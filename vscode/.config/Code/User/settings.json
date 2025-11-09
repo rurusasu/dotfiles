@@ -199,32 +199,30 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   // ========================================
-  // Neovim Integration Settings
+  // Vim Integration Settings (VSCodeVim)
   // ========================================
-  // WSL環境でのNeovimパス設定
-  "vscode-neovim.neovimExecutablePaths.wsl": "/home/miki/.local/bin/nvim",
-  "vscode-neovim.neovimInitVimPaths.wsl": "~/.config/nvim/init.lua",
+  "vim.useSystemClipboard": true,
+  "vim.useCtrlKeys": true,
+  "vim.hlsearch": true,
+  "vim.incsearch": true,
+  "vim.ignorecase": true,
+  "vim.smartcase": true,
+  "vim.leader": "<space>",
+  "vim.handleKeys": {
+    "<C-a>": false,
+    "<C-c>": false,
+    "<C-v>": false,
+    "<C-x>": false,
+    "<C-z>": false,
+    "<C-d>": true,
+    "<C-u>": true,
+    "<C-f>": true,
+    "<C-b>": true,
+    "<C-o>": true
+  },
+  "vim.insertModeKeyBindings": [],
+  "vim.normalModeKeyBindings": [],
 
-  // Linuxネイティブ環境用のフォールバック
-  "vscode-neovim.neovimExecutablePaths.linux": "/home/miki/.local/bin/nvim",
-  "vscode-neovim.neovimInitVimPaths.linux": "~/.config/nvim/init.lua",
-
-  "vscode-neovim.useCtrlKeysForNormalMode": true,
-  "vscode-neovim.useCtrlKeysForInsertMode": false,
-  "vscode-neovim.ctrlKeysForNormalMode": [
-    "d",
-    "u",
-    "f",
-    "b",
-    "o"
-  ],
-  "vscode-neovim.ctrlKeysForInsertMode": [
-    "a",
-    "c",
-    "v",
-    "x",
-    "z"
-  ],
   // Vim-friendly editor settings
   "editor.lineNumbers": "relative",
   "editor.cursorSurroundingLines": 8,

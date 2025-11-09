@@ -131,3 +131,4 @@ if ! nc -z localhost 22 2>/dev/null; then
   # ssh-agent がリッスンしていなければ起動
   eval "$(ssh-agent -s)" > /dev/null
 fi
+export PATH="$HOME/.local/bin:$PATH"
