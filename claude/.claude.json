@@ -1,0 +1,344 @@
+{
+  "installMethod": "unknown",
+  "autoUpdates": true,
+  "tipsHistory": {
+    "theme-command": 0,
+    "plan-mode-for-complex-tasks": 0
+  },
+  "userID": "e67c379e05cb10957dd85d0226be53875a99a7501daed8a02e8966dd05f9a66e",
+  "fallbackAvailableWarningThreshold": 0.5,
+  "projects": {
+    "/mnt/d/my_programing/shared-services-1": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {
+        "linear-server": {
+          "type": "sse",
+          "url": "https://mcp.linear.app/sse"
+        }
+      },
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 3,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "lastTotalWebSearchRequests": 0,
+      "exampleFiles": [
+        "compose.yaml",
+        "Makefile",
+        "README.md",
+        "init.sql",
+        "redis.conf"
+      ],
+      "exampleFilesGeneratedAt": 1762072773384,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/mnt/d/econa-engine": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "ai_agent_service.py",
+        "chat_message.py",
+        "chat_room.py",
+        "chat.py"
+      ],
+      "exampleFilesGeneratedAt": 1758199112278,
+      "hasCompletedProjectOnboarding": true,
+      "lastCost": 22.074175149999984,
+      "lastAPIDuration": 816490,
+      "lastToolDuration": 2001341,
+      "lastDuration": 11398235,
+      "lastLinesAdded": 27,
+      "lastLinesRemoved": 6,
+      "lastTotalInputTokens": 45848,
+      "lastTotalOutputTokens": 17672,
+      "lastTotalCacheCreationInputTokens": 495497,
+      "lastTotalCacheReadInputTokens": 7731928,
+      "lastTotalWebSearchRequests": 0,
+      "lastSessionId": "3634a437-b65b-420a-a6bc-53faa6e4bafd"
+    },
+    "/home/miki": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": false,
+      "projectOnboardingSeenCount": 4,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "lastTotalWebSearchRequests": 0
+    },
+    "/mnt/d/my_programing/econa-vertex-ai": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "main.py",
+        "artifact_registry.py",
+        "to_me_pipeline.yaml",
+        "db_connector.yaml",
+        "train.yaml"
+      ],
+      "exampleFilesGeneratedAt": 1759529789277,
+      "hasCompletedProjectOnboarding": true,
+      "lastTotalWebSearchRequests": 0
+    },
+    "/mnt/d/my_programing/econa-engine": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "hasCompletedProjectOnboarding": true,
+      "exampleFiles": [
+        "container.py",
+        "manager.py",
+        "celery_config.py",
+        "chat.py",
+        "conftest.py"
+      ],
+      "exampleFilesGeneratedAt": 1761355623936,
+      "lastTotalWebSearchRequests": 0
+    },
+    "/mnt/d/my_programing/trust-mate": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "config.py",
+        "inference_queue_manager.py",
+        "celery_predictor.py",
+        "main.py",
+        "database.py"
+      ],
+      "exampleFilesGeneratedAt": 1759352656401,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/mnt/wsl/docker-desktop-bind-mounts/Ubuntu/5b4622c2ee2babd0c741ab63e354fd060ff189e9eefdeb1b9efb7b4488c9d9ff": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759444399841,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/var/tmp/vibe-kanban/worktrees/85d2-ai-98": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": false,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false
+    },
+    "/var/tmp/vibe-kanban/worktrees/fcf7-ai-98": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759611691887,
+      "hasCompletedProjectOnboarding": true,
+      "lastTotalWebSearchRequests": 0
+    },
+    "/var/tmp/vibe-kanban/worktrees/5df4-ai-865": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759612532897,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/var/tmp/vibe-kanban/worktrees/e0f5-ai-85": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759613111169,
+      "hasCompletedProjectOnboarding": true,
+      "lastTotalWebSearchRequests": 0
+    },
+    "/var/tmp/vibe-kanban/worktrees/b08e-ai-879": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759614015264,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/var/tmp/vibe-kanban/worktrees/a683-ai-828": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "customer.py",
+        "chat_message.py",
+        "models.py",
+        "celery_config.py",
+        "customer_promptfoo.py"
+      ],
+      "exampleFilesGeneratedAt": 1759625365719,
+      "hasCompletedProjectOnboarding": true
+    },
+    "/var/tmp/vibe-kanban/worktrees/d20d-ai-865-backup": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": false,
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false
+    },
+    "/mnt/d/econa-site-service": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "ignorePatterns": [],
+      "projectOnboardingSeenCount": 0,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "user.go",
+        "chat.go",
+        "profile.go",
+        "repository.go",
+        "revenuecat_unified.go"
+      ],
+      "hasCompletedProjectOnboarding": true,
+      "exampleFilesGeneratedAt": 1760657492430
+    },
+    "/mnt/d/my_programing": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "ignorePatterns": [],
+      "projectOnboardingSeenCount": 1,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [],
+      "hasCompletedProjectOnboarding": true
+    },
+    "/mnt/d/my_programing/dotfiles": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": false,
+      "projectOnboardingSeenCount": 1,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "exampleFiles": [
+        "I don't have any file modification data to analyze. The lists of files modified by the user and other users appear to be empty.",
+        "",
+        "Please provide:",
+        "1. A list of files modified by the user (with modification counts)",
+        "2. A list of files modified by other users (with modification counts)",
+        "",
+        "Once you provide this git history data, I'll be able to identify five diverse, frequently modified core application logic files."
+      ],
+      "exampleFilesGeneratedAt": 1762596082712
+    }
+  }
+}

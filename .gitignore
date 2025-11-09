@@ -1,0 +1,31 @@
+# Backup files
+*.backup
+*~
+*.swp
+*.swo
+extensions-backup-*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.claude/
+
+# Personal/sensitive files
+*_local
+*_private
+*.local
+
+# History files
+*_history
+.bash_history
+.lesshst
+.wget-hsts
+
+# Temporary files
+*.tmp
+*.log

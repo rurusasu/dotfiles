@@ -1,0 +1,28 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "charliermarsh.ruff",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "eamodio.gitlens",
+    "yzhang.markdown-all-in-one",
+    "ms-vscode-remote.remote-wsl",
+    "ms-vscode-remote.remote-ssh",
+    "pkief.material-icon-theme",
+    "usernamehw.errorlens",
+    "wayou.vscode-todo-highlight",
+    "GitHub.vscode-pull-request-github",
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "github.vscode-github-actions",
+    "ms-azuretools.vscode-docker",
+    "github.vscode-github-actions",
+    "donjayamanne.githistory",
+    "mhutchie.git-graph",
+    "Anthropic.claude-code",
+    "openai.chatgpt",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

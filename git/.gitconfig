@@ -1,0 +1,23 @@
+[safe]
+	directory = /mnt/d/my_programing/econa-vertex-ai
+	directory = /mnt/d/my_programing/econa-vertex-ai
+	directory = /mnt/d/my_programing/econa-engine
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[core]
+	editor = true
+	sshCommand = ssh.exe
+[user]
+	name = Kohei Miki
+	email = rurusasu@gmail.com
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKncSpki/929iA6NRQf43U6vAyK+MwkF2MhAWghLjxIr
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	program = "/mnt/c/Users/KoheiMiki/AppData/Local/1Password/app/8/op-ssh-sign-wsl"
+[commit]
+	gpgsign = true
