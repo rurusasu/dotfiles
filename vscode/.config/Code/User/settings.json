@@ -25,7 +25,6 @@
   "editor.formatOnType": true,
   "editor.stickyTabStops": true,
   "editor.selectionHighlight": true,
-  "editor.find.seedSearchStringFromSelection": "always",
   "editor.acceptSuggestionOnEnter": "off",
   "editor.cursorSmoothCaretAnimation": "off",
   "editor.guides.indentation": true,
@@ -198,5 +197,37 @@
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  // ========================================
+  // Neovim Integration Settings
+  // ========================================
+  // WSL環境でのNeovimパス設定
+  "vscode-neovim.neovimExecutablePaths.wsl": "/home/miki/.local/bin/nvim",
+  "vscode-neovim.neovimInitVimPaths.wsl": "~/.config/nvim/init.lua",
+
+  // Linuxネイティブ環境用のフォールバック
+  "vscode-neovim.neovimExecutablePaths.linux": "/home/miki/.local/bin/nvim",
+  "vscode-neovim.neovimInitVimPaths.linux": "~/.config/nvim/init.lua",
+
+  "vscode-neovim.useCtrlKeysForNormalMode": true,
+  "vscode-neovim.useCtrlKeysForInsertMode": false,
+  "vscode-neovim.ctrlKeysForNormalMode": [
+    "d",
+    "u",
+    "f",
+    "b",
+    "o"
+  ],
+  "vscode-neovim.ctrlKeysForInsertMode": [
+    "a",
+    "c",
+    "v",
+    "x",
+    "z"
+  ],
+  // Vim-friendly editor settings
+  "editor.lineNumbers": "relative",
+  "editor.cursorSurroundingLines": 8,
+  "workbench.list.automaticKeyboardNavigation": false,
+  "editor.find.seedSearchStringFromSelection": "never"
 }
