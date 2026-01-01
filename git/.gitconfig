@@ -2,6 +2,7 @@
 	directory = /mnt/d/my_programing/econa-vertex-ai
 	directory = /mnt/d/my_programing/econa-vertex-ai
 	directory = /mnt/d/my_programing/econa-engine
+	directory = /mnt/d/my_programing/econa-engine/tools/git-worktree-runner
 [credential "https://github.com"]
 	helper = 
 	helper = !/usr/bin/gh auth git-credential
@@ -14,10 +15,10 @@
 [user]
 	name = Kohei Miki
 	email = rurusasu@gmail.com
-	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKncSpki/929iA6NRQf43U6vAyK+MwkF2MhAWghLjxIr
+	signingkey = C:/Users/KoheiMiki/.ssh/signing_key.pub
 [gpg]
 	format = ssh
 [gpg "ssh"]
-	program = "/mnt/c/Users/KoheiMiki/AppData/Local/1Password/app/8/op-ssh-sign-wsl"
+	program = /home/miki/.local/bin/op-ssh-sign-wrapper.sh
 [commit]
 	gpgsign = true

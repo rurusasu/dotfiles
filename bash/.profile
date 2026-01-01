@@ -25,3 +25,6 @@ fi
 if [ -d "$HOME/.local/bin" ] ; then
     PATH="$HOME/.local/bin:$PATH"
 fi
+
+# Added for Claude Code (local install)
+export PATH="$HOME/.local/bin:$PATH"
