@@ -87,15 +87,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 mkdir -p "$REPO_DIR"
-cp -a /etc/nixos/. "$REPO_DIR/"
 
 if [[ -d "$SOURCE_ROOT/nix" ]]; then
   mkdir -p "$REPO_DIR/nix"
   cp -a "$SOURCE_ROOT/nix/." "$REPO_DIR/nix/"
-fi
-
-if [[ -f "$REPO_DIR/configuration.nix" ]]; then
-  sed -i '\|<nixos-wsl/modules>|d' "$REPO_DIR/configuration.nix"
 fi
 
 case "$(uname -m)" in
@@ -113,40 +108,16 @@ esac
 NIX_DIR="$REPO_DIR/nix"
 HM_DIR="$NIX_DIR/home"
 HM_USERS_DIR="$HM_DIR/users"
-HM_HOSTS_DIR="$HM_DIR/hosts"
 HM_PROFILES_DIR="$NIX_DIR/profiles/home"
+HOST_DIR="$NIX_DIR/hosts/wsl"
 
-mkdir -p "$HM_USERS_DIR" "$HM_HOSTS_DIR" "$HM_PROFILES_DIR"
+mkdir -p "$HM_DIR/wsl" "$HM_USERS_DIR" "$HM_PROFILES_DIR" "$HOST_DIR"
 
-COMMON_HOME_PATH="$HM_PROFILES_DIR/common.nix"
 USER_HOME_PATH="$HM_USERS_DIR/$USER_NAME.nix"
-HOST_HOME_PATH="$HM_HOSTS_DIR/wsl.nix"
-MODULE_PATH="$REPO_DIR/wsl-postinstall.nix"
-
-cat > "$COMMON_HOME_PATH" <<'EOF'
-{ config, pkgs, ... }:
-{
-  home.stateVersion = "24.05";
-
-  programs = {
-    git.enable = true;
-    bash.enable = true;
-    zsh.enable = true;
-    neovim = {
-      enable = true;
-      defaultEditor = true;
-      viAlias = true;
-      vimAlias = true;
-    };
-    tmux.enable = true;
-    vscode.enable = true;
-  };
-
-  programs.wezterm.enable = true;
-
-  home.file.".config/wezterm/wezterm.lua".source = ../../home/config/wezterm/wezterm.lua;
-}
-EOF
+HOST_HOME_PATH="$HM_DIR/wsl/default.nix"
+HOST_DEFAULT_PATH="$HOST_DIR/default.nix"
+HOST_CONFIG_PATH="$HOST_DIR/configuration.nix"
+HOST_HW_PATH="$HOST_DIR/hardware-configuration.nix"
 
 cat > "$USER_HOME_PATH" <<EOF
 { config, pkgs, ... }:
@@ -160,69 +131,36 @@ cat > "$HOST_HOME_PATH" <<EOF
 { config, pkgs, ... }:
 {
   imports = [
-    ../../profiles/home/common.nix
     ../users/$USER_NAME.nix
+    ../../profiles/home/common.nix
   ];
 }
 EOF
 
+cat > "$HOST_DEFAULT_PATH" <<EOF
+{ config, pkgs, ... }:
 {
-  echo '{ config, pkgs, ... }:'
-  echo '{'
-  echo '  nix = {'
-  echo '    settings = {'
-  echo '      experimental-features = [ "nix-command" "flakes" ];'
-  echo '      auto-optimise-store = true;'
-  echo '    };'
-  echo '    gc = {'
-  echo '      automatic = true;'
-  echo '      dates = "weekly";'
-  echo '      options = "--delete-older-than 7d";'
-  echo '    };'
-  echo '  };'
-  echo ''
-  echo '  nixpkgs.config.allowUnfree = true;'
-  echo '  programs.zsh.enable = true;'
-  echo '  environment.systemPackages = ['
-  echo '    pkgs.coreutils'
-  echo '  ];'
-  echo ''
-  echo "  users.users.\"$USER_NAME\".shell = pkgs.zsh;"
-  if [[ -n "$HOSTNAME" ]]; then
-    echo "  networking.hostName = \"$HOSTNAME\";"
-  fi
-  echo '}'
-} > "$MODULE_PATH"
+  imports = [
+    ../../modules/host
+    ../../modules/wsl
+    ./configuration.nix
+  ];
 
-cat > "$REPO_DIR/flake.nix" <<EOF
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    home-manager.url = "github:nix-community/home-manager";
-    home-manager.inputs.nixpkgs.follows = "nixpkgs";
-    nixos-wsl.url = "github:nix-community/NixOS-WSL";
-  };
-
-  outputs = { self, nixpkgs, home-manager, nixos-wsl }:
-  {
-    nixosConfigurations.$FLAKE_NAME = nixpkgs.lib.nixosSystem {
-      system = "$SYSTEM";
-      modules = [
-        nixos-wsl.nixosModules.wsl
-        ./configuration.nix
-        ./wsl-postinstall.nix
-        ./nix/hosts/wsl.nix
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.users.$USER_NAME = import ./nix/home/hosts/wsl.nix;
-        }
-      ];
-    };
-  };
-}
+  users.users.$USER_NAME.shell = pkgs.zsh;
 EOF
+
+if [[ -n "$HOSTNAME" ]]; then
+  echo "  networking.hostName = \"$HOSTNAME\";" >> "$HOST_DEFAULT_PATH"
+fi
+echo '}' >> "$HOST_DEFAULT_PATH"
+
+if [[ -f /etc/nixos/configuration.nix ]]; then
+  cp -f /etc/nixos/configuration.nix "$HOST_CONFIG_PATH"
+  sed -i '\|<nixos-wsl/modules>|d' "$HOST_CONFIG_PATH"
+fi
+if [[ -f /etc/nixos/hardware-configuration.nix ]]; then
+  cp -f /etc/nixos/hardware-configuration.nix "$HOST_HW_PATH"
+fi
 
 if id "$USER_NAME" >/dev/null 2>&1; then
   USER_GROUP="$(id -gn "$USER_NAME" 2>/dev/null || true)"

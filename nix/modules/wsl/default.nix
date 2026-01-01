@@ -1,7 +1,5 @@
 { config, pkgs, ... }:
 {
-  # WSL-specific system settings can go here.
-  # Docker is handled by Docker Desktop on Windows.
   environment.systemPackages = [
     pkgs.coreutils
   ];
@@ -12,4 +10,9 @@
       ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami
     '';
   };
+
+  nix.nixPath = [
+    "nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos"
+    "nixos-config=/etc/nixos/configuration.nix"
+  ];
 }

@@ -65,11 +65,12 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 
 生成される主なファイル:
 - `~/.dotfiles/flake.nix`
-- `~/.dotfiles/wsl-postinstall.nix`
 - `~/.dotfiles/nix/profiles/home/common.nix`
-- `~/.dotfiles/nix/home/hosts/wsl.nix`
+- `~/.dotfiles/nix/home/wsl/default.nix`
 - `~/.dotfiles/nix/home/users/<USER>.nix`
-- `~/.dotfiles/nix/hosts/wsl.nix`
+- `~/.dotfiles/nix/hosts/wsl/default.nix`
+- `~/.dotfiles/nix/hosts/wsl/configuration.nix`
+- `~/.dotfiles/nix/hosts/wsl/hardware-configuration.nix`
 
 ## 起動方法
 

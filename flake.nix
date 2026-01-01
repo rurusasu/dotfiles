@@ -1,26 +1,23 @@
 {
-  description = "Dotfiles utilities";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    systems.url = "github:nix-systems/default";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nixos-wsl.url = "github:nix-community/NixOS-WSL";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
-    let
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
+  outputs = { flake-parts, ... } @ inputs:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [
+        ./nix/flakes
       ];
-      forAllSystems = nixpkgs.lib.genAttrs systems;
-    in
-    {
-      formatter = forAllSystems (system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-        in
-        pkgs.treefmt
-      );
     };
 }
