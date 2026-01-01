@@ -46,6 +46,31 @@ nix-channel --update
 nixos-rebuild switch
 ```
 
+## 環境構築の自動実行
+
+`windows/install-nixos-wsl.ps1` は既定で `scripts/nixos-wsl-postinstall.sh` を実行し、
+Flake 化と Home Manager ベースの最小構成を作成します。
+
+スキップしたい場合:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SkipPostInstallSetup
+```
+
+手動で実行したい場合:
+
+```sh
+sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user <USER> --hostname <HOST>
+```
+
+生成される主なファイル:
+- `~/.dotfiles/flake.nix`
+- `~/.dotfiles/wsl-postinstall.nix`
+- `~/.dotfiles/nix/profiles/home/common.nix`
+- `~/.dotfiles/nix/home/hosts/wsl.nix`
+- `~/.dotfiles/nix/home/users/<USER>.nix`
+- `~/.dotfiles/nix/hosts/wsl.nix`
+
 ## 起動方法
 
 ```powershell

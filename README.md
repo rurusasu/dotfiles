@@ -2,6 +2,34 @@
 
 GNU Stow を使った dotfiles の一元管理リポジトリ
 
+## 方針 (Home Manager)
+
+NixOS/WSL を含む複数環境で共通運用するため、ユーザー設定は Home Manager に寄せる方針。
+設定は `nix/home/` と `nix/profiles/` 配下で管理します。
+
+非 WSL の NixOS 向けホスト設定は `nix/hosts/` で管理します。
+
+## フォーマット (treefmt)
+
+Nix の整形は treefmt で行います。
+
+```bash
+nix fmt
+```
+
+```bash
+./scripts/treefmt.sh
+```
+
+## WSL 設定 (.wslconfig)
+
+`.wslconfig` は `windows/.wslconfig` で管理し、以下で適用します。
+
+```powershell
+.\windows\apply-wslconfig.ps1
+wsl --shutdown
+```
+
 ## ディレクトリ構造
 
 ```

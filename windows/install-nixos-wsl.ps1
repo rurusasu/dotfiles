@@ -4,11 +4,22 @@ param(
     [string]$InstallDir = "$env:USERPROFILE\\NixOS",
     [string]$ReleaseTag = "",
     [switch]$SkipWslBaseInstall,
-    [switch]$SkipChannelUpdate
+    [switch]$SkipChannelUpdate,
+    [string]$PostInstallScript = "",
+    [switch]$SkipPostInstallSetup,
+    [switch]$SkipSetDefaultDistro,
+    [int]$DockerIntegrationRetries = 5,
+    [int]$DockerIntegrationRetryDelaySeconds = 5,
+    [switch]$SkipWslConfigApply,
+    [switch]$SkipVhdExpand
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
+    $PostInstallScript = Join-Path $PSScriptRoot "..\\scripts\\nixos-wsl-postinstall.sh"
+}
 
 function Assert-Admin {
     $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -131,9 +142,193 @@ function Install-FromFile {
 function Run-PostInstall {
     param([string]$Name)
     Write-Host "NixOS 内でチャンネル更新と再構成を実行します..."
-    & wsl -d $Name -u root -- sh -lc "nix-channel --update && nixos-rebuild switch"
+    $nixPath = "nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos:nixos-config=/etc/nixos/configuration.nix"
+    & wsl -d $Name -u root -- sh -lc "nix-channel --update && NIX_PATH=$nixPath nixos-rebuild switch"
 }
 
+function Invoke-PostInstallSetup {
+    param(
+        [string]$Name,
+        [string]$ScriptPath
+    )
+    if ($SkipPostInstallSetup) {
+        Write-Host "Post-install セットアップをスキップしました。"
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($ScriptPath)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $ScriptPath)) {
+        Write-Warning "Post-install スクリプトが見つかりません: $ScriptPath"
+        return
+    }
+    $resolved = (Resolve-Path -LiteralPath $ScriptPath).Path
+    $wslPath = & wsl wslpath -a $resolved 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
+        $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
+        $rest = $resolved.Substring(2) -replace "\\", "/"
+        $fallback = "/mnt/$($drive.ToLower())$rest"
+        $wslPath = $fallback
+    }
+    Write-Host "Post-install セットアップを実行します..."
+    $cmd = "bash `"$wslPath`" --force"
+    & wsl -d $Name -u root -- sh -lc $cmd
+}
+
+function Ensure-WhoamiShim {
+    param([string]$Name)
+    $cmd = "if [ -x /run/current-system/sw/bin/whoami ]; then " +
+           "ln -sf /run/current-system/sw/bin/whoami /bin/whoami; " +
+           "ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami; fi"
+    & wsl -d $Name -u root -- sh -lc $cmd
+}
+
+function Test-DockerDesktopProxy {
+    param([string]$Name)
+    $existsCmd = "[ -x /mnt/wsl/docker-desktop/docker-desktop-user-distro ]"
+    & wsl -d $Name -u root -- sh -lc $existsCmd
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    $proxyCmd = "timeout 3 /mnt/wsl/docker-desktop/docker-desktop-user-distro proxy --distro-name nixos --docker-desktop-root /mnt/wsl/docker-desktop 'C:\Program Files\Docker\Docker\resources'"
+    & wsl -d $Name -u root -- sh -lc $proxyCmd
+    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 124) {
+        return $true
+    }
+    return $false
+}
+
+function Ensure-DockerDesktopIntegration {
+    param(
+        [string]$Name,
+        [int]$Retries,
+        [int]$DelaySeconds
+    )
+    if ($Retries -le 0) {
+        return
+    }
+    $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
+    & wsl -d $Name -u root -- sh -lc $writableCheck
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "WSL が書き込み不可のため、Docker Desktop 連携のリトライをスキップします。"
+        return
+    }
+    $freeCheck = 'df -Pk / | awk ''NR==2 {print $4}'''
+    $freeBlocks = & wsl -d $Name -u root -- sh -lc $freeCheck
+    $freeBlocks = ($freeBlocks | Select-Object -First 1).Trim()
+    $freeValue = 0
+    if ($freeBlocks -and [int]::TryParse($freeBlocks, [ref]$freeValue) -and $freeValue -lt 10240) {
+        Write-Warning "WSL の空き容量が不足しているため、Docker Desktop 連携のリトライをスキップします。"
+        return
+    }
+    if (-not (Test-DockerDesktopHealth)) {
+        Write-Warning "Docker Desktop 側の WSL ディストリビューションが壊れている可能性があるため、連携の確認をスキップします。"
+        return
+    }
+    Ensure-DockerDesktopDistros
+    Ensure-DockerGroup -Name $Name
+    Start-DockerDesktopIfNeeded
+    $restarted = $false
+    for ($i = 1; $i -le $Retries; $i++) {
+        Write-Host "Docker Desktop 連携の確認を試行します ($i/$Retries)..."
+        Start-DockerDesktopIfNeeded
+        if (Test-DockerDesktopProxy -Name $Name) {
+            Write-Host "Docker Desktop 連携の確認に成功しました。"
+            return
+        }
+        Write-Warning "Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します。"
+        if (-not $restarted) {
+            Restart-DockerDesktop
+            $restarted = $true
+        }
+        & wsl --shutdown
+        Start-Sleep -Seconds $DelaySeconds
+    }
+    Write-Warning "Docker Desktop 連携の確認に $Retries 回失敗しました。"
+}
+
+function Start-DockerDesktopIfNeeded {
+    $running = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    if (-not $running) {
+        $running = Get-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
+    }
+    if ($running) {
+        return
+    }
+    $dockerExe = Join-Path $env:ProgramFiles "Docker\\Docker\\Docker Desktop.exe"
+    if (-not (Test-Path -LiteralPath $dockerExe)) {
+        return
+    }
+    Write-Host "Docker Desktop を起動します..."
+    Start-Process -FilePath $dockerExe | Out-Null
+    Start-Sleep -Seconds 5
+}
+
+function Restart-DockerDesktop {
+    $running = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    $backend = Get-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
+    if (-not $running -and -not $backend) {
+        return
+    }
+    Write-Host "Docker Desktop を再起動します..."
+    Stop-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    Stop-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    Start-DockerDesktopIfNeeded
+    Start-Sleep -Seconds 10
+}
+
+function Test-DockerDesktopHealth {
+    $check = & wsl -d docker-desktop -u root -- sh -lc "test -f /opt/docker-desktop/componentsVersion.json"
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Ensure-DockerDesktopDistros {
+    $dockerExe = Join-Path $env:ProgramFiles "Docker\\Docker\\Docker Desktop.exe"
+    if (-not (Test-Path -LiteralPath $dockerExe)) {
+        return
+    }
+    $list = & wsl -l -q 2>$null
+    $names = @()
+    if ($list) {
+        $names = $list | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    }
+    if ($names -contains "docker-desktop" -and $names -contains "docker-desktop-data") {
+        return
+    }
+    $resourceRoot = Join-Path $env:ProgramFiles "Docker\\Docker\\resources\\wsl"
+    $vhdTemplate = Join-Path $resourceRoot "ext4.vhdx"
+    $dataTar = Join-Path $resourceRoot "wsl-data.tar"
+    if (-not (Test-Path -LiteralPath $vhdTemplate) -or -not (Test-Path -LiteralPath $dataTar)) {
+        Write-Warning "Docker Desktop の WSL リソースが見つからないため、ディストリビューションの作成をスキップします。"
+        return
+    }
+    $root = Join-Path $env:LOCALAPPDATA "Docker\\wsl"
+    $distroDir = Join-Path $root "distro"
+    $dataDir = Join-Path $root "data"
+    New-Item -ItemType Directory -Path $distroDir,$dataDir -Force | Out-Null
+    $distroVhd = Join-Path $distroDir "ext4.vhdx"
+    Copy-Item -LiteralPath $vhdTemplate -Destination $distroVhd -Force
+    Write-Host "docker-desktop ディストリビューションを登録します..."
+    & wsl --import-in-place docker-desktop $distroVhd
+    Write-Host "docker-desktop-data ディストリビューションを登録します..."
+    & wsl --import docker-desktop-data $dataDir $dataTar --version 2
+}
+
+function Get-WslDefaultUser {
+    param([string]$Name)
+    $user = & wsl -d $Name -- sh -lc "whoami"
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
+        return "nixos"
+    }
+    return $user.Trim()
+}
+
+function Ensure-DockerGroup {
+    param([string]$Name)
+    $user = Get-WslDefaultUser -Name $Name
+    & wsl -d $Name -u root -- sh -lc "( groupadd docker || true ) && usermod -aG docker $user"
+}
 Assert-Admin
 Ensure-WslReady
 
@@ -159,10 +354,143 @@ if (Distro-Exists -Name $DistroName) {
     }
 }
 
+function Apply-WslConfig {
+    if ($SkipWslConfigApply) {
+        Write-Host ".wslconfig の適用をスキップしました。"
+        return
+    }
+    $source = Join-Path $PSScriptRoot ".wslconfig"
+    if (-not (Test-Path -LiteralPath $source)) {
+        Write-Warning ".wslconfig が見つかりません: $source"
+        return
+    }
+    $dest = Join-Path $env:USERPROFILE ".wslconfig"
+    Copy-Item -LiteralPath $source -Destination $dest -Force
+    Write-Host ".wslconfig を更新しました。反映のため WSL を再起動します。"
+    & wsl --shutdown
+}
+
+function Get-WslDistroBasePath {
+    param([string]$Name)
+    $root = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
+    $keys = Get-ChildItem -Path $root -ErrorAction SilentlyContinue
+    foreach ($k in $keys) {
+        $props = Get-ItemProperty -Path $k.PSPath
+        if ($props.DistributionName -and $props.DistributionName -ieq $Name) {
+            return $props.BasePath
+        }
+    }
+    return $null
+}
+
+function Parse-SizeToMB {
+    param([string]$Value)
+    if (-not $Value) { return $null }
+    $v = $Value.Trim()
+    if ($v -match '^(\\d+)(GB|MB)$') {
+        $num = [int]$Matches[1]
+        $unit = $Matches[2]
+        if ($unit -eq "GB") { return $num * 1024 }
+        return $num
+    }
+    return $null
+}
+
+function Ensure-VhdExpanded {
+    param([string]$Name)
+    if ($SkipVhdExpand) {
+        Write-Host "VHDX 拡張をスキップしました。"
+        return
+    }
+    $base = Get-WslDistroBasePath -Name $Name
+    if (-not $base) {
+        Write-Warning "WSL ディストリの BasePath を取得できませんでした: $Name"
+        return
+    }
+    $vhdx = Join-Path $base "ext4.vhdx"
+    if (-not (Test-Path -LiteralPath $vhdx)) {
+        Write-Warning "VHDX が見つかりません: $vhdx"
+        return
+    }
+    $wslConfig = Join-Path $PSScriptRoot ".wslconfig"
+    if (-not (Test-Path -LiteralPath $wslConfig)) {
+        $wslConfig = Join-Path $env:USERPROFILE ".wslconfig"
+    }
+    $targetMB = $null
+    if (Test-Path -LiteralPath $wslConfig) {
+        $content = Get-Content -Raw -Path $wslConfig
+        $match = [regex]::Match($content, 'defaultVhdSize\s*=\s*(\d+)\s*(GB|MB)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($match.Success) {
+            $raw = "$($match.Groups[1].Value)$($match.Groups[2].Value.ToUpper())"
+            $targetMB = Parse-SizeToMB -Value $raw
+        }
+    }
+    if (-not $targetMB) {
+        $targetMB = 32768
+        Write-Warning "defaultVhdSize を読み取れないため、${targetMB}MB で VHDX を拡張します。"
+    }
+    Write-Host "VHDX を ${targetMB}MB へ拡張します: $vhdx"
+    & wsl --shutdown
+    $diskpart = @"
+select vdisk file="$vhdx"
+expand vdisk maximum=$targetMB
+exit
+"@
+    $tmp = New-TemporaryFile
+    Set-Content -Path $tmp -Value $diskpart -Encoding ASCII
+    & diskpart /s $tmp | Out-Null
+    Remove-Item -LiteralPath $tmp -Force
+}
+
+function Resize-WslFilesystem {
+    param([string]$Name)
+    $findRoot = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/" {print "/dev/"\$1; exit}'''
+    $dev = & wsl -d $Name -u root -- sh -lc $findRoot
+    $dev = $dev | Select-Object -First 1
+    if ($dev) { $dev = $dev.Trim() } else { $dev = "" }
+    if (-not $dev) {
+        $findFallback = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/mnt/wslg/distro" {print "/dev/"\$1; exit}'''
+        $dev = & wsl -d $Name -u root -- sh -lc $findFallback
+        $dev = $dev | Select-Object -First 1
+        if ($dev) { $dev = $dev.Trim() } else { $dev = "" }
+    }
+    if ($dev) {
+        Write-Host "ファイルシステムを拡張します: $dev"
+        & wsl -d $Name -u root -- sh -lc "resize2fs $dev"
+    } else {
+        Write-Warning "拡張対象のデバイスを特定できませんでした。"
+    }
+}
+
+function Ensure-WslWritable {
+    param([string]$Name)
+    $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
+    & wsl -d $Name -u root -- sh -lc $writableCheck
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "WSL が読み取り専用のため、VHDX 拡張を試みます。"
+        Ensure-VhdExpanded -Name $Name
+        & wsl -d $Name -u root -- sh -lc $writableCheck
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "WSL がまだ読み取り専用です。ファイルシステム拡張を試みます。"
+            Resize-WslFilesystem -Name $Name
+        }
+    }
+}
 if ($SkipChannelUpdate) {
     Write-Host "チャンネル更新をスキップしました。"
 } else {
     Run-PostInstall -Name $DistroName
+}
+
+Invoke-PostInstallSetup -Name $DistroName -ScriptPath $PostInstallScript
+Apply-WslConfig
+Ensure-WslWritable -Name $DistroName
+Ensure-WhoamiShim -Name $DistroName
+Ensure-DockerDesktopIntegration -Name $DistroName -Retries $DockerIntegrationRetries -DelaySeconds $DockerIntegrationRetryDelaySeconds
+
+if (-not $SkipSetDefaultDistro) {
+    Write-Host "WSL の既定ディストリビューションを設定します: $DistroName"
+    & wsl --set-default $DistroName
 }
 
 Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName"
