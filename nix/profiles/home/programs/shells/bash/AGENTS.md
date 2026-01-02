@@ -1,8 +1,8 @@
 # AGENTS
 
-Purpose: Bash shell configuration files.
+Purpose: Bash shell configuration via Home Manager programs.bash.
 Expected contents:
-- default.nix: deploys bash config files to home directory.
-- .bashrc: bash runtime configuration.
-- .profile: login shell configuration.
-- .bash_logout: logout script.
+- default.nix: bash configuration using programs.bash options.
+Notes:
+- Uses Home Manager's programs.bash module instead of raw dotfiles.
+- Includes history settings, shell aliases, and initialization scripts.
