@@ -5,7 +5,7 @@
   programs = {
     git.enable = true;
     zsh.enable = true;
-    neovim = {
+    nixvim = {
       enable = true;
       defaultEditor = true;
       viAlias = true;
