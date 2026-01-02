@@ -2,6 +2,7 @@
 {
   imports = [
     ../nixvim
+    ./programs/fzf
     ./programs/vscode
     ./programs/wezterm
   ];
