@@ -1,13 +1,13 @@
 { ... }:
 {
   imports = [
-    ./fzf
-    ./git
-    ./zsh
-    ./tmux
     ./claude-code
-    ./ghq
     ./fonts
+    ./fzf
+    ./ghq
+    ./git
+    ./shells
+    ./tmux
     ./vscode
     ./wezterm
   ];
