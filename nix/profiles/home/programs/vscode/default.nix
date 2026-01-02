@@ -16,6 +16,6 @@
       wakatime.vscode-wakatime
     ];
     userSettings = import ../../../home/config/vscode/settings.nix;
-    keybindings = builtins.fromJSON (builtins.readFile ../../../home/config/vscode/keybindings.json);
+    keybindings = builtins.fromJSON (builtins.readFile ../../../../home/config/vscode/keybindings.json);
   };
 }
