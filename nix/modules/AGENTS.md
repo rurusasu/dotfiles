@@ -1,5 +1,8 @@
 # AGENTS
 
 Purpose
-- Reusable NixOS/Home Manager modules and shared settings.
+Purpose: reusable modules for host/home.
+Expected contents:
+- host/: common system defaults (nix settings, allowUnfree, base packages).
+- wsl/: WSL-specific tweaks (nixPath, whoami shim, etc).
 

@@ -1,5 +1,7 @@
 # AGENTS
 
 Purpose
-- Host-level modules for system defaults and common settings.
+Purpose: host-level system defaults.
+Expected contents:
+- default.nix: nix settings, allowUnfree, baseline systemPackages, shells.
 

@@ -1,5 +1,7 @@
 # AGENTS
 
 Purpose
-- Shared Nix library helpers for pkgs/lib/system wiring.
+Purpose: shared Nix helpers (pkgs/lib/system wiring).
+Expected contents:
+- default.nix: exports pkgs, lib, system for modules/profiles.
 
