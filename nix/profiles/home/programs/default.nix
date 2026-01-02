@@ -1,10 +1,10 @@
 { ... }:
 {
   imports = [
-    ./claude-code
     ./fzf
     ./ghq
     ./git
+    ./llm
     ./shells
     ./tmux
     ./vscode
