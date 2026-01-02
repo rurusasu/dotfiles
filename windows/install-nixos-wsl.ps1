@@ -11,7 +11,9 @@ param(
     [int]$DockerIntegrationRetries = 5,
     [int]$DockerIntegrationRetryDelaySeconds = 5,
     [switch]$SkipWslConfigApply,
-    [switch]$SkipVhdExpand
+    [switch]$SkipVhdExpand,
+    [ValidateSet("repo", "nix", "none")]
+    [string]$SyncMode = "repo"
 )
 
 Set-StrictMode -Version Latest
@@ -171,7 +173,7 @@ function Invoke-PostInstallSetup {
         $wslPath = $fallback
     }
     Write-Host "Post-install セットアップを実行します..."
-    $cmd = "bash `"$wslPath`" --force"
+    $cmd = "bash `"$wslPath`" --force --sync-mode $SyncMode"
     & wsl -d $Name -u root -- sh -lc $cmd
 }
 

@@ -10,6 +10,8 @@ Options:
   --repo-dir <path>    Config repo directory (default: /home/<user>/.dotfiles)
   --flake-name <name>  Flake name (default: myNixOS)
   --hostname <name>    Set networking.hostName
+  --sync-mode <mode>   Sync mode: repo|nix|none (default: repo)
+  --sync-source <path> Source dir for sync (default: script repo root)
   --force              Allow non-empty repo dir (no deletion)
   -h, --help           Show help
 USAGE
@@ -25,6 +27,8 @@ REPO_DIR=""
 FLAKE_NAME="myNixOS"
 HOSTNAME=""
 FORCE=0
+SYNC_MODE="repo"
+SYNC_SOURCE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +46,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --hostname)
       HOSTNAME="${2:-}"
+      shift 2
+      ;;
+    --sync-mode)
+      SYNC_MODE="${2:-}"
+      shift 2
+      ;;
+    --sync-source)
+      SYNC_SOURCE="${2:-}"
       shift 2
       ;;
     --force)
@@ -85,12 +97,30 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ -z "$SYNC_SOURCE" ]]; then
+  SYNC_SOURCE="$SOURCE_ROOT"
+fi
 
 mkdir -p "$REPO_DIR"
 
-if [[ -d "$SOURCE_ROOT/nix" ]]; then
-  mkdir -p "$REPO_DIR/nix"
-  cp -a "$SOURCE_ROOT/nix/." "$REPO_DIR/nix/"
+if [[ "$SYNC_MODE" == "repo" ]]; then
+  if [[ ! -d "$SYNC_SOURCE" ]]; then
+    echo "Sync source not found: $SYNC_SOURCE" >&2
+    exit 1
+  fi
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete --exclude ".git" --exclude ".direnv" --exclude "result" "$SYNC_SOURCE/" "$REPO_DIR/"
+  else
+    (cd "$SYNC_SOURCE" && tar --exclude ".git" --exclude ".direnv" --exclude "result" -cf - .) | (cd "$REPO_DIR" && tar -xf -)
+  fi
+elif [[ "$SYNC_MODE" == "nix" ]]; then
+  if [[ -d "$SOURCE_ROOT/nix" ]]; then
+    mkdir -p "$REPO_DIR/nix"
+    cp -a "$SOURCE_ROOT/nix/." "$REPO_DIR/nix/"
+  fi
+elif [[ "$SYNC_MODE" != "none" ]]; then
+  echo "Unknown sync mode: $SYNC_MODE" >&2
+  exit 1
 fi
 
 case "$(uname -m)" in
