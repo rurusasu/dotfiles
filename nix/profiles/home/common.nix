@@ -1,7 +1,9 @@
 { config, pkgs, ... }:
 {
   imports = [
+    ../nixvim
     ./programs/vscode
+    ./programs/wezterm
   ];
 
   home.stateVersion = "24.05";
@@ -9,23 +11,12 @@
   programs = {
     git.enable = true;
     zsh.enable = true;
-    nixvim = {
-      enable = true;
-      defaultEditor = true;
-      viAlias = true;
-      vimAlias = true;
-      extraConfigLua = builtins.readFile ../../home/config/nvim/init.lua;
-    };
     tmux.enable = true;
   };
 
-  programs.wezterm.enable = true;
-
-  home.file.".bashrc".source = ../../home/config/bash/.bashrc;
-  home.file.".profile".source = ../../home/config/bash/.profile;
-  home.file.".bash_logout".source = ../../home/config/bash/.bash_logout;
-
-  home.file.".config/wezterm/wezterm.lua".source = ../../home/config/wezterm/wezterm.lua;
+  home.file.".bashrc".source = ./bash/.bashrc;
+  home.file.".profile".source = ./bash/.profile;
+  home.file.".bash_logout".source = ./bash/.bash_logout;
   home.file.".claude/settings.json".source = ../../../claude/settings.json;
   home.file.".codex/config.toml".source = ../../../codex/config.toml;
 

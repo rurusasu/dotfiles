@@ -1,8 +1,9 @@
 # AGENTS
 
-Purpose
-Purpose: tool-specific Home Manager profiles.
+Purpose: tool-specific Home Manager modules.
 Expected contents:
-- vscode/: VS Code profile and extensions.
+- vscode/: VS Code module (default.nix, settings.nix, keybindings.json).
+- wezterm/: WezTerm module (default.nix, wezterm.lua).
 Notes:
-- Keep tool configs isolated here and import from common.nix.
+- Each tool has its own directory with default.nix and config files.
+- Imported from common.nix.

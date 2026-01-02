@@ -1,10 +1,9 @@
 # AGENTS
 
-Purpose
-Purpose: shared Home Manager profile(s).
+Purpose: Home Manager profiles and source files.
 Expected contents:
-- common.nix: shared packages and dotfile links.
-- programs/: editor/tool-specific Home Manager profiles.
+- common.nix: shared Home Manager settings imported by all hosts.
+- bash/: .bashrc, .profile, .bash_logout (source files).
+- programs/: tool-specific Home Manager modules (vscode/, wezterm/).
 Notes:
-- Use as the base for host/user HM entrypoints.
-- Dotfile sources live under nix/home/config and are linked here.
+- nixvim config is in profiles/nixvim/, imported from common.nix.

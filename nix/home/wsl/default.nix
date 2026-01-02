@@ -1,7 +1,9 @@
 { config, pkgs, ... }:
 {
   imports = [
-    ../users/nixos.nix
     ../../profiles/home/common.nix
   ];
+
+  home.username = "nixos";
+  home.homeDirectory = "/home/nixos";
 }

@@ -1,8 +1,9 @@
 # AGENTS
 
-Purpose
-Purpose: VS Code Home Manager profile and extensions list.
+Purpose: VS Code Home Manager module.
 Expected contents:
 - default.nix: programs.vscode settings and extension list.
+- settings.json: VS Code user settings.
+- keybindings.json: VS Code keybindings.
 Notes:
-- User settings and keybindings are loaded via programs.vscode from nix/home/config/vscode.
+- All VS Code config files are co-located in this directory.
