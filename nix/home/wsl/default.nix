@@ -2,6 +2,6 @@
 {
   imports = [
     ../users/nixos.nix
-    ../../profiles/home/common.nix
+    ../../profiles/home
   ];
 }

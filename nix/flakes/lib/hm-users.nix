@@ -16,7 +16,7 @@ in {
     extraSpecialArgs = {
       inherit inputs siteLib system;
       systemConfig = config;
-      dotfilesPath = builtins.toString inputs.self;
+      dotfilesPath = "/home/${builtins.elemAt (builtins.attrNames users) 0}/.dotfiles";
     };
     backupFileExtension = "hm-bak";
     users = hmUsers;

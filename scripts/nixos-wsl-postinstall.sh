@@ -10,9 +10,9 @@ Options:
   --repo-dir <path>    Config repo directory (default: /home/<user>/.dotfiles)
   --flake-name <name>  Flake name (default: myNixOS)
   --hostname <name>    Set networking.hostName
-  --sync-mode <mode>   Sync mode: repo|nix|none (default: repo)
+  --sync-mode <mode>   Sync mode: link|repo|nix|none (default: link)
   --sync-source <path> Source dir for sync (default: script repo root)
-  --sync-back <mode>   Sync back: repo|lock|none (default: repo when sync-mode=repo)
+  --sync-back <mode>   Sync back: lock|none (default: lock when sync-mode=link)
   --force              Allow non-empty repo dir (no deletion)
   -h, --help           Show help
 USAGE
@@ -25,10 +25,10 @@ fi
 
 USER_NAME=""
 REPO_DIR=""
-FLAKE_NAME="myNixOS"
+FLAKE_NAME="nixos"
 HOSTNAME=""
 FORCE=0
-SYNC_MODE="repo"
+SYNC_MODE="link"
 SYNC_SOURCE=""
 SYNC_BACK=""
 
@@ -93,30 +93,71 @@ if [[ -z "$REPO_DIR" ]]; then
   REPO_DIR="/home/$USER_NAME/.dotfiles"
 fi
 
-if [[ -e "$REPO_DIR" && "$FORCE" -eq 0 ]]; then
-  if [[ -n "$(ls -A "$REPO_DIR" 2>/dev/null)" ]]; then
-    echo "Repo dir is not empty: $REPO_DIR" >&2
-    echo "Move it or pass --force to continue." >&2
-    exit 1
-  fi
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 if [[ -z "$SYNC_SOURCE" ]]; then
   SYNC_SOURCE="$SOURCE_ROOT"
 fi
 if [[ -z "$SYNC_BACK" ]]; then
-  if [[ "$SYNC_MODE" == "repo" ]]; then
+  if [[ "$SYNC_MODE" == "link" ]]; then
+    SYNC_BACK="lock"
+  elif [[ "$SYNC_MODE" == "repo" ]]; then
     SYNC_BACK="repo"
   else
     SYNC_BACK="none"
   fi
 fi
 
-mkdir -p "$REPO_DIR"
+# Handle sync mode
+if [[ "$SYNC_MODE" == "link" ]]; then
+  # Create symlink to Windows-side dotfiles
+  if [[ ! -d "$SYNC_SOURCE" ]]; then
+    echo "Sync source not found: $SYNC_SOURCE" >&2
+    exit 1
+  fi
 
-if [[ "$SYNC_MODE" == "repo" ]]; then
+  # Remove existing REPO_DIR if it's a directory or file (not symlink)
+  if [[ -e "$REPO_DIR" && ! -L "$REPO_DIR" ]]; then
+    if [[ "$FORCE" -eq 0 ]]; then
+      echo "Repo dir exists and is not a symlink: $REPO_DIR" >&2
+      echo "Pass --force to remove it and create symlink." >&2
+      exit 1
+    fi
+    rm -rf "$REPO_DIR"
+  fi
+
+  # Remove existing symlink if pointing elsewhere
+  if [[ -L "$REPO_DIR" ]]; then
+    CURRENT_TARGET="$(readlink -f "$REPO_DIR" 2>/dev/null || true)"
+    if [[ "$CURRENT_TARGET" != "$SYNC_SOURCE" ]]; then
+      rm -f "$REPO_DIR"
+    fi
+  fi
+
+  # Create symlink
+  if [[ ! -e "$REPO_DIR" ]]; then
+    ln -s "$SYNC_SOURCE" "$REPO_DIR"
+    echo "Created symlink: $REPO_DIR -> $SYNC_SOURCE"
+  else
+    echo "Symlink already exists: $REPO_DIR -> $SYNC_SOURCE"
+  fi
+
+  # Set ownership of the symlink itself
+  if id "$USER_NAME" >/dev/null 2>&1; then
+    chown -h "$USER_NAME" "$REPO_DIR" 2>/dev/null || true
+  fi
+
+elif [[ "$SYNC_MODE" == "repo" ]]; then
+  if [[ -e "$REPO_DIR" && "$FORCE" -eq 0 ]]; then
+    if [[ -n "$(ls -A "$REPO_DIR" 2>/dev/null)" ]]; then
+      echo "Repo dir is not empty: $REPO_DIR" >&2
+      echo "Move it or pass --force to continue." >&2
+      exit 1
+    fi
+  fi
+
+  mkdir -p "$REPO_DIR"
+
   if [[ ! -d "$SYNC_SOURCE" ]]; then
     echo "Sync source not found: $SYNC_SOURCE" >&2
     exit 1
@@ -126,14 +167,34 @@ if [[ "$SYNC_MODE" == "repo" ]]; then
   else
     (cd "$SYNC_SOURCE" && tar --exclude ".git" --exclude ".direnv" --exclude "result" -cf - .) | (cd "$REPO_DIR" && tar -xf -)
   fi
+
+  if id "$USER_NAME" >/dev/null 2>&1; then
+    USER_GROUP="$(id -gn "$USER_NAME" 2>/dev/null || true)"
+    if [[ -n "$USER_GROUP" ]]; then
+      chown -R "$USER_NAME:$USER_GROUP" "$REPO_DIR"
+    else
+      chown -R "$USER_NAME" "$REPO_DIR"
+    fi
+  fi
+
 elif [[ "$SYNC_MODE" == "nix" ]]; then
+  mkdir -p "$REPO_DIR"
   if [[ -d "$SOURCE_ROOT/nix" ]]; then
     mkdir -p "$REPO_DIR/nix"
     cp -a "$SOURCE_ROOT/nix/." "$REPO_DIR/nix/"
   fi
+
 elif [[ "$SYNC_MODE" != "none" ]]; then
   echo "Unknown sync mode: $SYNC_MODE" >&2
   exit 1
+fi
+
+# For link mode, use SYNC_SOURCE directly for file generation
+# For other modes, use REPO_DIR
+if [[ "$SYNC_MODE" == "link" ]]; then
+  TARGET_DIR="$SYNC_SOURCE"
+else
+  TARGET_DIR="$REPO_DIR"
 fi
 
 case "$(uname -m)" in
@@ -148,7 +209,7 @@ case "$(uname -m)" in
     ;;
 esac
 
-NIX_DIR="$REPO_DIR/nix"
+NIX_DIR="$TARGET_DIR/nix"
 HM_DIR="$NIX_DIR/home"
 HM_USERS_DIR="$HM_DIR/users"
 HM_PROFILES_DIR="$NIX_DIR/profiles/home"
@@ -175,7 +236,7 @@ cat > "$HOST_HOME_PATH" <<EOF
 {
   imports = [
     ../users/$USER_NAME.nix
-    ../../profiles/home/common.nix
+    ../../profiles/home
   ];
 }
 EOF
@@ -214,26 +275,20 @@ if [[ -f /etc/nixos/hardware-configuration.nix ]]; then
   cp -f /etc/nixos/hardware-configuration.nix "$HOST_HW_PATH"
 fi
 
-if id "$USER_NAME" >/dev/null 2>&1; then
-  USER_GROUP="$(id -gn "$USER_NAME" 2>/dev/null || true)"
-  if [[ -n "$USER_GROUP" ]]; then
-    chown -R "$USER_NAME:$USER_GROUP" "$REPO_DIR"
-  else
-    chown -R "$USER_NAME" "$REPO_DIR"
-  fi
-fi
-
+# Run nixos-rebuild
 NIX_CONFIG="experimental-features = nix-command flakes" \
-  nixos-rebuild switch --flake "path:$REPO_DIR#$FLAKE_NAME"
+  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME"
 
-if [[ "$SYNC_BACK" == "repo" ]]; then
+# Handle sync-back
+if [[ "$SYNC_BACK" == "repo" && "$SYNC_MODE" != "link" ]]; then
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete --exclude ".git" --exclude ".direnv" --exclude "result" "$REPO_DIR/" "$SYNC_SOURCE/"
   else
     (cd "$REPO_DIR" && tar --exclude ".git" --exclude ".direnv" --exclude "result" -cf - .) | (cd "$SYNC_SOURCE" && tar -xf -)
   fi
 elif [[ "$SYNC_BACK" == "lock" ]]; then
-  if [[ -f "$REPO_DIR/flake.lock" ]]; then
+  # For link mode, flake.lock is already in SYNC_SOURCE
+  if [[ "$SYNC_MODE" != "link" && -f "$REPO_DIR/flake.lock" ]]; then
     cp -f "$REPO_DIR/flake.lock" "$SYNC_SOURCE/flake.lock"
   fi
 elif [[ "$SYNC_BACK" != "none" ]]; then
@@ -241,12 +296,15 @@ elif [[ "$SYNC_BACK" != "none" ]]; then
   exit 1
 fi
 
-if command -v git >/dev/null 2>&1; then
-  git -C "$REPO_DIR" init
-  git config --global --add safe.directory "$REPO_DIR"
-  git -C "$REPO_DIR" add -A
-else
-  echo "git is not available yet. You can init later."
+# Git setup (only for non-link mode, link mode uses Windows git)
+if [[ "$SYNC_MODE" != "link" ]]; then
+  if command -v git >/dev/null 2>&1; then
+    git -C "$REPO_DIR" init
+    git config --global --add safe.directory "$REPO_DIR"
+    git -C "$REPO_DIR" add -A
+  else
+    echo "git is not available yet. You can init later."
+  fi
 fi
 
 echo "Post-install setup completed."

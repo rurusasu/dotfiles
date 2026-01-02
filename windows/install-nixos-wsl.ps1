@@ -13,10 +13,10 @@ param(
     [switch]$SkipVhdExpand,
     [switch]$SkipVscodeServerClean,
     [switch]$SkipVscodeServerPreinstall,
-    [ValidateSet("repo", "nix", "none")]
-    [string]$SyncMode = "repo",
+    [ValidateSet("link", "repo", "nix", "none")]
+    [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
-    [string]$SyncBack = "repo"
+    [string]$SyncBack = "lock"
 )
 
 Set-StrictMode -Version Latest

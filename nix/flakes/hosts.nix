@@ -7,7 +7,7 @@
 in {
   flake = {
     nixosConfigurations = {
-      myNixOS = let
+      nixos = let
         system = "x86_64-linux";
       in
         withSystem system ({pkgs, ...}: let
