@@ -15,8 +15,7 @@
       vscodevim.vim
       wakatime.vscode-wakatime
     ];
+    userSettings = builtins.fromJSON (builtins.readFile ../../../home/config/vscode/settings.json);
+    keybindings = builtins.fromJSON (builtins.readFile ../../../home/config/vscode/keybindings.json);
   };
-
-  home.file.".config/Code/User/settings.json".source = ../../../home/config/vscode/settings.json;
-  home.file.".config/Code/User/keybindings.json".source = ../../../home/config/vscode/keybindings.json;
 }
