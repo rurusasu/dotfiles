@@ -201,14 +201,14 @@ if id "$USER_NAME" >/dev/null 2>&1; then
   fi
 fi
 
+NIX_CONFIG="experimental-features = nix-command flakes" \
+  nixos-rebuild switch --flake "path:$REPO_DIR#$FLAKE_NAME"
+
 if command -v git >/dev/null 2>&1; then
   git -C "$REPO_DIR" init
   git config --global --add safe.directory "$REPO_DIR"
 else
   echo "git is not available yet. You can init later."
 fi
-
-NIX_CONFIG="experimental-features = nix-command flakes" \
-  nixos-rebuild switch --flake "$REPO_DIR#$FLAKE_NAME"
 
 echo "Post-install setup completed."
