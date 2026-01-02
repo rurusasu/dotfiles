@@ -3,19 +3,22 @@
   programs.vscode = {
     enable = true;
     package = pkgs.vscode;
-    profiles.default.extensions = with pkgs.vscode-extensions; [
-      tobiasalthoff.atom-material-theme
-      ms-vscode-remote.remote-containers
-      ms-vscode-remote.remote-ssh
-      ms-vscode-remote.remote-ssh-edit
-      hediet.vscode-drawio
-      jnoortheen.nix-ide
-      arrterian.nix-env-selector
-      kamadorueda.alejandra
-      vscodevim.vim
-      wakatime.vscode-wakatime
-    ];
-    userSettings = import ../../../../home/config/vscode/settings.nix;
-    keybindings = builtins.fromJSON (builtins.readFile ../../../../home/config/vscode/keybindings.json);
+    mutableExtensionsDir = false;
+    profiles.default = {
+      extensions = with pkgs.vscode-extensions; [
+        tobiasalthoff.atom-material-theme
+        ms-vscode-remote.remote-containers
+        ms-vscode-remote.remote-ssh
+        ms-vscode-remote.remote-ssh-edit
+        hediet.vscode-drawio
+        jnoortheen.nix-ide
+        arrterian.nix-env-selector
+        kamadorueda.alejandra
+        vscodevim.vim
+        wakatime.vscode-wakatime
+      ];
+      userSettings = import ../../../../home/config/vscode/settings.nix;
+      keybindings = builtins.fromJSON (builtins.readFile ../../../../home/config/vscode/keybindings.json);
+    };
   };
 }
