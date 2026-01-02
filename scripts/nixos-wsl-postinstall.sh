@@ -181,15 +181,24 @@ cat > "$HOST_HOME_PATH" <<EOF
 EOF
 
 cat > "$HOST_DEFAULT_PATH" <<EOF
-{ config, pkgs, ... }:
+{ config, inputs, pkgs, ... }:
 {
   imports = [
     ../../modules/host
     ../../modules/wsl
     ./configuration.nix
+    inputs.nixos-vscode-server.nixosModules.default
   ];
 
   users.users.$USER_NAME.shell = pkgs.zsh;
+
+  services.vscode-server = {
+    enable = true;
+    installPath = [
+      "\$HOME/.vscode-server"
+      "\$HOME/.vscode-server-insiders"
+    ];
+  };
 EOF
 
 if [[ -n "$HOSTNAME" ]]; then
