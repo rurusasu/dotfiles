@@ -6,4 +6,4 @@ Expected contents:
 - bash/: .bashrc, .profile, .bash_logout
 - wezterm/: wezterm.lua
 - nvim/: init.lua for nixvim extraConfigLua
-- vscode/: settings.json and keybindings.json
+- vscode/: settings.nix and keybindings.json
