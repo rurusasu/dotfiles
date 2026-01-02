@@ -173,6 +173,7 @@ fi
 
 if command -v git >/dev/null 2>&1; then
   git -C "$REPO_DIR" init
+  git config --global --add safe.directory "$REPO_DIR"
 else
   echo "git is not available yet. You can init later."
 fi
