@@ -2,7 +2,6 @@
 {
   imports = [
     ./claude-code
-    ./fonts
     ./fzf
     ./ghq
     ./git
