@@ -51,6 +51,36 @@ nixos-rebuild switch
 `windows/install-nixos-wsl.ps1` は既定で `scripts/nixos-wsl-postinstall.sh` を実行し、
 Flake 化と Home Manager ベースの最小構成を作成します。
 
+### 同期の仕組み (図)
+
+```
+Windows (D:\my_programing\dotfiles)
+        |
+        |  (postinstall --sync-mode repo)
+        v
+WSL (/home/<user>/.dotfiles)
+        |
+        |  nixos-rebuild switch --flake
+        v
+NixOS の設定が反映される
+```
+
+既定では Windows 側のリポジトリを WSL 側へ同期してからビルドします。
+これにより WSL 側で `flake.lock` が作成されます。
+
+同期方式を変えたい場合:
+
+```powershell
+# repo: リポジトリ全体を同期 (既定)
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SyncMode repo
+
+# nix: nix ディレクトリだけ同期
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SyncMode nix
+
+# none: 同期しない (既存の ~/.dotfiles を使う)
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SyncMode none
+```
+
 スキップしたい場合:
 
 ```powershell
@@ -64,7 +94,6 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 ```
 
 生成される主なファイル:
-- `~/.dotfiles/flake.nix`
 - `~/.dotfiles/nix/profiles/home/common.nix`
 - `~/.dotfiles/nix/home/wsl/default.nix`
 - `~/.dotfiles/nix/home/users/<USER>.nix`
