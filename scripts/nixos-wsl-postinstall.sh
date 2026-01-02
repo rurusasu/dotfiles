@@ -12,6 +12,7 @@ Options:
   --hostname <name>    Set networking.hostName
   --sync-mode <mode>   Sync mode: repo|nix|none (default: repo)
   --sync-source <path> Source dir for sync (default: script repo root)
+  --sync-back <mode>   Sync back: repo|lock|none (default: repo when sync-mode=repo)
   --force              Allow non-empty repo dir (no deletion)
   -h, --help           Show help
 USAGE
@@ -29,6 +30,7 @@ HOSTNAME=""
 FORCE=0
 SYNC_MODE="repo"
 SYNC_SOURCE=""
+SYNC_BACK=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -54,6 +56,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --sync-source)
       SYNC_SOURCE="${2:-}"
+      shift 2
+      ;;
+    --sync-back)
+      SYNC_BACK="${2:-}"
       shift 2
       ;;
     --force)
@@ -99,6 +105,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 if [[ -z "$SYNC_SOURCE" ]]; then
   SYNC_SOURCE="$SOURCE_ROOT"
+fi
+if [[ -z "$SYNC_BACK" ]]; then
+  if [[ "$SYNC_MODE" == "repo" ]]; then
+    SYNC_BACK="repo"
+  else
+    SYNC_BACK="none"
+  fi
 fi
 
 mkdir -p "$REPO_DIR"
@@ -203,6 +216,21 @@ fi
 
 NIX_CONFIG="experimental-features = nix-command flakes" \
   nixos-rebuild switch --flake "path:$REPO_DIR#$FLAKE_NAME"
+
+if [[ "$SYNC_BACK" == "repo" ]]; then
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete --exclude ".git" --exclude ".direnv" --exclude "result" "$REPO_DIR/" "$SYNC_SOURCE/"
+  else
+    (cd "$REPO_DIR" && tar --exclude ".git" --exclude ".direnv" --exclude "result" -cf - .) | (cd "$SYNC_SOURCE" && tar -xf -)
+  fi
+elif [[ "$SYNC_BACK" == "lock" ]]; then
+  if [[ -f "$REPO_DIR/flake.lock" ]]; then
+    cp -f "$REPO_DIR/flake.lock" "$SYNC_SOURCE/flake.lock"
+  fi
+elif [[ "$SYNC_BACK" != "none" ]]; then
+  echo "Unknown sync-back mode: $SYNC_BACK" >&2
+  exit 1
+fi
 
 if command -v git >/dev/null 2>&1; then
   git -C "$REPO_DIR" init

@@ -13,7 +13,9 @@ param(
     [switch]$SkipWslConfigApply,
     [switch]$SkipVhdExpand,
     [ValidateSet("repo", "nix", "none")]
-    [string]$SyncMode = "repo"
+    [string]$SyncMode = "repo",
+    [ValidateSet("repo", "lock", "none")]
+    [string]$SyncBack = "repo"
 )
 
 Set-StrictMode -Version Latest
@@ -173,7 +175,7 @@ function Invoke-PostInstallSetup {
         $wslPath = $fallback
     }
     Write-Host "Post-install セットアップを実行します..."
-    $cmd = "bash `"$wslPath`" --force --sync-mode $SyncMode"
+    $cmd = "bash `"$wslPath`" --force --sync-mode $SyncMode --sync-back $SyncBack"
     & wsl -d $Name -u root -- sh -lc $cmd
 }
 
