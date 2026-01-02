@@ -15,6 +15,13 @@
   nixpkgs.config.allowUnfree = true;
   programs.zsh.enable = true;
 
+  programs.git = {
+    enable = true;
+    config = {
+      safe.directory = "*";
+    };
+  };
+
   environment.systemPackages = [
     pkgs.git
   ];

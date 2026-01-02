@@ -21,3 +21,25 @@ Notes:
 Note: `--impure` is required for dynamic dotfiles path resolution via `mkOutOfStoreSymlink`.
 
 Tab completion is available for additional options: `--show-trace`, `--verbose`, `--upgrade`, `--update-input`
+
+### Testing Aliases
+From Windows PowerShell:
+```powershell
+# Test nrs (switch)
+wsl -d NixOS -- zsh -ic "nrs"
+
+# Test nrt (test)
+wsl -d NixOS -- zsh -ic "nrt"
+
+# Test nrb (boot)
+wsl -d NixOS -- zsh -ic "nrb"
+```
+
+Or from within NixOS (zsh shell):
+```bash
+nrs  # Rebuild and switch
+nrt  # Build and test (no boot entry)
+nrb  # Build for next boot
+```
+
+Expected output: `Done. The new configuration is /nix/store/...`
