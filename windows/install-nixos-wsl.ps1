@@ -1,10 +1,9 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$DistroName = "NixOS",
     [string]$InstallDir = "$env:USERPROFILE\\NixOS",
     [string]$ReleaseTag = "",
     [switch]$SkipWslBaseInstall,
-    [switch]$SkipChannelUpdate,
     [string]$PostInstallScript = "",
     [switch]$SkipPostInstallSetup,
     [switch]$SkipSetDefaultDistro,
@@ -12,6 +11,8 @@ param(
     [int]$DockerIntegrationRetryDelaySeconds = 5,
     [switch]$SkipWslConfigApply,
     [switch]$SkipVhdExpand,
+    [switch]$SkipVscodeServerClean,
+    [switch]$SkipVscodeServerPreinstall,
     [ValidateSet("repo", "nix", "none")]
     [string]$SyncMode = "repo",
     [ValidateSet("repo", "lock", "none")]
@@ -143,13 +144,6 @@ function Install-FromFile {
     & wsl @args
 }
 
-function Run-PostInstall {
-    param([string]$Name)
-    Write-Host "NixOS 内でチャンネル更新と再構成を実行します..."
-    $nixPath = "nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos:nixos-config=/etc/nixos/configuration.nix"
-    & wsl -d $Name -u root -- sh -lc "nix-channel --update && NIX_PATH=$nixPath nixos-rebuild switch"
-}
-
 function Invoke-PostInstallSetup {
     param(
         [string]$Name,
@@ -225,13 +219,12 @@ function Ensure-DockerDesktopIntegration {
         Write-Warning "WSL の空き容量が不足しているため、Docker Desktop 連携のリトライをスキップします。"
         return
     }
-    if (-not (Test-DockerDesktopHealth)) {
-        Write-Warning "Docker Desktop 側の WSL ディストリビューションが壊れている可能性があるため、連携の確認をスキップします。"
-        return
-    }
     Ensure-DockerDesktopDistros
     Ensure-DockerGroup -Name $Name
     Start-DockerDesktopIfNeeded
+    if (-not (Test-DockerDesktopHealth)) {
+        Write-Warning "Docker Desktop 側の WSL ディストリビューションが壊れている可能性がありますが、連携の確認は続行します。"
+    }
     $restarted = $false
     for ($i = 1; $i -le $Retries; $i++) {
         Write-Host "Docker Desktop 連携の確認を試行します ($i/$Retries)..."
@@ -332,6 +325,78 @@ function Ensure-DockerGroup {
     param([string]$Name)
     $user = Get-WslDefaultUser -Name $Name
     & wsl -d $Name -u root -- sh -lc "( groupadd docker || true ) && usermod -aG docker $user"
+}
+
+function Cleanup-VscodeServer {
+    param([string]$Name)
+    $user = Get-WslDefaultUser -Name $Name
+    $userHome = "/home/$user"
+    $cleanup = @(
+        "rm -rf $userHome/.vscode-server $userHome/.vscode-server-insiders",
+        "rm -rf $userHome/.vscode-remote-containers $userHome/.vscode-remote-wsl",
+        "rm -rf /root/.vscode-server /root/.vscode-server-insiders",
+        "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
+    ) -join " && "
+    & wsl -d $Name -u root -- sh -lc $cleanup
+}
+
+function Find-VscodeProductJson {
+    param([string[]]$Roots, [string]$Pattern)
+    $candidates = @()
+    foreach ($root in $Roots) {
+        if ([string]::IsNullOrWhiteSpace($root)) { continue }
+        if (Test-Path -LiteralPath $root) {
+            $candidates += Get-ChildItem -LiteralPath $root -Recurse -Filter product.json -ErrorAction SilentlyContinue
+        }
+    }
+    if ($Pattern) {
+        $candidates += Get-ChildItem -Path $Pattern -ErrorAction SilentlyContinue
+    }
+    $candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
+
+function Get-VscodeProductInfo {
+    param([string[]]$Roots, [string]$Pattern)
+    $productFile = Find-VscodeProductJson -Roots $Roots -Pattern $Pattern
+    if (-not $productFile) {
+        return $null
+    }
+    try {
+        return (Get-Content -Raw -LiteralPath $productFile.FullName | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
+}
+
+function Install-VscodeServer {
+    param(
+        [string]$Name,
+        [string]$Channel,
+        [string]$Commit,
+        [string]$User
+    )
+    if (-not $Commit) {
+        return
+    }
+    $serverRoot = if ($Channel -eq "insider") { "/home/$User/.vscode-server-insiders" } else { "/home/$User/.vscode-server" }
+    $serverDir = "$serverRoot/bin/$Commit"
+    $url = "https://update.code.visualstudio.com/commit:$Commit/server-linux-x64/$Channel"
+    $safeUser = $User.Replace("'", "''")
+    $safeRoot = $serverRoot.Replace("'", "''")
+    $safeDir = $serverDir.Replace("'", "''")
+    $safeUrl = $url.Replace("'", "''")
+    $chownOwner = "${safeUser}:" + '$groupName'
+    $cmd = "set -e; " +
+        "userName='$safeUser'; " +
+        "groupName=`$(id -gn `"$safeUser`" 2>/dev/null || echo `"$safeUser`"); " +
+        "serverRoot='$safeRoot'; " +
+        "serverDir='$safeDir'; " +
+        "url='$safeUrl'; " +
+        "mkdir -p `"$safeDir`"; " +
+        "if [ ! -f `"$safeDir/.nixos-patched`" ]; then curl -fsSL `"$safeUrl`" | tar -xz -C `"$safeDir`" --strip-components=1; fi; " +
+        "if [ -x `"$safeDir/bin/code-server-insiders`" ] && [ ! -e `"$safeDir/bin/code-server`" ]; then ln -s code-server-insiders `"$safeDir/bin/code-server`"; fi; " +
+        "chown -R `"$chownOwner`" `"$safeRoot`""
+    & wsl -d $Name -u root -- sh -lc $cmd
 }
 Assert-Admin
 Ensure-WslReady
@@ -480,17 +545,43 @@ function Ensure-WslWritable {
         }
     }
 }
-if ($SkipChannelUpdate) {
-    Write-Host "チャンネル更新をスキップしました。"
-} else {
-    Run-PostInstall -Name $DistroName
-}
-
 Invoke-PostInstallSetup -Name $DistroName -ScriptPath $PostInstallScript
 Apply-WslConfig
 Ensure-WslWritable -Name $DistroName
 Ensure-WhoamiShim -Name $DistroName
 Ensure-DockerDesktopIntegration -Name $DistroName -Retries $DockerIntegrationRetries -DelaySeconds $DockerIntegrationRetryDelaySeconds
+if (-not $SkipVscodeServerClean) {
+    Write-Host "VS Code Server キャッシュを削除します..."
+    Cleanup-VscodeServer -Name $DistroName
+    Write-Host "VS Code Server キャッシュを削除しました。"
+}
+if (-not $SkipVscodeServerPreinstall) {
+    $user = Get-WslDefaultUser -Name $DistroName
+    $insidersRoots = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\\Microsoft VS Code Insiders")
+    )
+    $stableRoots = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\\Microsoft VS Code")
+    )
+    $insidersPattern = "C:\\Users\\*\\AppData\\Local\\Programs\\Microsoft VS Code Insiders\\*\\resources\\app\\product.json"
+    $stablePattern = "C:\\Users\\*\\AppData\\Local\\Programs\\Microsoft VS Code\\*\\resources\\app\\product.json"
+    $insidersProduct = Get-VscodeProductInfo -Roots $insidersRoots -Pattern $insidersPattern
+    $stableProduct = Get-VscodeProductInfo -Roots $stableRoots -Pattern $stablePattern
+    $didPreinstall = $false
+    if ($insidersProduct -and $insidersProduct.commit) {
+        Write-Host "VS Code Server (Insiders) を事前インストールします..."
+        Install-VscodeServer -Name $DistroName -Channel "insider" -Commit $insidersProduct.commit -User $user
+        $didPreinstall = $true
+    }
+    if ($stableProduct -and $stableProduct.commit) {
+        Write-Host "VS Code Server (Stable) を事前インストールします..."
+        Install-VscodeServer -Name $DistroName -Channel "stable" -Commit $stableProduct.commit -User $user
+        $didPreinstall = $true
+    }
+    if (-not $didPreinstall) {
+        Write-Warning "VS Code の product.json が見つからないため、事前インストールをスキップします。"
+    }
+}
 
 if (-not $SkipSetDefaultDistro) {
     Write-Host "WSL の既定ディストリビューションを設定します: $DistroName"
@@ -498,3 +589,4 @@ if (-not $SkipSetDefaultDistro) {
 }
 
 Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName"
+

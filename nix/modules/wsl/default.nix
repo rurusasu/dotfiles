@@ -21,6 +21,12 @@
     ];
   };
 
+  # Ensure nix-ld works for non-login shells (e.g. VS Code WSL server).
+  environment.variables = {
+    NIX_LD = "/run/current-system/sw/share/nix-ld/lib/ld.so";
+    NIX_LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
+  };
+
   nix.nixPath = [
     "nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos"
     "nixos-config=/etc/nixos/configuration.nix"

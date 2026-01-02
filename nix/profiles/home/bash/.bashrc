@@ -92,6 +92,18 @@ alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 
+# NixOS aliases
+alias nrs='sudo nixos-rebuild switch --flake ~/dotfiles --impure'
+alias nrt='sudo nixos-rebuild test --flake ~/dotfiles --impure'
+alias nrb='sudo nixos-rebuild boot --flake ~/dotfiles --impure'
+
+# Tab completion for nixos-rebuild aliases (options)
+_nrs_completions() {
+    local opts="--flake --impure --show-trace --verbose --upgrade --update-input"
+    COMPREPLY=($(compgen -W "$opts" -- "${COMP_WORDS[COMP_CWORD]}"))
+}
+complete -F _nrs_completions nrs nrt nrb
+
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
