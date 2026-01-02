@@ -4,7 +4,6 @@
 
   programs = {
     git.enable = true;
-    bash.enable = true;
     zsh.enable = true;
     neovim = {
       enable = true;
@@ -17,6 +16,10 @@
   };
 
   programs.wezterm.enable = true;
+
+  home.file.".bashrc".source = ../../../bash/.bashrc;
+  home.file.".profile".source = ../../../bash/.profile;
+  home.file.".bash_logout".source = ../../../bash/.bash_logout;
 
   home.file.".config/wezterm/wezterm.lua".source = ../../home/config/wezterm/wezterm.lua;
   home.file.".claude/settings.json".source = ../../../claude/settings.json;
