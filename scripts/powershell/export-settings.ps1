@@ -2,7 +2,7 @@
 # Run this script to update dotfiles with current Windows settings
 
 param(
-    [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 )
 
 $ErrorActionPreference = "Stop"

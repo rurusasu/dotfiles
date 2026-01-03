@@ -1,322 +1,141 @@
 # Dotfiles
 
-GNU Stow を使った dotfiles の一元管理リポジトリ
+NixOS/Home Manager を使った dotfiles の一元管理リポジトリ
 
-## 方針 (Home Manager)
+## 方針
 
-NixOS/WSL を含む複数環境で共通運用するため、ユーザー設定は Home Manager に寄せる方針。
-設定は `nix/home/` と `nix/profiles/` 配下で管理します。
+NixOS/WSL を含む複数環境で共通運用するため、すべての設定は Nix で管理します。
 
-非 WSL の NixOS 向けホスト設定は `nix/hosts/` で管理します。
-
-## フォーマット (treefmt)
-
-Nix の整形は treefmt で行います。
-
-```bash
-nix fmt
-```
-
-```bash
-./scripts/treefmt.sh
-```
-
-## WSL 設定 (.wslconfig)
-
-`.wslconfig` は `windows/.wslconfig` で管理し、以下で適用します。
-
-```powershell
-.\windows\apply-wslconfig.ps1
-wsl --shutdown
-```
+- ユーザー設定: `nix/profiles/home/` (Home Manager)
+- ホスト設定: `nix/hosts/`
+- ターミナル設定: `nix/profiles/home/programs/terminals/`
 
 ## ディレクトリ構造
 
 ```
 dotfiles/
-├── bash/         # Bash設定 (.bashrc, .profile, .bash_logout)
-├── git/          # Git設定 (.gitconfig)
-├── vim/          # Vim設定 (.vimrc)
-├── claude/       # Claude設定 (.claude.json)
-├── nvim/         # Neovim設定 (init.lua, vscode統合)
-│   └── .config/nvim/
-│       ├── init.lua                # メイン設定ファイル
-│       └── lua/
-│           └── vscode-config.lua   # VSCode固有設定
-├── vscode/       # VSCode設定 (settings.json, keybindings.json, snippets/)
-│   ├── .config/Code/User/
-│   ├── extensions.json             # 拡張機能リスト（vscode-neovim含む）
-│   └── install-extensions.sh       # 拡張機能インストールスクリプト
-└── install.sh    # インストールスクリプト
+├── nix/                    # NixOS/Home Manager configuration
+│   ├── flakes/             # Flake inputs/outputs
+│   ├── hosts/              # Host-specific configs
+│   ├── home/               # Home Manager base
+│   ├── profiles/           # Reusable config profiles
+│   │   └── home/programs/
+│   │       └── terminals/  # Windows Terminal, WezTerm
+│   ├── modules/            # Custom NixOS modules
+│   ├── lib/                # Helper functions
+│   ├── overlays/           # Nixpkgs overlays
+│   ├── packages/           # Custom packages
+│   └── templates/          # Config templates
+├── scripts/                # All scripts
+│   ├── sh/                 # Shell scripts (Linux/WSL)
+│   │   ├── update.sh           # Daily update script
+│   │   ├── nixos-wsl-postinstall.sh
+│   │   └── treefmt.sh
+│   └── powershell/         # PowerShell scripts (Windows)
+│       ├── update-windows-settings.ps1
+│       ├── update-wslconfig.ps1
+│       └── export-settings.ps1
+├── windows/                # Windows-side config files
+│   ├── winget/             # Package management
+│   └── .wslconfig          # WSL configuration
+├── install.ps1             # NixOS WSL installer (auto-elevates to admin)
+├── flake.nix               # Nix flake entry point
+└── flake.lock
 ```
 
-## 必要なツール
+## セットアップ
 
-- **GNU Stow** - dotfiles のシンボリックリンク管理
-- **Neovim** - VSCode での Vim エミュレーション（オプション）
+### NixOS WSL (推奨)
+
+Windows から管理者権限の PowerShell で実行:
+
+```powershell
+.\install.ps1
+```
+
+これにより:
+1. NixOS WSL がダウンロード・インポートされる
+2. `~/.dotfiles` がこのリポジトリへのシンボリックリンクとして作成される
+3. `nixos-rebuild switch` が実行され設定が適用される
+
+### 設定の更新
+
+WSL 内で実行:
 
 ```bash
-# 必須
-sudo apt install stow
+# 方法1: update.sh を使う（NixOS rebuild + Windows設定適用を一括実行）
+./scripts/sh/update.sh
 
-# VSCode で Vim を使う場合
-sudo apt install neovim
+# 方法2: エイリアスを使う（NixOS rebuildのみ）
+nrs  # alias for: sudo nixos-rebuild switch --flake ~/.dotfiles --impure
 ```
 
-## インストール方法
+Windows 側のファイルを編集すると、`~/.dotfiles` シンボリックリンク経由で即座に WSL から参照可能。
 
-### 全ての設定を適用
+### ターミナル設定を Windows に適用
+
+`nixos-rebuild switch` 後、Windows Terminal と WezTerm の設定を Windows に適用:
+
+```powershell
+# 管理者権限で実行
+.\scripts\powershell\update-windows-settings.ps1
+```
+
+または `update.sh` を使用すると、NixOS rebuild 後に自動で適用するか確認されます。
+
+## フォーマット (treefmt)
+
+Nix の整形は treefmt で行います:
 
 ```bash
-./install.sh
+nix fmt
 ```
 
-### 個別に適用
+または:
 
 ```bash
-# Bash設定のみ
-stow -t ~ bash
-
-# Git設定のみ
-stow -t ~ git
-
-# Vim設定のみ
-stow -t ~ vim
-
-# Claude設定のみ
-stow -t ~ claude
-
-# Neovim設定のみ
-stow -t ~ nvim
-
-# VSCode設定のみ
-stow -t ~ vscode
+./scripts/sh/treefmt.sh
 ```
 
-## アンインストール方法
+## WSL 設定 (.wslconfig)
 
-```bash
-# 全ての設定を削除
-stow -D -t ~ bash git vim claude nvim vscode
+`.wslconfig` は `windows/.wslconfig` で管理し、以下で適用:
 
-# 個別に削除
-stow -D -t ~ bash
+```powershell
+.\scripts\powershell\update-wslconfig.ps1
+wsl --shutdown
 ```
 
-## 新しいマシンでのセットアップ
+## キーパス
 
-1. リポジトリをクローン
+| Location | Description |
+|----------|-------------|
+| `~/.dotfiles` | Windows dotfiles へのシンボリックリンク |
+| `nixosConfigurations.nixos` | WSL ホスト用 Flake attribute |
+| `nix/profiles/home/programs/terminals/` | ターミナル設定 (Windows Terminal, WezTerm) |
 
-```bash
-cd ~
-git clone https://github.com/rurusasu/dotfiles.git
-cd dotfiles
-```
+## ターミナル設定
 
-2. GNU Stow をインストール
+### Windows Terminal
+- 設定ソース: `nix/profiles/home/programs/terminals/windows-terminal/`
+- キーバインド: `Ctrl+Shift+H` (水平分割), `Ctrl+Shift+V` (垂直分割), `Ctrl+Shift+X` (ペイン閉じる)
 
-```bash
-sudo apt install stow
-```
-
-3. 設定を適用
-
-```bash
-./install.sh
-```
-
-## 新しい設定ファイルの追加方法
-
-1. 新しいカテゴリのディレクトリを作成
-
-```bash
-mkdir <category>
-```
-
-2. 設定ファイルを配置
-
-```bash
-cp ~/.<config_file> <category>/.<config_file>
-```
-
-3. Stow で適用
-
-```bash
-stow -t ~ <category>
-```
-
-4. 変更をコミット
-
-```bash
-git add <category>
-git commit -m "Add <category> configuration"
-git push
-```
-
-## 設定ファイルの更新方法
-
-1. dotfiles リポジトリ内のファイルを編集（シンボリックリンクなので、ホームディレクトリで編集しても同じ）
-
-2. 変更をコミット
-
-```bash
-cd ~/dotfiles
-git add .
-git commit -m "Update configuration"
-git push
-```
-
-## Neovim for VSCode (Vim Emulation)
-
-このdotfilesには、VSCodeでNeovimを使用するための設定が含まれています。
-
-### セットアップ手順
-
-**1. Neovimをインストール**
-
-```bash
-sudo apt update && sudo apt install -y neovim
-
-# バージョン確認（0.5+推奨、0.9+が理想）
-nvim --version
-```
-
-**2. dotfilesを適用**
-
-```bash
-./install.sh
-# nvimが含まれるので、~/.config/nvim/init.luaへシンボリックリンクが作成されます
-```
-
-**3. VSCode拡張機能をインストール**
-
-```bash
-cd vscode
-./install-extensions.sh
-# vscode-neovimが自動的にインストールされます
-```
-
-**4. VSCodeを再起動**
-
-VSCodeを再起動すると、vscode-neovimが有効になります。
-
-### 主な機能
-
-- **Vim モーション**: hjkl, w/b, f/t, gg/G など全てのVimコマンド
-- **Visual モード**: v (character), V (line), Ctrl+v (block)
-- **マクロ**: qa でマクロ記録開始、@a で再生
-- **VSCode統合**: `<leader>` キー（スペース）でVSCodeコマンドにアクセス
-
-### キーバインド一覧
-
-| キー | 機能 |
-|------|------|
-| `<Space>ff` | ファイル検索（Quick Open） |
-| `<Space>fg` | テキスト検索（Find in Files） |
-| `<Space>ca` | コードアクション |
-| `<Space>rn` | シンボル名変更 |
-| `gd` | 定義へジャンプ |
-| `gr` | 参照を表示 |
-| `gcc` | 行コメント切替 |
-| `<Space>e` | エクスプローラー表示 |
-| `<Space>tt` | ターミナル切替 |
-
-完全なキーバインドは `nvim/.config/nvim/lua/vscode-config.lua` を参照。
-
-### カスタマイズ
-
-`nvim/.config/nvim/lua/vscode-config.lua` を編集してキーバインドを追加・変更できます。
-
-### トラブルシューティング
-
-**Q: Neovimが起動しない**
-```bash
-# 設定ファイルのエラーチェック
-nvim --headless -c 'checkhealth' -c 'quit'
-```
-
-**Q: Vimコマンドが効かない**
-- VSCodeVim拡張機能が無効になっているか確認
-- vscode-neovimのみ有効にする
-
-## VSCode 拡張機能の管理
-
-VSCode 拡張機能は **2つの方法** で自動セットアップできます：
-
-### 方法1: Bash スクリプトで自動インストール（推奨）
-
-**使い方：**
-
-```bash
-# dotfiles セットアップ時に自動実行（./install.sh 実行時に確認されます）
-./install.sh
-
-# または手動で実行
-cd vscode
-./install-extensions.sh
-```
-
-**特徴：**
-- ✅ **WSL 対応**: Windows の VSCode/VSCode Insiders/Cursor を自動検出
-- ✅ `extensions.json` から自動読み込み
-- ✅ 既にインストール済みの拡張機能は自動スキップ
-- ✅ `jq` 不要（grep/sed でパース）
-- ✅ バックアップ自動作成
-
-**対応エディタ：**
-- Visual Studio Code
-- Visual Studio Code Insiders
-- VSCodium / VSCodium Insiders
-- Cursor
-
-### 方法2: VSCode の推奨機能
-
-VSCode は `extensions.json` の `recommendations` を自動的に読み込み、「推奨拡張機能をインストールしますか？」と聞いてくれます。
-
-**使い方：**
-1. VSCode を開く
-2. 右下に表示される通知から「すべてインストール」をクリック
-
-### 拡張機能の追加
-
-`vscode/extensions.json` を編集：
-
-```json
-{
-  "recommendations": [
-    "ms-python.python",
-    "your-new-extension-id"
-  ]
-}
-```
-
-### 現在の拡張機能を保存
-
-```bash
-# WSL 環境の場合
-cd vscode
-./install-extensions.sh  # 拡張機能リストを確認
-
-# 手動で extensions.json を編集
-```
+### WezTerm
+- 設定ソース: `nix/profiles/home/programs/terminals/wezterm/`
+- Leader key: `Ctrl+Q`
+- キーバインド: `Leader+h` (水平分割), `Leader+v` (垂直分割), `Leader+x` (ペイン閉じる)
 
 ## トラブルシューティング
 
-### シンボリックリンクが作成されない場合
-
-既存のファイルがある場合は、まずバックアップしてから削除してください：
+### ビルドエラー
 
 ```bash
-# バックアップを作成
-mv ~/.bashrc ~/.bashrc.backup
-
-# Stow を実行
-stow -t ~ bash
+# ドライランでエラーを確認
+sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 ```
 
-### 設定を元に戻す場合
+### Windows Terminal 設定が反映されない
 
-```bash
-stow -D -t ~ bash
-mv ~/.bashrc.backup ~/.bashrc
-```
+1. WSL で `nixos-rebuild switch` を実行
+2. Windows で `.\scripts\powershell\update-windows-settings.ps1` を管理者権限で実行
+3. Windows Terminal を再起動

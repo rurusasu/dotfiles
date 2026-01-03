@@ -2,7 +2,7 @@
 # Run this script as Administrator to create symlinks and install packages
 
 param(
-    [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+    [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))),
     [switch]$SkipWinget,
     [string]$WslDistro = "NixOS",
     [switch]$Force
@@ -51,13 +51,38 @@ if (Test-Path $destDir) {
         # Write the settings directly (copy approach since symlinks don't work with WSL symlinks)
         $settingsContent | Out-File -FilePath $TerminalSettingsDest -Encoding utf8 -Force
         Write-Host "[OK] Windows Terminal settings applied" -ForegroundColor Green
-        Write-Host "     Note: Settings are copied, run this script again after nixos-rebuild to update" -ForegroundColor Gray
     } else {
         Write-Host "[SKIP] Windows Terminal settings not found in WSL" -ForegroundColor Yellow
         Write-Host "[HINT] Run 'sudo nixos-rebuild switch' in WSL first to generate settings" -ForegroundColor Yellow
     }
 } else {
     Write-Host "[SKIP] Windows Terminal not installed" -ForegroundColor Yellow
+}
+
+# WezTerm settings (Nix-generated from WSL)
+$WeztermConfigDir = "$env:USERPROFILE\.config\wezterm"
+$WeztermConfigDest = "$WeztermConfigDir\wezterm.lua"
+
+# Create config directory if it doesn't exist
+if (-not (Test-Path $WeztermConfigDir)) {
+    New-Item -ItemType Directory -Path $WeztermConfigDir -Force | Out-Null
+}
+
+# Read WezTerm config from WSL
+$weztermContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/wezterm/wezterm.lua" 2>$null
+
+if ($LASTEXITCODE -eq 0 -and $weztermContent) {
+    # Backup existing config if not already backed up
+    if ((Test-Path $WeztermConfigDest) -and -not (Test-Path "$WeztermConfigDest.backup")) {
+        Copy-Item -Path $WeztermConfigDest -Destination "$WeztermConfigDest.backup" -Force
+        Write-Host "[INFO] Backed up existing WezTerm config to $WeztermConfigDest.backup" -ForegroundColor Gray
+    }
+
+    # Write the config
+    $weztermContent | Out-File -FilePath $WeztermConfigDest -Encoding utf8 -Force
+    Write-Host "[OK] WezTerm settings applied" -ForegroundColor Green
+} else {
+    Write-Host "[SKIP] WezTerm settings not found in WSL" -ForegroundColor Yellow
 }
 
 # Install winget packages

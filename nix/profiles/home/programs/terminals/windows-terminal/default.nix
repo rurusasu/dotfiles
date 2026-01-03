@@ -13,10 +13,17 @@ let
       }
       { command = "paste"; id = "User.paste"; }
       {
-        command = { action = "splitPane"; split = "auto"; splitMode = "duplicate"; };
-        id = "User.splitPane.A6751878";
+        command = { action = "splitPane"; split = "horizontal"; splitMode = "duplicate"; };
+        id = "User.splitPane.horizontal";
+      }
+      {
+        command = { action = "splitPane"; split = "vertical"; splitMode = "duplicate"; };
+        id = "User.splitPane.vertical";
       }
       { command = "find"; id = "User.find"; }
+      { command = "closePane"; id = "User.closePane"; }
+      { command = "nextTab"; id = "User.nextTab"; }
+      { command = "prevTab"; id = "User.prevTab"; }
       # Unbind Alt+C and Alt+Z for fzf
       { command = "unbound"; keys = "alt+c"; }
       { command = "unbound"; keys = "alt+z"; }
@@ -29,12 +36,22 @@ let
     # Default profile (PowerShell Core)
     defaultProfile = "{574e775e-4f2a-5b96-ac1e-a2962a402336}";
 
+    # Global settings
+    language = "ja";
+    alwaysShowNotificationIcon = true;
+    useAcrylicInTabRow = true;
+    showTabsFullscreen = true;
+
     # Keybindings
     keybindings = [
       { id = "User.copy.644BA8F2"; keys = "ctrl+c"; }
-      { id = "User.find"; keys = "ctrl+shift+f"; }
       { id = "User.paste"; keys = "ctrl+v"; }
-      { id = "User.splitPane.A6751878"; keys = "alt+shift+d"; }
+      { id = "User.find"; keys = "ctrl+shift+f"; }
+      { id = "User.splitPane.horizontal"; keys = "ctrl+shift+h"; }
+      { id = "User.splitPane.vertical"; keys = "ctrl+shift+v"; }
+      { id = "User.closePane"; keys = "ctrl+shift+x"; }
+      { id = "User.nextTab"; keys = "ctrl+tab"; }
+      { id = "User.prevTab"; keys = "ctrl+shift+tab"; }
     ];
 
     # New tab menu
@@ -42,7 +59,18 @@ let
 
     # Profiles
     profiles = {
-      defaults = { };
+      # Default settings for all profiles
+      defaults = {
+        font = {
+          face = "Consolas";
+          size = 12;
+        };
+        useAcrylic = true;
+        opacity = 85;
+        colorScheme = "One Half Dark";
+        cursorShape = "bar";
+        padding = "8, 8, 8, 8";
+      };
       list = [
         {
           commandline = "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
@@ -58,7 +86,7 @@ let
         }
         {
           guid = "{b453ae62-4e3d-5e58-b989-0a998ec441b8}";
-          hidden = false;
+          hidden = true;
           name = "Azure Cloud Shell";
           source = "Windows.Terminal.Azure";
         }
@@ -68,6 +96,11 @@ let
           hidden = false;
           name = "PowerShell";
           source = "Windows.Terminal.PowershellCore";
+          backgroundImage = "desktopWallpaper";
+          backgroundImageOpacity = 0.25;
+          backgroundImageStretchMode = "uniformToFill";
+          colorScheme = "CGA";
+          opacity = 25;
         }
         {
           guid = "{b6523b27-da58-57e8-ae53-e1f73380400d}";
@@ -77,19 +110,19 @@ let
         }
         {
           guid = "{39d64555-b17f-5912-8d8e-2a01e69d9673}";
-          hidden = false;
+          hidden = true;
           name = "Ubuntu";
           source = "Microsoft.WSL";
         }
         {
           guid = "{55bf1f9a-7b1e-542e-877c-89bbdeae0402}";
-          hidden = false;
+          hidden = true;
           name = "Developer Command Prompt for VS 21";
           source = "Windows.Terminal.VisualStudio";
         }
         {
           guid = "{5dd0a95e-998e-503b-874d-b2d83f552911}";
-          hidden = false;
+          hidden = true;
           name = "Developer PowerShell for VS 21";
           source = "Windows.Terminal.VisualStudio";
         }
@@ -125,7 +158,7 @@ let
         }
         {
           guid = "{bc78590e-5f0e-5af3-9cfc-8683e86326e6}";
-          hidden = false;
+          hidden = true;
           name = "Ubuntu";
           source = "Microsoft.WSL";
         }

@@ -4,7 +4,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$source = Join-Path $PSScriptRoot ".wslconfig"
+$source = Join-Path $PSScriptRoot "..\\..\\windows\\.wslconfig"
 $dest = Join-Path $env:USERPROFILE ".wslconfig"
 
 if (-not (Test-Path -LiteralPath $source)) {

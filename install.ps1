@@ -23,13 +23,26 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
-    $PostInstallScript = Join-Path $PSScriptRoot "..\\scripts\\nixos-wsl-postinstall.sh"
+    $PostInstallScript = Join-Path $PSScriptRoot "scripts\sh\nixos-wsl-postinstall.sh"
 }
 
 function Assert-Admin {
     $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-        throw "PowerShell を管理者として実行してください。"
+        Write-Host "管理者権限が必要です。UAC プロンプトを表示します..." -ForegroundColor Yellow
+        $scriptPath = $PSCommandPath
+        $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"")
+        foreach ($key in $PSBoundParameters.Keys) {
+            $value = $PSBoundParameters[$key]
+            if ($value -is [switch]) {
+                if ($value) { $arguments += "-$key" }
+            } else {
+                $arguments += "-$key"
+                $arguments += "`"$value`""
+            }
+        }
+        Start-Process pwsh -ArgumentList $arguments -Verb RunAs
+        exit 0
     }
 }
 
@@ -428,7 +441,7 @@ function Apply-WslConfig {
         Write-Host ".wslconfig の適用をスキップしました。"
         return
     }
-    $source = Join-Path $PSScriptRoot ".wslconfig"
+    $source = Join-Path $PSScriptRoot "windows\\.wslconfig"
     if (-not (Test-Path -LiteralPath $source)) {
         Write-Warning ".wslconfig が見つかりません: $source"
         return
@@ -481,7 +494,7 @@ function Ensure-VhdExpanded {
         Write-Warning "VHDX が見つかりません: $vhdx"
         return
     }
-    $wslConfig = Join-Path $PSScriptRoot ".wslconfig"
+    $wslConfig = Join-Path $PSScriptRoot "windows\\.wslconfig"
     if (-not (Test-Path -LiteralPath $wslConfig)) {
         $wslConfig = Join-Path $env:USERPROFILE ".wslconfig"
     }
@@ -586,6 +599,16 @@ if (-not $SkipVscodeServerPreinstall) {
 if (-not $SkipSetDefaultDistro) {
     Write-Host "WSL の既定ディストリビューションを設定します: $DistroName"
     & wsl --set-default $DistroName
+}
+
+# Windows Terminal / WezTerm 設定を適用
+Write-Host "Windows Terminal / WezTerm 設定を適用しています..."
+$updateScript = Join-Path $PSScriptRoot "scripts\powershell\update-windows-settings.ps1"
+if (Test-Path -LiteralPath $updateScript) {
+    & $updateScript -WslDistro $DistroName -SkipWinget
+    Write-Host "Windows 設定を適用しました。"
+} else {
+    Write-Warning "update-windows-settings.ps1 が見つかりません: $updateScript"
 }
 
 Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName"
