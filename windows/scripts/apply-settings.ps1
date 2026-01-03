@@ -4,7 +4,6 @@
 param(
     [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [switch]$SkipWinget,
-    [switch]$UseNixGenerated,
     [string]$WslDistro = "NixOS",
     [switch]$Force
 )
@@ -22,23 +21,20 @@ if (-not $isAdmin) {
 Write-Host "Applying Windows settings from dotfiles..." -ForegroundColor Cyan
 Write-Host "Dotfiles path: $DotfilesPath" -ForegroundColor Gray
 
-# Determine Windows Terminal settings source
-if ($UseNixGenerated) {
-    # Use Nix-generated settings from WSL
-    $WslUser = wsl -d $WslDistro -- whoami 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERROR] Could not get WSL user from $WslDistro" -ForegroundColor Red
-        exit 1
-    }
-    $WslUser = $WslUser.Trim()
-    $TerminalSettingsSource = "\\wsl$\$WslDistro\home\$WslUser\.config\windows-terminal\settings.json"
-    Write-Host "[INFO] Using Nix-generated settings from WSL" -ForegroundColor Gray
-} else {
-    # Use dotfiles settings directly
-    $TerminalSettingsSource = Join-Path $DotfilesPath "windows\terminal\settings.json"
+# Get WSL user for Nix-generated settings
+$WslUser = wsl -d $WslDistro -- whoami 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Could not get WSL user from $WslDistro" -ForegroundColor Red
+    Write-Host "[HINT] Make sure WSL distro '$WslDistro' is running" -ForegroundColor Yellow
+    exit 1
 }
+$WslUser = $WslUser.Trim()
 
+# Windows Terminal settings (Nix-generated from WSL)
+$TerminalSettingsSource = "\\wsl$\$WslDistro\home\$WslUser\.config\windows-terminal\settings.json"
 $TerminalSettingsDest = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+
+Write-Host "[INFO] Using Nix-generated settings from WSL" -ForegroundColor Gray
 
 if (Test-Path $TerminalSettingsSource) {
     $destDir = Split-Path -Parent $TerminalSettingsDest
@@ -64,9 +60,7 @@ if (Test-Path $TerminalSettingsSource) {
     }
 } else {
     Write-Host "[SKIP] Windows Terminal settings not found at: $TerminalSettingsSource" -ForegroundColor Yellow
-    if ($UseNixGenerated) {
-        Write-Host "[HINT] Run 'home-manager switch' in WSL first to generate settings" -ForegroundColor Yellow
-    }
+    Write-Host "[HINT] Run 'sudo nixos-rebuild switch' in WSL first to generate settings" -ForegroundColor Yellow
 }
 
 # Install winget packages
@@ -94,8 +88,3 @@ if (-not $SkipWinget) {
 
 Write-Host ""
 Write-Host "Apply complete!" -ForegroundColor Green
-Write-Host ""
-Write-Host "Usage:" -ForegroundColor Cyan
-Write-Host "  Default (use dotfiles JSON):    .\apply-settings.ps1" -ForegroundColor Gray
-Write-Host "  Use Nix-generated settings:     .\apply-settings.ps1 -UseNixGenerated" -ForegroundColor Gray
-Write-Host "  Skip winget packages:           .\apply-settings.ps1 -SkipWinget" -ForegroundColor Gray

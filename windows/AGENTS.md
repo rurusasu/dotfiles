@@ -6,25 +6,27 @@ Purpose
 ## Directory Structure
 ```
 windows/
-├── terminal/           # Windows Terminal configuration (symlink)
 ├── winget/             # Package management (winget export/import)
 ├── scripts/            # Management scripts
 ├── .wslconfig          # WSL configuration
 └── install-nixos-wsl.* # NixOS WSL installer
 ```
 
+Note: Windows Terminal settings are managed in Nix at
+`nix/profiles/home/programs/terminals/windows-terminal/`
+
 ## scripts/
 
 ### export-settings.ps1
 Export current Windows settings to dotfiles.
-- Copies Windows Terminal settings.json
 - Exports winget package list
 
 ### apply-settings.ps1
 Apply settings from dotfiles (requires Administrator).
-- Creates symlink for Windows Terminal settings
+- Creates symlink for Windows Terminal settings (from Nix-generated JSON in WSL)
 - Installs winget packages
-- Parameters: `-SkipWinget` to skip package installation
+- Requires: `sudo nixos-rebuild switch` in WSL first
+- Parameters: `-SkipWinget` to skip package installation, `-WslDistro` to specify distro
 
 ## install-nixos-wsl.ps1
 

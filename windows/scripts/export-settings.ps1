@@ -10,16 +10,10 @@ $ErrorActionPreference = "Stop"
 Write-Host "Exporting Windows settings to dotfiles..." -ForegroundColor Cyan
 Write-Host "Dotfiles path: $DotfilesPath" -ForegroundColor Gray
 
-# Export Windows Terminal settings
-$TerminalSettingsSource = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-$TerminalSettingsDest = Join-Path $DotfilesPath "windows\terminal\settings.json"
-
-if (Test-Path $TerminalSettingsSource) {
-    Copy-Item -Path $TerminalSettingsSource -Destination $TerminalSettingsDest -Force
-    Write-Host "[OK] Windows Terminal settings exported" -ForegroundColor Green
-} else {
-    Write-Host "[SKIP] Windows Terminal settings not found" -ForegroundColor Yellow
-}
+# Note: Windows Terminal settings are now managed in Nix
+# Edit nix/profiles/home/programs/terminals/windows-terminal/default.nix instead
+Write-Host "[INFO] Windows Terminal settings are managed in Nix" -ForegroundColor Gray
+Write-Host "       Edit: nix/profiles/home/programs/terminals/windows-terminal/default.nix" -ForegroundColor Gray
 
 # Export winget packages
 $WingetPackagesDest = Join-Path $DotfilesPath "windows\winget\packages.json"
