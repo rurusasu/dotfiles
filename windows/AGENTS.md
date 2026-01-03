@@ -23,10 +23,55 @@ Export current Windows settings to dotfiles.
 
 ### apply-settings.ps1
 Apply settings from dotfiles (requires Administrator).
-- Creates symlink for Windows Terminal settings (from Nix-generated JSON in WSL)
-- Installs winget packages
-- Requires: `sudo nixos-rebuild switch` in WSL first
-- Parameters: `-SkipWinget` to skip package installation, `-WslDistro` to specify distro
+
+**Architecture:**
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         WSL (NixOS)                          │
+│  ~/.config/windows-terminal/settings.json                    │
+│       ↓ (symlink to /nix/store/...)                          │
+│  /nix/store/xxx-windows-terminal-settings.json               │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            │ wsl -d NixOS -- cat ...
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                  apply-settings.ps1                          │
+│  1. Read JSON content via WSL (resolves symlinks)            │
+│  2. Write directly to Windows Terminal LocalState            │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│  %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_xxx\      │
+│    LocalState\settings.json                                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Why copy instead of symlink?**
+- Home Manager creates symlinks pointing to `/nix/store/`
+- Windows cannot resolve WSL symlinks to nix store paths
+- Solution: Read content via `wsl cat` and copy to Windows
+
+**Usage:**
+```powershell
+# Full apply (requires Administrator)
+.\windows\scripts\apply-settings.ps1
+
+# Skip winget package installation
+.\windows\scripts\apply-settings.ps1 -SkipWinget
+
+# Specify different WSL distro
+.\windows\scripts\apply-settings.ps1 -WslDistro Ubuntu
+```
+
+**Prerequisites:**
+- Run `sudo nixos-rebuild switch` in WSL first to generate settings
+- PowerShell must be run as Administrator
+
+**Parameters:**
+- `-SkipWinget`: Skip winget package installation
+- `-WslDistro`: WSL distribution name (default: NixOS)
 
 ## install-nixos-wsl.ps1
 

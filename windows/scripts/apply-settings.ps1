@@ -31,36 +31,33 @@ if ($LASTEXITCODE -ne 0) {
 $WslUser = $WslUser.Trim()
 
 # Windows Terminal settings (Nix-generated from WSL)
-$TerminalSettingsSource = "\\wsl$\$WslDistro\home\$WslUser\.config\windows-terminal\settings.json"
+# Note: Home Manager creates symlinks, so we need to resolve and copy the actual file
 $TerminalSettingsDest = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
 Write-Host "[INFO] Using Nix-generated settings from WSL" -ForegroundColor Gray
 
-if (Test-Path $TerminalSettingsSource) {
-    $destDir = Split-Path -Parent $TerminalSettingsDest
-    if (Test-Path $destDir) {
-        # Backup existing settings if not a symlink
-        if ((Test-Path $TerminalSettingsDest) -and -not (Get-Item $TerminalSettingsDest).Attributes.ToString().Contains("ReparsePoint")) {
-            $backupPath = "$TerminalSettingsDest.backup"
-            Copy-Item -Path $TerminalSettingsDest -Destination $backupPath -Force
-            Write-Host "[INFO] Backed up existing settings to $backupPath" -ForegroundColor Gray
+$destDir = Split-Path -Parent $TerminalSettingsDest
+if (Test-Path $destDir) {
+    # Read the actual content from WSL (resolves symlinks)
+    $settingsContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/windows-terminal/settings.json" 2>$null
+
+    if ($LASTEXITCODE -eq 0 -and $settingsContent) {
+        # Backup existing settings if not already backed up
+        if ((Test-Path $TerminalSettingsDest) -and -not (Test-Path "$TerminalSettingsDest.backup")) {
+            Copy-Item -Path $TerminalSettingsDest -Destination "$TerminalSettingsDest.backup" -Force
+            Write-Host "[INFO] Backed up existing settings to $TerminalSettingsDest.backup" -ForegroundColor Gray
         }
 
-        # Remove existing file/symlink
-        if (Test-Path $TerminalSettingsDest) {
-            Remove-Item -Path $TerminalSettingsDest -Force
-        }
-
-        # Create symlink
-        New-Item -ItemType SymbolicLink -Path $TerminalSettingsDest -Target $TerminalSettingsSource | Out-Null
-        Write-Host "[OK] Windows Terminal settings linked" -ForegroundColor Green
-        Write-Host "     Source: $TerminalSettingsSource" -ForegroundColor Gray
+        # Write the settings directly (copy approach since symlinks don't work with WSL symlinks)
+        $settingsContent | Out-File -FilePath $TerminalSettingsDest -Encoding utf8 -Force
+        Write-Host "[OK] Windows Terminal settings applied" -ForegroundColor Green
+        Write-Host "     Note: Settings are copied, run this script again after nixos-rebuild to update" -ForegroundColor Gray
     } else {
-        Write-Host "[SKIP] Windows Terminal not installed" -ForegroundColor Yellow
+        Write-Host "[SKIP] Windows Terminal settings not found in WSL" -ForegroundColor Yellow
+        Write-Host "[HINT] Run 'sudo nixos-rebuild switch' in WSL first to generate settings" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "[SKIP] Windows Terminal settings not found at: $TerminalSettingsSource" -ForegroundColor Yellow
-    Write-Host "[HINT] Run 'sudo nixos-rebuild switch' in WSL first to generate settings" -ForegroundColor Yellow
+    Write-Host "[SKIP] Windows Terminal not installed" -ForegroundColor Yellow
 }
 
 # Install winget packages
