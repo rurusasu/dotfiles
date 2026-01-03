@@ -33,7 +33,7 @@ in
         # File explorer
         nvim-tree = {
           enable = true;
-          filters.dotfiles = false;
+          settings.filters.dotfiles = false;
         };
 
         # Fuzzy finder (conditional)

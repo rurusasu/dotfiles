@@ -2,13 +2,15 @@
 {
   programs.git = {
     enable = true;
-    userName = "Kohei Miki";
-    userEmail = "rurusasu@gmail.com";
     signing = {
       key = "~/.ssh/signing_key.pub";
       signByDefault = true;
     };
-    extraConfig = {
+    settings = {
+      user = {
+        name = "Kohei Miki";
+        email = "rurusasu@gmail.com";
+      };
       safe.directory = "*";
       core = {
         editor = "nvim";

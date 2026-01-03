@@ -9,7 +9,7 @@
       find = "fd";
       grep = "rg";
     };
-    initExtra = ''
+    initContent = ''
       # Alt+Z: zoxide interactive (履歴ベースのディレクトリジャンプ)
       __zoxide_zi_widget() {
         local result
