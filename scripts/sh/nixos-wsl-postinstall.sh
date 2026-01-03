@@ -94,7 +94,7 @@ if [[ -z "$REPO_DIR" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if [[ -z "$SYNC_SOURCE" ]]; then
   SYNC_SOURCE="$SOURCE_ROOT"
 fi
