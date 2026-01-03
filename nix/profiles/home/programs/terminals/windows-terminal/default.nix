@@ -166,20 +166,31 @@ in
 
     ## Keybindings
 
-    Windows Terminal doesn't support Leader key natively.
-    Keybindings are designed to be similar to WezTerm where possible:
+    Keybindings are consistent with WezTerm:
 
-    | Action | WezTerm | Windows Terminal |
-    |--------|---------|------------------|
-    | Split horizontal | Leader + h | Ctrl+Shift+H |
-    | Split vertical | Leader + v | Ctrl+Shift+V |
-    | Close pane | Leader + x | Ctrl+Shift+X |
-    | Move left | Ctrl+Shift+H | Ctrl+Alt+H |
-    | Move down | Ctrl+Shift+J | Ctrl+Alt+J |
-    | Move up | Ctrl+Shift+K | Ctrl+Alt+K |
-    | Move right | Ctrl+Shift+L | Ctrl+Alt+L |
+    ### Pane Operations (Ctrl+Alt)
+    | Action | Key |
+    |--------|-----|
+    | Split horizontal | Ctrl+Alt+H |
+    | Split vertical | Ctrl+Alt+V |
+    | Close pane | Ctrl+Alt+X |
+    | Pane zoom | Ctrl+Alt+W |
 
-    Leader key (WezTerm): ${terminalsCfg.leader.mods}+${terminalsCfg.leader.key}
+    ### Pane Navigation (Ctrl+Shift)
+    | Action | Key |
+    |--------|-----|
+    | Move left | Ctrl+Shift+H |
+    | Move down | Ctrl+Shift+J |
+    | Move up | Ctrl+Shift+K |
+    | Move right | Ctrl+Shift+L |
+
+    ### Other
+    | Action | Key |
+    |--------|-----|
+    | Fullscreen | F11 |
+
+    Note: Windows Terminal doesn't support Leader key.
+    WezTerm Leader key: ${terminalsCfg.leader.mods}+${terminalsCfg.leader.key}
 
     ## Apply Settings
 

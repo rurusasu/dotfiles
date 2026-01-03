@@ -35,6 +35,8 @@ in
         id = "User.splitPane.vertical";
       }
       { command = "closePane"; id = "User.closePane"; }
+      { command = "togglePaneZoom"; id = "User.togglePaneZoom"; }
+      { command = "toggleFullscreen"; id = "User.toggleFullscreen"; }
       { command = "find"; id = "User.find"; }
       { command = "nextTab"; id = "User.nextTab"; }
       { command = "prevTab"; id = "User.prevTab"; }
@@ -61,26 +63,28 @@ in
     ];
 
     # Keybindings
-    # Matches WezTerm where possible:
-    # - Pane split: Ctrl+Shift+H/V (horizontal/vertical) - since WT has no Leader
-    # - Pane close: Ctrl+Shift+X
+    # Matches WezTerm keybindings:
+    # - Pane split/close/zoom: Ctrl+Alt+H/V/X/W
     # - Pane navigation: Ctrl+Shift+H/J/K/L (Vim-style)
     keybindings = [
       { id = "User.copy"; keys = "ctrl+c"; }
       { id = "User.paste"; keys = "ctrl+v"; }
       { id = "User.find"; keys = "ctrl+shift+f"; }
-      # Pane split (Ctrl+Shift+H/V to match WezTerm's Leader+h/v concept)
-      { id = "User.splitPane.horizontal"; keys = "ctrl+shift+h"; }
-      { id = "User.splitPane.vertical"; keys = "ctrl+shift+v"; }
-      { id = "User.closePane"; keys = "ctrl+shift+x"; }
-      # Pane navigation (Ctrl+Alt + Vim keys)
-      { id = "User.moveFocus.left"; keys = "ctrl+alt+h"; }
-      { id = "User.moveFocus.right"; keys = "ctrl+alt+l"; }
-      { id = "User.moveFocus.up"; keys = "ctrl+alt+k"; }
-      { id = "User.moveFocus.down"; keys = "ctrl+alt+j"; }
+      # Pane split/close (Ctrl+Alt to match WezTerm)
+      { id = "User.splitPane.horizontal"; keys = "ctrl+alt+h"; }
+      { id = "User.splitPane.vertical"; keys = "ctrl+alt+v"; }
+      { id = "User.closePane"; keys = "ctrl+alt+x"; }
+      { id = "User.togglePaneZoom"; keys = "ctrl+alt+w"; }
+      # Pane navigation (Ctrl+Shift + Vim keys to match WezTerm)
+      { id = "User.moveFocus.left"; keys = "ctrl+shift+h"; }
+      { id = "User.moveFocus.right"; keys = "ctrl+shift+l"; }
+      { id = "User.moveFocus.up"; keys = "ctrl+shift+k"; }
+      { id = "User.moveFocus.down"; keys = "ctrl+shift+j"; }
       # Tab navigation
       { id = "User.nextTab"; keys = "ctrl+tab"; }
       { id = "User.prevTab"; keys = "ctrl+shift+tab"; }
+      # Fullscreen
+      { id = "User.toggleFullscreen"; keys = "f11"; }
     ];
   };
 
@@ -91,11 +95,12 @@ in
       mods = leader.mods;
       timeout = leader.timeout;
     };
-    # Pane operations use LEADER prefix
+    # Pane operations use Ctrl+Alt
     pane = {
-      splitHorizontal = "LEADER + h";
-      splitVertical = "LEADER + v";
-      close = "LEADER + x";
+      splitHorizontal = "CTRL+ALT + h";
+      splitVertical = "CTRL+ALT + v";
+      close = "CTRL+ALT + x";
+      zoom = "CTRL+ALT + w";
     };
     # Navigation uses Ctrl+Shift + Vim keys
     navigation = {
@@ -104,5 +109,7 @@ in
       up = "CTRL+SHIFT + k";
       right = "CTRL+SHIFT + l";
     };
+    # Other
+    fullscreen = "F11";
   };
 }
