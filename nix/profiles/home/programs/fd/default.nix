@@ -17,6 +17,7 @@
     ];
     extraOptions = [
       "--follow"
+      "--no-ignore-vcs"
       "--max-results=1000"
       "--max-depth=5"
     ];
