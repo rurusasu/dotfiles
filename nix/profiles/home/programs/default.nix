@@ -9,9 +9,9 @@
     ./ripgrep
     ./shells
     ./starship
+    ./terminals
     ./tmux
     ./vscode
-    ./wezterm
     ./zoxide
   ];
 }
