@@ -24,8 +24,11 @@ let
     base0F = "#d65d0e"; # Brown
   };
 
-  # Import keybindings (uses shared leader config)
-  keybind = import ./keybind { leader = terminalsCfg.leader; };
+  # Import keybindings (uses shared leader and tab configs)
+  keybind = import ./keybind {
+    leader = terminalsCfg.leader;
+    tabKeys = terminalsCfg.keybindings.tab;
+  };
 in
 {
   options = {

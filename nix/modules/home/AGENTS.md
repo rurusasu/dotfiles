@@ -33,7 +33,13 @@ myHomeSettings
 │   ├── leader.key         # Leader key (default: Space)
 │   ├── leader.mods        # Modifiers (default: CTRL)
 │   ├── leader.timeout     # Timeout in ms (default: 2000)
-│   └── keybindings.paneNavStyle  # vim or arrow
+│   └── keybindings
+│       ├── paneNavStyle   # vim or arrow
+│       └── tab            # Tab/window management (shared)
+│           ├── new        # New tab key (default: t)
+│           ├── close      # Close tab key (default: q)
+│           ├── next       # Next tab key (default: n)
+│           └── prev       # Previous tab key (default: p)
 ├── tmux                   # Tmux multiplexer
 │   ├── enable             # Enable tmux
 │   ├── prefix.key         # Prefix key (default: b)
@@ -62,6 +68,10 @@ All tools share similar keybindings where possible:
 | Pane down | C-S-j | j | C-w j |
 | Pane up | C-S-k | k | C-w k |
 | Pane right | C-S-l | l | C-w l |
+| New tab | Leader+t | prefix+t | Leader+t |
+| Close tab | Leader+q | prefix+q | Leader+q |
+| Next tab | Leader+n | prefix+n | Leader+n |
+| Previous tab | Leader+p | prefix+p | Leader+p |
 
 ## Usage
 

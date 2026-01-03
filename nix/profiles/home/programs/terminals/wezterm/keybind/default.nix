@@ -1,4 +1,4 @@
-{ leader }:
+{ leader, tabKeys }:
 let
   # Helper to convert Nix keybinding to Lua string
   mkKey = { key, mods, action }:
@@ -29,12 +29,12 @@ let
       { key = "RightArrow"; mods = "CTRL|SHIFT"; action = ''act.AdjustPaneSize({ "Right", 5 })''; }
     ];
 
-    # Tab management
+    # Tab management (using shared keybindings)
     tab = [
-      { key = "t"; mods = "CTRL|SHIFT"; action = ''act.SpawnTab("CurrentPaneDomain")''; }
-      { key = "w"; mods = "CTRL|SHIFT"; action = ''act.CloseCurrentTab({ confirm = true })''; }
-      { key = "Tab"; mods = "CTRL"; action = "act.ActivateTabRelative(1)"; }
-      { key = "Tab"; mods = "CTRL|SHIFT"; action = "act.ActivateTabRelative(-1)"; }
+      { key = tabKeys.new; mods = "LEADER"; action = ''act.SpawnTab("CurrentPaneDomain")''; }
+      { key = tabKeys.close; mods = "LEADER"; action = ''act.CloseCurrentTab({ confirm = true })''; }
+      { key = tabKeys.next; mods = "LEADER"; action = "act.ActivateTabRelative(1)"; }
+      { key = tabKeys.prev; mods = "LEADER"; action = "act.ActivateTabRelative(-1)"; }
     ];
 
     # Misc

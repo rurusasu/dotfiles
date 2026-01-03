@@ -60,6 +60,12 @@ in
         bind -r J resize-pane -D 5
         bind -r K resize-pane -U 5
         bind -r L resize-pane -R 5
+
+        # Tab (window) management (using shared keybindings)
+        bind ${terminalsCfg.keybindings.tab.new} new-window -c "#{pane_current_path}"
+        bind ${terminalsCfg.keybindings.tab.close} kill-window
+        bind ${terminalsCfg.keybindings.tab.next} next-window
+        bind ${terminalsCfg.keybindings.tab.prev} previous-window
       '';
     };
   };

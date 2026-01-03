@@ -4,6 +4,7 @@
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;
+  tabKeys = config.myHomeSettings.terminals.keybindings.tab;
 in
 {
   config = mkIf cfg.enable {
@@ -91,6 +92,11 @@ in
       # Keymaps
       keymaps = [
         { mode = "n"; key = "<leader>e"; action = "<cmd>NvimTreeToggle<cr>"; options.desc = "Explorer"; }
+        # Tab (buffer) management (using shared keybindings)
+        { mode = "n"; key = "<leader>${tabKeys.new}"; action = "<cmd>tabnew<cr>"; options.desc = "New tab"; }
+        { mode = "n"; key = "<leader>${tabKeys.close}"; action = "<cmd>tabclose<cr>"; options.desc = "Close tab"; }
+        { mode = "n"; key = "<leader>${tabKeys.next}"; action = "<cmd>tabnext<cr>"; options.desc = "Next tab"; }
+        { mode = "n"; key = "<leader>${tabKeys.prev}"; action = "<cmd>tabprevious<cr>"; options.desc = "Previous tab"; }
       ];
 
       # Performance optimization

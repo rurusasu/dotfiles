@@ -28,6 +28,30 @@ with lib;
         default = "vim";
         description = "Pane navigation style: vim (hjkl) or arrow keys";
       };
+
+      # Tab/window management (shared across terminals, tmux, nvim)
+      tab = {
+        new = mkOption {
+          type = types.str;
+          default = "t";
+          description = "Key for new tab (after leader/prefix)";
+        };
+        close = mkOption {
+          type = types.str;
+          default = "q";
+          description = "Key for closing tab (after leader/prefix)";
+        };
+        next = mkOption {
+          type = types.str;
+          default = "n";
+          description = "Key for next tab";
+        };
+        prev = mkOption {
+          type = types.str;
+          default = "p";
+          description = "Key for previous tab";
+        };
+      };
     };
   };
 
