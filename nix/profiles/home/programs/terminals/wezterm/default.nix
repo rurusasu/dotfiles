@@ -1,10 +1,56 @@
 { pkgs, lib, ... }:
+let
+  # Gruvbox Dark colors
+  gruvbox = {
+    bg = "#1d2021";
+    bg0 = "#282828";
+    bg1 = "#3c3836";
+    fg = "#ebdbb2";
+    gray = "#928374";
+  };
+
+  # Generate Lua table for colors
+  luaColors = ''
+    colors = {
+      tab_bar = {
+        background = "${gruvbox.bg}",
+        active_tab = {
+          bg_color = "${gruvbox.bg0}",
+          fg_color = "${gruvbox.fg}",
+          intensity = "Bold",
+        },
+        inactive_tab = {
+          bg_color = "${gruvbox.bg}",
+          fg_color = "${gruvbox.gray}",
+        },
+        inactive_tab_hover = {
+          bg_color = "${gruvbox.bg1}",
+          fg_color = "${gruvbox.fg}",
+        },
+      },
+    },
+  '';
+
+  # Window padding settings
+  windowPadding = {
+    left = 8;
+    right = 8;
+    top = 6;
+    bottom = 6;
+  };
+
+  # Leader key settings
+  leaderKey = {
+    key = "q";
+    mods = "CTRL";
+    timeout = 2000;
+  };
+in
 {
   programs.wezterm = {
     enable = true;
     package = pkgs.wezterm;
 
-    # All settings in Nix
     extraConfig = ''
       local wezterm = require("wezterm")
       local act = wezterm.action
@@ -15,8 +61,14 @@
         config = wezterm.config_builder()
       end
 
+      -- Detect Windows for default shell
+      local is_windows = wezterm.target_triple:find("windows") ~= nil
+      if is_windows then
+        config.default_prog = { "pwsh.exe", "-NoLogo" }
+      end
+
       -- Color scheme
-      config.color_scheme = "Gruvbox Dark"
+      config.color_scheme = "Gruvbox Dark (Gogh)"
 
       -- Font settings
       config.font = wezterm.font("Consolas")
@@ -29,10 +81,10 @@
       config.window_background_opacity = 0.85
       config.window_decorations = "RESIZE"
       config.window_padding = {
-        left = 8,
-        right = 8,
-        top = 6,
-        bottom = 6,
+        left = ${toString windowPadding.left},
+        right = ${toString windowPadding.right},
+        top = ${toString windowPadding.top},
+        bottom = ${toString windowPadding.bottom},
       }
 
       -- Tab bar settings
@@ -43,31 +95,14 @@
       config.show_new_tab_button_in_tab_bar = false
 
       -- Tab colors (Gruvbox)
-      config.colors = {
-        tab_bar = {
-          background = "#1d2021",
-          active_tab = {
-            bg_color = "#282828",
-            fg_color = "#ebdbb2",
-            intensity = "Bold",
-          },
-          inactive_tab = {
-            bg_color = "#1d2021",
-            fg_color = "#928374",
-          },
-          inactive_tab_hover = {
-            bg_color = "#3c3836",
-            fg_color = "#ebdbb2",
-          },
-        },
-      }
+      config.${luaColors}
 
       -- Alt key sends escape sequence for fzf Alt+C support
       config.send_composed_key_when_left_alt_is_pressed = false
       config.send_composed_key_when_right_alt_is_pressed = false
 
-      -- Leader key (Ctrl+Q)
-      config.leader = { key = "q", mods = "CTRL", timeout_milliseconds = 2000 }
+      -- Leader key (${leaderKey.mods}+${leaderKey.key})
+      config.leader = { key = "${leaderKey.key}", mods = "${leaderKey.mods}", timeout_milliseconds = ${toString leaderKey.timeout} }
 
       -- Keybindings
       config.keys = {
