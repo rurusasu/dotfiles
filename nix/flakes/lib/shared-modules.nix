@@ -7,12 +7,9 @@ let
 in
 [
   nixvimModule
-  # Custom Home Manager modules (inline import to work with flake paths)
-  ({ ... }: {
-    imports = [
-      ../../../modules/home/terminals
-      ../../../modules/home/tmux
-      ../../../modules/home/nixvim
-    ];
-  })
+  # Custom Home Manager modules
+  # Path is relative from this file: nix/flakes/lib/ -> nix/modules/home/
+  ../../modules/home/terminals
+  ../../modules/home/tmux
+  ../../modules/home/nixvim
 ]
