@@ -7,6 +7,10 @@ Purpose: Home Manager module definitions (options only, no config).
 ```
 home/
   default.nix           # Imports all home modules
+  fd/                   # fd file finder options
+    default.nix         # myHomeSettings.fd options
+  fzf/                  # fzf fuzzy finder options
+    default.nix         # myHomeSettings.fzf options
   terminals/            # Terminal emulator options (WezTerm, Windows Terminal)
     default.nix         # myHomeSettings.terminals options
   tmux/                 # Tmux options
@@ -29,6 +33,23 @@ This separation allows:
 
 ```
 myHomeSettings
+├── fd                     # fd file finder (used by fzf)
+│   ├── enable             # Enable fd (default: true)
+│   ├── hidden             # Search hidden files (default: true)
+│   ├── followSymlinks     # Follow symlinks (default: true)
+│   ├── noIgnoreVcs        # Ignore .gitignore (default: true)
+│   ├── maxResults         # Max results (default: 1000)
+│   ├── maxDepth           # Max depth (default: 5)
+│   ├── ignores            # Paths to ignore (list)
+│   └── extraOptions       # Additional fd options (list)
+├── fzf                    # fzf fuzzy finder (uses fd settings)
+│   ├── enable             # Enable fzf (default: true)
+│   ├── searchRoot         # Search root directory (default: "/")
+│   ├── height             # Window height (default: "40%")
+│   ├── layout             # Layout: default/reverse/reverse-list (default: reverse)
+│   ├── border             # Show border (default: true)
+│   ├── prompt             # Prompt string (default: "> ")
+│   └── extraOptions       # Additional fzf options (list)
 ├── terminals              # Terminal emulators (WezTerm, Windows Terminal)
 │   ├── leader.key         # Leader key (default: Space)
 │   ├── leader.mods        # Modifiers (default: CTRL)

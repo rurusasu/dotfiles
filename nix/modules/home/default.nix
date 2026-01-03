@@ -3,6 +3,8 @@
 { ... }:
 {
   imports = [
+    ./fd
+    ./fzf
     ./terminals
     ./tmux
     ./nixvim

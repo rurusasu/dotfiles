@@ -1,4 +1,22 @@
-{ pkgs, ... }:
+# zsh profile - uses settings from myHomeSettings.fd and myHomeSettings.fzf
+{ pkgs, config, lib, ... }:
+with lib;
+let
+  fdCfg = config.myHomeSettings.fd;
+  fzfCfg = config.myHomeSettings.fzf;
+
+  # Build fd options string (same as fzf profile)
+  fdOptions =
+    (optional fdCfg.hidden "--hidden")
+    ++ (optional fdCfg.followSymlinks "--follow")
+    ++ (optional fdCfg.noIgnoreVcs "--no-ignore-vcs")
+    ++ (optional (fdCfg.maxResults != null) "--max-results=${toString fdCfg.maxResults}")
+    ++ (optional (fdCfg.maxDepth != null) "--max-depth=${toString fdCfg.maxDepth}")
+    ++ fdCfg.extraOptions;
+
+  fdOptionsStr = concatStringsSep " " fdOptions;
+  searchRoot = fzfCfg.searchRoot;
+in
 {
   programs.zsh = {
     enable = true;
@@ -22,7 +40,7 @@
       # Alt+D: fzf directory search and cd
       __fzf_cd_widget() {
         local dir
-        dir="$(${pkgs.fd}/bin/fd -t d | ${pkgs.fzf}/bin/fzf)" && cd "$dir"
+        dir="$(${pkgs.fd}/bin/fd ${fdOptionsStr} -t d . ${searchRoot} | ${pkgs.fzf}/bin/fzf)" && cd "$dir"
         zle reset-prompt
       }
       zle -N __fzf_cd_widget
@@ -31,7 +49,7 @@
       # Alt+T: fzf file/directory search and insert
       __fzf_file_widget() {
         local selected
-        selected="$(${pkgs.fd}/bin/fd | ${pkgs.fzf}/bin/fzf)"
+        selected="$(${pkgs.fd}/bin/fd ${fdOptionsStr} . ${searchRoot} | ${pkgs.fzf}/bin/fzf)"
         if [[ -n "$selected" ]]; then
           LBUFFER="$LBUFFER$selected"
         fi
