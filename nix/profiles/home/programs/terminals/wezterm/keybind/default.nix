@@ -1,4 +1,4 @@
-{ leader, tabKeys }:
+{ leader, tabKeys, paneZoomKey }:
 let
   # Helper to convert Nix keybinding to Lua string
   mkKey = { key, mods, action }:
@@ -6,11 +6,12 @@ let
 
   # Keybindings defined in Nix
   keybindings = {
-    # Pane split (Leader + h/v/x)
+    # Pane split (Leader + h/v/x) and zoom
     pane = [
       { key = "h"; mods = "LEADER"; action = ''act.SplitHorizontal({ domain = "CurrentPaneDomain" })''; }
       { key = "v"; mods = "LEADER"; action = ''act.SplitVertical({ domain = "CurrentPaneDomain" })''; }
       { key = "x"; mods = "LEADER"; action = ''act.CloseCurrentPane({ confirm = true })''; }
+      { key = paneZoomKey; mods = "LEADER"; action = "act.TogglePaneZoomState"; }
     ];
 
     # Pane navigation (Ctrl+Shift + H/J/K/L, Vim-like)

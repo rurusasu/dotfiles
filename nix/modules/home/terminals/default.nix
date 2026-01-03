@@ -29,6 +29,13 @@ with lib;
         description = "Pane navigation style: vim (hjkl) or arrow keys";
       };
 
+      # Pane zoom/maximize
+      paneZoom = mkOption {
+        type = types.str;
+        default = "w";
+        description = "Key for toggling pane zoom/maximize (after leader/prefix)";
+      };
+
       # Tab/window management (shared across terminals, tmux, nvim)
       tab = {
         new = mkOption {

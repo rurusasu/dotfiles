@@ -35,6 +35,7 @@ myHomeSettings
 │   ├── leader.timeout     # Timeout in ms (default: 2000)
 │   └── keybindings
 │       ├── paneNavStyle   # vim or arrow
+│       ├── paneZoom       # Pane zoom key (default: w)
 │       └── tab            # Tab/window management (shared)
 │           ├── new        # New tab key (default: t)
 │           ├── close      # Close tab key (default: q)
@@ -72,6 +73,7 @@ All tools share similar keybindings where possible:
 | Close tab | Leader+q | prefix+q | Leader+q |
 | Next tab | Leader+n | prefix+n | Leader+n |
 | Previous tab | Leader+p | prefix+p | Leader+p |
+| Pane zoom | Leader+w | prefix+w | Leader+w |
 
 ## Usage
 

@@ -66,6 +66,9 @@ in
         bind ${terminalsCfg.keybindings.tab.close} kill-window
         bind ${terminalsCfg.keybindings.tab.next} next-window
         bind ${terminalsCfg.keybindings.tab.prev} previous-window
+
+        # Pane zoom (using shared keybindings)
+        bind ${terminalsCfg.keybindings.paneZoom} resize-pane -Z
       '';
     };
   };

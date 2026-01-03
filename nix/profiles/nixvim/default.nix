@@ -5,6 +5,7 @@ with lib;
 let
   cfg = config.myHomeSettings.nixvim;
   tabKeys = config.myHomeSettings.terminals.keybindings.tab;
+  paneZoomKey = config.myHomeSettings.terminals.keybindings.paneZoom;
 in
 {
   config = mkIf cfg.enable {
@@ -97,6 +98,8 @@ in
         { mode = "n"; key = "<leader>${tabKeys.close}"; action = "<cmd>tabclose<cr>"; options.desc = "Close tab"; }
         { mode = "n"; key = "<leader>${tabKeys.next}"; action = "<cmd>tabnext<cr>"; options.desc = "Next tab"; }
         { mode = "n"; key = "<leader>${tabKeys.prev}"; action = "<cmd>tabprevious<cr>"; options.desc = "Previous tab"; }
+        # Window zoom (using shared keybindings)
+        { mode = "n"; key = "<leader>${paneZoomKey}"; action = "<cmd>only<cr>"; options.desc = "Maximize window"; }
       ];
 
       # Performance optimization

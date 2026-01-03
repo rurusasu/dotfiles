@@ -24,10 +24,11 @@ let
     base0F = "#d65d0e"; # Brown
   };
 
-  # Import keybindings (uses shared leader and tab configs)
+  # Import keybindings (uses shared leader, tab, and pane configs)
   keybind = import ./keybind {
     leader = terminalsCfg.leader;
     tabKeys = terminalsCfg.keybindings.tab;
+    paneZoomKey = terminalsCfg.keybindings.paneZoom;
   };
 in
 {
