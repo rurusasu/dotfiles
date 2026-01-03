@@ -1,5 +1,6 @@
 # Nixvim configuration
 # Options are defined in nix/modules/home/nixvim/
+# Plugin configurations are in ./plugins/
 { config, lib, pkgs, ... }:
 with lib;
 let
@@ -8,6 +9,10 @@ let
   paneZoomKey = config.myHomeSettings.terminals.keybindings.paneZoom;
 in
 {
+  imports = [
+    ./plugins
+  ];
+
   config = mkIf cfg.enable {
     programs.nixvim = {
       enable = true;
@@ -25,72 +30,6 @@ in
       colorschemes.${cfg.colorscheme.name} = {
         enable = true;
         settings.style = cfg.colorscheme.style;
-      };
-
-      # Plugins (nixvim native configuration)
-      plugins = {
-        # Which-key
-        which-key.enable = true;
-
-        # File explorer
-        nvim-tree = {
-          enable = true;
-          settings.filters.dotfiles = false;
-        };
-
-        # Fuzzy finder (conditional)
-        telescope = mkIf cfg.features.telescope {
-          enable = true;
-          keymaps = {
-            "<leader>ff" = { action = "find_files"; options.desc = "Find files"; };
-            "<leader>fg" = { action = "live_grep"; options.desc = "Live grep"; };
-            "<leader>fb" = { action = "buffers"; options.desc = "Buffers"; };
-            "<leader>fh" = { action = "help_tags"; options.desc = "Help tags"; };
-          };
-        };
-
-        # Treesitter (conditional)
-        treesitter = mkIf cfg.features.treesitter {
-          enable = true;
-          # Use nixGrammars instead of ensure_installed to avoid read-only store errors
-          nixGrammars = true;
-          settings = {
-            highlight.enable = true;
-            indent.enable = true;
-          };
-          # Grammars installed via Nix (not runtime download)
-          grammarPackages = with pkgs.vimPlugins.nvim-treesitter.builtGrammars; [
-            lua vim vimdoc nix bash
-            python javascript typescript
-            json yaml markdown markdown_inline
-          ];
-        };
-
-        # Git signs (conditional)
-        gitsigns = mkIf cfg.features.git {
-          enable = true;
-        };
-
-        # Status line
-        lualine = {
-          enable = true;
-          settings.options.theme = cfg.colorscheme.name;
-        };
-
-        # Indent guides
-        indent-blankline.enable = true;
-
-        # Auto pairs
-        nvim-autopairs.enable = true;
-
-        # Comment
-        comment.enable = true;
-
-        # Surround
-        nvim-surround.enable = true;
-
-        # Web devicons
-        web-devicons.enable = true;
       };
 
       # Keymaps
