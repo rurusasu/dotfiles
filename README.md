@@ -1,6 +1,42 @@
 # Dotfiles
 
+[![NixOS](https://img.shields.io/badge/NixOS-26.05-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
+[![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
+[![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 NixOS/Home Manager を使った dotfiles の一元管理リポジトリ
+
+## 技術スタック
+
+| Category | Technology |
+|----------|------------|
+| OS | NixOS (WSL2) |
+| Package Manager | Nix Flakes |
+| User Config | Home Manager |
+| Shell | Zsh + Starship |
+| Editor | Neovim (nixvim) |
+| Terminal | Windows Terminal, WezTerm |
+| Formatter | treefmt-nix |
+
+## クイックスタート
+
+Windows PowerShell で以下を実行:
+
+```powershell
+# 1. リポジトリをクローン
+git clone https://github.com/rurusasu/dotfiles.git
+cd dotfiles
+
+# 2. インストール実行（管理者権限は自動で取得されます）
+.\install.ps1
+```
+
+これにより:
+1. NixOS WSL がダウンロード・インポートされる
+2. `~/.dotfiles` がこのリポジトリへのシンボリックリンクとして作成される
+3. `nixos-rebuild switch` が実行され設定が適用される
+4. Windows Terminal / WezTerm の設定が Windows に適用される
 
 ## 方針
 
@@ -43,20 +79,7 @@ dotfiles/
 └── flake.lock
 ```
 
-## セットアップ
-
-### NixOS WSL (推奨)
-
-Windows から管理者権限の PowerShell で実行:
-
-```powershell
-.\install.ps1
-```
-
-これにより:
-1. NixOS WSL がダウンロード・インポートされる
-2. `~/.dotfiles` がこのリポジトリへのシンボリックリンクとして作成される
-3. `nixos-rebuild switch` が実行され設定が適用される
+## 日常の使い方
 
 ### 設定の更新
 
@@ -64,7 +87,7 @@ WSL 内で実行:
 
 ```bash
 # 方法1: update.sh を使う（NixOS rebuild + Windows設定適用を一括実行）
-./scripts/sh/update.sh
+~/.dotfiles/scripts/sh/update.sh
 
 # 方法2: エイリアスを使う（NixOS rebuildのみ）
 nrs  # alias for: sudo nixos-rebuild switch --flake ~/.dotfiles --impure
