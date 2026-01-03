@@ -50,7 +50,7 @@ with lib;
         };
         next = mkOption {
           type = types.str;
-          default = "j";
+          default = "l";
           description = "Key for next tab";
         };
         prev = mkOption {

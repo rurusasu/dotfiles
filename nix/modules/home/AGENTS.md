@@ -39,7 +39,7 @@ myHomeSettings
 │       └── tab            # Tab/window management (shared)
 │           ├── new        # New tab key (default: t)
 │           ├── close      # Close tab key (default: x)
-│           ├── next       # Next tab key (default: j)
+│           ├── next       # Next tab key (default: l)
 │           └── prev       # Previous tab key (default: h)
 ├── tmux                   # Tmux multiplexer
 │   ├── enable             # Enable tmux
@@ -66,7 +66,7 @@ All tools share similar keybindings where possible:
 | Leader key | CTRL+Space | C-b (or shared) | Space |
 | New tab | Leader+t | prefix+t | Leader+t |
 | Close tab | Leader+x | prefix+x | Leader+x |
-| Next tab | Leader+j | prefix+j | Leader+j |
+| Next tab | Leader+l | prefix+l | Leader+l |
 | Previous tab | Leader+h | prefix+h | Leader+h |
 | Tab 1-9 | Leader+1-9 | prefix+1-9 | - |
 
