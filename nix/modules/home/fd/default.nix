@@ -29,8 +29,8 @@ with lib;
 
     maxResults = mkOption {
       type = types.nullOr types.int;
-      default = 1000;
-      description = "Maximum number of search results (--max-results)";
+      default = null;
+      description = "Maximum number of search results (--max-results). null = unlimited";
     };
 
     maxDepth = mkOption {
