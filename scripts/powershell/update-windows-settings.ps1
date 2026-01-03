@@ -1,6 +1,7 @@
 # Apply Windows settings from dotfiles
-# Run this script as Administrator to create symlinks and install packages
+# Automatically elevates to Administrator if needed
 
+[CmdletBinding()]
 param(
     [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))),
     [switch]$SkipWinget,
@@ -10,12 +11,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Check for admin privileges (required for symlinks)
+# Auto-elevate to Administrator if needed
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Host "[ERROR] This script requires Administrator privileges for creating symlinks." -ForegroundColor Red
-    Write-Host "Please run PowerShell as Administrator and try again." -ForegroundColor Yellow
-    exit 1
+    Write-Host "管理者権限が必要です。UAC プロンプトを表示します..." -ForegroundColor Yellow
+    $scriptPath = $PSCommandPath
+    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"")
+    foreach ($key in $PSBoundParameters.Keys) {
+        $value = $PSBoundParameters[$key]
+        if ($value -is [switch]) {
+            if ($value) { $arguments += "-$key" }
+        } else {
+            $arguments += "-$key"
+            $arguments += "`"$value`""
+        }
+    }
+    Start-Process pwsh -ArgumentList $arguments -Verb RunAs
+    exit 0
 }
 
 Write-Host "Applying Windows settings from dotfiles..." -ForegroundColor Cyan

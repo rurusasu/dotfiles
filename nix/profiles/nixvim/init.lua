@@ -1,9 +1,6 @@
 -- Neovim configuration for VSCode integration and native use
 -- Location: ~/.config/nvim/init.lua
-
--- Leader keys
-vim.g.mapleader = ' '
-vim.g.maplocalleader = ','
+-- Note: Leader keys are set via Nix module (myHomeSettings.nixvim.leader)
 
 -- Basic settings that work everywhere
 vim.opt.clipboard = 'unnamedplus'  -- System clipboard integration
