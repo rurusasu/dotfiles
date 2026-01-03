@@ -14,4 +14,7 @@ return {
     top = 6,
     bottom = 6,
   },
+  -- Alt key sends escape sequence for fzf Alt+C support
+  send_composed_key_when_left_alt_is_pressed = false,
+  send_composed_key_when_right_alt_is_pressed = false,
 }

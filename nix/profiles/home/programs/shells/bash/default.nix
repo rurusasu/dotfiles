@@ -24,9 +24,8 @@
       ll = "ls -alF";
       la = "ls -A";
       l = "ls -CF";
-      grep = "grep --color=auto";
-      fgrep = "fgrep --color=auto";
-      egrep = "egrep --color=auto";
+      grep = "rg";
+      find = "fd";
     };
 
     sessionVariables = {
@@ -80,6 +79,13 @@
       if ! nc -z localhost 22 2>/dev/null; then
         eval "$(ssh-agent -s)" > /dev/null
       fi
+
+      # Alt+Z: zoxide interactive (履歴ベースのディレクトリジャンプ)
+      __zoxide_zi_widget() {
+        local result
+        result="$(${pkgs.zoxide}/bin/zoxide query -i)" && cd "$result"
+      }
+      bind -x '"\ez": __zoxide_zi_widget'
     '';
 
     logoutExtra = ''

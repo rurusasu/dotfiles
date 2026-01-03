@@ -1,7 +1,30 @@
 # AGENTS
 
 Purpose
-- Windows-side installer helpers and execution guidance.
+- Windows-side configuration management, installer helpers, and execution guidance.
+
+## Directory Structure
+```
+windows/
+├── terminal/           # Windows Terminal configuration (symlink)
+├── winget/             # Package management (winget export/import)
+├── scripts/            # Management scripts
+├── .wslconfig          # WSL configuration
+└── install-nixos-wsl.* # NixOS WSL installer
+```
+
+## scripts/
+
+### export-settings.ps1
+Export current Windows settings to dotfiles.
+- Copies Windows Terminal settings.json
+- Exports winget package list
+
+### apply-settings.ps1
+Apply settings from dotfiles (requires Administrator).
+- Creates symlink for Windows Terminal settings
+- Installs winget packages
+- Parameters: `-SkipWinget` to skip package installation
 
 ## install-nixos-wsl.ps1
 
