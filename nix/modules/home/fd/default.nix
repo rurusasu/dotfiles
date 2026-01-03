@@ -53,6 +53,8 @@ with lib;
         ".cargo/"
         "/mnt/wsl/"
         "/mnt/wslg/"
+        "/sys/"
+        "/lib/"
       ];
       description = "Paths to ignore globally";
     };
