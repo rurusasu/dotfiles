@@ -1,8 +1,11 @@
 { leader, tabKeys, paneZoomKey }:
 let
   # Helper to convert Nix keybinding to Lua string
-  mkKey = { key, mods, action }:
-    ''{ key = "${key}", mods = "${mods}", action = ${action} }'';
+  mkKey = { key, mods ? null, action }:
+    if mods == null then
+      ''{ key = "${key}", action = ${action} }''
+    else
+      ''{ key = "${key}", mods = "${mods}", action = ${action} }'';
 
   # Keybindings defined in Nix
   keybindings = {
@@ -42,6 +45,7 @@ let
     misc = [
       { key = "["; mods = "LEADER"; action = "act.ActivateCopyMode"; }
       { key = "Space"; mods = "LEADER"; action = "act.QuickSelect"; }
+      { key = "F11"; action = "act.ToggleFullScreen"; }
     ];
 
     # Font size
