@@ -35,7 +35,7 @@ with lib;
 
     maxDepth = mkOption {
       type = types.nullOr types.int;
-      default = 5;
+      default = 10;
       description = "Maximum search depth (--max-depth)";
     };
 
@@ -51,6 +51,8 @@ with lib;
         ".local/share/"
         ".npm/"
         ".cargo/"
+        "/mnt/wsl/"
+        "/mnt/wslg/"
       ];
       description = "Paths to ignore globally";
     };
