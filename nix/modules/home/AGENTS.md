@@ -38,9 +38,9 @@ myHomeSettings
 │       ├── paneZoom       # Pane zoom key (default: w)
 │       └── tab            # Tab/window management (shared)
 │           ├── new        # New tab key (default: t)
-│           ├── close      # Close tab key (default: q)
-│           ├── next       # Next tab key (default: n)
-│           └── prev       # Previous tab key (default: p)
+│           ├── close      # Close tab key (default: x)
+│           ├── next       # Next tab key (default: j)
+│           └── prev       # Previous tab key (default: h)
 ├── tmux                   # Tmux multiplexer
 │   ├── enable             # Enable tmux
 │   ├── prefix.key         # Prefix key (default: b)
@@ -59,21 +59,38 @@ myHomeSettings
 
 All tools share similar keybindings where possible:
 
+### Tab Operations (Leader-based)
+
 | Action | WezTerm | Tmux | Neovim |
 |--------|---------|------|--------|
 | Leader key | CTRL+Space | C-b (or shared) | Space |
-| Split horizontal | Leader+h | prefix+h | - |
-| Split vertical | Leader+v | prefix+v | - |
-| Close pane | Leader+x | prefix+x | - |
+| New tab | Leader+t | prefix+t | Leader+t |
+| Close tab | Leader+x | prefix+x | Leader+x |
+| Next tab | Leader+j | prefix+j | Leader+j |
+| Previous tab | Leader+h | prefix+h | Leader+h |
+| Tab 1-9 | Leader+1-9 | prefix+1-9 | - |
+
+### Pane Operations (Ctrl+Alt in WezTerm)
+
+| Action | WezTerm | Tmux | Neovim |
+|--------|---------|------|--------|
+| Split horizontal | C-A-h | prefix+h | - |
+| Split vertical | C-A-v | prefix+v | - |
+| Close pane | C-A-x | prefix+x | - |
+| Pane zoom | C-A-w | prefix+w | Leader+w |
+| Resize left | C-A-Left | prefix+H | - |
+| Resize down | C-A-Down | prefix+J | - |
+| Resize up | C-A-Up | prefix+K | - |
+| Resize right | C-A-Right | prefix+L | - |
+
+### Pane Navigation (Ctrl+Shift in WezTerm)
+
+| Action | WezTerm | Tmux | Neovim |
+|--------|---------|------|--------|
 | Pane left | C-S-h | h | C-w h |
 | Pane down | C-S-j | j | C-w j |
 | Pane up | C-S-k | k | C-w k |
 | Pane right | C-S-l | l | C-w l |
-| New tab | Leader+t | prefix+t | Leader+t |
-| Close tab | Leader+q | prefix+q | Leader+q |
-| Next tab | Leader+n | prefix+n | Leader+n |
-| Previous tab | Leader+p | prefix+p | Leader+p |
-| Pane zoom | Leader+w | prefix+w | Leader+w |
 
 ## Usage
 

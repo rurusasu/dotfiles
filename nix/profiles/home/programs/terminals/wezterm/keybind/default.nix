@@ -6,12 +6,12 @@ let
 
   # Keybindings defined in Nix
   keybindings = {
-    # Pane split (Leader + h/v/x) and zoom
+    # Pane split/close/zoom (Ctrl+Alt)
     pane = [
-      { key = "h"; mods = "LEADER"; action = ''act.SplitHorizontal({ domain = "CurrentPaneDomain" })''; }
-      { key = "v"; mods = "LEADER"; action = ''act.SplitVertical({ domain = "CurrentPaneDomain" })''; }
-      { key = "x"; mods = "LEADER"; action = ''act.CloseCurrentPane({ confirm = true })''; }
-      { key = paneZoomKey; mods = "LEADER"; action = "act.TogglePaneZoomState"; }
+      { key = "h"; mods = "CTRL|ALT"; action = ''act.SplitHorizontal({ domain = "CurrentPaneDomain" })''; }
+      { key = "v"; mods = "CTRL|ALT"; action = ''act.SplitVertical({ domain = "CurrentPaneDomain" })''; }
+      { key = "x"; mods = "CTRL|ALT"; action = ''act.CloseCurrentPane({ confirm = true })''; }
+      { key = paneZoomKey; mods = "CTRL|ALT"; action = "act.TogglePaneZoomState"; }
     ];
 
     # Pane navigation (Ctrl+Shift + H/J/K/L, Vim-like)
@@ -22,12 +22,12 @@ let
       { key = "l"; mods = "CTRL|SHIFT"; action = ''act.ActivatePaneDirection("Right")''; }
     ];
 
-    # Pane resize (Ctrl+Shift + Arrow)
+    # Pane resize (Ctrl+Alt + Arrow)
     paneResize = [
-      { key = "LeftArrow"; mods = "CTRL|SHIFT"; action = ''act.AdjustPaneSize({ "Left", 5 })''; }
-      { key = "DownArrow"; mods = "CTRL|SHIFT"; action = ''act.AdjustPaneSize({ "Down", 5 })''; }
-      { key = "UpArrow"; mods = "CTRL|SHIFT"; action = ''act.AdjustPaneSize({ "Up", 5 })''; }
-      { key = "RightArrow"; mods = "CTRL|SHIFT"; action = ''act.AdjustPaneSize({ "Right", 5 })''; }
+      { key = "LeftArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Left", 5 })''; }
+      { key = "DownArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Down", 5 })''; }
+      { key = "UpArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Up", 5 })''; }
+      { key = "RightArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Right", 5 })''; }
     ];
 
     # Tab management (using shared keybindings)

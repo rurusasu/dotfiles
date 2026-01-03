@@ -45,17 +45,17 @@ with lib;
         };
         close = mkOption {
           type = types.str;
-          default = "q";
+          default = "x";
           description = "Key for closing tab (after leader/prefix)";
         };
         next = mkOption {
           type = types.str;
-          default = "n";
+          default = "j";
           description = "Key for next tab";
         };
         prev = mkOption {
           type = types.str;
-          default = "p";
+          default = "h";
           description = "Key for previous tab";
         };
       };
