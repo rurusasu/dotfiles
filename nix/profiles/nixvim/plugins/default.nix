@@ -5,6 +5,7 @@
     ./telescope
     ./lualine
     ./nvim-tree
+    ./oil
     ./gitsigns
     ./indent-blankline
     ./nvim-autopairs

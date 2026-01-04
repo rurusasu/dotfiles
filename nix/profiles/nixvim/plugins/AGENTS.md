@@ -17,7 +17,10 @@ plugins/
 ├── lualine/              # Status line
 │   ├── default.nix
 │   └── AGENTS.md
-├── nvim-tree/            # File explorer
+├── nvim-tree/            # File explorer (tree view)
+│   ├── default.nix
+│   └── AGENTS.md
+├── oil/                  # File explorer (buffer-like)
 │   ├── default.nix
 │   └── AGENTS.md
 ├── gitsigns/             # Git integration
@@ -53,7 +56,8 @@ plugins/
 
 ### Navigation
 - `telescope` - Fuzzy finder
-- `nvim-tree` - File explorer
+- `nvim-tree` - File explorer (tree view)
+- `oil` - File explorer (edit filesystem like a buffer)
 
 ### Editing
 - `nvim-autopairs` - Auto bracket pairing
