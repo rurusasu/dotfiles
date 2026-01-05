@@ -54,18 +54,6 @@ let
           name = "Windows PowerShell";
         }
         {
-          commandline = "%SystemRoot%\\System32\\cmd.exe";
-          guid = "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}";
-          hidden = false;
-          name = "コマンド プロンプト";
-        }
-        {
-          guid = "{b453ae62-4e3d-5e58-b989-0a998ec441b8}";
-          hidden = true;
-          name = "Azure Cloud Shell";
-          source = "Windows.Terminal.Azure";
-        }
-        {
           elevate = true;
           guid = "{574e775e-4f2a-5b96-ac1e-a2962a402336}";
           hidden = false;
@@ -78,64 +66,10 @@ let
           opacity = 25;
         }
         {
-          guid = "{b6523b27-da58-57e8-ae53-e1f73380400d}";
-          hidden = false;
-          name = "Ubuntu-24.04";
-          source = "Microsoft.WSL";
-        }
-        {
-          guid = "{39d64555-b17f-5912-8d8e-2a01e69d9673}";
-          hidden = true;
-          name = "Ubuntu";
-          source = "Microsoft.WSL";
-        }
-        {
-          guid = "{55bf1f9a-7b1e-542e-877c-89bbdeae0402}";
-          hidden = true;
-          name = "Developer Command Prompt for VS 21";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
-          guid = "{5dd0a95e-998e-503b-874d-b2d83f552911}";
-          hidden = true;
-          name = "Developer PowerShell for VS 21";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
           guid = "{2ece5bfe-50ed-5f3a-ab87-5cd4baafed2b}";
           hidden = false;
           name = "Git Bash";
           source = "Git";
-        }
-        {
-          guid = "{b5fdcf37-ec3e-5a08-8f59-dee726688d80}";
-          hidden = true;
-          name = "Developer Command Prompt for VS 2022";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
-          guid = "{375eb4b6-c4c0-5648-8a38-0d8f88c7b880}";
-          hidden = true;
-          name = "Developer PowerShell for VS 2022";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
-          guid = "{2f733b2d-cc70-54fa-be59-88dd0e7eb1f4}";
-          hidden = true;
-          name = "Developer Command Prompt for VS 18";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
-          guid = "{551d7d6d-9712-5b38-817d-de5397c961c1}";
-          hidden = true;
-          name = "Developer PowerShell for VS 18";
-          source = "Windows.Terminal.VisualStudio";
-        }
-        {
-          guid = "{bc78590e-5f0e-5af3-9cfc-8683e86326e6}";
-          hidden = true;
-          name = "Ubuntu";
-          source = "Microsoft.WSL";
         }
         {
           guid = "{265f58cc-343d-58ab-af9f-53bd9c7e769f}";
