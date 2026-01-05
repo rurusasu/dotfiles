@@ -48,6 +48,24 @@ $TerminalSettingsDest = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8w
 
 Write-Host "[INFO] Using Nix-generated settings from WSL" -ForegroundColor Gray
 
+# Check if terminal config files exist in WSL
+$terminalConfigCheck = & wsl -d $WslDistro -u $WslUser -- bash -c "test -f ~/.config/windows-terminal/settings.json && echo exists" 2>$null
+$configMissing = -not ($terminalConfigCheck -eq "exists")
+
+if ($configMissing) {
+    Write-Host "[INFO] Configuration files not found in WSL" -ForegroundColor Yellow
+    Write-Host "[INFO] Running nixos-rebuild switch to generate configs..." -ForegroundColor Yellow
+
+    & wsl -d $WslDistro -u $WslUser -- bash -c "cd ~/.dotfiles && sudo nixos-rebuild switch --flake '.#nixos'"
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] nixos-rebuild completed successfully" -ForegroundColor Green
+    } else {
+        Write-Host "[WARN] nixos-rebuild failed (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+        Write-Host "[HINT] Terminal settings may not be available" -ForegroundColor Yellow
+    }
+}
+
 $destDir = Split-Path -Parent $TerminalSettingsDest
 if (Test-Path $destDir) {
     # Read the actual content from WSL (resolves symlinks)

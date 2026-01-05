@@ -1,0 +1,30 @@
+# デフォルトの動作: すべてのテキストファイルはLFに正規化
+* text=auto
+
+# PowerShellスクリプトはCRLFを使用
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Windowsバッチファイル/コマンドファイルはCRLFを使用
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Unix系シェルスクリプトはLFを使用
+*.sh text eol=lf
+
+# その他のテキストファイルはLFを使用
+*.md text eol=lf
+*.nix text eol=lf
+*.lua text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+
+# バイナリファイル（変換しない）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
