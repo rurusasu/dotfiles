@@ -29,3 +29,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.log
+
+# WSL config (machine-specific)
+windows/.wslconfig
