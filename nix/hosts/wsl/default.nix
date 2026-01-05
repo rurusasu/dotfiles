@@ -3,6 +3,7 @@
   imports = [
     ../../modules/host
     ../../modules/wsl
+    ../../profiles/hosts/kubernetes
     ./configuration.nix
     inputs.nixos-vscode-server.nixosModules.default
   ];
