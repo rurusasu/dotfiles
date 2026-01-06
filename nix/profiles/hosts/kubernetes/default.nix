@@ -1,10 +1,20 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Import plugins
+  imports = [
+    ./plugins/cilium.nix
+  ];
+
   # Kubernetes configuration
   services.kubernetes = {
     roles = [ "master" "node" ];
     masterAddress = "localhost";
+
+    # Use easyCerts for automatic certificate management
+    # This is suitable for development and testing environments
+    # Note: For production clusters, use cert-manager or external PKI
+    easyCerts = true;
 
     # Disable default flannel CNI (we'll use Cilium)
     flannel.enable = false;
@@ -16,12 +26,13 @@
     };
 
     # Kubelet configuration for Cilium
-    kubelet = {
-      extraOpts = lib.concatStringsSep " " [
-        "--network-plugin=cni"
-        "--cni-conf-dir=/etc/cni/net.d"
-        "--cni-bin-dir=${pkgs.cni-plugins}/bin"
-      ];
+    # Note: --network-plugin flag was removed in Kubernetes 1.24+
+    # CNI is now the default and only network plugin. The cni-* flags
+    # were removed from kubelet 1.34+, so rely on the defaults and
+    # /opt/cni/bin symlinks below.
+    kubelet.extraConfig = {
+      # WSL typically runs with swap enabled; allow kubelet to start.
+      failSwapOn = false;
     };
 
     # Add CNI plugins path
@@ -38,23 +49,18 @@
     "nf_conntrack"
   ];
 
-  # Kernel parameters for Kubernetes and Cilium
+  # Kernel parameters for Cilium/eBPF
+  # Note: Kubernetes networking parameters (ip_forward, bridge-nf-call-*) are
+  # automatically set by the Kubernetes module
   boot.kernel.sysctl = {
-    "net.bridge.bridge-nf-call-iptables" = 1;
-    "net.bridge.bridge-nf-call-ip6tables" = 1;
-    "net.ipv4.ip_forward" = 1;
-    "net.ipv6.conf.all.forwarding" = 1;
-    # eBPF related
     "kernel.unprivileged_bpf_disabled" = 0;
     "net.core.bpf_jit_enable" = 1;
   };
 
-  # Install kubectl, helm, and cilium-cli
+  # Install kubectl, helm, and CNI plugins
   environment.systemPackages = with pkgs; [
     kubectl
     kubernetes-helm
-    cilium-cli
-    hubble
     cni-plugins
   ];
 
@@ -64,13 +70,9 @@
     "d /opt/cni/bin 0755 root root -"
   ];
 
-  # Link CNI plugins
-  system.activationScripts.cniPlugins = {
-    text = ''
-      mkdir -p /opt/cni/bin
-      for plugin in ${pkgs.cni-plugins}/bin/*; do
-        ln -sf $plugin /opt/cni/bin/
-      done
-    '';
-  };
+  # Docker Desktop's /Docker/host mount includes spaces in /proc/mounts and
+  # breaks kubelet's mount parser on WSL. Unmount it before kubelet starts.
+  systemd.services.kubelet.preStart = lib.mkBefore ''
+    umount -l /Docker/host || true
+  '';
 }

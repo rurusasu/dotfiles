@@ -143,6 +143,8 @@ in
         local is_windows = wezterm.target_triple:find("windows") ~= nil
         if is_windows then
           config.default_prog = { "pwsh.exe", "-NoLogo" }
+          -- Exit behavior: close window without error message on non-zero exit codes
+          config.exit_behavior = "Close"
         end
 
         -- Terminal type (enables undercurl, colored underlines, etc.)
