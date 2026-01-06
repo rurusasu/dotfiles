@@ -4,17 +4,24 @@
   # Import plugins
   imports = [
     ./plugins/cilium.nix
+    ./plugins/step-ca.nix
   ];
+
+  # Enable step-ca based PKI for HA-ready certificate management
+  myKubernetes.pki = {
+    enable = true;
+    # For HA setup, change caAddress to 0.0.0.0 and add extraSANs
+    # caAddress = "0.0.0.0";
+    # extraSANs = [ "10.0.0.10" "10.0.0.11" "master1.k8s.local" ];
+  };
 
   # Kubernetes configuration
   services.kubernetes = {
     roles = [ "master" "node" ];
     masterAddress = "localhost";
 
-    # Use easyCerts for automatic certificate management
-    # This is suitable for development and testing environments
-    # Note: For production clusters, use cert-manager or external PKI
-    easyCerts = true;
+    # Disable easyCerts - using step-ca for HA-ready PKI
+    easyCerts = false;
 
     # Disable default flannel CNI (we'll use Cilium)
     flannel.enable = false;
