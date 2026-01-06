@@ -26,6 +26,12 @@ in
       nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
       find = "fd";
       grep = "rg";
+      # Kubernetes aliases (requires sudo for certificate access)
+      k = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig";
+      kgn = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get nodes";
+      kgp = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get pods -A";
+      kgs = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get svc -A";
+      cilium = "sudo KUBECONFIG=/etc/kubernetes/cluster-admin.kubeconfig cilium";
     };
     initContent = ''
       # Alt+Z: zoxide interactive (履歴ベースのディレクトリジャンプ)
