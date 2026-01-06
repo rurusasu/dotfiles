@@ -43,6 +43,61 @@ in
       step-ca
     ];
 
+    # Configure Kubernetes to use our certificates
+    services.kubernetes = {
+      # CA certificate
+      caFile = "/var/lib/kubernetes/secrets/ca.pem";
+
+      # API server certificates
+      apiserver = {
+        tlsCertFile = "/var/lib/kubernetes/secrets/kube-apiserver.pem";
+        tlsKeyFile = "/var/lib/kubernetes/secrets/kube-apiserver-key.pem";
+        kubeletClientCaFile = "/var/lib/kubernetes/secrets/ca.pem";
+        kubeletClientCertFile = "/var/lib/kubernetes/secrets/kube-apiserver.pem";
+        kubeletClientKeyFile = "/var/lib/kubernetes/secrets/kube-apiserver-key.pem";
+        serviceAccountSigningKeyFile = "/var/lib/kubernetes/secrets/service-account-key.pem";
+        serviceAccountKeyFile = "/var/lib/kubernetes/secrets/service-account.pem";
+        clientCaFile = "/var/lib/kubernetes/secrets/ca.pem";
+      };
+
+      # Controller manager certificates
+      controllerManager = {
+        serviceAccountKeyFile = "/var/lib/kubernetes/secrets/service-account-key.pem";
+        rootCaFile = "/var/lib/kubernetes/secrets/ca.pem";
+        kubeconfig = {
+          caFile = "/var/lib/kubernetes/secrets/ca.pem";
+          certFile = "/var/lib/kubernetes/secrets/kube-controller-manager.pem";
+          keyFile = "/var/lib/kubernetes/secrets/kube-controller-manager-key.pem";
+        };
+      };
+
+      # Scheduler certificates
+      scheduler.kubeconfig = {
+        caFile = "/var/lib/kubernetes/secrets/ca.pem";
+        certFile = "/var/lib/kubernetes/secrets/kube-scheduler.pem";
+        keyFile = "/var/lib/kubernetes/secrets/kube-scheduler-key.pem";
+      };
+
+      # Kubelet certificates
+      kubelet = {
+        clientCaFile = "/var/lib/kubernetes/secrets/ca.pem";
+        tlsCertFile = "/var/lib/kubernetes/secrets/kubelet.pem";
+        tlsKeyFile = "/var/lib/kubernetes/secrets/kubelet-key.pem";
+        kubeconfig = {
+          caFile = "/var/lib/kubernetes/secrets/ca.pem";
+          certFile = "/var/lib/kubernetes/secrets/kubelet.pem";
+          keyFile = "/var/lib/kubernetes/secrets/kubelet-key.pem";
+        };
+      };
+
+      # Proxy certificates
+      proxy.kubeconfig = {
+        caFile = "/var/lib/kubernetes/secrets/ca.pem";
+        certFile = "/var/lib/kubernetes/secrets/kube-proxy.pem";
+        keyFile = "/var/lib/kubernetes/secrets/kube-proxy-key.pem";
+      };
+    };
+
     # Initialize step-ca certificates before the service starts
     systemd.services.step-ca-init = {
       description = "Initialize step-ca PKI for Kubernetes";
@@ -140,7 +195,7 @@ in
         RemainAfterExit = true;
       };
 
-      path = [ pkgs.step-cli ];
+      path = [ pkgs.step-cli pkgs.openssl ];
 
       script = let
         allSANs = pkiCfg.dnsNames ++ pkiCfg.extraSANs ++ [ "127.0.0.1" "10.0.0.1" ];
@@ -243,9 +298,30 @@ in
             --root="$CA_ROOT" \
             --provisioner="kubernetes" \
             --provisioner-password-file="/var/lib/step-ca/password.txt" \
-            --set="organization=system:masters" \
             --not-after=8760h \
             --force
+        fi
+
+        # Generate kube-proxy certificate
+        if [ ! -f "$SECRETS_DIR/kube-proxy.pem" ]; then
+          echo "Generating kube-proxy certificate..."
+          step ca certificate \
+            "system:kube-proxy" \
+            "$SECRETS_DIR/kube-proxy.pem" \
+            "$SECRETS_DIR/kube-proxy-key.pem" \
+            --ca-url="$CA_URL" \
+            --root="$CA_ROOT" \
+            --provisioner="kubernetes" \
+            --provisioner-password-file="/var/lib/step-ca/password.txt" \
+            --not-after=8760h \
+            --force
+        fi
+
+        # Generate service account key pair (RSA for JWT signing)
+        if [ ! -f "$SECRETS_DIR/service-account-key.pem" ]; then
+          echo "Generating service account key pair..."
+          openssl genrsa -out "$SECRETS_DIR/service-account-key.pem" 2048
+          openssl rsa -in "$SECRETS_DIR/service-account-key.pem" -pubout -out "$SECRETS_DIR/service-account.pem"
         fi
 
         # Copy CA certificate
