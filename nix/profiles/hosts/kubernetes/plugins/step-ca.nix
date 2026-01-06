@@ -124,17 +124,22 @@ in
         if [ ! -f "$CA_DIR/certs/root_ca.crt" ]; then
           echo "Initializing step-ca PKI..."
 
-          # Initialize step-ca with kubernetes profile
+          # Initialize step-ca with kubernetes profile (non-interactive)
+          export STEPPATH="$STEP_PATH"
+          mkdir -p "$STEP_PATH"
+
+          # Create password file first
+          echo "kubernetes-pki-password" > "$STEP_PATH/password.txt"
+
           step ca init \
             --name="kubernetes-ca" \
             --dns="${dnsNamesStr}" \
             --address="${pkiCfg.caAddress}:${toString pkiCfg.caPort}" \
             --provisioner="kubernetes" \
-            --password-file=<(echo "kubernetes-pki-password") \
-            --provisioner-password-file=<(echo "kubernetes-pki-password") \
+            --password-file="$STEP_PATH/password.txt" \
+            --provisioner-password-file="$STEP_PATH/password.txt" \
             --deployment-type=standalone \
-            --context="kubernetes" \
-            --with-ca-url="https://${pkiCfg.caAddress}:${toString pkiCfg.caPort}"
+            --no-db
 
           # Copy generated files from step's output directory to CA_DIR
           cp "$STEP_PATH/certs/root_ca.crt" "$CA_DIR/certs/"
