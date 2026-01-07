@@ -26,12 +26,13 @@ in
       nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
       find = "fd";
       grep = "rg";
-      # Kubernetes aliases (requires sudo for certificate access)
-      k = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig";
-      kgn = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get nodes";
-      kgp = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get pods -A";
-      kgs = "sudo kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get svc -A";
-      cilium = "sudo KUBECONFIG=/etc/kubernetes/cluster-admin.kubeconfig cilium";
+      # k3s aliases (no sudo needed)
+      k = "kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml";
+      kgn = "kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get nodes";
+      kgp = "kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get pods -A";
+      kgs = "kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get svc -A";
+      cilium = "KUBECONFIG=/etc/rancher/k3s/k3s.yaml cilium";
+      k3s-status = "systemctl status k3s";
     };
     initContent = ''
       # Alt+Z: zoxide interactive (履歴ベースのディレクトリジャンプ)
