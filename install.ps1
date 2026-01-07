@@ -611,5 +611,12 @@ if (Test-Path -LiteralPath $updateScript) {
     Write-Warning "update-windows-settings.ps1 が見つかりません: $updateScript"
 }
 
+# Docker Desktop VHDX 拡張
+$expandDockerVhd = Join-Path $PSScriptRoot "windows\expand-docker-vhd.ps1"
+if (Test-Path -LiteralPath $expandDockerVhd) {
+    Write-Host "Docker Desktop VHDX サイズを確認しています..."
+    & $expandDockerVhd -Force
+}
+
 Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName"
 
