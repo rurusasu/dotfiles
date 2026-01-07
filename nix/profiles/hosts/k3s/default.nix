@@ -24,6 +24,7 @@
       # Add more SANs for HA: "--tls-san=10.0.0.10" "--tls-san=master1.local"
       "--kube-apiserver-arg=allow-privileged=true"
       "--kubelet-arg=fail-swap-on=false"     # WSL swap handling
+      "--kubelet-arg=cgroup-driver=systemd"  # WSL2 cgroup2 compatibility
     ];
   };
 

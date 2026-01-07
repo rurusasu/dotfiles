@@ -72,13 +72,17 @@ if (Test-Path $destDir) {
     $settingsContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/windows-terminal/settings.json" 2>$null
 
     if ($LASTEXITCODE -eq 0 -and $settingsContent) {
-        # Backup existing settings if not already backed up
-        if ((Test-Path $TerminalSettingsDest) -and -not (Test-Path "$TerminalSettingsDest.backup")) {
-            Copy-Item -Path $TerminalSettingsDest -Destination "$TerminalSettingsDest.backup" -Force
-            Write-Host "[INFO] Backed up existing settings to $TerminalSettingsDest.backup" -ForegroundColor Gray
+        # Delete existing settings and backup completely
+        if (Test-Path $TerminalSettingsDest) {
+            Remove-Item -Path $TerminalSettingsDest -Force
+            Write-Host "[INFO] Deleted existing settings: $TerminalSettingsDest" -ForegroundColor Gray
+        }
+        if (Test-Path "$TerminalSettingsDest.backup") {
+            Remove-Item -Path "$TerminalSettingsDest.backup" -Force
+            Write-Host "[INFO] Deleted existing backup: $TerminalSettingsDest.backup" -ForegroundColor Gray
         }
 
-        # Write the settings directly (copy approach since symlinks don't work with WSL symlinks)
+        # Write the new settings
         $settingsContent | Out-File -FilePath $TerminalSettingsDest -Encoding utf8 -Force
         Write-Host "[OK] Windows Terminal settings applied" -ForegroundColor Green
     } else {
@@ -102,13 +106,17 @@ if (-not (Test-Path $WeztermConfigDir)) {
 $weztermContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/wezterm/wezterm.lua" 2>$null
 
 if ($LASTEXITCODE -eq 0 -and $weztermContent) {
-    # Backup existing config if not already backed up
-    if ((Test-Path $WeztermConfigDest) -and -not (Test-Path "$WeztermConfigDest.backup")) {
-        Copy-Item -Path $WeztermConfigDest -Destination "$WeztermConfigDest.backup" -Force
-        Write-Host "[INFO] Backed up existing WezTerm config to $WeztermConfigDest.backup" -ForegroundColor Gray
+    # Delete existing config and backup completely
+    if (Test-Path $WeztermConfigDest) {
+        Remove-Item -Path $WeztermConfigDest -Force
+        Write-Host "[INFO] Deleted existing config: $WeztermConfigDest" -ForegroundColor Gray
+    }
+    if (Test-Path "$WeztermConfigDest.backup") {
+        Remove-Item -Path "$WeztermConfigDest.backup" -Force
+        Write-Host "[INFO] Deleted existing backup: $WeztermConfigDest.backup" -ForegroundColor Gray
     }
 
-    # Write the config
+    # Write the new config
     $weztermContent | Out-File -FilePath $WeztermConfigDest -Encoding utf8 -Force
     Write-Host "[OK] WezTerm settings applied" -ForegroundColor Green
 } else {
