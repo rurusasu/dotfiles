@@ -306,8 +306,16 @@ ADMINCSR
           echo "Kubernetes PKI already initialized"
         fi
 
-        # Ensure proper ownership
+        # Ensure proper ownership and permissions
         chown -R kubernetes:kubernetes "$SECRETS_DIR" 2>/dev/null || true
+
+        # Set correct permissions for all private keys
+        chmod 600 "$SECRETS_DIR"/*-key.pem 2>/dev/null || true
+
+        # Allow etcd user to read etcd certificates
+        chgrp etcd "$SECRETS_DIR/etcd-key.pem" "$SECRETS_DIR/etcd.pem" "$SECRETS_DIR/ca.pem" 2>/dev/null || true
+        chmod 640 "$SECRETS_DIR/etcd-key.pem" 2>/dev/null || true
+        chmod 644 "$SECRETS_DIR/etcd.pem" "$SECRETS_DIR/ca.pem" 2>/dev/null || true
 
         # Generate cluster-admin kubeconfig
         KUBECONFIG_DIR="/etc/kubernetes"
