@@ -223,15 +223,22 @@ HOST_DEFAULT_PATH="$HOST_DIR/default.nix"
 HOST_CONFIG_PATH="$HOST_DIR/configuration.nix"
 HOST_HW_PATH="$HOST_DIR/hardware-configuration.nix"
 
-cat > "$USER_HOME_PATH" <<EOF
+# Only generate files if they don't exist (preserve existing configurations)
+if [[ ! -f "$USER_HOME_PATH" ]]; then
+  cat > "$USER_HOME_PATH" <<EOF
 { config, pkgs, ... }:
 {
   home.username = "$USER_NAME";
   home.homeDirectory = "/home/$USER_NAME";
 }
 EOF
+  echo "Created: $USER_HOME_PATH"
+else
+  echo "Skipping (exists): $USER_HOME_PATH"
+fi
 
-cat > "$HOST_HOME_PATH" <<EOF
+if [[ ! -f "$HOST_HOME_PATH" ]]; then
+  cat > "$HOST_HOME_PATH" <<EOF
 { config, pkgs, ... }:
 {
   imports = [
@@ -240,13 +247,19 @@ cat > "$HOST_HOME_PATH" <<EOF
   ];
 }
 EOF
+  echo "Created: $HOST_HOME_PATH"
+else
+  echo "Skipping (exists): $HOST_HOME_PATH"
+fi
 
-cat > "$HOST_DEFAULT_PATH" <<EOF
+if [[ ! -f "$HOST_DEFAULT_PATH" ]]; then
+  cat > "$HOST_DEFAULT_PATH" <<EOF
 { config, inputs, pkgs, ... }:
 {
   imports = [
     ../../modules/host
     ../../modules/wsl
+    ../../profiles/hosts/k3s
     ./configuration.nix
     inputs.nixos-vscode-server.nixosModules.default
   ];
@@ -260,19 +273,35 @@ cat > "$HOST_DEFAULT_PATH" <<EOF
       "\$HOME/.vscode-server-insiders"
     ];
   };
+}
 EOF
-
-if [[ -n "$HOSTNAME" ]]; then
-  echo "  networking.hostName = \"$HOSTNAME\";" >> "$HOST_DEFAULT_PATH"
+  echo "Created: $HOST_DEFAULT_PATH"
+else
+  echo "Skipping (exists): $HOST_DEFAULT_PATH"
 fi
-echo '}' >> "$HOST_DEFAULT_PATH"
 
-if [[ -f /etc/nixos/configuration.nix ]]; then
-  cp -f /etc/nixos/configuration.nix "$HOST_CONFIG_PATH"
-  sed -i '\|<nixos-wsl/modules>|d' "$HOST_CONFIG_PATH"
+if [[ ! -f "$HOST_CONFIG_PATH" ]]; then
+  if [[ -f /etc/nixos/configuration.nix ]]; then
+    cp -f /etc/nixos/configuration.nix "$HOST_CONFIG_PATH"
+    sed -i '\|<nixos-wsl/modules>|d' "$HOST_CONFIG_PATH"
+    # Add Docker Desktop integration setting for k3s
+    sed -i '/wsl.defaultUser/a\
+\
+  # Enable Docker Desktop WSL integration handling for k3s\
+  mySettings.wsl.dockerDesktopIntegration = true;' "$HOST_CONFIG_PATH"
+    echo "Created: $HOST_CONFIG_PATH"
+  fi
+else
+  echo "Skipping (exists): $HOST_CONFIG_PATH"
 fi
-if [[ -f /etc/nixos/hardware-configuration.nix ]]; then
-  cp -f /etc/nixos/hardware-configuration.nix "$HOST_HW_PATH"
+
+if [[ ! -f "$HOST_HW_PATH" ]]; then
+  if [[ -f /etc/nixos/hardware-configuration.nix ]]; then
+    cp -f /etc/nixos/hardware-configuration.nix "$HOST_HW_PATH"
+    echo "Created: $HOST_HW_PATH"
+  fi
+else
+  echo "Skipping (exists): $HOST_HW_PATH"
 fi
 
 # Run nixos-rebuild
