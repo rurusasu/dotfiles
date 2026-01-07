@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 let
   terminalsCfg = config.myHomeSettings.terminals;
 
@@ -30,7 +35,7 @@ let
     keybindings = sharedKeybindings.windowsTerminal.keybindings;
 
     # New tab menu
-    newTabMenu = [{ type = "remainingProfiles"; }];
+    newTabMenu = [ { type = "remainingProfiles"; } ];
 
     # Profiles
     profiles = {
@@ -85,8 +90,7 @@ let
   };
 
   # Generate JSON file
-  settingsJson = pkgs.writeText "windows-terminal-settings.json"
-    (builtins.toJSON settings);
+  settingsJson = pkgs.writeText "windows-terminal-settings.json" (builtins.toJSON settings);
 in
 {
   # Export the generated settings path for scripts to use

@@ -1,5 +1,10 @@
 # Treesitter - syntax highlighting and parsing
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;
@@ -16,9 +21,18 @@ in
       };
       # Grammars installed via Nix (not runtime download)
       grammarPackages = with pkgs.vimPlugins.nvim-treesitter.builtGrammars; [
-        lua vim vimdoc nix bash
-        python javascript typescript
-        json yaml markdown markdown_inline
+        lua
+        vim
+        vimdoc
+        nix
+        bash
+        python
+        javascript
+        typescript
+        json
+        yaml
+        markdown
+        markdown_inline
       ];
     };
   };

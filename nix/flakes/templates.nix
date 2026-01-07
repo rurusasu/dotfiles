@@ -1,4 +1,5 @@
-{ ... }: {
+{ ... }:
+{
   flake = {
     templates = {
       python = {

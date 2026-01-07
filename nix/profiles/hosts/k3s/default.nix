@@ -1,5 +1,13 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
+let
+  hasDockerDesktopIntegration = config.mySettings.wsl.dockerDesktopIntegration;
+in
 {
   # Import Cilium plugin
   imports = [
@@ -15,16 +23,16 @@
     extraFlags = [
       "--flannel-backend=none"
       "--disable-network-policy"
-      "--disable=traefik"                    # Disable default ingress
-      "--write-kubeconfig-mode=644"          # Allow reading kubeconfig
-      "--tls-san=localhost"                  # For HA-ready setup
+      "--disable=traefik" # Disable default ingress
+      "--write-kubeconfig-mode=644" # Allow reading kubeconfig
+      "--tls-san=localhost" # For HA-ready setup
       "--tls-san=127.0.0.1"
       "--tls-san=kubernetes"
       "--tls-san=kubernetes.default"
       # Add more SANs for HA: "--tls-san=10.0.0.10" "--tls-san=master1.local"
       "--kube-apiserver-arg=allow-privileged=true"
-      "--kubelet-arg=fail-swap-on=false"     # WSL swap handling
-      "--kubelet-arg=cgroup-driver=systemd"  # WSL2 cgroup2 compatibility
+      "--kubelet-arg=fail-swap-on=false" # WSL swap handling
+      "--kubelet-arg=cgroup-driver=systemd" # WSL2 cgroup2 compatibility
     ];
   };
 
@@ -48,13 +56,16 @@
   environment.systemPackages = with pkgs; [
     kubectl
     kubernetes-helm
-    k9s                                      # Optional: nice TUI for k8s
+    k9s # Optional: nice TUI for k8s
   ];
 
   # WSL-specific workaround: Docker Desktop mount breaks kubelet
-  systemd.services.k3s.preStart = lib.mkBefore ''
-    umount -l /Docker/host 2>/dev/null || true
-  '';
+  # Only enabled when Docker Desktop WSL integration is active
+  systemd.services.k3s.preStart = lib.mkIf hasDockerDesktopIntegration (
+    lib.mkBefore ''
+      umount -l /Docker/host 2>/dev/null || true
+    ''
+  );
 
   # Ensure k3s starts after network is ready
   systemd.services.k3s.after = [ "network-online.target" ];

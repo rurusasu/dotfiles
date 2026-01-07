@@ -12,7 +12,8 @@ scripts/
 └── powershell/                   # PowerShell scripts (Windows)
     ├── update-windows-settings.ps1  # Apply terminal settings to Windows (Admin)
     ├── update-wslconfig.ps1      # Apply .wslconfig to Windows
-    └── export-settings.ps1       # Export Windows settings to dotfiles
+    ├── export-settings.ps1       # Export Windows settings to dotfiles
+    └── format-ps1.ps1            # Format PowerShell scripts via PSScriptAnalyzer
 
 Note: install.ps1 is in the repository root (auto-elevates to admin).
 ```

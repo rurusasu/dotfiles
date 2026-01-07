@@ -1,4 +1,8 @@
-{ pkgs, lib, system }:
+{
+  pkgs,
+  lib,
+  system,
+}:
 {
   inherit pkgs lib system;
 }

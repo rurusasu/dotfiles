@@ -1,5 +1,10 @@
 # which-key - keybinding hints
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;

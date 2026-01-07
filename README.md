@@ -108,7 +108,14 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 
 ## フォーマット (treefmt)
 
-Nix の整形は treefmt で行います:
+以下を treefmt で整形します:
+
+- Nix: `nixfmt`
+- JSON/YAML/Markdown: `prettier`
+- TOML: `taplo`
+- Lua: `stylua`
+- Shell: `shfmt`
+- PowerShell: `pwsh` + `PSScriptAnalyzer`
 
 ```bash
 nix fmt
@@ -119,6 +126,23 @@ nix fmt
 ```bash
 ./scripts/sh/treefmt.sh
 ```
+
+pre-commit を使う場合:
+
+```bash
+pre-commit install
+```
+
+PowerShell (.ps1) の整形は PSScriptAnalyzer の `Invoke-Formatter` を使用します:
+
+```powershell
+pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
+```
+
+TOML/Lua はそれぞれ設定ファイルで整形幅などを調整しています:
+
+- `.taplo.toml`
+- `stylua.toml`
 
 ## WSL 設定 (.wslconfig)
 

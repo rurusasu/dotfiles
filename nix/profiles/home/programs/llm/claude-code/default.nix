@@ -49,7 +49,7 @@
           "Bash(git rm:*)"
           "Bash(readlink:*)"
         ];
-        deny = [];
+        deny = [ ];
       };
     };
   };

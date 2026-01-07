@@ -25,7 +25,10 @@ with lib;
 
     keybindings = {
       paneNavStyle = mkOption {
-        type = types.enum [ "vim" "arrow" ];
+        type = types.enum [
+          "vim"
+          "arrow"
+        ];
         default = config.myHomeSettings.terminals.keybindings.paneNavStyle;
         description = "Pane navigation style: vim (hjkl) or arrow keys";
       };

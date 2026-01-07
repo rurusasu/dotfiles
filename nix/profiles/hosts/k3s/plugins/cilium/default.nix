@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Install Cilium CLI tools
@@ -26,7 +31,10 @@
       RestartSec = "30s";
     };
 
-    path = with pkgs; [ cilium-cli kubectl ];
+    path = with pkgs; [
+      cilium-cli
+      kubectl
+    ];
 
     script = ''
       # Wait for k3s API to be ready

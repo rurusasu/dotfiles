@@ -1,5 +1,10 @@
 # fd profile - uses settings from myHomeSettings.fd
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.fd;

@@ -24,7 +24,8 @@ dotfiles/
 │   └── powershell/         # PowerShell scripts (Windows)
 │       ├── update-windows-settings.ps1  # Apply terminal settings
 │       ├── update-wslconfig.ps1    # Apply .wslconfig
-│       └── export-settings.ps1     # Export Windows settings
+│       ├── export-settings.ps1     # Export Windows settings
+│       └── format-ps1.ps1          # Format PowerShell scripts
 ├── windows/                # Windows-side config files
 │   ├── winget/             # Package management
 │   └── .wslconfig          # WSL configuration
@@ -86,6 +87,32 @@ To test build without applying:
 
 ```bash
 sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
+```
+
+## Formatting
+
+Use treefmt for Nix/JSON/YAML/Markdown/TOML/Lua/Shell/PowerShell:
+
+```bash
+nix fmt
+```
+
+or:
+
+```bash
+./scripts/sh/treefmt.sh
+```
+
+To enable automatic formatting on commit:
+
+```bash
+pre-commit install
+```
+
+PowerShell formatting requires PSScriptAnalyzer:
+
+```powershell
+pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
 ## Terminal Settings Flow

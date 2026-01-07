@@ -1,5 +1,10 @@
 # nvim-autopairs - auto bracket pairing
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;

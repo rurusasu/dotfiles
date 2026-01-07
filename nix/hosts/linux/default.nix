@@ -1,14 +1,7 @@
-{ config, pkgs, ... }:
+{ ... }:
 {
   imports = [
     ../../modules/host
+    ./configuration.nix
   ];
-
-  virtualisation.docker = {
-    enable = true;
-    rootless = {
-      enable = true;
-      setSocketVariable = true;
-    };
-  };
 }

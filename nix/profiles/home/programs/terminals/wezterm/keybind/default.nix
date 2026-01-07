@@ -1,7 +1,16 @@
-{ leader, tabKeys, paneZoomKey }:
+{
+  leader,
+  tabKeys,
+  paneZoomKey,
+}:
 let
   # Helper to convert Nix keybinding to Lua string
-  mkKey = { key, mods ? null, action }:
+  mkKey =
+    {
+      key,
+      mods ? null,
+      action,
+    }:
     if mods == null then
       ''{ key = "${key}", action = ${action} }''
     else
@@ -11,48 +20,135 @@ let
   keybindings = {
     # Pane split/close/zoom (Ctrl+Alt)
     pane = [
-      { key = "h"; mods = "CTRL|ALT"; action = ''act.SplitHorizontal({ domain = "CurrentPaneDomain" })''; }
-      { key = "v"; mods = "CTRL|ALT"; action = ''act.SplitVertical({ domain = "CurrentPaneDomain" })''; }
-      { key = "x"; mods = "CTRL|ALT"; action = ''act.CloseCurrentPane({ confirm = true })''; }
-      { key = paneZoomKey; mods = "CTRL|ALT"; action = "act.TogglePaneZoomState"; }
+      {
+        key = "h";
+        mods = "CTRL|ALT";
+        action = ''act.SplitHorizontal({ domain = "CurrentPaneDomain" })'';
+      }
+      {
+        key = "v";
+        mods = "CTRL|ALT";
+        action = ''act.SplitVertical({ domain = "CurrentPaneDomain" })'';
+      }
+      {
+        key = "x";
+        mods = "CTRL|ALT";
+        action = ''act.CloseCurrentPane({ confirm = true })'';
+      }
+      {
+        key = paneZoomKey;
+        mods = "CTRL|ALT";
+        action = "act.TogglePaneZoomState";
+      }
     ];
 
     # Pane navigation (Ctrl+Shift + H/J/K/L, Vim-like)
     paneNav = [
-      { key = "h"; mods = "CTRL|SHIFT"; action = ''act.ActivatePaneDirection("Left")''; }
-      { key = "j"; mods = "CTRL|SHIFT"; action = ''act.ActivatePaneDirection("Down")''; }
-      { key = "k"; mods = "CTRL|SHIFT"; action = ''act.ActivatePaneDirection("Up")''; }
-      { key = "l"; mods = "CTRL|SHIFT"; action = ''act.ActivatePaneDirection("Right")''; }
+      {
+        key = "h";
+        mods = "CTRL|SHIFT";
+        action = ''act.ActivatePaneDirection("Left")'';
+      }
+      {
+        key = "j";
+        mods = "CTRL|SHIFT";
+        action = ''act.ActivatePaneDirection("Down")'';
+      }
+      {
+        key = "k";
+        mods = "CTRL|SHIFT";
+        action = ''act.ActivatePaneDirection("Up")'';
+      }
+      {
+        key = "l";
+        mods = "CTRL|SHIFT";
+        action = ''act.ActivatePaneDirection("Right")'';
+      }
     ];
 
     # Pane resize (Ctrl+Alt + Arrow)
     paneResize = [
-      { key = "LeftArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Left", 5 })''; }
-      { key = "DownArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Down", 5 })''; }
-      { key = "UpArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Up", 5 })''; }
-      { key = "RightArrow"; mods = "CTRL|ALT"; action = ''act.AdjustPaneSize({ "Right", 5 })''; }
+      {
+        key = "LeftArrow";
+        mods = "CTRL|ALT";
+        action = ''act.AdjustPaneSize({ "Left", 5 })'';
+      }
+      {
+        key = "DownArrow";
+        mods = "CTRL|ALT";
+        action = ''act.AdjustPaneSize({ "Down", 5 })'';
+      }
+      {
+        key = "UpArrow";
+        mods = "CTRL|ALT";
+        action = ''act.AdjustPaneSize({ "Up", 5 })'';
+      }
+      {
+        key = "RightArrow";
+        mods = "CTRL|ALT";
+        action = ''act.AdjustPaneSize({ "Right", 5 })'';
+      }
     ];
 
     # Tab management (using shared keybindings)
     tab = [
-      { key = tabKeys.new; mods = "LEADER"; action = ''act.SpawnTab("CurrentPaneDomain")''; }
-      { key = tabKeys.close; mods = "LEADER"; action = ''act.CloseCurrentTab({ confirm = true })''; }
-      { key = tabKeys.next; mods = "LEADER"; action = "act.ActivateTabRelative(1)"; }
-      { key = tabKeys.prev; mods = "LEADER"; action = "act.ActivateTabRelative(-1)"; }
+      {
+        key = tabKeys.new;
+        mods = "LEADER";
+        action = ''act.SpawnTab("CurrentPaneDomain")'';
+      }
+      {
+        key = tabKeys.close;
+        mods = "LEADER";
+        action = ''act.CloseCurrentTab({ confirm = true })'';
+      }
+      {
+        key = tabKeys.next;
+        mods = "LEADER";
+        action = "act.ActivateTabRelative(1)";
+      }
+      {
+        key = tabKeys.prev;
+        mods = "LEADER";
+        action = "act.ActivateTabRelative(-1)";
+      }
     ];
 
     # Misc
     misc = [
-      { key = "["; mods = "LEADER"; action = "act.ActivateCopyMode"; }
-      { key = "Space"; mods = "LEADER"; action = "act.QuickSelect"; }
-      { key = "F11"; action = "act.ToggleFullScreen"; }
+      {
+        key = "[";
+        mods = "LEADER";
+        action = "act.ActivateCopyMode";
+      }
+      {
+        key = "Space";
+        mods = "LEADER";
+        action = "act.QuickSelect";
+      }
+      {
+        key = "F11";
+        action = "act.ToggleFullScreen";
+      }
     ];
 
     # Font size
     font = [
-      { key = "+"; mods = "CTRL"; action = "act.IncreaseFontSize"; }
-      { key = "-"; mods = "CTRL"; action = "act.DecreaseFontSize"; }
-      { key = "0"; mods = "CTRL"; action = "act.ResetFontSize"; }
+      {
+        key = "+";
+        mods = "CTRL";
+        action = "act.IncreaseFontSize";
+      }
+      {
+        key = "-";
+        mods = "CTRL";
+        action = "act.DecreaseFontSize";
+      }
+      {
+        key = "0";
+        mods = "CTRL";
+        action = "act.ResetFontSize";
+      }
     ];
   };
 
@@ -64,7 +160,8 @@ let
   }) 9;
 
   # Flatten all keybindings
-  allKeybindings = with keybindings;
+  allKeybindings =
+    with keybindings;
     pane ++ paneNav ++ paneResize ++ tab ++ misc ++ font ++ tabNumbers;
 
   # Convert to Lua table entries

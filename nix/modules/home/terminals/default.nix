@@ -24,7 +24,10 @@ with lib;
 
     keybindings = {
       paneNavStyle = mkOption {
-        type = types.enum [ "vim" "arrow" ];
+        type = types.enum [
+          "vim"
+          "arrow"
+        ];
         default = "vim";
         description = "Pane navigation style: vim (hjkl) or arrow keys";
       };

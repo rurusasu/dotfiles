@@ -1,3 +1,27 @@
 [formatter.nix]
 command = "nixfmt"
 includes = ["*.nix"]
+
+[formatter.prettier]
+command = "prettier"
+options = ["--write"]
+includes = ["*.json", "*.yaml", "*.yml", "*.md"]
+
+[formatter.shfmt]
+command = "shfmt"
+options = ["-w"]
+includes = ["*.sh"]
+
+[formatter.powershell]
+command = "pwsh"
+options = ["-NoProfile", "-File", "scripts/powershell/format-ps1.ps1"]
+includes = ["*.ps1"]
+
+[formatter.taplo]
+command = "taplo"
+options = ["format"]
+includes = ["*.toml"]
+
+[formatter.stylua]
+command = "stylua"
+includes = ["*.lua"]

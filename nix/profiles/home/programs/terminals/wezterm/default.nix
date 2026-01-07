@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.wezterm;
@@ -97,8 +102,26 @@ in
 
       # Color scheme defined in Nix (generates TOML)
       colorSchemes.gruvbox-custom = with colors; {
-        ansi = [ base00 base08 base0B base0A base0D base0E base0C base05 ];
-        brights = [ base03 base08 base0B base0A base0D base0E base0C base07 ];
+        ansi = [
+          base00
+          base08
+          base0B
+          base0A
+          base0D
+          base0E
+          base0C
+          base05
+        ];
+        brights = [
+          base03
+          base08
+          base0B
+          base0A
+          base0D
+          base0E
+          base0C
+          base07
+        ];
         background = base00;
         foreground = base06;
         cursor_bg = base06;

@@ -1,5 +1,10 @@
 # zsh profile - uses settings from myHomeSettings.fd and myHomeSettings.fzf
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 with lib;
 let
   fdCfg = config.myHomeSettings.fd;
@@ -77,6 +82,9 @@ in
       }
       zle -N __fzf_history_widget
       bindkey '^[r' __fzf_history_widget  # Alt+R
+
+      # k3s KUBECONFIG environment variable
+      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     '';
   };
 }

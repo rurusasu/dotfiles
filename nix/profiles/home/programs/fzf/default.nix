@@ -1,5 +1,10 @@
 # fzf profile - uses settings from myHomeSettings.fzf and myHomeSettings.fd
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 with lib;
 let
   fzfCfg = config.myHomeSettings.fzf;
@@ -23,12 +28,13 @@ let
   changeDirWidgetCommand = "${fdCmd} --type d . ${fzfCfg.searchRoot}";
 
   # Build fzf default options
-  buildDefaultOptions =
-    [ "--height=${fzfCfg.height}" ]
-    ++ [ "--layout=${fzfCfg.layout}" ]
-    ++ (optional fzfCfg.border "--border")
-    ++ [ "--prompt=${fzfCfg.prompt}" ]
-    ++ fzfCfg.extraOptions;
+  buildDefaultOptions = [
+    "--height=${fzfCfg.height}"
+  ]
+  ++ [ "--layout=${fzfCfg.layout}" ]
+  ++ (optional fzfCfg.border "--border")
+  ++ [ "--prompt=${fzfCfg.prompt}" ]
+  ++ fzfCfg.extraOptions;
 in
 {
   config = mkIf fzfCfg.enable {
