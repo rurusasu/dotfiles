@@ -1,17 +1,11 @@
 # AGENTS
 
-Purpose: tool-specific Home Manager modules.
+Purpose: tool-specific Home Manager modules and package list.
 Expected contents:
-- default.nix: imports all program modules.
-- claude-code/: claude-code and codex module.
-- fonts/: font packages module.
-- fzf/: fzf module.
-- ghq/: ghq module.
-- git/: git module.
+- default.nix: imports remaining program modules and installs packages for chezmoi-managed config.
+- ghq/: ghq module (package install).
 - tmux/: tmux module.
-- vscode/: VS Code module (default.nix, settings.json, keybindings.json).
-- wezterm/: WezTerm module (default.nix, wezterm.lua).
-- zsh/: zsh module with shell aliases.
+- vscode/: VS Code module (extensions only; settings/keybindings in chezmoi).
 Notes:
-- Each tool has its own directory with default.nix and config files.
+- Shells, git, starship, fzf/fd/ripgrep/zoxide, LLM, and terminal configs are managed by chezmoi.
 - Imported from profiles/home/default.nix.

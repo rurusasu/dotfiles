@@ -10,10 +10,10 @@ $ErrorActionPreference = "Stop"
 Write-Host "Exporting Windows settings to dotfiles..." -ForegroundColor Cyan
 Write-Host "Dotfiles path: $DotfilesPath" -ForegroundColor Gray
 
-# Note: Windows Terminal settings are now managed in Nix
-# Edit nix/profiles/home/programs/terminals/windows-terminal/default.nix instead
-Write-Host "[INFO] Windows Terminal settings are managed in Nix" -ForegroundColor Gray
-Write-Host "       Edit: nix/profiles/home/programs/terminals/windows-terminal/default.nix" -ForegroundColor Gray
+# Note: Windows Terminal and WezTerm settings are managed by chezmoi
+Write-Host "[INFO] Windows Terminal/WezTerm settings are managed by chezmoi" -ForegroundColor Gray
+Write-Host "       Source: chezmoi/AppData/Local/Packages/.../LocalState/settings.json" -ForegroundColor Gray
+Write-Host "       Source: chezmoi/dot_config/wezterm/wezterm.lua" -ForegroundColor Gray
 
 # Export winget packages
 $WingetPackagesDest = Join-Path $DotfilesPath "windows\winget\packages.json"

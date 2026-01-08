@@ -11,7 +11,7 @@ home/
     default.nix         # myHomeSettings.fd options
   fzf/                  # fzf fuzzy finder options
     default.nix         # myHomeSettings.fzf options
-  terminals/            # Terminal emulator options (WezTerm, Windows Terminal)
+  terminals/            # Terminal keybinding options (shared with tmux/WezTerm configs)
     default.nix         # myHomeSettings.terminals options
   tmux/                 # Tmux options
     default.nix         # myHomeSettings.tmux options
@@ -124,7 +124,6 @@ Modules are automatically imported via `nix/flakes/lib/shared-modules.nix`.
 myHomeSettings = {
   nixvim.enable = true;
   tmux.enable = true;
-  wezterm.enable = true;
 };
 ```
 
@@ -140,6 +139,8 @@ myHomeSettings = {
 
   # Tmux uses terminals.leader
   tmux.prefix.useTerminalsLeader = true;
+
+  # Terminal configs are managed by chezmoi (edit there directly)
 
   # Nixvim colorscheme
   nixvim.colorscheme = {

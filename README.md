@@ -5,7 +5,7 @@
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-NixOS/Home Manager を使った dotfiles の一元管理リポジトリ
+NixOS/Home Manager + chezmoi を使った dotfiles の一元管理リポジトリ
 
 ## 技術スタック
 
@@ -13,7 +13,7 @@ NixOS/Home Manager を使った dotfiles の一元管理リポジトリ
 |----------|------------|
 | OS | NixOS (WSL2) |
 | Package Manager | Nix Flakes |
-| User Config | Home Manager |
+| User Config | Chezmoi + Home Manager |
 | Shell | Zsh + Starship |
 | Editor | Neovim (nixvim) |
 | Terminal | Windows Terminal, WezTerm |
@@ -36,27 +36,27 @@ cd dotfiles
 1. NixOS WSL がダウンロード・インポートされる
 2. `~/.dotfiles` がこのリポジトリへのシンボリックリンクとして作成される
 3. `nixos-rebuild switch` が実行され設定が適用される
-4. Windows Terminal / WezTerm の設定が Windows に適用される
+4. Windows 側のユーザー設定は chezmoi apply で適用する
 
 ## 方針
 
-NixOS/WSL を含む複数環境で共通運用するため、すべての設定は Nix で管理します。
+Nix はパッケージ/システム設定、chezmoi はユーザー設定を管理します。
 
-- ユーザー設定: `nix/profiles/home/` (Home Manager)
+- ユーザー設定: `chezmoi/`
+- Home Manager: `nix/profiles/home/` (packages, tmux, nixvim, extensions)
 - ホスト設定: `nix/hosts/`
-- ターミナル設定: `nix/profiles/home/programs/terminals/`
+- ターミナル設定: `chezmoi/dot_config/wezterm/wezterm.lua` と `chezmoi/AppData/Local/.../LocalState/settings.json`
 
 ## ディレクトリ構造
 
 ```
 dotfiles/
+├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── flakes/             # Flake inputs/outputs
 │   ├── hosts/              # Host-specific configs
 │   ├── home/               # Home Manager base
 │   ├── profiles/           # Reusable config profiles
-│   │   └── home/programs/
-│   │       └── terminals/  # Windows Terminal, WezTerm
 │   ├── modules/            # Custom NixOS modules
 │   ├── lib/                # Helper functions
 │   ├── overlays/           # Nixpkgs overlays
@@ -86,7 +86,7 @@ dotfiles/
 WSL 内で実行:
 
 ```bash
-# 方法1: update.sh を使う（NixOS rebuild + Windows設定適用を一括実行）
+# 方法1: update.sh を使う（NixOS rebuild + winget 適用を一括実行）
 ~/.dotfiles/scripts/sh/update.sh
 
 # 方法2: エイリアスを使う（NixOS rebuildのみ）
@@ -97,14 +97,12 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 
 ### ターミナル設定を Windows に適用
 
-`nixos-rebuild switch` 後、Windows Terminal と WezTerm の設定を Windows に適用:
+Windows で chezmoi を実行して適用:
 
 ```powershell
-# 管理者権限で実行
-.\scripts\powershell\update-windows-settings.ps1
+chezmoi init --source ~/.dotfiles/chezmoi
+chezmoi apply
 ```
-
-または `update.sh` を使用すると、NixOS rebuild 後に自動で適用するか確認されます。
 
 ## フォーマット (treefmt)
 
@@ -159,18 +157,19 @@ wsl --shutdown
 |----------|-------------|
 | `~/.dotfiles` | Windows dotfiles へのシンボリックリンク |
 | `nixosConfigurations.nixos` | WSL ホスト用 Flake attribute |
-| `nix/profiles/home/programs/terminals/` | ターミナル設定 (Windows Terminal, WezTerm) |
+| `chezmoi/dot_config/wezterm/wezterm.lua` | WezTerm 設定 |
+| `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal 設定 |
 
 ## ターミナル設定
 
 ### Windows Terminal
-- 設定ソース: `nix/profiles/home/programs/terminals/windows-terminal/`
-- キーバインド: `Ctrl+Shift+H` (水平分割), `Ctrl+Shift+V` (垂直分割), `Ctrl+Shift+X` (ペイン閉じる)
+- 設定ソース: `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
+- キーバインド: `Ctrl+Alt+H` (水平分割), `Ctrl+Alt+V` (垂直分割), `Ctrl+Alt+X` (ペイン閉じる)
 
 ### WezTerm
-- 設定ソース: `nix/profiles/home/programs/terminals/wezterm/`
-- Leader key: `Ctrl+Q`
-- キーバインド: `Leader+h` (水平分割), `Leader+v` (垂直分割), `Leader+x` (ペイン閉じる)
+- 設定ソース: `chezmoi/dot_config/wezterm/wezterm.lua`
+- Leader key: `Ctrl+Space`
+- キーバインド: `Ctrl+Alt+H` (水平分割), `Ctrl+Alt+V` (垂直分割), `Ctrl+Alt+X` (ペイン閉じる)
 
 ## トラブルシューティング
 
@@ -183,6 +182,5 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 
 ### Windows Terminal 設定が反映されない
 
-1. WSL で `nixos-rebuild switch` を実行
-2. Windows で `.\scripts\powershell\update-windows-settings.ps1` を管理者権限で実行
-3. Windows Terminal を再起動
+1. Windows で `chezmoi apply` を実行
+2. Windows Terminal を再起動

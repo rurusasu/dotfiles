@@ -1,11 +1,10 @@
 # Apply Windows settings from dotfiles
-# Automatically elevates to Administrator if needed
+# Terminal settings are managed by chezmoi; this script handles winget only
 
 [CmdletBinding()]
 param(
     [string]$DotfilesPath = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))),
     [switch]$SkipWinget,
-    [string]$WslDistro = "NixOS",
     [switch]$Force
 )
 
@@ -32,96 +31,8 @@ if (-not $isAdmin) {
 
 Write-Host "Applying Windows settings from dotfiles..." -ForegroundColor Cyan
 Write-Host "Dotfiles path: $DotfilesPath" -ForegroundColor Gray
-
-# Get WSL user for Nix-generated settings
-$WslUser = wsl -d $WslDistro -- whoami 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[ERROR] Could not get WSL user from $WslDistro" -ForegroundColor Red
-    Write-Host "[HINT] Make sure WSL distro '$WslDistro' is running" -ForegroundColor Yellow
-    exit 1
-}
-$WslUser = $WslUser.Trim()
-
-# Windows Terminal settings (Nix-generated from WSL)
-# Note: Home Manager creates symlinks, so we need to resolve and copy the actual file
-$TerminalSettingsDest = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-
-Write-Host "[INFO] Using Nix-generated settings from WSL" -ForegroundColor Gray
-
-# Check if terminal config files exist in WSL
-$terminalConfigCheck = & wsl -d $WslDistro -u $WslUser -- bash -c "test -f ~/.config/windows-terminal/settings.json && echo exists" 2>$null
-$configMissing = -not ($terminalConfigCheck -eq "exists")
-
-if ($configMissing) {
-    Write-Host "[INFO] Configuration files not found in WSL" -ForegroundColor Yellow
-    Write-Host "[INFO] Running nixos-rebuild switch to generate configs..." -ForegroundColor Yellow
-
-    & wsl -d $WslDistro -u $WslUser -- bash -c "cd ~/.dotfiles && sudo nixos-rebuild switch --flake '.#nixos'"
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "[OK] nixos-rebuild completed successfully" -ForegroundColor Green
-    } else {
-        Write-Host "[WARN] nixos-rebuild failed (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
-        Write-Host "[HINT] Terminal settings may not be available" -ForegroundColor Yellow
-    }
-}
-
-$destDir = Split-Path -Parent $TerminalSettingsDest
-if (Test-Path $destDir) {
-    # Read the actual content from WSL (resolves symlinks)
-    $settingsContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/windows-terminal/settings.json" 2>$null
-
-    if ($LASTEXITCODE -eq 0 -and $settingsContent) {
-        # Delete existing settings and backup completely
-        if (Test-Path $TerminalSettingsDest) {
-            Remove-Item -Path $TerminalSettingsDest -Force
-            Write-Host "[INFO] Deleted existing settings: $TerminalSettingsDest" -ForegroundColor Gray
-        }
-        if (Test-Path "$TerminalSettingsDest.backup") {
-            Remove-Item -Path "$TerminalSettingsDest.backup" -Force
-            Write-Host "[INFO] Deleted existing backup: $TerminalSettingsDest.backup" -ForegroundColor Gray
-        }
-
-        # Write the new settings
-        $settingsContent | Out-File -FilePath $TerminalSettingsDest -Encoding utf8 -Force
-        Write-Host "[OK] Windows Terminal settings applied" -ForegroundColor Green
-    } else {
-        Write-Host "[SKIP] Windows Terminal settings not found in WSL" -ForegroundColor Yellow
-        Write-Host "[HINT] Run 'sudo nixos-rebuild switch' in WSL first to generate settings" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "[SKIP] Windows Terminal not installed" -ForegroundColor Yellow
-}
-
-# WezTerm settings (Nix-generated from WSL)
-$WeztermConfigDir = "$env:USERPROFILE\.config\wezterm"
-$WeztermConfigDest = "$WeztermConfigDir\wezterm.lua"
-
-# Create config directory if it doesn't exist
-if (-not (Test-Path $WeztermConfigDir)) {
-    New-Item -ItemType Directory -Path $WeztermConfigDir -Force | Out-Null
-}
-
-# Read WezTerm config from WSL
-$weztermContent = wsl -d $WslDistro -- bash -c "cat /home/$WslUser/.config/wezterm/wezterm.lua" 2>$null
-
-if ($LASTEXITCODE -eq 0 -and $weztermContent) {
-    # Delete existing config and backup completely
-    if (Test-Path $WeztermConfigDest) {
-        Remove-Item -Path $WeztermConfigDest -Force
-        Write-Host "[INFO] Deleted existing config: $WeztermConfigDest" -ForegroundColor Gray
-    }
-    if (Test-Path "$WeztermConfigDest.backup") {
-        Remove-Item -Path "$WeztermConfigDest.backup" -Force
-        Write-Host "[INFO] Deleted existing backup: $WeztermConfigDest.backup" -ForegroundColor Gray
-    }
-
-    # Write the new config
-    $weztermContent | Out-File -FilePath $WeztermConfigDest -Encoding utf8 -Force
-    Write-Host "[OK] WezTerm settings applied" -ForegroundColor Green
-} else {
-    Write-Host "[SKIP] WezTerm settings not found in WSL" -ForegroundColor Yellow
-}
+Write-Host "[INFO] Windows Terminal/WezTerm settings are managed by chezmoi" -ForegroundColor Gray
+Write-Host "[INFO] Run: chezmoi apply" -ForegroundColor Gray
 
 # Install winget packages
 if (-not $SkipWinget) {

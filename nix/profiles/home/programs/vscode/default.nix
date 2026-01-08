@@ -17,8 +17,7 @@
         vscodevim.vim
         wakatime.vscode-wakatime
       ];
-      userSettings = builtins.fromJSON (builtins.readFile ./settings.json);
-      keybindings = builtins.fromJSON (builtins.readFile ./keybindings.json);
+      # settings.json/keybindings.json are managed by chezmoi
     };
   };
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Dotfiles インストールスクリプト
-# NixOS の設定をビルドし、Windows 側にターミナル設定を適用します
+# NixOS の設定をビルドし、Windows 側の winget 適用を行います
 
 set -e
 
@@ -63,15 +63,14 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
     info "WSL 環境が検出されました。Windows 側の設定を適用しますか？"
     echo ""
     echo "適用される設定:"
-    echo "  - Windows Terminal settings.json"
-    echo "  - WezTerm wezterm.lua"
     echo "  - Winget パッケージ (オプション)"
+    echo "  - Terminal 設定は Windows 側で chezmoi apply を実行してください"
     echo ""
     read -p "続行しますか? (y/N): " -n 1 -r
     echo ""
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        info "Windows 設定を適用しています..."
+        info "Windows 側の winget パッケージを適用しています..."
         echo ""
 
         # PowerShell スクリプトのパスを取得
@@ -79,24 +78,25 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
         APPLY_SCRIPT="${WINDOWS_DOTFILES}\\scripts\\powershell\\update-windows-settings.ps1"
 
         # 管理者権限が必要なことを通知
-        warn "Windows Terminal への適用には管理者権限が必要です。"
+        warn "winget の適用に管理者権限が必要な場合があります。"
         warn "UAC プロンプトが表示される場合があります。"
         echo ""
 
         # PowerShell を管理者として実行
-        if powershell.exe -NoProfile -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${APPLY_SCRIPT}\" -SkipWinget' -Verb RunAs -Wait" 2>/dev/null; then
-            success "Windows 設定が適用されました"
+        if powershell.exe -NoProfile -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${APPLY_SCRIPT}\"' -Verb RunAs -Wait" 2>/dev/null; then
+            success "Winget パッケージが適用されました"
         else
-            warn "Windows 設定の適用に失敗しました。"
+            warn "Winget パッケージの適用に失敗しました。"
             echo ""
             echo "手動で適用するには、Windows PowerShell (管理者) から:"
             echo "  .\\scripts\\powershell\\update-windows-settings.ps1"
         fi
     else
-        info "Windows 設定の適用をスキップしました"
+        info "Winget パッケージの適用をスキップしました"
         echo ""
         echo "後で適用するには、Windows PowerShell (管理者) から:"
         echo "  .\\scripts\\powershell\\update-windows-settings.ps1"
+        echo "Terminal 設定は Windows 側で chezmoi apply を実行してください"
     fi
 fi
 
