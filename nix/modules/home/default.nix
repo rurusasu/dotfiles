@@ -3,8 +3,10 @@
 { ... }:
 {
   imports = [
+    ./chezmoi
     ./fd
     ./fzf
+    ./ssh
     ./terminals
     ./tmux
     ./nixvim
