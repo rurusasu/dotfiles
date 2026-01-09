@@ -15,7 +15,6 @@
     installPath = [
       "$HOME/.vscode-server"
       "$HOME/.vscode-server-insiders"
-      "$HOME/.cursor-server"
     ];
   };
 }

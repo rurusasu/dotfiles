@@ -6,18 +6,25 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-      in {
+      in
+      {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             python312
             python312Packages.pip
             python312Packages.virtualenv
-            uv        # Fast package manager
-            ruff      # Linter/formatter
+            uv # Fast package manager
+            ruff # Linter/formatter
           ];
           shellHook = ''
             echo "Python $(python --version) environment loaded"
@@ -29,5 +36,6 @@
             source .venv/bin/activate
           '';
         };
-      });
+      }
+    );
 }

@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: treefmt
+        name: treefmt
+        entry: bash scripts/sh/treefmt.sh
+        language: system
+        pass_filenames: false

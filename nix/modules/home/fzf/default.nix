@@ -24,7 +24,11 @@ with lib;
     };
 
     layout = mkOption {
-      type = types.enum [ "default" "reverse" "reverse-list" ];
+      type = types.enum [
+        "default"
+        "reverse"
+        "reverse-list"
+      ];
       default = "reverse";
       description = "Layout of fzf window";
     };

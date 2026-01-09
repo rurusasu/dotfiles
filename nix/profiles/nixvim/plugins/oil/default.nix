@@ -1,5 +1,10 @@
 # oil.nvim - file explorer that lets you edit your filesystem like a buffer
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;

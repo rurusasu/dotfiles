@@ -1,5 +1,10 @@
 # Telescope - fuzzy finder
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;
@@ -10,10 +15,22 @@ in
       enable = true;
       package = pkgs.vimPlugins.telescope-nvim;
       keymaps = {
-        "<leader>ff" = { action = "find_files"; options.desc = "Find files"; };
-        "<leader>fg" = { action = "live_grep"; options.desc = "Live grep"; };
-        "<leader>fb" = { action = "buffers"; options.desc = "Buffers"; };
-        "<leader>fh" = { action = "help_tags"; options.desc = "Help tags"; };
+        "<leader>ff" = {
+          action = "find_files";
+          options.desc = "Find files";
+        };
+        "<leader>fg" = {
+          action = "live_grep";
+          options.desc = "Live grep";
+        };
+        "<leader>fb" = {
+          action = "buffers";
+          options.desc = "Buffers";
+        };
+        "<leader>fh" = {
+          action = "help_tags";
+          options.desc = "Help tags";
+        };
       };
     };
   };

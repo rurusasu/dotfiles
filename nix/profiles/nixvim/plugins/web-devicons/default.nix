@@ -1,5 +1,10 @@
 # web-devicons - file type icons
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
 let
   cfg = config.myHomeSettings.nixvim;

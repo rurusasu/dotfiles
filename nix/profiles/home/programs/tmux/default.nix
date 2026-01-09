@@ -7,34 +7,41 @@ let
   terminalsCfg = config.myHomeSettings.terminals;
 
   # Convert terminals leader to tmux prefix if enabled
-  tmuxPrefix = if cfg.prefix.useTerminalsLeader then
-    let
-      # Map terminal mods to tmux format
-      modsMap = {
-        "CTRL" = "C";
-        "ALT" = "M";
-        "SHIFT" = "S";
-      };
-      mods = builtins.head (lib.splitString "|" terminalsCfg.leader.mods);
-      modKey = modsMap.${mods} or "C";
-      key = lib.toLower terminalsCfg.leader.key;
-    in "${modKey}-${key}"
-  else "C-${cfg.prefix.key}";
+  tmuxPrefix =
+    if cfg.prefix.useTerminalsLeader then
+      let
+        # Map terminal mods to tmux format
+        modsMap = {
+          "CTRL" = "C";
+          "ALT" = "M";
+          "SHIFT" = "S";
+        };
+        mods = builtins.head (lib.splitString "|" terminalsCfg.leader.mods);
+        modKey = modsMap.${mods} or "C";
+        key = lib.toLower terminalsCfg.leader.key;
+      in
+      "${modKey}-${key}"
+    else
+      "C-${cfg.prefix.key}";
 
   # Pane navigation keybindings based on style
-  paneNavBindings = if cfg.keybindings.paneNavStyle == "vim" then ''
-    # Vim-style pane navigation
-    bind h select-pane -L
-    bind j select-pane -D
-    bind k select-pane -U
-    bind l select-pane -R
-  '' else ''
-    # Arrow-style pane navigation
-    bind Left select-pane -L
-    bind Down select-pane -D
-    bind Up select-pane -U
-    bind Right select-pane -R
-  '';
+  paneNavBindings =
+    if cfg.keybindings.paneNavStyle == "vim" then
+      ''
+        # Vim-style pane navigation
+        bind h select-pane -L
+        bind j select-pane -D
+        bind k select-pane -U
+        bind l select-pane -R
+      ''
+    else
+      ''
+        # Arrow-style pane navigation
+        bind Left select-pane -L
+        bind Down select-pane -D
+        bind Up select-pane -U
+        bind Right select-pane -R
+      '';
 in
 {
   config = mkIf cfg.enable {

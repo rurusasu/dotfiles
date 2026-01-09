@@ -1,15 +1,16 @@
-{ inputs }: {
+{ inputs }:
+{
   users,
   siteLib,
   system,
-  extraSharedModules ? [],
-}: { config, ... }: let
-  normalize = spec:
-    if builtins.isPath spec || builtins.isString spec
-    then (import spec)
-    else spec;
+  extraSharedModules ? [ ],
+}:
+{ config, ... }:
+let
+  normalize = spec: if builtins.isPath spec || builtins.isString spec then (import spec) else spec;
   hmUsers = builtins.mapAttrs (_: normalize) users;
-in {
+in
+{
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;

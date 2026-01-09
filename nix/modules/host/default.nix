@@ -1,28 +1,42 @@
-{ config, pkgs, ... }:
+{ lib, pkgs, ... }:
+let
+  inherit (lib) mkOption types;
+in
 {
-  nix = {
-    settings = {
-      experimental-features = [ "nix-command" "flakes" ];
-      auto-optimise-store = true;
-    };
-    gc = {
-      automatic = true;
-      dates = "weekly";
-      options = "--delete-older-than 7d";
-    };
+  options.mySettings.wsl.dockerDesktopIntegration = mkOption {
+    type = types.bool;
+    default = false;
+    description = "Enable Docker Desktop WSL2 integration handling for k3s";
   };
 
-  nixpkgs.config.allowUnfree = true;
-  programs.zsh.enable = true;
-
-  programs.git = {
-    enable = true;
-    config = {
-      safe.directory = "*";
+  config = {
+    nix = {
+      settings = {
+        experimental-features = [
+          "nix-command"
+          "flakes"
+        ];
+        auto-optimise-store = true;
+      };
+      gc = {
+        automatic = true;
+        dates = "weekly";
+        options = "--delete-older-than 7d";
+      };
     };
-  };
 
-  environment.systemPackages = [
-    pkgs.git
-  ];
+    nixpkgs.config.allowUnfree = true;
+    programs.zsh.enable = true;
+
+    programs.git = {
+      enable = true;
+      config = {
+        safe.directory = "*";
+      };
+    };
+
+    environment.systemPackages = with pkgs; [
+      git
+    ];
+  };
 }

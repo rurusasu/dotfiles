@@ -17,3 +17,4 @@ Expected contents:
 
 Notes:
 - windows/install-nixos-wsl.ps1 requires admin; use elevated PowerShell or run with sudo in pwsh.
+- User dotfiles are managed in repo root `chezmoi/`.

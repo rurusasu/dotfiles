@@ -15,6 +15,10 @@
   wsl.enable = true;
   wsl.defaultUser = "nixos";
 
+  # Enable Docker Desktop WSL integration handling for k3s
+  # This unmounts /Docker/host before k3s starts to prevent cgroup validation errors
+  mySettings.wsl.dockerDesktopIntegration = true;
+
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
   # on your system were taken. It's perfectly fine and recommended to leave
