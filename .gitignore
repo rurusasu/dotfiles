@@ -19,6 +19,7 @@ Thumbs.db
 *_local
 *_private
 *.local
+chezmoi/private_dot_claude/settings.local.json
 
 # History files
 *_history

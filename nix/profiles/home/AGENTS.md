@@ -3,11 +3,11 @@
 Purpose: Home Manager profiles and source files.
 Expected contents:
 - default.nix: main entry point, imports programs/.
-- programs/: tool-specific Home Manager modules (including shells/).
+- programs/: tool-specific Home Manager modules (packages, tmux, vscode extensions).
 Notes:
 - nixvim config is in profiles/nixvim/, imported from default.nix.
 - ~/.dotfiles is a symlink to Windows-side dotfiles (created by postinstall).
-- Shell configs (bash, zsh) are in programs/shells/.
+- Shell configs (bash, zsh) are managed by chezmoi.
 
 ## Shell Aliases (zsh)
 

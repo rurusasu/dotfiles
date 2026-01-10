@@ -66,5 +66,5 @@ with lib;
   };
 
   # No config section - this module only defines options
-  # Actual configuration is done in profiles/home/programs/terminals/
+  # Terminal config is managed by chezmoi (see chezmoi/ for wezterm/windows-terminal)
 }

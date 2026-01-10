@@ -6,6 +6,8 @@ Purpose: repo-level workflow notes.
 
 ```
 dotfiles/
+├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
+├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── flakes/             # Flake inputs/outputs
 │   ├── hosts/              # Host-specific configs
@@ -22,7 +24,8 @@ dotfiles/
 │   │   ├── nixos-wsl-postinstall.sh
 │   │   └── treefmt.sh
 │   └── powershell/         # PowerShell scripts (Windows)
-│       ├── update-windows-settings.ps1  # Apply terminal settings
+│       ├── apply-chezmoi.ps1       # Apply chezmoi dotfiles (auto-installs chezmoi)
+│       ├── update-windows-settings.ps1  # Apply winget packages
 │       ├── update-wslconfig.ps1    # Apply .wslconfig
 │       ├── export-settings.ps1     # Export Windows settings
 │       └── format-ps1.ps1          # Format PowerShell scripts
@@ -72,13 +75,24 @@ nrs  # alias for: sudo nixos-rebuild switch --flake ~/.dotfiles --impure
 
 Since ~/.dotfiles points to Windows-side dotfiles, changes made in Windows are immediately available in WSL without any sync step.
 
-### Apply Terminal Settings to Windows
+### Apply Terminal Settings (Windows)
 
-After `nixos-rebuild switch`, apply settings to Windows:
+Apply via chezmoi on Windows:
 
 ```powershell
-# Run as Administrator
-.\scripts\powershell\update-windows-settings.ps1
+chezmoi init --source ~/.dotfiles/chezmoi
+chezmoi apply
+# 方法1: GitHub から直接取得（クローン不要）
+winget install -e --id twpayne.chezmoi
+chezmoi init rurusasu/dotfiles --source-path chezmoi
+chezmoi apply
+
+# 方法2: ローカルコピーから適用
+chezmoi init --source <repo-path>\chezmoi
+chezmoi apply
+
+# 方法3: 同梱スクリプトで一括適用
+.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
 ```
 
 ### Dry Run (from WSL)
@@ -88,6 +102,44 @@ To test build without applying:
 ```bash
 sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 ```
+
+## Chezmoi
+
+User-level dotfiles are managed in `chezmoi/` (shell, git, starship, VS Code settings, terminal configs, LLM configs).
+
+**Note**: クローン不要で GitHub から直接適用可能。
+
+### Windows での適用
+
+```powershell
+# 方法1: GitHub から直接取得（クローン不要）
+winget install -e --id twpayne.chezmoi
+chezmoi init rurusasu/dotfiles --source-path chezmoi
+chezmoi apply
+
+# 方法2: ローカルコピーから適用
+chezmoi init --source <repo-path>\chezmoi
+chezmoi apply
+
+# 方法3: 同梱スクリプトで一括適用
+.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
+```
+
+### WSL/Linux での適用
+
+```bash
+# ~/.dotfiles シンボリックリンクがある場合
+chezmoi init --source ~/.dotfiles/chezmoi
+chezmoi apply
+
+# GitHub から直接取得（クローン不要）
+chezmoi init rurusasu/dotfiles --source-path chezmoi
+chezmoi apply
+```
+
+Secrets:
+- Configure age/gpg in `~/.config/chezmoi/chezmoi.toml`
+- Use `chezmoi add --encrypt <path>` to add secrets
 
 ## Formatting
 
@@ -119,26 +171,24 @@ pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Nix Configuration (source of truth)                         │
-│  nix/profiles/home/programs/terminals/windows-terminal/      │
-│  nix/profiles/home/programs/terminals/wezterm/               │
+│  Chezmoi (source of truth)                                   │
+│  chezmoi/AppData/Local/.../settings.json                    │
+│  chezmoi/dot_config/wezterm/wezterm.lua                      │
 └──────────────────────────────────────────────────────────────┘
                             │
-                            │ nixos-rebuild switch
-                            ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         WSL (NixOS)                          │
-│  ~/.config/windows-terminal/settings.json                    │
-│  ~/.config/wezterm/wezterm.lua                               │
-│       (symlinks to /nix/store/...)                           │
-└──────────────────────────────────────────────────────────────┘
-                            │
-                            │ scripts/powershell/update-windows-settings.ps1
+                            │ chezmoi apply (Windows)
                             ↓
 ┌──────────────────────────────────────────────────────────────┐
 │                         Windows                              │
 │  %LOCALAPPDATA%\...\WindowsTerminal\settings.json            │
 │  %USERPROFILE%\.config\wezterm\wezterm.lua                   │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            │ chezmoi apply (WSL/Linux)
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                         WSL/Linux                            │
+│  ~/.config/wezterm/wezterm.lua                               │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,10 +196,12 @@ pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 
 | Location | Description |
 |----------|-------------|
+| `chezmoi/` | Chezmoi source for user dotfiles |
 | `~/.dotfiles` | Symlink to Windows dotfiles (created by postinstall) |
 | `nixosConfigurations.nixos` | Flake attribute for WSL host |
 | `/mnt/d/.../dotfiles` | Actual Windows-side dotfiles location |
 | `scripts/sh/` | Shell scripts for Linux/WSL |
 | `scripts/powershell/` | PowerShell scripts for Windows |
 | `windows/` | Windows-side configuration files |
-| `nix/profiles/home/programs/terminals/` | Terminal settings (Windows Terminal, WezTerm) |
+| `chezmoi/dot_config/wezterm/wezterm.lua` | WezTerm settings |
+| `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal settings |

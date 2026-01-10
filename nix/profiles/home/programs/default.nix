@@ -1,17 +1,30 @@
-{ ... }:
+{ pkgs, ... }:
+{ pkgs, ... }:
 {
   imports = [
-    ./fd
-    ./fzf
-    ./ghq
-    ./git
-    ./llm
-    ./ripgrep
     ./shells
-    ./starship
-    ./terminals
+    ./editors
+    ./llms
+    ./ghq
     ./tmux
-    ./vscode
-    ./zoxide
+  ];
+
+  # Packages for chezmoi-managed configs
+  home.packages = with pkgs; [
+    # Dotfiles manager
+    chezmoi
+
+    # Version control
+    git
+    gh  # GitHub CLI
+
+    # CLI tools
+    fd
+    fzf
+    ripgrep
+    zoxide
+
+    # Terminals
+    wezterm
   ];
 }

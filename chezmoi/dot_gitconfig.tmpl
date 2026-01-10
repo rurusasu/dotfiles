@@ -1,0 +1,24 @@
+[user]
+  name = Kohei Miki
+  email = rurusasu@gmail.com
+  signingkey = ~/.ssh/signing_key.pub
+
+[commit]
+  gpgsign = true
+
+[gpg]
+  format = ssh
+
+[safe]
+  directory = *
+
+[core]
+  editor = nvim
+  sshCommand = ssh
+
+{{- if ne .os "windows" }}
+[credential "https://github.com"]
+  helper = "!gh auth git-credential"
+[credential "https://gist.github.com"]
+  helper = "!gh auth git-credential"
+{{- end }}

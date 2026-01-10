@@ -1,0 +1,8 @@
+{{- if eq .os "windows" -}}
+dot_config/Code/
+dot_zshrc
+dot_bashrc
+dot_profile
+{{- else -}}
+AppData/
+{{- end -}}

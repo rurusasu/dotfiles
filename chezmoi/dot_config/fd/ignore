@@ -1,0 +1,13 @@
+.git/
+node_modules/
+target/
+__pycache__/
+.cache/
+.nix-profile/
+.local/share/
+.npm/
+.cargo/
+/mnt/wsl/
+/mnt/wslg/
+/sys/
+/lib/
