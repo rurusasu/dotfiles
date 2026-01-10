@@ -34,7 +34,7 @@ function Assert-Admin
     {
         Write-Host "管理者権限が必要です。UAC プロンプトを表示します..." -ForegroundColor Yellow
         $scriptPath = $PSCommandPath
-        $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"")
+        $arguments = @("-NoProfile", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"")
         foreach ($key in $PSBoundParameters.Keys)
         {
             $value = $PSBoundParameters[$key]
@@ -741,10 +741,85 @@ if (-not $SkipSetDefaultDistro)
 }
 
 # Windows Terminal / WezTerm 設定は chezmoi で管理
-Write-Host "Windows Terminal / WezTerm 設定は chezmoi で管理しています。"
-Write-Host "Windows 側で以下を実行してください:"
-Write-Host "  chezmoi init --source ~/.dotfiles/chezmoi"
-Write-Host "  chezmoi apply"
+$applyChezmoiScript = Join-Path $PSScriptRoot "scripts\powershell\apply-chezmoi.ps1"
+$chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
+
+# chezmoi の既知の配置先をチェック
+$chezmoiExe = $null
+if ($chezmoiCmd)
+{
+    $chezmoiExe = $chezmoiCmd.Source
+} else
+{
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\chezmoi.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\chezmoi\chezmoi.exe")
+    )
+    foreach ($c in $candidates)
+    {
+        if (Test-Path -LiteralPath $c)
+        {
+            $chezmoiExe = $c
+            break
+        }
+    }
+    if (-not $chezmoiExe)
+    {
+        $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+        if (Test-Path -LiteralPath $packagesRoot)
+        {
+            $pkgDir = Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object Name -like 'twpayne.chezmoi*' |
+                Select-Object -First 1
+            if ($pkgDir)
+            {
+                $exe = Join-Path $pkgDir.FullName "chezmoi.exe"
+                if (Test-Path -LiteralPath $exe)
+                {
+                    $chezmoiExe = $exe
+                }
+            }
+        }
+    }
+}
+
+if ($chezmoiExe)
+{
+    Write-Host "chezmoi でターミナル設定を適用します..." -ForegroundColor Cyan
+    $chezmoiSource = Join-Path $PSScriptRoot "chezmoi"
+    & $chezmoiExe --source "$chezmoiSource" apply
+    if ($LASTEXITCODE -eq 0)
+    {
+        Write-Host "[OK] chezmoi apply 完了" -ForegroundColor Green
+        Write-Host "Windows Terminal を起動中なら、再起動すると確実に反映されます。" -ForegroundColor Gray
+    } else
+    {
+        Write-Warning "chezmoi apply が失敗しました (exit=$LASTEXITCODE)"
+        Write-Host "手動で実行してください: chezmoi --source `"$chezmoiSource`" apply" -ForegroundColor Yellow
+    }
+} else
+{
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "chezmoi がインストールされていません" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Windows Terminal / WezTerm 設定を適用するには、以下のいずれかを実行してください:" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  # 方法1: winget で chezmoi をインストールして適用"
+    Write-Host "  winget install -e --id twpayne.chezmoi"
+    Write-Host "  chezmoi init --source `"$PSScriptRoot\chezmoi`""
+    Write-Host "  chezmoi apply"
+    Write-Host ""
+    Write-Host "  # 方法2: GitHub から直接取得（クローン不要）"
+    Write-Host "  winget install -e --id twpayne.chezmoi"
+    Write-Host "  chezmoi init rurusasu/dotfiles --source-path chezmoi"
+    Write-Host "  chezmoi apply"
+    Write-Host ""
+    Write-Host "  # 方法3: 同梱スクリプトで一括適用"
+    Write-Host "  .\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi"
+    Write-Host ""
+}
 
 # Docker Desktop VHDX 拡張
 $expandDockerVhd = Join-Path $PSScriptRoot "windows\expand-docker-vhd.ps1"
@@ -754,4 +829,10 @@ if (Test-Path -LiteralPath $expandDockerVhd)
     & $expandDockerVhd -Force
 }
 
-Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName"
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "Enter を押すとこのウィンドウを閉じます..." -ForegroundColor Gray
+Read-Host | Out-Null

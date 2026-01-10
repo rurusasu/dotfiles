@@ -1,0 +1,98 @@
+name: PowerShell Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/powershell/**'
+      - 'install.ps1'
+      - '.github/workflows/test-powershell.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/powershell/**'
+      - 'install.ps1'
+      - '.github/workflows/test-powershell.yml'
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run tests
+        shell: pwsh
+        working-directory: scripts/powershell
+        run: |
+          $pesterConfig = New-PesterConfiguration
+          $pesterConfig.Run.Path = "./tests"
+          $pesterConfig.Run.PassThru = $true
+          $pesterConfig.Output.Verbosity = "Detailed"
+
+          # Code coverage
+          $sourceFiles = @(
+            "./lib/SetupHandler.ps1",
+            "./lib/Invoke-ExternalCommand.ps1",
+            "./handlers/Handler.WslConfig.ps1",
+            "./handlers/Handler.Docker.ps1",
+            "./handlers/Handler.VscodeServer.ps1",
+            "./handlers/Handler.Chezmoi.ps1"
+          ) | Where-Object { Test-Path $_ }
+
+          if ($sourceFiles.Count -gt 0) {
+            $pesterConfig.CodeCoverage.Enabled = $true
+            $pesterConfig.CodeCoverage.Path = $sourceFiles
+            $pesterConfig.CodeCoverage.OutputPath = "coverage.xml"
+            $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+          }
+
+          # JUnit output for GitHub
+          $pesterConfig.TestResult.Enabled = $true
+          $pesterConfig.TestResult.OutputPath = "test-results.xml"
+          $pesterConfig.TestResult.OutputFormat = "JUnitXml"
+
+          $result = Invoke-Pester -Configuration $pesterConfig
+
+          # Output summary
+          Write-Host ""
+          Write-Host "=== Test Summary ===" -ForegroundColor Cyan
+          Write-Host "Passed: $($result.PassedCount)" -ForegroundColor Green
+          Write-Host "Failed: $($result.FailedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { "Red" } else { "Gray" })
+          Write-Host "Skipped: $($result.SkippedCount)" -ForegroundColor Yellow
+
+          if ($result.CodeCoverage) {
+            Write-Host ""
+            Write-Host "=== Coverage ===" -ForegroundColor Cyan
+            Write-Host "Coverage: $([math]::Round($result.CodeCoverage.CoveragePercent, 2))%"
+          }
+
+          if ($result.FailedCount -gt 0) {
+            exit 1
+          }
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: scripts/powershell/coverage.xml
+          flags: powershell
+          name: powershell-coverage
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            scripts/powershell/test-results.xml
+            scripts/powershell/coverage.xml
+          retention-days: 30

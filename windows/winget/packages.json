@@ -7,6 +7,9 @@
 			"Packages" :
 			[
 				{
+					"PackageIdentifier" : "twpayne.chezmoi"
+				},
+				{
 					"PackageIdentifier" : "Google.AndroidStudio"
 				},
 				{
