@@ -7,6 +7,7 @@ Purpose: repo-level workflow notes.
 ```
 dotfiles/
 ├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
+├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── flakes/             # Flake inputs/outputs
 │   ├── hosts/              # Host-specific configs
@@ -23,6 +24,7 @@ dotfiles/
 │   │   ├── nixos-wsl-postinstall.sh
 │   │   └── treefmt.sh
 │   └── powershell/         # PowerShell scripts (Windows)
+│       ├── apply-chezmoi.ps1       # Apply chezmoi dotfiles (auto-installs chezmoi)
 │       ├── update-windows-settings.ps1  # Apply winget packages
 │       ├── update-wslconfig.ps1    # Apply .wslconfig
 │       ├── export-settings.ps1     # Export Windows settings
@@ -73,13 +75,24 @@ nrs  # alias for: sudo nixos-rebuild switch --flake ~/.dotfiles --impure
 
 Since ~/.dotfiles points to Windows-side dotfiles, changes made in Windows are immediately available in WSL without any sync step.
 
-### Apply Terminal Settings
+### Apply Terminal Settings (Windows)
 
-Apply via chezmoi on each OS:
+Apply via chezmoi on Windows:
 
 ```powershell
 chezmoi init --source ~/.dotfiles/chezmoi
 chezmoi apply
+# 方法1: GitHub から直接取得（クローン不要）
+winget install -e --id twpayne.chezmoi
+chezmoi init rurusasu/dotfiles --source-path chezmoi
+chezmoi apply
+
+# 方法2: ローカルコピーから適用
+chezmoi init --source <repo-path>\chezmoi
+chezmoi apply
+
+# 方法3: 同梱スクリプトで一括適用
+.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
 ```
 
 ### Dry Run (from WSL)
@@ -94,10 +107,33 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 
 User-level dotfiles are managed in `chezmoi/` (shell, git, starship, VS Code settings, terminal configs, LLM configs).
 
-Initialize/apply:
+**Note**: クローン不要で GitHub から直接適用可能。
+
+### Windows での適用
+
+```powershell
+# 方法1: GitHub から直接取得（クローン不要）
+winget install -e --id twpayne.chezmoi
+chezmoi init rurusasu/dotfiles --source-path chezmoi
+chezmoi apply
+
+# 方法2: ローカルコピーから適用
+chezmoi init --source <repo-path>\chezmoi
+chezmoi apply
+
+# 方法3: 同梱スクリプトで一括適用
+.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
+```
+
+### WSL/Linux での適用
 
 ```bash
+# ~/.dotfiles シンボリックリンクがある場合
 chezmoi init --source ~/.dotfiles/chezmoi
+chezmoi apply
+
+# GitHub から直接取得（クローン不要）
+chezmoi init rurusasu/dotfiles --source-path chezmoi
 chezmoi apply
 ```
 

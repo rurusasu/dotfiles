@@ -1,0 +1,79 @@
+# ~/.zshrc managed by chezmoi
+
+# Aliases
+alias nrs="sudo nixos-rebuild switch --flake ~/.dotfiles --impure"
+alias nrt="sudo nixos-rebuild test --flake ~/.dotfiles --impure"
+alias nrb="sudo nixos-rebuild boot --flake ~/.dotfiles --impure"
+alias find="fd"
+alias grep="rg"
+# k3s aliases (no sudo needed)
+alias k="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml"
+alias kgn="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get nodes"
+alias kgp="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get pods -A"
+alias kgs="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get svc -A"
+alias cilium="KUBECONFIG=/etc/rancher/k3s/k3s.yaml cilium"
+alias k3s-status="systemctl status k3s"
+
+# Environment
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
+
+# fd/fzf defaults (mirrors Nix defaults)
+FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"
+export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --type f . /"
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --type d . /"
+export FZF_DEFAULT_OPTS="--height=40% --layout=reverse --border --prompt='> '"
+
+# Starship prompt
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi
+
+# zoxide
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh --cmd cd)"
+fi
+
+# Alt+Z: zoxide interactive (history-based directory jump)
+__zoxide_zi_widget() {
+  local result
+  result="$(zoxide query -i)" && cd "$result"
+  zle reset-prompt
+}
+zle -N __zoxide_zi_widget
+bindkey '^[z' __zoxide_zi_widget  # Alt+Z
+
+# Alt+D: fzf directory search and cd
+__fzf_cd_widget() {
+  local dir
+  dir="$(fd $FD_DEFAULT_OPTS -t d . / | fzf)" && cd "$dir"
+  zle reset-prompt
+}
+zle -N __fzf_cd_widget
+bindkey '^[d' __fzf_cd_widget  # Alt+D
+
+# Alt+T: fzf file/directory search and insert
+__fzf_file_widget() {
+  local selected
+  selected="$(fd $FD_DEFAULT_OPTS . / | fzf)"
+  if [[ -n "$selected" ]]; then
+    LBUFFER="$LBUFFER$selected"
+  fi
+  zle reset-prompt
+}
+zle -N __fzf_file_widget
+bindkey '^[t' __fzf_file_widget  # Alt+T
+
+# Alt+R: fzf command history search
+__fzf_history_widget() {
+  local selected
+  selected="$(fc -ln 1 | fzf --tac)"
+  if [[ -n "$selected" ]]; then
+    BUFFER="$selected"
+    CURSOR=$#BUFFER
+  fi
+  zle reset-prompt
+}
+zle -N __fzf_history_widget
+bindkey '^[r' __fzf_history_widget  # Alt+R

@@ -3,6 +3,8 @@
 [![NixOS](https://img.shields.io/badge/NixOS-26.05-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
+[![PowerShell Tests](https://github.com/rurusasu/dotfiles/actions/workflows/test-powershell.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/test-powershell.yml)
+[![codecov](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=powershell)](https://codecov.io/gh/rurusasu/dotfiles)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 NixOS/Home Manager + chezmoi を使った dotfiles の一元管理リポジトリ
@@ -100,8 +102,20 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 Windows で chezmoi を実行して適用:
 
 ```powershell
-chezmoi init --source ~/.dotfiles/chezmoi
+# 方法1: GitHub から直接取得（クローン不要）
+winget install -e --id twpayne.chezmoi
+chezmoi init rurusasu/dotfiles --source-path chezmoi
 chezmoi apply
+
+# 方法2: ローカルにクローン済みの場合
+chezmoi init --source <クローン先>\chezmoi
+chezmoi apply
+```
+
+または同梱スクリプトで一括適用（ローカルコピーがある場合）:
+
+```powershell
+.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
 ```
 
 ## フォーマット (treefmt)

@@ -1,0 +1,82 @@
+# ~/.bashrc managed by chezmoi
+
+# History
+HISTCONTROL=ignoreboth
+HISTFILE="$HOME/.bash_history"
+HISTSIZE=1000
+HISTFILESIZE=2000
+HISTIGNORE="ls:cd:exit"
+shopt -s histappend
+shopt -s checkwinsize
+
+# Aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias grep='rg'
+alias find='fd'
+
+# Session variables
+export USER_ID="$(id -u)"
+export GROUP_ID="$(id -g)"
+export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
+export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
+
+# fd/fzf defaults (mirrors Nix defaults)
+FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"
+export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --type f . /"
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --type d . /"
+export FZF_DEFAULT_OPTS="--height=40% --layout=reverse --border --prompt='> '"
+
+# Starship prompt
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init bash)"
+fi
+
+# zoxide
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init bash --cmd cd)"
+fi
+
+# Color support for ls
+if [ -x /usr/bin/dircolors ]; then
+  test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+  alias ls='ls --color=auto'
+fi
+
+# Fancy prompt
+case "$TERM" in
+  xterm-color|*-256color) color_prompt=yes;;
+esac
+
+if [ "$color_prompt" = yes ]; then
+  PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+else
+  PS1='\u@\h:\w\$ '
+fi
+unset color_prompt
+
+# Set xterm title
+case "$TERM" in
+  xterm*|rxvt*)
+    PS1="\[\e]0;\u@\h: \w\a\]$PS1"
+    ;;
+esac
+
+# NVM setup
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+
+# SSH agent
+if ! nc -z localhost 22 2>/dev/null; then
+  eval "$(ssh-agent -s)" > /dev/null
+fi
+
+# Alt+Z: zoxide interactive (history-based directory jump)
+__zoxide_zi_widget() {
+  local result
+  result="$(zoxide query -i)" && cd "$result"
+}
+bind -x '"\ez": __zoxide_zi_widget'
