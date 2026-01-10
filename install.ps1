@@ -41,7 +41,7 @@ function Assert-Admin
             if ($value -is [switch])
             {
                 if ($value)
-                { $arguments += "-$key" 
+                { $arguments += "-$key"
                 }
             } else
             {
@@ -90,9 +90,9 @@ function Get-WslVersion
     if ($output -match "WSL version:\\s*([0-9\\.]+)")
     {
         try
-        { return [version]$Matches[1] 
+        { return [version]$Matches[1]
         } catch
-        { return $null 
+        { return $null
         }
     }
     return $null
@@ -115,9 +115,9 @@ function Get-Release
     param([string]$Tag)
     $base = "https://api.github.com/repos/nix-community/NixOS-WSL/releases"
     $uri = if ([string]::IsNullOrWhiteSpace($Tag))
-    { "$base/latest" 
+    { "$base/latest"
     } else
-    { "$base/tags/$Tag" 
+    { "$base/tags/$Tag"
     }
     return Invoke-RestMethod -Uri $uri -Headers @{ "User-Agent" = "nixos-wsl-installer" }
 }
@@ -432,7 +432,7 @@ function Find-VscodeProductJson
     foreach ($root in $Roots)
     {
         if ([string]::IsNullOrWhiteSpace($root))
-        { continue 
+        { continue
         }
         if (Test-Path -LiteralPath $root)
         {
@@ -476,9 +476,9 @@ function Install-VscodeServer
         return
     }
     $serverRoot = if ($Channel -eq "insider")
-    { "/home/$User/.vscode-server-insiders" 
+    { "/home/$User/.vscode-server-insiders"
     } else
-    { "/home/$User/.vscode-server" 
+    { "/home/$User/.vscode-server"
     }
     $serverDir = "$serverRoot/bin/$Commit"
     $url = "https://update.code.visualstudio.com/commit:$Commit/server-linux-x64/$Channel"
@@ -518,9 +518,9 @@ if (Distro-Exists -Name $DistroName)
         try
         {
             $location = if ($PSBoundParameters.ContainsKey("InstallDir"))
-            { $InstallDir 
+            { $InstallDir
             } else
-            { $null 
+            { $null
             }
             Install-FromFile -Name $DistroName -Archive $archivePath -Location $location
         } catch
@@ -573,7 +573,7 @@ function Parse-SizeToMB
 {
     param([string]$Value)
     if (-not $Value)
-    { return $null 
+    { return $null
     }
     $v = $Value.Trim()
     if ($v -match '^(\\d+)(GB|MB)$')
@@ -581,7 +581,7 @@ function Parse-SizeToMB
         $num = [int]$Matches[1]
         $unit = $Matches[2]
         if ($unit -eq "GB")
-        { return $num * 1024 
+        { return $num * 1024
         }
         return $num
     }
@@ -649,9 +649,9 @@ function Resize-WslFilesystem
     $dev = & wsl -d $Name -u root -- sh -lc $findRoot
     $dev = $dev | Select-Object -First 1
     if ($dev)
-    { $dev = $dev.Trim() 
+    { $dev = $dev.Trim()
     } else
-    { $dev = "" 
+    { $dev = ""
     }
     if (-not $dev)
     {
@@ -659,9 +659,9 @@ function Resize-WslFilesystem
         $dev = & wsl -d $Name -u root -- sh -lc $findFallback
         $dev = $dev | Select-Object -First 1
         if ($dev)
-        { $dev = $dev.Trim() 
+        { $dev = $dev.Trim()
         } else
-        { $dev = "" 
+        { $dev = ""
         }
     }
     if ($dev)

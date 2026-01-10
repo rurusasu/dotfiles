@@ -7,6 +7,7 @@ Purpose: repo-level workflow notes.
 ```
 dotfiles/
 ├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
+├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── flakes/             # Flake inputs/outputs
 │   ├── hosts/              # Host-specific configs
@@ -79,6 +80,8 @@ Since ~/.dotfiles points to Windows-side dotfiles, changes made in Windows are i
 Apply via chezmoi on Windows:
 
 ```powershell
+chezmoi init --source ~/.dotfiles/chezmoi
+chezmoi apply
 # 方法1: GitHub から直接取得（クローン不要）
 winget install -e --id twpayne.chezmoi
 chezmoi init rurusasu/dotfiles --source-path chezmoi
