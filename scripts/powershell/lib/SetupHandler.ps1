@@ -133,15 +133,15 @@ class SetupResult {
         ハンドラー名
     .PARAMETER message
         エラーメッセージ
-    .PARAMETER error
+    .PARAMETER exception
         例外オブジェクト（オプション）
     #>
-    static [SetupResult] CreateFailure([string]$handlerName, [string]$message, [System.Exception]$error) {
+    static [SetupResult] CreateFailure([string]$handlerName, [string]$message, [System.Exception]$exception) {
         $result = [SetupResult]::new()
         $result.HandlerName = $handlerName
         $result.Success = $false
         $result.Message = $message
-        $result.Error = $error
+        $result.Error = $exception
         return $result
     }
 
@@ -232,11 +232,11 @@ class SetupHandlerBase {
         失敗結果を作成するヘルパーメソッド
     .PARAMETER message
         エラーメッセージ
-    .PARAMETER error
+    .PARAMETER exception
         例外オブジェクト（オプション）
     #>
-    [SetupResult] CreateFailureResult([string]$message, [System.Exception]$error) {
-        return [SetupResult]::CreateFailure($this.Name, $message, $error)
+    [SetupResult] CreateFailureResult([string]$message, [System.Exception]$exception) {
+        return [SetupResult]::CreateFailure($this.Name, $message, $exception)
     }
 
     [SetupResult] CreateFailureResult([string]$message) {

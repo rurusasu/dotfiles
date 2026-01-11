@@ -23,6 +23,44 @@ function Deploy-File {
     }
 }
 
+function Install-Extensions {
+    param(
+        [string]$EditorCommand,
+        [string]$EditorName,
+        [string]$ExtensionsFile
+    )
+
+    if (-not (Get-Command $EditorCommand -ErrorAction SilentlyContinue)) {
+        Write-Host "$EditorName CLI not found, skipping extension installation"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $ExtensionsFile)) {
+        Write-Host "Extensions file not found: $ExtensionsFile"
+        return
+    }
+
+    try {
+        $extensionsData = Get-Content -LiteralPath $ExtensionsFile -Raw | ConvertFrom-Json
+        $extensions = $extensionsData.recommendations
+
+        if ($extensions.Count -eq 0) {
+            Write-Host "No extensions to install for $EditorName"
+            return
+        }
+
+        Write-Host "Installing $EditorName extensions..."
+        foreach ($ext in $extensions) {
+            Write-Host "  Installing: $ext"
+            & $EditorCommand --install-extension $ext --force 2>&1 | Out-Null
+        }
+        Write-Host "$EditorName extensions installed successfully"
+    }
+    catch {
+        Write-Host "Error installing $EditorName extensions: $_"
+    }
+}
+
 Write-Host "Deploying chezmoi configurations..."
 
 # Shells (for Git Bash / WSL access)
@@ -83,5 +121,18 @@ Deploy-File "$ChezmoiSource\llms\gemini\settings.json" "$HomeDir\.gemini\setting
 # SSH - deploy rendered config (template is processed by chezmoi)
 Deploy-File "$ChezmoiSource\ssh\config" "$HomeDir\.ssh\config"
 
+Write-Host ""
+Write-Host "Installing editor extensions..."
+
+# Install VSCode extensions
+Install-Extensions "code" "VSCode" "$ChezmoiSource\editors\vscode\extensions.json"
+
+# Install VSCode Insiders extensions
+Install-Extensions "code-insiders" "VSCode Insiders" "$ChezmoiSource\editors\vscode\extensions.json"
+
+# Install Cursor extensions
+Install-Extensions "cursor" "Cursor" "$ChezmoiSource\editors\cursor\extensions.json"
+
+Write-Host ""
 Write-Host "Deployment complete!"
 {{ end -}}

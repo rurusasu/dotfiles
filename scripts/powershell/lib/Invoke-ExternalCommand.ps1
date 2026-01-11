@@ -149,9 +149,9 @@ function Get-ExternalCommand {
 .OUTPUTS
     パスが存在する場合は $true、存在しない場合は $false
 .EXAMPLE
-    if (Test-PathExists -Path "C:\Windows") { "Exists" }
+    if (Test-PathExist -Path "C:\Windows") { "Exists" }
 #>
-function Test-PathExists {
+function Test-PathExist {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

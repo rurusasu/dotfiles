@@ -45,7 +45,7 @@ class ChezmoiHandler : SetupHandlerBase {
 
         # ソースディレクトリの確認
         $sourcePath = $this.GetChezmoiSourcePath($ctx)
-        if (-not (Test-PathExists -Path $sourcePath)) {
+        if (-not (Test-PathExist -Path $sourcePath)) {
             $this.LogWarning("chezmoi ソースディレクトリが見つかりません: $sourcePath")
             return $false
         }
@@ -96,20 +96,20 @@ class ChezmoiHandler : SetupHandlerBase {
 
         # 2. WinGet Links ディレクトリ
         $linksPath = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\chezmoi.exe"
-        if (Test-PathExists -Path $linksPath) {
+        if (Test-PathExist -Path $linksPath) {
             return $linksPath
         }
 
         # 3. WinGet Packages ディレクトリ
         $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-        if (Test-PathExists -Path $packagesRoot) {
+        if (Test-PathExist -Path $packagesRoot) {
             $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
                 Where-Object { $_.Name -like 'twpayne.chezmoi*' } |
                 Select-Object -First 1
 
             if ($pkgDir) {
                 $exe = Join-Path $pkgDir.FullName "chezmoi.exe"
-                if (Test-PathExists -Path $exe) {
+                if (Test-PathExist -Path $exe) {
                     return $exe
                 }
             }
@@ -117,7 +117,7 @@ class ChezmoiHandler : SetupHandlerBase {
 
         # 4. Programs ディレクトリ（カスタムインストール）
         $programsPath = Join-Path $env:LOCALAPPDATA "Programs\chezmoi\chezmoi.exe"
-        if (Test-PathExists -Path $programsPath) {
+        if (Test-PathExist -Path $programsPath) {
             return $programsPath
         }
 

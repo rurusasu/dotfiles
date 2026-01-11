@@ -58,7 +58,7 @@ Describe 'DockerHandler' {
         }
 
         It 'Docker Desktop がインストールされていない場合は $false を返す' {
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Write-Host { }
 
             $result = $handler.CanApply($ctx)
@@ -67,7 +67,7 @@ Describe 'DockerHandler' {
         }
 
         It 'Docker Desktop がインストールされている場合は $true を返す' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
 
             $result = $handler.CanApply($ctx)
 
@@ -75,7 +75,7 @@ Describe 'DockerHandler' {
         }
 
         It 'Options から Retries を読み込む' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetries"] = 10
 
             $handler.CanApply($ctx)
@@ -84,7 +84,7 @@ Describe 'DockerHandler' {
         }
 
         It 'Options から RetryDelaySeconds を読み込む' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetryDelaySeconds"] = 15
 
             $handler.CanApply($ctx)
@@ -95,7 +95,7 @@ Describe 'DockerHandler' {
 
     Context 'Apply - WSL 書き込み不可' {
         It 'WSL が書き込み不可の場合はスキップする' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Wsl { 
                 $global:LASTEXITCODE = 1
                 return ""
@@ -111,7 +111,7 @@ Describe 'DockerHandler' {
 
     Context 'Apply - 空き容量不足' {
         It 'WSL の空き容量が不足している場合はスキップする' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $wslCallCount = 0
             Mock Invoke-Wsl {
                 $script:wslCallCount++
@@ -137,7 +137,7 @@ Describe 'DockerHandler' {
 
     Context 'Apply - 正常系' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Get-ProcessSafe { return $null }
             Mock Start-ProcessSafe { }
@@ -242,7 +242,7 @@ Describe 'DockerHandler' {
                 }
                 return ""
             }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 # Docker リソースが存在する
                 return $true
@@ -257,7 +257,7 @@ Describe 'DockerHandler' {
 
     Context 'Apply - リトライ' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Get-ProcessSafe { return $null }
             Mock Start-ProcessSafe { }
@@ -371,7 +371,7 @@ Describe 'DockerHandler' {
 
     Context 'Docker Desktop 起動/再起動' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Start-SleepSafe { }
             Mock New-DirectorySafe { }
@@ -434,7 +434,7 @@ Describe 'DockerHandler' {
                 $global:LASTEXITCODE = 0
                 return "testuser"
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
@@ -456,7 +456,7 @@ Describe 'DockerHandler' {
                 $global:LASTEXITCODE = 0
                 return ""
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
@@ -465,7 +465,7 @@ Describe 'DockerHandler' {
 
     Context 'Docker Desktop ヘルスチェック' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
@@ -541,7 +541,7 @@ Describe 'DockerHandler' {
     Context 'Apply - 例外処理' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
         }
 
@@ -560,7 +560,7 @@ Describe 'DockerHandler' {
     Context 'EnsureDockerDesktopDistros - リソース不足' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 # Docker Desktop の WSL リソースが存在しない
                 if ($Path -like "*Docker\Docker\resources\wsl*") {
@@ -609,7 +609,7 @@ Describe 'DockerHandler' {
     Context 'RestartDockerDesktop' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Start-SleepSafe { }
         }
 
@@ -669,7 +669,7 @@ Describe 'DockerHandler' {
     Context 'TestDockerDesktopProxy - 失敗パス' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
             Mock Stop-ProcessSafe { }

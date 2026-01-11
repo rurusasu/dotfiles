@@ -52,7 +52,7 @@ Describe 'VscodeServerHandler' {
 
         It 'VS Code がインストールされていない場合（preinstall 有効、clean 無効）は $false' {
             Mock Write-Host { }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
             $ctx.Options["SkipVscodeServerClean"] = $true
@@ -65,7 +65,7 @@ Describe 'VscodeServerHandler' {
 
         It 'VS Code がインストールされていない場合（clean 有効）は $true' {
             Mock Write-Host { }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
             $ctx.Options["SkipVscodeServerClean"] = $false
@@ -77,7 +77,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'VS Code Stable がインストールされている場合は $true' {
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 return $Path -like "*Microsoft VS Code*"
             }
@@ -98,7 +98,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'VS Code Insiders がインストールされている場合は $true' {
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 return $Path -like "*VS Code Insiders*"
             }
@@ -123,7 +123,7 @@ Describe 'VscodeServerHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Invoke-Wsl { return "" }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
         }
@@ -194,7 +194,7 @@ Describe 'VscodeServerHandler' {
 
         It 'VS Code Stable の事前インストール' {
             $script:curlArgs = ""
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 return $Path -like "*Microsoft VS Code" -and $Path -notlike "*Insiders*"
             }
@@ -229,7 +229,7 @@ Describe 'VscodeServerHandler' {
 
         It 'VS Code Insiders の事前インストール' {
             $script:curlArgs = ""
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 return $Path -like "*Insiders*"
             }
@@ -263,7 +263,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It '両方の VS Code がインストールされている場合は両方インストール' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $callCount = 0
             $script:wslCallCount = 0
             Mock Get-ChildItemSafe { 
@@ -292,7 +292,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'product.json が見つからない場合は警告を出す' {
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
             $script:warningShown = $false
@@ -311,7 +311,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'SkipVscodeServerPreinstall が true の場合はスキップする' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $script:curlCalled = $false
             Mock Get-ChildItemSafe { 
                 return @([PSCustomObject]@{ 
@@ -342,7 +342,7 @@ Describe 'VscodeServerHandler' {
     Context 'GetWslDefaultUser' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
         }
@@ -401,7 +401,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It '複数の product.json がある場合は最新を返す' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             $script:commitUsed = ""
             Mock Get-ChildItemSafe { 
                 return @(
@@ -440,7 +440,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'パターンマッチでファイルを検索する' {
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             $script:getChildItemCalled = $false
             Mock Get-ChildItem { 
@@ -469,7 +469,7 @@ Describe 'VscodeServerHandler' {
         }
 
         It 'product.json のパースに失敗した場合は null を返す' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Get-ChildItemSafe { 
                 return @([PSCustomObject]@{ 
                     FullName = "C:\VS Code\product.json"

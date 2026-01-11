@@ -217,7 +217,7 @@ Describe 'Sort-SetupHandlers' {
     It '空配列の場合は空の結果を返す' {
         # 空配列は Sort-Object でそのまま通過する
         $emptyArray = @() | Sort-Object Order
-        $emptyArray.Count | Should -Be 0
+        @($emptyArray).Count | Should -Be 0
     }
 }
 

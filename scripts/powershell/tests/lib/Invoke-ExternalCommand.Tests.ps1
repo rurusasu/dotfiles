@@ -96,11 +96,11 @@ Describe 'Get-ExternalCommand' {
     }
 }
 
-Describe 'Test-PathExists' {
+Describe 'Test-PathExist' {
     It 'パスが存在する場合は $true を返す' {
         Mock Test-Path { return $true }
         
-        $result = Test-PathExists -Path "C:\Windows"
+        $result = Test-PathExist -Path "C:\Windows"
         
         $result | Should -Be $true
     }
@@ -108,7 +108,7 @@ Describe 'Test-PathExists' {
     It 'パスが存在しない場合は $false を返す' {
         Mock Test-Path { return $false }
         
-        $result = Test-PathExists -Path "C:\NonExistent"
+        $result = Test-PathExist -Path "C:\NonExistent"
         
         $result | Should -Be $false
     }

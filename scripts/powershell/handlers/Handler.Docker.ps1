@@ -50,7 +50,7 @@ class DockerHandler : SetupHandlerBase {
 
         # Docker Desktop のインストール確認
         $dockerExe = $this.GetDockerDesktopPath()
-        if (-not (Test-PathExists -Path $dockerExe)) {
+        if (-not (Test-PathExist -Path $dockerExe)) {
             $this.Log("Docker Desktop がインストールされていません", "Gray")
             return $false
         }
@@ -139,7 +139,7 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [void] EnsureDockerDesktopDistros() {
         $dockerExe = $this.GetDockerDesktopPath()
-        if (-not (Test-PathExists -Path $dockerExe)) {
+        if (-not (Test-PathExist -Path $dockerExe)) {
             return
         }
 
@@ -159,7 +159,7 @@ class DockerHandler : SetupHandlerBase {
         $vhdTemplate = Join-Path $resourceRoot "ext4.vhdx"
         $dataTar = Join-Path $resourceRoot "wsl-data.tar"
 
-        if (-not (Test-PathExists -Path $vhdTemplate) -or -not (Test-PathExists -Path $dataTar)) {
+        if (-not (Test-PathExist -Path $vhdTemplate) -or -not (Test-PathExist -Path $dataTar)) {
             $this.LogWarning("Docker Desktop の WSL リソースが見つからないため、ディストリビューションの作成をスキップします")
             return
         }
@@ -219,7 +219,7 @@ class DockerHandler : SetupHandlerBase {
         }
 
         $dockerExe = $this.GetDockerDesktopPath()
-        if (-not (Test-PathExists -Path $dockerExe)) {
+        if (-not (Test-PathExist -Path $dockerExe)) {
             return
         }
 

@@ -32,7 +32,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - winget が見つからない場合' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
         }
 
         It 'false を返すこと' {
@@ -44,7 +44,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import モードでパッケージファイルがない場合' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
         }
 
         It 'false を返すこと' {
@@ -57,7 +57,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import モードで条件を満たす場合' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
         }
 
         It 'true を返すこと' {
@@ -82,7 +82,7 @@ Describe 'WingetHandler' {
     Context 'Apply - import モード成功' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Winget {
                 $global:LASTEXITCODE = 0
                 return "Packages installed"
@@ -117,7 +117,7 @@ Describe 'WingetHandler' {
     Context 'Apply - import モード一部失敗' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Winget {
                 $global:LASTEXITCODE = 1
                 return "Some packages failed"
@@ -135,7 +135,7 @@ Describe 'WingetHandler' {
     Context 'Apply - export モード成功' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
                 $global:LASTEXITCODE = 0
@@ -171,7 +171,7 @@ Describe 'WingetHandler' {
     Context 'Apply - export モードでディレクトリがない場合' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
                 $global:LASTEXITCODE = 0
@@ -195,7 +195,7 @@ Describe 'WingetHandler' {
     Context 'Apply - export モード一部失敗' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Winget {
                 $global:LASTEXITCODE = 1
                 return "Some packages could not be exported"
@@ -213,7 +213,7 @@ Describe 'WingetHandler' {
     Context 'Apply - 不明なモード' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
         }
 
         It '失敗結果を返すこと' {
@@ -227,7 +227,7 @@ Describe 'WingetHandler' {
     Context 'Apply - 例外発生' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Winget { throw "winget error" }
         }
 

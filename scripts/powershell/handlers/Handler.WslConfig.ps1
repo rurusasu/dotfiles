@@ -42,7 +42,7 @@ class WslConfigHandler : SetupHandlerBase {
 
         # ソースファイルの存在チェック
         $sourcePath = $this.GetSourceWslConfigPath($ctx)
-        if (-not (Test-PathExists -Path $sourcePath)) {
+        if (-not (Test-PathExist -Path $sourcePath)) {
             $this.LogWarning(".wslconfig が見つかりません: $sourcePath")
             return $false
         }
@@ -110,7 +110,7 @@ class WslConfigHandler : SetupHandlerBase {
         }
 
         $vhdxPath = Join-Path $basePath "ext4.vhdx"
-        if (-not (Test-PathExists -Path $vhdxPath)) {
+        if (-not (Test-PathExist -Path $vhdxPath)) {
             $this.LogWarning("VHDX が見つかりません: $vhdxPath")
             return
         }
@@ -189,7 +189,7 @@ exit
         )
 
         foreach ($configPath in $configPaths) {
-            if (Test-PathExists -Path $configPath) {
+            if (Test-PathExist -Path $configPath) {
                 $content = Get-FileContentSafe -Path $configPath
                 $match = [regex]::Match($content, 'defaultVhdSize\s*=\s*(\d+)\s*(GB|MB)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                 if ($match.Success) {

@@ -226,7 +226,7 @@ class VscodeServerHandler : SetupHandlerBase {
             if ([string]::IsNullOrWhiteSpace($root)) {
                 continue
             }
-            if (Test-PathExists -Path $root) {
+            if (Test-PathExist -Path $root) {
                 $found = Get-ChildItemSafe -Path $root -Filter "product.json" -Recurse
                 if ($found) {
                     $candidates += $found

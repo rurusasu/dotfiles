@@ -50,7 +50,7 @@ Describe 'WslConfigHandler' {
         }
 
         It '.wslconfig が存在しない場合は $false を返す' {
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Write-Host { }
 
             $result = $handler.CanApply($ctx)
@@ -59,7 +59,7 @@ Describe 'WslConfigHandler' {
         }
 
         It '.wslconfig が存在する場合は $true を返す' {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
 
             $result = $handler.CanApply($ctx)
 
@@ -69,7 +69,7 @@ Describe 'WslConfigHandler' {
 
     Context 'Apply' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Copy-FileSafe { }
             Mock Invoke-Wsl { }
             Mock Write-Host { }
@@ -142,7 +142,7 @@ Describe 'WslConfigHandler' {
 
     Context 'ExpandVhd' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Copy-FileSafe { }
             Mock Invoke-Wsl { }
             Mock Write-Host { }
@@ -170,7 +170,7 @@ Describe 'WslConfigHandler' {
                     BasePath = "C:\WSL\NixOS"
                 }
             }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*ext4.vhdx") { return $false }
                 return $true
@@ -194,7 +194,7 @@ Describe 'WslConfigHandler' {
                     BasePath = "C:\WSL\NixOS"
                 }
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Invoke-Diskpart { $script:diskpartCalled = $true }
             Mock Get-FileContentSafe { return "defaultVhdSize = 64GB" }
             $ctx.Options["SkipVhdExpand"] = $false
@@ -207,7 +207,7 @@ Describe 'WslConfigHandler' {
 
     Context 'GetTargetVhdSizeMB' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Copy-FileSafe { }
             Mock Invoke-Wsl { }
             Mock Write-Host { }
@@ -269,7 +269,7 @@ Describe 'WslConfigHandler' {
 
     Context 'ResizeFilesystem' {
         BeforeEach {
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Copy-FileSafe { }
             Mock Write-Host { }
             Mock Get-RegistryChildItem { 

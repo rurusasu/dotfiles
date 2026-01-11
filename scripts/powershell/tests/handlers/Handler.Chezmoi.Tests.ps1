@@ -46,7 +46,7 @@ Describe 'ChezmoiHandler' {
                     Source = "C:\chezmoi\chezmoi.exe" 
                 }
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
 
             $result = $handler.CanApply($ctx)
 
@@ -55,7 +55,7 @@ Describe 'ChezmoiHandler' {
 
         It 'chezmoi が WinGet Links にある場合は $true' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 # WinGet Links の chezmoi.exe が存在
                 if ($Path -like "*WinGet\Links\chezmoi.exe") { return $true }
@@ -71,7 +71,7 @@ Describe 'ChezmoiHandler' {
 
         It 'chezmoi が WinGet Packages にある場合は $true' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }
@@ -93,7 +93,7 @@ Describe 'ChezmoiHandler' {
 
         It 'chezmoi が Programs ディレクトリにある場合は $true' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $false }
@@ -110,7 +110,7 @@ Describe 'ChezmoiHandler' {
 
         It 'chezmoi が見つからない場合はインストール手順を表示して $false' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             $script:notFoundMessageShown = $false
             Mock Write-Host { 
@@ -132,7 +132,7 @@ Describe 'ChezmoiHandler' {
             Mock Get-ExternalCommand { 
                 return [PSCustomObject]@{ Source = "C:\chezmoi.exe" }
             }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*chezmoi.exe") { return $true }
                 return $false  # ソースディレクトリは存在しない
@@ -157,7 +157,7 @@ Describe 'ChezmoiHandler' {
             Mock Get-ExternalCommand { 
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
         }
 
@@ -214,7 +214,7 @@ Describe 'ChezmoiHandler' {
             Mock Get-ExternalCommand { 
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
         }
 
@@ -257,7 +257,7 @@ Describe 'ChezmoiHandler' {
     Context 'ShowChezmoiInstallInstructions' {
         It 'インストール手順に winget コマンドが含まれる' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
@@ -270,7 +270,7 @@ Describe 'ChezmoiHandler' {
 
         It 'インストール手順に GitHub 直接取得方法が含まれる' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
@@ -283,7 +283,7 @@ Describe 'ChezmoiHandler' {
 
         It 'インストール手順にソースパスが含まれる' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { return $false }
+            Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
@@ -303,7 +303,7 @@ Describe 'ChezmoiHandler' {
                 $script:searchOrder += "PATH"
                 return $null
             }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*WinGet\Links*") {
                     $script:searchOrder += "Links"
@@ -333,19 +333,19 @@ Describe 'ChezmoiHandler' {
             Mock Get-ExternalCommand { 
                 return [PSCustomObject]@{ Source = "C:\chezmoi.exe" }
             }
-            Mock Test-PathExists { return $true }
+            Mock Test-PathExist { return $true }
 
             $handler.CanApply($ctx)
 
-            # Test-PathExists は chezmoi ソースディレクトリの確認のみ
-            Should -Invoke Test-PathExists -Times 1
+            # Test-PathExist は chezmoi ソースディレクトリの確認のみ
+            Should -Invoke Test-PathExist -Times 1
         }
     }
 
     Context 'WinGet Packages 検索' {
         It 'twpayne.chezmoi* パターンでパッケージを検索する' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }
@@ -374,7 +374,7 @@ Describe 'ChezmoiHandler' {
 
         It 'パッケージ内に chezmoi.exe がない場合は次を検索する' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExists { 
+            Mock Test-PathExist { 
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }

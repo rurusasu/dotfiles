@@ -57,23 +57,53 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = $PSScriptRoot
 $projectRoot = Split-Path -Parent $scriptRoot
 
-# Pester モジュールの確認とインストール
-if (-not (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" })) {
-    Write-Host "Installing Pester 5.x..." -ForegroundColor Yellow
-    Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck
+# Pester v3 が自動ロードされるのを防ぐ
+if (Get-Module -Name Pester) {
+    $currentVersion = (Get-Module -Name Pester).Version
+    if ($currentVersion -lt [Version]"5.0.0") {
+        Write-Host "Pester v$currentVersion がロードされています。v5 に切り替えます..." -ForegroundColor Yellow
+        Remove-Module -Name Pester -Force -ErrorAction SilentlyContinue
+    }
 }
 
-Import-Module Pester -MinimumVersion 5.0.0
+# Pester モジュールの確認とインストール
+$pesterV5 = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" } | Select-Object -First 1
 
-# テスト対象ファイルの収集
-$sourceFiles = @(
-    "$projectRoot/lib/SetupHandler.ps1",
-    "$projectRoot/lib/Invoke-ExternalCommand.ps1",
-    "$projectRoot/handlers/Handler.WslConfig.ps1",
-    "$projectRoot/handlers/Handler.Docker.ps1",
-    "$projectRoot/handlers/Handler.VscodeServer.ps1",
-    "$projectRoot/handlers/Handler.Chezmoi.ps1"
-) | Where-Object { Test-Path $_ }
+if (-not $pesterV5) {
+    Write-Host "Pester v5 がインストールされていません。インストールを開始します..." -ForegroundColor Yellow
+    try {
+        Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
+        Write-Host "Pester v5 のインストールに成功しました" -ForegroundColor Green
+    } catch {
+        Write-Error "Pester v5 のインストールに失敗しました: $($_.Exception.Message)"
+        exit 1
+    }
+}
+
+# Pester v5 を強制ロード
+Import-Module -Name Pester -MinimumVersion 5.0.0 -Force
+
+$loadedVersion = (Get-Module -Name Pester).Version
+Write-Host "Pester v$loadedVersion を使用します" -ForegroundColor Cyan
+Write-Host ""
+
+# テスト対象ファイルの収集（カバレッジ有効時のみ）
+$sourceFiles = @()
+if ($MinimumCoverage -gt 0) {
+    $sourceFiles = @(
+        "$projectRoot\lib\SetupHandler.ps1",
+        "$projectRoot\lib\Invoke-ExternalCommand.ps1",
+        "$projectRoot\handlers\Handler.WslConfig.ps1",
+        "$projectRoot\handlers\Handler.Docker.ps1",
+        "$projectRoot\handlers\Handler.VscodeServer.ps1",
+        "$projectRoot\handlers\Handler.Chezmoi.ps1",
+        "$projectRoot\handlers\Handler.Winget.ps1"
+    ) | Where-Object { Test-Path $_ }
+
+    if ($sourceFiles.Count -eq 0) {
+        Write-Warning "カバレッジ対象ファイルが見つかりません。パス: $projectRoot"
+    }
+}
 
 # テストパスの決定
 if (-not $Path) {
@@ -93,18 +123,22 @@ $pesterConfig.Output.Verbosity = "Detailed"
 $pesterConfig.Output.CIFormat = "Auto"
 
 # カバレッジ設定
-if ($sourceFiles.Count -gt 0) {
+if ($sourceFiles.Count -gt 0 -and $MinimumCoverage -gt 0) {
     $pesterConfig.CodeCoverage.Enabled = $true
     $pesterConfig.CodeCoverage.Path = $sourceFiles
     $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
     $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
     # 外部コマンド直接呼び出しはカバレッジから除外
     $pesterConfig.CodeCoverage.ExcludeTests = $true
+    # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
+    $pesterConfig.CodeCoverage.UseBreakpoints = $false
 
     if ($CoverageOutputFile) {
         $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
         $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
     }
+} else {
+    $pesterConfig.CodeCoverage.Enabled = $false
 }
 
 # JUnit XML 出力

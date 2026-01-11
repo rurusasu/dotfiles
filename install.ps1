@@ -1,7 +1,76 @@
-﻿[CmdletBinding()]
+﻿<#
+.SYNOPSIS
+    NixOS-WSL のインストールとセットアップを自動化するスクリプト
+
+.DESCRIPTION
+    以下の処理を実行します:
+    1. NixOS-WSL のダウンロードとインポート
+    2. Post-install セットアップの実行
+    3. ハンドラーシステムによる自動設定:
+       - WslConfig: .wslconfig の適用と VHD 拡張
+       - Docker: Docker Desktop との WSL 連携
+       - VscodeServer: VS Code Server のキャッシュ削除と事前インストール
+       - Chezmoi: chezmoi による dotfiles 適用
+
+.PARAMETER DistroName
+    WSL ディストリビューション名（デフォルト: NixOS）
+
+.PARAMETER InstallDir
+    WSL インストール先ディレクトリ（デフォルト: $env:USERPROFILE\NixOS）
+
+.PARAMETER ReleaseTag
+    NixOS-WSL のリリースタグ（指定しない場合は latest）
+
+.PARAMETER SkipWslBaseInstall
+    WSL 基盤インストールをスキップ
+
+.PARAMETER PostInstallScript
+    Post-install スクリプトのパス
+
+.PARAMETER SkipPostInstallSetup
+    Post-install セットアップをスキップ
+
+.PARAMETER SkipSetDefaultDistro
+    デフォルトディストリビューション設定をスキップ
+
+.PARAMETER DockerIntegrationRetries
+    Docker Desktop 連携のリトライ回数（デフォルト: 5）
+
+.PARAMETER DockerIntegrationRetryDelaySeconds
+    Docker Desktop 連携のリトライ間隔（秒）（デフォルト: 5）
+
+.PARAMETER SkipWslConfigApply
+    .wslconfig 適用をスキップ
+
+.PARAMETER SkipVhdExpand
+    VHD 拡張をスキップ
+
+.PARAMETER SkipVscodeServerClean
+    VS Code Server キャッシュ削除をスキップ
+
+.PARAMETER SkipVscodeServerPreinstall
+    VS Code Server 事前インストールをスキップ
+
+.PARAMETER SyncMode
+    Post-install スクリプトの --sync-mode オプション（デフォルト: link）
+
+.PARAMETER SyncBack
+    Post-install スクリプトの --sync-back オプション（デフォルト: lock）
+
+.EXAMPLE
+    .\install.ps1
+
+.EXAMPLE
+    .\install.ps1 -DistroName "MyNixOS" -InstallDir "D:\WSL\MyNixOS"
+
+.EXAMPLE
+    .\install.ps1 -SkipWslConfigApply -SkipVhdExpand
+#>
+
+[CmdletBinding()]
 param(
     [string]$DistroName = "NixOS",
-    [string]$InstallDir = "$env:USERPROFILE\\NixOS",
+    [string]$InstallDir = "$env:USERPROFILE\NixOS",
     [string]$ReleaseTag = "",
     [switch]$SkipWslBaseInstall,
     [string]$PostInstallScript = "",
@@ -239,266 +308,7 @@ function Ensure-WhoamiShim
     & wsl -d $Name -u root -- sh -lc $cmd
 }
 
-function Test-DockerDesktopProxy
-{
-    param([string]$Name)
-    $existsCmd = "[ -x /mnt/wsl/docker-desktop/docker-desktop-user-distro ]"
-    & wsl -d $Name -u root -- sh -lc $existsCmd
-    if ($LASTEXITCODE -ne 0)
-    {
-        return $false
-    }
-    $proxyCmd = "timeout 3 /mnt/wsl/docker-desktop/docker-desktop-user-distro proxy --distro-name nixos --docker-desktop-root /mnt/wsl/docker-desktop 'C:\Program Files\Docker\Docker\resources'"
-    & wsl -d $Name -u root -- sh -lc $proxyCmd
-    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 124)
-    {
-        return $true
-    }
-    return $false
-}
 
-function Ensure-DockerDesktopIntegration
-{
-    param(
-        [string]$Name,
-        [int]$Retries,
-        [int]$DelaySeconds
-    )
-    if ($Retries -le 0)
-    {
-        return
-    }
-    $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
-    & wsl -d $Name -u root -- sh -lc $writableCheck
-    if ($LASTEXITCODE -ne 0)
-    {
-        Write-Warning "WSL が書き込み不可のため、Docker Desktop 連携のリトライをスキップします。"
-        return
-    }
-    $freeCheck = 'df -Pk / | awk ''NR==2 {print $4}'''
-    $freeBlocks = & wsl -d $Name -u root -- sh -lc $freeCheck
-    $freeBlocks = ($freeBlocks | Select-Object -First 1).Trim()
-    $freeValue = 0
-    if ($freeBlocks -and [int]::TryParse($freeBlocks, [ref]$freeValue) -and $freeValue -lt 10240)
-    {
-        Write-Warning "WSL の空き容量が不足しているため、Docker Desktop 連携のリトライをスキップします。"
-        return
-    }
-    Ensure-DockerDesktopDistros
-    Ensure-DockerGroup -Name $Name
-    Start-DockerDesktopIfNeeded
-    if (-not (Test-DockerDesktopHealth))
-    {
-        Write-Warning "Docker Desktop 側の WSL ディストリビューションが壊れている可能性がありますが、連携の確認は続行します。"
-    }
-    $restarted = $false
-    for ($i = 1; $i -le $Retries; $i++)
-    {
-        Write-Host "Docker Desktop 連携の確認を試行します ($i/$Retries)..."
-        Start-DockerDesktopIfNeeded
-        if (Test-DockerDesktopProxy -Name $Name)
-        {
-            Write-Host "Docker Desktop 連携の確認に成功しました。"
-            return
-        }
-        Write-Warning "Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します。"
-        if (-not $restarted)
-        {
-            Restart-DockerDesktop
-            $restarted = $true
-        }
-        & wsl --shutdown
-        Start-Sleep -Seconds $DelaySeconds
-    }
-    Write-Warning "Docker Desktop 連携の確認に $Retries 回失敗しました。"
-}
-
-function Start-DockerDesktopIfNeeded
-{
-    $running = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    if (-not $running)
-    {
-        $running = Get-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
-    }
-    if ($running)
-    {
-        return
-    }
-    $dockerExe = Join-Path $env:ProgramFiles "Docker\\Docker\\Docker Desktop.exe"
-    if (-not (Test-Path -LiteralPath $dockerExe))
-    {
-        return
-    }
-    Write-Host "Docker Desktop を起動します..."
-    Start-Process -FilePath $dockerExe | Out-Null
-    Start-Sleep -Seconds 5
-}
-
-function Restart-DockerDesktop
-{
-    $running = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    $backend = Get-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
-    if (-not $running -and -not $backend)
-    {
-        return
-    }
-    Write-Host "Docker Desktop を再起動します..."
-    Stop-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    Stop-Process -Name "com.docker.backend" -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 5
-    Start-DockerDesktopIfNeeded
-    Start-Sleep -Seconds 10
-}
-
-function Test-DockerDesktopHealth
-{
-    $check = & wsl -d docker-desktop -u root -- sh -lc "test -f /opt/docker-desktop/componentsVersion.json"
-    return ($LASTEXITCODE -eq 0)
-}
-
-function Ensure-DockerDesktopDistros
-{
-    $dockerExe = Join-Path $env:ProgramFiles "Docker\\Docker\\Docker Desktop.exe"
-    if (-not (Test-Path -LiteralPath $dockerExe))
-    {
-        return
-    }
-    $list = & wsl -l -q 2>$null
-    $names = @()
-    if ($list)
-    {
-        $names = $list | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-    }
-    if ($names -contains "docker-desktop" -and $names -contains "docker-desktop-data")
-    {
-        return
-    }
-    $resourceRoot = Join-Path $env:ProgramFiles "Docker\\Docker\\resources\\wsl"
-    $vhdTemplate = Join-Path $resourceRoot "ext4.vhdx"
-    $dataTar = Join-Path $resourceRoot "wsl-data.tar"
-    if (-not (Test-Path -LiteralPath $vhdTemplate) -or -not (Test-Path -LiteralPath $dataTar))
-    {
-        Write-Warning "Docker Desktop の WSL リソースが見つからないため、ディストリビューションの作成をスキップします。"
-        return
-    }
-    $root = Join-Path $env:LOCALAPPDATA "Docker\\wsl"
-    $distroDir = Join-Path $root "distro"
-    $dataDir = Join-Path $root "data"
-    New-Item -ItemType Directory -Path $distroDir,$dataDir -Force | Out-Null
-    $distroVhd = Join-Path $distroDir "ext4.vhdx"
-    Copy-Item -LiteralPath $vhdTemplate -Destination $distroVhd -Force
-    Write-Host "docker-desktop ディストリビューションを登録します..."
-    & wsl --import-in-place docker-desktop $distroVhd
-    Write-Host "docker-desktop-data ディストリビューションを登録します..."
-    & wsl --import docker-desktop-data $dataDir $dataTar --version 2
-}
-
-function Get-WslDefaultUser
-{
-    param([string]$Name)
-    $user = & wsl -d $Name -- sh -lc "whoami"
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user))
-    {
-        return "nixos"
-    }
-    return $user.Trim()
-}
-
-function Ensure-DockerGroup
-{
-    param([string]$Name)
-    $user = Get-WslDefaultUser -Name $Name
-    & wsl -d $Name -u root -- sh -lc "( groupadd docker || true ) && usermod -aG docker $user"
-}
-
-function Cleanup-VscodeServer
-{
-    param([string]$Name)
-    $user = Get-WslDefaultUser -Name $Name
-    $userHome = "/home/$user"
-    $cleanup = @(
-        "rm -rf $userHome/.vscode-server $userHome/.vscode-server-insiders",
-        "rm -rf $userHome/.vscode-remote-containers $userHome/.vscode-remote-wsl",
-        "rm -rf /root/.vscode-server /root/.vscode-server-insiders",
-        "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
-    ) -join " && "
-    & wsl -d $Name -u root -- sh -lc $cleanup
-}
-
-function Find-VscodeProductJson
-{
-    param([string[]]$Roots, [string]$Pattern)
-    $candidates = @()
-    foreach ($root in $Roots)
-    {
-        if ([string]::IsNullOrWhiteSpace($root))
-        { continue
-        }
-        if (Test-Path -LiteralPath $root)
-        {
-            $candidates += Get-ChildItem -LiteralPath $root -Recurse -Filter product.json -ErrorAction SilentlyContinue
-        }
-    }
-    if ($Pattern)
-    {
-        $candidates += Get-ChildItem -Path $Pattern -ErrorAction SilentlyContinue
-    }
-    $candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-}
-
-function Get-VscodeProductInfo
-{
-    param([string[]]$Roots, [string]$Pattern)
-    $productFile = Find-VscodeProductJson -Roots $Roots -Pattern $Pattern
-    if (-not $productFile)
-    {
-        return $null
-    }
-    try
-    {
-        return (Get-Content -Raw -LiteralPath $productFile.FullName | ConvertFrom-Json)
-    } catch
-    {
-        return $null
-    }
-}
-
-function Install-VscodeServer
-{
-    param(
-        [string]$Name,
-        [string]$Channel,
-        [string]$Commit,
-        [string]$User
-    )
-    if (-not $Commit)
-    {
-        return
-    }
-    $serverRoot = if ($Channel -eq "insider")
-    { "/home/$User/.vscode-server-insiders"
-    } else
-    { "/home/$User/.vscode-server"
-    }
-    $serverDir = "$serverRoot/bin/$Commit"
-    $url = "https://update.code.visualstudio.com/commit:$Commit/server-linux-x64/$Channel"
-    $safeUser = $User.Replace("'", "''")
-    $safeRoot = $serverRoot.Replace("'", "''")
-    $safeDir = $serverDir.Replace("'", "''")
-    $safeUrl = $url.Replace("'", "''")
-    $chownOwner = "${safeUser}:" + '$groupName'
-    $cmd = "set -e; " +
-    "userName='$safeUser'; " +
-    "groupName=`$(id -gn `"$safeUser`" 2>/dev/null || echo `"$safeUser`"); " +
-    "serverRoot='$safeRoot'; " +
-    "serverDir='$safeDir'; " +
-    "url='$safeUrl'; " +
-    "mkdir -p `"$safeDir`"; " +
-    "if [ ! -f `"$safeDir/.nixos-patched`" ]; then curl -fsSL `"$safeUrl`" | tar -xz -C `"$safeDir`" --strip-components=1; fi; " +
-    "if [ -x `"$safeDir/bin/code-server-insiders`" ] && [ ! -e `"$safeDir/bin/code-server`" ]; then ln -s code-server-insiders `"$safeDir/bin/code-server`"; fi; " +
-    "chown -R `"$chownOwner`" `"$safeRoot`""
-    & wsl -d $Name -u root -- sh -lc $cmd
-}
 Assert-Admin
 Ensure-WslReady
 
@@ -534,146 +344,6 @@ if (Distro-Exists -Name $DistroName)
     }
 }
 
-function Apply-WslConfig
-{
-    if ($SkipWslConfigApply)
-    {
-        Write-Host ".wslconfig の適用をスキップしました。"
-        return
-    }
-    $source = Join-Path $PSScriptRoot "windows\\.wslconfig"
-    if (-not (Test-Path -LiteralPath $source))
-    {
-        Write-Warning ".wslconfig が見つかりません: $source"
-        return
-    }
-    $dest = Join-Path $env:USERPROFILE ".wslconfig"
-    Copy-Item -LiteralPath $source -Destination $dest -Force
-    Write-Host ".wslconfig を更新しました。反映のため WSL を再起動します。"
-    & wsl --shutdown
-}
-
-function Get-WslDistroBasePath
-{
-    param([string]$Name)
-    $root = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
-    $keys = Get-ChildItem -Path $root -ErrorAction SilentlyContinue
-    foreach ($k in $keys)
-    {
-        $props = Get-ItemProperty -Path $k.PSPath
-        if ($props.DistributionName -and $props.DistributionName -ieq $Name)
-        {
-            return $props.BasePath
-        }
-    }
-    return $null
-}
-
-function Parse-SizeToMB
-{
-    param([string]$Value)
-    if (-not $Value)
-    { return $null
-    }
-    $v = $Value.Trim()
-    if ($v -match '^(\\d+)(GB|MB)$')
-    {
-        $num = [int]$Matches[1]
-        $unit = $Matches[2]
-        if ($unit -eq "GB")
-        { return $num * 1024
-        }
-        return $num
-    }
-    return $null
-}
-
-function Ensure-VhdExpanded
-{
-    param([string]$Name)
-    if ($SkipVhdExpand)
-    {
-        Write-Host "VHDX 拡張をスキップしました。"
-        return
-    }
-    $base = Get-WslDistroBasePath -Name $Name
-    if (-not $base)
-    {
-        Write-Warning "WSL ディストリの BasePath を取得できませんでした: $Name"
-        return
-    }
-    $vhdx = Join-Path $base "ext4.vhdx"
-    if (-not (Test-Path -LiteralPath $vhdx))
-    {
-        Write-Warning "VHDX が見つかりません: $vhdx"
-        return
-    }
-    $wslConfig = Join-Path $PSScriptRoot "windows\\.wslconfig"
-    if (-not (Test-Path -LiteralPath $wslConfig))
-    {
-        $wslConfig = Join-Path $env:USERPROFILE ".wslconfig"
-    }
-    $targetMB = $null
-    if (Test-Path -LiteralPath $wslConfig)
-    {
-        $content = Get-Content -Raw -Path $wslConfig
-        $match = [regex]::Match($content, 'defaultVhdSize\s*=\s*(\d+)\s*(GB|MB)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if ($match.Success)
-        {
-            $raw = "$($match.Groups[1].Value)$($match.Groups[2].Value.ToUpper())"
-            $targetMB = Parse-SizeToMB -Value $raw
-        }
-    }
-    if (-not $targetMB)
-    {
-        $targetMB = 32768
-        Write-Warning "defaultVhdSize を読み取れないため、${targetMB}MB で VHDX を拡張します。"
-    }
-    Write-Host "VHDX を ${targetMB}MB へ拡張します: $vhdx"
-    & wsl --shutdown
-    $diskpart = @"
-select vdisk file="$vhdx"
-expand vdisk maximum=$targetMB
-exit
-"@
-    $tmp = New-TemporaryFile
-    Set-Content -Path $tmp -Value $diskpart -Encoding ASCII
-    & diskpart /s $tmp | Out-Null
-    Remove-Item -LiteralPath $tmp -Force
-}
-
-function Resize-WslFilesystem
-{
-    param([string]$Name)
-    $findRoot = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/" {print "/dev/"\$1; exit}'''
-    $dev = & wsl -d $Name -u root -- sh -lc $findRoot
-    $dev = $dev | Select-Object -First 1
-    if ($dev)
-    { $dev = $dev.Trim()
-    } else
-    { $dev = ""
-    }
-    if (-not $dev)
-    {
-        $findFallback = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/mnt/wslg/distro" {print "/dev/"\$1; exit}'''
-        $dev = & wsl -d $Name -u root -- sh -lc $findFallback
-        $dev = $dev | Select-Object -First 1
-        if ($dev)
-        { $dev = $dev.Trim()
-        } else
-        { $dev = ""
-        }
-    }
-    if ($dev)
-    {
-        Write-Host "ファイルシステムを拡張します: $dev"
-        & wsl -d $Name -u root -- sh -lc "resize2fs $dev"
-    } else
-    {
-        Write-Warning "拡張対象のデバイスを特定できませんでした。"
-    }
-}
-
 function Ensure-WslWritable
 {
     param([string]$Name)
@@ -681,158 +351,148 @@ function Ensure-WslWritable
     & wsl -d $Name -u root -- sh -lc $writableCheck
     if ($LASTEXITCODE -ne 0)
     {
-        Write-Warning "WSL が読み取り専用のため、VHDX 拡張を試みます。"
-        Ensure-VhdExpanded -Name $Name
-        & wsl -d $Name -u root -- sh -lc $writableCheck
-        if ($LASTEXITCODE -ne 0)
-        {
-            Write-Warning "WSL がまだ読み取り専用です。ファイルシステム拡張を試みます。"
-            Resize-WslFilesystem -Name $Name
-        }
+        Write-Warning "WSL が読み取り専用です。VHD 拡張は WslConfig ハンドラーで処理されます。"
     }
 }
+# Post-install セットアップの実行
 Invoke-PostInstallSetup -Name $DistroName -ScriptPath $PostInstallScript
-Apply-WslConfig
+
+# WSL の書き込み可能状態を確保
 Ensure-WslWritable -Name $DistroName
+
+# whoami シムのセットアップ
 Ensure-WhoamiShim -Name $DistroName
-Ensure-DockerDesktopIntegration -Name $DistroName -Retries $DockerIntegrationRetries -DelaySeconds $DockerIntegrationRetryDelaySeconds
-if (-not $SkipVscodeServerClean)
-{
-    Write-Host "VS Code Server キャッシュを削除します..."
-    Cleanup-VscodeServer -Name $DistroName
-    Write-Host "VS Code Server キャッシュを削除しました。"
-}
-if (-not $SkipVscodeServerPreinstall)
-{
-    $user = Get-WslDefaultUser -Name $DistroName
-    $insidersRoots = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\\Microsoft VS Code Insiders")
-    )
-    $stableRoots = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\\Microsoft VS Code")
-    )
-    $insidersPattern = "C:\\Users\\*\\AppData\\Local\\Programs\\Microsoft VS Code Insiders\\*\\resources\\app\\product.json"
-    $stablePattern = "C:\\Users\\*\\AppData\\Local\\Programs\\Microsoft VS Code\\*\\resources\\app\\product.json"
-    $insidersProduct = Get-VscodeProductInfo -Roots $insidersRoots -Pattern $insidersPattern
-    $stableProduct = Get-VscodeProductInfo -Roots $stableRoots -Pattern $stablePattern
-    $didPreinstall = $false
-    if ($insidersProduct -and $insidersProduct.commit)
-    {
-        Write-Host "VS Code Server (Insiders) を事前インストールします..."
-        Install-VscodeServer -Name $DistroName -Channel "insider" -Commit $insidersProduct.commit -User $user
-        $didPreinstall = $true
-    }
-    if ($stableProduct -and $stableProduct.commit)
-    {
-        Write-Host "VS Code Server (Stable) を事前インストールします..."
-        Install-VscodeServer -Name $DistroName -Channel "stable" -Commit $stableProduct.commit -User $user
-        $didPreinstall = $true
-    }
-    if (-not $didPreinstall)
-    {
-        Write-Warning "VS Code の product.json が見つからないため、事前インストールをスキップします。"
+
+# ========================================
+# ハンドラーシステムによる自動設定
+# ========================================
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "ハンドラーシステムによる自動設定を開始" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ハンドラーシステムのロード
+$libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
+. (Join-Path $libPath "SetupHandler.ps1")
+. (Join-Path $libPath "Invoke-ExternalCommand.ps1")
+
+# セットアップコンテキストの作成
+$context = [SetupContext]::new($PSScriptRoot)
+$context.DistroName = $DistroName
+$context.InstallDir = $InstallDir
+
+# オプションの設定
+$context.Options["SkipWslConfigApply"] = $SkipWslConfigApply.IsPresent
+$context.Options["SkipVhdExpand"] = $SkipVhdExpand.IsPresent
+$context.Options["SkipVscodeServerClean"] = $SkipVscodeServerClean.IsPresent
+$context.Options["SkipVscodeServerPreinstall"] = $SkipVscodeServerPreinstall.IsPresent
+$context.Options["DockerIntegrationRetries"] = $DockerIntegrationRetries
+$context.Options["DockerIntegrationRetryDelaySeconds"] = $DockerIntegrationRetryDelaySeconds
+
+# ハンドラーの読み込み
+$handlersPath = Join-Path $PSScriptRoot "scripts\powershell\handlers"
+$handlerFiles = Get-ChildItem -LiteralPath $handlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+
+$handlers = @()
+foreach ($file in $handlerFiles) {
+    try {
+        . $file.FullName
+
+        # クラス名を推測（例: Handler.WslConfig.ps1 -> WslConfigHandler）
+        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        $className = $baseName.Replace("Handler.", "") + "Handler"
+
+        # ハンドラーインスタンスの作成
+        $handlerInstance = New-Object $className
+        $handlers += $handlerInstance
+
+        Write-Host "[Load] $($handlerInstance.Name) (Order: $($handlerInstance.Order))" -ForegroundColor Gray
+    } catch {
+        Write-Warning "ハンドラーの読み込みに失敗しました: $($file.Name) - $($_.Exception.Message)"
     }
 }
 
-if (-not $SkipSetDefaultDistro)
-{
-    Write-Host "WSL の既定ディストリビューションを設定します: $DistroName"
-    & wsl --set-default $DistroName
-}
+# 実行順序でソート
+$handlers = $handlers | Sort-Object Order
 
-# Windows Terminal / WezTerm 設定は chezmoi で管理
-$applyChezmoiScript = Join-Path $PSScriptRoot "scripts\powershell\apply-chezmoi.ps1"
-$chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
+# ハンドラーの実行
+$results = @()
+foreach ($handler in $handlers) {
+    Write-Host ""
+    Write-Host "[$($handler.Name)] $($handler.Description)" -ForegroundColor Cyan
 
-# chezmoi の既知の配置先をチェック
-$chezmoiExe = $null
-if ($chezmoiCmd)
-{
-    $chezmoiExe = $chezmoiCmd.Source
-} else
-{
-    $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\chezmoi.exe"),
-        (Join-Path $env:LOCALAPPDATA "Programs\chezmoi\chezmoi.exe")
-    )
-    foreach ($c in $candidates)
-    {
-        if (Test-Path -LiteralPath $c)
-        {
-            $chezmoiExe = $c
-            break
-        }
+    # 実行可否の判定
+    if (-not $handler.CanApply($context)) {
+        Write-Host "[$($handler.Name)] スキップします" -ForegroundColor Gray
+        continue
     }
-    if (-not $chezmoiExe)
-    {
-        $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-        if (Test-Path -LiteralPath $packagesRoot)
-        {
-            $pkgDir = Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
-                Where-Object Name -like 'twpayne.chezmoi*' |
-                Select-Object -First 1
-            if ($pkgDir)
-            {
-                $exe = Join-Path $pkgDir.FullName "chezmoi.exe"
-                if (Test-Path -LiteralPath $exe)
-                {
-                    $chezmoiExe = $exe
-                }
+
+    # 実行
+    try {
+        $result = $handler.Apply($context)
+        $results += $result
+
+        if ($result.Success) {
+            Write-Host "[$($handler.Name)] ✓ $($result.Message)" -ForegroundColor Green
+        } else {
+            Write-Host "[$($handler.Name)] ✗ $($result.Message)" -ForegroundColor Red
+            if ($result.Error) {
+                Write-Host "[$($handler.Name)] エラー詳細: $($result.Error.Message)" -ForegroundColor Red
             }
         }
+    } catch {
+        $result = [SetupResult]::CreateFailure($handler.Name, $_.Exception.Message, $_.Exception)
+        $results += $result
+        Write-Host "[$($handler.Name)] ✗ 例外が発生しました: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
-if ($chezmoiExe)
-{
-    Write-Host "chezmoi でターミナル設定を適用します..." -ForegroundColor Cyan
-    $chezmoiSource = Join-Path $PSScriptRoot "chezmoi"
-    & $chezmoiExe --source "$chezmoiSource" apply
-    if ($LASTEXITCODE -eq 0)
-    {
-        Write-Host "[OK] chezmoi apply 完了" -ForegroundColor Green
-        Write-Host "Windows Terminal を起動中なら、再起動すると確実に反映されます。" -ForegroundColor Gray
-    } else
-    {
-        Write-Warning "chezmoi apply が失敗しました (exit=$LASTEXITCODE)"
-        Write-Host "手動で実行してください: chezmoi --source `"$chezmoiSource`" apply" -ForegroundColor Yellow
-    }
-} else
-{
+# ========================================
+# 最終処理
+# ========================================
+
+if (-not $SkipSetDefaultDistro) {
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "chezmoi がインストールされていません" -ForegroundColor Yellow
-    Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Windows Terminal / WezTerm 設定を適用するには、以下のいずれかを実行してください:" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  # 方法1: winget で chezmoi をインストールして適用"
-    Write-Host "  winget install -e --id twpayne.chezmoi"
-    Write-Host "  chezmoi init --source `"$PSScriptRoot\chezmoi`""
-    Write-Host "  chezmoi apply"
-    Write-Host ""
-    Write-Host "  # 方法2: GitHub から直接取得（クローン不要）"
-    Write-Host "  winget install -e --id twpayne.chezmoi"
-    Write-Host "  chezmoi init rurusasu/dotfiles --source-path chezmoi"
-    Write-Host "  chezmoi apply"
-    Write-Host ""
-    Write-Host "  # 方法3: 同梱スクリプトで一括適用"
-    Write-Host "  .\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi"
-    Write-Host ""
+    Write-Host "WSL の既定ディストリビューションを設定します: $DistroName" -ForegroundColor Cyan
+    & wsl --set-default $DistroName
 }
 
 # Docker Desktop VHDX 拡張
 $expandDockerVhd = Join-Path $PSScriptRoot "windows\expand-docker-vhd.ps1"
-if (Test-Path -LiteralPath $expandDockerVhd)
-{
-    Write-Host "Docker Desktop VHDX サイズを確認しています..."
+if (Test-Path -LiteralPath $expandDockerVhd) {
+    Write-Host ""
+    Write-Host "Docker Desktop VHDX サイズを確認しています..." -ForegroundColor Cyan
     & $expandDockerVhd -Force
 }
 
+# ========================================
+# 結果サマリー
+# ========================================
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "完了しました。NixOS を起動するには: wsl -d $DistroName" -ForegroundColor Green
+Write-Host "セットアップ完了" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+
+# 成功・失敗の集計
+$successCount = ($results | Where-Object { $_.Success }).Count
+$failureCount = ($results | Where-Object { -not $_.Success }).Count
+
+Write-Host "実行結果: $successCount 件成功, $failureCount 件失敗" -ForegroundColor $(if ($failureCount -eq 0) { "Green" } else { "Yellow" })
+Write-Host ""
+
+if ($failureCount -gt 0) {
+    Write-Host "失敗したハンドラー:" -ForegroundColor Yellow
+    foreach ($result in $results | Where-Object { -not $_.Success }) {
+        Write-Host "  - $($result.HandlerName): $($result.Message)" -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
+Write-Host "NixOS を起動するには: wsl -d $DistroName" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Enter を押すとこのウィンドウを閉じます..." -ForegroundColor Gray
 Read-Host | Out-Null

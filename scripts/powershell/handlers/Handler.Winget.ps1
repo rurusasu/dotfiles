@@ -47,7 +47,7 @@ class WingetHandler : SetupHandlerBase {
         if ($mode -eq "import") {
             # import モード: パッケージリストの存在確認
             $packagesPath = $this.GetPackagesPath($ctx)
-            if (-not (Test-PathExists -Path $packagesPath)) {
+            if (-not (Test-PathExist -Path $packagesPath)) {
                 $this.LogWarning("パッケージリストが見つかりません: $packagesPath")
                 return $false
             }
@@ -85,12 +85,12 @@ class WingetHandler : SetupHandlerBase {
             $this.Log("ソース: $packagesPath")
             $this.LogWarning("ライセンス同意が必要な場合があります")
 
-            $output = Invoke-Winget -Arguments @(
+            Invoke-Winget -Arguments @(
                 "import",
                 "-i", $packagesPath,
                 "--accept-package-agreements",
                 "--accept-source-agreements"
-            )
+            ) | Out-Null
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("winget import 完了", "Green")
@@ -117,14 +117,14 @@ class WingetHandler : SetupHandlerBase {
 
             # 出力ディレクトリが存在しない場合は作成
             $parentDir = Split-Path -Parent $packagesPath
-            if (-not (Test-PathExists -Path $parentDir)) {
+            if (-not (Test-PathExist -Path $parentDir)) {
                 New-DirectorySafe -Path $parentDir | Out-Null
             }
 
-            $output = Invoke-Winget -Arguments @(
+            Invoke-Winget -Arguments @(
                 "export",
                 "-o", $packagesPath
-            )
+            ) | Out-Null
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("winget export 完了", "Green")
