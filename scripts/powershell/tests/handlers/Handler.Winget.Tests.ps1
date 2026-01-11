@@ -11,75 +11,72 @@ Describe 'WingetHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が Winget であること' {
-            $handler.Name | Should -Be "Winget"
-        }
-
-        It 'Description が設定されていること' {
-            $handler.Description | Should -Not -BeNullOrEmpty
-        }
-
-        It 'Order が 90 であること' {
-            $handler.Order | Should -Be 90
-        }
-
-        It 'RequiresAdmin が true であること' {
-            $handler.RequiresAdmin | Should -Be $true
+    Context 'Constructor' {
+        It 'should set <property> correctly' -ForEach @(
+            @{ property = "Name"; expected = "Winget"; checkType = "Be" }
+            @{ property = "Description"; expected = $null; checkType = "Not -BeNullOrEmpty" }
+            @{ property = "Order"; expected = 5; checkType = "Be" }
+            @{ property = "RequiresAdmin"; expected = $true; checkType = "Be" }
+        ) {
+            if ($checkType -eq "Be") {
+                $handler.$property | Should -Be $expected
+            } else {
+                $handler.$property | Should -Not -BeNullOrEmpty
+            }
         }
     }
 
-    Context 'CanApply - winget が見つからない場合' {
+    Context 'CanApply - winget not found' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $true }
         }
 
-        It 'false を返すこと' {
+        It 'should return false' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $false
         }
     }
 
-    Context 'CanApply - import モードでパッケージファイルがない場合' {
+    Context 'CanApply - import mode without package file' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $false }
         }
 
-        It 'false を返すこと' {
+        It 'should return false' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.CanApply($ctx)
             $result | Should -Be $false
         }
     }
 
-    Context 'CanApply - import モードで条件を満たす場合' {
+    Context 'CanApply - import mode with all conditions met' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
         }
 
-        It 'true を返すこと' {
+        It 'should return true' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
     }
 
-    Context 'CanApply - export モードで winget がある場合' {
+    Context 'CanApply - export mode with winget available' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
         }
 
-        It 'パッケージファイルがなくても true を返すこと' {
+        It 'should return true even without package file' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
     }
 
-    Context 'Apply - import モード成功' {
+    Context 'Apply - import mode success' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -89,14 +86,14 @@ Describe 'WingetHandler' {
             }
         }
 
-        It '成功結果を返すこと' {
+        It 'should return success result' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "インストール"
         }
 
-        It 'winget import が呼ばれること' {
+        It 'should call winget import' {
             $script:wingetCalled = $false
             $script:wingetArgs = $null
             Mock Invoke-Winget {
@@ -114,7 +111,7 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - import モード一部失敗' {
+    Context 'Apply - import mode partial failure' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -124,7 +121,7 @@ Describe 'WingetHandler' {
             }
         }
 
-        It '成功結果を返すこと（一部失敗の警告付き）' {
+        It 'should return success with partial failure warning' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
@@ -132,7 +129,7 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - export モード成功' {
+    Context 'Apply - export mode success' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -143,14 +140,14 @@ Describe 'WingetHandler' {
             }
         }
 
-        It '成功結果を返すこと' {
+        It 'should return success result' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "エクスポート"
         }
 
-        It 'winget export が呼ばれること' {
+        It 'should call winget export' {
             $script:wingetCalled = $false
             $script:wingetArgs = $null
             Mock Invoke-Winget {
@@ -168,7 +165,7 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - export モードでディレクトリがない場合' {
+    Context 'Apply - export mode without directory' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $false }
@@ -179,7 +176,7 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'ディレクトリが作成されること' {
+        It 'should create directory' {
             $script:dirCreated = $false
             Mock New-DirectorySafe {
                 $script:dirCreated = $true
@@ -192,7 +189,7 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - export モード一部失敗' {
+    Context 'Apply - export mode partial failure' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -202,7 +199,7 @@ Describe 'WingetHandler' {
             }
         }
 
-        It '成功結果を返すこと（一部除外の警告付き）' {
+        It 'should return success with partial exclusion warning' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
@@ -210,13 +207,13 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - 不明なモード' {
+    Context 'Apply - unknown mode' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
         }
 
-        It '失敗結果を返すこと' {
+        It 'should return failure result' {
             $ctx.Options["WingetMode"] = "unknown"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $false
@@ -224,14 +221,14 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - 例外発生' {
+    Context 'Apply - exception thrown' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
             Mock Invoke-Winget { throw "winget error" }
         }
 
-        It '失敗結果を返すこと' {
+        It 'should return failure result' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $false

@@ -21,26 +21,19 @@ Describe 'VscodeServerHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が VscodeServer に設定される' {
-            $handler.Name | Should -Be "VscodeServer"
-        }
-
-        It 'Description が設定される' {
-            $handler.Description | Should -Be "VS Code Server のキャッシュ削除と事前インストール"
-        }
-
-        It 'Order が 30 に設定される' {
-            $handler.Order | Should -Be 30
-        }
-
-        It 'RequiresAdmin が $false に設定される' {
-            $handler.RequiresAdmin | Should -Be $false
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "VscodeServer" }
+            @{ property = "Description"; expected = "VS Code Server のキャッシュ削除と事前インストール" }
+            @{ property = "Order"; expected = 40 }
+            @{ property = "RequiresAdmin"; expected = $false }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'SkipVscodeServerClean と SkipVscodeServerPreinstall が両方 true の場合は $false' {
+        It 'should return false when both SkipVscodeServerClean and SkipVscodeServerPreinstall are true' {
             Mock Write-Host { }
             $ctx.Options["SkipVscodeServerClean"] = $true
             $ctx.Options["SkipVscodeServerPreinstall"] = $true
@@ -50,7 +43,7 @@ Describe 'VscodeServerHandler' {
             $result | Should -Be $false
         }
 
-        It 'VS Code がインストールされていない場合（preinstall 有効、clean 無効）は $false' {
+        It 'should return false when VS Code is not installed with preinstall enabled and clean disabled' {
             Mock Write-Host { }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
@@ -63,7 +56,7 @@ Describe 'VscodeServerHandler' {
             $result | Should -Be $false
         }
 
-        It 'VS Code がインストールされていない場合（clean 有効）は $true' {
+        It 'should return true when VS Code is not installed but clean is enabled' {
             Mock Write-Host { }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
@@ -76,13 +69,13 @@ Describe 'VscodeServerHandler' {
             $result | Should -Be $true
         }
 
-        It 'VS Code Stable がインストールされている場合は $true' {
-            Mock Test-PathExist { 
+        It 'should return true when VS Code Stable is installed' {
+            Mock Test-PathExist {
                 param($Path)
                 return $Path -like "*Microsoft VS Code*"
             }
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -97,13 +90,13 @@ Describe 'VscodeServerHandler' {
             $result | Should -Be $true
         }
 
-        It 'VS Code Insiders がインストールされている場合は $true' {
-            Mock Test-PathExist { 
+        It 'should return true when VS Code Insiders is installed' {
+            Mock Test-PathExist {
                 param($Path)
                 return $Path -like "*VS Code Insiders*"
             }
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code Insiders\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -119,7 +112,7 @@ Describe 'VscodeServerHandler' {
         }
     }
 
-    Context 'Apply - キャッシュ削除' {
+    Context 'Apply - cache deletion' {
         BeforeEach {
             Mock Write-Host { }
             Mock Invoke-Wsl { return "" }
@@ -128,9 +121,9 @@ Describe 'VscodeServerHandler' {
             Mock Get-ChildItem { return @() }
         }
 
-        It 'SkipVscodeServerClean が false の場合はキャッシュを削除する' {
+        It 'should delete cache when SkipVscodeServerClean is false' {
             $script:cacheDeleted = $false
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 if (($Arguments -join " ") -match "rm -rf.*\.vscode-server") {
                     $script:cacheDeleted = $true
@@ -145,9 +138,9 @@ Describe 'VscodeServerHandler' {
             $result.Success | Should -Be $true
         }
 
-        It 'SkipVscodeServerClean が true の場合はキャッシュ削除をスキップする' {
+        It 'should skip cache deletion when SkipVscodeServerClean is true' {
             $script:cacheDeleted = $false
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 if (($Arguments -join " ") -match "rm -rf.*\.vscode-server") {
                     $script:cacheDeleted = $true
@@ -161,9 +154,9 @@ Describe 'VscodeServerHandler' {
             $script:cacheDeleted | Should -Be $false
         }
 
-        It 'キャッシュ削除コマンドが正しい' {
+        It 'should use correct cache deletion command' {
             $script:commandArgs = ""
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $script:commandArgs = $Arguments -join " "
             }
@@ -179,10 +172,10 @@ Describe 'VscodeServerHandler' {
         }
     }
 
-    Context 'Apply - 事前インストール' {
+    Context 'Apply - preinstall' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "whoami") {
@@ -192,16 +185,16 @@ Describe 'VscodeServerHandler' {
             }
         }
 
-        It 'VS Code Stable の事前インストール' {
+        It 'should preinstall VS Code Stable' {
             $script:curlArgs = ""
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 return $Path -like "*Microsoft VS Code" -and $Path -notlike "*Insiders*"
             }
-            Mock Get-ChildItemSafe { 
+            Mock Get-ChildItemSafe {
                 param($Path)
                 if ($Path -like "*Insiders*") { return @() }
-                return @([PSCustomObject]@{ 
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -227,16 +220,16 @@ Describe 'VscodeServerHandler' {
             $result.Success | Should -Be $true
         }
 
-        It 'VS Code Insiders の事前インストール' {
+        It 'should preinstall VS Code Insiders' {
             $script:curlArgs = ""
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 return $Path -like "*Insiders*"
             }
-            Mock Get-ChildItemSafe { 
+            Mock Get-ChildItemSafe {
                 param($Path)
                 if ($Path -notlike "*Insiders*") { return @() }
-                return @([PSCustomObject]@{ 
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code Insiders\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -262,13 +255,13 @@ Describe 'VscodeServerHandler' {
             $result.Success | Should -Be $true
         }
 
-        It '両方の VS Code がインストールされている場合は両方インストール' {
+        It 'should install both when both VS Code versions are installed' {
             Mock Test-PathExist { return $true }
             $callCount = 0
             $script:wslCallCount = 0
-            Mock Get-ChildItemSafe { 
+            Mock Get-ChildItemSafe {
                 param($Path)
-                return @([PSCustomObject]@{ 
+                return @([PSCustomObject]@{
                     FullName = "$Path\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -291,12 +284,12 @@ Describe 'VscodeServerHandler' {
             $script:wslCallCount | Should -BeGreaterOrEqual 2
         }
 
-        It 'product.json が見つからない場合は警告を出す' {
+        It 'should show warning when product.json is not found' {
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
             $script:warningShown = $false
-            Mock Write-Host { 
+            Mock Write-Host {
                 param($Object)
                 if ($Object -match "product.json が見つからない") {
                     $script:warningShown = $true
@@ -310,11 +303,11 @@ Describe 'VscodeServerHandler' {
             $script:warningShown | Should -Be $true
         }
 
-        It 'SkipVscodeServerPreinstall が true の場合はスキップする' {
+        It 'should skip when SkipVscodeServerPreinstall is true' {
             Mock Test-PathExist { return $true }
             $script:curlCalled = $false
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -347,9 +340,9 @@ Describe 'VscodeServerHandler' {
             Mock Get-ChildItem { return @() }
         }
 
-        It 'whoami が成功した場合はユーザー名を返す' {
+        It 'should return username when whoami succeeds' {
             $script:homePathUsed = ""
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "whoami") {
@@ -370,9 +363,9 @@ Describe 'VscodeServerHandler' {
             $script:homePathUsed | Should -Match "/home/testuser"
         }
 
-        It 'whoami が失敗した場合は nixos を返す' {
+        It 'should return nixos when whoami fails' {
             $script:homePathUsed = ""
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "whoami") {
@@ -400,16 +393,16 @@ Describe 'VscodeServerHandler' {
             Mock Invoke-Wsl { return "nixos" }
         }
 
-        It '複数の product.json がある場合は最新を返す' {
+        It 'should return latest when multiple product.json files exist' {
             Mock Test-PathExist { return $true }
             $script:commitUsed = ""
-            Mock Get-ChildItemSafe { 
+            Mock Get-ChildItemSafe {
                 return @(
-                    [PSCustomObject]@{ 
+                    [PSCustomObject]@{
                         FullName = "C:\old\product.json"
                         LastWriteTime = (Get-Date).AddDays(-10)
                     },
-                    [PSCustomObject]@{ 
+                    [PSCustomObject]@{
                         FullName = "C:\new\product.json"
                         LastWriteTime = (Get-Date)
                     }
@@ -439,13 +432,13 @@ Describe 'VscodeServerHandler' {
             $script:commitUsed | Should -Be "newcommit"
         }
 
-        It 'パターンマッチでファイルを検索する' {
+        It 'should search files using pattern matching' {
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             $script:getChildItemCalled = $false
-            Mock Get-ChildItem { 
+            Mock Get-ChildItem {
                 $script:getChildItemCalled = $true
-                return @([PSCustomObject]@{ 
+                return @([PSCustomObject]@{
                     FullName = "C:\Users\test\AppData\Local\Programs\Microsoft VS Code\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -462,16 +455,16 @@ Describe 'VscodeServerHandler' {
         }
     }
 
-    Context 'GetVscodeProductInfo - null 返却' {
+    Context 'GetVscodeProductInfo - null return' {
         BeforeEach {
             Mock Write-Host { }
             Mock Invoke-Wsl { return "nixos" }
         }
 
-        It 'product.json のパースに失敗した場合は null を返す' {
+        It 'should return null when product.json parsing fails' {
             Mock Test-PathExist { return $true }
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     FullName = "C:\VS Code\product.json"
                     LastWriteTime = Get-Date
                 })
@@ -485,14 +478,14 @@ Describe 'VscodeServerHandler' {
 
             # エラーが発生しても処理は継続される
             $result = $handler.Apply($ctx)
-            
+
             # 成功（エラーはキャッチされる）
             $result.Success | Should -Be $true
         }
     }
 
-    Context 'エラーハンドリング' {
-        It '例外が発生した場合は失敗結果を返す' {
+    Context 'Error handling' {
+        It 'should return failure when exception is thrown' {
             Mock Write-Host { }
             Mock Invoke-Wsl { throw "WSL エラー" }
             $ctx.Options["SkipVscodeServerClean"] = $false

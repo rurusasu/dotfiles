@@ -23,7 +23,7 @@ class ChezmoiHandler : SetupHandlerBase {
     ChezmoiHandler() {
         $this.Name = "Chezmoi"
         $this.Description = "chezmoi による dotfiles 適用"
-        $this.Order = 100
+        $this.Order = 10
         $this.RequiresAdmin = $false
     }
 

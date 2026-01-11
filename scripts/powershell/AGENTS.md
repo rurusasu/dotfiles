@@ -86,8 +86,39 @@ Invoke-Pester
 - テストは必ず [tests/Invoke-Tests.ps1](tests/Invoke-Tests.ps1) 経由で実行
 - Pester v5 が自動的にインストール・使用される
 - `UseBreakpoints = $false` でモックを有効化
+- pre-commit フックでも自動実行される（[.pre-commit-config.yaml](../../.pre-commit-config.yaml)）
 
-### 5. 配列操作の安全性
+### 5. Pester テスト命名規則
+
+```powershell
+# ✅ 正しい（"should ..." で始まる、-ForEach でパラメタライズ）
+It 'should set <property> to <expected>' -ForEach @(
+    @{ property = "Name"; expected = "Docker" }
+    @{ property = "Order"; expected = 20 }
+) {
+    $handler.$property | Should -Be $expected
+}
+
+It 'should return true when path exists' {
+    # ...
+}
+
+# ❌ 誤り（日本語、パラメタライズなし）
+It 'Name が Docker に設定される' {
+    $handler.Name | Should -Be "Docker"
+}
+
+It 'Order が 20 に設定される' {
+    $handler.Order | Should -Be 20
+}
+```
+
+**ルール**:
+- `It` ブロック名は `'should ...'` で始める（英語、小文字）
+- 類似テストは `-ForEach` でパラメタライズする
+- `<property>` 形式のトークンで動的な名前を生成
+
+### 6. 配列操作の安全性
 
 ```powershell
 # ✅ 正しい（@() でラップ）
@@ -174,6 +205,20 @@ cd scripts/powershell/tests
 
 **現在の状態**: 230+ テスト、カバレッジ 95%+
 
+### pre-commit による自動テスト
+
+PowerShell ファイルの変更時に自動でテストが実行されます。
+
+```bash
+# pre-commit を手動実行
+pre-commit run powershell-tests --all-files
+
+# 全フックを実行
+pre-commit run --all-files
+```
+
+**設定**: [.pre-commit-config.yaml](../../.pre-commit-config.yaml)
+
 ## 📚 プロジェクト概要
 
 **目的**: NixOS-WSL セットアップの自動化とハンドラーシステムの実装
@@ -197,12 +242,12 @@ scripts/powershell/
 │   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult + オーケストレーション関数
 │   └── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
 ├── handlers/                    # セットアップハンドラー
-│   ├── Handler.NixOSWSL.ps1     # Order 5: NixOS-WSL インストール
-│   ├── Handler.WslConfig.ps1    # Order 10: WSL 設定・VHD 拡張
-│   ├── Handler.Docker.ps1       # Order 20: Docker Desktop 連携
-│   ├── Handler.VscodeServer.ps1 # Order 30: VS Code Server 管理
-│   ├── Handler.Winget.ps1       # Order 90: winget パッケージ
-│   └── Handler.Chezmoi.ps1      # Order 100: dotfiles 適用
+│   ├── Handler.Winget.ps1       # Order 5: winget パッケージ
+│   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用
+│   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定・VHD 拡張
+│   ├── Handler.Docker.ps1       # Order 30: Docker Desktop 連携
+│   ├── Handler.VscodeServer.ps1 # Order 40: VS Code Server 管理
+│   └── Handler.NixOSWSL.ps1     # Order 50: NixOS-WSL インストール
 ├── tests/                       # テストファイル
 │   ├── Invoke-Tests.ps1         # テストランナー（Pester v5 自動インストール）
 │   ├── Install.Tests.ps1        # オーケストレーション関数のテスト
@@ -219,12 +264,12 @@ scripts/powershell/
 
 | Order | ハンドラー | ファイル | 説明 |
 |-------|-----------|---------|------|
-| 5 | NixOSWSL | Handler.NixOSWSL.ps1 | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
-| 10 | WslConfig | Handler.WslConfig.ps1 | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
-| 20 | Docker | Handler.Docker.ps1 | Docker Desktop WSL 連携、docker-desktop distro 作成 |
-| 30 | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール |
-| 90 | Winget | Handler.Winget.ps1 | winget パッケージ管理（JSON定義ベース） |
-| 100 | Chezmoi | Handler.Chezmoi.ps1 | chezmoi dotfiles 適用 |
+| 5 | Winget | Handler.Winget.ps1 | winget パッケージ管理（JSON定義ベース） |
+| 10 | Chezmoi | Handler.Chezmoi.ps1 | chezmoi dotfiles 適用 |
+| 20 | WslConfig | Handler.WslConfig.ps1 | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
+| 30 | Docker | Handler.Docker.ps1 | Docker Desktop WSL 連携、docker-desktop distro 作成 |
+| 40 | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール |
+| 50 | NixOSWSL | Handler.NixOSWSL.ps1 | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
 
 ## 🔗 参考資料
 

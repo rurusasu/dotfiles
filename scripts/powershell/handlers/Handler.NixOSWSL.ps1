@@ -22,7 +22,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     NixOSWSLHandler() {
         $this.Name = "NixOSWSL"
         $this.Description = "NixOS-WSL のダウンロードとインストール"
-        $this.Order = 5
+        $this.Order = 50
         $this.RequiresAdmin = $true
     }
 

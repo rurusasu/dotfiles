@@ -54,7 +54,91 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -ShowCoverage
 ```
 
-**現在の状態**: 203/203 テスト成功（100%）、カバレッジ 95%+
+**現在の状態**: 230+ テスト成功（100%）、カバレッジ 95%+
+
+## pre-commit 統合
+
+PowerShell ファイルの変更時に自動でテストが実行されます。
+
+**設定ファイル**: [.pre-commit-config.yaml](../../../.pre-commit-config.yaml)
+
+```yaml
+- repo: local
+  hooks:
+    - id: powershell-tests
+      name: powershell tests
+      entry: pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
+      language: system
+      pass_filenames: false
+      types: [powershell]
+```
+
+**実行方法**:
+
+```bash
+# PowerShell テストのみ
+pre-commit run powershell-tests --all-files
+
+# 全フックを実行
+pre-commit run --all-files
+```
+
+## テスト命名規則（ベストプラクティス）
+
+### It ブロックの命名
+
+`It` ブロック名は `'should ...'` で始めます（英語、小文字）。
+
+```powershell
+# ✅ 正しい
+It 'should return true when path exists' { }
+It 'should throw exception when file not found' { }
+It 'should set <property> to <expected>' { }
+
+# ❌ 誤り
+It 'パスが存在する場合は true を返す' { }  # 日本語
+It 'Returns true when path exists' { }        # 大文字始まり
+It 'true を返す' { }                          # 説明不足
+```
+
+### -ForEach によるパラメタライズ
+
+類似テストは `-ForEach` でパラメタライズします（pytest の `@pytest.mark.parametrize` と同様）。
+
+```powershell
+# ✅ 正しい（パラメタライズ）
+It 'should set <property> to <expected>' -ForEach @(
+    @{ property = "Name"; expected = "Docker" }
+    @{ property = "Description"; expected = "Docker Desktop WSL 連携" }
+    @{ property = "Order"; expected = 20 }
+    @{ property = "RequiresAdmin"; expected = $false }
+) {
+    $handler.$property | Should -Be $expected
+}
+
+# ❌ 誤り（個別テスト）
+It 'should set Name to Docker' {
+    $handler.Name | Should -Be "Docker"
+}
+It 'should set Order to 20' {
+    $handler.Order | Should -Be 20
+}
+```
+
+### トークン置換
+
+`-ForEach` でハッシュテーブルを渡すと、`<key>` 形式のトークンがテスト名で自動置換されます。
+
+```powershell
+# テスト名: "should set Name to Docker"
+#           "should set Order to 20"
+It 'should set <property> to <expected>' -ForEach @(
+    @{ property = "Name"; expected = "Docker" }
+    @{ property = "Order"; expected = 20 }
+) {
+    $handler.$property | Should -Be $expected
+}
+```
 
 ## テストパターン
 
@@ -71,59 +155,53 @@ BeforeAll {
 }
 
 Describe 'ChezmoiHandler' {
-    Context 'Constructor' {
-        It 'プロパティが正しく初期化される' {
-            $handler = [ChezmoiHandler]::new()
+    BeforeEach {
+        $script:handler = [ChezmoiHandler]::new()
+        $script:ctx = [SetupContext]::new("D:\dotfiles")
+    }
 
-            $handler.Name | Should -Be "Chezmoi"
-            $handler.Description | Should -Not -BeNullOrEmpty
-            $handler.Order | Should -Be 100
+    Context 'Constructor' {
+        # パラメタライズされたテスト
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "Chezmoi" }
+            @{ property = "Description"; expected = "chezmoi による dotfiles 適用" }
+            @{ property = "Order"; expected = 100 }
+            @{ property = "RequiresAdmin"; expected = $false }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'chezmoi が見つかる場合は true を返す' {
-            # モックを設定
-            Mock Invoke-TestPath { return $true }
+        It 'should return true when chezmoi is found' {
+            Mock Get-ExternalCommand { return @{ Source = "chezmoi.exe" } }
 
-            $handler = [ChezmoiHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.CanApply($context)
+            $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
 
-        It 'chezmoi が見つからない場合は false を返す' {
-            Mock Invoke-TestPath { return $false }
+        It 'should return false when chezmoi is not found' {
+            Mock Get-ExternalCommand { return $null }
 
-            $handler = [ChezmoiHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.CanApply($context)
+            $result = $handler.CanApply($ctx)
             $result | Should -Be $false
         }
     }
 
     Context 'Apply' {
-        It 'chezmoi apply を実行して成功を返す' {
+        It 'should return success when chezmoi apply succeeds' {
             Mock Invoke-Chezmoi { return "Applied" }
 
-            $handler = [ChezmoiHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.Apply($context)
+            $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             Should -Invoke Invoke-Chezmoi -Times 1
         }
 
-        It 'エラー発生時は失敗を返す' {
+        It 'should return failure when exception is thrown' {
             Mock Invoke-Chezmoi { throw "chezmoi error" }
 
-            $handler = [ChezmoiHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.Apply($context)
+            $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
             $result.Error | Should -Not -BeNullOrEmpty
@@ -137,12 +215,12 @@ Describe 'ChezmoiHandler' {
 **参考**: [tests/Install.Tests.ps1](../../../scripts/powershell/tests/Install.Tests.ps1)
 
 ```powershell
-Describe 'ハンドラーの動的ロード' {
+Describe 'Handler dynamic loading' {
     BeforeAll {
         $handlersPath = Join-Path $PSScriptRoot "..\handlers"
     }
 
-    It '全ハンドラーがロードされる' {
+    It 'should load all handlers' {
         $handlers = @()
         $handlerFiles = Get-ChildItem -Path "$handlersPath" -Filter "Handler.*.ps1"
 
@@ -157,8 +235,7 @@ Describe 'ハンドラーの動的ロード' {
         $handlers.Count | Should -BeGreaterThan 0
     }
 
-    It 'Order プロパティでソートされる' {
-        # テスト用ハンドラーを作成
+    It 'should sort handlers by Order property' {
         $handlers = @(
             [PSCustomObject]@{ Name = "A"; Order = 20 },
             [PSCustomObject]@{ Name = "B"; Order = 10 },
@@ -172,7 +249,7 @@ Describe 'ハンドラーの動的ロード' {
         $sorted[2].Name | Should -Be "C"
     }
 
-    It '空配列の場合は空の結果を返す' {
+    It 'should return empty array when no handlers exist' {
         $emptyArray = @() | Sort-Object Order
         @($emptyArray).Count | Should -Be 0
     }

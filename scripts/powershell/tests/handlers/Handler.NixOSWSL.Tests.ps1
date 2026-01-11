@@ -32,8 +32,8 @@ Describe 'NixOSWSLHandler' {
             $handler.Description | Should -Be "NixOS-WSL のダウンロードとインストール"
         }
 
-        It 'Order が 5 に設定される' {
-            $handler.Order | Should -Be 5
+        It 'Order が 50 に設定される' {
+            $handler.Order | Should -Be 50
         }
 
         It 'RequiresAdmin が $true に設定される' {

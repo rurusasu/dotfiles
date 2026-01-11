@@ -21,7 +21,7 @@ class VscodeServerHandler : SetupHandlerBase {
     VscodeServerHandler() {
         $this.Name = "VscodeServer"
         $this.Description = "VS Code Server のキャッシュ削除と事前インストール"
-        $this.Order = 30
+        $this.Order = 40
         $this.RequiresAdmin = $false
     }
 

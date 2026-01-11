@@ -66,7 +66,7 @@ function Invoke-YourCommand {
 
 **ファイル名**: `tests/handlers/Handler.YourName.Tests.ps1`
 
-**テンプレート**:
+**テンプレート**（[テスト命名規則](testing.md#テスト命名規則ベストプラクティス) に準拠）:
 
 ```powershell
 BeforeAll {
@@ -76,59 +76,54 @@ BeforeAll {
 }
 
 Describe 'YourNameHandler' {
-    Context 'Constructor' {
-        It 'プロパティが正しく初期化される' {
-            $handler = [YourNameHandler]::new()
+    BeforeEach {
+        $script:handler = [YourNameHandler]::new()
+        $script:ctx = [SetupContext]::new("D:\dotfiles")
+    }
 
-            $handler.Name | Should -Be "YourName"
-            $handler.Description | Should -Not -BeNullOrEmpty
-            $handler.Order | Should -Be 50
+    Context 'Constructor' {
+        # パラメタライズされたテスト（類似テストを -ForEach でまとめる）
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "YourName" }
+            @{ property = "Description"; expected = "Your handler description" }
+            @{ property = "Order"; expected = 50 }
+            @{ property = "RequiresAdmin"; expected = $false }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'ファイルが存在する場合は true を返す' {
+        It 'should return true when file exists' {
             Mock Invoke-TestPath { return $true }
 
-            $handler = [YourNameHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.CanApply($context)
+            $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
 
-        It 'ファイルが存在しない場合は false を返す' {
+        It 'should return false when file does not exist' {
             Mock Invoke-TestPath { return $false }
 
-            $handler = [YourNameHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.CanApply($context)
+            $result = $handler.CanApply($ctx)
             $result | Should -Be $false
         }
     }
 
     Context 'Apply' {
-        It 'コマンドを実行して成功を返す' {
+        It 'should return success when command succeeds' {
             Mock Invoke-YourCommand { return "Success output" }
 
-            $handler = [YourNameHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.Apply($context)
+            $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "成功"
             Should -Invoke Invoke-YourCommand -Times 1 -Exactly
         }
 
-        It 'エラー発生時は失敗を返す' {
+        It 'should return failure when exception is thrown' {
             Mock Invoke-YourCommand { throw "Command failed" }
 
-            $handler = [YourNameHandler]::new()
-            $context = [SetupContext]::new("C:\test")
-
-            $result = $handler.Apply($context)
+            $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
             $result.Error | Should -Not -BeNullOrEmpty
@@ -228,8 +223,17 @@ cd tests
 
 ### 既存ハンドラーの参考実装
 
-- [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1) - VHD拡張、ファイルシステムリサイズ
-- [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1) - Docker Desktop連携
-- [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) - VS Code Server管理
-- [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1) - dotfiles適用
-- [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1) - wingetパッケージ管理
+| ハンドラー | ソースファイル | テストファイル | 説明 |
+|-----------|--------------|--------------|------|
+| Winget | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1) | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1) | winget パッケージ管理 |
+| Chezmoi | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1) | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1) | dotfiles 適用 |
+| WslConfig | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1) | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1) | VHD 拡張、FS リサイズ |
+| Docker | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1) | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1) | Docker Desktop 連携 |
+| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理 |
+| NixOSWSL | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1) | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1) | NixOS-WSL インストール |
+
+### 関連ドキュメント
+
+- [テスト](testing.md) - Pester v5 の使用方法とテストパターン
+- [アーキテクチャ](architecture.md) - ハンドラーシステムの設計と実行フロー
+- [コーディング規約](coding-standards.md) - 命名規則、スタイル、ベストプラクティス

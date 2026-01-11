@@ -21,26 +21,19 @@ Describe 'WslConfigHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が WslConfig に設定される' {
-            $handler.Name | Should -Be "WslConfig"
-        }
-
-        It 'Description が設定される' {
-            $handler.Description | Should -Be ".wslconfig の適用と VHD 拡張"
-        }
-
-        It 'Order が 10 に設定される' {
-            $handler.Order | Should -Be 10
-        }
-
-        It 'RequiresAdmin が $true に設定される' {
-            $handler.RequiresAdmin | Should -Be $true
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "WslConfig" }
+            @{ property = "Description"; expected = ".wslconfig の適用と VHD 拡張" }
+            @{ property = "Order"; expected = 20 }
+            @{ property = "RequiresAdmin"; expected = $true }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'SkipWslConfigApply が true の場合は $false を返す' {
+        It 'should return false when SkipWslConfigApply is true' {
             Mock Write-Host { }
             $ctx.Options["SkipWslConfigApply"] = $true
 
@@ -49,7 +42,7 @@ Describe 'WslConfigHandler' {
             $result | Should -Be $false
         }
 
-        It '.wslconfig が存在しない場合は $false を返す' {
+        It 'should return false when .wslconfig does not exist' {
             Mock Test-PathExist { return $false }
             Mock Write-Host { }
 
@@ -58,7 +51,7 @@ Describe 'WslConfigHandler' {
             $result | Should -Be $false
         }
 
-        It '.wslconfig が存在する場合は $true を返す' {
+        It 'should return true when .wslconfig exists' {
             Mock Test-PathExist { return $true }
 
             $result = $handler.CanApply($ctx)
@@ -77,11 +70,11 @@ Describe 'WslConfigHandler' {
             Mock Get-RegistryValue { return $null }
         }
 
-        It '.wslconfig をコピーして成功結果を返す' {
+        It 'should copy .wslconfig and return success result' {
             $script:copyFileCalled = $false
             $script:shutdownCalled = $false
             Mock Copy-FileSafe { $script:copyFileCalled = $true }
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 if ($Arguments -contains "--shutdown") {
                     $script:shutdownCalled = $true
@@ -97,7 +90,7 @@ Describe 'WslConfigHandler' {
             $script:shutdownCalled | Should -Be $true
         }
 
-        It 'VHD 拡張がスキップされる（SkipVhdExpand = true）' {
+        It 'should skip VHD expansion when SkipVhdExpand is true' {
             $script:diskpartCalled = $false
             Mock Invoke-Diskpart { $script:diskpartCalled = $true }
             $ctx.Options["SkipVhdExpand"] = $true
@@ -107,7 +100,7 @@ Describe 'WslConfigHandler' {
             $script:diskpartCalled | Should -Be $false
         }
 
-        It 'ApplyWslConfig が $false を返した場合は失敗結果を返す' {
+        It 'should return failure when ApplyWslConfig returns false' {
             # Copy-FileSafe が例外をスローすると ApplyWslConfig は $false を返す
             # これにより Apply メソッドの if (-not $copyResult) 分岐が実行される
             $script:errorLogged = $false
@@ -128,7 +121,7 @@ Describe 'WslConfigHandler' {
             $result.Message | Should -Be ".wslconfig のコピーに失敗しました"
         }
 
-        It 'Apply 中に予期しない例外が発生した場合は例外メッセージで失敗結果を返す' {
+        It 'should return failure with exception message when unexpected exception occurs' {
             # ApplyWslConfig 自体が予期しない例外をスローした場合
             Mock Copy-FileSafe { }
             Mock Invoke-Wsl { throw "予期しないWSLエラー" }
@@ -148,7 +141,7 @@ Describe 'WslConfigHandler' {
             Mock Write-Host { }
         }
 
-        It 'BasePath が取得できない場合は VHD 拡張をスキップする' {
+        It 'should skip VHD expansion when BasePath cannot be retrieved' {
             $script:diskpartCalled = $false
             Mock Get-RegistryChildItem { return @() }
             Mock Invoke-Diskpart { $script:diskpartCalled = $true }
@@ -159,9 +152,9 @@ Describe 'WslConfigHandler' {
             $script:diskpartCalled | Should -Be $false
         }
 
-        It 'VHDX が存在しない場合はスキップする' {
+        It 'should skip when VHDX does not exist' {
             $script:diskpartCalled = $false
-            Mock Get-RegistryChildItem { 
+            Mock Get-RegistryChildItem {
                 return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
             }
             Mock Get-RegistryValue {
@@ -170,7 +163,7 @@ Describe 'WslConfigHandler' {
                     BasePath = "C:\WSL\NixOS"
                 }
             }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*ext4.vhdx") { return $false }
                 return $true
@@ -183,9 +176,9 @@ Describe 'WslConfigHandler' {
             $script:diskpartCalled | Should -Be $false
         }
 
-        It 'VHDX が存在する場合は diskpart で拡張する' {
+        It 'should expand with diskpart when VHDX exists' {
             $script:diskpartCalled = $false
-            Mock Get-RegistryChildItem { 
+            Mock Get-RegistryChildItem {
                 return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
             }
             Mock Get-RegistryValue {
@@ -211,7 +204,7 @@ Describe 'WslConfigHandler' {
             Mock Copy-FileSafe { }
             Mock Invoke-Wsl { }
             Mock Write-Host { }
-            Mock Get-RegistryChildItem { 
+            Mock Get-RegistryChildItem {
                 return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
             }
             Mock Get-RegistryValue {
@@ -222,12 +215,12 @@ Describe 'WslConfigHandler' {
             }
         }
 
-        It 'defaultVhdSize が GB で指定されている場合' {
+        It 'should convert GB to MB when defaultVhdSize is specified in GB' {
             $script:diskpartScript = ""
             Mock Get-FileContentSafe { return "defaultVhdSize = 64GB" }
-            Mock Invoke-Diskpart { 
+            Mock Invoke-Diskpart {
                 param($ScriptContent)
-                $script:diskpartScript = $ScriptContent 
+                $script:diskpartScript = $ScriptContent
             }
             $ctx.Options["SkipVhdExpand"] = $false
 
@@ -237,12 +230,12 @@ Describe 'WslConfigHandler' {
             $script:diskpartScript | Should -Match "expand vdisk maximum=65536"
         }
 
-        It 'defaultVhdSize が MB で指定されている場合' {
+        It 'should use MB value directly when defaultVhdSize is specified in MB' {
             $script:diskpartScript = ""
             Mock Get-FileContentSafe { return "defaultVhdSize = 32768MB" }
-            Mock Invoke-Diskpart { 
+            Mock Invoke-Diskpart {
                 param($ScriptContent)
-                $script:diskpartScript = $ScriptContent 
+                $script:diskpartScript = $ScriptContent
             }
             $ctx.Options["SkipVhdExpand"] = $false
 
@@ -251,12 +244,12 @@ Describe 'WslConfigHandler' {
             $script:diskpartScript | Should -Match "expand vdisk maximum=32768"
         }
 
-        It 'defaultVhdSize が読み取れない場合はデフォルト値を使用' {
+        It 'should use default value when defaultVhdSize cannot be read' {
             $script:diskpartScript = ""
             Mock Get-FileContentSafe { return "# empty config" }
-            Mock Invoke-Diskpart { 
+            Mock Invoke-Diskpart {
                 param($ScriptContent)
-                $script:diskpartScript = $ScriptContent 
+                $script:diskpartScript = $ScriptContent
             }
             $ctx.Options["SkipVhdExpand"] = $false
 
@@ -272,7 +265,7 @@ Describe 'WslConfigHandler' {
             Mock Test-PathExist { return $true }
             Mock Copy-FileSafe { }
             Mock Write-Host { }
-            Mock Get-RegistryChildItem { 
+            Mock Get-RegistryChildItem {
                 return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
             }
             Mock Get-RegistryValue {
@@ -285,9 +278,9 @@ Describe 'WslConfigHandler' {
             Mock Get-FileContentSafe { return "defaultVhdSize = 64GB" }
         }
 
-        It 'ルートデバイスを検出して resize2fs を実行する' {
+        It 'should detect root device and run resize2fs' {
             $script:resize2fsCalled = $false
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "lsblk") {
@@ -308,9 +301,9 @@ Describe 'WslConfigHandler' {
             $script:resize2fsCalled | Should -Be $true
         }
 
-        It 'ルートデバイスが見つからない場合はフォールバックを試す' {
+        It 'should try fallback when root device is not found' {
             $script:wslCallCount = 0
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $script:wslCallCount++
                 $argStr = $Arguments -join " "

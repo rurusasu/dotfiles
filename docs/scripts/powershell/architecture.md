@@ -140,15 +140,16 @@ foreach ($result in $results) {
 
 ## ハンドラー実行順序
 
-| Order | ハンドラー | ファイル | 説明 |
-|-------|-----------|---------|------|
-| 10 | WslConfig | Handler.WslConfig.ps1 | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
-| 20 | Docker | Handler.Docker.ps1 | Docker Desktop WSL 連携、docker-desktop distro 作成 |
-| 30 | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール |
-| 90 | Winget | Handler.Winget.ps1 | winget パッケージ管理（JSON定義ベース） |
-| 100 | Chezmoi | Handler.Chezmoi.ps1 | chezmoi dotfiles 適用 |
+| Order | ハンドラー | ソースファイル | 説明 |
+|-------|-----------|--------------|------|
+| 5 | Winget | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1) | winget パッケージ管理（JSON定義ベース） |
+| 10 | Chezmoi | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1) | chezmoi dotfiles 適用 |
+| 20 | WslConfig | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1) | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
+| 30 | Docker | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1) | Docker Desktop WSL 連携、docker-desktop distro 作成 |
+| 40 | VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | VS Code Server キャッシュクリア、事前インストール |
+| 50 | NixOSWSL | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1) | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
 
-**重要**: Order は 10 刻みで設定し、将来の挿入を容易にする
+**重要**: Order は 5〜10 刻みで設定し、将来の挿入を容易にする
 
 ## 外部コマンドラッパー
 

@@ -22,7 +22,7 @@ class WingetHandler : SetupHandlerBase {
     WingetHandler() {
         $this.Name = "Winget"
         $this.Description = "winget パッケージ管理"
-        $this.Order = 90
+        $this.Order = 5
         $this.RequiresAdmin = $true
     }
 

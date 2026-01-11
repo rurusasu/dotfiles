@@ -25,7 +25,7 @@ Describe 'ChezmoiHandler' {
         It 'should set <property> to <expected>' -ForEach @(
             @{ property = "Name"; expected = "Chezmoi" }
             @{ property = "Description"; expected = "chezmoi による dotfiles 適用" }
-            @{ property = "Order"; expected = 100 }
+            @{ property = "Order"; expected = 10 }
             @{ property = "RequiresAdmin"; expected = $false }
         ) {
             $handler.$property | Should -Be $expected

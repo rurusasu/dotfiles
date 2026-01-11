@@ -21,7 +21,7 @@ class WslConfigHandler : SetupHandlerBase {
     WslConfigHandler() {
         $this.Name = "WslConfig"
         $this.Description = ".wslconfig の適用と VHD 拡張"
-        $this.Order = 10
+        $this.Order = 20
         $this.RequiresAdmin = $true
     }
 

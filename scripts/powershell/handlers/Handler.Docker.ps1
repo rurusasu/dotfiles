@@ -26,7 +26,7 @@ class DockerHandler : SetupHandlerBase {
     DockerHandler() {
         $this.Name = "Docker"
         $this.Description = "Docker Desktop との WSL 連携"
-        $this.Order = 20
+        $this.Order = 30
         $this.RequiresAdmin = $false
     }
 

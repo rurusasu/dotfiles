@@ -25,7 +25,7 @@ Describe 'DockerHandler' {
         It 'should set <property> to <expected>' -ForEach @(
             @{ property = "Name"; expected = "Docker" }
             @{ property = "Description"; expected = "Docker Desktop との WSL 連携" }
-            @{ property = "Order"; expected = 20 }
+            @{ property = "Order"; expected = 30 }
             @{ property = "RequiresAdmin"; expected = $false }
             @{ property = "Retries"; expected = 5 }
             @{ property = "RetryDelaySeconds"; expected = 5 }
