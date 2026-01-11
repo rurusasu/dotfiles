@@ -15,22 +15,22 @@ BeforeAll {
 
 Describe 'SetupContext' {
     Context 'コンストラクタ' {
-        It 'DotfilesPath を設定できる' {
+        It 'should set DotfilesPath correctly' {
             $ctx = [SetupContext]::new("D:\dotfiles")
             $ctx.DotfilesPath | Should -Be "D:\dotfiles"
         }
 
-        It 'デフォルトの DistroName は NixOS' {
+        It 'should default DistroName to NixOS' {
             $ctx = [SetupContext]::new("D:\dotfiles")
             $ctx.DistroName | Should -Be "NixOS"
         }
 
-        It 'InstallDir が USERPROFILE\NixOS に設定される' {
+        It 'should set InstallDir to USERPROFILE\NixOS' {
             $ctx = [SetupContext]::new("D:\dotfiles")
             $ctx.InstallDir | Should -Be (Join-Path $env:USERPROFILE "NixOS")
         }
 
-        It 'Options が空の hashtable で初期化される' {
+        It 'should initialize Options as empty hashtable' {
             $ctx = [SetupContext]::new("D:\dotfiles")
             $ctx.Options | Should -BeOfType [hashtable]
             $ctx.Options.Count | Should -Be 0
@@ -38,47 +38,43 @@ Describe 'SetupContext' {
     }
 
     Context 'GetOption' {
-        It 'キーが存在する場合は値を返す' {
+        It 'should return <expected> when key <keyExists>' -ForEach @(
+            @{ keyExists = "exists"; key = "TestKey"; setValue = "TestValue"; default = "Default"; expected = "TestValue" }
+            @{ keyExists = "does not exist"; key = "NonExistentKey"; setValue = $null; default = "DefaultValue"; expected = "DefaultValue" }
+        ) {
             $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.Options["TestKey"] = "TestValue"
-            $ctx.GetOption("TestKey", "Default") | Should -Be "TestValue"
+            if ($setValue) {
+                $ctx.Options[$key] = $setValue
+            }
+            $ctx.GetOption($key, $default) | Should -Be $expected
         }
 
-        It 'キーが存在しない場合はデフォルト値を返す' {
+        It 'should return <expected> for default value type <type>' -ForEach @(
+            @{ type = "null"; default = $null; expected = $null }
+            @{ type = "false"; default = $false; expected = $false }
+            @{ type = "number"; default = 42; expected = 42 }
+        ) {
             $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.GetOption("NonExistentKey", "DefaultValue") | Should -Be "DefaultValue"
-        }
-
-        It 'デフォルト値が $null の場合' {
-            $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.GetOption("NonExistentKey", $null) | Should -BeNullOrEmpty
-        }
-
-        It 'デフォルト値が $false の場合' {
-            $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.GetOption("NonExistentKey", $false) | Should -Be $false
-        }
-
-        It 'デフォルト値が数値の場合' {
-            $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.GetOption("NonExistentKey", 42) | Should -Be 42
+            $result = $ctx.GetOption("NonExistentKey", $default)
+            if ($null -eq $expected) {
+                $result | Should -BeNullOrEmpty
+            } else {
+                $result | Should -Be $expected
+            }
         }
     }
 
     Context 'プロパティ設定' {
-        It 'DistroName を変更できる' {
+        It 'should allow setting <property> to <value>' -ForEach @(
+            @{ property = "DistroName"; value = "Ubuntu" }
+            @{ property = "InstallDir"; value = "C:\WSL\NixOS" }
+        ) {
             $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.DistroName = "Ubuntu"
-            $ctx.DistroName | Should -Be "Ubuntu"
+            $ctx.$property = $value
+            $ctx.$property | Should -Be $value
         }
 
-        It 'InstallDir を変更できる' {
-            $ctx = [SetupContext]::new("D:\dotfiles")
-            $ctx.InstallDir = "C:\WSL\NixOS"
-            $ctx.InstallDir | Should -Be "C:\WSL\NixOS"
-        }
-
-        It 'Options に複数のキーを設定できる' {
+        It 'should allow setting multiple keys in Options' {
             $ctx = [SetupContext]::new("D:\dotfiles")
             $ctx.Options["Key1"] = "Value1"
             $ctx.Options["Key2"] = $true
@@ -93,54 +89,52 @@ Describe 'SetupContext' {
 
 Describe 'SetupResult' {
     Context 'コンストラクタ' {
-        It 'デフォルトで Success は $false' {
+        It 'should default <property> to <expected>' -ForEach @(
+            @{ property = "Success"; expected = $false }
+            @{ property = "Message"; expected = "" }
+        ) {
             $result = [SetupResult]::new()
-            $result.Success | Should -Be $false
+            $result.$property | Should -Be $expected
         }
 
-        It 'デフォルトで Message は空文字' {
-            $result = [SetupResult]::new()
-            $result.Message | Should -Be ""
-        }
-
-        It 'デフォルトで Error は $null' {
+        It 'should default Error to null' {
             $result = [SetupResult]::new()
             $result.Error | Should -BeNullOrEmpty
         }
     }
 
     Context 'CreateSuccess' {
-        It '成功結果を作成できる' {
+        It 'should create success result with correct properties' {
             $result = [SetupResult]::CreateSuccess("TestHandler", "処理が完了しました")
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $true
             $result.Message | Should -Be "処理が完了しました"
             $result.Error | Should -BeNullOrEmpty
         }
 
-        It '空のメッセージでも作成できる' {
+        It 'should allow empty message' {
             $result = [SetupResult]::CreateSuccess("TestHandler", "")
-            
+
             $result.Success | Should -Be $true
             $result.Message | Should -Be ""
         }
     }
 
     Context 'CreateFailure' {
-        It '失敗結果を作成できる（例外なし）' {
+        It 'should create failure result without exception' {
             $result = [SetupResult]::CreateFailure("TestHandler", "エラーが発生しました")
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $false
             $result.Message | Should -Be "エラーが発生しました"
             $result.Error | Should -BeNullOrEmpty
         }
 
-        It '失敗結果を作成できる（例外あり）' {
+        It 'should create failure result with exception' {
             $exception = [System.Exception]::new("Test exception")
             $result = [SetupResult]::CreateFailure("TestHandler", "エラーが発生しました", $exception)
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $false
             $result.Message | Should -Be "エラーが発生しました"
@@ -148,9 +142,9 @@ Describe 'SetupResult' {
             $result.Error.Message | Should -Be "Test exception"
         }
 
-        It '例外が $null でも作成できる' {
+        It 'should allow null exception' {
             $result = [SetupResult]::CreateFailure("TestHandler", "エラー", $null)
-            
+
             $result.Success | Should -Be $false
             $result.Error | Should -BeNullOrEmpty
         }
@@ -159,59 +153,49 @@ Describe 'SetupResult' {
 
 Describe 'SetupHandlerBase' {
     Context 'プロパティ' {
-        It 'デフォルトの Order は 100' {
+        It 'should default <property> to <expected>' -ForEach @(
+            @{ property = "Order"; expected = 100 }
+            @{ property = "RequiresAdmin"; expected = $false }
+        ) {
             $handler = [SetupHandlerBase]::new()
-            $handler.Order | Should -Be 100
+            $handler.$property | Should -Be $expected
         }
 
-        It 'デフォルトの RequiresAdmin は $false' {
+        It 'should allow setting <property>' -ForEach @(
+            @{ property = "Order"; value = 50 }
+            @{ property = "Name"; value = "TestHandler" }
+            @{ property = "Description"; value = "テスト用ハンドラー" }
+        ) {
             $handler = [SetupHandlerBase]::new()
-            $handler.RequiresAdmin | Should -Be $false
-        }
-
-        It 'Order を設定できる' {
-            $handler = [SetupHandlerBase]::new()
-            $handler.Order = 50
-            $handler.Order | Should -Be 50
-        }
-
-        It 'Name を設定できる' {
-            $handler = [SetupHandlerBase]::new()
-            $handler.Name = "TestHandler"
-            $handler.Name | Should -Be "TestHandler"
-        }
-
-        It 'Description を設定できる' {
-            $handler = [SetupHandlerBase]::new()
-            $handler.Description = "テスト用ハンドラー"
-            $handler.Description | Should -Be "テスト用ハンドラー"
+            $handler.$property = $value
+            $handler.$property | Should -Be $value
         }
     }
 
     Context 'CanApply (基底クラス)' {
-        It '基底クラスの CanApply は例外をスロー' {
+        It 'should throw exception for base class CanApply' {
             $handler = [SetupHandlerBase]::new()
             $ctx = [SetupContext]::new("D:\dotfiles")
-            
+
             { $handler.CanApply($ctx) } | Should -Throw "*must be implemented*"
         }
     }
 
     Context 'Apply (基底クラス)' {
-        It '基底クラスの Apply は例外をスロー' {
+        It 'should throw exception for base class Apply' {
             $handler = [SetupHandlerBase]::new()
             $ctx = [SetupContext]::new("D:\dotfiles")
-            
+
             { $handler.Apply($ctx) } | Should -Throw "*must be implemented*"
         }
     }
 
     Context 'CreateSuccessResult' {
-        It '成功結果を作成できる' {
+        It 'should create success result with handler name' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
             $result = $handler.CreateSuccessResult("テスト成功")
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $true
             $result.Message | Should -Be "テスト成功"
@@ -219,23 +203,23 @@ Describe 'SetupHandlerBase' {
     }
 
     Context 'CreateFailureResult' {
-        It '失敗結果を作成できる（例外なし）' {
+        It 'should create failure result without exception' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
             $result = $handler.CreateFailureResult("テスト失敗")
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $false
             $result.Message | Should -Be "テスト失敗"
             $result.Error | Should -BeNullOrEmpty
         }
 
-        It '失敗結果を作成できる（例外あり）' {
+        It 'should create failure result with exception' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
             $exception = [System.IO.IOException]::new("ファイルが見つかりません")
             $result = $handler.CreateFailureResult("テスト失敗", $exception)
-            
+
             $result.HandlerName | Should -Be "TestHandler"
             $result.Success | Should -Be $false
             $result.Message | Should -Be "テスト失敗"
@@ -244,63 +228,41 @@ Describe 'SetupHandlerBase' {
     }
 
     Context 'Log メソッド' {
-        It 'Log はメッセージを出力する' {
+        It 'should output message with <color> color' -ForEach @(
+            @{ method = "Log"; color = "Cyan"; message = "テストメッセージ" }
+            @{ method = "LogWarning"; color = "Yellow"; message = "警告メッセージ" }
+            @{ method = "LogError"; color = "Red"; message = "エラーメッセージ" }
+        ) {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
-            
+
             Mock Write-Host { }
-            
-            $handler.Log("テストメッセージ")
-            
+
+            if ($method -eq "Log") {
+                $handler.Log($message)
+            } elseif ($method -eq "LogWarning") {
+                $handler.LogWarning($message)
+            } else {
+                $handler.LogError($message)
+            }
+
             Should -Invoke Write-Host -Times 1 -ParameterFilter {
-                $Object -eq "[TestHandler] テストメッセージ" -and
-                $ForegroundColor -eq "Cyan"
+                $Object -eq "[TestHandler] $message" -and
+                $ForegroundColor -eq $color
             }
         }
 
-        It 'Log は色を指定できる' {
+        It 'should allow custom color for Log method' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
-            
+
             Mock Write-Host { }
-            
+
             $handler.Log("テストメッセージ", "Green")
-            
+
             Should -Invoke Write-Host -Times 1 -ParameterFilter {
                 $Object -eq "[TestHandler] テストメッセージ" -and
                 $ForegroundColor -eq "Green"
-            }
-        }
-    }
-
-    Context 'LogWarning メソッド' {
-        It 'LogWarning は黄色でメッセージを出力する' {
-            $handler = [SetupHandlerBase]::new()
-            $handler.Name = "TestHandler"
-            
-            Mock Write-Host { }
-            
-            $handler.LogWarning("警告メッセージ")
-            
-            Should -Invoke Write-Host -Times 1 -ParameterFilter {
-                $Object -eq "[TestHandler] 警告メッセージ" -and
-                $ForegroundColor -eq "Yellow"
-            }
-        }
-    }
-
-    Context 'LogError メソッド' {
-        It 'LogError は赤色でメッセージを出力する' {
-            $handler = [SetupHandlerBase]::new()
-            $handler.Name = "TestHandler"
-            
-            Mock Write-Host { }
-            
-            $handler.LogError("エラーメッセージ")
-            
-            Should -Invoke Write-Host -Times 1 -ParameterFilter {
-                $Object -eq "[TestHandler] エラーメッセージ" -and
-                $ForegroundColor -eq "Red"
             }
         }
     }

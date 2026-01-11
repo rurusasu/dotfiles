@@ -105,7 +105,6 @@ $ErrorActionPreference = "Stop"
 $libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
-. (Join-Path $libPath "InstallHelper.ps1")
 
 # ========================================
 # Backward Compatibility Layer
@@ -163,77 +162,11 @@ if (-not $PSBoundParameters.ContainsKey("PostInstallScript"))
 }
 
 # ========================================
-# Phase 1: System Preparation
+# Phase 1: Handler System Execution
 # ========================================
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 1: System Preparation" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-Assert-Admin
-Ensure-WslReady -SkipWslBaseInstall:($Options['SkipWslBaseInstall'] -eq $true)
-
-# ========================================
-# Phase 2: NixOS-WSL Installation
-# ========================================
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 2: NixOS-WSL Installation" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-if (Distro-Exists -Name $DistroName)
-{
-    Write-Warning "Distro '$DistroName' already exists. Skipping installation."
-} else
-{
-    $release = Get-Release -Tag $ReleaseTag
-    $asset = Select-Asset -Release $release
-    $archivePath = Download-Asset -Asset $asset
-
-    $supportsFromFile = (Supports-FromFileInstall) -and ($asset.name -like "*.wsl")
-
-    if ($supportsFromFile)
-    {
-        try
-        {
-            $location = if ($PSBoundParameters.ContainsKey("InstallDir"))
-            { $InstallDir
-            } else
-            { $null
-            }
-            Install-FromFile -Name $DistroName -Archive $archivePath -Location $location
-        } catch
-        {
-            Write-Warning "wsl --install --from-file failed. Falling back to wsl --import.`n$($_.Exception.Message)"
-            Import-Distro -Name $DistroName -Dir $InstallDir -Archive $archivePath
-        }
-    } else
-    {
-        Import-Distro -Name $DistroName -Dir $InstallDir -Archive $archivePath
-    }
-}
-
-# ========================================
-# Phase 3: Post-Install Setup
-# ========================================
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 3: Post-Install Setup" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-Invoke-PostInstallSetup -Name $DistroName -ScriptPath $PostInstallScript -SyncMode $SyncMode -SyncBack $SyncBack -SkipPostInstallSetup:($Options['SkipPostInstallSetup'] -eq $true)
-Ensure-WslWritable -Name $DistroName
-Ensure-WhoamiShim -Name $DistroName
-
-# ========================================
-# Phase 4: Handler System Execution
-# ========================================
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 4: Handler System Execution" -ForegroundColor Cyan
+Write-Host "Phase 1: Handler System Execution" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -247,6 +180,12 @@ foreach ($key in $Options.Keys)
     $context.Options[$key] = $Options[$key]
 }
 
+# Add additional parameters for NixOSWSL handler
+$context.Options['ReleaseTag'] = $ReleaseTag
+$context.Options['PostInstallScript'] = $PostInstallScript
+$context.Options['SyncMode'] = $SyncMode
+$context.Options['SyncBack'] = $SyncBack
+
 # Load and execute handlers
 $handlersPath = Join-Path $PSScriptRoot "scripts\powershell\handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
@@ -254,11 +193,11 @@ $handlers = Select-SetupHandler -Handlers $handlers
 $results = Invoke-SetupHandler -Handlers $handlers -Context $context
 
 # ========================================
-# Phase 5: Final Processing
+# Phase 2: Final Processing
 # ========================================
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 5: Final Processing" -ForegroundColor Cyan
+Write-Host "Phase 2: Final Processing" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -276,7 +215,7 @@ if (Test-Path -LiteralPath $expandDockerVhd)
 }
 
 # ========================================
-# Phase 6: Summary
+# Phase 3: Summary
 # ========================================
 Show-SetupSummary -Results $results
 

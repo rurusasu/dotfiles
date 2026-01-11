@@ -25,52 +25,32 @@ BeforeAll {
 
 Describe 'PSScriptAnalyzer - 静的解析' {
     Context 'ライブラリファイル' {
-        It 'lib/SetupHandler.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\lib\SetupHandler.ps1" -Settings $settingsPath -Severity Error,Warning
-            $results | Should -BeNullOrEmpty
-        }
-
-        It 'lib/Invoke-ExternalCommand.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\lib\Invoke-ExternalCommand.ps1" -Settings $settingsPath -Severity Error,Warning
+        It 'should have no Error/Warning in <_>' -ForEach @(
+            "lib\SetupHandler.ps1",
+            "lib\Invoke-ExternalCommand.ps1"
+        ) {
+            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error,Warning
             $results | Should -BeNullOrEmpty
         }
     }
 
     Context 'ハンドラーファイル' {
-        It 'Handler.WslConfig.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\handlers\Handler.WslConfig.ps1" -Settings $settingsPath -Severity Error,Warning
+        It 'should have no Error/Warning in <_>' -ForEach @(
+            "handlers\Handler.WslConfig.ps1",
+            "handlers\Handler.Docker.ps1",
+            "handlers\Handler.VscodeServer.ps1",
+            "handlers\Handler.Chezmoi.ps1",
+            "handlers\Handler.Winget.ps1"
+        ) {
+            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error,Warning
             # TypeNotFound を除外（using module の制限）
-            $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
-            $results | Should -BeNullOrEmpty
-        }
-
-        It 'Handler.Docker.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\handlers\Handler.Docker.ps1" -Settings $settingsPath -Severity Error,Warning
-            $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
-            $results | Should -BeNullOrEmpty
-        }
-
-        It 'Handler.VscodeServer.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\handlers\Handler.VscodeServer.ps1" -Settings $settingsPath -Severity Error,Warning
-            $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
-            $results | Should -BeNullOrEmpty
-        }
-
-        It 'Handler.Chezmoi.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\handlers\Handler.Chezmoi.ps1" -Settings $settingsPath -Severity Error,Warning
-            $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
-            $results | Should -BeNullOrEmpty
-        }
-
-        It 'Handler.Winget.ps1 に Error/Warning レベルの問題がない' {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\handlers\Handler.Winget.ps1" -Settings $settingsPath -Severity Error,Warning
             $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
             $results | Should -BeNullOrEmpty
         }
     }
 
     Context '全体的なコード品質' {
-        It 'すべてのソースファイルに Critical な問題がない' {
+        It 'should have no Critical issues in all source files' {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error
@@ -90,7 +70,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             $allResults | Should -BeNullOrEmpty
         }
 
-        It 'プロジェクト全体で Error/Warning レベルの問題が 0 件' {
+        It 'should have 0 Error/Warning issues in the entire project' {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error,Warning
@@ -112,22 +92,17 @@ Describe 'PSScriptAnalyzer - 静的解析' {
     }
 
     Context 'ベストプラクティス' {
-        It 'すべてのハンドラーが CmdletBinding 属性を適切に使用している' {
-            # この例では、外部コマンドラッパーが [CmdletBinding()] を使用しているかチェック
+        It 'should have at least one CmdletBinding attribute in wrapper file' {
             $wrapperFile = "$projectRoot\lib\Invoke-ExternalCommand.ps1"
             $content = Get-Content -Raw $wrapperFile
-
-            # 関数定義の数をカウント
-            $functionCount = ([regex]::Matches($content, 'function\s+Invoke-\w+')).Count
 
             # [CmdletBinding()] の数をカウント
             $cmdletBindingCount = ([regex]::Matches($content, '\[CmdletBinding\(\)\]')).Count
 
-            # すべての関数が CmdletBinding を持つべき
             $cmdletBindingCount | Should -BeGreaterOrEqual 1
         }
 
-        It 'すべてのハンドラークラスが SetupHandlerBase を継承している' {
+        It 'should have all handler classes inherit from SetupHandlerBase' {
             $handlerFiles = Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1"
 
             foreach ($file in $handlerFiles) {
@@ -139,22 +114,24 @@ Describe 'PSScriptAnalyzer - 静的解析' {
 }
 
 Describe 'PSScriptAnalyzer - 設定ファイル' {
-    It 'PSScriptAnalyzerSettings.psd1 が存在する' {
+    It 'should exist at expected path' {
         Test-Path $settingsPath | Should -Be $true
     }
 
-    It 'PSScriptAnalyzerSettings.psd1 が有効な設定ファイルである' {
+    It 'should be a valid PowerShell data file' {
         { Import-PowerShellDataFile $settingsPath } | Should -Not -Throw
     }
 
-    It 'PSScriptAnalyzerSettings.psd1 に ExcludeRules が定義されている' {
+    It 'should have ExcludeRules defined' {
         $settings = Import-PowerShellDataFile $settingsPath
         $settings.ExcludeRules | Should -Not -BeNullOrEmpty
     }
 
-    It 'PSScriptAnalyzerSettings.psd1 に Severity が定義されている' {
+    It 'should have <severity> in Severity list' -ForEach @(
+        @{ severity = "Error" }
+        @{ severity = "Warning" }
+    ) {
         $settings = Import-PowerShellDataFile $settingsPath
-        $settings.Severity | Should -Contain 'Error'
-        $settings.Severity | Should -Contain 'Warning'
+        $settings.Severity | Should -Contain $severity
     }
 }

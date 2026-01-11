@@ -6,3 +6,9 @@ repos:
         entry: bash scripts/sh/treefmt.sh
         language: system
         pass_filenames: false
+      - id: powershell-tests
+        name: powershell tests
+        entry: pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
+        language: system
+        pass_filenames: false
+        types: [powershell]

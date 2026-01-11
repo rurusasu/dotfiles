@@ -38,6 +38,9 @@
           "PackageIdentifier": "OpenAI.ChatGPT"
         },
         {
+          "PackageIdentifier": "Python.Python.3.13"
+        },
+        {
           "PackageIdentifier": "OpenAI.ChatGPTCodex"
         },
         {

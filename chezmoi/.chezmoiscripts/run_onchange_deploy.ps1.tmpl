@@ -122,6 +122,45 @@ Deploy-File "$ChezmoiSource\llms\gemini\settings.json" "$HomeDir\.gemini\setting
 Deploy-File "$ChezmoiSource\ssh\config" "$HomeDir\.ssh\config"
 
 Write-Host ""
+Write-Host "Setting up pre-commit hooks..."
+
+# Install pre-commit via pip if Python is available but pre-commit is not
+if ((Get-Command python -ErrorAction SilentlyContinue) -and -not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing pre-commit via pip..."
+    try {
+        python -m pip install --user pre-commit 2>&1 | Out-Null
+        # Refresh PATH to find newly installed pre-commit
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
+        Write-Host "pre-commit installed successfully"
+    }
+    catch {
+        Write-Host "Error installing pre-commit: $_"
+    }
+}
+
+# Setup pre-commit in dotfiles repository
+$DotfilesRepo = Split-Path -Parent $ChezmoiSource
+if ((Test-Path "$DotfilesRepo\.pre-commit-config.yaml") -and (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+    Push-Location $DotfilesRepo
+    try {
+        pre-commit install
+        Write-Host "pre-commit hooks installed successfully"
+    }
+    catch {
+        Write-Host "Error installing pre-commit hooks: $_"
+    }
+    finally {
+        Pop-Location
+    }
+} else {
+    if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+        Write-Host "pre-commit not found, skipping hook installation (install Python first)"
+    } else {
+        Write-Host "No .pre-commit-config.yaml found in dotfiles repository"
+    }
+}
+
+Write-Host ""
 Write-Host "Installing editor extensions..."
 
 # Install VSCode extensions

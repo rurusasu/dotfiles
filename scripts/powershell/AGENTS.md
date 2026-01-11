@@ -179,12 +179,11 @@ cd scripts/powershell/tests
 **目的**: NixOS-WSL セットアップの自動化とハンドラーシステムの実装
 
 **主要コンポーネント**:
-- [install.ps1](../../install.ps1) - メインインストールスクリプト（293行、ハンドラーオーケストレーター）
+- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター）
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
-- [lib/InstallHelper.ps1](lib/InstallHelper.ps1) - インストール用ヘルパー関数（WSL管理、NixOS-WSLダウンロード等）
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
-- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（5個）
-- `tests/` - Pester v5 テストスイート（203 テスト、95%+ カバレッジ）
+- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（6個）
+- `tests/` - Pester v5 テストスイート（239 テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
 - [treefmt.toml](../../treefmt.toml) - 統一フォーマッター設定（PowerShell含む）
 
@@ -196,14 +195,14 @@ scripts/powershell/
 ├── PSScriptAnalyzerSettings.psd1 # PSScriptAnalyzer 設定（linting）
 ├── lib/                         # 共通ライブラリ
 │   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult + オーケストレーション関数
-│   ├── InstallHelper.ps1        # インストール用ヘルパー関数（WSL管理、NixOS-WSLダウンロード等）
 │   └── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
 ├── handlers/                    # セットアップハンドラー
+│   ├── Handler.NixOSWSL.ps1     # Order 5: NixOS-WSL インストール
 │   ├── Handler.WslConfig.ps1    # Order 10: WSL 設定・VHD 拡張
 │   ├── Handler.Docker.ps1       # Order 20: Docker Desktop 連携
 │   ├── Handler.VscodeServer.ps1 # Order 30: VS Code Server 管理
-│   ├── Handler.Chezmoi.ps1      # Order 100: dotfiles 適用
-│   └── Handler.Winget.ps1       # Order 90: winget パッケージ
+│   ├── Handler.Winget.ps1       # Order 90: winget パッケージ
+│   └── Handler.Chezmoi.ps1      # Order 100: dotfiles 適用
 ├── tests/                       # テストファイル
 │   ├── Invoke-Tests.ps1         # テストランナー（Pester v5 自動インストール）
 │   ├── Install.Tests.ps1        # オーケストレーション関数のテスト
@@ -211,7 +210,7 @@ scripts/powershell/
 │   ├── handlers/                # 各ハンドラーのテスト
 │   └── lib/                     # ライブラリのテスト
 
-../../install.ps1                # メインエントリーポイント（293行、簡素化済み）
+../../install.ps1                # メインエントリーポイント（簡素化済み）
 ../../treefmt.toml               # 統一フォーマッター設定（PowerShell含む）
 ../../docs/scripts/powershell/   # 詳細ドキュメント（このファイルから参照）
 ```
@@ -220,6 +219,7 @@ scripts/powershell/
 
 | Order | ハンドラー | ファイル | 説明 |
 |-------|-----------|---------|------|
+| 5 | NixOSWSL | Handler.NixOSWSL.ps1 | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
 | 10 | WslConfig | Handler.WslConfig.ps1 | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
 | 20 | Docker | Handler.Docker.ps1 | Docker Desktop WSL 連携、docker-desktop distro 作成 |
 | 30 | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール |

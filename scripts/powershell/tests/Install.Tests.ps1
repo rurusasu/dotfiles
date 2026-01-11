@@ -24,13 +24,13 @@ Describe 'Get-SetupHandler' {
         New-Item -ItemType Directory -Path $testHandlersPath -Force | Out-Null
     }
 
-    It '空のディレクトリの場合は空配列を返す' {
+    It 'should return empty array for empty directory' {
         $result = Get-SetupHandler -HandlersPath $testHandlersPath
 
         $result | Should -HaveCount 0
     }
 
-    It 'Handler.*.ps1 パターンにマッチするファイルをロードする' {
+    It 'should load files matching Handler.*.ps1 pattern' {
         # テスト用ハンドラーを作成
         $testHandler = @'
 class TestHandler : SetupHandlerBase {
@@ -50,7 +50,7 @@ class TestHandler : SetupHandlerBase {
         $result[0].Name | Should -Be "Test"
     }
 
-    It 'パターンにマッチしないファイルは無視する' {
+    It 'should ignore files not matching pattern' {
         Set-Content -Path (Join-Path $testHandlersPath "NotAHandler.ps1") -Value "# not a handler"
 
         $result = Get-SetupHandler -HandlersPath $testHandlersPath
@@ -59,7 +59,7 @@ class TestHandler : SetupHandlerBase {
         $result.Name | Should -Not -Contain "NotAHandler"
     }
 
-    It '不正なハンドラーファイルは警告を出してスキップする' {
+    It 'should warn and skip invalid handler files' {
         $invalidHandler = "invalid powershell syntax {{{"
         Set-Content -Path (Join-Path $testHandlersPath "Handler.Invalid.ps1") -Value $invalidHandler
         Mock Write-Warning { }
@@ -70,7 +70,7 @@ class TestHandler : SetupHandlerBase {
         $result.Name | Should -Not -Contain "Invalid"
     }
 
-    It '存在しないディレクトリの場合は空配列を返す' {
+    It 'should return empty array for non-existent directory' {
         $result = Get-SetupHandler -HandlersPath "C:\NonExistent\Path"
 
         $result | Should -HaveCount 0
@@ -78,7 +78,7 @@ class TestHandler : SetupHandlerBase {
 }
 
 Describe 'Select-SetupHandler' {
-    It 'Order の昇順でソートする' {
+    It 'should sort handlers by Order in ascending order' {
         # PSCustomObject を使用してハンドラーをシミュレート
         $handlers = @(
             [PSCustomObject]@{ Name = "Third"; Order = 30 },
@@ -93,7 +93,7 @@ Describe 'Select-SetupHandler' {
         $sorted[2].Name | Should -Be "Third"
     }
 
-    It '同じ Order の場合は元の順序を維持する' {
+    It 'should maintain original order for same Order value (stable sort)' {
         $handlers = @(
             [PSCustomObject]@{ Name = "B"; Order = 50 },
             [PSCustomObject]@{ Name = "A"; Order = 50 },
@@ -108,7 +108,7 @@ Describe 'Select-SetupHandler' {
         $sorted[2].Name | Should -Be "C"
     }
 
-    It '空配列の場合は空の結果を返す' {
+    It 'should return empty result for empty array' {
         # 空配列は Sort-Object でそのまま通過する
         $emptyArray = @() | Sort-Object Order
         @($emptyArray).Count | Should -Be 0
@@ -126,7 +126,7 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    It 'スキップリストに含まれるハンドラーは実行しない' {
+    It 'should skip handlers in skip list' {
         $handler = [ChezmoiHandler]::new()
 
         $results = Invoke-SetupHandler -Handlers @($handler) -Context $ctx -SkipHandlers @("Chezmoi")
@@ -143,33 +143,27 @@ Describe 'Show-SetupSummary' {
         Mock Write-Host { }
     }
 
-    It '成功結果は緑色で ✓ と表示する' {
+    It 'should display <status> result with <symbol> in <color>' -ForEach @(
+        @{ status = "success"; symbol = "✓"; color = "Green"; success = $true; message = "完了" }
+        @{ status = "failure"; symbol = "✗"; color = "Red"; success = $false; message = "エラー" }
+    ) {
         $results = @(
-            [SetupResult]::CreateSuccess("Handler1", "完了")
+            if ($success) {
+                [SetupResult]::CreateSuccess("TestHandler", $message)
+            } else {
+                [SetupResult]::CreateFailure("TestHandler", $message)
+            }
         )
 
         Show-SetupSummary -Results $results
 
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[✓\].*Handler1" -and
-            $ForegroundColor -eq "Green"
+            $Object -match "\[$symbol\].*TestHandler" -and
+            $ForegroundColor -eq $color
         }
     }
 
-    It '失敗結果は赤色で ✗ と表示する' {
-        $results = @(
-            [SetupResult]::CreateFailure("Handler2", "エラー")
-        )
-
-        Show-SetupSummary -Results $results
-
-        Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[✗\].*Handler2" -and
-            $ForegroundColor -eq "Red"
-        }
-    }
-
-    It 'Summary ヘッダーを表示する' {
+    It 'should display Summary header' {
         # 空でない結果でテスト
         $results = @(
             [SetupResult]::CreateSuccess("TestHandler", "テスト")
@@ -182,7 +176,7 @@ Describe 'Show-SetupSummary' {
         }
     }
 
-    It '複数の結果を表示する' {
+    It 'should display multiple results' {
         $results = @(
             [SetupResult]::CreateSuccess("Handler1", "成功1"),
             [SetupResult]::CreateFailure("Handler2", "失敗1"),
