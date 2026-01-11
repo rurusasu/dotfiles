@@ -2,8 +2,8 @@
 command = "nixfmt"
 includes = ["*.nix"]
 
-[formatter.prettier]
-command = "prettier"
+[formatter.oxfmt]
+command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml", "*.md"]
 

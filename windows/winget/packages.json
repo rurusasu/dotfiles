@@ -1,83 +1,72 @@
 {
-	"$schema" : "https://aka.ms/winget-packages.schema.2.0.json",
-	"CreationDate" : "2026-01-03T11:32:47.820-00:00",
-	"Sources" :
-	[
-		{
-			"Packages" :
-			[
-				{
-					"PackageIdentifier" : "twpayne.chezmoi"
-				},
-				{
-					"PackageIdentifier" : "Google.AndroidStudio"
-				},
-				{
-					"PackageIdentifier" : "Docker.DockerDesktop"
-				},
-				{
-					"PackageIdentifier" : "Git.Git"
-				},
-				{
-					"PackageIdentifier" : "TablePlus.TablePlus"
-				},
-				{
-					"PackageIdentifier" : "Anthropic.Claude"
-				},
-				{
-					"PackageIdentifier" : "Microsoft.VisualStudioCode.Insiders"
-				},
-				{
-					"PackageIdentifier" : "ZedIndustries.Zed"
-				},
-				{
-					"PackageIdentifier" : "Anysphere.Cursor"
-				},
-				{
-					"PackageIdentifier" : "Microsoft.WindowsTerminal"
-				},
-				{
-					"PackageIdentifier" : "Microsoft.WSL"
-				}
-			],
-			"SourceDetails" :
-			{
-				"Argument" : "https://cdn.winget.microsoft.com/cache",
-				"Identifier" : "Microsoft.Winget.Source_8wekyb3d8bbwe",
-				"Name" : "winget",
-				"Type" : "Microsoft.PreIndexed.Package"
-			}
-		},
-		{
-			"Packages" :
-			[
-				{
-					"PackageIdentifier" : "XP8BT8DW290MPQ"
-				},
-				{
-					"PackageIdentifier" : "XPDP1CDRK42FHJ"
-				},
-				{
-					"PackageIdentifier" : "XPDC2RH70K22MN"
-				},
-				{
-					"PackageIdentifier" : "XPFCC4CD725961"
-				},
-				{
-					"PackageIdentifier" : "XP89DCGQ3K6VLD"
-				},
-				{
-					"PackageIdentifier" : "9MZ1SNWT0N5D"
-				}
-			],
-			"SourceDetails" :
-			{
-				"Argument" : "https://storeedgefd.dsx.mp.microsoft.com/v9.0",
-				"Identifier" : "StoreEdgeFD",
-				"Name" : "msstore",
-				"Type" : "Microsoft.Rest"
-			}
-		}
-	],
-	"WinGetVersion" : "1.12.440"
+  "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
+  "CreationDate": "2026-01-03T11:32:47.820-00:00",
+  "Sources": [
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "twpayne.chezmoi"
+        },
+        {
+          "PackageIdentifier": "Docker.DockerDesktop"
+        },
+        {
+          "PackageIdentifier": "Git.Git"
+        },
+        {
+          "PackageIdentifier": "TablePlus.TablePlus"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudioCode.Insiders"
+        },
+        {
+          "PackageIdentifier": "ZedIndustries.Zed"
+        },
+        {
+          "PackageIdentifier": "Anysphere.Cursor"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsTerminal"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WSL"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://cdn.winget.microsoft.com/cache",
+        "Identifier": "Microsoft.Winget.Source_8wekyb3d8bbwe",
+        "Name": "winget",
+        "Type": "Microsoft.PreIndexed.Package"
+      }
+    },
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "XP8BT8DW290MPQ"
+        },
+        {
+          "PackageIdentifier": "XPDP1CDRK42FHJ"
+        },
+        {
+          "PackageIdentifier": "XPDC2RH70K22MN"
+        },
+        {
+          "PackageIdentifier": "XPFCC4CD725961"
+        },
+        {
+          "PackageIdentifier": "XP89DCGQ3K6VLD"
+        },
+        {
+          "PackageIdentifier": "9MZ1SNWT0N5D"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://storeedgefd.dsx.mp.microsoft.com/v9.0",
+        "Identifier": "StoreEdgeFD",
+        "Name": "msstore",
+        "Type": "Microsoft.Rest"
+      }
+    }
+  ],
+  "WinGetVersion": "1.12.440"
 }
