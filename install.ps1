@@ -35,33 +35,6 @@
 .PARAMETER SyncBack
     Post-install スクリプトの --sync-back オプション（デフォルト: lock）
 
-.PARAMETER SkipWslBaseInstall
-    [非推奨] WSL 基盤インストールをスキップ（-Options で指定してください）
-
-.PARAMETER SkipPostInstallSetup
-    [非推奨] Post-install セットアップをスキップ（-Options で指定してください）
-
-.PARAMETER SkipSetDefaultDistro
-    [非推奨] デフォルトディストリビューション設定をスキップ（-Options で指定してください）
-
-.PARAMETER DockerIntegrationRetries
-    [非推奨] Docker Desktop 連携のリトライ回数（-Options で指定してください）
-
-.PARAMETER DockerIntegrationRetryDelaySeconds
-    [非推奨] Docker Desktop 連携のリトライ間隔（-Options で指定してください）
-
-.PARAMETER SkipWslConfigApply
-    [非推奨] .wslconfig 適用をスキップ（-Options で指定してください）
-
-.PARAMETER SkipVhdExpand
-    [非推奨] VHD 拡張をスキップ（-Options で指定してください）
-
-.PARAMETER SkipVscodeServerClean
-    [非推奨] VS Code Server キャッシュ削除をスキップ（-Options で指定してください）
-
-.PARAMETER SkipVscodeServerPreinstall
-    [非推奨] VS Code Server 事前インストールをスキップ（-Options で指定してください）
-
 .EXAMPLE
     .\install.ps1
 
@@ -82,18 +55,7 @@ param(
     [ValidateSet("link", "repo", "nix", "none")]
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
-    [string]$SyncBack = "lock",
-
-    # Deprecated parameters (backward compatibility)
-    [switch]$SkipWslBaseInstall,
-    [switch]$SkipPostInstallSetup,
-    [switch]$SkipSetDefaultDistro,
-    [int]$DockerIntegrationRetries = -1,
-    [int]$DockerIntegrationRetryDelaySeconds = -1,
-    [switch]$SkipWslConfigApply,
-    [switch]$SkipVhdExpand,
-    [switch]$SkipVscodeServerClean,
-    [switch]$SkipVscodeServerPreinstall
+    [string]$SyncBack = "lock"
 )
 
 Set-StrictMode -Version Latest
@@ -107,54 +69,8 @@ $libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 
 # ========================================
-# Backward Compatibility Layer
+# Parameter Initialization
 # ========================================
-if ($PSBoundParameters.ContainsKey('SkipWslBaseInstall'))
-{
-    Write-Warning "-SkipWslBaseInstall is deprecated. Use -Options @{ SkipWslBaseInstall = `$true } instead."
-    $Options['SkipWslBaseInstall'] = $SkipWslBaseInstall.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('SkipPostInstallSetup'))
-{
-    Write-Warning "-SkipPostInstallSetup is deprecated. Use -Options @{ SkipPostInstallSetup = `$true } instead."
-    $Options['SkipPostInstallSetup'] = $SkipPostInstallSetup.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('SkipSetDefaultDistro'))
-{
-    Write-Warning "-SkipSetDefaultDistro is deprecated. Use -Options @{ SkipSetDefaultDistro = `$true } instead."
-    $Options['SkipSetDefaultDistro'] = $SkipSetDefaultDistro.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('DockerIntegrationRetries') -and $DockerIntegrationRetries -ge 0)
-{
-    Write-Warning "-DockerIntegrationRetries is deprecated. Use -Options @{ DockerIntegrationRetries = N } instead."
-    $Options['DockerIntegrationRetries'] = $DockerIntegrationRetries
-}
-if ($PSBoundParameters.ContainsKey('DockerIntegrationRetryDelaySeconds') -and $DockerIntegrationRetryDelaySeconds -ge 0)
-{
-    Write-Warning "-DockerIntegrationRetryDelaySeconds is deprecated. Use -Options @{ DockerIntegrationRetryDelaySeconds = N } instead."
-    $Options['DockerIntegrationRetryDelaySeconds'] = $DockerIntegrationRetryDelaySeconds
-}
-if ($PSBoundParameters.ContainsKey('SkipWslConfigApply'))
-{
-    Write-Warning "-SkipWslConfigApply is deprecated. Use -Options @{ SkipWslConfigApply = `$true } instead."
-    $Options['SkipWslConfigApply'] = $SkipWslConfigApply.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('SkipVhdExpand'))
-{
-    Write-Warning "-SkipVhdExpand is deprecated. Use -Options @{ SkipVhdExpand = `$true } instead."
-    $Options['SkipVhdExpand'] = $SkipVhdExpand.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('SkipVscodeServerClean'))
-{
-    Write-Warning "-SkipVscodeServerClean is deprecated. Use -Options @{ SkipVscodeServerClean = `$true } instead."
-    $Options['SkipVscodeServerClean'] = $SkipVscodeServerClean.IsPresent
-}
-if ($PSBoundParameters.ContainsKey('SkipVscodeServerPreinstall'))
-{
-    Write-Warning "-SkipVscodeServerPreinstall is deprecated. Use -Options @{ SkipVscodeServerPreinstall = `$true } instead."
-    $Options['SkipVscodeServerPreinstall'] = $SkipVscodeServerPreinstall.IsPresent
-}
-
 # Set default PostInstallScript if not provided
 if (-not $PSBoundParameters.ContainsKey("PostInstallScript"))
 {
