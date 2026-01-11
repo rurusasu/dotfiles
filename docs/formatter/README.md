@@ -4,15 +4,15 @@
 
 ## 概要
 
-| 言語/形式 | フォーマッター | 設定ファイル |
-|----------|--------------|-------------|
-| Nix | [nixfmt](https://github.com/serokell/nixfmt) | - |
-| JSON/YAML | [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) | [.oxfmtrc.json](../../.oxfmtrc.json) |
-| Shell | [shfmt](https://github.com/mvdan/shfmt) | - |
+| 言語/形式  | フォーマッター                                                     | 設定ファイル                                                                            |
+| ---------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Nix        | [nixfmt](https://github.com/serokell/nixfmt)                       | -                                                                                       |
+| JSON/YAML  | [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)            | [.oxfmtrc.json](../../.oxfmtrc.json)                                                    |
+| Shell      | [shfmt](https://github.com/mvdan/shfmt)                            | -                                                                                       |
 | PowerShell | [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer) | [PSScriptAnalyzerSettings.psd1](../../scripts/powershell/PSScriptAnalyzerSettings.psd1) |
-| TOML | [taplo](https://taplo.tamasfe.dev/) | [.taplo.toml](../../.taplo.toml) |
-| Lua | [StyLua](https://github.com/JohnnyMorganz/StyLua) | [stylua.toml](../../stylua.toml) |
-| Markdown | [dprint](https://dprint.dev/) | [dprint.json](../../dprint.json) |
+| TOML       | [taplo](https://taplo.tamasfe.dev/)                                | [.taplo.toml](../../.taplo.toml)                                                        |
+| Lua        | [StyLua](https://github.com/JohnnyMorganz/StyLua)                  | [stylua.toml](../../stylua.toml)                                                        |
+| Markdown   | [dprint](https://dprint.dev/)                                      | [dprint.json](../../dprint.json)                                                        |
 
 ## 設定ファイル
 
@@ -35,16 +35,16 @@
 
 ### VSCode / Cursor
 
-| フォーマッター | 拡張機能 ID |
-|--------------|------------|
-| treefmt | `ibecker.treefmt-vscode` |
-| Nix | `jnoortheen.nix-ide` |
-| TOML | `tamasfe.even-better-toml` |
-| Markdown | `dprint.dprint` |
-| Lua | `JohnnyMorganz.stylua` |
-| PowerShell | `ms-vscode.powershell` |
-| JSON/YAML | `oxc.oxc-vscode` |
-| Shell | `foxundermoon.shell-format` |
+| フォーマッター | 拡張機能 ID                 |
+| -------------- | --------------------------- |
+| treefmt        | `ibecker.treefmt-vscode`    |
+| Nix            | `jnoortheen.nix-ide`        |
+| TOML           | `tamasfe.even-better-toml`  |
+| Markdown       | `dprint.dprint`             |
+| Lua            | `JohnnyMorganz.stylua`      |
+| PowerShell     | `ms-vscode.powershell`      |
+| JSON/YAML      | `oxc.oxc-vscode`            |
+| Shell          | `foxundermoon.shell-format` |
 
 ### Zed
 

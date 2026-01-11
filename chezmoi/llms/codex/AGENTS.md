@@ -9,6 +9,7 @@ This directory contains OpenAI Codex CLI configuration.
 ## Settings
 
 Key configuration options:
+
 - Model preferences
 - API settings
 - Output formatting

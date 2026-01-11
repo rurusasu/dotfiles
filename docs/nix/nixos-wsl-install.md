@@ -23,16 +23,19 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1
 ## よく使うオプション
 
 - 既存の WSL 基盤を使いたい (WSL の有効化をスキップ)
+
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SkipWslBaseInstall
 ```
 
 - チャンネル更新と再構成をスキップ
+
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -SkipChannelUpdate
 ```
 
 - ディストリ名とインストール先を指定
+
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\install-nixos-wsl.ps1 -DistroName NixOS -InstallDir "$env:USERPROFILE\NixOS"
 ```
@@ -94,6 +97,7 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 ```
 
 生成される主なファイル:
+
 - `~/.dotfiles/nix/profiles/home/common.nix`
 - `~/.dotfiles/nix/home/wsl/default.nix`
 - `~/.dotfiles/nix/home/users/<USER>.nix`

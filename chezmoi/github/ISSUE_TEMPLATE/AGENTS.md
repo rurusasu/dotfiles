@@ -14,5 +14,6 @@ These templates use GitHub's YAML form syntax for structured input, providing a 
 ## Customization
 
 Add additional templates as needed:
+
 - `question.yml` - For questions/discussions
 - `documentation.yml` - For documentation requests

@@ -34,74 +34,74 @@ SYNC_BACK=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --user)
-      USER_NAME="${2:-}"
-      shift 2
-      ;;
-    --repo-dir)
-      REPO_DIR="${2:-}"
-      shift 2
-      ;;
-    --flake-name)
-      FLAKE_NAME="${2:-}"
-      shift 2
-      ;;
-    --hostname)
-      HOSTNAME="${2:-}"
-      shift 2
-      ;;
-    --sync-mode)
-      SYNC_MODE="${2:-}"
-      shift 2
-      ;;
-    --sync-source)
-      SYNC_SOURCE="${2:-}"
-      shift 2
-      ;;
-    --sync-back)
-      SYNC_BACK="${2:-}"
-      shift 2
-      ;;
-    --force)
-      FORCE=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
+  --user)
+    USER_NAME="${2:-}"
+    shift 2
+    ;;
+  --repo-dir)
+    REPO_DIR="${2:-}"
+    shift 2
+    ;;
+  --flake-name)
+    FLAKE_NAME="${2:-}"
+    shift 2
+    ;;
+  --hostname)
+    HOSTNAME="${2:-}"
+    shift 2
+    ;;
+  --sync-mode)
+    SYNC_MODE="${2:-}"
+    shift 2
+    ;;
+  --sync-source)
+    SYNC_SOURCE="${2:-}"
+    shift 2
+    ;;
+  --sync-back)
+    SYNC_BACK="${2:-}"
+    shift 2
+    ;;
+  --force)
+    FORCE=1
+    shift
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown option: $1" >&2
+    usage >&2
+    exit 1
+    ;;
   esac
 done
 
-if [[ -z "$USER_NAME" ]]; then
+if [[ -z $USER_NAME ]]; then
   USER_NAME="$(getent passwd 1000 | cut -d: -f1 || true)"
-  if [[ -z "$USER_NAME" ]]; then
+  if [[ -z $USER_NAME ]]; then
     USER_NAME="$(getent passwd | awk -F: '$3>=1000 && $1!="nobody"{print $1; exit}')"
   fi
-  if [[ -z "$USER_NAME" ]]; then
+  if [[ -z $USER_NAME ]]; then
     echo "Could not detect a non-root user. Use --user." >&2
     exit 1
   fi
 fi
 
-if [[ -z "$REPO_DIR" ]]; then
+if [[ -z $REPO_DIR ]]; then
   REPO_DIR="/home/$USER_NAME/.dotfiles"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-if [[ -z "$SYNC_SOURCE" ]]; then
+if [[ -z $SYNC_SOURCE ]]; then
   SYNC_SOURCE="$SOURCE_ROOT"
 fi
-if [[ -z "$SYNC_BACK" ]]; then
-  if [[ "$SYNC_MODE" == "link" ]]; then
+if [[ -z $SYNC_BACK ]]; then
+  if [[ $SYNC_MODE == "link" ]]; then
     SYNC_BACK="lock"
-  elif [[ "$SYNC_MODE" == "repo" ]]; then
+  elif [[ $SYNC_MODE == "repo" ]]; then
     SYNC_BACK="repo"
   else
     SYNC_BACK="none"
@@ -109,16 +109,16 @@ if [[ -z "$SYNC_BACK" ]]; then
 fi
 
 # Handle sync mode
-if [[ "$SYNC_MODE" == "link" ]]; then
+if [[ $SYNC_MODE == "link" ]]; then
   # Create symlink to Windows-side dotfiles
-  if [[ ! -d "$SYNC_SOURCE" ]]; then
+  if [[ ! -d $SYNC_SOURCE ]]; then
     echo "Sync source not found: $SYNC_SOURCE" >&2
     exit 1
   fi
 
   # Remove existing REPO_DIR if it's a directory or file (not symlink)
-  if [[ -e "$REPO_DIR" && ! -L "$REPO_DIR" ]]; then
-    if [[ "$FORCE" -eq 0 ]]; then
+  if [[ -e $REPO_DIR && ! -L $REPO_DIR ]]; then
+    if [[ $FORCE -eq 0 ]]; then
       echo "Repo dir exists and is not a symlink: $REPO_DIR" >&2
       echo "Pass --force to remove it and create symlink." >&2
       exit 1
@@ -127,15 +127,15 @@ if [[ "$SYNC_MODE" == "link" ]]; then
   fi
 
   # Remove existing symlink if pointing elsewhere
-  if [[ -L "$REPO_DIR" ]]; then
+  if [[ -L $REPO_DIR ]]; then
     CURRENT_TARGET="$(readlink -f "$REPO_DIR" 2>/dev/null || true)"
-    if [[ "$CURRENT_TARGET" != "$SYNC_SOURCE" ]]; then
+    if [[ $CURRENT_TARGET != "$SYNC_SOURCE" ]]; then
       rm -f "$REPO_DIR"
     fi
   fi
 
   # Create symlink
-  if [[ ! -e "$REPO_DIR" ]]; then
+  if [[ ! -e $REPO_DIR ]]; then
     ln -s "$SYNC_SOURCE" "$REPO_DIR"
     echo "Created symlink: $REPO_DIR -> $SYNC_SOURCE"
   else
@@ -147,8 +147,8 @@ if [[ "$SYNC_MODE" == "link" ]]; then
     chown -h "$USER_NAME" "$REPO_DIR" 2>/dev/null || true
   fi
 
-elif [[ "$SYNC_MODE" == "repo" ]]; then
-  if [[ -e "$REPO_DIR" && "$FORCE" -eq 0 ]]; then
+elif [[ $SYNC_MODE == "repo" ]]; then
+  if [[ -e $REPO_DIR && $FORCE -eq 0 ]]; then
     if [[ -n "$(ls -A "$REPO_DIR" 2>/dev/null)" ]]; then
       echo "Repo dir is not empty: $REPO_DIR" >&2
       echo "Move it or pass --force to continue." >&2
@@ -158,7 +158,7 @@ elif [[ "$SYNC_MODE" == "repo" ]]; then
 
   mkdir -p "$REPO_DIR"
 
-  if [[ ! -d "$SYNC_SOURCE" ]]; then
+  if [[ ! -d $SYNC_SOURCE ]]; then
     echo "Sync source not found: $SYNC_SOURCE" >&2
     exit 1
   fi
@@ -170,43 +170,43 @@ elif [[ "$SYNC_MODE" == "repo" ]]; then
 
   if id "$USER_NAME" >/dev/null 2>&1; then
     USER_GROUP="$(id -gn "$USER_NAME" 2>/dev/null || true)"
-    if [[ -n "$USER_GROUP" ]]; then
+    if [[ -n $USER_GROUP ]]; then
       chown -R "$USER_NAME:$USER_GROUP" "$REPO_DIR"
     else
       chown -R "$USER_NAME" "$REPO_DIR"
     fi
   fi
 
-elif [[ "$SYNC_MODE" == "nix" ]]; then
+elif [[ $SYNC_MODE == "nix" ]]; then
   mkdir -p "$REPO_DIR"
   if [[ -d "$SOURCE_ROOT/nix" ]]; then
     mkdir -p "$REPO_DIR/nix"
     cp -a "$SOURCE_ROOT/nix/." "$REPO_DIR/nix/"
   fi
 
-elif [[ "$SYNC_MODE" != "none" ]]; then
+elif [[ $SYNC_MODE != "none" ]]; then
   echo "Unknown sync mode: $SYNC_MODE" >&2
   exit 1
 fi
 
 # For link mode, use SYNC_SOURCE directly for file generation
 # For other modes, use REPO_DIR
-if [[ "$SYNC_MODE" == "link" ]]; then
+if [[ $SYNC_MODE == "link" ]]; then
   TARGET_DIR="$SYNC_SOURCE"
 else
   TARGET_DIR="$REPO_DIR"
 fi
 
 case "$(uname -m)" in
-  x86_64)
-    SYSTEM="x86_64-linux"
-    ;;
-  aarch64|arm64)
-    SYSTEM="aarch64-linux"
-    ;;
-  *)
-    SYSTEM="x86_64-linux"
-    ;;
+x86_64)
+  SYSTEM="x86_64-linux"
+  ;;
+aarch64 | arm64)
+  SYSTEM="aarch64-linux"
+  ;;
+*)
+  SYSTEM="x86_64-linux"
+  ;;
 esac
 
 NIX_DIR="$TARGET_DIR/nix"
@@ -224,8 +224,8 @@ HOST_CONFIG_PATH="$HOST_DIR/configuration.nix"
 HOST_HW_PATH="$HOST_DIR/hardware-configuration.nix"
 
 # Only generate files if they don't exist (preserve existing configurations)
-if [[ ! -f "$USER_HOME_PATH" ]]; then
-  cat > "$USER_HOME_PATH" <<EOF
+if [[ ! -f $USER_HOME_PATH ]]; then
+  cat >"$USER_HOME_PATH" <<EOF
 { config, pkgs, ... }:
 {
   home.username = "$USER_NAME";
@@ -237,8 +237,8 @@ else
   echo "Skipping (exists): $USER_HOME_PATH"
 fi
 
-if [[ ! -f "$HOST_HOME_PATH" ]]; then
-  cat > "$HOST_HOME_PATH" <<EOF
+if [[ ! -f $HOST_HOME_PATH ]]; then
+  cat >"$HOST_HOME_PATH" <<EOF
 { config, pkgs, ... }:
 {
   imports = [
@@ -252,8 +252,8 @@ else
   echo "Skipping (exists): $HOST_HOME_PATH"
 fi
 
-if [[ ! -f "$HOST_DEFAULT_PATH" ]]; then
-  cat > "$HOST_DEFAULT_PATH" <<EOF
+if [[ ! -f $HOST_DEFAULT_PATH ]]; then
+  cat >"$HOST_DEFAULT_PATH" <<EOF
 { config, inputs, pkgs, ... }:
 {
   imports = [
@@ -280,7 +280,7 @@ else
   echo "Skipping (exists): $HOST_DEFAULT_PATH"
 fi
 
-if [[ ! -f "$HOST_CONFIG_PATH" ]]; then
+if [[ ! -f $HOST_CONFIG_PATH ]]; then
   if [[ -f /etc/nixos/configuration.nix ]]; then
     cp -f /etc/nixos/configuration.nix "$HOST_CONFIG_PATH"
     sed -i '\|<nixos-wsl/modules>|d' "$HOST_CONFIG_PATH"
@@ -295,7 +295,7 @@ else
   echo "Skipping (exists): $HOST_CONFIG_PATH"
 fi
 
-if [[ ! -f "$HOST_HW_PATH" ]]; then
+if [[ ! -f $HOST_HW_PATH ]]; then
   if [[ -f /etc/nixos/hardware-configuration.nix ]]; then
     cp -f /etc/nixos/hardware-configuration.nix "$HOST_HW_PATH"
     echo "Created: $HOST_HW_PATH"
@@ -309,24 +309,24 @@ NIX_CONFIG="experimental-features = nix-command flakes" \
   nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME"
 
 # Handle sync-back
-if [[ "$SYNC_BACK" == "repo" && "$SYNC_MODE" != "link" ]]; then
+if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete --exclude ".git" --exclude ".direnv" --exclude "result" "$REPO_DIR/" "$SYNC_SOURCE/"
   else
     (cd "$REPO_DIR" && tar --exclude ".git" --exclude ".direnv" --exclude "result" -cf - .) | (cd "$SYNC_SOURCE" && tar -xf -)
   fi
-elif [[ "$SYNC_BACK" == "lock" ]]; then
+elif [[ $SYNC_BACK == "lock" ]]; then
   # For link mode, flake.lock is already in SYNC_SOURCE
-  if [[ "$SYNC_MODE" != "link" && -f "$REPO_DIR/flake.lock" ]]; then
+  if [[ $SYNC_MODE != "link" && -f "$REPO_DIR/flake.lock" ]]; then
     cp -f "$REPO_DIR/flake.lock" "$SYNC_SOURCE/flake.lock"
   fi
-elif [[ "$SYNC_BACK" != "none" ]]; then
+elif [[ $SYNC_BACK != "none" ]]; then
   echo "Unknown sync-back mode: $SYNC_BACK" >&2
   exit 1
 fi
 
 # Git setup (only for non-link mode, link mode uses Windows git)
-if [[ "$SYNC_MODE" != "link" ]]; then
+if [[ $SYNC_MODE != "link" ]]; then
   if command -v git >/dev/null 2>&1; then
     git -C "$REPO_DIR" init
     git config --global --add safe.directory "$REPO_DIR"

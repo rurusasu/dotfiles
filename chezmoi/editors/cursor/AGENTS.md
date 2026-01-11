@@ -4,21 +4,23 @@ Cursor is an AI-powered code editor (VS Code fork).
 
 ## Files
 
-| File | Deployed To | Purpose |
-|------|-------------|---------|
-| `settings.json` | `~/.config/Cursor/User/` or `%APPDATA%/Cursor/User/` | Editor settings |
-| `keybindings.json` | Same as above | Custom keybindings |
-| `extensions.json` | N/A (used by script) | Extension list |
+| File               | Deployed To                                          | Purpose            |
+| ------------------ | ---------------------------------------------------- | ------------------ |
+| `settings.json`    | `~/.config/Cursor/User/` or `%APPDATA%/Cursor/User/` | Editor settings    |
+| `keybindings.json` | Same as above                                        | Custom keybindings |
+| `extensions.json`  | N/A (used by script)                                 | Extension list     |
 
 ## Configuration
 
 Cursor uses the same configuration format as VS Code. Settings are largely identical with Cursor-specific additions:
+
 - `cursor.cpp.disabledLanguages`: []
 - `cursor.general.enableShadowWorkspace`: true
 
 ## Settings
 
 Inherited from VS Code configuration:
+
 - Vim mode with relative line numbers
 - Format on save
 - Prettier/Ruff formatters

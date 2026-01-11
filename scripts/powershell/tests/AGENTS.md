@@ -37,12 +37,12 @@ Invoke-Pester -Path .\tests\handlers\Handler.Docker.Tests.ps1
 
 以下のコードはユニットテストでカバー不可能です（外部コマンド/ファイルシステム操作）：
 
-| ファイル | 行 | コード | 理由 |
-|----------|-----|--------|------|
-| `lib/Invoke-ExternalCommand.ps1` | 53 | `if ($ExePath)` | 外部exe呼び出しの分岐判定 |
-| `lib/Invoke-ExternalCommand.ps1` | 54 | `& $ExePath @Arguments` | 指定パスの chezmoi.exe 実行 |
-| `lib/Invoke-ExternalCommand.ps1` | 56 | `& chezmoi @Arguments` | PATH 内の chezmoi 実行 |
-| `lib/Invoke-ExternalCommand.ps1` | 101 | `Set-Content ... -NoNewline` | 実際のファイル書き込み |
+| ファイル                         | 行  | コード                       | 理由                        |
+| -------------------------------- | --- | ---------------------------- | --------------------------- |
+| `lib/Invoke-ExternalCommand.ps1` | 53  | `if ($ExePath)`              | 外部exe呼び出しの分岐判定   |
+| `lib/Invoke-ExternalCommand.ps1` | 54  | `& $ExePath @Arguments`      | 指定パスの chezmoi.exe 実行 |
+| `lib/Invoke-ExternalCommand.ps1` | 56  | `& chezmoi @Arguments`       | PATH 内の chezmoi 実行      |
+| `lib/Invoke-ExternalCommand.ps1` | 101 | `Set-Content ... -NoNewline` | 実際のファイル書き込み      |
 
 これらは**統合テスト**でのみカバー可能です。
 

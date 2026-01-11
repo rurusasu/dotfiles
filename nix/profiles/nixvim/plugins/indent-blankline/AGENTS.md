@@ -4,19 +4,19 @@ Purpose: indent-blankline indentation guides configuration.
 
 ## Nixvim Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | bool | false | Enable indent-blankline |
-| `package` | package | pkgs.vimPlugins.indent-blankline-nvim | Package |
-| `autoLoad` | bool | true | Auto load on startup |
-| `settings` | attrs | {} | Options for `require('ibl').setup` |
-| `settings.indent.char` | string | "│" | Indent guide character |
-| `settings.indent.highlight` | string/list | nil | Highlight group(s) |
-| `settings.indent.priority` | int | 1 | Virtual text priority |
-| `settings.whitespace.remove_blankline_trail` | bool | true | Remove trailing whitespace |
-| `settings.scope.enabled` | bool | true | Enable scope highlighting |
-| `settings.scope.show_start` | bool | true | Show scope start |
-| `settings.scope.show_end` | bool | false | Show scope end |
+| Option                                       | Type        | Default                               | Description                        |
+| -------------------------------------------- | ----------- | ------------------------------------- | ---------------------------------- |
+| `enable`                                     | bool        | false                                 | Enable indent-blankline            |
+| `package`                                    | package     | pkgs.vimPlugins.indent-blankline-nvim | Package                            |
+| `autoLoad`                                   | bool        | true                                  | Auto load on startup               |
+| `settings`                                   | attrs       | {}                                    | Options for `require('ibl').setup` |
+| `settings.indent.char`                       | string      | "│"                                   | Indent guide character             |
+| `settings.indent.highlight`                  | string/list | nil                                   | Highlight group(s)                 |
+| `settings.indent.priority`                   | int         | 1                                     | Virtual text priority              |
+| `settings.whitespace.remove_blankline_trail` | bool        | true                                  | Remove trailing whitespace         |
+| `settings.scope.enabled`                     | bool        | true                                  | Enable scope highlighting          |
+| `settings.scope.show_start`                  | bool        | true                                  | Show scope start                   |
+| `settings.scope.show_end`                    | bool        | false                                 | Show scope end                     |
 
 ## Current Configuration
 

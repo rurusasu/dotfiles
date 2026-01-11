@@ -1,36 +1,36 @@
 [formatter.nix]
 command = "nixfmt"
-includes = ["*.nix"]
+includes = [ "*.nix" ]
 
 [formatter.oxfmt]
 command = "oxfmt"
-options = ["--write"]
-includes = ["*.json", "*.yaml", "*.yml"]
+options = [ "--write" ]
+includes = [ "*.json", "*.yaml", "*.yml" ]
 
 [formatter.shfmt]
 command = "shfmt"
-options = ["-w"]
-includes = ["*.sh"]
+options = [ "-w" ]
+includes = [ "*.sh" ]
 
 [formatter.powershell]
 command = "pwsh"
 options = [
   "-NoProfile",
   "-Command",
-  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber | Out-Null }; Import-Module PSScriptAnalyzer -Force; $content = Get-Content -Raw -LiteralPath $env:FILENAME; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }"
+  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber | Out-Null }; Import-Module PSScriptAnalyzer -Force; $content = Get-Content -Raw -LiteralPath $env:FILENAME; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }",
 ]
-includes = ["*.ps1"]
+includes = [ "*.ps1" ]
 
 [formatter.taplo]
 command = "taplo"
-options = ["format"]
-includes = ["*.toml"]
+options = [ "format" ]
+includes = [ "*.toml" ]
 
 [formatter.stylua]
 command = "stylua"
-includes = ["*.lua"]
+includes = [ "*.lua" ]
 
 [formatter.dprint]
 command = "dprint"
-options = ["fmt"]
-includes = ["*.md"]
+options = [ "fmt" ]
+includes = [ "*.md" ]

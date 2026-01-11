@@ -28,22 +28,22 @@ When `useTerminalsLeader = true`, the tmux prefix becomes the same as the termin
 
 ## Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `enable` | `false` | Enable tmux |
-| `prefix.key` | `b` | Prefix key (for C-b) |
-| `prefix.useTerminalsLeader` | `false` | Use terminals.leader |
-| `keybindings.paneNavStyle` | (from terminals) | vim or arrow |
+| Option                      | Default          | Description          |
+| --------------------------- | ---------------- | -------------------- |
+| `enable`                    | `false`          | Enable tmux          |
+| `prefix.key`                | `b`              | Prefix key (for C-b) |
+| `prefix.useTerminalsLeader` | `false`          | Use terminals.leader |
+| `keybindings.paneNavStyle`  | (from terminals) | vim or arrow         |
 
 ## Keybindings
 
-| Action | Keybinding |
-|--------|------------|
-| Split horizontal | prefix + h |
-| Split vertical | prefix + v |
-| Close pane | prefix + x |
-| Navigate (vim) | h/j/k/l |
-| Navigate (arrow) | Arrow keys |
-| Resize | H/J/K/L (repeat) |
+| Action           | Keybinding       |
+| ---------------- | ---------------- |
+| Split horizontal | prefix + h       |
+| Split vertical   | prefix + v       |
+| Close pane       | prefix + x       |
+| Navigate (vim)   | h/j/k/l          |
+| Navigate (arrow) | Arrow keys       |
+| Resize           | H/J/K/L (repeat) |
 
 See `nix/modules/home/AGENTS.md` for full shared settings architecture.

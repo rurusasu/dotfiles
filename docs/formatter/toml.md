@@ -26,30 +26,30 @@ trailing_newline = true
 
 ### 基本設定
 
-| オプション | 値 | 説明 |
-|-----------|-----|------|
-| `column_width` | `100` | 行の最大幅 |
-| `trailing_newline` | `true` | ファイル末尾に改行を追加 |
-| `allowed_blank_lines` | `1` | 連続する空行の最大数 |
+| オプション            | 値     | 説明                     |
+| --------------------- | ------ | ------------------------ |
+| `column_width`        | `100`  | 行の最大幅               |
+| `trailing_newline`    | `true` | ファイル末尾に改行を追加 |
+| `allowed_blank_lines` | `1`    | 連続する空行の最大数     |
 
 ### 配列設定
 
-| オプション | 値 | 説明 |
-|-----------|-----|------|
-| `array_trailing_comma` | `true` | 配列の最後にカンマを追加 |
-| `array_auto_expand` | `true` | 長い配列を複数行に展開 |
-| `array_auto_collapse` | `false` | 短い配列を1行にまとめない |
-| `compact_arrays` | `false` | 配列をコンパクトに表示しない |
+| オプション             | 値      | 説明                         |
+| ---------------------- | ------- | ---------------------------- |
+| `array_trailing_comma` | `true`  | 配列の最後にカンマを追加     |
+| `array_auto_expand`    | `true`  | 長い配列を複数行に展開       |
+| `array_auto_collapse`  | `false` | 短い配列を1行にまとめない    |
+| `compact_arrays`       | `false` | 配列をコンパクトに表示しない |
 
 ### テーブル設定
 
-| オプション | 値 | 説明 |
-|-----------|-----|------|
-| `align_entries` | `false` | エントリを揃えない |
-| `indent_tables` | `false` | テーブルをインデントしない |
-| `indent_entries` | `false` | エントリをインデントしない |
+| オプション              | 値      | 説明                                   |
+| ----------------------- | ------- | -------------------------------------- |
+| `align_entries`         | `false` | エントリを揃えない                     |
+| `indent_tables`         | `false` | テーブルをインデントしない             |
+| `indent_entries`        | `false` | エントリをインデントしない             |
 | `compact_inline_tables` | `false` | インラインテーブルをコンパクトにしない |
-| `reorder_keys` | `false` | キーを並び替えない |
+| `reorder_keys`          | `false` | キーを並び替えない                     |
 
 ## インストール
 

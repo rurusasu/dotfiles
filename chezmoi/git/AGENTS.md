@@ -4,8 +4,8 @@ Git configuration with SSH signing and cross-platform support.
 
 ## Files
 
-| File | Deployed To | Description |
-|------|-------------|-------------|
+| File             | Deployed To    | Description                          |
+| ---------------- | -------------- | ------------------------------------ |
 | `gitconfig.tmpl` | `~/.gitconfig` | Git configuration (chezmoi template) |
 
 ## Features
@@ -19,6 +19,7 @@ Git configuration with SSH signing and cross-platform support.
 ## Template Variables
 
 The `.tmpl` extension indicates this is a chezmoi template. Variables:
+
 - Platform-specific settings can be added using chezmoi template syntax
 
 ## Related

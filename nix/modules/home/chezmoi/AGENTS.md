@@ -6,13 +6,13 @@ Nix module for chezmoi dotfile management with 1Password SSH agent integration.
 
 ## Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `programs.chezmoi.enable` | bool | false | Enable chezmoi |
-| `programs.chezmoi.package` | package | pkgs.chezmoi | Chezmoi package |
-| `programs.chezmoi.sourceDir` | string | ~/.local/share/chezmoi | Source directory |
-| `programs.chezmoi.onePassword.enable` | bool | false | Enable 1Password SSH agent |
-| `programs.chezmoi.onePassword.agentPath` | string | (OS-dependent) | Agent socket path |
+| Option                                   | Type    | Default                | Description                |
+| ---------------------------------------- | ------- | ---------------------- | -------------------------- |
+| `programs.chezmoi.enable`                | bool    | false                  | Enable chezmoi             |
+| `programs.chezmoi.package`               | package | pkgs.chezmoi           | Chezmoi package            |
+| `programs.chezmoi.sourceDir`             | string  | ~/.local/share/chezmoi | Source directory           |
+| `programs.chezmoi.onePassword.enable`    | bool    | false                  | Enable 1Password SSH agent |
+| `programs.chezmoi.onePassword.agentPath` | string  | (OS-dependent)         | Agent socket path          |
 
 ## Usage
 

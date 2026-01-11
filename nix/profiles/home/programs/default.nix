@@ -16,7 +16,7 @@
 
     # Version control
     git
-    gh  # GitHub CLI
+    gh # GitHub CLI
 
     # CLI tools
     fd

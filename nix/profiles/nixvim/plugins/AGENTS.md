@@ -49,22 +49,26 @@ plugins/
 ## Plugin Categories
 
 ### UI Enhancement
+
 - `lualine` - Status line
 - `indent-blankline` - Indentation guides
 - `web-devicons` - File type icons
 - `which-key` - Keybinding hints
 
 ### Navigation
+
 - `telescope` - Fuzzy finder
 - `nvim-tree` - File explorer (tree view)
 - `oil` - File explorer (edit filesystem like a buffer)
 
 ### Editing
+
 - `nvim-autopairs` - Auto bracket pairing
 - `nvim-surround` - Text surrounding
 - `comment` - Code commenting
 
 ### Syntax & Git
+
 - `treesitter` - Syntax highlighting
 - `gitsigns` - Git integration
 
@@ -92,6 +96,7 @@ in
 ## Conditional Plugins
 
 Some plugins are conditionally enabled:
+
 - `treesitter` - `cfg.features.treesitter`
 - `telescope` - `cfg.features.telescope`
 - `gitsigns` - `cfg.features.git`

@@ -403,11 +403,13 @@ cd scripts/powershell/tests
 `using module` ステートメントで読み込む型は、PSScriptAnalyzer が静的解析時に認識できないため、`TypeNotFound` 警告が出ます。これは Information レベルのため、Severity 設定で除外され、テストにも影響しません。
 
 **理由**:
+
 - `using module` は実行時に型を読み込む
 - PSScriptAnalyzer は静的解析ツールでファイルを実行しない
 - 実際には問題なく動作する
 
 **対処法**:
+
 - Severity を Error/Warning のみに設定(設定済み)
 - テスト内で明示的にフィルタリング: `$results | Where-Object { $_.RuleName -ne 'TypeNotFound' }`
 
@@ -437,6 +439,7 @@ includes = ["*.ps1"]
 ```
 
 **注意**:
+
 - `Invoke-Formatter` はフォーマット(スタイル)
 - `Invoke-ScriptAnalyzer` はリント(コード品質)
 - 両者は別の目的を持つツールです

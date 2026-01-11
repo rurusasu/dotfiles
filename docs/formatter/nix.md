@@ -108,20 +108,20 @@ includes = ["*.nix"]
 
 Nix には複数の Language Server があります：
 
-| Server | 特徴 |
-|--------|------|
-| [nil](https://github.com/oxalica/nil) | 高速、フォーマッター連携 |
-| [rnix-lsp](https://github.com/nix-community/rnix-lsp) | 基本的な LSP 機能 |
-| [nixd](https://github.com/nix-community/nixd) | 高機能、型推論 |
+| Server                                                | 特徴                     |
+| ----------------------------------------------------- | ------------------------ |
+| [nil](https://github.com/oxalica/nil)                 | 高速、フォーマッター連携 |
+| [rnix-lsp](https://github.com/nix-community/rnix-lsp) | 基本的な LSP 機能        |
+| [nixd](https://github.com/nix-community/nixd)         | 高機能、型推論           |
 
 ## nixfmt vs alejandra
 
-| 項目 | nixfmt | alejandra |
-|------|--------|-----------|
-| 開発元 | Serokell | コミュニティ |
-| スタイル | 公式 | 独自（opinionated） |
-| 設定 | なし | なし |
-| 速度 | 高速 | 高速 |
+| 項目     | nixfmt   | alejandra           |
+| -------- | -------- | ------------------- |
+| 開発元   | Serokell | コミュニティ        |
+| スタイル | 公式     | 独自（opinionated） |
+| 設定     | なし     | なし                |
+| 速度     | 高速     | 高速                |
 
 ## コード例
 

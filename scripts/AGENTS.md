@@ -3,6 +3,7 @@
 Purpose: Shell scripts for NixOS setup, maintenance, and Windows package management.
 
 ## Directory Structure
+
 ```
 scripts/
 ├── sh/                           # Shell scripts (Linux/WSL)
@@ -25,14 +26,16 @@ Note: install.ps1 is in the repository root (auto-elevates to admin).
 Post-install setup script run after NixOS WSL import.
 
 #### Sync Modes
-| Mode | Description |
-|------|-------------|
+
+| Mode             | Description                                          |
+| ---------------- | ---------------------------------------------------- |
 | `link` (default) | Creates symlink ~/.dotfiles -> Windows dotfiles path |
-| `repo` | Copies dotfiles to ~/.dotfiles via rsync |
-| `nix` | Copies only nix/ directory |
-| `none` | No sync, manual setup required |
+| `repo`           | Copies dotfiles to ~/.dotfiles via rsync             |
+| `nix`            | Copies only nix/ directory                           |
+| `none`           | No sync, manual setup required                       |
 
 #### Key Options
+
 - `--sync-mode <mode>`: Sync mode (default: link)
 - `--sync-source <path>`: Source directory (default: script's parent dir)
 - `--repo-dir <path>`: Target directory (default: /home/<user>/.dotfiles)
@@ -40,6 +43,7 @@ Post-install setup script run after NixOS WSL import.
 - `--force`: Allow overwriting existing repo-dir
 
 #### Flow
+
 1. Create ~/.dotfiles (symlink or copy based on sync-mode)
 2. Generate user/host nix files if missing
 3. Run nixos-rebuild switch
@@ -52,6 +56,7 @@ Post-install setup script run after NixOS WSL import.
 Apply `.wslconfig` from `windows/.wslconfig` to `%USERPROFILE%\.wslconfig`.
 
 **Usage:**
+
 ```powershell
 .\scripts\powershell\update-wslconfig.ps1
 wsl --shutdown  # To apply changes
@@ -62,10 +67,12 @@ wsl --shutdown  # To apply changes
 Apply settings from dotfiles to Windows (winget import only).
 
 Note: Windows Terminal and WezTerm settings are managed by chezmoi:
+
 - `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
 - `chezmoi/dot_config/wezterm/wezterm.lua`
 
 **Usage:**
+
 ```powershell
 # Full apply (requires Administrator)
 .\scripts\powershell\update-windows-settings.ps1
@@ -75,6 +82,7 @@ Note: Windows Terminal and WezTerm settings are managed by chezmoi:
 ```
 
 **Parameters:**
+
 - `-SkipWinget`: Skip winget package installation
 
 ### export-settings.ps1
@@ -82,13 +90,16 @@ Note: Windows Terminal and WezTerm settings are managed by chezmoi:
 Export current Windows settings to dotfiles.
 
 **What it exports:**
+
 - Winget package list to `windows/winget/packages.json`
 
 **Note:** Windows Terminal and WezTerm settings are managed by chezmoi:
+
 - `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
 - `chezmoi/dot_config/wezterm/wezterm.lua`
 
 **Usage:**
+
 ```powershell
 .\scripts\powershell\export-settings.ps1
 ```

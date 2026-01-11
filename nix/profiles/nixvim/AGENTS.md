@@ -35,17 +35,17 @@ myHomeSettings.nixvim = {
 
 ## Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `enable` | `false` | Enable nixvim |
-| `leader` | `" "` (Space) | Vim leader key |
-| `localLeader` | `\` | Local leader key |
-| `colorscheme.name` | `tokyonight` | Colorscheme |
-| `colorscheme.style` | `night` | Colorscheme style |
-| `features.lsp` | `true` | Enable LSP |
-| `features.treesitter` | `true` | Enable Treesitter |
-| `features.telescope` | `true` | Enable Telescope |
-| `features.git` | `true` | Enable Git integration |
+| Option                | Default       | Description            |
+| --------------------- | ------------- | ---------------------- |
+| `enable`              | `false`       | Enable nixvim          |
+| `leader`              | `" "` (Space) | Vim leader key         |
+| `localLeader`         | `\`           | Local leader key       |
+| `colorscheme.name`    | `tokyonight`  | Colorscheme            |
+| `colorscheme.style`   | `night`       | Colorscheme style      |
+| `features.lsp`        | `true`        | Enable LSP             |
+| `features.treesitter` | `true`        | Enable Treesitter      |
+| `features.telescope`  | `true`        | Enable Telescope       |
+| `features.git`        | `true`        | Enable Git integration |
 
 ## Notes
 
@@ -56,19 +56,19 @@ myHomeSettings.nixvim = {
 
 ## Plugins
 
-| Plugin | Description | Keybinding |
-|--------|-------------|------------|
-| tokyonight | Colorscheme (night style) | - |
-| which-key | Keybinding hints | - |
-| nvim-tree | File explorer | `<leader>e` |
-| telescope | Fuzzy finder | `<leader>ff/fg/fb/fh` |
-| treesitter | Syntax highlighting | - |
-| gitsigns | Git integration | - |
-| lualine | Status line | - |
-| indent-blankline | Indent guides | - |
-| nvim-autopairs | Auto pairs | - |
-| comment | Commenting | `gc`, `gb` |
-| nvim-surround | Surround operations | - |
-| web-devicons | File icons | - |
+| Plugin           | Description               | Keybinding            |
+| ---------------- | ------------------------- | --------------------- |
+| tokyonight       | Colorscheme (night style) | -                     |
+| which-key        | Keybinding hints          | -                     |
+| nvim-tree        | File explorer             | `<leader>e`           |
+| telescope        | Fuzzy finder              | `<leader>ff/fg/fb/fh` |
+| treesitter       | Syntax highlighting       | -                     |
+| gitsigns         | Git integration           | -                     |
+| lualine          | Status line               | -                     |
+| indent-blankline | Indent guides             | -                     |
+| nvim-autopairs   | Auto pairs                | -                     |
+| comment          | Commenting                | `gc`, `gb`            |
+| nvim-surround    | Surround operations       | -                     |
+| web-devicons     | File icons                | -                     |
 
 See `nix/modules/home/AGENTS.md` for full shared settings architecture.

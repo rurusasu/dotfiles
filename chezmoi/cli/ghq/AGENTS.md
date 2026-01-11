@@ -4,8 +4,8 @@ ghq is a Git repository manager.
 
 ## Files
 
-| File | Deployed To |
-|------|-------------|
+| File     | Deployed To            |
+| -------- | ---------------------- |
 | `config` | `~/.config/ghq/config` |
 
 ## Configuration
@@ -16,6 +16,7 @@ ghq is a Git repository manager.
 ## Directory Structure
 
 Repositories are cloned to:
+
 ```
 ~/ghq/
 └── github.com/
@@ -44,6 +45,7 @@ cd $(ghq list -p | fzf)
 ## Integration
 
 Works well with:
+
 - fzf for fuzzy repository selection
 - Git for version control
 - SSH keys for authentication

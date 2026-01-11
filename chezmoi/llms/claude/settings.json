@@ -2,13 +2,7 @@
   "$schema": "https://claude.ai/schemas/settings.json",
   "permissions": {
     "allow": [],
-    "deny": [
-      "**/.env",
-      "**/.env.*",
-      "**/secrets/**",
-      "**/*.pem",
-      "**/*.key"
-    ]
+    "deny": ["**/.env", "**/.env.*", "**/secrets/**", "**/*.pem", "**/*.key"]
   },
   "env": {}
 }

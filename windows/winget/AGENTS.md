@@ -2,8 +2,9 @@
 
 Purpose: Windows package management via winget.
 Expected contents:
+
 - packages.json: Exported winget package list
-Notes:
+  Notes:
 - Export: winget export -o packages.json
 - Import: winget import -i packages.json --accept-package-agreements
 - Some packages may require manual installation (license agreements, unavailable sources)

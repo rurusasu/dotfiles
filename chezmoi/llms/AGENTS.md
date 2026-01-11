@@ -20,6 +20,7 @@ llms/
 ## Deployment
 
 Files are deployed to:
+
 - `~/.claude/` - Claude Code
 - `~/.codex/` - Codex CLI
 - `~/.cursor/` - Cursor AI rules
@@ -28,6 +29,7 @@ Files are deployed to:
 ## Installation
 
 LLM tool binaries are installed via Nix (`nix/profiles/home/programs/llms/`):
+
 - `claude-code` - Claude Code CLI
 - `codex` - OpenAI Codex CLI
 - `gemini-cli` - Google Gemini CLI

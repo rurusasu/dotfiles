@@ -34,11 +34,11 @@
 
 PSScriptAnalyzer は以下のスタイルでフォーマットします：
 
-| 項目 | スタイル |
-|------|---------|
-| インデント | 4スペース |
-| 中括弧 | K&R スタイル（開き括弧は同じ行） |
-| 空白 | 演算子の前後にスペース |
+| 項目       | スタイル                         |
+| ---------- | -------------------------------- |
+| インデント | 4スペース                        |
+| 中括弧     | K&R スタイル（開き括弧は同じ行） |
+| 空白       | 演算子の前後にスペース           |
 
 ### コード例
 
@@ -60,11 +60,11 @@ function Get-Something {
 
 ## 除外ルール
 
-| ルール | 理由 |
-|--------|------|
-| `PSUseOutputTypeCorrectly` | dot-source で読み込む型は静的解析で認識できない |
-| `PSUseBOMForUnicodeEncodedFile` | UTF-8 (without BOM) で問題ない |
-| `PSUseShouldProcessForStateChangingFunctions` | ラッパー関数では ShouldProcess 不要 |
+| ルール                                        | 理由                                            |
+| --------------------------------------------- | ----------------------------------------------- |
+| `PSUseOutputTypeCorrectly`                    | dot-source で読み込む型は静的解析で認識できない |
+| `PSUseBOMForUnicodeEncodedFile`               | UTF-8 (without BOM) で問題ない                  |
+| `PSUseShouldProcessForStateChangingFunctions` | ラッパー関数では ShouldProcess 不要             |
 
 ## インストール
 
@@ -103,10 +103,10 @@ includes = ["*.ps1"]
 
 ## フォーマット vs リント
 
-| ツール | 目的 | コマンド |
-|--------|------|---------|
-| `Invoke-Formatter` | コードスタイルの統一 | フォーマット |
-| `Invoke-ScriptAnalyzer` | コード品質チェック | リント |
+| ツール                  | 目的                 | コマンド     |
+| ----------------------- | -------------------- | ------------ |
+| `Invoke-Formatter`      | コードスタイルの統一 | フォーマット |
+| `Invoke-ScriptAnalyzer` | コード品質チェック   | リント       |
 
 ## エディター設定
 

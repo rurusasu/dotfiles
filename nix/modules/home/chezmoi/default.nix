@@ -45,8 +45,8 @@ in
 
     # Create 1Password agent symlink for Linux/WSL
     home.file = lib.mkIf (cfg.onePassword.enable && pkgs.stdenv.isLinux) {
-      ".1password/agent.sock".source = config.lib.file.mkOutOfStoreSymlink
-        "/mnt/c/Users/${config.home.username}/.1password/agent.sock";
+      ".1password/agent.sock".source =
+        config.lib.file.mkOutOfStoreSymlink "/mnt/c/Users/${config.home.username}/.1password/agent.sock";
     };
 
     # SSH config for 1Password integration

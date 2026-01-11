@@ -4,58 +4,65 @@ Windows Terminal is the modern terminal for Windows.
 
 ## Files
 
-| File | Deployed To |
-|------|-------------|
+| File            | Deployed To                                                                     |
+| --------------- | ------------------------------------------------------------------------------- |
 | `settings.json` | `%LOCALAPPDATA%/Packages/Microsoft.WindowsTerminal.../LocalState/settings.json` |
 
 ## Configuration
 
 ### Appearance
+
 - **Font**: Consolas, 12pt
 - **Opacity**: 85% (acrylic)
 - **Color scheme**: One Half Dark (default), CGA (PowerShell)
 
 ### Profiles
-| Profile | Description |
-|---------|-------------|
+
+| Profile              | Description               |
+| -------------------- | ------------------------- |
 | PowerShell (default) | PowerShell Core, elevated |
-| Windows PowerShell | Legacy PowerShell |
-| Git Bash | Git for Windows bash |
-| NixOS | WSL NixOS distribution |
+| Windows PowerShell   | Legacy PowerShell         |
+| Git Bash             | Git for Windows bash      |
+| NixOS                | WSL NixOS distribution    |
 
 ## Keybindings
 
 Matches WezTerm keybindings (no leader key support):
 
 ### Pane Operations
-| Key | Action |
-|-----|--------|
+
+| Key          | Action      |
+| ------------ | ----------- |
 | `Ctrl+Alt+H` | Split right |
-| `Ctrl+Alt+V` | Split down |
-| `Ctrl+Alt+X` | Close pane |
+| `Ctrl+Alt+V` | Split down  |
+| `Ctrl+Alt+X` | Close pane  |
 | `Ctrl+Alt+W` | Toggle zoom |
 
 ### Pane Navigation
-| Key | Action |
-|-----|--------|
-| `Ctrl+Shift+H` | Focus left |
-| `Ctrl+Shift+J` | Focus down |
-| `Ctrl+Shift+K` | Focus up |
+
+| Key            | Action      |
+| -------------- | ----------- |
+| `Ctrl+Shift+H` | Focus left  |
+| `Ctrl+Shift+J` | Focus down  |
+| `Ctrl+Shift+K` | Focus up    |
 | `Ctrl+Shift+L` | Focus right |
 
 ### Tab Navigation
-| Key | Action |
-|-----|--------|
-| `Ctrl+Tab` | Next tab |
+
+| Key              | Action       |
+| ---------------- | ------------ |
+| `Ctrl+Tab`       | Next tab     |
 | `Ctrl+Shift+Tab` | Previous tab |
 
 ### Other
-| Key | Action |
-|-----|--------|
-| `F11` | Toggle fullscreen |
-| `Ctrl+Shift+F` | Find |
+
+| Key            | Action            |
+| -------------- | ----------------- |
+| `F11`          | Toggle fullscreen |
+| `Ctrl+Shift+F` | Find              |
 
 ### Unbound Keys
+
 - `Alt+C`: Reserved for fzf
 - `Alt+Z`: Reserved for zoxide
 

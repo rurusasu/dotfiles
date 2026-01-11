@@ -14,23 +14,26 @@ editors/
 
 ## Role Separation
 
-| Aspect | Managed By |
-|--------|------------|
-| **Installation** | Nix (this directory) |
+| Aspect                   | Managed By                   |
+| ------------------------ | ---------------------------- |
+| **Installation**         | Nix (this directory)         |
 | **Settings/Keybindings** | Chezmoi (`chezmoi/editors/`) |
-| **Extensions** | Chezmoi (`extensions.json`) |
+| **Extensions**           | Chezmoi (`extensions.json`)  |
 
 ## Editors
 
 ### VS Code
+
 - Installed via `programs.vscode`
 - `mutableExtensionsDir = true` (extensions managed by chezmoi)
 
 ### Cursor
+
 - Not in nixpkgs
 - Install manually (winget on Windows, AppImage on Linux)
 
 ### Zed
+
 - Installed via `home.packages = [ zed-editor ]`
 
 ## Usage

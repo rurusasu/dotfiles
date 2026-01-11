@@ -15,7 +15,7 @@ enabled = true
 
 [shell_environment_policy]
 # Environment variables to include
-include_only = ["PATH", "HOME", "USER", "SHELL", "TERM"]
+include_only = [ "PATH", "HOME", "USER", "SHELL", "TERM" ]
 
 [features]
 # Enable shell snapshot for context

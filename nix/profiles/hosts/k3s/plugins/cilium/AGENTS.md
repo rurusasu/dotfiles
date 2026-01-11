@@ -1,14 +1,17 @@
 # Cilium CNI Plugin
 
 ## Overview
+
 This module configures Cilium as the Container Network Interface (CNI) for Kubernetes.
 
 ## Features
+
 - Installs `cilium-cli` and `hubble` CLI tools
 - Prepares `/opt/cni/bin` directory for Cilium's CNI binary
 - Configures systemd service ordering for kubelet
 
 ## Installation
+
 Cilium is deployed via Helm after the cluster is running:
 
 ```bash
@@ -23,11 +26,13 @@ helm install cilium cilium/cilium --version 1.16.5 \
 ```
 
 ## Verification
+
 ```bash
 cilium status
 kubectl get pods -n kube-system -l app.kubernetes.io/part-of=cilium
 ```
 
 ## Dependencies
+
 - Kubernetes cluster must be running
 - PKI certificates must be initialized (cfssl module)

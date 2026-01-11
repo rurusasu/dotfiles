@@ -9,6 +9,7 @@ This directory contains GitHub Actions workflow templates.
 ## Usage
 
 These are starting templates. Customize for your project:
+
 - Add appropriate build steps
 - Configure test frameworks
 - Set up deployment if needed

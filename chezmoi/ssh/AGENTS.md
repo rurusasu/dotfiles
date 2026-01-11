@@ -10,11 +10,11 @@ OS-independent SSH configuration with 1Password SSH Agent integration.
 
 ## 1Password SSH Agent Paths
 
-| OS | Agent Path |
-|----|------------|
-| Windows | `//./pipe/openssh-ssh-agent` |
-| macOS | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
-| Linux/WSL | `~/.1password/agent.sock` |
+| OS        | Agent Path                                                         |
+| --------- | ------------------------------------------------------------------ |
+| Windows   | `//./pipe/openssh-ssh-agent`                                       |
+| macOS     | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
+| Linux/WSL | `~/.1password/agent.sock`                                          |
 
 ## GitHub Hosts
 

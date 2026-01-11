@@ -4,16 +4,16 @@ Purpose: Treesitter syntax highlighting and parsing configuration.
 
 ## Nixvim Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | bool | false | Enable treesitter |
-| `package` | package | pkgs.vimPlugins.nvim-treesitter | Treesitter package |
-| `autoLoad` | bool | true | Auto load on startup |
-| `nixGrammars` | bool | true | Use Nix-managed grammars |
-| `grammarPackages` | list | all grammars | Grammar packages to install |
-| `settings.highlight.enable` | bool | false | Enable syntax highlighting |
-| `settings.indent.enable` | bool | false | Enable indentation |
-| `folding.enable` | bool | false | Enable treesitter-based folding |
+| Option                      | Type    | Default                         | Description                     |
+| --------------------------- | ------- | ------------------------------- | ------------------------------- |
+| `enable`                    | bool    | false                           | Enable treesitter               |
+| `package`                   | package | pkgs.vimPlugins.nvim-treesitter | Treesitter package              |
+| `autoLoad`                  | bool    | true                            | Auto load on startup            |
+| `nixGrammars`               | bool    | true                            | Use Nix-managed grammars        |
+| `grammarPackages`           | list    | all grammars                    | Grammar packages to install     |
+| `settings.highlight.enable` | bool    | false                           | Enable syntax highlighting      |
+| `settings.indent.enable`    | bool    | false                           | Enable indentation              |
+| `folding.enable`            | bool    | false                           | Enable treesitter-based folding |
 
 ## Current Configuration
 

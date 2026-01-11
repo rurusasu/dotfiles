@@ -2,6 +2,7 @@
 
 Purpose: Nix flake templates for project development environments.
 Expected contents:
+
 - python/: Python development environment template (flake.nix, .envrc).
 
 ## Usage
@@ -27,4 +28,3 @@ direnv allow
 - [Determinate Systems Nix Installer](https://determinate.systems/posts/determinate-nix-installer)
 - [devenv with Flakes](https://devenv.sh/guides/using-with-flakes/)
 - [NixOS & Flakes Book - Dev Environments](https://nixos-and-flakes.thiscute.world/development/dev-environments)
-

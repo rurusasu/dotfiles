@@ -4,8 +4,8 @@ zoxide is a smarter `cd` command that learns your habits.
 
 ## Files
 
-| File | Purpose |
-|------|---------|
+| File  | Purpose                           |
+| ----- | --------------------------------- |
 | `env` | Environment variables (reference) |
 
 ## Environment Variables
@@ -17,6 +17,7 @@ zoxide is a smarter `cd` command that learns your habits.
 ## Shell Integration
 
 Shell integration is managed by **Nix Home Manager**, not this file:
+
 ```nix
 programs.zoxide = {
   enable = true;

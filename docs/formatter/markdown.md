@@ -23,28 +23,28 @@
 
 ## 設定オプション
 
-| オプション | 値 | 説明 |
-|-----------|-----|------|
-| `lineWidth` | `100` | 行の最大幅 |
-| `textWrap` | `"maintain"` | テキストの折り返し方法。`maintain` は既存の改行を維持 |
-| `emphasisKind` | `"asterisks"` | イタリックのマーカー。`*text*` を使用 |
-| `strongKind` | `"asterisks"` | 太字のマーカー。`**text**` を使用 |
-| `newLineKind` | `"lf"` | 改行コード。Unix 形式 (LF) を使用 |
+| オプション     | 値            | 説明                                                  |
+| -------------- | ------------- | ----------------------------------------------------- |
+| `lineWidth`    | `100`         | 行の最大幅                                            |
+| `textWrap`     | `"maintain"`  | テキストの折り返し方法。`maintain` は既存の改行を維持 |
+| `emphasisKind` | `"asterisks"` | イタリックのマーカー。`*text*` を使用                 |
+| `strongKind`   | `"asterisks"` | 太字のマーカー。`**text**` を使用                     |
+| `newLineKind`  | `"lf"`        | 改行コード。Unix 形式 (LF) を使用                     |
 
 ## textWrap オプション
 
-| 値 | 説明 |
-|----|------|
-| `"always"` | 常に lineWidth で折り返す |
-| `"never"` | 折り返さない |
+| 値           | 説明                                             |
+| ------------ | ------------------------------------------------ |
+| `"always"`   | 常に lineWidth で折り返す                        |
+| `"never"`    | 折り返さない                                     |
 | `"maintain"` | 既存の改行を維持（推奨：日本語ドキュメント向け） |
 
 ## emphasisKind / strongKind オプション
 
-| 値 | イタリック | 太字 |
-|----|----------|------|
-| `"asterisks"` | `*text*` | `**text**` |
-| `"underscores"` | `_text_` | `__text__` |
+| 値              | イタリック | 太字       |
+| --------------- | ---------- | ---------- |
+| `"asterisks"`   | `*text*`   | `**text**` |
+| `"underscores"` | `_text_`   | `__text__` |
 
 ## インストール
 

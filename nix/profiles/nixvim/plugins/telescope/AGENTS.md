@@ -4,14 +4,14 @@ Purpose: Telescope fuzzy finder configuration.
 
 ## Nixvim Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | bool | false | Enable telescope |
-| `package` | package | pkgs.vimPlugins.telescope-nvim | Telescope package |
-| `autoLoad` | bool | true | Auto load on startup |
-| `keymaps` | attrs | {} | Keymap definitions |
-| `settings` | attrs | {} | Options for `require('telescope').setup` |
-| `extensions.<name>.enable` | bool | false | Enable telescope extensions |
+| Option                     | Type    | Default                        | Description                              |
+| -------------------------- | ------- | ------------------------------ | ---------------------------------------- |
+| `enable`                   | bool    | false                          | Enable telescope                         |
+| `package`                  | package | pkgs.vimPlugins.telescope-nvim | Telescope package                        |
+| `autoLoad`                 | bool    | true                           | Auto load on startup                     |
+| `keymaps`                  | attrs   | {}                             | Keymap definitions                       |
+| `settings`                 | attrs   | {}                             | Options for `require('telescope').setup` |
+| `extensions.<name>.enable` | bool    | false                          | Enable telescope extensions              |
 
 ## Current Configuration
 

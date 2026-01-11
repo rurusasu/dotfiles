@@ -4,18 +4,18 @@ Purpose: nvim-web-devicons file type icons configuration.
 
 ## Nixvim Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | bool | false | Enable web-devicons |
-| `package` | package | pkgs.vimPlugins.nvim-web-devicons | Package |
-| `autoLoad` | bool | true | Auto load on startup |
-| `settings` | attrs | {} | Options for `require('nvim-web-devicons').setup` |
-| `settings.strict` | bool | false | Strict icon matching |
-| `settings.color_icons` | bool | true | Enable colored icons |
-| `settings.default` | bool | false | Show default icon |
-| `override` | attrs | {} | Custom icon overrides |
-| `override_by_filename` | attrs | {} | Override by filename |
-| `override_by_extension` | attrs | {} | Override by extension |
+| Option                  | Type    | Default                           | Description                                      |
+| ----------------------- | ------- | --------------------------------- | ------------------------------------------------ |
+| `enable`                | bool    | false                             | Enable web-devicons                              |
+| `package`               | package | pkgs.vimPlugins.nvim-web-devicons | Package                                          |
+| `autoLoad`              | bool    | true                              | Auto load on startup                             |
+| `settings`              | attrs   | {}                                | Options for `require('nvim-web-devicons').setup` |
+| `settings.strict`       | bool    | false                             | Strict icon matching                             |
+| `settings.color_icons`  | bool    | true                              | Enable colored icons                             |
+| `settings.default`      | bool    | false                             | Show default icon                                |
+| `override`              | attrs   | {}                                | Custom icon overrides                            |
+| `override_by_filename`  | attrs   | {}                                | Override by filename                             |
+| `override_by_extension` | attrs   | {}                                | Override by extension                            |
 
 ## Current Configuration
 
@@ -36,6 +36,7 @@ plugins.web-devicons = {
 ## Used By
 
 This plugin provides icons for:
+
 - nvim-tree (file explorer)
 - telescope (fuzzy finder)
 - lualine (status line)

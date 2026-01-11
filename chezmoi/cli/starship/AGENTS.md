@@ -4,13 +4,14 @@ Starship is a fast, customizable cross-shell prompt.
 
 ## Files
 
-| File | Deployed To |
-|------|-------------|
+| File            | Deployed To               |
+| --------------- | ------------------------- |
 | `starship.toml` | `~/.config/starship.toml` |
 
 ## Prompt Elements
 
 The prompt displays:
+
 - OS symbol
 - Username and hostname
 - Memory usage
@@ -21,12 +22,12 @@ The prompt displays:
 
 ## Git Status Symbols
 
-| Symbol | Meaning |
-|--------|---------|
-| `+` | Staged changes |
-| `!` | Modified files |
-| `?` | Untracked files |
-| `×` | Deleted files |
+| Symbol | Meaning         |
+| ------ | --------------- |
+| `+`    | Staged changes  |
+| `!`    | Modified files  |
+| `?`    | Untracked files |
+| `×`    | Deleted files   |
 
 ## Installation
 
@@ -36,6 +37,7 @@ The prompt displays:
 ## Shell Integration
 
 Add to shell config (handled by Nix or manually):
+
 ```bash
 eval "$(starship init bash)"  # or zsh
 ```

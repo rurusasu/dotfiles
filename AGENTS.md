@@ -138,6 +138,7 @@ chezmoi apply
 ```
 
 Secrets:
+
 - Configure age/gpg in `~/.config/chezmoi/chezmoi.toml`
 - Use `chezmoi add --encrypt <path>` to add secrets
 
@@ -194,14 +195,14 @@ pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 
 ## Key Paths
 
-| Location | Description |
-|----------|-------------|
-| `chezmoi/` | Chezmoi source for user dotfiles |
-| `~/.dotfiles` | Symlink to Windows dotfiles (created by postinstall) |
-| `nixosConfigurations.nixos` | Flake attribute for WSL host |
-| `/mnt/d/.../dotfiles` | Actual Windows-side dotfiles location |
-| `scripts/sh/` | Shell scripts for Linux/WSL |
-| `scripts/powershell/` | PowerShell scripts for Windows |
-| `windows/` | Windows-side configuration files |
-| `chezmoi/dot_config/wezterm/wezterm.lua` | WezTerm settings |
-| `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal settings |
+| Location                                                                                          | Description                                          |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `chezmoi/`                                                                                        | Chezmoi source for user dotfiles                     |
+| `~/.dotfiles`                                                                                     | Symlink to Windows dotfiles (created by postinstall) |
+| `nixosConfigurations.nixos`                                                                       | Flake attribute for WSL host                         |
+| `/mnt/d/.../dotfiles`                                                                             | Actual Windows-side dotfiles location                |
+| `scripts/sh/`                                                                                     | Shell scripts for Linux/WSL                          |
+| `scripts/powershell/`                                                                             | PowerShell scripts for Windows                       |
+| `windows/`                                                                                        | Windows-side configuration files                     |
+| `chezmoi/dot_config/wezterm/wezterm.lua`                                                          | WezTerm settings                                     |
+| `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal settings                            |

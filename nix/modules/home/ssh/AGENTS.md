@@ -6,12 +6,12 @@ OS-independent SSH configuration with 1Password SSH agent integration.
 
 ## Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `modules.ssh.enable` | bool | false | Enable SSH configuration |
-| `modules.ssh.onePassword.enable` | bool | false | Enable 1Password agent |
-| `modules.ssh.onePassword.agentPath` | string | (OS-dependent) | Agent socket path |
-| `modules.ssh.githubHosts` | attrset | {} | GitHub host configurations |
+| Option                              | Type    | Default        | Description                |
+| ----------------------------------- | ------- | -------------- | -------------------------- |
+| `modules.ssh.enable`                | bool    | false          | Enable SSH configuration   |
+| `modules.ssh.onePassword.enable`    | bool    | false          | Enable 1Password agent     |
+| `modules.ssh.onePassword.agentPath` | string  | (OS-dependent) | Agent socket path          |
+| `modules.ssh.githubHosts`           | attrset | {}             | GitHub host configurations |
 
 ## Usage
 
@@ -35,11 +35,11 @@ OS-independent SSH configuration with 1Password SSH agent integration.
 
 ## OS-Specific Agent Paths
 
-| OS | Default Path |
-|----|--------------|
-| macOS | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
-| Linux/WSL | `~/.1password/agent.sock` |
-| Windows | `//./pipe/openssh-ssh-agent` (handled by chezmoi) |
+| OS        | Default Path                                                       |
+| --------- | ------------------------------------------------------------------ |
+| macOS     | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
+| Linux/WSL | `~/.1password/agent.sock`                                          |
+| Windows   | `//./pipe/openssh-ssh-agent` (handled by chezmoi)                  |
 
 ## Files
 

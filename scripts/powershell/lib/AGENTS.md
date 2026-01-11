@@ -4,10 +4,10 @@ Purpose: 共通ライブラリ
 
 ## ファイル一覧
 
-| ファイル | 説明 |
-|----------|------|
-| `SetupHandler.ps1` | 基底クラスとコンテキスト定義 |
-| `Invoke-ExternalCommand.ps1` | 外部コマンドラッパー関数群 |
+| ファイル                     | 説明                         |
+| ---------------------------- | ---------------------------- |
+| `SetupHandler.ps1`           | 基底クラスとコンテキスト定義 |
+| `Invoke-ExternalCommand.ps1` | 外部コマンドラッパー関数群   |
 
 ## SetupHandler.ps1
 
@@ -43,23 +43,23 @@ $ctx.Options        # オプション hashtable
 
 ### 主要関数
 
-| 関数 | 説明 |
-|------|------|
-| `Invoke-Wsl` | WSL コマンド実行 |
-| `Invoke-Chezmoi` | chezmoi コマンド実行 |
-| `Invoke-Diskpart` | diskpart コマンド実行 |
-| `Get-ExternalCommand` | コマンド存在確認 |
-| `Test-PathExists` | パス存在確認 |
-| `Get-ProcessSafe` | プロセス取得 |
-| `Stop-ProcessSafe` | プロセス停止 |
-| `Start-ProcessSafe` | プロセス起動 |
-| `Copy-FileSafe` | ファイルコピー |
-| `Get-FileContentSafe` | ファイル読み取り |
-| `Get-JsonContent` | JSON ファイル読み取り |
-| `New-DirectorySafe` | ディレクトリ作成 |
-| `Get-ChildItemSafe` | ディレクトリ内容取得 |
-| `Get-RegistryValue` | レジストリ値取得 |
-| `Get-RegistryChildItem` | レジストリ子キー取得 |
+| 関数                    | 説明                  |
+| ----------------------- | --------------------- |
+| `Invoke-Wsl`            | WSL コマンド実行      |
+| `Invoke-Chezmoi`        | chezmoi コマンド実行  |
+| `Invoke-Diskpart`       | diskpart コマンド実行 |
+| `Get-ExternalCommand`   | コマンド存在確認      |
+| `Test-PathExists`       | パス存在確認          |
+| `Get-ProcessSafe`       | プロセス取得          |
+| `Stop-ProcessSafe`      | プロセス停止          |
+| `Start-ProcessSafe`     | プロセス起動          |
+| `Copy-FileSafe`         | ファイルコピー        |
+| `Get-FileContentSafe`   | ファイル読み取り      |
+| `Get-JsonContent`       | JSON ファイル読み取り |
+| `New-DirectorySafe`     | ディレクトリ作成      |
+| `Get-ChildItemSafe`     | ディレクトリ内容取得  |
+| `Get-RegistryValue`     | レジストリ値取得      |
+| `Get-RegistryChildItem` | レジストリ子キー取得  |
 
 ### テストでのモック例
 

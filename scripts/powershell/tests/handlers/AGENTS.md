@@ -4,12 +4,12 @@ Purpose: ハンドラーのユニットテスト
 
 ## ファイル一覧
 
-| ファイル | 対象 |
-|----------|------|
-| `Handler.WslConfig.Tests.ps1` | WslConfigHandler |
-| `Handler.Docker.Tests.ps1` | DockerHandler |
+| ファイル                         | 対象                |
+| -------------------------------- | ------------------- |
+| `Handler.WslConfig.Tests.ps1`    | WslConfigHandler    |
+| `Handler.Docker.Tests.ps1`       | DockerHandler       |
 | `Handler.VscodeServer.Tests.ps1` | VscodeServerHandler |
-| `Handler.Chezmoi.Tests.ps1` | ChezmoiHandler |
+| `Handler.Chezmoi.Tests.ps1`      | ChezmoiHandler      |
 
 ## テスト構造
 

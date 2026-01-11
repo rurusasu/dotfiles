@@ -4,12 +4,12 @@ Purpose: セットアップハンドラーの実装
 
 ## ファイル一覧
 
-| ファイル | Order | 説明 |
-|----------|-------|------|
-| `Handler.WslConfig.ps1` | 10 | .wslconfig 適用と VHD 拡張 |
-| `Handler.Docker.ps1` | 20 | Docker Desktop WSL 連携設定 |
-| `Handler.VscodeServer.ps1` | 30 | VS Code Server キャッシュ削除/事前インストール |
-| `Handler.Chezmoi.ps1` | 100 | chezmoi dotfiles 適用 |
+| ファイル                   | Order | 説明                                           |
+| -------------------------- | ----- | ---------------------------------------------- |
+| `Handler.WslConfig.ps1`    | 10    | .wslconfig 適用と VHD 拡張                     |
+| `Handler.Docker.ps1`       | 20    | Docker Desktop WSL 連携設定                    |
+| `Handler.VscodeServer.ps1` | 30    | VS Code Server キャッシュ削除/事前インストール |
+| `Handler.Chezmoi.ps1`      | 100   | chezmoi dotfiles 適用                          |
 
 ## ハンドラー実装ルール
 

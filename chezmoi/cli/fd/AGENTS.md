@@ -4,13 +4,14 @@ fd is a fast, user-friendly alternative to `find`.
 
 ## Files
 
-| File | Deployed To |
-|------|-------------|
+| File     | Deployed To           |
+| -------- | --------------------- |
 | `ignore` | `~/.config/fd/ignore` |
 
 ## Ignore Patterns
 
 The ignore file excludes:
+
 - Version control: `.git/`
 - Dependencies: `node_modules/`, `bower_components/`
 - Build outputs: `target/`, `build/`, `dist/`, `__pycache__/`

@@ -4,10 +4,10 @@ Purpose: 共通ライブラリのユニットテスト
 
 ## ファイル一覧
 
-| ファイル | 対象 |
-|----------|------|
-| `SetupHandler.Tests.ps1` | SetupContext, SetupResult, SetupHandlerBase |
-| `Invoke-ExternalCommand.Tests.ps1` | 外部コマンドラッパー関数群 |
+| ファイル                           | 対象                                        |
+| ---------------------------------- | ------------------------------------------- |
+| `SetupHandler.Tests.ps1`           | SetupContext, SetupResult, SetupHandlerBase |
+| `Invoke-ExternalCommand.Tests.ps1` | 外部コマンドラッパー関数群                  |
 
 ## SetupHandler.Tests.ps1
 
@@ -45,11 +45,11 @@ Purpose: 共通ライブラリのユニットテスト
 
 以下は外部コマンド/ファイルシステム操作のため、ユニットテストでカバー不可：
 
-| 関数 | 行 | コード |
-|------|-----|--------|
-| `Invoke-Chezmoi` | 53 | `if ($ExePath)` |
-| `Invoke-Chezmoi` | 54 | `& $ExePath @Arguments` |
-| `Invoke-Chezmoi` | 56 | `& chezmoi @Arguments` |
+| 関数                   | 行  | コード                       |
+| ---------------------- | --- | ---------------------------- |
+| `Invoke-Chezmoi`       | 53  | `if ($ExePath)`              |
+| `Invoke-Chezmoi`       | 54  | `& $ExePath @Arguments`      |
+| `Invoke-Chezmoi`       | 56  | `& chezmoi @Arguments`       |
 | `Set-ContentNoNewline` | 101 | `Set-Content ... -NoNewline` |
 
 これらは**統合テスト**でカバーする必要があります。

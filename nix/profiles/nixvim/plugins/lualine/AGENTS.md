@@ -4,18 +4,18 @@ Purpose: Lualine status line configuration.
 
 ## Nixvim Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | bool | false | Enable lualine |
-| `package` | package | pkgs.vimPlugins.lualine-nvim | Lualine package |
-| `autoLoad` | bool | true | Auto load on startup |
-| `settings.options.theme` | string | "auto" | Colorscheme theme |
-| `settings.options.globalstatus` | bool | false | Single statusline |
-| `settings.options.icons_enabled` | bool | true | Show icons |
-| `settings.options.component_separators` | attrs | {} | Component separators |
-| `settings.options.section_separators` | attrs | {} | Section separators |
-| `settings.sections` | attrs | {} | Configure lualine_a through lualine_z |
-| `settings.inactive_sections` | attrs | {} | Inactive window sections |
+| Option                                  | Type    | Default                      | Description                           |
+| --------------------------------------- | ------- | ---------------------------- | ------------------------------------- |
+| `enable`                                | bool    | false                        | Enable lualine                        |
+| `package`                               | package | pkgs.vimPlugins.lualine-nvim | Lualine package                       |
+| `autoLoad`                              | bool    | true                         | Auto load on startup                  |
+| `settings.options.theme`                | string  | "auto"                       | Colorscheme theme                     |
+| `settings.options.globalstatus`         | bool    | false                        | Single statusline                     |
+| `settings.options.icons_enabled`        | bool    | true                         | Show icons                            |
+| `settings.options.component_separators` | attrs   | {}                           | Component separators                  |
+| `settings.options.section_separators`   | attrs   | {}                           | Section separators                    |
+| `settings.sections`                     | attrs   | {}                           | Configure lualine_a through lualine_z |
+| `settings.inactive_sections`            | attrs   | {}                           | Inactive window sections              |
 
 ## Lualine Sections Layout
 

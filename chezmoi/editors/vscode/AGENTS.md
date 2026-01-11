@@ -4,15 +4,16 @@ Visual Studio Code editor configuration.
 
 ## Files
 
-| File | Deployed To | Purpose |
-|------|-------------|---------|
-| `settings.json` | `~/.config/Code/User/` or `%APPDATA%/Code/User/` | Editor settings |
-| `keybindings.json` | Same as above | Custom keybindings |
-| `extensions.json` | N/A (used by script) | Extension list |
+| File               | Deployed To                                      | Purpose            |
+| ------------------ | ------------------------------------------------ | ------------------ |
+| `settings.json`    | `~/.config/Code/User/` or `%APPDATA%/Code/User/` | Editor settings    |
+| `keybindings.json` | Same as above                                    | Custom keybindings |
+| `extensions.json`  | N/A (used by script)                             | Extension list     |
 
 ## Settings Highlights
 
 ### Editor
+
 - Font size: 12pt
 - Tab size: 2 spaces
 - Format on save: Enabled
@@ -20,25 +21,29 @@ Visual Studio Code editor configuration.
 - Word wrap: 80 columns
 
 ### Theme
+
 - Color theme: Default Dark Modern
 - Icon theme: Material Icon Theme
 
 ### Vim Mode
+
 - System clipboard: Enabled
 - Leader key: `<Space>`
 - Disabled Ctrl keys: `Ctrl+A/C/V/X/Z` (OS compatibility)
 - Enabled Ctrl keys: `Ctrl+D/U/F/B/O` (vim navigation)
 
 ### Language Formatters
-| Language | Formatter |
-|----------|-----------|
-| Python | Ruff |
-| JavaScript/TypeScript | Prettier |
-| JSON | Prettier |
+
+| Language              | Formatter |
+| --------------------- | --------- |
+| Python                | Ruff      |
+| JavaScript/TypeScript | Prettier  |
+| JSON                  | Prettier  |
 
 ## Extensions
 
 Auto-installed extensions:
+
 - `tobiasalthoff.atom-material-theme`
 - `ms-vscode-remote.remote-containers`
 - `ms-vscode-remote.remote-ssh`
@@ -55,6 +60,7 @@ Auto-installed extensions:
 ## Remote Development
 
 Configured for:
+
 - Dev Containers
 - SSH Remote
 - WSL

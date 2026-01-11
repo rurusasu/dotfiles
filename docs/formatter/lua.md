@@ -14,29 +14,29 @@ indent_width = 4
 
 ## 設定オプション
 
-| オプション | 値 | 説明 |
-|-----------|-----|------|
-| `column_width` | `120` | 行の最大幅 |
-| `indent_type` | `"Spaces"` | インデントにスペースを使用 |
-| `indent_width` | `4` | インデント幅（スペース数） |
+| オプション     | 値         | 説明                       |
+| -------------- | ---------- | -------------------------- |
+| `column_width` | `120`      | 行の最大幅                 |
+| `indent_type`  | `"Spaces"` | インデントにスペースを使用 |
+| `indent_width` | `4`        | インデント幅（スペース数） |
 
 ## その他のオプション
 
-| オプション | デフォルト | 説明 |
-|-----------|-----------|------|
-| `line_endings` | `"Unix"` | 改行コード (`"Unix"` or `"Windows"`) |
-| `quote_style` | `"AutoPreferDouble"` | 文字列のクォートスタイル |
-| `call_parentheses` | `"Always"` | 関数呼び出しの括弧 |
-| `collapse_simple_statement` | `"Never"` | シンプルな文を1行にまとめるか |
+| オプション                  | デフォルト           | 説明                                 |
+| --------------------------- | -------------------- | ------------------------------------ |
+| `line_endings`              | `"Unix"`             | 改行コード (`"Unix"` or `"Windows"`) |
+| `quote_style`               | `"AutoPreferDouble"` | 文字列のクォートスタイル             |
+| `call_parentheses`          | `"Always"`           | 関数呼び出しの括弧                   |
+| `collapse_simple_statement` | `"Never"`            | シンプルな文を1行にまとめるか        |
 
 ## quote_style オプション
 
-| 値 | 説明 |
-|----|------|
+| 値                   | 説明                               |
+| -------------------- | ---------------------------------- |
 | `"AutoPreferDouble"` | ダブルクォートを優先（デフォルト） |
-| `"AutoPreferSingle"` | シングルクォートを優先 |
-| `"ForceDouble"` | 常にダブルクォート |
-| `"ForceSingle"` | 常にシングルクォート |
+| `"AutoPreferSingle"` | シングルクォートを優先             |
+| `"ForceDouble"`      | 常にダブルクォート                 |
+| `"ForceSingle"`      | 常にシングルクォート               |
 
 ## インストール
 

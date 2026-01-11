@@ -4,16 +4,17 @@ This directory contains Nix configurations for installing LLM/AI coding tools.
 
 ## Installed Packages
 
-| Package | Description |
-|---------|-------------|
+| Package       | Description                 |
+| ------------- | --------------------------- |
 | `claude-code` | Anthropic's Claude Code CLI |
-| `codex` | OpenAI Codex CLI |
-| `gemini-cli` | Google Gemini CLI |
-| `cursor-cli` | Cursor editor CLI |
+| `codex`       | OpenAI Codex CLI            |
+| `gemini-cli`  | Google Gemini CLI           |
+| `cursor-cli`  | Cursor editor CLI           |
 
 ## Configuration
 
 Configurations for these tools are managed by chezmoi in `chezmoi/llms/`:
+
 - `~/.claude/` - Claude Code settings
 - `~/.codex/` - Codex configuration
 - `~/.cursor/` - Cursor AI rules

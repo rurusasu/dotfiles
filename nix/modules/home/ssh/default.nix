@@ -34,24 +34,26 @@ in
     };
 
     githubHosts = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule {
-        options = {
-          hostname = lib.mkOption {
-            type = lib.types.str;
-            default = "github.com";
-            description = "GitHub hostname";
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            hostname = lib.mkOption {
+              type = lib.types.str;
+              default = "github.com";
+              description = "GitHub hostname";
+            };
+            identityFile = lib.mkOption {
+              type = lib.types.str;
+              description = "Path to SSH public key";
+            };
+            identitiesOnly = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Only use specified identity";
+            };
           };
-          identityFile = lib.mkOption {
-            type = lib.types.str;
-            description = "Path to SSH public key";
-          };
-          identitiesOnly = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Only use specified identity";
-          };
-        };
-      });
+        }
+      );
       default = { };
       description = "GitHub host configurations";
     };

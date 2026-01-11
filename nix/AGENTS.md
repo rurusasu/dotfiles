@@ -3,6 +3,7 @@
 Purpose
 Purpose: Nix configuration root for this repo.
 Expected contents:
+
 - flake.nix lives at repo root (not here); this tree is referenced by flake modules.
 - nix/flakes: flake-parts composition and outputs wiring.
 - nix/hosts/<host>: per-host system configs.
@@ -16,5 +17,6 @@ Expected contents:
 - nix/templates: templates/scaffolding (if any).
 
 Notes:
+
 - windows/install-nixos-wsl.ps1 requires admin; use elevated PowerShell or run with sudo in pwsh.
 - User dotfiles are managed in repo root `chezmoi/`.

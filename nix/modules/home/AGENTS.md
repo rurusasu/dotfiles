@@ -25,6 +25,7 @@ home/
 - **Profiles** provide configuration (in `nix/profiles/`)
 
 This separation allows:
+
 1. Options to be available across all hosts
 2. Profiles to selectively enable features
 3. Clear distinction between "what can be configured" vs "what is configured"
@@ -82,36 +83,36 @@ All tools share similar keybindings where possible:
 
 ### Tab Operations (Leader-based)
 
-| Action | WezTerm | Tmux | Neovim |
-|--------|---------|------|--------|
-| Leader key | CTRL+Space | C-b (or shared) | Space |
-| New tab | Leader+t | prefix+t | Leader+t |
-| Close tab | Leader+x | prefix+x | Leader+x |
-| Next tab | Leader+l | prefix+l | Leader+l |
-| Previous tab | Leader+h | prefix+h | Leader+h |
-| Tab 1-9 | Leader+1-9 | prefix+1-9 | - |
+| Action       | WezTerm    | Tmux            | Neovim   |
+| ------------ | ---------- | --------------- | -------- |
+| Leader key   | CTRL+Space | C-b (or shared) | Space    |
+| New tab      | Leader+t   | prefix+t        | Leader+t |
+| Close tab    | Leader+x   | prefix+x        | Leader+x |
+| Next tab     | Leader+l   | prefix+l        | Leader+l |
+| Previous tab | Leader+h   | prefix+h        | Leader+h |
+| Tab 1-9      | Leader+1-9 | prefix+1-9      | -        |
 
 ### Pane Operations (Ctrl+Alt in WezTerm)
 
-| Action | WezTerm | Tmux | Neovim |
-|--------|---------|------|--------|
-| Split horizontal | C-A-h | prefix+h | - |
-| Split vertical | C-A-v | prefix+v | - |
-| Close pane | C-A-x | prefix+x | - |
-| Pane zoom | C-A-w | prefix+w | Leader+w |
-| Resize left | C-A-Left | prefix+H | - |
-| Resize down | C-A-Down | prefix+J | - |
-| Resize up | C-A-Up | prefix+K | - |
-| Resize right | C-A-Right | prefix+L | - |
+| Action           | WezTerm   | Tmux     | Neovim   |
+| ---------------- | --------- | -------- | -------- |
+| Split horizontal | C-A-h     | prefix+h | -        |
+| Split vertical   | C-A-v     | prefix+v | -        |
+| Close pane       | C-A-x     | prefix+x | -        |
+| Pane zoom        | C-A-w     | prefix+w | Leader+w |
+| Resize left      | C-A-Left  | prefix+H | -        |
+| Resize down      | C-A-Down  | prefix+J | -        |
+| Resize up        | C-A-Up    | prefix+K | -        |
+| Resize right     | C-A-Right | prefix+L | -        |
 
 ### Pane Navigation (Ctrl+Shift in WezTerm)
 
-| Action | WezTerm | Tmux | Neovim |
-|--------|---------|------|--------|
-| Pane left | C-S-h | h | C-w h |
-| Pane down | C-S-j | j | C-w j |
-| Pane up | C-S-k | k | C-w k |
-| Pane right | C-S-l | l | C-w l |
+| Action     | WezTerm | Tmux | Neovim |
+| ---------- | ------- | ---- | ------ |
+| Pane left  | C-S-h   | h    | C-w h  |
+| Pane down  | C-S-j   | j    | C-w j  |
+| Pane up    | C-S-k   | k    | C-w k  |
+| Pane right | C-S-l   | l    | C-w l  |
 
 ## Usage
 

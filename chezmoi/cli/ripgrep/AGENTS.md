@@ -4,13 +4,14 @@ ripgrep (rg) is a fast line-oriented search tool.
 
 ## Files
 
-| File | Deployed To |
-|------|-------------|
+| File     | Deployed To                |
+| -------- | -------------------------- |
 | `config` | `~/.config/ripgrep/config` |
 
 ## Configuration
 
 Current settings:
+
 - `--smart-case`: Case-insensitive unless uppercase is used
 - `--hidden`: Include hidden files
 - `--glob=!.git/*`: Exclude .git directory

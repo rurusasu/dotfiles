@@ -20,16 +20,19 @@ chezmoi/
 ## Architecture
 
 ### Deployment Method
+
 All configurations are deployed via `.chezmoiscripts/run_onchange_deploy.*`:
+
 - `run_onchange_deploy.ps1` - Windows (PowerShell)
 - `run_onchange_deploy.sh` - Unix/Linux/WSL/DevContainer
 
 ### Role Separation
-| Role | Tool |
-|------|------|
-| **Installation** | Nix (Linux/WSL), winget (Windows) |
-| **Configuration** | Chezmoi (this directory) |
-| **Shell Integration** | Nix Home Manager (fzf, zoxide) |
+
+| Role                  | Tool                              |
+| --------------------- | --------------------------------- |
+| **Installation**      | Nix (Linux/WSL), winget (Windows) |
+| **Configuration**     | Chezmoi (this directory)          |
+| **Shell Integration** | Nix Home Manager (fzf, zoxide)    |
 
 ## Usage
 
@@ -56,6 +59,7 @@ chezmoi apply
 4. All directories are ignored by chezmoi (see `.chezmoiignore`) and deployed via scripts
 
 Notes:
+
 - `AGENTS.md` / `README.md` are intentionally ignored (docs only)
 
 ## Platform Support

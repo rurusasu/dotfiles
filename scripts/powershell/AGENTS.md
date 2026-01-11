@@ -29,6 +29,7 @@ class Docker : SetupHandlerBase { }
 ```
 
 **ルール**:
+
 - ファイル名: `Handler.{Name}.ps1` パターン
 - クラス名: `{Name}Handler` パターン
 - 基底クラス: `SetupHandlerBase` を継承
@@ -44,6 +45,7 @@ $output = wsl.exe --list --verbose
 ```
 
 **ルール**:
+
 - すべての外部コマンドは `Invoke-*` ラッパー経由で実行
 - 新しいコマンドは [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) にラッパーを追加
 
@@ -68,6 +70,7 @@ $output = wsl.exe --list --verbose
 ```
 
 **ルール**:
+
 - Apply() は例外をスローせず、常に `SetupResult` を返す
 - エラー時は `CreateFailureResult()` を使用
 
@@ -83,6 +86,7 @@ Invoke-Pester
 ```
 
 **ルール**:
+
 - テストは必ず [tests/Invoke-Tests.ps1](tests/Invoke-Tests.ps1) 経由で実行
 - Pester v5 が自動的にインストール・使用される
 - `UseBreakpoints = $false` でモックを有効化
@@ -114,6 +118,7 @@ It 'Order が 20 に設定される' {
 ```
 
 **ルール**:
+
 - `It` ブロック名は `'should ...'` で始める（英語、小文字）
 - 類似テストは `-ForEach` でパラメタライズする
 - `<property>` 形式のトークンで動的な名前を生成
@@ -132,6 +137,7 @@ $count = $handlers.Count
 ```
 
 **ルール**:
+
 - 配列操作後に Count や他のプロパティにアクセスする場合は `@()` でラップ
 
 ## 🔄 ドキュメント更新ポリシー
@@ -224,6 +230,7 @@ pre-commit run --all-files
 **目的**: NixOS-WSL セットアップの自動化とハンドラーシステムの実装
 
 **主要コンポーネント**:
+
 - [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター）
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
@@ -262,14 +269,14 @@ scripts/powershell/
 
 ### ハンドラー実行順序
 
-| Order | ハンドラー | ファイル | 説明 |
-|-------|-----------|---------|------|
-| 5 | Winget | Handler.Winget.ps1 | winget パッケージ管理（JSON定義ベース） |
-| 10 | Chezmoi | Handler.Chezmoi.ps1 | chezmoi dotfiles 適用 |
-| 20 | WslConfig | Handler.WslConfig.ps1 | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ |
-| 30 | Docker | Handler.Docker.ps1 | Docker Desktop WSL 連携、docker-desktop distro 作成 |
-| 40 | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール |
-| 50 | NixOSWSL | Handler.NixOSWSL.ps1 | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
+| Order | ハンドラー   | ファイル                 | 説明                                                              |
+| ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
+| 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（JSON定義ベース）                           |
+| 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用                                             |
+| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ               |
+| 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |
+| 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                 |
+| 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
 
 ## 🔗 参考資料
 
