@@ -1,0 +1,19 @@
+# Cursor AI Rules
+
+## Language
+- Respond in Japanese when the user writes in Japanese
+- Use concise and direct responses
+
+## Code Style
+- Use 2 spaces for indentation
+- Follow existing project conventions
+- Prefer functional patterns where appropriate
+
+## Behavior
+- Always read files before editing
+- Prefer editing existing files over creating new ones
+- Explain changes briefly
+
+## Security
+- Never expose API keys or secrets
+- Use environment variables for sensitive data

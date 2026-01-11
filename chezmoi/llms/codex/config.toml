@@ -1,0 +1,24 @@
+# Codex CLI configuration
+# See: https://developers.openai.com/codex/config-reference/
+
+[model]
+# Default model to use
+default = "o4-mini"
+
+[approvals]
+# Approval mode: "always", "never", "auto-edit"
+mode = "auto-edit"
+
+[sandbox]
+# Enable sandbox mode for safer execution
+enabled = true
+
+[shell_environment_policy]
+# Environment variables to include
+include_only = ["PATH", "HOME", "USER", "SHELL", "TERM"]
+
+[features]
+# Enable shell snapshot for context
+shell_snapshot = true
+# Enable web search
+web_search_request = true

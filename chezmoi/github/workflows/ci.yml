@@ -1,0 +1,23 @@
+# Basic CI workflow template
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        run: echo "Add your setup steps here"
+
+      - name: Build
+        run: echo "Add your build steps here"
+
+      - name: Test
+        run: echo "Add your test steps here"

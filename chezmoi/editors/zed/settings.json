@@ -1,0 +1,112 @@
+{
+  // Zed settings - uses JSONC format (comments allowed)
+  "theme": "Gruvbox Dark Hard",
+  "ui_font_size": 14,
+  "buffer_font_size": 12,
+  "buffer_font_family": "Consolas",
+
+  // Vim mode
+  "vim_mode": true,
+  "vim": {
+    "use_system_clipboard": "always",
+    "use_multiline_find": true
+  },
+
+  // Editor settings
+  "tab_size": 2,
+  "hard_tabs": false,
+  "format_on_save": "on",
+  "formatter": "language_server",
+  "show_whitespaces": "all",
+  "cursor_blink": true,
+  "relative_line_numbers": true,
+  "scroll_beyond_last_line": "one_page",
+  "vertical_scroll_margin": 8,
+  "scrollbar": {
+    "show": "auto"
+  },
+  "gutter": {
+    "line_numbers": true,
+    "code_actions": true,
+    "folds": true
+  },
+  "indent_guides": {
+    "enabled": true,
+    "coloring": "fixed"
+  },
+  "inlay_hints": {
+    "enabled": true
+  },
+  "soft_wrap": "editor_width",
+
+  // Terminal settings
+  "terminal": {
+    "shell": {
+      "program": "pwsh"
+    },
+    "font_size": 13,
+    "line_height": "comfortable",
+    "copy_on_select": false
+  },
+
+  // File settings
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/node_modules",
+    "**/target",
+    "**/build",
+    "**/dist",
+    "**/.DS_Store"
+  ],
+  "remove_trailing_whitespace_on_save": true,
+  "ensure_final_newline_on_save": true,
+
+  // Git settings
+  "git": {
+    "git_gutter": "tracked_files",
+    "inline_blame": {
+      "enabled": true
+    }
+  },
+
+  // Telemetry
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  },
+
+  // Project panel
+  "project_panel": {
+    "dock": "right",
+    "auto_reveal_entries": true,
+    "auto_fold_dirs": true
+  },
+
+  // Language-specific settings
+  "languages": {
+    "Python": {
+      "formatter": {
+        "external": {
+          "command": "ruff",
+          "arguments": ["format", "-"]
+        }
+      }
+    },
+    "JavaScript": {
+      "formatter": "prettier"
+    },
+    "TypeScript": {
+      "formatter": "prettier"
+    },
+    "JSON": {
+      "formatter": "prettier"
+    }
+  },
+
+  // Assistant (AI) settings
+  "assistant": {
+    "enabled": true,
+    "version": "2"
+  }
+}

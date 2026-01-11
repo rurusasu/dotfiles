@@ -1,0 +1,13 @@
+{
+  "codeAssist": {
+    "enableCodeCompletion": true,
+    "enableInlineChat": true
+  },
+  "preferences": {
+    "language": "auto",
+    "codeStyle": {
+      "indentSize": 2,
+      "useTabs": false
+    }
+  }
+}

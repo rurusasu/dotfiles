@@ -1,0 +1,87 @@
+{{ if eq .chezmoi.os "windows" -}}
+# chezmoi deploy script for Windows
+# Deploys configuration files from chezmoi source to appropriate locations
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-File {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+
+    if (Test-Path -LiteralPath $Source -PathType Leaf) {
+        $destDir = Split-Path -Parent $Destination
+        if (-not (Test-Path -LiteralPath $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $Source -Destination $Destination -Force
+        Write-Host "Deployed: $Destination"
+    }
+}
+
+Write-Host "Deploying chezmoi configurations..."
+
+# Shells (for Git Bash / WSL access)
+Deploy-File "$ChezmoiSource\shells\bashrc" "$HomeDir\.bashrc"
+Deploy-File "$ChezmoiSource\shells\zshrc" "$HomeDir\.zshrc"
+Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
+
+# Git
+if (Test-Path "$ChezmoiSource\git\gitconfig") {
+    Deploy-File "$ChezmoiSource\git\gitconfig" "$HomeDir\.gitconfig"
+} elseif (Test-Path "$ChezmoiSource\git\gitconfig.tmpl") {
+    Deploy-File "$ChezmoiSource\git\gitconfig.tmpl" "$HomeDir\.gitconfig.tmpl"
+}
+
+# CLI tools
+Deploy-File "$ChezmoiSource\cli\starship\starship.toml" "$HomeDir\.config\starship.toml"
+Deploy-File "$ChezmoiSource\cli\fd\ignore" "$HomeDir\.config\fd\ignore"
+Deploy-File "$ChezmoiSource\cli\ripgrep\config" "$HomeDir\.config\ripgrep\config"
+Deploy-File "$ChezmoiSource\cli\ghq\config" "$HomeDir\.config\ghq\config"
+Deploy-File "$ChezmoiSource\cli\zoxide\env" "$HomeDir\.config\zoxide\env"
+
+# Terminals
+Deploy-File "$ChezmoiSource\terminals\wezterm\wezterm.lua" "$HomeDir\.config\wezterm\wezterm.lua"
+
+# Windows Terminal
+$WTSettingsDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
+if (Test-Path -LiteralPath $WTSettingsDir) {
+    Deploy-File "$ChezmoiSource\terminals\windows-terminal\settings.json" "$WTSettingsDir\settings.json"
+}
+
+# Editors - VS Code
+$VSCodeConfig = "$env:APPDATA\Code\User"
+Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeConfig\keybindings.json"
+
+# Editors - VS Code Insiders
+$VSCodeInsidersConfig = "$env:APPDATA\Code - Insiders\User"
+Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeInsidersConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeInsidersConfig\keybindings.json"
+
+# Editors - Cursor
+$CursorConfig = "$env:APPDATA\Cursor\User"
+Deploy-File "$ChezmoiSource\editors\cursor\settings.json" "$CursorConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\cursor\keybindings.json" "$CursorConfig\keybindings.json"
+
+# Editors - Zed
+$ZedConfig = "$env:APPDATA\Zed"
+Deploy-File "$ChezmoiSource\editors\zed\settings.json" "$ZedConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\zed\keymap.json" "$ZedConfig\keymap.json"
+
+# LLMs
+Deploy-File "$ChezmoiSource\llms\claude\settings.json" "$HomeDir\.claude\settings.json"
+Deploy-File "$ChezmoiSource\llms\claude\CLAUDE.md" "$HomeDir\.claude\CLAUDE.md"
+Deploy-File "$ChezmoiSource\llms\codex\config.toml" "$HomeDir\.codex\config.toml"
+Deploy-File "$ChezmoiSource\llms\cursor\rules" "$HomeDir\.cursor\rules"
+Deploy-File "$ChezmoiSource\llms\gemini\settings.json" "$HomeDir\.gemini\settings.json"
+
+# SSH - deploy rendered config (template is processed by chezmoi)
+Deploy-File "$ChezmoiSource\ssh\config" "$HomeDir\.ssh\config"
+
+Write-Host "Deployment complete!"
+{{ end -}}

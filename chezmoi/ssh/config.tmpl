@@ -1,0 +1,30 @@
+# SSH Configuration - managed by chezmoi
+# 1Password SSH Agent integration (OS-independent)
+
+{{- if eq .chezmoi.os "windows" }}
+# Windows: Use named pipe for 1Password SSH Agent
+Host *
+    IdentityAgent "//./pipe/openssh-ssh-agent"
+{{- else if eq .chezmoi.os "darwin" }}
+# macOS: Use 1Password SSH Agent socket
+Host *
+    IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+{{- else }}
+# Linux/WSL: Use 1Password SSH Agent socket
+Host *
+    IdentityAgent ~/.1password/agent.sock
+{{- end }}
+
+# Personal GitHub (rurusasu)
+Host github.com-personal
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/personal_key.pub
+    IdentitiesOnly yes
+
+# Work GitHub
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/signing_key.pub
+    IdentitiesOnly yes

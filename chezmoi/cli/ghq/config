@@ -1,0 +1,7 @@
+# ghq configuration
+# Root directory for repositories
+root = ~/ghq
+
+# Use SSH for GitHub
+[github.com]
+  protocol = ssh

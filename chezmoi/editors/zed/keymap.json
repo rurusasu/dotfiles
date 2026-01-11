@@ -1,0 +1,29 @@
+[
+  {
+    "context": "Terminal",
+    "bindings": {
+      "shift-enter": ["terminal::SendText", "\\\n"]
+    }
+  },
+  {
+    "context": "Workspace",
+    "bindings": {
+      "ctrl-alt-h": "pane::SplitRight",
+      "ctrl-alt-v": "pane::SplitDown",
+      "ctrl-alt-x": "pane::CloseActiveItem",
+      "ctrl-alt-w": "workspace::ToggleZoom",
+      "ctrl-shift-h": ["workspace::ActivatePaneInDirection", "Left"],
+      "ctrl-shift-j": ["workspace::ActivatePaneInDirection", "Down"],
+      "ctrl-shift-k": ["workspace::ActivatePaneInDirection", "Up"],
+      "ctrl-shift-l": ["workspace::ActivatePaneInDirection", "Right"]
+    }
+  },
+  {
+    "context": "Editor && vim_mode == normal",
+    "bindings": {
+      "space f f": "file_finder::Toggle",
+      "space f g": "pane::DeploySearch",
+      "space e": "project_panel::ToggleFocus"
+    }
+  }
+]

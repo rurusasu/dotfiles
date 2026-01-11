@@ -1,0 +1,73 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# chezmoi deploy script for Linux/WSL/DevContainer
+# Deploys configuration files from chezmoi source to appropriate locations
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+# Helper function to create directory and copy file
+deploy_file() {
+    local src="$1"
+    local dst="$2"
+
+    if [[ -f "$src" ]]; then
+        mkdir -p "$(dirname "$dst")"
+        cp -f "$src" "$dst"
+        echo "Deployed: $dst"
+    fi
+}
+
+echo "Deploying chezmoi configurations..."
+
+# Shells
+deploy_file "$CHEZMOI_SOURCE/shells/bashrc" "$HOME_DIR/.bashrc"
+deploy_file "$CHEZMOI_SOURCE/shells/zshrc" "$HOME_DIR/.zshrc"
+deploy_file "$CHEZMOI_SOURCE/shells/profile" "$HOME_DIR/.profile"
+
+# Git
+if [[ -f "$CHEZMOI_SOURCE/git/gitconfig" ]]; then
+    deploy_file "$CHEZMOI_SOURCE/git/gitconfig" "$HOME_DIR/.gitconfig"
+elif [[ -f "$CHEZMOI_SOURCE/git/gitconfig.tmpl" ]]; then
+    deploy_file "$CHEZMOI_SOURCE/git/gitconfig.tmpl" "$HOME_DIR/.gitconfig.tmpl"
+fi
+
+# CLI tools
+deploy_file "$CHEZMOI_SOURCE/cli/starship/starship.toml" "$HOME_DIR/.config/starship.toml"
+deploy_file "$CHEZMOI_SOURCE/cli/fd/ignore" "$HOME_DIR/.config/fd/ignore"
+deploy_file "$CHEZMOI_SOURCE/cli/ripgrep/config" "$HOME_DIR/.config/ripgrep/config"
+deploy_file "$CHEZMOI_SOURCE/cli/ghq/config" "$HOME_DIR/.config/ghq/config"
+deploy_file "$CHEZMOI_SOURCE/cli/zoxide/env" "$HOME_DIR/.config/zoxide/env"
+
+# Terminals
+deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
+
+# Editors - VS Code
+VSCODE_CONFIG="$HOME_DIR/.config/Code/User"
+deploy_file "$CHEZMOI_SOURCE/editors/vscode/settings.json" "$VSCODE_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/vscode/keybindings.json" "$VSCODE_CONFIG/keybindings.json"
+
+# Editors - Cursor
+CURSOR_CONFIG="$HOME_DIR/.config/Cursor/User"
+deploy_file "$CHEZMOI_SOURCE/editors/cursor/settings.json" "$CURSOR_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/cursor/keybindings.json" "$CURSOR_CONFIG/keybindings.json"
+
+# Editors - Zed
+ZED_CONFIG="$HOME_DIR/.config/zed"
+deploy_file "$CHEZMOI_SOURCE/editors/zed/settings.json" "$ZED_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/zed/keymap.json" "$ZED_CONFIG/keymap.json"
+
+# LLMs
+deploy_file "$CHEZMOI_SOURCE/llms/claude/settings.json" "$HOME_DIR/.claude/settings.json"
+deploy_file "$CHEZMOI_SOURCE/llms/claude/CLAUDE.md" "$HOME_DIR/.claude/CLAUDE.md"
+deploy_file "$CHEZMOI_SOURCE/llms/codex/config.toml" "$HOME_DIR/.codex/config.toml"
+deploy_file "$CHEZMOI_SOURCE/llms/cursor/rules" "$HOME_DIR/.cursor/rules"
+deploy_file "$CHEZMOI_SOURCE/llms/gemini/settings.json" "$HOME_DIR/.gemini/settings.json"
+
+# SSH - deploy rendered config (template is processed by chezmoi)
+deploy_file "$CHEZMOI_SOURCE/ssh/config" "$HOME_DIR/.ssh/config"
+
+echo "Deployment complete!"
+{{ end -}}

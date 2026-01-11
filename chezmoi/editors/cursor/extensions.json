@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "tobiasalthoff.atom-material-theme",
+    "ms-vscode-remote.remote-containers",
+    "ms-vscode-remote.remote-ssh",
+    "ms-vscode-remote.remote-ssh-edit",
+    "hediet.vscode-drawio",
+    "jnoortheen.nix-ide",
+    "arrterian.nix-env-selector",
+    "kamadorueda.alejandra",
+    "vscodevim.vim",
+    "wakatime.vscode-wakatime",
+    "esbenp.prettier-vscode",
+    "charliermarsh.ruff",
+    "pkief.material-icon-theme"
+  ]
+}

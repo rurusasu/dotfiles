@@ -1,0 +1,10 @@
+# CODEOWNERS file
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @your-username
+
+# Examples:
+# /docs/ @docs-team
+# *.js @frontend-team
+# /src/api/ @backend-team
