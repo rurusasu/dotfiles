@@ -23,26 +23,19 @@ Describe 'NixOSWSLHandler' {
         $script:ctx.InstallDir = "D:\WSL\NixOS"
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が NixOSWSL に設定される' {
-            $handler.Name | Should -Be "NixOSWSL"
-        }
-
-        It 'Description が設定される' {
-            $handler.Description | Should -Be "NixOS-WSL のダウンロードとインストール"
-        }
-
-        It 'Order が 50 に設定される' {
-            $handler.Order | Should -Be 50
-        }
-
-        It 'RequiresAdmin が $true に設定される' {
-            $handler.RequiresAdmin | Should -Be $true
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "NixOSWSL" }
+            @{ property = "Description"; expected = "NixOS-WSL のダウンロードとインストール" }
+            @{ property = "Order"; expected = 50 }
+            @{ property = "RequiresAdmin"; expected = $true }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'ディストリビューションが存在しない場合は $true を返す' {
+        It 'should return true when distro does not exist' {
             # DistroExists が $false を返すようにモック
             $handler | Add-Member -MemberType ScriptMethod -Name DistroExists -Value { return $false } -Force
             Mock Write-Host { }
@@ -52,7 +45,7 @@ Describe 'NixOSWSLHandler' {
             $result | Should -Be $true
         }
 
-        It 'ディストリビューションが存在する場合は $false を返す' {
+        It 'should return false when distro already exists' {
             # DistroExists が $true を返すようにモック
             $handler | Add-Member -MemberType ScriptMethod -Name DistroExists -Value { return $true } -Force
             Mock Write-Host { }
@@ -63,7 +56,7 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
-    Context 'Apply - 成功パス' {
+    Context 'Apply - success path' {
         BeforeEach {
             # すべての依存関数をモック
             $handler | Add-Member -MemberType ScriptMethod -Name AssertAdmin -Value { } -Force
@@ -84,7 +77,7 @@ Describe 'NixOSWSLHandler' {
             Mock Write-Host { }
         }
 
-        It '成功結果を返す' {
+        It 'should return success result' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -92,8 +85,8 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
-    Context 'Apply - エラーハンドリング' {
-        It '例外が発生した場合は失敗結果を返す' {
+    Context 'Apply - error handling' {
+        It 'should return failure result when exception occurs' {
             $handler | Add-Member -MemberType ScriptMethod -Name AssertAdmin -Value {
                 throw "管理者権限がありません"
             } -Force
@@ -107,7 +100,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'AssertAdmin' {
-        It '管理者権限がない場合は例外をスローする' {
+        It 'should throw exception when not running as administrator' {
             Mock New-Object {
                 $principal = [PSCustomObject]@{}
                 $principal | Add-Member -MemberType ScriptMethod -Name IsInRole -Value { return $false }
@@ -119,7 +112,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'SupportsFromFileInstall' {
-        It 'WSL 2.4.4+ の場合は $true を返す' {
+        It 'should return true when WSL version is 2.4.4+' {
             $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
                 return [version]"2.4.4.0"
             } -Force
@@ -129,7 +122,7 @@ Describe 'NixOSWSLHandler' {
             $result | Should -Be $true
         }
 
-        It 'WSL 2.4.3 以下の場合はヘルプテキストをチェックする' {
+        It 'should check help text when WSL version is below 2.4.4' {
             $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
                 return [version]"2.0.0.0"
             } -Force
@@ -142,7 +135,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'GetRelease' {
-        It 'GitHub API から latest リリースを取得する' {
+        It 'should fetch latest release from GitHub API' {
             Mock Invoke-RestMethod {
                 return @{
                     tag_name = "v24.5.1"
@@ -159,7 +152,7 @@ Describe 'NixOSWSLHandler' {
             }
         }
 
-        It '特定のタグを指定できる' {
+        It 'should fetch specific tag when specified' {
             Mock Invoke-RestMethod {
                 return @{
                     tag_name = "v24.5.0"
@@ -177,7 +170,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'SelectAsset' {
-        It 'nixos.wsl を優先的に選択する' {
+        It 'should prefer nixos.wsl asset' {
             $release = @{
                 assets = @(
                     @{ name = "nixos-wsl.tar.gz" },
@@ -191,7 +184,7 @@ Describe 'NixOSWSLHandler' {
             $result.name | Should -Be "nixos.wsl"
         }
 
-        It 'nixos.wsl がない場合は nixos-wsl.tar.gz を選択する' {
+        It 'should select nixos-wsl.tar.gz when nixos.wsl is not available' {
             $release = @{
                 assets = @(
                     @{ name = "nixos-wsl.tar.gz" },
@@ -205,7 +198,7 @@ Describe 'NixOSWSLHandler' {
             $result.name | Should -Be "nixos-wsl.tar.gz"
         }
 
-        It 'アセットが見つからない場合は例外をスローする' {
+        It 'should throw exception when no asset is found' {
             $release = @{
                 tag_name = "v1.0.0"
                 assets = @()
@@ -216,7 +209,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'DownloadAsset' {
-        It 'アセットをダウンロードする' {
+        It 'should download asset' {
             $asset = @{
                 name = "nixos.wsl"
                 browser_download_url = "http://example.com/nixos.wsl"
@@ -234,7 +227,7 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'EnsureInstallDir' {
-        It 'ディレクトリが存在しない場合は作成する' {
+        It 'should create directory when it does not exist' {
             Mock Test-Path { return $false }
             Mock New-Item { }
 
@@ -245,7 +238,7 @@ Describe 'NixOSWSLHandler' {
             }
         }
 
-        It 'ディレクトリが空でない場合は例外をスローする' {
+        It 'should throw exception when directory is not empty' {
             Mock Test-Path { return $true } -ParameterFilter { $PathType -eq 'Container' }
             Mock Test-Path { return $true } -ParameterFilter { -not $PSBoundParameters.ContainsKey('PathType') }
             Mock Get-ChildItem {
@@ -262,7 +255,7 @@ Describe 'NixOSWSLHandler' {
             $handler | Add-Member -MemberType ScriptMethod -Name SupportsFromFileInstall -Value { return $true } -Force
         }
 
-        It '.wsl ファイルの場合は InstallFromFile を使用する' {
+        It 'should use InstallFromFile for .wsl file' {
             $script:callCount = 0
             $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value { $script:callCount++ } -Force
 
@@ -271,7 +264,7 @@ Describe 'NixOSWSLHandler' {
             $script:callCount | Should -Be 1
         }
 
-        It 'InstallFromFile が失敗した場合は ImportDistro にフォールバックする' {
+        It 'should fallback to ImportDistro when InstallFromFile fails' {
             $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value {
                 throw "Failed"
             } -Force
@@ -286,14 +279,14 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'ExecutePostInstall' {
-        It 'SkipPostInstallSetup が true の場合は何もしない' {
+        It 'should skip when SkipPostInstallSetup is true' {
             $ctx.Options["SkipPostInstallSetup"] = $true
             Mock Write-Host { }
 
             { $handler.ExecutePostInstall($ctx) } | Should -Not -Throw
         }
 
-        It 'スクリプトが存在しない場合は警告を出す' {
+        It 'should show warning when script does not exist' {
             $ctx.Options["PostInstallScript"] = "C:\NonExistent\script.sh"
             Mock Test-Path { return $false }
             Mock Write-Host { }
