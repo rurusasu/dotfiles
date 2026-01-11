@@ -5,7 +5,16 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "twpayne.chezmoi"
+          "PackageIdentifier": "AgileBits.1Password"
+        },
+        {
+          "PackageIdentifier": "Anthropic.Claude"
+        },
+        {
+          "PackageIdentifier": "Anthropic.ClaudeCod"
+        },
+        {
+          "PackageIdentifier": "Anysphere.Cursor"
         },
         {
           "PackageIdentifier": "Docker.DockerDesktop"
@@ -14,22 +23,34 @@
           "PackageIdentifier": "Git.Git"
         },
         {
-          "PackageIdentifier": "TablePlus.TablePlus"
+          "PackageIdentifier": "Microsoft.PowerShell"
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
-        },
-        {
-          "PackageIdentifier": "ZedIndustries.Zed"
-        },
-        {
-          "PackageIdentifier": "Anysphere.Cursor"
         },
         {
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
           "PackageIdentifier": "Microsoft.WSL"
+        },
+        {
+          "PackageIdentifier": "OpenAI.ChatGPT"
+        },
+        {
+          "PackageIdentifier": "OpenAI.ChatGPTCodex"
+        },
+        {
+          "PackageIdentifier": "TablePlus.TablePlus"
+        },
+        {
+          "PackageIdentifier": "twpayne.chezmoi"
+        },
+        {
+          "PackageIdentifier": "wez.wezterm"
+        },
+        {
+          "PackageIdentifier": "ZedIndustries.Zed"
         }
       ],
       "SourceDetails": {
