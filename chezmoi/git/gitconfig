@@ -14,18 +14,7 @@
 
 [core]
   editor = nvim
-{{- if eq .chezmoi.os "windows" }}
   sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
-{{- else }}
-  sshCommand = ssh
-{{- end }}
-
-{{- if ne .chezmoi.os "windows" }}
-[credential "https://github.com"]
-  helper = "!gh auth git-credential"
-[credential "https://gist.github.com"]
-  helper = "!gh auth git-credential"
-{{- end }}
 
 # Personal repositories use personal SSH key
 [url "git@github.com-personal:rurusasu/"]
