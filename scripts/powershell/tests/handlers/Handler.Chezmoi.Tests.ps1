@@ -21,29 +21,22 @@ Describe 'ChezmoiHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が Chezmoi に設定される' {
-            $handler.Name | Should -Be "Chezmoi"
-        }
-
-        It 'Description が設定される' {
-            $handler.Description | Should -Be "chezmoi による dotfiles 適用"
-        }
-
-        It 'Order が 100 に設定される' {
-            $handler.Order | Should -Be 100
-        }
-
-        It 'RequiresAdmin が $false に設定される' {
-            $handler.RequiresAdmin | Should -Be $false
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "Chezmoi" }
+            @{ property = "Description"; expected = "chezmoi による dotfiles 適用" }
+            @{ property = "Order"; expected = 100 }
+            @{ property = "RequiresAdmin"; expected = $false }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
-    Context 'CanApply - chezmoi 検出' {
-        It 'chezmoi が PATH にある場合は $true' {
-            Mock Get-ExternalCommand { 
-                return [PSCustomObject]@{ 
-                    Source = "C:\chezmoi\chezmoi.exe" 
+    Context 'CanApply - chezmoi detection' {
+        It 'should return true when chezmoi is in PATH' {
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{
+                    Source = "C:\chezmoi\chezmoi.exe"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -53,9 +46,9 @@ Describe 'ChezmoiHandler' {
             $result | Should -Be $true
         }
 
-        It 'chezmoi が WinGet Links にある場合は $true' {
+        It 'should return true when chezmoi is in WinGet Links' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 # WinGet Links の chezmoi.exe が存在
                 if ($Path -like "*WinGet\Links\chezmoi.exe") { return $true }
@@ -69,9 +62,9 @@ Describe 'ChezmoiHandler' {
             $result | Should -Be $true
         }
 
-        It 'chezmoi が WinGet Packages にある場合は $true' {
+        It 'should return true when chezmoi is in WinGet Packages' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }
@@ -79,8 +72,8 @@ Describe 'ChezmoiHandler' {
                 if ($Path -like "*chezmoi") { return $true }  # ソースディレクトリ
                 return $false
             }
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     Name = "twpayne.chezmoi_1.0.0"
                     FullName = "C:\WinGet\Packages\twpayne.chezmoi_1.0.0"
                 })
@@ -91,9 +84,9 @@ Describe 'ChezmoiHandler' {
             $result | Should -Be $true
         }
 
-        It 'chezmoi が Programs ディレクトリにある場合は $true' {
+        It 'should return true when chezmoi is in Programs directory' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $false }
@@ -108,12 +101,12 @@ Describe 'ChezmoiHandler' {
             $result | Should -Be $true
         }
 
-        It 'chezmoi が見つからない場合はインストール手順を表示して $false' {
+        It 'should return false and show install instructions when chezmoi is not found' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             $script:notFoundMessageShown = $false
-            Mock Write-Host { 
+            Mock Write-Host {
                 param($Object)
                 if ($Object -match "chezmoi がインストールされていません") {
                     $script:notFoundMessageShown = $true
@@ -127,18 +120,18 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'CanApply - ソースディレクトリ' {
-        It 'chezmoi ソースディレクトリが存在しない場合は $false' {
-            Mock Get-ExternalCommand { 
+    Context 'CanApply - source directory' {
+        It 'should return false when chezmoi source directory does not exist' {
+            Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = "C:\chezmoi.exe" }
             }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*chezmoi.exe") { return $true }
                 return $false  # ソースディレクトリは存在しない
             }
             $script:sourceDirNotFoundShown = $false
-            Mock Write-Host { 
+            Mock Write-Host {
                 param($Object)
                 if ($Object -match "ソースディレクトリが見つかりません") {
                     $script:sourceDirNotFoundShown = $true
@@ -152,17 +145,17 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'Apply - 正常系' {
+    Context 'Apply - success cases' {
         BeforeEach {
-            Mock Get-ExternalCommand { 
+            Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
         }
 
-        It 'chezmoi apply が成功した場合' {
-            Mock Invoke-Chezmoi { 
+        It 'should succeed when chezmoi apply succeeds' {
+            Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
             }
             $handler.CanApply($ctx)
@@ -173,10 +166,10 @@ Describe 'ChezmoiHandler' {
             $result.Message | Should -Be "dotfiles を適用しました"
         }
 
-        It 'chezmoi apply に正しい引数が渡される' {
+        It 'should pass correct arguments to chezmoi apply' {
             $script:chezmoiArgs = ""
             $script:chezmoiExePath = ""
-            Mock Invoke-Chezmoi { 
+            Mock Invoke-Chezmoi {
                 param($ExePath, $Arguments)
                 $script:chezmoiExePath = $ExePath
                 $script:chezmoiArgs = $Arguments -join " "
@@ -190,12 +183,12 @@ Describe 'ChezmoiHandler' {
             $script:chezmoiArgs | Should -Match "--source.*D:\\dotfiles\\chezmoi.*apply"
         }
 
-        It '成功後にメッセージが表示される' {
+        It 'should show success message after completion' {
             $script:successMessageShown = $false
-            Mock Invoke-Chezmoi { 
+            Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
             }
-            Mock Write-Host { 
+            Mock Write-Host {
                 param($Object, $ForegroundColor)
                 if ($Object -match "chezmoi apply 完了" -and $ForegroundColor -eq "Green") {
                     $script:successMessageShown = $true
@@ -209,17 +202,17 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'Apply - 失敗系' {
+    Context 'Apply - failure cases' {
         BeforeEach {
-            Mock Get-ExternalCommand { 
+            Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
         }
 
-        It 'chezmoi apply が失敗した場合（exit code != 0）' {
-            Mock Invoke-Chezmoi { 
+        It 'should fail when chezmoi apply fails with non-zero exit code' {
+            Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 1
             }
             $handler.CanApply($ctx)
@@ -230,8 +223,8 @@ Describe 'ChezmoiHandler' {
             $result.Message | Should -Match "chezmoi apply が失敗しました"
         }
 
-        It '失敗時に手動実行コマンドが表示される' {
-            Mock Invoke-Chezmoi { 
+        It 'should show manual execution command on failure' {
+            Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 1
             }
             $handler.CanApply($ctx)
@@ -243,7 +236,7 @@ Describe 'ChezmoiHandler' {
             }
         }
 
-        It '例外が発生した場合' {
+        It 'should fail when exception is thrown' {
             Mock Invoke-Chezmoi { throw "chezmoi エラー" }
             $handler.CanApply($ctx)
 
@@ -255,7 +248,7 @@ Describe 'ChezmoiHandler' {
     }
 
     Context 'ShowChezmoiInstallInstructions' {
-        It 'インストール手順に winget コマンドが含まれる' {
+        It 'should include winget command in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
@@ -268,7 +261,7 @@ Describe 'ChezmoiHandler' {
             }
         }
 
-        It 'インストール手順に GitHub 直接取得方法が含まれる' {
+        It 'should include GitHub direct fetch method in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
@@ -281,7 +274,7 @@ Describe 'ChezmoiHandler' {
             }
         }
 
-        It 'インストール手順にソースパスが含まれる' {
+        It 'should include source path in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
@@ -295,15 +288,15 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'FindChezmoiExe - 検索順序' {
-        It 'PATH → WinGet Links → WinGet Packages → Programs の順で検索する' {
+    Context 'FindChezmoiExe - search order' {
+        It 'should search in order: PATH, WinGet Links, WinGet Packages, Programs' {
             $script:searchOrder = @()
-            
-            Mock Get-ExternalCommand { 
+
+            Mock Get-ExternalCommand {
                 $script:searchOrder += "PATH"
                 return $null
             }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*WinGet\Links*") {
                     $script:searchOrder += "Links"
@@ -329,8 +322,8 @@ Describe 'ChezmoiHandler' {
             $script:searchOrder | Should -Contain "Packages"
         }
 
-        It 'PATH で見つかった場合は他を検索しない' {
-            Mock Get-ExternalCommand { 
+        It 'should not search other locations when found in PATH' {
+            Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = "C:\chezmoi.exe" }
             }
             Mock Test-PathExist { return $true }
@@ -342,10 +335,10 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'WinGet Packages 検索' {
-        It 'twpayne.chezmoi* パターンでパッケージを検索する' {
+    Context 'WinGet Packages search' {
+        It 'should search packages with twpayne.chezmoi* pattern' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }
@@ -353,10 +346,10 @@ Describe 'ChezmoiHandler' {
                 if ($Path -like "*chezmoi") { return $true }
                 return $false
             }
-            Mock Get-ChildItemSafe { 
+            Mock Get-ChildItemSafe {
                 param($Path)
                 if ($Path -like "*Packages*") {
-                    return @([PSCustomObject]@{ 
+                    return @([PSCustomObject]@{
                         Name = "twpayne.chezmoi_2.40.0_x64"
                         FullName = "C:\WinGet\Packages\twpayne.chezmoi_2.40.0_x64"
                     })
@@ -372,9 +365,9 @@ Describe 'ChezmoiHandler' {
             }
         }
 
-        It 'パッケージ内に chezmoi.exe がない場合は次を検索する' {
+        It 'should search next location when chezmoi.exe not found in package' {
             Mock Get-ExternalCommand { return $null }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 if ($Path -like "*WinGet\Links*") { return $false }
                 if ($Path -like "*WinGet\Packages") { return $true }
@@ -383,8 +376,8 @@ Describe 'ChezmoiHandler' {
                 if ($Path -like "*chezmoi") { return $true }
                 return $false
             }
-            Mock Get-ChildItemSafe { 
-                return @([PSCustomObject]@{ 
+            Mock Get-ChildItemSafe {
+                return @([PSCustomObject]@{
                     Name = "twpayne.chezmoi_2.40.0"
                     FullName = "C:\WinGet\Packages\twpayne.chezmoi_2.40.0"
                 })

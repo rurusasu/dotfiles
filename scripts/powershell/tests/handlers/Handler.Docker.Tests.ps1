@@ -21,34 +21,21 @@ Describe 'DockerHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
-    Context 'コンストラクタ' {
-        It 'Name が Docker に設定される' {
-            $handler.Name | Should -Be "Docker"
-        }
-
-        It 'Description が設定される' {
-            $handler.Description | Should -Be "Docker Desktop との WSL 連携"
-        }
-
-        It 'Order が 20 に設定される' {
-            $handler.Order | Should -Be 20
-        }
-
-        It 'RequiresAdmin が $false に設定される' {
-            $handler.RequiresAdmin | Should -Be $false
-        }
-
-        It 'Retries のデフォルトは 5' {
-            $handler.Retries | Should -Be 5
-        }
-
-        It 'RetryDelaySeconds のデフォルトは 5' {
-            $handler.RetryDelaySeconds | Should -Be 5
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "Docker" }
+            @{ property = "Description"; expected = "Docker Desktop との WSL 連携" }
+            @{ property = "Order"; expected = 20 }
+            @{ property = "RequiresAdmin"; expected = $false }
+            @{ property = "Retries"; expected = 5 }
+            @{ property = "RetryDelaySeconds"; expected = 5 }
+        ) {
+            $handler.$property | Should -Be $expected
         }
     }
 
     Context 'CanApply' {
-        It 'Retries が 0 の場合は $false を返す' {
+        It 'should return false when Retries is 0' {
             Mock Write-Host { }
             $ctx.Options["DockerIntegrationRetries"] = 0
 
@@ -57,7 +44,7 @@ Describe 'DockerHandler' {
             $result | Should -Be $false
         }
 
-        It 'Docker Desktop がインストールされていない場合は $false を返す' {
+        It 'should return false when Docker Desktop is not installed' {
             Mock Test-PathExist { return $false }
             Mock Write-Host { }
 
@@ -66,7 +53,7 @@ Describe 'DockerHandler' {
             $result | Should -Be $false
         }
 
-        It 'Docker Desktop がインストールされている場合は $true を返す' {
+        It 'should return true when Docker Desktop is installed' {
             Mock Test-PathExist { return $true }
 
             $result = $handler.CanApply($ctx)
@@ -74,7 +61,7 @@ Describe 'DockerHandler' {
             $result | Should -Be $true
         }
 
-        It 'Options から Retries を読み込む' {
+        It 'should read Retries from Options' {
             Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetries"] = 10
 
@@ -83,7 +70,7 @@ Describe 'DockerHandler' {
             $handler.Retries | Should -Be 10
         }
 
-        It 'Options から RetryDelaySeconds を読み込む' {
+        It 'should read RetryDelaySeconds from Options' {
             Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetryDelaySeconds"] = 15
 
@@ -93,10 +80,10 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Apply - WSL 書き込み不可' {
-        It 'WSL が書き込み不可の場合はスキップする' {
+    Context 'Apply - WSL write permission' {
+        It 'should skip when WSL is not writable' {
             Mock Test-PathExist { return $true }
-            Mock Invoke-Wsl { 
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return ""
             }
@@ -109,8 +96,8 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Apply - 空き容量不足' {
-        It 'WSL の空き容量が不足している場合はスキップする' {
+    Context 'Apply - disk space' {
+        It 'should skip when WSL disk space is insufficient' {
             Mock Test-PathExist { return $true }
             $wslCallCount = 0
             Mock Invoke-Wsl {
@@ -135,7 +122,7 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Apply - 正常系' {
+    Context 'Apply - success cases' {
         BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
@@ -147,13 +134,13 @@ Describe 'DockerHandler' {
             Mock Copy-FileSafe { }
         }
 
-        It 'Docker Desktop 連携が成功する場合' {
+        It 'should succeed when Docker Desktop integration succeeds' {
             $wslCallCount = 0
             Mock Invoke-Wsl {
                 param($Arguments)
                 $script:wslCallCount++
                 $argStr = $Arguments -join " "
-                
+
                 # 書き込みテスト
                 if ($argStr -match "touch.*wsl-write-test") {
                     $global:LASTEXITCODE = 0
@@ -199,13 +186,13 @@ Describe 'DockerHandler' {
             $result.Message | Should -Match "連携を確認しました"
         }
 
-        It 'Docker Desktop ディストリビューションが存在しない場合は作成する' {
+        It 'should create Docker Desktop distribution when it does not exist' {
             $wslCallCount = 0
             Mock Invoke-Wsl {
                 param($Arguments)
                 $script:wslCallCount++
                 $argStr = $Arguments -join " "
-                
+
                 if ($argStr -match "touch.*wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
@@ -242,7 +229,7 @@ Describe 'DockerHandler' {
                 }
                 return ""
             }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 # Docker リソースが存在する
                 return $true
@@ -255,7 +242,7 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Apply - リトライ' {
+    Context 'Apply - retry' {
         BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
@@ -267,14 +254,14 @@ Describe 'DockerHandler' {
             Mock Copy-FileSafe { }
         }
 
-        It 'プロキシテストが失敗した場合はリトライする' {
+        It 'should retry when proxy test fails' {
             $ctx.Options["DockerIntegrationRetries"] = 2
             $proxyTestCount = 0
-            
+
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                
+
                 if ($argStr -match "touch.*wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
@@ -320,13 +307,13 @@ Describe 'DockerHandler' {
             $result.Success | Should -Be $true
         }
 
-        It 'リトライ上限に達した場合は失敗結果を返す' {
+        It 'should fail when retry limit is reached' {
             $ctx.Options["DockerIntegrationRetries"] = 2
-            
+
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                
+
                 if ($argStr -match "touch.*wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
@@ -369,7 +356,7 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Docker Desktop 起動/再起動' {
+    Context 'Docker Desktop start/restart' {
         BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
@@ -405,7 +392,7 @@ Describe 'DockerHandler' {
             }
         }
 
-        It 'Docker Desktop が起動していない場合は起動する' {
+        It 'should start Docker Desktop when not running' {
             Mock Get-ProcessSafe { return $null }
             $script:startCalled = $false
             Mock Start-ProcessSafe { $script:startCalled = $true }
@@ -416,8 +403,8 @@ Describe 'DockerHandler' {
             $script:startCalled | Should -Be $true
         }
 
-        It 'Docker Desktop が既に起動している場合は起動しない' {
-            Mock Get-ProcessSafe { 
+        It 'should not start Docker Desktop when already running' {
+            Mock Get-ProcessSafe {
                 return [PSCustomObject]@{ Name = "Docker Desktop" }
             }
             Mock Start-ProcessSafe { }
@@ -429,8 +416,8 @@ Describe 'DockerHandler' {
     }
 
     Context 'GetWslDefaultUser' {
-        It 'whoami が成功した場合はユーザー名を返す' {
-            Mock Invoke-Wsl { 
+        It 'should return username when whoami succeeds' {
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 0
                 return "testuser"
             }
@@ -445,8 +432,8 @@ Describe 'DockerHandler' {
             # 実際にはハンドラー内部でユーザー名が使われる
         }
 
-        It 'whoami が失敗した場合は nixos を返す' {
-            Mock Invoke-Wsl { 
+        It 'should return nixos when whoami fails' {
+            Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "whoami") {
@@ -463,7 +450,7 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Docker Desktop ヘルスチェック' {
+    Context 'Docker Desktop health check' {
         BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
@@ -473,7 +460,7 @@ Describe 'DockerHandler' {
             Mock Copy-FileSafe { }
         }
 
-        It 'componentsVersion.json が存在する場合は健全' {
+        It 'should be healthy when componentsVersion.json exists' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -504,7 +491,7 @@ Describe 'DockerHandler' {
             $result.Success | Should -Be $true
         }
 
-        It 'componentsVersion.json が存在しない場合は警告を出すが続行する' {
+        It 'should warn but continue when componentsVersion.json does not exist' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -538,15 +525,15 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'Apply - 例外処理' {
+    Context 'Apply - exception handling' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
         }
 
-        It 'Apply 中に例外が発生した場合は失敗結果を返す' {
-            Mock Invoke-Wsl { 
+        It 'should return failure when exception is thrown during Apply' {
+            Mock Invoke-Wsl {
                 throw "WSL Error"
             }
 
@@ -557,10 +544,10 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'EnsureDockerDesktopDistros - リソース不足' {
+    Context 'EnsureDockerDesktopDistros - missing resources' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-PathExist { 
+            Mock Test-PathExist {
                 param($Path)
                 # Docker Desktop の WSL リソースが存在しない
                 if ($Path -like "*Docker\Docker\resources\wsl*") {
@@ -572,7 +559,7 @@ Describe 'DockerHandler' {
             Mock Start-SleepSafe { }
         }
 
-        It 'Docker Desktop の WSL リソースが見つからない場合は警告を出してスキップする' {
+        It 'should warn and skip when Docker Desktop WSL resources are not found' {
             $script:warningShown = $false
             Mock Write-Host {
                 param($Object)
@@ -613,12 +600,12 @@ Describe 'DockerHandler' {
             Mock Start-SleepSafe { }
         }
 
-        It 'Docker Desktop が起動している場合は再起動する' {
+        It 'should restart Docker Desktop when it is running' {
             $script:stopCalled = $false
             $script:startCalled = $false
             $script:restartLogShown = $false
-            
-            Mock Get-ProcessSafe { 
+
+            Mock Get-ProcessSafe {
                 param($Name)
                 if ($Name -eq "Docker Desktop") {
                     return [PSCustomObject]@{ Name = "Docker Desktop" }
@@ -666,7 +653,7 @@ Describe 'DockerHandler' {
         }
     }
 
-    Context 'TestDockerDesktopProxy - 失敗パス' {
+    Context 'TestDockerDesktopProxy - failure path' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
@@ -676,7 +663,7 @@ Describe 'DockerHandler' {
             Mock Start-ProcessSafe { }
         }
 
-        It 'docker-desktop-user-distro が存在しない場合は $false を返す' {
+        It 'should return false when docker-desktop-user-distro does not exist' {
             $script:proxyReturnedFalse = $false
             Mock Invoke-Wsl {
                 param($Arguments)

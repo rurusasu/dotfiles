@@ -14,27 +14,27 @@ BeforeAll {
 }
 
 Describe 'Invoke-Wsl' {
-    It '引数を WSL に渡す' {
+    It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
-        
+
         $result = Invoke-Wsl --list --quiet
-        
+
         Should -Invoke wsl -Times 1
     }
 
-    It '引数なしで呼び出せる' {
+    It 'should allow calling without arguments' {
         Mock wsl { return "" }
-        
+
         Invoke-Wsl
-        
+
         Should -Invoke wsl -Times 1
     }
 
-    It '複数の引数を渡せる' {
+    It 'should pass multiple arguments' {
         Mock wsl { param($args) return "OK" }
-        
+
         Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
-        
+
         Should -Invoke wsl -Times 1
     }
 }
@@ -43,127 +43,105 @@ Describe 'Invoke-Diskpart' {
     BeforeAll {
         $script:diskpartCalled = $false
         $script:setContentCalled = $false
-        Mock diskpart { 
+        Mock diskpart {
             $script:diskpartCalled = $true
-            return "diskpart output" 
+            return "diskpart output"
         }
-        # Set-ContentNoNewline をモックして実際のファイル書き込みをスキップ
-        Mock Set-ContentNoNewline { 
+        Mock Set-ContentNoNewline {
             $script:setContentCalled = $true
         }
         Mock Remove-Item { }
-        Mock New-TemporaryFile { 
+        Mock New-TemporaryFile {
             return [PSCustomObject]@{ FullName = "C:\temp\diskpart_test.txt" }
         }
     }
 
-    It 'スクリプトファイルを作成して diskpart を実行する' {
+    It 'should create script file and execute diskpart' {
         Invoke-Diskpart -ScriptContent "list disk"
-        
+
         $script:diskpartCalled | Should -Be $true
     }
 
-    It '一時ファイルにスクリプト内容を書き込む' {
+    It 'should write script content to temp file' {
         Invoke-Diskpart -ScriptContent "select disk 0"
-        
+
         $script:setContentCalled | Should -Be $true
     }
 }
 
 Describe 'Get-ExternalCommand' {
-    It 'コマンドが存在する場合はコマンド情報を返す' {
-        Mock Get-Command { 
-            return [PSCustomObject]@{ 
-                Name = "powershell"
-                Source = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-            } 
-        }
-        
-        $result = Get-ExternalCommand -Name "powershell"
-        
-        $result | Should -Not -BeNullOrEmpty
-        $result.Name | Should -Be "powershell"
-    }
+    It 'should return command info when command <exists>' -ForEach @(
+        @{ exists = "exists"; name = "powershell"; mockReturn = [PSCustomObject]@{ Name = "powershell"; Source = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" }; expectedNull = $false }
+        @{ exists = "does not exist"; name = "nonexistent"; mockReturn = $null; expectedNull = $true }
+    ) {
+        Mock Get-Command { return $mockReturn }
 
-    It 'コマンドが存在しない場合は $null を返す' {
-        Mock Get-Command { return $null } -ParameterFilter { 
-            $Name -eq "nonexistent" 
+        $result = Get-ExternalCommand -Name $name
+
+        if ($expectedNull) {
+            $result | Should -BeNullOrEmpty
+        } else {
+            $result | Should -Not -BeNullOrEmpty
+            $result.Name | Should -Be $name
         }
-        
-        $result = Get-ExternalCommand -Name "nonexistent"
-        
-        $result | Should -BeNullOrEmpty
     }
 }
 
 Describe 'Test-PathExist' {
-    It 'パスが存在する場合は $true を返す' {
-        Mock Test-Path { return $true }
-        
-        $result = Test-PathExist -Path "C:\Windows"
-        
-        $result | Should -Be $true
-    }
+    It 'should return <expected> when path <exists>' -ForEach @(
+        @{ exists = "exists"; expected = $true }
+        @{ exists = "does not exist"; expected = $false }
+    ) {
+        Mock Test-Path { return $expected }
 
-    It 'パスが存在しない場合は $false を返す' {
-        Mock Test-Path { return $false }
-        
-        $result = Test-PathExist -Path "C:\NonExistent"
-        
-        $result | Should -Be $false
+        $result = Test-PathExist -Path "C:\SomePath"
+
+        $result | Should -Be $expected
     }
 }
 
 Describe 'Get-ProcessSafe' {
-    It 'プロセスが存在する場合はプロセス情報を返す' {
-        Mock Get-Process { 
-            return [PSCustomObject]@{ 
-                Name = "pwsh"
-                Id = 1234
-            } 
-        }
-        
-        $result = Get-ProcessSafe -Name "pwsh"
-        
-        $result | Should -Not -BeNullOrEmpty
-        $result.Name | Should -Be "pwsh"
-    }
+    It 'should return process info when process <exists>' -ForEach @(
+        @{ exists = "exists"; name = "pwsh"; mockReturn = [PSCustomObject]@{ Name = "pwsh"; Id = 1234 }; expectedNull = $false }
+        @{ exists = "does not exist"; name = "NonExistentProcess"; mockReturn = $null; expectedNull = $true }
+    ) {
+        Mock Get-Process { return $mockReturn }
 
-    It 'プロセスが存在しない場合は $null を返す' {
-        Mock Get-Process { return $null } -ParameterFilter {
-            $ErrorAction -eq 'SilentlyContinue'
+        $result = Get-ProcessSafe -Name $name
+
+        if ($expectedNull) {
+            $result | Should -BeNullOrEmpty
+        } else {
+            $result | Should -Not -BeNullOrEmpty
+            $result.Name | Should -Be $name
         }
-        
-        $result = Get-ProcessSafe -Name "NonExistentProcess"
-        
-        $result | Should -BeNullOrEmpty
     }
 }
 
 Describe 'Stop-ProcessSafe' {
-    It 'プロセスを停止する' {
+    It 'should stop process by name' {
         Mock Stop-Process { }
-        
+
         Stop-ProcessSafe -Name "TestProcess"
-        
+
         Should -Invoke Stop-Process -Times 1 -ParameterFilter {
             $Name -eq "TestProcess"
         }
     }
 
-    It 'プロセスが存在しなくてもエラーにならない' {
+    It 'should not throw when process does not exist' {
         Mock Stop-Process { }
-        
+
         { Stop-ProcessSafe -Name "NonExistent" } | Should -Not -Throw
     }
 }
 
 Describe 'Start-ProcessSafe' {
-    It 'プロセスを起動する' {
+    It 'should start process with file path' {
         Mock Start-Process { return [PSCustomObject]@{ Id = 5678 } }
-        
+
         Start-ProcessSafe -FilePath "C:\test\app.exe"
-        
+
         Should -Invoke Start-Process -Times 1 -ParameterFilter {
             $FilePath -eq "C:\test\app.exe"
         }
@@ -171,22 +149,22 @@ Describe 'Start-ProcessSafe' {
 }
 
 Describe 'Copy-FileSafe' {
-    It 'ファイルをコピーする' {
+    It 'should copy file from source to destination' {
         Mock Copy-Item { }
-        
+
         Copy-FileSafe -Source "C:\source.txt" -Destination "C:\dest.txt"
-        
+
         Should -Invoke Copy-Item -Times 1 -ParameterFilter {
             $LiteralPath -eq "C:\source.txt" -and
             $Destination -eq "C:\dest.txt"
         }
     }
 
-    It '-Force オプションを渡せる' {
+    It 'should pass -Force option when specified' {
         Mock Copy-Item { }
-        
+
         Copy-FileSafe -Source "C:\source.txt" -Destination "C:\dest.txt" -Force
-        
+
         Should -Invoke Copy-Item -Times 1 -ParameterFilter {
             $Force -eq $true
         }
@@ -194,11 +172,11 @@ Describe 'Copy-FileSafe' {
 }
 
 Describe 'Get-FileContentSafe' {
-    It 'ファイルの内容を取得する' {
+    It 'should get file content with -Raw option' {
         Mock Get-Content { return "file content" }
-        
+
         $result = Get-FileContentSafe -Path "C:\test.txt"
-        
+
         $result | Should -Be "file content"
         Should -Invoke Get-Content -Times 1 -ParameterFilter {
             $LiteralPath -eq "C:\test.txt" -and
@@ -208,29 +186,29 @@ Describe 'Get-FileContentSafe' {
 }
 
 Describe 'Get-JsonContent' {
-    It 'JSON ファイルをパースして返す' {
+    It 'should parse JSON file and return object' {
         Mock Get-Content { return '{"key": "value"}' }
-        
+
         $result = Get-JsonContent -Path "C:\test.json"
-        
+
         $result.key | Should -Be "value"
     }
 
-    It '配列を含む JSON をパースできる' {
+    It 'should parse JSON with arrays' {
         Mock Get-Content { return '{"items": [1, 2, 3]}' }
-        
+
         $result = Get-JsonContent -Path "C:\test.json"
-        
+
         $result.items | Should -HaveCount 3
     }
 }
 
 Describe 'New-DirectorySafe' {
-    It 'ディレクトリを作成する' {
+    It 'should create directory with -Force option' {
         Mock New-Item { return [PSCustomObject]@{ FullName = "C:\newdir" } }
-        
+
         New-DirectorySafe -Path "C:\newdir"
-        
+
         Should -Invoke New-Item -Times 1 -ParameterFilter {
             $ItemType -eq "Directory" -and
             $Path -eq "C:\newdir" -and
@@ -240,46 +218,44 @@ Describe 'New-DirectorySafe' {
 }
 
 Describe 'Get-ChildItemSafe' {
-    It 'ディレクトリ内のファイルを取得する' {
-        Mock Get-ChildItem { 
+    It 'should get files in directory' {
+        Mock Get-ChildItem {
             return @(
                 [PSCustomObject]@{ Name = "file1.txt" },
                 [PSCustomObject]@{ Name = "file2.txt" }
             )
         }
-        
+
         $result = Get-ChildItemSafe -Path "C:\test"
-        
+
         $result | Should -HaveCount 2
     }
 
-    It 'フィルターを適用できる' {
-        Mock Get-ChildItem { 
-            return @([PSCustomObject]@{ Name = "file.ps1" })
-        }
-        
+    It 'should apply Filter option' {
+        Mock Get-ChildItem { return @([PSCustomObject]@{ Name = "file.ps1" }) }
+
         Get-ChildItemSafe -Path "C:\test" -Filter "*.ps1"
-        
+
         Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
             $Filter -eq "*.ps1"
         }
     }
 
-    It '再帰的に検索できる' {
+    It 'should apply Recurse option' {
         Mock Get-ChildItem { return @() }
-        
+
         Get-ChildItemSafe -Path "C:\test" -Recurse
-        
+
         Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
             $Recurse -eq $true
         }
     }
 
-    It 'ディレクトリのみを取得できる' {
+    It 'should apply Directory option' {
         Mock Get-ChildItem { return @() }
-        
+
         Get-ChildItemSafe -Path "C:\test" -Directory
-        
+
         Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
             $Directory -eq $true
         }
@@ -287,56 +263,41 @@ Describe 'Get-ChildItemSafe' {
 }
 
 Describe 'Get-RegistryValue' {
-    It 'レジストリ値を取得する' {
-        Mock Get-ItemProperty { 
-            return [PSCustomObject]@{ 
-                TestValue = "TestData"
-            } 
-        }
-        
-        $result = Get-RegistryValue -Path "HKCU:\Test"
-        
-        $result.TestValue | Should -Be "TestData"
-    }
+    It 'should return registry value when path <exists>' -ForEach @(
+        @{ exists = "exists"; mockReturn = [PSCustomObject]@{ TestValue = "TestData" }; expectedNull = $false }
+        @{ exists = "does not exist"; mockReturn = $null; expectedNull = $true }
+    ) {
+        Mock Get-ItemProperty { return $mockReturn }
 
-    It 'パスが存在しない場合は $null を返す' {
-        Mock Get-ItemProperty { return $null }
-        
-        $result = Get-RegistryValue -Path "HKCU:\NonExistent"
-        
-        $result | Should -BeNullOrEmpty
+        $result = Get-RegistryValue -Path "HKCU:\Test"
+
+        if ($expectedNull) {
+            $result | Should -BeNullOrEmpty
+        } else {
+            $result.TestValue | Should -Be "TestData"
+        }
     }
 }
 
 Describe 'Get-RegistryChildItem' {
-    It 'レジストリの子キーを取得する' {
-        Mock Get-ChildItem { 
-            return @(
-                [PSCustomObject]@{ Name = "Key1" },
-                [PSCustomObject]@{ Name = "Key2" }
-            )
-        }
-        
-        $result = Get-RegistryChildItem -Path "HKCU:\Test"
-        
-        $result | Should -HaveCount 2
-    }
+    It 'should return <count> child keys' -ForEach @(
+        @{ count = 2; mockReturn = @([PSCustomObject]@{ Name = "Key1" }, [PSCustomObject]@{ Name = "Key2" }) }
+        @{ count = 0; mockReturn = @() }
+    ) {
+        Mock Get-ChildItem { return $mockReturn }
 
-    It 'パスが存在しない場合は空を返す' {
-        Mock Get-ChildItem { return @() }
-        
-        $result = Get-RegistryChildItem -Path "HKCU:\NonExistent"
-        
-        $result | Should -HaveCount 0
+        $result = Get-RegistryChildItem -Path "HKCU:\Test"
+
+        $result | Should -HaveCount $count
     }
 }
 
 Describe 'Invoke-WebRequestSafe' {
-    It 'ファイルをダウンロードする' {
+    It 'should download file with UseBasicParsing' {
         Mock Invoke-WebRequest { }
-        
+
         Invoke-WebRequestSafe -Uri "https://example.com/file.zip" -OutFile "C:\temp\file.zip"
-        
+
         Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter {
             $Uri -eq "https://example.com/file.zip" -and
             $OutFile -eq "C:\temp\file.zip" -and
@@ -346,21 +307,21 @@ Describe 'Invoke-WebRequestSafe' {
 }
 
 Describe 'Invoke-RestMethodSafe' {
-    It 'REST API を呼び出す' {
-        Mock Invoke-RestMethod { 
-            return [PSCustomObject]@{ result = "success" } 
+    It 'should call REST API and return result' {
+        Mock Invoke-RestMethod {
+            return [PSCustomObject]@{ result = "success" }
         }
-        
+
         $result = Invoke-RestMethodSafe -Uri "https://api.example.com/data"
-        
+
         $result.result | Should -Be "success"
     }
 
-    It 'ヘッダーを渡せる' {
+    It 'should pass headers when specified' {
         Mock Invoke-RestMethod { return @{} }
-        
+
         Invoke-RestMethodSafe -Uri "https://api.example.com" -Headers @{ "Authorization" = "Bearer token" }
-        
+
         Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
             $Headers["Authorization"] -eq "Bearer token"
         }
@@ -368,11 +329,11 @@ Describe 'Invoke-RestMethodSafe' {
 }
 
 Describe 'Start-SleepSafe' {
-    It '指定秒数スリープする' {
+    It 'should sleep for specified seconds' {
         Mock Start-Sleep { }
-        
+
         Start-SleepSafe -Seconds 5
-        
+
         Should -Invoke Start-Sleep -Times 1 -ParameterFilter {
             $Seconds -eq 5
         }

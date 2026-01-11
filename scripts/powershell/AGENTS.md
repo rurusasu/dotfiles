@@ -172,7 +172,7 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -Path .\handlers\Handler.Chezmoi.Tests.ps1 -MinimumCoverage 0
 ```
 
-**現在の状態**: 203/203 テスト成功（100%）、カバレッジ 95%+
+**現在の状態**: 230+ テスト、カバレッジ 95%+
 
 ## 📚 プロジェクト概要
 
@@ -183,7 +183,7 @@ cd scripts/powershell/tests
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（6個）
-- `tests/` - Pester v5 テストスイート（239 テスト、95%+ カバレッジ）
+- `tests/` - Pester v5 テストスイート（230+ テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
 - [treefmt.toml](../../treefmt.toml) - 統一フォーマッター設定（PowerShell含む）
 

@@ -228,35 +228,49 @@ Describe 'SetupHandlerBase' {
     }
 
     Context 'Log メソッド' {
-        It 'should output message with <color> color' -ForEach @(
-            @{ method = "Log"; color = "Cyan"; message = "テストメッセージ" }
-            @{ method = "LogWarning"; color = "Yellow"; message = "警告メッセージ" }
-            @{ method = "LogError"; color = "Red"; message = "エラーメッセージ" }
-        ) {
+        BeforeEach {
+            Mock Write-Host { }
+        }
+
+        It 'should output message with Cyan color' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
 
-            Mock Write-Host { }
-
-            if ($method -eq "Log") {
-                $handler.Log($message)
-            } elseif ($method -eq "LogWarning") {
-                $handler.LogWarning($message)
-            } else {
-                $handler.LogError($message)
-            }
+            $handler.Log("テストメッセージ")
 
             Should -Invoke Write-Host -Times 1 -ParameterFilter {
-                $Object -eq "[TestHandler] $message" -and
-                $ForegroundColor -eq $color
+                $Object -eq "[TestHandler] テストメッセージ" -and
+                $ForegroundColor -eq "Cyan"
+            }
+        }
+
+        It 'should output message with Yellow color' {
+            $handler = [SetupHandlerBase]::new()
+            $handler.Name = "TestHandler"
+
+            $handler.LogWarning("警告メッセージ")
+
+            Should -Invoke Write-Host -Times 1 -ParameterFilter {
+                $Object -eq "[TestHandler] 警告メッセージ" -and
+                $ForegroundColor -eq "Yellow"
+            }
+        }
+
+        It 'should output message with Red color' {
+            $handler = [SetupHandlerBase]::new()
+            $handler.Name = "TestHandler"
+
+            $handler.LogError("エラーメッセージ")
+
+            Should -Invoke Write-Host -Times 1 -ParameterFilter {
+                $Object -eq "[TestHandler] エラーメッセージ" -and
+                $ForegroundColor -eq "Red"
             }
         }
 
         It 'should allow custom color for Log method' {
             $handler = [SetupHandlerBase]::new()
             $handler.Name = "TestHandler"
-
-            Mock Write-Host { }
 
             $handler.Log("テストメッセージ", "Green")
 
