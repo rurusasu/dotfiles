@@ -10,120 +10,14 @@
 #>
 
 BeforeAll {
-    # クラスをファイルレベルでロード
+    # クラスとオーケストレーション関数をロード
+    # 注: Get-SetupHandler, Select-SetupHandler, Invoke-SetupHandler, Show-SetupSummary は
+    # SetupHandler.ps1 に含まれています
     . $PSScriptRoot/../lib/SetupHandler.ps1
     . $PSScriptRoot/../lib/Invoke-ExternalCommand.ps1
-
-    <#
-    .SYNOPSIS
-        handlers ディレクトリからハンドラーを検出・ロードする
-    #>
-    function Get-SetupHandlers {
-        param(
-            [Parameter(Mandatory)]
-            [string]$HandlersPath
-        )
-
-        $handlers = @()
-        $handlerFiles = Get-ChildItem -Path $HandlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
-
-        foreach ($file in $handlerFiles) {
-            try {
-                . $file.FullName
-
-                # クラス名を抽出 (Handler.Chezmoi.ps1 → ChezmoiHandler)
-                $handlerName = $file.BaseName -replace '^Handler\.', ''
-                $className = "${handlerName}Handler"
-
-                $instance = New-Object $className
-                $handlers += $instance
-            } catch {
-                Write-Warning "Failed to instantiate handler: $($file.Name) - $($_.Exception.Message)"
-            }
-        }
-
-        return $handlers
-    }
-
-    <#
-    .SYNOPSIS
-        ハンドラーを Order でソートする
-    #>
-    function Sort-SetupHandlers {
-        param(
-            [Parameter(Mandatory)]
-            [array]$Handlers
-        )
-
-        return $Handlers | Sort-Object Order
-    }
-
-    <#
-    .SYNOPSIS
-        ハンドラーを実行する
-    #>
-    function Invoke-SetupHandlers {
-        param(
-            [Parameter(Mandatory)]
-            [array]$Handlers,
-            [Parameter(Mandatory)]
-            [SetupContext]$Context,
-            [string[]]$SkipHandlers = @()
-        )
-
-        $results = @()
-
-        foreach ($handler in $Handlers) {
-            # スキップチェック
-            if ($handler.Name -in $SkipHandlers) {
-                Write-Host "[$($handler.Name)] Skipped (user request)" -ForegroundColor Gray
-                continue
-            }
-
-            # 実行可否チェック
-            if (-not $handler.CanApply($Context)) {
-                continue
-            }
-
-            # 実行
-            Write-Host ""
-            Write-Host "=== $($handler.Description) ===" -ForegroundColor Cyan
-
-            $result = $handler.Apply($Context)
-            $results += $result
-
-            if ($result.Success) {
-                Write-Host "[$($handler.Name)] $($result.Message)" -ForegroundColor Green
-            } else {
-                Write-Host "[$($handler.Name)] $($result.Message)" -ForegroundColor Red
-            }
-        }
-
-        return $results
-    }
-
-    <#
-    .SYNOPSIS
-        結果サマリーを表示する
-    #>
-    function Show-SetupSummary {
-        param(
-            [Parameter(Mandatory)]
-            [array]$Results
-        )
-
-        Write-Host ""
-        Write-Host "=== Summary ===" -ForegroundColor White
-
-        foreach ($result in $Results) {
-            $color = if ($result.Success) { "Green" } else { "Red" }
-            $status = if ($result.Success) { "OK" } else { "FAIL" }
-            Write-Host "  [$status] $($result.HandlerName): $($result.Message)" -ForegroundColor $color
-        }
-    }
 }
 
-Describe 'Get-SetupHandlers' {
+Describe 'Get-SetupHandler' {
     BeforeAll {
         # テスト用の一時ディレクトリを作成
         $script:testHandlersPath = Join-Path $TestDrive "handlers"
@@ -131,7 +25,7 @@ Describe 'Get-SetupHandlers' {
     }
 
     It '空のディレクトリの場合は空配列を返す' {
-        $result = Get-SetupHandlers -HandlersPath $testHandlersPath
+        $result = Get-SetupHandler -HandlersPath $testHandlersPath
 
         $result | Should -HaveCount 0
     }
@@ -150,7 +44,7 @@ class TestHandler : SetupHandlerBase {
 '@
         Set-Content -Path (Join-Path $testHandlersPath "Handler.Test.ps1") -Value $testHandler
 
-        $result = Get-SetupHandlers -HandlersPath $testHandlersPath
+        $result = Get-SetupHandler -HandlersPath $testHandlersPath
 
         $result | Should -HaveCount 1
         $result[0].Name | Should -Be "Test"
@@ -159,7 +53,7 @@ class TestHandler : SetupHandlerBase {
     It 'パターンにマッチしないファイルは無視する' {
         Set-Content -Path (Join-Path $testHandlersPath "NotAHandler.ps1") -Value "# not a handler"
 
-        $result = Get-SetupHandlers -HandlersPath $testHandlersPath
+        $result = Get-SetupHandler -HandlersPath $testHandlersPath
 
         # Handler.Test.ps1 のみ
         $result.Name | Should -Not -Contain "NotAHandler"
@@ -170,20 +64,20 @@ class TestHandler : SetupHandlerBase {
         Set-Content -Path (Join-Path $testHandlersPath "Handler.Invalid.ps1") -Value $invalidHandler
         Mock Write-Warning { }
 
-        $result = Get-SetupHandlers -HandlersPath $testHandlersPath
+        $result = Get-SetupHandler -HandlersPath $testHandlersPath
 
         # Invalid はロードされない
         $result.Name | Should -Not -Contain "Invalid"
     }
 
     It '存在しないディレクトリの場合は空配列を返す' {
-        $result = Get-SetupHandlers -HandlersPath "C:\NonExistent\Path"
+        $result = Get-SetupHandler -HandlersPath "C:\NonExistent\Path"
 
         $result | Should -HaveCount 0
     }
 }
 
-Describe 'Sort-SetupHandlers' {
+Describe 'Select-SetupHandler' {
     It 'Order の昇順でソートする' {
         # PSCustomObject を使用してハンドラーをシミュレート
         $handlers = @(
@@ -192,7 +86,7 @@ Describe 'Sort-SetupHandlers' {
             [PSCustomObject]@{ Name = "Second"; Order = 20 }
         )
 
-        $sorted = Sort-SetupHandlers -Handlers $handlers
+        $sorted = Select-SetupHandler -Handlers $handlers
 
         $sorted[0].Name | Should -Be "First"
         $sorted[1].Name | Should -Be "Second"
@@ -206,7 +100,7 @@ Describe 'Sort-SetupHandlers' {
             [PSCustomObject]@{ Name = "C"; Order = 50 }
         )
 
-        $sorted = Sort-SetupHandlers -Handlers $handlers
+        $sorted = Select-SetupHandler -Handlers $handlers
 
         # 安定ソートなので元の順序を維持
         $sorted[0].Name | Should -Be "B"
@@ -221,7 +115,7 @@ Describe 'Sort-SetupHandlers' {
     }
 }
 
-Describe 'Invoke-SetupHandlers - 実際のハンドラーを使用' {
+Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
     BeforeAll {
         # 実際のハンドラーをロード
         . $PSScriptRoot/../handlers/Handler.Chezmoi.ps1
@@ -235,7 +129,7 @@ Describe 'Invoke-SetupHandlers - 実際のハンドラーを使用' {
     It 'スキップリストに含まれるハンドラーは実行しない' {
         $handler = [ChezmoiHandler]::new()
 
-        $results = Invoke-SetupHandlers -Handlers @($handler) -Context $ctx -SkipHandlers @("Chezmoi")
+        $results = Invoke-SetupHandler -Handlers @($handler) -Context $ctx -SkipHandlers @("Chezmoi")
 
         $results | Should -HaveCount 0
         Should -Invoke Write-Host -ParameterFilter {
@@ -249,7 +143,7 @@ Describe 'Show-SetupSummary' {
         Mock Write-Host { }
     }
 
-    It '成功結果は緑色で OK と表示する' {
+    It '成功結果は緑色で ✓ と表示する' {
         $results = @(
             [SetupResult]::CreateSuccess("Handler1", "完了")
         )
@@ -257,12 +151,12 @@ Describe 'Show-SetupSummary' {
         Show-SetupSummary -Results $results
 
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[OK\].*Handler1" -and
+            $Object -match "\[✓\].*Handler1" -and
             $ForegroundColor -eq "Green"
         }
     }
 
-    It '失敗結果は赤色で FAIL と表示する' {
+    It '失敗結果は赤色で ✗ と表示する' {
         $results = @(
             [SetupResult]::CreateFailure("Handler2", "エラー")
         )
@@ -270,7 +164,7 @@ Describe 'Show-SetupSummary' {
         Show-SetupSummary -Results $results
 
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[FAIL\].*Handler2" -and
+            $Object -match "\[✗\].*Handler2" -and
             $ForegroundColor -eq "Red"
         }
     }

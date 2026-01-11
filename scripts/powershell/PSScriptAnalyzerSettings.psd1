@@ -6,7 +6,9 @@
         # BOM エンコーディングは UTF-8 (without BOM) でも問題ないため除外
         'PSUseBOMForUnicodeEncodedFile',
         # 外部コマンドラッパー関数では ShouldProcess は不要なため除外
-        'PSUseShouldProcessForStateChangingFunctions'
+        'PSUseShouldProcessForStateChangingFunctions',
+        # ハンドラーオーケストレーション関数では Write-Host でユーザーに直接出力するため除外
+        'PSAvoidUsingWriteHost'
     )
 
     # 重大度でフィルタリング（Information レベルを除外）

@@ -279,3 +279,237 @@ class SetupHandlerBase {
         Write-Host "[$($this.Name)] $message" -ForegroundColor Red
     }
 }
+
+# ========================================
+# Handler Orchestration Functions
+# ========================================
+
+<#
+.SYNOPSIS
+    Load all handler instances from a directory
+
+.PARAMETER HandlersPath
+    Path to the handlers directory containing Handler.*.ps1 files
+
+.OUTPUTS
+    Array of handler instances
+
+.EXAMPLE
+    $handlers = Get-SetupHandler -HandlersPath ".\handlers"
+#>
+function Get-SetupHandler
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$HandlersPath
+    )
+
+    $handlers = @()
+    $handlerFiles = Get-ChildItem -Path $HandlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+
+    if ($handlerFiles.Count -eq 0)
+    {
+        Write-Warning "No handler files found in: $HandlersPath"
+        return $handlers
+    }
+
+    foreach ($file in $handlerFiles)
+    {
+        try
+        {
+            # Dot-source the handler file
+            . $file.FullName
+
+            # Extract class name (Handler.Chezmoi.ps1 → ChezmoiHandler)
+            $handlerName = $file.BaseName -replace '^Handler\.', ''
+            $className = "${handlerName}Handler"
+
+            # Instantiate the handler
+            $instance = New-Object $className
+            $handlers += $instance
+
+            Write-Verbose "Loaded handler: $($instance.Name) (Order: $($instance.Order))"
+        } catch
+        {
+            Write-Warning "Failed to load handler: $($file.Name) - $($_.Exception.Message)"
+        }
+    }
+
+    Write-Verbose "Loaded $($handlers.Count) handler(s)"
+    return $handlers
+}
+
+<#
+.SYNOPSIS
+    Sort handlers by their execution order
+
+.PARAMETER Handlers
+    Array of handler instances to sort
+
+.OUTPUTS
+    Sorted array of handlers (by Order property, ascending)
+
+.EXAMPLE
+    $sorted = Select-SetupHandler -Handlers $handlers
+#>
+function Select-SetupHandler
+{
+    param(
+        [Parameter(Mandatory)]
+        [array]$Handlers
+    )
+
+    return $Handlers | Sort-Object Order
+}
+
+<#
+.SYNOPSIS
+    Execute handlers in sequence
+
+.PARAMETER Handlers
+    Array of handler instances to execute
+
+.PARAMETER Context
+    SetupContext instance with configuration and state
+
+.PARAMETER SkipHandlers
+    Array of handler names to skip
+
+.OUTPUTS
+    Array of SetupResult instances
+
+.EXAMPLE
+    $results = Invoke-SetupHandler -Handlers $handlers -Context $context
+#>
+function Invoke-SetupHandler
+{
+    param(
+        [Parameter(Mandatory)]
+        [array]$Handlers,
+        [Parameter(Mandatory)]
+        [SetupContext]$Context,
+        [string[]]$SkipHandlers = @()
+    )
+
+    $results = @()
+
+    if ($Handlers.Count -eq 0)
+    {
+        Write-Warning "No handlers to execute"
+        return $results
+    }
+
+    foreach ($handler in $Handlers)
+    {
+        # Skip if in skip list
+        if ($handler.Name -in $SkipHandlers)
+        {
+            Write-Host "[$($handler.Name)] Skipped (user request)" -ForegroundColor Gray
+            continue
+        }
+
+        # Check if handler can apply
+        $canApply = $false
+        try
+        {
+            $canApply = $handler.CanApply($Context)
+        } catch
+        {
+            Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+            continue
+        }
+
+        if (-not $canApply)
+        {
+            Write-Host "[$($handler.Name)] Skipped (CanApply returned false)" -ForegroundColor Gray
+            continue
+        }
+
+        # Execute handler
+        Write-Host ""
+        Write-Host "[$($handler.Name)] $($handler.Description)" -ForegroundColor Cyan
+
+        try
+        {
+            $result = $handler.Apply($Context)
+            $results += $result
+
+            if ($result.Success)
+            {
+                Write-Host "[$($handler.Name)] ✓ $($result.Message)" -ForegroundColor Green
+            } else
+            {
+                Write-Host "[$($handler.Name)] ✗ $($result.Message)" -ForegroundColor Red
+                if ($result.Error)
+                {
+                    Write-Host "[$($handler.Name)] Error: $($result.Error.Message)" -ForegroundColor Red
+                }
+            }
+        } catch
+        {
+            $exception = $_.Exception
+            $result = [SetupResult]::CreateFailure($handler.Name, "Unhandled exception", $exception)
+            $results += $result
+            Write-Host "[$($handler.Name)] ✗ Exception: $($exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    return $results
+}
+
+<#
+.SYNOPSIS
+    Display a summary of handler execution results
+
+.PARAMETER Results
+    Array of SetupResult instances
+
+.EXAMPLE
+    Show-SetupSummary -Results $results
+#>
+function Show-SetupSummary
+{
+    param(
+        [Parameter(Mandatory)]
+        [array]$Results
+    )
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor White
+    Write-Host "Setup Summary" -ForegroundColor White
+    Write-Host "========================================" -ForegroundColor White
+
+    if ($Results.Count -eq 0)
+    {
+        Write-Host "No handlers were executed" -ForegroundColor Gray
+        return
+    }
+
+    $successCount = ($Results | Where-Object { $_.Success }).Count
+    $failureCount = ($Results | Where-Object { -not $_.Success }).Count
+
+    Write-Host ""
+    Write-Host "Total: $($Results.Count) | Success: $successCount | Failure: $failureCount" -ForegroundColor $(if ($failureCount -eq 0)
+        { "Green"
+        } else
+        { "Yellow"
+        })
+    Write-Host ""
+
+    foreach ($result in $Results)
+    {
+        $color = if ($result.Success)
+        { "Green"
+        } else
+        { "Red"
+        }
+        $status = if ($result.Success)
+        { "✓"
+        } else
+        { "✗"
+        }
+        Write-Host "  [$status] $($result.HandlerName): $($result.Message)" -ForegroundColor $color
+    }
+
+    Write-Host ""
+}

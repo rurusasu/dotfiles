@@ -179,8 +179,9 @@ cd scripts/powershell/tests
 **目的**: NixOS-WSL セットアップの自動化とハンドラーシステムの実装
 
 **主要コンポーネント**:
-- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター）
-- [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラスと共通型定義
+- [install.ps1](../../install.ps1) - メインインストールスクリプト（293行、ハンドラーオーケストレーター）
+- [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
+- [lib/InstallHelper.ps1](lib/InstallHelper.ps1) - インストール用ヘルパー関数（WSL管理、NixOS-WSLダウンロード等）
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（5個）
 - `tests/` - Pester v5 テストスイート（203 テスト、95%+ カバレッジ）
@@ -194,7 +195,8 @@ scripts/powershell/
 ├── AGENTS.md                    # このファイル（インデックス）
 ├── PSScriptAnalyzerSettings.psd1 # PSScriptAnalyzer 設定（linting）
 ├── lib/                         # 共通ライブラリ
-│   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult
+│   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult + オーケストレーション関数
+│   ├── InstallHelper.ps1        # インストール用ヘルパー関数（WSL管理、NixOS-WSLダウンロード等）
 │   └── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
 ├── handlers/                    # セットアップハンドラー
 │   ├── Handler.WslConfig.ps1    # Order 10: WSL 設定・VHD 拡張
@@ -204,12 +206,12 @@ scripts/powershell/
 │   └── Handler.Winget.ps1       # Order 90: winget パッケージ
 ├── tests/                       # テストファイル
 │   ├── Invoke-Tests.ps1         # テストランナー（Pester v5 自動インストール）
-│   ├── Install.Tests.ps1        # install.ps1 オーケストレーターテスト
+│   ├── Install.Tests.ps1        # オーケストレーション関数のテスト
 │   ├── PSScriptAnalyzer.Tests.ps1 # PSScriptAnalyzer 静的解析テスト
 │   ├── handlers/                # 各ハンドラーのテスト
 │   └── lib/                     # ライブラリのテスト
 
-../../install.ps1                # メインエントリーポイント（ハンドラー実行）
+../../install.ps1                # メインエントリーポイント（293行、簡素化済み）
 ../../treefmt.toml               # 統一フォーマッター設定（PowerShell含む）
 ../../docs/scripts/powershell/   # 詳細ドキュメント（このファイルから参照）
 ```
