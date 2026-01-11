@@ -11,6 +11,11 @@
     "wakatime.vscode-wakatime",
     "esbenp.prettier-vscode",
     "charliermarsh.ruff",
-    "pkief.material-icon-theme"
+    "pkief.material-icon-theme",
+    "tamasfe.even-better-toml",
+    "dprint.dprint",
+    "JohnnyMorganz.stylua",
+    "ibecker.treefmt-vscode",
+    "oxc.oxc-vscode"
   ]
 }

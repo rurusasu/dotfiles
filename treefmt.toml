@@ -5,7 +5,7 @@ includes = ["*.nix"]
 [formatter.oxfmt]
 command = "oxfmt"
 options = ["--write"]
-includes = ["*.json", "*.yaml", "*.yml", "*.md"]
+includes = ["*.json", "*.yaml", "*.yml"]
 
 [formatter.shfmt]
 command = "shfmt"
@@ -29,3 +29,8 @@ includes = ["*.toml"]
 [formatter.stylua]
 command = "stylua"
 includes = ["*.lua"]
+
+[formatter.dprint]
+command = "dprint"
+options = ["fmt"]
+includes = ["*.md"]
