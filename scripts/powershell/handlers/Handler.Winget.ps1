@@ -43,6 +43,13 @@ class WingetHandler : SetupHandlerBase {
             return $false
         }
 
+        # winget が実際に動作するか確認
+        if (-not $this.TestWingetExecutable()) {
+            $this.LogWarning("winget が正常に動作しません（App Installer の再インストールが必要な可能性があります）")
+            $this.Log("修正方法: Microsoft Store から App Installer を更新してください", "Yellow")
+            return $false
+        }
+
         $mode = $ctx.GetOption("WingetMode", "import")
 
         if ($mode -eq "import") {
@@ -55,6 +62,25 @@ class WingetHandler : SetupHandlerBase {
         }
 
         return $true
+    }
+
+    <#
+    .SYNOPSIS
+        winget が実際に動作するか確認する
+    .DESCRIPTION
+        winget --version を実行して、動作確認を行う
+    #>
+    hidden [bool] TestWingetExecutable() {
+        try {
+            $output = Invoke-Winget -Arguments @("--version")
+            # exit code 0 かつ出力に v があるか確認（例: v1.6.3133）
+            if ($LASTEXITCODE -eq 0 -and $output -match 'v?\d+\.\d+') {
+                return $true
+            }
+            return $false
+        } catch {
+            return $false
+        }
     }
 
     <#

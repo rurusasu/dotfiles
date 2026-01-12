@@ -56,7 +56,43 @@ class DockerHandler : SetupHandlerBase {
             return $false
         }
 
+        # Docker Desktop が起動可能か確認
+        if (-not $this.TestDockerDesktopExecutable($dockerExe)) {
+            $this.LogWarning("Docker Desktop が正常に動作しません（インストールが不完全な可能性があります）")
+            $this.Log("修正方法: Docker Desktop を再インストールしてください", "Yellow")
+            return $false
+        }
+
         return $true
+    }
+
+    <#
+    .SYNOPSIS
+        Docker Desktop が実際に起動可能か確認する
+    .DESCRIPTION
+        Docker Desktop.exe が存在し、実行可能ファイルとして有効かを確認
+        （componentsVersion.json の存在で判定）
+    #>
+    hidden [bool] TestDockerDesktopExecutable([string]$dockerExe) {
+        try {
+            # componentsVersion.json が存在するか確認（Docker Desktop が正しくインストールされている証拠）
+            $dockerDir = Split-Path -Parent $dockerExe
+            $componentsFile = Join-Path $dockerDir "componentsVersion.json"
+            if (Test-PathExist -Path $componentsFile) {
+                return $true
+            }
+
+            # componentsVersion.json がなくても、exe が存在していれば OK（古いバージョン対応）
+            # ファイルサイズが極端に小さい場合は壊れている可能性
+            $fileInfo = Get-Item -LiteralPath $dockerExe -ErrorAction SilentlyContinue
+            if ($fileInfo -and $fileInfo.Length -gt 1MB) {
+                return $true
+            }
+
+            return $false
+        } catch {
+            return $false
+        }
     }
 
     <#
@@ -66,6 +102,9 @@ class DockerHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $distroName = $ctx.DistroName
+
+            # 最初に残留プロセスをクリーンアップ（Lingering processes対策）
+            $this.StopLingeringDockerProcesses()
 
             # Docker Desktop を起動（WSL を正しく起動するために必要）
             $this.StartDockerDesktopIfNeeded()
@@ -232,6 +271,9 @@ class DockerHandler : SetupHandlerBase {
             return
         }
 
+        # 起動前に残留プロセスをクリーンアップ（Lingering processes対策）
+        $this.StopLingeringDockerProcesses()
+
         $this.Log("Docker Desktop を起動します")
         Start-ProcessSafe -FilePath $dockerExe
         Start-SleepSafe -Seconds 5
@@ -242,20 +284,151 @@ class DockerHandler : SetupHandlerBase {
         Docker Desktop を再起動する
     #>
     hidden [void] RestartDockerDesktop() {
-        $running = Get-ProcessSafe -Name "Docker Desktop"
-        $backend = Get-ProcessSafe -Name "com.docker.backend"
+        # Docker 関連プロセスが1つでも動いているかチェック
+        $anyRunning = $this.HasAnyDockerProcess()
 
-        if (-not $running -and -not $backend) {
+        if (-not $anyRunning) {
             return
         }
 
         $this.Log("Docker Desktop を再起動します")
-        Stop-ProcessSafe -Name "Docker Desktop"
-        Stop-ProcessSafe -Name "com.docker.backend"
+
+        # Docker 関連のすべてのプロセスを終了
+        $this.StopAllDockerProcesses()
+
         Start-SleepSafe -Seconds 5
 
         $this.StartDockerDesktopIfNeeded()
         Start-SleepSafe -Seconds 10
+    }
+
+    <#
+    .SYNOPSIS
+        Docker 関連プロセスが1つでも動いているかチェックする
+    #>
+    hidden [bool] HasAnyDockerProcess() {
+        $dockerProcessNames = @(
+            "Docker Desktop",
+            "com.docker.backend",
+            "com.docker.build",
+            "com.docker.dev-envs",
+            "com.docker.extensions",
+            "com.docker.proxy",
+            "com.docker.service"
+        )
+
+        foreach ($processName in $dockerProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    <#
+    .SYNOPSIS
+        残留しているDockerプロセスを終了する（起動前のクリーンアップ）
+    .DESCRIPTION
+        Docker Desktop が不完全な状態で残っている場合、すべてのDockerプロセスを
+        終了してクリーンな状態から起動できるようにする。
+        「Lingering processes detected」エラーを防ぐため、残留プロセスだけでなく
+        Docker Desktop本体も終了させて完全にリセットする。
+    #>
+    hidden [void] StopLingeringDockerProcesses() {
+        # 残留プロセス（Docker Desktop本体なしで動いているプロセス）をチェック
+        $lingeringProcessNames = @(
+            "com.docker.build",
+            "com.docker.dev-envs",
+            "com.docker.extensions",
+            "com.docker.proxy",
+            "com.docker.service"
+        )
+
+        $hasLingering = $false
+        foreach ($processName in $lingeringProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                $hasLingering = $true
+                break
+            }
+        }
+
+        if (-not $hasLingering) {
+            return
+        }
+
+        $this.Log("残留Dockerプロセスを検出しました。クリーンアップを実行します", "Yellow")
+
+        # Docker関連のすべてのプロセスを終了（完全リセット）
+        $allDockerProcessNames = @(
+            "Docker Desktop",
+            "com.docker.backend",
+            "com.docker.build",
+            "com.docker.dev-envs",
+            "com.docker.extensions",
+            "com.docker.proxy",
+            "com.docker.service"
+        )
+
+        foreach ($processName in $allDockerProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                $this.Log("プロセスを終了します: $processName", "Gray")
+                Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # プロセス終了を待機
+        Start-SleepSafe -Seconds 3
+
+        # まだ残っているプロセスを再度強制終了
+        foreach ($processName in $allDockerProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                $this.Log("プロセスを強制終了します: $processName", "Yellow")
+                Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        Start-SleepSafe -Seconds 2
+        $this.Log("Dockerプロセスのクリーンアップが完了しました", "Green")
+    }
+
+    <#
+    .SYNOPSIS
+        Docker 関連のすべてのプロセスを終了する
+    #>
+    hidden [void] StopAllDockerProcesses() {
+        # Docker 関連のプロセス名リスト
+        $dockerProcessNames = @(
+            "Docker Desktop",
+            "com.docker.backend",
+            "com.docker.build",
+            "com.docker.dev-envs",
+            "com.docker.extensions",
+            "com.docker.proxy",
+            "com.docker.service"
+        )
+
+        foreach ($processName in $dockerProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                $this.Log("プロセスを終了します: $processName", "Gray")
+                Stop-ProcessSafe -Name $processName
+            }
+        }
+
+        # 少し待ってからまだ残っているプロセスを強制終了
+        Start-SleepSafe -Seconds 2
+
+        foreach ($processName in $dockerProcessNames) {
+            $process = Get-ProcessSafe -Name $processName
+            if ($process) {
+                $this.Log("プロセスを強制終了します: $processName", "Yellow")
+                Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     <#

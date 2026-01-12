@@ -36,6 +36,13 @@ class NixOSWSLHandler : SetupHandlerBase {
         - または強制再インストールが指定されているか
     #>
     [bool] CanApply([SetupContext]$ctx) {
+        # WSL が動作するか確認
+        if (-not $this.TestWslExecutable()) {
+            $this.LogWarning("WSL が正常に動作しません")
+            $this.Log("修正方法: wsl --install を実行するか、Windows Update を確認してください", "Yellow")
+            return $false
+        }
+
         # ディストリビューションがすでに存在する場合
         if ($this.DistroExists($ctx.DistroName)) {
             $this.Log("ディストリビューション '$($ctx.DistroName)' はすでに存在します", "Gray")
@@ -43,6 +50,30 @@ class NixOSWSLHandler : SetupHandlerBase {
         }
 
         return $true
+    }
+
+    <#
+    .SYNOPSIS
+        WSL が実際に動作するか確認する
+    .DESCRIPTION
+        wsl --status を実行して、WSL が有効化されているか確認
+    #>
+    hidden [bool] TestWslExecutable() {
+        try {
+            $output = Invoke-Wsl --status 2>&1
+            # wsl --status は WSL が無効でもエラーを返さないことがあるので、
+            # 出力に "Default Version" や "カーネル" が含まれているか確認
+            if ($output -match 'Default|既定|Version|バージョン|Kernel|カーネル') {
+                return $true
+            }
+            # 出力がなくても LASTEXITCODE が 0 なら動作している
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+            return $false
+        } catch {
+            return $false
+        }
     }
 
     <#

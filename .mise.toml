@@ -1,0 +1,39 @@
+# mise - ツールバージョン管理
+# https://mise.jdx.dev/
+
+[tools]
+# フォーマッター
+treefmt = "latest"
+dprint = "latest"
+
+# pre-commit フック
+pre-commit = "latest"
+
+# Lua フォーマッター (neovim config用)
+stylua = "latest"
+
+# Shell フォーマッター
+shfmt = "latest"
+
+# Nix フォーマッター (オプション - NixOS では不要)
+# nixfmt = "latest"
+
+[hooks]
+# mise install 後に自動的に pre-commit hooks をセットアップ
+postinstall = "pre-commit install"
+
+[tasks.fmt]
+description = "Run treefmt on all files"
+run = "treefmt"
+
+[tasks.lint]
+description = "Run linters"
+run = "pre-commit run --all-files"
+
+[tasks.test]
+description = "Run PowerShell tests"
+run = "pwsh -NoProfile -Command 'Invoke-Pester -Path scripts/powershell/tests -CI'"
+
+[tasks.setup]
+description = "Setup pre-commit hooks"
+run = "pre-commit install"

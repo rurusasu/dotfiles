@@ -223,14 +223,16 @@ cd tests
 
 ### 既存ハンドラーの参考実装
 
-| ハンドラー   | ソースファイル                                                                            | テストファイル                                                                                              | 説明                   |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1)             | winget パッケージ管理  |
-| Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)           | dotfiles 適用          |
-| WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1)       | VHD 拡張、FS リサイズ  |
-| Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携    |
-| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
-| NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
+| ハンドラー   | ソースファイル                                                                            | テストファイル                                                                                              | 説明                      |
+| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1)             | winget パッケージ管理     |
+| Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)           | dotfiles 適用             |
+| Mise         | [Handler.Mise.ps1](../../../scripts/powershell/handlers/Handler.Mise.ps1)                 | [Handler.Mise.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Mise.Tests.ps1)                 | mise ツールインストール   |
+| WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1)       | .wslconfig 適用           |
+| VhdManager   | [Handler.VhdManager.ps1](../../../scripts/powershell/handlers/Handler.VhdManager.ps1)     | [Handler.VhdManager.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VhdManager.Tests.ps1)     | VHD 拡張、FS リサイズ     |
+| Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携       |
+| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理       |
+| NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール    |
 
 ### 関連ドキュメント
 

@@ -7,11 +7,14 @@
     1. NixOS-WSL のダウンロードとインポート
     2. Post-install セットアップの実行
     3. ハンドラーシステムによる自動設定:
-       - WslConfig: .wslconfig の適用と VHD 拡張
-       - Docker: Docker Desktop との WSL 連携
-       - VscodeServer: VS Code Server のキャッシュ削除と事前インストール
-       - Chezmoi: chezmoi による dotfiles 適用
-       - Winget: パッケージ管理
+       - Winget (Order=5): パッケージ管理（mise 含む）
+       - Chezmoi (Order=10): chezmoi による dotfiles 適用
+       - Mise (Order=15): mise によるツールインストール（treefmt, pre-commit 等）
+       - WslConfig (Order=20): .wslconfig の適用
+       - VhdManager (Order=21): WSL VHD サイズ拡張
+       - Docker (Order=30): Docker Desktop との WSL 連携
+       - VscodeServer (Order=40): VS Code Server のキャッシュ削除と事前インストール
+       - NixOSWSL (Order=50): NixOS-WSL のダウンロードとインストール
 
 .PARAMETER DistroName
     WSL ディストリビューション名（デフォルト: NixOS）
@@ -75,8 +78,7 @@ Request-AdminElevation -ScriptPath $PSCommandPath -BoundParameters $PSBoundParam
 # Parameter Initialization
 # ========================================
 # Set default PostInstallScript if not provided
-if (-not $PSBoundParameters.ContainsKey("PostInstallScript"))
-{
+if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
     $PostInstallScript = Join-Path $PSScriptRoot "scripts\sh\nixos-wsl-postinstall.sh"
 }
 
@@ -94,8 +96,7 @@ $context.DistroName = $DistroName
 $context.InstallDir = $InstallDir
 
 # Merge all options into context
-foreach ($key in $Options.Keys)
-{
+foreach ($key in $Options.Keys) {
     $context.Options[$key] = $Options[$key]
 }
 
@@ -120,18 +121,19 @@ Write-Host "Phase 2: Final Processing" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-if ($Options['SkipSetDefaultDistro'] -ne $true)
-{
+if ($Options['SkipSetDefaultDistro'] -ne $true) {
     Write-Host "Setting default distro: $DistroName"
     & wsl --set-default $DistroName
 }
 
 $expandDockerVhd = Join-Path $PSScriptRoot "windows\expand-docker-vhd.ps1"
-if (Test-Path -LiteralPath $expandDockerVhd)
-{
+if (Test-Path -LiteralPath $expandDockerVhd) {
     Write-Host "Expanding Docker Desktop VHDX..."
     & $expandDockerVhd -Force
 }
+
+# Note: mise install は MiseHandler (Order=15) で自動実行されます
+# 手動で実行する場合: mise trust && mise install
 
 # ========================================
 # Phase 3: Summary

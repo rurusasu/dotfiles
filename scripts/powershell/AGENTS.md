@@ -209,7 +209,7 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -Path .\handlers\Handler.Chezmoi.Tests.ps1 -MinimumCoverage 0
 ```
 
-**現在の状態**: 230+ テスト、カバレッジ 95%+
+**現在の状態**: 270+ テスト、カバレッジ 95%+
 
 ### pre-commit による自動テスト
 
@@ -253,7 +253,9 @@ scripts/powershell/
 ├── handlers/                    # セットアップハンドラー
 │   ├── Handler.Winget.ps1       # Order 5: winget パッケージ
 │   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用
-│   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定・VHD 拡張
+│   ├── Handler.Mise.ps1         # Order 15: mise ツールインストール
+│   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定
+│   ├── Handler.VhdManager.ps1   # Order 21: VHD サイズ拡張
 │   ├── Handler.Docker.ps1       # Order 30: Docker Desktop 連携
 │   ├── Handler.VscodeServer.ps1 # Order 40: VS Code Server 管理
 │   └── Handler.NixOSWSL.ps1     # Order 50: NixOS-WSL インストール
@@ -275,7 +277,9 @@ scripts/powershell/
 | ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
 | 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（JSON定義ベース）                           |
 | 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用                                             |
-| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ               |
+| 15    | Mise         | Handler.Mise.ps1         | mise によるツールインストール（treefmt, pre-commit 等）           |
+| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                   |
+| 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                                |
 | 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |
 | 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                 |
 | 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |

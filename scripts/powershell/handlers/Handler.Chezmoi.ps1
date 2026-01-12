@@ -44,6 +44,13 @@ class ChezmoiHandler : SetupHandlerBase {
             return $false
         }
 
+        # chezmoi が実際に動作するか確認（DLL不足などを検出）
+        if (-not $this.TestChezmoiExecutable()) {
+            $this.LogWarning("chezmoi が正常に動作しません（Visual C++ Redistributable が必要な可能性があります）")
+            $this.Log("修正方法: winget install -e --id Microsoft.VCRedist.2015+.x64", "Yellow")
+            return $false
+        }
+
         # ソースディレクトリの確認
         $sourcePath = $this.GetChezmoiSourcePath($ctx)
         if (-not (Test-PathExist -Path $sourcePath)) {
@@ -105,8 +112,8 @@ class ChezmoiHandler : SetupHandlerBase {
         $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
         if (Test-PathExist -Path $packagesRoot) {
             $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
-                Where-Object { $_.Name -like 'twpayne.chezmoi*' } |
-                Select-Object -First 1
+            Where-Object { $_.Name -like 'twpayne.chezmoi*' } |
+            Select-Object -First 1
 
             if ($pkgDir) {
                 $exe = Join-Path $pkgDir.FullName "chezmoi.exe"
@@ -123,6 +130,26 @@ class ChezmoiHandler : SetupHandlerBase {
         }
 
         return $null
+    }
+
+    <#
+    .SYNOPSIS
+        chezmoi が実際に動作するか確認する
+    .DESCRIPTION
+        chezmoi --version を実行して、DLL不足などのエラーがないか確認
+    #>
+    hidden [bool] TestChezmoiExecutable() {
+        try {
+            $output = Invoke-Chezmoi -ExePath $this.ChezmoiExePath --version
+            # exit code 0 かつ出力にバージョン情報が含まれているか確認
+            if ($LASTEXITCODE -eq 0 -and $output -match '\d+\.\d+') {
+                return $true
+            }
+            return $false
+        } catch {
+            # 例外が発生した場合（DLL不足など）
+            return $false
+        }
     }
 
     <#

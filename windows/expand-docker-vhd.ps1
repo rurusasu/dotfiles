@@ -76,11 +76,29 @@ if (-not $Force) {
 
 # Stop Docker Desktop
 Write-Host "Stopping Docker Desktop..."
-$dockerProcesses = @("Docker Desktop", "com.docker.backend", "com.docker.service")
+$dockerProcesses = @(
+    "Docker Desktop",
+    "com.docker.backend",
+    "com.docker.build",
+    "com.docker.dev-envs",
+    "com.docker.extensions",
+    "com.docker.proxy",
+    "com.docker.service"
+)
 foreach ($proc in $dockerProcesses) {
     Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
 }
 Start-Sleep -Seconds 3
+
+# 残留プロセスを再度確認して強制終了
+foreach ($proc in $dockerProcesses) {
+    $remaining = Get-Process -Name $proc -ErrorAction SilentlyContinue
+    if ($remaining) {
+        Write-Host "Killing lingering process: $proc"
+        Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
+    }
+}
+Start-Sleep -Seconds 2
 
 # Shutdown WSL
 Write-Host "Shutting down WSL..."
@@ -113,7 +131,31 @@ if ($newSizeGB -ge $TargetSizeGB) {
     Write-Host "VHDX expansion successful!"
     Write-Host ""
     Write-Host "Note: The ext4 filesystem inside will auto-expand when Docker starts."
-    Write-Host "Start Docker Desktop to complete the process."
 } else {
     Write-Warning "VHDX expansion may not have completed successfully."
+}
+
+# Final cleanup: ensure no lingering Docker processes before user starts Docker Desktop
+Write-Host "Cleaning up any remaining Docker processes..."
+$dockerProcesses = @(
+    "Docker Desktop",
+    "com.docker.backend",
+    "com.docker.build",
+    "com.docker.dev-envs",
+    "com.docker.extensions",
+    "com.docker.proxy",
+    "com.docker.service"
+)
+foreach ($proc in $dockerProcesses) {
+    Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
+}
+Start-Sleep -Seconds 2
+
+Write-Host "Starting Docker Desktop..."
+$dockerExe = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
+if (Test-Path $dockerExe) {
+    Start-Process -FilePath $dockerExe
+    Write-Host "Docker Desktop started."
+} else {
+    Write-Host "Docker Desktop executable not found. Please start Docker Desktop manually."
 }

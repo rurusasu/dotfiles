@@ -16,6 +16,7 @@ dotfiles/
 │   ├── lib/                # Helper functions
 │   ├── overlays/           # Nixpkgs overlays
 │   └── templates/          # Project templates
+├── .mise.toml              # mise tool configuration (treefmt, pre-commit, etc.)
 ├── scripts/                # All scripts (see scripts/AGENTS.md)
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   │   ├── update.sh           # Daily update script
@@ -140,9 +141,9 @@ Secrets:
 - Configure age/gpg in `~/.config/chezmoi/chezmoi.toml`
 - Use `chezmoi add --encrypt <path>` to add secrets
 
-## Formatting
+## Formatting & Pre-commit
 
-treefmt を使用して複数のフォーマッターを統一管理。詳細は [docs/formatter/AGENTS.md](./docs/formatter/AGENTS.md) を参照。
+treefmt を使用して複数のフォーマッターを統一管理。mise でツールを管理し、pre-commit でコミット時に自動実行。
 
 ### Quick Reference
 
@@ -150,6 +151,8 @@ treefmt を使用して複数のフォーマッターを統一管理。詳細は
 |------|----------|
 | Source of truth | `.treefmt.toml` |
 | Nix integration | `nix/flakes/treefmt.nix` |
+| Tool versions | `.mise.toml` |
+| Pre-commit hooks | `.pre-commit-config.yaml` |
 | 詳細ドキュメント | [docs/formatter/](./docs/formatter/) |
 
 ### Usage
@@ -158,8 +161,10 @@ treefmt を使用して複数のフォーマッターを統一管理。詳細は
 # Via Nix (recommended)
 nix fmt
 
-# Via treefmt directly
-treefmt
+# Via mise + treefmt (Windows/Linux)
+mise install      # Install tools (treefmt, pre-commit, etc.)
+treefmt           # Run formatter
+pre-commit run    # Run all hooks manually
 ```
 
 ### Prerequisites
@@ -169,6 +174,16 @@ PowerShell formatting requires PSScriptAnalyzer:
 ```powershell
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
+
+### mise によるツール管理
+
+`.mise.toml` で以下のツールを管理:
+- treefmt: 統一フォーマッター
+- pre-commit: Git フック管理
+- stylua: Lua フォーマッター
+- shfmt: Shell フォーマッター
+
+`mise install` で自動インストールされ、postinstall フックで `pre-commit install` も自動実行。
 
 ## Terminal Settings Flow
 

@@ -613,6 +613,7 @@ Describe 'DockerHandler' {
                 return $null
             }
             Mock Stop-ProcessSafe { $script:stopCalled = $true }
+            Mock Stop-Process { }
             Mock Start-ProcessSafe { $script:startCalled = $true }
             Mock Write-Host {
                 param($Object)
@@ -650,6 +651,171 @@ Describe 'DockerHandler' {
             # 再起動ログが表示される
             $script:restartLogShown | Should -Be $true
             $script:stopCalled | Should -Be $true
+        }
+    }
+
+    Context 'StopAllDockerProcesses' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Test-PathExist { return $true }
+            Mock Start-SleepSafe { }
+            Mock Start-ProcessSafe { }
+        }
+
+        It 'should stop all Docker-related processes including com.docker.build' {
+            $script:stoppedProcesses = @()
+
+            Mock Get-ProcessSafe {
+                param($Name)
+                # com.docker.build を含む複数のプロセスが実行中
+                if ($Name -in @("Docker Desktop", "com.docker.backend", "com.docker.build")) {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
+            }
+            Mock Stop-ProcessSafe {
+                param($Name)
+                $script:stoppedProcesses += $Name
+            }
+            Mock Stop-Process { }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "df -Pk") {
+                    return "50000"
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "docker-desktop-user-distro") {
+                    $global:LASTEXITCODE = 1
+                }
+                if ($argStr -match "proxy") {
+                    $global:LASTEXITCODE = 1
+                }
+                return ""
+            }
+            $handler.Retries = 1
+            $handler.RetryDelaySeconds = 0
+
+            $handler.Apply($ctx)
+
+            # com.docker.build が終了対象に含まれることを確認
+            $script:stoppedProcesses | Should -Contain "Docker Desktop"
+            $script:stoppedProcesses | Should -Contain "com.docker.backend"
+            $script:stoppedProcesses | Should -Contain "com.docker.build"
+        }
+
+        It 'should force kill lingering processes after initial stop attempt' {
+            $script:forceKillCalled = $false
+            $callCount = 0
+
+            Mock Get-ProcessSafe {
+                param($Name)
+                $script:callCount++
+                # 最初のループでは全プロセス存在、2回目のループでもまだ com.docker.build が残っている
+                if ($Name -eq "com.docker.build") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                if ($script:callCount -le 7 -and $Name -eq "Docker Desktop") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
+            }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process {
+                param($Name)
+                if ($Name -eq "com.docker.build") {
+                    $script:forceKillCalled = $true
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "df -Pk") {
+                    return "50000"
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "docker-desktop-user-distro") {
+                    $global:LASTEXITCODE = 1
+                }
+                return ""
+            }
+            $handler.Retries = 1
+            $handler.RetryDelaySeconds = 0
+
+            $handler.Apply($ctx)
+
+            # 強制終了が呼ばれたことを確認
+            $script:forceKillCalled | Should -Be $true
+        }
+    }
+
+    Context 'StopLingeringDockerProcesses' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Test-PathExist { return $true }
+            Mock Start-SleepSafe { }
+        }
+
+        It 'should stop lingering com.docker.build before starting Docker Desktop' {
+            $script:lingeringProcessKilled = $false
+            $script:dockerDesktopStarted = $false
+
+            Mock Get-ProcessSafe {
+                param($Name)
+                # Docker Desktop は動いていないが、com.docker.build が残留
+                if ($Name -eq "com.docker.build" -and -not $script:lingeringProcessKilled) {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
+            }
+            Mock Stop-Process {
+                param($Name)
+                if ($Name -eq "com.docker.build") {
+                    $script:lingeringProcessKilled = $true
+                }
+            }
+            Mock Start-ProcessSafe {
+                $script:dockerDesktopStarted = $true
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "df -Pk") {
+                    return "50000"
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "docker-desktop-user-distro") {
+                    $global:LASTEXITCODE = 0
+                }
+                if ($argStr -match "proxy") {
+                    $global:LASTEXITCODE = 0
+                }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            # 残留プロセスが終了されてからDocker Desktopが起動されることを確認
+            $script:lingeringProcessKilled | Should -Be $true
+            $script:dockerDesktopStarted | Should -Be $true
         }
     }
 

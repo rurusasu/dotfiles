@@ -11,7 +11,7 @@
           "PackageIdentifier": "Anthropic.Claude"
         },
         {
-          "PackageIdentifier": "Anthropic.ClaudeCod"
+          "PackageIdentifier": "Anthropic.ClaudeCode"
         },
         {
           "PackageIdentifier": "Anysphere.Cursor"
@@ -23,7 +23,13 @@
           "PackageIdentifier": "Git.Git"
         },
         {
+          "PackageIdentifier": "jdx.mise"
+        },
+        {
           "PackageIdentifier": "Microsoft.PowerShell"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
@@ -35,13 +41,7 @@
           "PackageIdentifier": "Microsoft.WSL"
         },
         {
-          "PackageIdentifier": "OpenAI.ChatGPT"
-        },
-        {
-          "PackageIdentifier": "Python.Python.3.13"
-        },
-        {
-          "PackageIdentifier": "OpenAI.ChatGPTCodex"
+          "PackageIdentifier": "OpenAI.Codex"
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"
@@ -61,6 +61,19 @@
         "Identifier": "Microsoft.Winget.Source_8wekyb3d8bbwe",
         "Name": "winget",
         "Type": "Microsoft.PreIndexed.Package"
+      }
+    },
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "9NT1R1C2HH7J"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://storeedgefd.dsx.mp.microsoft.com/v9.0",
+        "Identifier": "StoreEdgeFD",
+        "Name": "msstore",
+        "Type": "Microsoft.Rest"
       }
     }
   ],

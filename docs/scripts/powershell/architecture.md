@@ -144,7 +144,9 @@ foreach ($result in $results) {
 | ----- | ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | 5     | Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | winget パッケージ管理（JSON定義ベース）                           |
 | 10    | Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | chezmoi dotfiles 適用                                             |
-| 20    | WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | .wslconfig 適用、VHD 拡張、ファイルシステムリサイズ               |
+| 15    | Mise         | [Handler.Mise.ps1](../../../scripts/powershell/handlers/Handler.Mise.ps1)                 | mise によるツールインストール（treefmt, pre-commit 等）           |
+| 20    | WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | .wslconfig 適用                                                   |
+| 21    | VhdManager   | [Handler.VhdManager.ps1](../../../scripts/powershell/handlers/Handler.VhdManager.ps1)     | WSL VHD サイズ拡張                                                |
 | 30    | Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | Docker Desktop WSL 連携、docker-desktop distro 作成               |
 | 40    | VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | VS Code Server キャッシュクリア、事前インストール                 |
 | 50    | NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
