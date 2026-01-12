@@ -471,7 +471,9 @@ function Show-SetupSummary
 {
     param(
         [Parameter(Mandatory)]
-        [array]$Results
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        $Results
     )
 
     Write-Host ""
@@ -479,24 +481,35 @@ function Show-SetupSummary
     Write-Host "Setup Summary" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor White
 
-    if ($Results.Count -eq 0)
+    # Handle null, empty, or non-array results
+    if ($null -eq $Results)
     {
         Write-Host "No handlers were executed" -ForegroundColor Gray
         return
     }
 
-    $successCount = ($Results | Where-Object { $_.Success }).Count
-    $failureCount = ($Results | Where-Object { -not $_.Success }).Count
+    # Ensure Results is an array
+    $resultsArray = @($Results)
+    $totalCount = $resultsArray.Count
+
+    if ($totalCount -eq 0)
+    {
+        Write-Host "No handlers were executed" -ForegroundColor Gray
+        return
+    }
+
+    $successCount = @($resultsArray | Where-Object { $_.Success }).Count
+    $failureCount = @($resultsArray | Where-Object { -not $_.Success }).Count
 
     Write-Host ""
-    Write-Host "Total: $($Results.Count) | Success: $successCount | Failure: $failureCount" -ForegroundColor $(if ($failureCount -eq 0)
+    Write-Host "Total: $totalCount | Success: $successCount | Failure: $failureCount" -ForegroundColor $(if ($failureCount -eq 0)
         { "Green"
         } else
         { "Yellow"
         })
     Write-Host ""
 
-    foreach ($result in $Results)
+    foreach ($result in $resultsArray)
     {
         $color = if ($result.Success)
         { "Green"

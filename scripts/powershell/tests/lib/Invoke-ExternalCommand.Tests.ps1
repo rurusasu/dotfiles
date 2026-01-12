@@ -41,25 +41,40 @@ Describe 'Invoke-Wsl' {
 
 Describe 'Invoke-Diskpart' {
     BeforeAll {
-        $script:diskpartCalled = $false
+        $script:startProcessCalled = $false
         $script:setContentCalled = $false
-        Mock diskpart {
-            $script:diskpartCalled = $true
-            return "diskpart output"
+        $script:tempDir = Join-Path $env:TEMP "diskpart_test_$(Get-Random)"
+        New-Item -ItemType Directory -Path $script:tempDir -Force | Out-Null
+        $script:tempFile = Join-Path $script:tempDir "script.tmp"
+
+        Mock Start-Process {
+            $script:startProcessCalled = $true
+            # Create output files that the function expects
+            $outPath = $RedirectStandardOutput
+            $errPath = $RedirectStandardError
+            if ($outPath) { Set-Content -Path $outPath -Value "diskpart output" }
+            if ($errPath) { Set-Content -Path $errPath -Value "" }
+            return [PSCustomObject]@{ ExitCode = 0 }
         }
         Mock Set-ContentNoNewline {
             $script:setContentCalled = $true
         }
         Mock Remove-Item { }
         Mock New-TemporaryFile {
-            return [PSCustomObject]@{ FullName = "C:\temp\diskpart_test.txt" }
+            return [PSCustomObject]@{ FullName = $script:tempFile }
         }
+        Mock Test-Path { return $true }
+        Mock Get-Content { return "diskpart output" }
     }
 
-    It 'should create script file and execute diskpart' {
+    AfterAll {
+        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'should create script file and execute diskpart via Start-Process' {
         Invoke-Diskpart -ScriptContent "list disk"
 
-        $script:diskpartCalled | Should -Be $true
+        $script:startProcessCalled | Should -Be $true
     }
 
     It 'should write script content to temp file' {

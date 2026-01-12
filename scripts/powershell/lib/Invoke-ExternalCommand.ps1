@@ -94,11 +94,30 @@ function Invoke-Diskpart {
         [string]$ScriptContent
     )
     $tmp = New-TemporaryFile
+    $outFile = "$($tmp.FullName).out"
+    $errFile = "$($tmp.FullName).err"
     try {
         Set-ContentNoNewline -Path $tmp -Value $ScriptContent
-        & diskpart /s $tmp
+        # Use Start-Process to avoid encoding issues with native commands in PowerShell 7
+        $result = Start-Process -FilePath "diskpart.exe" -ArgumentList "/s", $tmp.FullName -Wait -PassThru -NoNewWindow -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+
+        # Output stdout content
+        if (Test-Path $outFile) {
+            Get-Content -Path $outFile -ErrorAction SilentlyContinue
+        }
+
+        # Check for errors
+        if ($result.ExitCode -ne 0) {
+            $errContent = ""
+            if (Test-Path $errFile) {
+                $errContent = Get-Content -Path $errFile -Raw -ErrorAction SilentlyContinue
+            }
+            throw "diskpart failed with exit code $($result.ExitCode): $errContent"
+        }
     } finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $outFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
     }
 }
 
