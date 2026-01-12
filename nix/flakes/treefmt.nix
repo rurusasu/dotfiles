@@ -1,35 +1,30 @@
+# treefmt-nix configuration
+# Formatter settings are in .treefmt.toml (source of truth)
+# This file only installs formatters via Nix
+#
+# References:
+# - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
+# - treefmt-nix examples: https://github.com/numtide/treefmt-nix/tree/main/examples
 _: {
   perSystem =
     { pkgs, ... }:
     {
       treefmt = {
-        package = pkgs.treefmt;
-        enableDefaultExcludes = true;
-        flakeFormatter = true;
         projectRootFile = "flake.nix";
 
+        # Install formatters (settings come from .treefmt.toml)
         programs = {
-          # Nix
-          nixfmt.enable = true;
-
-          # Shell
-          shfmt.enable = true;
-
-          # TOML
-          taplo.enable = true;
-
-          # Lua
-          stylua.enable = true;
-
-          # Markdown - dprint with explicit includes
-          dprint = {
-            enable = true;
-            includes = [ "*.md" ];
-          };
+          nixfmt.enable = true; # *.nix
+          shfmt.enable = true; # *.sh
+          taplo.enable = true; # *.toml
+          stylua.enable = true; # *.lua
+          dprint.enable = true; # *.md
+          oxfmt.enable = true; # *.json, *.yaml, *.yml
         };
 
+        # Custom formatters not in treefmt-nix programs
         settings.formatter = {
-          # PowerShell - treefmt-nix doesn't have built-in support
+          # PowerShell (no built-in support)
           powershell = {
             command = "${pkgs.powershell}/bin/pwsh";
             options = [
@@ -38,19 +33,6 @@ _: {
               "& { $content = Get-Content -Raw -LiteralPath $env:FILENAME; Import-Module PSScriptAnalyzer -Force; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }"
             ];
             includes = [ "*.ps1" ];
-          };
-
-          # JSON/YAML with prettier (oxfmt is not yet in nixpkgs)
-          prettier = {
-            command = "${pkgs.nodePackages.prettier}/bin/prettier";
-            options = [
-              "--write"
-            ];
-            includes = [
-              "*.json"
-              "*.yaml"
-              "*.yml"
-            ];
           };
         };
       };

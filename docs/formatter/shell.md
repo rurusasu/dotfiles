@@ -8,6 +8,21 @@ shfmt は Go 製の高速な Shell スクリプトフォーマッターです。
 
 ## インストール
 
+### Nix (推奨)
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#shfmt
+
+# nix-env
+nix-env -iA nixpkgs.shfmt
+
+# nix run (一時的)
+nix run nixpkgs#shfmt -- --help
+```
+
+### その他
+
 ```bash
 # Go
 go install mvdan.cc/sh/v3/cmd/shfmt@latest
@@ -17,9 +32,6 @@ brew install shfmt
 
 # apt (Debian/Ubuntu)
 apt install shfmt
-
-# nix
-nix-env -iA nixpkgs.shfmt
 ```
 
 ## 使用方法
@@ -55,7 +67,7 @@ treefmt
 | `-kp`      | カラム位置を保持           | false      |
 | `-fn`      | 関数の開き括弧を次行に     | false      |
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.shfmt]
@@ -71,6 +83,34 @@ includes = ["*.sh"]
 command = "shfmt"
 options = ["-w", "-i", "2", "-ci"]
 includes = ["*.sh", "*.bash"]
+```
+
+## treefmt-nix 設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    programs.shfmt.enable = true;
+  };
+}
+```
+
+### treefmt-nix ソース
+
+- [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+### 利用可能なオプション
+
+```nix
+{
+  programs.shfmt = {
+    enable = true;
+    # インデント幅（デフォルト: 2）
+    indent_size = 2;
+  };
+}
 ```
 
 ## .editorconfig 連携
@@ -158,5 +198,6 @@ shfmt -ln mksh script.sh
 ## 参考リンク
 
 - [shfmt GitHub](https://github.com/mvdan/shfmt)
+- [treefmt-nix shfmt 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
 - [EditorConfig](https://editorconfig.org/)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=foxundermoon.shell-format)

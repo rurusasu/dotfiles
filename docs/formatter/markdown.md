@@ -4,7 +4,7 @@
 
 ## 設定ファイル
 
-[dprint.json](../../dprint.json)
+[.dprint.json](../../.dprint.json)
 
 ```json
 {
@@ -48,6 +48,21 @@
 
 ## インストール
 
+### Nix (推奨)
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#dprint
+
+# nix-env
+nix-env -iA nixpkgs.dprint
+
+# nix run (一時的)
+nix run nixpkgs#dprint -- --help
+```
+
+### その他
+
 ```bash
 # cargo
 cargo install dprint
@@ -72,13 +87,41 @@ treefmt
 dprint check "**/*.md"
 ```
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.dprint]
 command = "dprint"
 options = ["fmt"]
 includes = ["*.md"]
+```
+
+## treefmt-nix 設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    programs.dprint.enable = true;
+  };
+}
+```
+
+### treefmt-nix ソース
+
+- [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+### 利用可能なオプション
+
+```nix
+{
+  programs.dprint = {
+    enable = true;
+    # パッケージを指定
+    package = pkgs.dprint;
+  };
+}
 ```
 
 ## エディター設定
@@ -118,6 +161,7 @@ includes = ["*.md"]
 ## 参考リンク
 
 - [dprint 公式サイト](https://dprint.dev/)
+- [treefmt-nix dprint 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
 - [Markdown プラグイン設定](https://dprint.dev/plugins/markdown/config/)
 - [GitHub リポジトリ](https://github.com/dprint/dprint)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=dprint.dprint)

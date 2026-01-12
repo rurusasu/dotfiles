@@ -11,12 +11,13 @@
 | Shell      | [shfmt](https://github.com/mvdan/shfmt)                            | -                                                                                       |
 | PowerShell | [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer) | [PSScriptAnalyzerSettings.psd1](../../scripts/powershell/PSScriptAnalyzerSettings.psd1) |
 | TOML       | [taplo](https://taplo.tamasfe.dev/)                                | [.taplo.toml](../../.taplo.toml)                                                        |
-| Lua        | [StyLua](https://github.com/JohnnyMorganz/StyLua)                  | [stylua.toml](../../stylua.toml)                                                        |
-| Markdown   | [dprint](https://dprint.dev/)                                      | [dprint.json](../../dprint.json)                                                        |
+| Lua        | [StyLua](https://github.com/JohnnyMorganz/StyLua)                  | [.stylua.toml](../../.stylua.toml)                                                      |
+| Markdown   | [dprint](https://dprint.dev/)                                      | [.dprint.json](../../.dprint.json)                                                      |
 
 ## 設定ファイル
 
-メイン設定: [treefmt.toml](../../treefmt.toml)
+- treefmt 設定: [.treefmt.toml](../../.treefmt.toml)
+- Nix 統合: [nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix)
 
 詳細: [treefmt 設定](./treefmt.md)
 

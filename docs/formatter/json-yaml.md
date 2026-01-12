@@ -8,15 +8,33 @@
 
 ```json
 {
-  "printWidth": 100
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "proseWrap": "preserve",
+  "endOfLine": "lf"
 }
 ```
 
 ## 設定オプション
 
-| オプション   | 値    | 説明       |
-| ------------ | ----- | ---------- |
-| `printWidth` | `100` | 行の最大幅 |
+| オプション       | 値          | 説明                               |
+| ---------------- | ----------- | ---------------------------------- |
+| `printWidth`     | `100`       | 行の最大幅                         |
+| `tabWidth`       | `2`         | インデント幅                       |
+| `useTabs`        | `false`     | スペースを使用                     |
+| `semi`           | `true`      | セミコロンを追加                   |
+| `singleQuote`    | `false`     | ダブルクォートを使用               |
+| `trailingComma`  | `"es5"`     | ES5互換の末尾カンマ                |
+| `bracketSpacing` | `true`      | オブジェクトリテラル内にスペース   |
+| `arrowParens`    | `"always"`  | アロー関数の引数に常に括弧         |
+| `proseWrap`      | `"preserve"`| 既存の改行を維持                   |
+| `endOfLine`      | `"lf"`      | Unix形式の改行コード               |
 
 ## 対応フォーマット
 
@@ -28,6 +46,21 @@ oxfmt は以下のフォーマットに対応しています：
 - TypeScript (`.ts`, `.tsx`)
 
 ## インストール
+
+### Nix (推奨)
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#oxfmt
+
+# nix-env
+nix-env -iA nixpkgs.oxfmt
+
+# nix run (一時的)
+nix run nixpkgs#oxfmt -- --help
+```
+
+### その他
 
 ```bash
 # npm
@@ -50,13 +83,41 @@ oxfmt "**/*.json"
 treefmt
 ```
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.oxfmt]
 command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml"]
+```
+
+## treefmt-nix 設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    programs.oxfmt.enable = true;
+  };
+}
+```
+
+### treefmt-nix ソース
+
+- [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
+
+### 利用可能なオプション
+
+```nix
+{
+  programs.oxfmt = {
+    enable = true;
+    # パッケージを指定
+    package = pkgs.oxfmt;
+  };
+}
 ```
 
 ## JSON フォーマット例
@@ -120,8 +181,6 @@ dependencies:
 }
 ```
 
-> **Note**: 現在は prettier を使用しています。oxfmt は CLI 経由で treefmt から実行されます。
-
 ### Zed
 
 ```json
@@ -139,11 +198,10 @@ dependencies:
 }
 ```
 
-> **Note**: 現在は prettier を使用しています。
-
 ## 参考リンク
 
 - [oxc 公式サイト](https://oxc.rs/)
+- [treefmt-nix oxfmt 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
 - [フォーマッター設定リファレンス](https://oxc.rs/docs/guide/usage/formatter/config-file-reference.html)
 - [GitHub リポジトリ](https://github.com/oxc-project/oxc)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=oxc.oxc-vscode)

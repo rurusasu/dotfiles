@@ -68,6 +68,23 @@ function Get-Something {
 
 ## インストール
 
+### Nix (推奨)
+
+PowerShell 自体をインストール（PSScriptAnalyzer は PowerShell Gallery から取得）:
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#powershell
+
+# nix-env
+nix-env -iA nixpkgs.powershell
+
+# nix run (一時的)
+nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
+```
+
+### PSScriptAnalyzer のインストール
+
 ```powershell
 # PowerShell Gallery からインストール
 Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
@@ -88,7 +105,7 @@ Invoke-ScriptAnalyzer -Path "script.ps1" -Settings "PSScriptAnalyzerSettings.psd
 Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd1"
 ```
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.powershell]
@@ -100,6 +117,38 @@ options = [
 ]
 includes = ["*.ps1"]
 ```
+
+## treefmt-nix 設定
+
+PowerShell は treefmt-nix の programs に含まれていないため、カスタム設定が必要です。
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    # Custom formatters not in treefmt-nix programs
+    settings.formatter = {
+      # PowerShell (no built-in support)
+      powershell = {
+        command = "${pkgs.powershell}/bin/pwsh";
+        options = [
+          "-NoProfile"
+          "-Command"
+          "& { $content = Get-Content -Raw -LiteralPath $env:FILENAME; Import-Module PSScriptAnalyzer -Force; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }"
+        ];
+        includes = [ "*.ps1" ];
+      };
+    };
+  };
+}
+```
+
+### treefmt-nix カスタムフォーマッター
+
+treefmt-nix では `settings.formatter` を使用してカスタムフォーマッターを定義できます。
+
+参考: [treefmt-nix README](https://github.com/numtide/treefmt-nix#custom-formatters)
 
 ## フォーマット vs リント
 
@@ -147,6 +196,7 @@ includes = ["*.ps1"]
 ## 参考リンク
 
 - [PSScriptAnalyzer GitHub](https://github.com/PowerShell/PSScriptAnalyzer)
+- [treefmt-nix カスタムフォーマッター](https://github.com/numtide/treefmt-nix#custom-formatters)
 - [ルール一覧](https://github.com/PowerShell/PSScriptAnalyzer/blob/master/docs/Rules/README.md)
 - [設定ファイルの書き方](https://github.com/PowerShell/PSScriptAnalyzer#settings-support-in-scriptanalyzer)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=ms-vscode.powershell)

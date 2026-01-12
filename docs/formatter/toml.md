@@ -53,6 +53,21 @@ trailing_newline = true
 
 ## インストール
 
+### Nix (推奨)
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#taplo
+
+# nix-env
+nix-env -iA nixpkgs.taplo
+
+# nix run (一時的)
+nix run nixpkgs#taplo -- --help
+```
+
+### その他
+
 ```bash
 # cargo
 cargo install taplo-cli
@@ -80,13 +95,41 @@ taplo check "**/*.toml"
 taplo lint "**/*.toml"
 ```
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.taplo]
 command = "taplo"
 options = ["format"]
 includes = ["*.toml"]
+```
+
+## treefmt-nix 設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    programs.taplo.enable = true;
+  };
+}
+```
+
+### treefmt-nix ソース
+
+- [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+### 利用可能なオプション
+
+```nix
+{
+  programs.taplo = {
+    enable = true;
+    # パッケージを指定
+    package = pkgs.taplo;
+  };
+}
 ```
 
 ## スキーマサポート
@@ -135,6 +178,7 @@ name = "my-project"
 ## 参考リンク
 
 - [taplo 公式サイト](https://taplo.tamasfe.dev/)
+- [treefmt-nix taplo 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
 - [設定リファレンス](https://taplo.tamasfe.dev/configuration/formatter-options.html)
 - [GitHub リポジトリ](https://github.com/tamasfe/taplo)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)

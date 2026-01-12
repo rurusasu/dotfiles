@@ -4,7 +4,7 @@
 
 ## 設定ファイル
 
-[stylua.toml](../../stylua.toml)
+[.stylua.toml](../../.stylua.toml)
 
 ```toml
 column_width = 120
@@ -40,6 +40,21 @@ indent_width = 4
 
 ## インストール
 
+### Nix (推奨)
+
+```bash
+# nix profile (flakes)
+nix profile install nixpkgs#stylua
+
+# nix-env
+nix-env -iA nixpkgs.stylua
+
+# nix run (一時的)
+nix run nixpkgs#stylua -- --help
+```
+
+### その他
+
 ```bash
 # cargo
 cargo install stylua
@@ -64,12 +79,40 @@ stylua --check "**/*.lua"
 treefmt
 ```
 
-## treefmt.toml 設定
+## .treefmt.toml 設定
 
 ```toml
 [formatter.stylua]
 command = "stylua"
 includes = ["*.lua"]
+```
+
+## treefmt-nix 設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+
+```nix
+{
+  treefmt = {
+    programs.stylua.enable = true;
+  };
+}
+```
+
+### treefmt-nix ソース
+
+- [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+### 利用可能なオプション
+
+```nix
+{
+  programs.stylua = {
+    enable = true;
+    # パッケージを指定
+    package = pkgs.stylua;
+  };
+}
 ```
 
 ## コード例
@@ -125,5 +168,6 @@ local t = { a = 1, b = 2, c = 3 }
 ## 参考リンク
 
 - [StyLua GitHub](https://github.com/JohnnyMorganz/StyLua)
+- [treefmt-nix stylua 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
 - [設定リファレンス](https://github.com/JohnnyMorganz/StyLua#configuration)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=JohnnyMorganz.stylua)

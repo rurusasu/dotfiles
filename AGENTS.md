@@ -7,17 +7,15 @@ Purpose: repo-level workflow notes.
 ```
 dotfiles/
 ├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
-├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
-├── nix/                    # NixOS/Home Manager configuration
-│   ├── flakes/             # Flake inputs/outputs
-│   ├── hosts/              # Host-specific configs
-│   ├── home/               # Home Manager base
-│   ├── profiles/           # Reusable config profiles
+├── nix/                    # NixOS configuration (no Home Manager)
+│   ├── flakes/             # Flake inputs/outputs, treefmt
+│   ├── hosts/              # Host-specific configs (WSL)
+│   ├── profiles/           # Reusable host profiles
 │   ├── modules/            # Custom NixOS modules
+│   ├── packages/           # Package sets for nix profile
 │   ├── lib/                # Helper functions
 │   ├── overlays/           # Nixpkgs overlays
-│   ├── packages/           # Custom packages
-│   └── templates/          # Config templates
+│   └── templates/          # Project templates
 ├── scripts/                # All scripts (see scripts/AGENTS.md)
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   │   ├── update.sh           # Daily update script
@@ -144,23 +142,48 @@ Secrets:
 
 ## Formatting
 
-Use treefmt for Nix/JSON/YAML/Markdown/TOML/Lua/Shell/PowerShell:
+### Configuration
+
+- **Source of truth**: `.treefmt.toml` (root directory)
+- **Nix integration**: `nix/flakes/treefmt.nix` (installs formatters only)
+
+### Config Files
+
+| File | Purpose | Docs |
+|------|---------|------|
+| `.treefmt.toml` | treefmt main config | [treefmt.com](https://treefmt.com/v2.1/getting-started/configure/) |
+| `.stylua.toml` | Lua formatter settings | [StyLua](https://github.com/JohnnyMorganz/StyLua) |
+| `.taplo.toml` | TOML formatter settings | [Taplo](https://taplo.tamasfe.dev/configuration/file.html) |
+| `.dprint.json` | Markdown formatter settings | [dprint](https://dprint.dev/config/) |
+| `.oxfmtrc.json` | JSON/YAML formatter settings | [oxfmt](https://github.com/aspect-build/oxfmt) |
+
+### Formatters
+
+| Language | Formatter | Files |
+|----------|-----------|-------|
+| Nix | nixfmt | `*.nix` |
+| Shell | shfmt | `*.sh` |
+| TOML | taplo | `*.toml` |
+| Lua | stylua | `*.lua` |
+| Markdown | dprint | `*.md` |
+| JSON/YAML | oxfmt | `*.json`, `*.yaml`, `*.yml` |
+| PowerShell | PSScriptAnalyzer | `*.ps1` |
+
+### Usage
 
 ```bash
+# Via Nix (recommended)
 nix fmt
+
+# Via treefmt directly
+treefmt
 ```
 
-or:
+### References
 
-```bash
-./scripts/sh/treefmt.sh
-```
+- [treefmt-nix examples](https://github.com/numtide/treefmt-nix/tree/main/examples)
 
-To enable automatic formatting on commit:
-
-```bash
-pre-commit install
-```
+### Prerequisites
 
 PowerShell formatting requires PSScriptAnalyzer:
 

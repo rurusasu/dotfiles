@@ -8,20 +8,29 @@ treefmt は「ワンコマンドで全てをフォーマット」するための
 
 ## インストール
 
-```bash
-# nix
-nix-env -iA nixpkgs.treefmt
+### Nix (推奨)
 
-# nix (flakes)
+```bash
+# nix profile (flakes)
 nix profile install nixpkgs#treefmt
 
+# nix-env
+nix-env -iA nixpkgs.treefmt
+
+# nix run (一時的)
+nix run nixpkgs#treefmt -- --help
+```
+
+### その他
+
+```bash
 # cargo
 cargo install treefmt
 ```
 
 ## 設定ファイル
 
-[treefmt.toml](../../treefmt.toml)
+[.treefmt.toml](../../.treefmt.toml)
 
 ```toml
 [formatter.nix]
@@ -60,6 +69,72 @@ includes = ["*.lua"]
 command = "dprint"
 options = ["fmt"]
 includes = ["*.md"]
+```
+
+## treefmt-nix 統合
+
+### Nix Flake での設定
+
+[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix)
+
+```nix
+# treefmt-nix configuration
+# Formatter settings are in .treefmt.toml (source of truth)
+# This file only installs formatters via Nix
+_: {
+  perSystem =
+    { pkgs, ... }:
+    {
+      treefmt = {
+        projectRootFile = "flake.nix";
+
+        # Install formatters (settings come from .treefmt.toml)
+        programs = {
+          nixfmt.enable = true; # *.nix
+          shfmt.enable = true; # *.sh
+          taplo.enable = true; # *.toml
+          stylua.enable = true; # *.lua
+          dprint.enable = true; # *.md
+          oxfmt.enable = true; # *.json, *.yaml, *.yml
+        };
+
+        # Custom formatters not in treefmt-nix programs
+        settings.formatter = {
+          # PowerShell (no built-in support)
+          powershell = {
+            command = "${pkgs.powershell}/bin/pwsh";
+            options = [
+              "-NoProfile"
+              "-Command"
+              "& { ... }"
+            ];
+            includes = [ "*.ps1" ];
+          };
+        };
+      };
+    };
+}
+```
+
+### treefmt-nix で利用可能なプログラム
+
+| プログラム | 対象ファイル            | treefmt-nix ソース                                                                       |
+| ---------- | ----------------------- | ---------------------------------------------------------------------------------------- |
+| nixfmt     | `*.nix`                 | [programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)   |
+| shfmt      | `*.sh`                  | [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)     |
+| taplo      | `*.toml`                | [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)     |
+| stylua     | `*.lua`                 | [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)   |
+| dprint     | `*.md` など             | [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)   |
+| oxfmt      | `*.json`, `*.yaml` など | [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)     |
+
+### Nix flake でのフォーマット実行
+
+```bash
+# nix fmt コマンドでフォーマット
+nix fmt
+
+# チェックのみ
+nix fmt -- --check
 ```
 
 ## 使用方法
@@ -191,6 +266,9 @@ treefmt --verbose --no-cache
 
 ## 参考リンク
 
+- [treefmt 公式ドキュメント](https://treefmt.com/)
+- [treefmt 設定リファレンス](https://treefmt.com/v2.1/getting-started/configure/)
 - [treefmt GitHub](https://github.com/numtide/treefmt)
 - [treefmt-nix](https://github.com/numtide/treefmt-nix) - Nix flake 統合
+- [treefmt-nix examples](https://github.com/numtide/treefmt-nix/tree/main/examples)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=ibecker.treefmt-vscode)
