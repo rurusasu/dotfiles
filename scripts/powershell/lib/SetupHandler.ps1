@@ -10,7 +10,7 @@
     Order の目安:
       10-30  : WSL 環境に依存する処理（WslConfig, Docker, VscodeServer）
       100+   : WSL に依存しない処理（Chezmoi）
-    
+
     小さい値が先に実行される。同じ Order の場合、ファイル名順。
 
 .EXAMPLE
@@ -20,17 +20,30 @@
             $this.Description = "My custom handler"
             $this.Order = 50
         }
-        
+
         [bool] CanApply([SetupContext]$ctx) {
             return $true
         }
-        
+
         [SetupResult] Apply([SetupContext]$ctx) {
             # 処理を実行
             return $this.CreateResult($true, "完了しました")
         }
     }
 #>
+
+# ========================================
+# Clear PowerShell Class Cache
+# ========================================
+# PowerShell classes are cached per session. When the same class is dot-sourced
+# multiple times, it creates type conflicts ("Cannot convert SetupContext to SetupContext").
+# Remove cached types by clearing the type accelerators before redefining classes.
+$typeAccelerators = [psobject].Assembly.GetType("System.Management.Automation.TypeAccelerators")
+@('SetupContext', 'SetupResult', 'SetupHandlerBase') | ForEach-Object {
+    if ($typeAccelerators::Get.ContainsKey($_)) {
+        $typeAccelerators::Remove($_) | Out-Null
+    }
+}
 
 <#
 .SYNOPSIS
