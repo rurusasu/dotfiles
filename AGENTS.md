@@ -142,32 +142,15 @@ Secrets:
 
 ## Formatting
 
-### Configuration
+treefmt を使用して複数のフォーマッターを統一管理。詳細は [docs/formatter/AGENTS.md](./docs/formatter/AGENTS.md) を参照。
 
-- **Source of truth**: `.treefmt.toml` (root directory)
-- **Nix integration**: `nix/flakes/treefmt.nix` (installs formatters only)
+### Quick Reference
 
-### Config Files
-
-| File | Purpose | Docs |
-|------|---------|------|
-| `.treefmt.toml` | treefmt main config | [treefmt.com](https://treefmt.com/v2.1/getting-started/configure/) |
-| `.stylua.toml` | Lua formatter settings | [StyLua](https://github.com/JohnnyMorganz/StyLua) |
-| `.taplo.toml` | TOML formatter settings | [Taplo](https://taplo.tamasfe.dev/configuration/file.html) |
-| `.dprint.json` | Markdown formatter settings | [dprint](https://dprint.dev/config/) |
-| `.oxfmtrc.json` | JSON/YAML formatter settings | [oxfmt](https://github.com/aspect-build/oxfmt) |
-
-### Formatters
-
-| Language | Formatter | Files |
-|----------|-----------|-------|
-| Nix | nixfmt | `*.nix` |
-| Shell | shfmt | `*.sh` |
-| TOML | taplo | `*.toml` |
-| Lua | stylua | `*.lua` |
-| Markdown | dprint | `*.md` |
-| JSON/YAML | oxfmt | `*.json`, `*.yaml`, `*.yml` |
-| PowerShell | PSScriptAnalyzer | `*.ps1` |
+| 設定 | ファイル |
+|------|----------|
+| Source of truth | `.treefmt.toml` |
+| Nix integration | `nix/flakes/treefmt.nix` |
+| 詳細ドキュメント | [docs/formatter/](./docs/formatter/) |
 
 ### Usage
 
@@ -178,10 +161,6 @@ nix fmt
 # Via treefmt directly
 treefmt
 ```
-
-### References
-
-- [treefmt-nix examples](https://github.com/numtide/treefmt-nix/tree/main/examples)
 
 ### Prerequisites
 
