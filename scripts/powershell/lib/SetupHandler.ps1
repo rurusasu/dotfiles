@@ -33,17 +33,12 @@
 #>
 
 # ========================================
-# Clear PowerShell Class Cache
+# Prevent Multiple Class Definitions
 # ========================================
 # PowerShell classes are cached per session. When the same class is dot-sourced
 # multiple times, it creates type conflicts ("Cannot convert SetupContext to SetupContext").
-# Remove cached types by clearing the type accelerators before redefining classes.
-$typeAccelerators = [psobject].Assembly.GetType("System.Management.Automation.TypeAccelerators")
-@('SetupContext', 'SetupResult', 'SetupHandlerBase') | ForEach-Object {
-    if ($typeAccelerators::Get.ContainsKey($_)) {
-        $typeAccelerators::Remove($_) | Out-Null
-    }
-}
+# This file should only be loaded once per session. Handler files should NOT dot-source
+# this file; they rely on it being pre-loaded by install.ps1 or the test framework.
 
 <#
 .SYNOPSIS

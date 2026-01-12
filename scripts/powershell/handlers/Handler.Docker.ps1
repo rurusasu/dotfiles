@@ -14,8 +14,9 @@
 #>
 
 # 依存ファイルの読み込み
+# 注: SetupHandler.ps1 は install.ps1 またはテストフレームワークによって事前にロードされている前提
+# クラスキャッシュ問題を防ぐため、ここでは読み込まない
 $libPath = Split-Path -Parent $PSScriptRoot
-. (Join-Path $libPath "lib\SetupHandler.ps1")
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
 class DockerHandler : SetupHandlerBase {
@@ -66,10 +67,18 @@ class DockerHandler : SetupHandlerBase {
         try {
             $distroName = $ctx.DistroName
 
+            # Docker Desktop を起動（WSL を正しく起動するために必要）
+            $this.StartDockerDesktopIfNeeded()
+
             # WSL が書き込み可能かチェック
             if (-not $this.TestWslWritable($distroName)) {
-                $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
-                return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
+                # Docker Desktop 起動後に再試行
+                $this.Log("WSL が書き込み不可。Docker Desktop を起動して再試行します")
+                Start-SleepSafe -Seconds 5
+                if (-not $this.TestWslWritable($distroName)) {
+                    $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
+                    return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
+                }
             }
 
             # 空き容量チェック
@@ -111,7 +120,7 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [bool] TestWslWritable([string]$distroName) {
         $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
-        Invoke-Wsl -d $distroName -u root -- sh -lc $writableCheck
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $writableCheck
         return $LASTEXITCODE -eq 0
     }
 
@@ -121,7 +130,7 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [bool] TestWslFreeSpace([string]$distroName) {
         $freeCheck = 'df -Pk / | awk ''NR==2 {print $4}'''
-        $freeBlocks = Invoke-Wsl -d $distroName -u root -- sh -lc $freeCheck | Select-Object -First 1
+        $freeBlocks = Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $freeCheck | Select-Object -First 1
 
         if ($freeBlocks) {
             $freeBlocks = $freeBlocks.Trim()
@@ -189,7 +198,7 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [void] EnsureDockerGroup([string]$distroName) {
         $user = $this.GetWslDefaultUser($distroName)
-        Invoke-Wsl -d $distroName -u root -- sh -lc "( groupadd docker || true ) && usermod -aG docker $user"
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" "( groupadd docker || true ) && usermod -aG docker $user"
     }
 
     <#
@@ -197,7 +206,7 @@ class DockerHandler : SetupHandlerBase {
         WSL のデフォルトユーザーを取得する
     #>
     hidden [string] GetWslDefaultUser([string]$distroName) {
-        $user = Invoke-Wsl -d $distroName -- sh -lc "whoami" | Select-Object -First 1
+        $user = Invoke-Wsl "-d" $distroName "--" "sh" "-lc" "whoami" | Select-Object -First 1
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
             return "nixos"
         }
@@ -254,7 +263,7 @@ class DockerHandler : SetupHandlerBase {
         Docker Desktop の健全性をチェックする
     #>
     hidden [bool] TestDockerDesktopHealth() {
-        Invoke-Wsl -d docker-desktop -u root -- sh -lc "test -f /opt/docker-desktop/componentsVersion.json"
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-lc" "test -f /opt/docker-desktop/componentsVersion.json"
         return $LASTEXITCODE -eq 0
     }
 
@@ -264,13 +273,13 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [bool] TestDockerDesktopProxy([string]$distroName) {
         $existsCmd = "[ -x /mnt/wsl/docker-desktop/docker-desktop-user-distro ]"
-        Invoke-Wsl -d $distroName -u root -- sh -lc $existsCmd
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $existsCmd
         if ($LASTEXITCODE -ne 0) {
             return $false
         }
 
         $proxyCmd = "timeout 3 /mnt/wsl/docker-desktop/docker-desktop-user-distro proxy --distro-name nixos --docker-desktop-root /mnt/wsl/docker-desktop 'C:\Program Files\Docker\Docker\resources'"
-        Invoke-Wsl -d $distroName -u root -- sh -lc $proxyCmd
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $proxyCmd
 
         # exit code 0 (成功) または 124 (timeout) は OK
         return ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 124)

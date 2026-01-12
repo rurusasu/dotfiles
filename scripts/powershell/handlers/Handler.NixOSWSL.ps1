@@ -14,8 +14,9 @@
 #>
 
 # 依存ファイルの読み込み
+# 注: SetupHandler.ps1 は install.ps1 またはテストフレームワークによって事前にロードされている前提
+# クラスキャッシュ問題を防ぐため、ここでは読み込まない
 $libPath = Split-Path -Parent $PSScriptRoot
-. (Join-Path $libPath "lib\SetupHandler.ps1")
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
 class NixOSWSLHandler : SetupHandlerBase {

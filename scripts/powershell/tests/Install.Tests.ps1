@@ -138,6 +138,60 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
     }
 }
 
+Describe 'クラスキャッシュ問題 - 複数回ロード' {
+    It 'should not cause type conflicts when SetupHandler.ps1 is loaded multiple times' {
+        # SetupHandler.ps1 を複数回 dot-source してもエラーが発生しないことを確認
+        . $PSScriptRoot/../lib/SetupHandler.ps1
+        . $PSScriptRoot/../lib/SetupHandler.ps1
+        . $PSScriptRoot/../lib/SetupHandler.ps1
+
+        # 3回ロード後もクラスが正常に動作することを確認
+        $ctx = [SetupContext]::new("D:\test")
+        $ctx.DotfilesPath | Should -Be "D:\test"
+
+        $result = [SetupResult]::CreateSuccess("Test", "OK")
+        $result.Success | Should -Be $true
+    }
+
+    It 'should allow handler to use SetupContext after multiple loads' {
+        # SetupHandler.ps1 を再ロード
+        . $PSScriptRoot/../lib/SetupHandler.ps1
+
+        # ハンドラーをロード（内部で SetupHandler.ps1 を再度 dot-source する）
+        . $PSScriptRoot/../lib/Invoke-ExternalCommand.ps1
+        . $PSScriptRoot/../handlers/Handler.Chezmoi.ps1
+
+        # SetupContext を作成
+        $ctx = [SetupContext]::new("D:\dotfiles")
+
+        # ハンドラーの CanApply が型エラーなく呼び出せることを確認
+        $handler = [ChezmoiHandler]::new()
+
+        # これが失敗する場合: "Cannot convert SetupContext to SetupContext"
+        { $handler.CanApply($ctx) } | Should -Not -Throw "*Cannot convert*SetupContext*"
+    }
+
+    It 'should work when install.ps1 pattern is simulated' {
+        # install.ps1 のパターンをシミュレート
+        # 1. SetupHandler.ps1 をロード
+        . $PSScriptRoot/../lib/SetupHandler.ps1
+        . $PSScriptRoot/../lib/Invoke-ExternalCommand.ps1
+
+        # 2. コンテキストを作成
+        $ctx = [SetupContext]::new("D:\dotfiles")
+
+        # 3. ハンドラーをロード（Get-SetupHandler 経由）
+        $handlersPath = Join-Path $PSScriptRoot ".." "handlers"
+        $handlers = Get-SetupHandler -HandlersPath $handlersPath
+
+        # 4. 各ハンドラーの CanApply を呼び出し
+        foreach ($handler in $handlers) {
+            # 型変換エラーが発生しないことを確認
+            { $handler.CanApply($ctx) } | Should -Not -Throw "*Cannot convert*SetupContext*"
+        }
+    }
+}
+
 Describe 'Show-SetupSummary' {
     BeforeEach {
         Mock Write-Host { }

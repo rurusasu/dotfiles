@@ -231,9 +231,10 @@ pre-commit run --all-files
 
 **主要コンポーネント**:
 
-- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター）
+- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター、UAC 自動昇格付き）
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
+- [lib/Request-AdminElevation.ps1](lib/Request-AdminElevation.ps1) - UAC 自動昇格（管理者権限チェックと再起動）
 - `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（6個）
 - `tests/` - Pester v5 テストスイート（230+ テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
@@ -247,7 +248,8 @@ scripts/powershell/
 ├── PSScriptAnalyzerSettings.psd1 # PSScriptAnalyzer 設定（linting）
 ├── lib/                         # 共通ライブラリ
 │   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult + オーケストレーション関数
-│   └── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
+│   ├── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
+│   └── Request-AdminElevation.ps1 # UAC 自動昇格（管理者権限チェック）
 ├── handlers/                    # セットアップハンドラー
 │   ├── Handler.Winget.ps1       # Order 5: winget パッケージ
 │   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用

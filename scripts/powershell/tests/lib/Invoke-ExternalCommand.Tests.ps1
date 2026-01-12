@@ -41,20 +41,18 @@ Describe 'Invoke-Wsl' {
 
 Describe 'Invoke-Diskpart' {
     BeforeAll {
-        $script:startProcessCalled = $false
+        $script:diskpartInternalCalled = $false
         $script:setContentCalled = $false
         $script:tempDir = Join-Path $env:TEMP "diskpart_test_$(Get-Random)"
         New-Item -ItemType Directory -Path $script:tempDir -Force | Out-Null
         $script:tempFile = Join-Path $script:tempDir "script.tmp"
 
-        Mock Start-Process {
-            $script:startProcessCalled = $true
-            # Create output files that the function expects
-            $outPath = $RedirectStandardOutput
-            $errPath = $RedirectStandardError
-            if ($outPath) { Set-Content -Path $outPath -Value "diskpart output" }
-            if ($errPath) { Set-Content -Path $errPath -Value "" }
-            return [PSCustomObject]@{ ExitCode = 0 }
+        Mock Invoke-DiskpartInternal {
+            $script:diskpartInternalCalled = $true
+            return @{
+                Output   = "diskpart output"
+                ExitCode = 0
+            }
         }
         Mock Set-ContentNoNewline {
             $script:setContentCalled = $true
@@ -63,24 +61,33 @@ Describe 'Invoke-Diskpart' {
         Mock New-TemporaryFile {
             return [PSCustomObject]@{ FullName = $script:tempFile }
         }
-        Mock Test-Path { return $true }
-        Mock Get-Content { return "diskpart output" }
     }
 
     AfterAll {
         Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It 'should create script file and execute diskpart via Start-Process' {
+    It 'should create script file and execute diskpart via internal function' {
         Invoke-Diskpart -ScriptContent "list disk"
 
-        $script:startProcessCalled | Should -Be $true
+        $script:diskpartInternalCalled | Should -Be $true
     }
 
     It 'should write script content to temp file' {
         Invoke-Diskpart -ScriptContent "select disk 0"
 
         $script:setContentCalled | Should -Be $true
+    }
+
+    It 'should throw when diskpart fails' {
+        Mock Invoke-DiskpartInternal {
+            return @{
+                Output   = "Error: Access denied"
+                ExitCode = 1
+            }
+        }
+
+        { Invoke-Diskpart -ScriptContent "list disk" } | Should -Throw "*diskpart failed*"
     }
 }
 

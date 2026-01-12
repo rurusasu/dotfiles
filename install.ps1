@@ -62,9 +62,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ========================================
-# Library Loading
+# Library Loading & UAC Auto-Elevation
 # ========================================
 $libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
+. (Join-Path $libPath "Request-AdminElevation.ps1")
+Request-AdminElevation -ScriptPath $PSCommandPath -BoundParameters $PSBoundParameters
+
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 

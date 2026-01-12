@@ -79,6 +79,28 @@ function Invoke-Winget {
 
 <#
 .SYNOPSIS
+    diskpart コマンドを実行する（内部関数）
+.DESCRIPTION
+    cmd /c 経由で diskpart を実行する。モック可能にするためラッパー関数として分離。
+#>
+function Invoke-DiskpartInternal {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ScriptPath
+    )
+    # diskpart requires admin privileges.
+    # Use Start-Process with -NoNewWindow to avoid output capture issues.
+    # Note: Start-Process with -RedirectStandardOutput requires additional privileges.
+    $proc = Start-Process -FilePath "diskpart" -ArgumentList "/s", $ScriptPath -Wait -PassThru -NoNewWindow
+    return @{
+        Output   = $null
+        ExitCode = $proc.ExitCode
+    }
+}
+
+<#
+.SYNOPSIS
     diskpart コマンドを実行する
 .PARAMETER ScriptContent
     diskpart スクリプトの内容
@@ -94,30 +116,22 @@ function Invoke-Diskpart {
         [string]$ScriptContent
     )
     $tmp = New-TemporaryFile
-    $outFile = "$($tmp.FullName).out"
-    $errFile = "$($tmp.FullName).err"
     try {
         Set-ContentNoNewline -Path $tmp -Value $ScriptContent
-        # Use Start-Process to avoid encoding issues with native commands in PowerShell 7
-        $result = Start-Process -FilePath "diskpart.exe" -ArgumentList "/s", $tmp.FullName -Wait -PassThru -NoNewWindow -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        # Run diskpart via internal function (mockable for tests)
+        $result = Invoke-DiskpartInternal -ScriptPath $tmp.FullName
 
-        # Output stdout content
-        if (Test-Path $outFile) {
-            Get-Content -Path $outFile -ErrorAction SilentlyContinue
+        # Output the result
+        if ($result.Output) {
+            $result.Output | ForEach-Object { Write-Output $_ }
         }
 
         # Check for errors
         if ($result.ExitCode -ne 0) {
-            $errContent = ""
-            if (Test-Path $errFile) {
-                $errContent = Get-Content -Path $errFile -Raw -ErrorAction SilentlyContinue
-            }
-            throw "diskpart failed with exit code $($result.ExitCode): $errContent"
+            throw "diskpart failed with exit code $($result.ExitCode)"
         }
     } finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $outFile -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
     }
 }
 
