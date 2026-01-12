@@ -3,7 +3,7 @@
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.defaultFormatter": "ibecker.treefmt-vscode",
   "editor.minimap.enabled": true,
   "editor.wordWrap": "on",
   "editor.wordWrapColumn": 80,
@@ -72,7 +72,7 @@
   "breadcrumbs.enabled": true,
   "breadcrumbs.filePath": "last",
   "workbench.editor.enablePreview": false,
-  "workbench.sideBar.location": "right",
+  "workbench.sideBar.location": "left",
   "workbench.editor.enablePreviewFromQuickOpen": true,
   "workbench.editor.showTabs": "multiple",
   "workbench.commandPalette.preserveInput": true,
@@ -167,21 +167,17 @@
   "telemetry.telemetryLevel": "off",
   "task.problemMatchers.neverPrompt": true,
   "extensions.autoUpdate": true,
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll.ruff": "explicit"
-    }
-  },
   "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml",
