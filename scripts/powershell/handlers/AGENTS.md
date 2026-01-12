@@ -14,6 +14,7 @@ Purpose: セットアップハンドラーの実装
 ## ハンドラー実装ルール
 
 1. **`SetupHandlerBase` を継承**
+
    ```powershell
    class MyHandler : SetupHandlerBase { ... }
    ```

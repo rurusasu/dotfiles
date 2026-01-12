@@ -22,32 +22,32 @@ Plugins are lazy-loaded by default for fast startup.
 
 ## Included Plugins
 
-| Plugin              | Purpose              |
-| ------------------- | -------------------- |
-| gruvbox.nvim        | Color scheme         |
-| oil.nvim            | File explorer        |
-| telescope.nvim      | Fuzzy finder         |
-| nvim-treesitter     | Syntax highlighting  |
-| lualine.nvim        | Status line          |
-| gitsigns.nvim       | Git integration      |
-| which-key.nvim      | Key binding help     |
-| Comment.nvim        | Commenting           |
-| nvim-autopairs      | Auto pairs           |
-| nvim-surround       | Surround editing     |
-| indent-blankline    | Indent guides        |
+| Plugin           | Purpose             |
+| ---------------- | ------------------- |
+| gruvbox.nvim     | Color scheme        |
+| oil.nvim         | File explorer       |
+| telescope.nvim   | Fuzzy finder        |
+| nvim-treesitter  | Syntax highlighting |
+| lualine.nvim     | Status line         |
+| gitsigns.nvim    | Git integration     |
+| which-key.nvim   | Key binding help    |
+| Comment.nvim     | Commenting          |
+| nvim-autopairs   | Auto pairs          |
+| nvim-surround    | Surround editing    |
+| indent-blankline | Indent guides       |
 
 ## Key Mappings
 
 Leader key: `<Space>`
 
-| Key           | Action              |
-| ------------- | ------------------- |
-| `<leader>e`   | File explorer (Oil) |
-| `<leader>ff`  | Find files          |
-| `<leader>fg`  | Live grep           |
-| `<leader>fb`  | Buffers             |
-| `<leader>w`   | Save file           |
-| `<leader>q`   | Quit                |
+| Key          | Action              |
+| ------------ | ------------------- |
+| `<leader>e`  | File explorer (Oil) |
+| `<leader>ff` | Find files          |
+| `<leader>fg` | Live grep           |
+| `<leader>fb` | Buffers             |
+| `<leader>w`  | Save file           |
+| `<leader>q`  | Quit                |
 
 ## Deployment
 

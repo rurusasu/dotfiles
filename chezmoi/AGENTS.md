@@ -2,6 +2,8 @@
 
 Cross-platform dotfiles management using chezmoi.
 
+📖 詳細なドキュメント: [docs/chezmoi/](../docs/chezmoi/)
+
 ## Directory Structure
 
 ```

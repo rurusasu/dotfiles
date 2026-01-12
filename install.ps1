@@ -7,9 +7,8 @@
     1. NixOS-WSL のダウンロードとインポート
     2. Post-install セットアップの実行
     3. ハンドラーシステムによる自動設定:
-       - Winget (Order=5): パッケージ管理（mise 含む）
+       - Winget (Order=5): パッケージ管理（Task 含む）
        - Chezmoi (Order=10): chezmoi による dotfiles 適用
-       - Mise (Order=15): mise によるツールインストール（treefmt, pre-commit 等）
        - WslConfig (Order=20): .wslconfig の適用
        - VhdManager (Order=21): WSL VHD サイズ拡張
        - Docker (Order=30): Docker Desktop との WSL 連携
@@ -132,8 +131,8 @@ if (Test-Path -LiteralPath $expandDockerVhd) {
     & $expandDockerVhd -Force
 }
 
-# Note: mise install は MiseHandler (Order=15) で自動実行されます
-# 手動で実行する場合: mise trust && mise install
+# Note: フォーマットは WSL 側の nix fmt で実行
+# Windows から: task fmt (WSL 経由で実行)
 
 # ========================================
 # Phase 3: Summary

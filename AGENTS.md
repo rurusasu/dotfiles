@@ -2,6 +2,8 @@
 
 Purpose: repo-level workflow notes.
 
+📖 アーキテクチャ詳細: [docs/architecture.md](./docs/architecture.md)
+
 ## Repository Structure
 
 ```
@@ -16,7 +18,7 @@ dotfiles/
 │   ├── lib/                # Helper functions
 │   ├── overlays/           # Nixpkgs overlays
 │   └── templates/          # Project templates
-├── .mise.toml              # mise tool configuration (treefmt, pre-commit, etc.)
+├── Taskfile.yml            # Task runner (WSL 経由で nix fmt, pre-commit 等を実行)
 ├── scripts/                # All scripts (see scripts/AGENTS.md)
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   │   ├── update.sh           # Daily update script
@@ -36,23 +38,7 @@ dotfiles/
 
 ## Setup Flow
 
-```
-Windows                              WSL (NixOS)
-────────                             ───────────
-install.ps1
-    │
-    ├─► Download NixOS WSL
-    │
-    ├─► Import to WSL
-    │
-    └─► scripts/sh/nixos-wsl-postinstall.sh ──► ~/.dotfiles (symlink)
-                                                  │
-                                                  ▼
-                                             nixos-rebuild switch
-                                                  │
-                                                  ▼
-                                             NixOS configured
-```
+セットアップフロー図は [docs/architecture.md](./docs/architecture.md) を参照。
 
 ## Testing Changes
 
@@ -76,21 +62,13 @@ Since ~/.dotfiles points to Windows-side dotfiles, changes made in Windows are i
 
 ### Apply Terminal Settings (Windows)
 
-Apply via chezmoi on Windows:
+chezmoi で Windows に設定を適用。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
 
 ```powershell
-chezmoi init --source ~/.dotfiles/chezmoi
-chezmoi apply
-# 方法1: GitHub から直接取得（クローン不要）
-winget install -e --id twpayne.chezmoi
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
+# GitHub から直接取得（推奨）
+chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 
-# 方法2: ローカルコピーから適用
-chezmoi init --source <repo-path>\chezmoi
-chezmoi apply
-
-# 方法3: 同梱スクリプトで一括適用
+# 同梱スクリプトで一括適用
 .\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
 ```
 
@@ -104,67 +82,35 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 
 ## Chezmoi
 
-User-level dotfiles are managed in `chezmoi/` (shell, git, starship, VS Code settings, terminal configs, LLM configs).
+ユーザーレベルの dotfiles を `chezmoi/` で管理（shell, git, terminal, VS Code, LLM configs）。
 
-**Note**: クローン不要で GitHub から直接適用可能。
-
-### Windows での適用
-
-```powershell
-# 方法1: GitHub から直接取得（クローン不要）
-winget install -e --id twpayne.chezmoi
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
-
-# 方法2: ローカルコピーから適用
-chezmoi init --source <repo-path>\chezmoi
-chezmoi apply
-
-# 方法3: 同梱スクリプトで一括適用
-.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
-```
-
-### WSL/Linux での適用
-
-```bash
-# ~/.dotfiles シンボリックリンクがある場合
-chezmoi init --source ~/.dotfiles/chezmoi
-chezmoi apply
-
-# GitHub から直接取得（クローン不要）
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
-```
-
-Secrets:
-
-- Configure age/gpg in `~/.config/chezmoi/chezmoi.toml`
-- Use `chezmoi add --encrypt <path>` to add secrets
+📖 詳細: [docs/chezmoi/](./docs/chezmoi/)
 
 ## Formatting & Pre-commit
 
-treefmt を使用して複数のフォーマッターを統一管理。mise でツールを管理し、pre-commit でコミット時に自動実行。
+treefmt を使用して複数のフォーマッターを統一管理。NixOS/WSL 側で `nix fmt` を実行。
 
 ### Quick Reference
 
-| 設定 | ファイル |
-|------|----------|
-| Source of truth | `.treefmt.toml` |
-| Nix integration | `nix/flakes/treefmt.nix` |
-| Tool versions | `.mise.toml` |
-| Pre-commit hooks | `.pre-commit-config.yaml` |
+| 設定             | ファイル                             |
+| ---------------- | ------------------------------------ |
+| Source of truth  | `.treefmt.toml`                      |
+| Nix integration  | `nix/flakes/treefmt.nix`             |
+| Task runner      | `Taskfile.yml`                       |
+| Pre-commit hooks | `.pre-commit-config.yaml`            |
 | 詳細ドキュメント | [docs/formatter/](./docs/formatter/) |
 
 ### Usage
 
 ```bash
-# Via Nix (recommended)
+# Via Nix (WSL/NixOS)
 nix fmt
 
-# Via mise + treefmt (Windows/Linux)
-mise install      # Install tools (treefmt, pre-commit, etc.)
-treefmt           # Run formatter
-pre-commit run    # Run all hooks manually
+# Via Taskfile (Windows → WSL)
+task fmt          # nix fmt を実行
+task lint         # pre-commit を実行
+task commit -- "message"  # フォーマット + コミット
+task sync -- "message"    # 全部やって push
 ```
 
 ### Prerequisites
@@ -175,40 +121,18 @@ PowerShell formatting requires PSScriptAnalyzer:
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
-### mise によるツール管理
+### Taskfile によるタスク管理
 
-`.mise.toml` で以下のツールを管理:
-- treefmt: 統一フォーマッター
-- pre-commit: Git フック管理
-- stylua: Lua フォーマッター
-- shfmt: Shell フォーマッター
+`Taskfile.yml` で WSL 経由の NixOS コマンドを実行:
 
-`mise install` で自動インストールされ、postinstall フックで `pre-commit install` も自動実行。
+- `task fmt`: nix fmt を実行
+- `task lint`: pre-commit を実行
+- `task commit`: フォーマット + lint + コミット
+- `task rebuild`: nixos-rebuild switch
 
 ## Terminal Settings Flow
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Chezmoi (source of truth)                                   │
-│  chezmoi/AppData/Local/.../settings.json                    │
-│  chezmoi/dot_config/wezterm/wezterm.lua                      │
-└──────────────────────────────────────────────────────────────┘
-                            │
-                            │ chezmoi apply (Windows)
-                            ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         Windows                              │
-│  %LOCALAPPDATA%\...\WindowsTerminal\settings.json            │
-│  %USERPROFILE%\.config\wezterm\wezterm.lua                   │
-└──────────────────────────────────────────────────────────────┘
-                            │
-                            │ chezmoi apply (WSL/Linux)
-                            ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         WSL/Linux                            │
-│  ~/.config/wezterm/wezterm.lua                               │
-└──────────────────────────────────────────────────────────────┘
-```
+ターミナル設定の適用フローについては [docs/chezmoi/structure.md](./docs/chezmoi/structure.md) を参照。
 
 ## Key Paths
 

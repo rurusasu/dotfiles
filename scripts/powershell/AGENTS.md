@@ -6,7 +6,7 @@
 
 詳細なドキュメントは [docs/scripts/powershell/](../../docs/scripts/powershell/) ディレクトリに配置されています:
 
-- **[アーキテクチャ](../../docs/scripts/powershell/architecture.md)** - ハンドラーシステムの設計と実行フロー
+- **[アーキテクチャ](../../docs/architecture.md)** - 全体アーキテクチャとハンドラーシステムの設計
 - **[テスト](../../docs/scripts/powershell/testing.md)** - Pester v5 の使用方法とテストパターン
 - **[ハンドラー開発ガイド](../../docs/scripts/powershell/handler-development.md)** - 新しいハンドラーの作成手順
 - **[コーディング規約](../../docs/scripts/powershell/coding-standards.md)** - 命名規則、スタイル、ベストプラクティス
@@ -182,7 +182,7 @@ docs: Update handler development guide for new Order convention
 
 ### 既存コードの理解
 
-1. [アーキテクチャ](../../docs/scripts/powershell/architecture.md) を読む
+1. [アーキテクチャ](../../docs/architecture.md) を読む
 2. 既存ハンドラー（例: [Handler.Chezmoi.ps1](handlers/Handler.Chezmoi.ps1)）を確認
 3. テスト（例: [Handler.Chezmoi.Tests.ps1](tests/handlers/Handler.Chezmoi.Tests.ps1)）を確認
 
@@ -209,7 +209,7 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -Path .\handlers\Handler.Chezmoi.Tests.ps1 -MinimumCoverage 0
 ```
 
-**現在の状態**: 270+ テスト、カバレッジ 95%+
+**現在の状態**: 240+ テスト、カバレッジ 95%+
 
 ### pre-commit による自動テスト
 
@@ -253,7 +253,6 @@ scripts/powershell/
 ├── handlers/                    # セットアップハンドラー
 │   ├── Handler.Winget.ps1       # Order 5: winget パッケージ
 │   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用
-│   ├── Handler.Mise.ps1         # Order 15: mise ツールインストール
 │   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定
 │   ├── Handler.VhdManager.ps1   # Order 21: VHD サイズ拡張
 │   ├── Handler.Docker.ps1       # Order 30: Docker Desktop 連携
@@ -277,7 +276,6 @@ scripts/powershell/
 | ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
 | 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（JSON定義ベース）                           |
 | 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用                                             |
-| 15    | Mise         | Handler.Mise.ps1         | mise によるツールインストール（treefmt, pre-commit 等）           |
 | 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                   |
 | 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                                |
 | 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |

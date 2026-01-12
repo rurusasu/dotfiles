@@ -82,5 +82,11 @@ in
   };
 
   # Individual package sets for selective install
-  inherit core dev llm terminal editors;
+  inherit
+    core
+    dev
+    llm
+    terminal
+    editors
+    ;
 }

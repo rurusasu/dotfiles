@@ -30,12 +30,12 @@ Code editor configurations for cross-platform development.
 
 ### Neovim
 
-| File                   | Purpose                       |
-| ---------------------- | ----------------------------- |
-| `init.lua`             | Main config (lazy.nvim setup) |
-| `lua/config/options.lua` | Core editor options         |
-| `lua/config/keymaps.lua` | Key mappings                |
-| `lua/plugins/init.lua` | Plugin specifications         |
+| File                     | Purpose                       |
+| ------------------------ | ----------------------------- |
+| `init.lua`               | Main config (lazy.nvim setup) |
+| `lua/config/options.lua` | Core editor options           |
+| `lua/config/keymaps.lua` | Key mappings                  |
+| `lua/plugins/init.lua`   | Plugin specifications         |
 
 ## Deployment Paths
 

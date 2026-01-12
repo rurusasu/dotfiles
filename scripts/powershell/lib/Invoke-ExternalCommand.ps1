@@ -457,28 +457,4 @@ function Start-SleepSafe {
     Start-Sleep -Seconds $Seconds
 }
 
-<#
-.SYNOPSIS
-    mise コマンドを実行するラッパー関数
-.PARAMETER MiseExePath
-    mise 実行ファイルのパス
-.PARAMETER Arguments
-    mise に渡す引数
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-MiseCommand -MiseExePath "mise" -Arguments @("install")
-    Invoke-MiseCommand -MiseExePath "C:\mise.exe" -Arguments @("trust", ".mise.toml")
-#>
-function Invoke-MiseCommand {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$MiseExePath,
 
-        [Parameter(Mandatory)]
-        [string[]]$Arguments
-    )
-
-    & $MiseExePath @Arguments 2>&1
-}

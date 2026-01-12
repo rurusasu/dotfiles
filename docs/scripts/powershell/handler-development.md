@@ -178,6 +178,7 @@ cd tests
 ### チェック項目
 
 1. **ファイル名パターン**: `Handler.*.ps1` に一致しているか
+
    ```powershell
    # ✅ 正しい
    Handler.Docker.ps1
@@ -188,6 +189,7 @@ cd tests
    ```
 
 2. **クラス名パターン**: `{Name}Handler` に一致しているか
+
    ```powershell
    # ✅ 正しい（Handler.Docker.ps1 の場合）
    class DockerHandler : SetupHandlerBase { }
@@ -198,6 +200,7 @@ cd tests
    ```
 
 3. **基底クラス継承**: `SetupHandlerBase` を継承しているか
+
    ```powershell
    # ✅ 正しい
    class DockerHandler : SetupHandlerBase { }
@@ -207,6 +210,7 @@ cd tests
    ```
 
 4. **Order プロパティ**: コンストラクタで設定されているか
+
    ```powershell
    # ✅ 正しい
    DockerHandler() {
@@ -223,19 +227,18 @@ cd tests
 
 ### 既存ハンドラーの参考実装
 
-| ハンドラー   | ソースファイル                                                                            | テストファイル                                                                                              | 説明                      |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1)             | winget パッケージ管理     |
-| Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)           | dotfiles 適用             |
-| Mise         | [Handler.Mise.ps1](../../../scripts/powershell/handlers/Handler.Mise.ps1)                 | [Handler.Mise.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Mise.Tests.ps1)                 | mise ツールインストール   |
-| WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1)       | .wslconfig 適用           |
-| VhdManager   | [Handler.VhdManager.ps1](../../../scripts/powershell/handlers/Handler.VhdManager.ps1)     | [Handler.VhdManager.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VhdManager.Tests.ps1)     | VHD 拡張、FS リサイズ     |
-| Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携       |
-| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理       |
-| NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール    |
+| ハンドラー   | ソースファイル                                                                            | テストファイル                                                                                              | 説明                   |
+| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1)             | winget パッケージ管理  |
+| Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)           | dotfiles 適用          |
+| WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1)       | .wslconfig 適用        |
+| VhdManager   | [Handler.VhdManager.ps1](../../../scripts/powershell/handlers/Handler.VhdManager.ps1)     | [Handler.VhdManager.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VhdManager.Tests.ps1)     | VHD 拡張、FS リサイズ  |
+| Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携    |
+| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
+| NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
 
 ### 関連ドキュメント
 
 - [テスト](testing.md) - Pester v5 の使用方法とテストパターン
-- [アーキテクチャ](architecture.md) - ハンドラーシステムの設計と実行フロー
+- [アーキテクチャ](../../architecture.md) - ハンドラーシステムの設計と実行フロー
 - [コーディング規約](coding-standards.md) - 命名規則、スタイル、ベストプラクティス

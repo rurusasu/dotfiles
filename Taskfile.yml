@@ -1,0 +1,112 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  DISTRO: NixOS
+  DOTFILES_PATH: ~/.dotfiles
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # ===========================================
+  # Formatting & Linting (via NixOS)
+  # ===========================================
+  fmt:
+    desc: Run nix fmt (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix fmt"
+
+  fmt:check:
+    desc: Check formatting without changes (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"
+
+  lint:
+    desc: Run pre-commit on all files (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"
+
+  # ===========================================
+  # Git Operations (via NixOS)
+  # ===========================================
+  commit:
+    desc: Format, lint, and commit (via WSL)
+    vars:
+      MSG: '{{.CLI_ARGS | default "update"}}'
+    cmds:
+      - task: fmt
+      - task: lint
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && git commit -m '{{.MSG}}'"
+
+  push:
+    desc: Push to remote (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git push"
+
+  sync:
+    desc: Format, lint, commit and push (via WSL)
+    vars:
+      MSG: '{{.CLI_ARGS | default "update"}}'
+    cmds:
+      - task: commit -- "{{.MSG}}"
+      - task: push
+
+  # ===========================================
+  # NixOS Operations
+  # ===========================================
+  rebuild:
+    desc: Run nixos-rebuild switch (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && sudo nixos-rebuild switch --flake . --impure"
+
+  build:
+    desc: Dry build NixOS configuration (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix build .#nixosConfigurations.nixos.config.system.build.toplevel --dry-run"
+
+  update:
+    desc: Update flake inputs (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix flake update"
+
+  # ===========================================
+  # Development
+  # ===========================================
+  shell:
+    desc: Enter NixOS shell
+    cmds:
+      - wsl -d {{.DISTRO}}
+
+  dev:
+    desc: Enter nix develop shell (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix develop"
+
+  # ===========================================
+  # Testing
+  # ===========================================
+  test:
+    desc: Run PowerShell tests
+    cmds:
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0"
+
+  test:coverage:
+    desc: Run PowerShell tests with coverage
+    cmds:
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1"
+
+  # ===========================================
+  # Windows Setup
+  # ===========================================
+  install:
+    desc: Run Windows installer
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
+
+  chezmoi:
+    desc: Apply chezmoi dotfiles
+    cmds:
+      - chezmoi apply --source {{.TASKFILE_DIR}}/chezmoi

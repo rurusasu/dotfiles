@@ -23,25 +23,25 @@
 
 ## 設定ファイル一覧
 
-| ファイル | 用途 | ドキュメント |
-|----------|------|--------------|
-| `.treefmt.toml` | treefmt メイン設定 | [treefmt.md](./treefmt.md) |
-| `.stylua.toml` | Lua フォーマッター | [lua.md](./lua.md) |
-| `.taplo.toml` | TOML フォーマッター | [toml.md](./toml.md) |
-| `.dprint.json` | Markdown フォーマッター | [markdown.md](./markdown.md) |
+| ファイル        | 用途                     | ドキュメント                   |
+| --------------- | ------------------------ | ------------------------------ |
+| `.treefmt.toml` | treefmt メイン設定       | [treefmt.md](./treefmt.md)     |
+| `.stylua.toml`  | Lua フォーマッター       | [lua.md](./lua.md)             |
+| `.taplo.toml`   | TOML フォーマッター      | [toml.md](./toml.md)           |
+| `.dprint.json`  | Markdown フォーマッター  | [markdown.md](./markdown.md)   |
 | `.oxfmtrc.json` | JSON/YAML フォーマッター | [json-yaml.md](./json-yaml.md) |
 
 ## フォーマッター一覧
 
-| 言語 | ツール | treefmt-nix | 対象 |
-|------|--------|-------------|------|
-| Nix | nixfmt | `programs.nixfmt.enable` | `*.nix` |
-| Shell | shfmt | `programs.shfmt.enable` | `*.sh` |
-| TOML | taplo | `programs.taplo.enable` | `*.toml` |
-| Lua | stylua | `programs.stylua.enable` | `*.lua` |
-| Markdown | dprint | `programs.dprint.enable` | `*.md` |
-| JSON/YAML | oxfmt | `programs.oxfmt.enable` | `*.json`, `*.yaml`, `*.yml` |
-| PowerShell | PSScriptAnalyzer | カスタム設定 | `*.ps1` |
+| 言語       | ツール           | treefmt-nix              | 対象                        |
+| ---------- | ---------------- | ------------------------ | --------------------------- |
+| Nix        | nixfmt           | `programs.nixfmt.enable` | `*.nix`                     |
+| Shell      | shfmt            | `programs.shfmt.enable`  | `*.sh`                      |
+| TOML       | taplo            | `programs.taplo.enable`  | `*.toml`                    |
+| Lua        | stylua           | `programs.stylua.enable` | `*.lua`                     |
+| Markdown   | dprint           | `programs.dprint.enable` | `*.md`                      |
+| JSON/YAML  | oxfmt            | `programs.oxfmt.enable`  | `*.json`, `*.yaml`, `*.yml` |
+| PowerShell | PSScriptAnalyzer | カスタム設定             | `*.ps1`                     |
 
 ## 使用方法
 
@@ -68,16 +68,16 @@ treefmt --check
 
 ## ドキュメント
 
-| ファイル | 内容 |
-|----------|------|
-| [README.md](./README.md) | 概要・クイックスタート |
-| [treefmt.md](./treefmt.md) | treefmt 統合設定 |
-| [nix.md](./nix.md) | Nix (nixfmt) |
-| [shell.md](./shell.md) | Shell (shfmt) |
-| [lua.md](./lua.md) | Lua (StyLua) |
-| [markdown.md](./markdown.md) | Markdown (dprint) |
-| [toml.md](./toml.md) | TOML (taplo) |
-| [json-yaml.md](./json-yaml.md) | JSON/YAML (oxfmt) |
+| ファイル                         | 内容                          |
+| -------------------------------- | ----------------------------- |
+| [README.md](./README.md)         | 概要・クイックスタート        |
+| [treefmt.md](./treefmt.md)       | treefmt 統合設定              |
+| [nix.md](./nix.md)               | Nix (nixfmt)                  |
+| [shell.md](./shell.md)           | Shell (shfmt)                 |
+| [lua.md](./lua.md)               | Lua (StyLua)                  |
+| [markdown.md](./markdown.md)     | Markdown (dprint)             |
+| [toml.md](./toml.md)             | TOML (taplo)                  |
+| [json-yaml.md](./json-yaml.md)   | JSON/YAML (oxfmt)             |
 | [powershell.md](./powershell.md) | PowerShell (PSScriptAnalyzer) |
 
 ## 参照リンク

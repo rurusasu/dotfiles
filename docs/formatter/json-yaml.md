@@ -23,18 +23,18 @@
 
 ## 設定オプション
 
-| オプション       | 値          | 説明                               |
-| ---------------- | ----------- | ---------------------------------- |
-| `printWidth`     | `100`       | 行の最大幅                         |
-| `tabWidth`       | `2`         | インデント幅                       |
-| `useTabs`        | `false`     | スペースを使用                     |
-| `semi`           | `true`      | セミコロンを追加                   |
-| `singleQuote`    | `false`     | ダブルクォートを使用               |
-| `trailingComma`  | `"es5"`     | ES5互換の末尾カンマ                |
-| `bracketSpacing` | `true`      | オブジェクトリテラル内にスペース   |
-| `arrowParens`    | `"always"`  | アロー関数の引数に常に括弧         |
-| `proseWrap`      | `"preserve"`| 既存の改行を維持                   |
-| `endOfLine`      | `"lf"`      | Unix形式の改行コード               |
+| オプション       | 値           | 説明                             |
+| ---------------- | ------------ | -------------------------------- |
+| `printWidth`     | `100`        | 行の最大幅                       |
+| `tabWidth`       | `2`          | インデント幅                     |
+| `useTabs`        | `false`      | スペースを使用                   |
+| `semi`           | `true`       | セミコロンを追加                 |
+| `singleQuote`    | `false`      | ダブルクォートを使用             |
+| `trailingComma`  | `"es5"`      | ES5互換の末尾カンマ              |
+| `bracketSpacing` | `true`       | オブジェクトリテラル内にスペース |
+| `arrowParens`    | `"always"`   | アロー関数の引数に常に括弧       |
+| `proseWrap`      | `"preserve"` | 既存の改行を維持                 |
+| `endOfLine`      | `"lf"`       | Unix形式の改行コード             |
 
 ## 対応フォーマット
 
@@ -126,7 +126,11 @@ includes = ["*.json", "*.yaml", "*.yml"]
 **Before:**
 
 ```json
-{"name":"example","version":"1.0.0","dependencies":{"lodash":"^4.17.21","express":"^4.18.2"}}
+{
+  "name": "example",
+  "version": "1.0.0",
+  "dependencies": { "lodash": "^4.17.21", "express": "^4.18.2" }
+}
 ```
 
 **After:**
@@ -149,7 +153,7 @@ includes = ["*.json", "*.yaml", "*.yml"]
 ```yaml
 name: example
 version: 1.0.0
-dependencies: {lodash: ^4.17.21, express: ^4.18.2}
+dependencies: { lodash: ^4.17.21, express: ^4.18.2 }
 ```
 
 **After:**

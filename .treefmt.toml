@@ -30,7 +30,7 @@ includes = [ "*.toml" ]
 command = "stylua"
 includes = [ "*.lua" ]
 
-[formatter.dprint]
-command = "dprint"
-options = [ "fmt" ]
-includes = [ "*.md" ]
+# [formatter.dprint]
+# command = "dprint"
+# options = [ "fmt", "--allow-no-files" ]
+# includes = [ "*.md" ]

@@ -23,10 +23,10 @@
           "PackageIdentifier": "Git.Git"
         },
         {
-          "PackageIdentifier": "jdx.mise"
+          "PackageIdentifier": "Microsoft.PowerShell"
         },
         {
-          "PackageIdentifier": "Microsoft.PowerShell"
+          "PackageIdentifier": "Task.Task"
         },
         {
           "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"

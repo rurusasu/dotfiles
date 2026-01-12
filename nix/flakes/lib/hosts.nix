@@ -15,6 +15,7 @@
         hostPath
         (_: { nixpkgs.overlays = overlays; })
         ../../modules/host
-      ] ++ extraModules;
+      ]
+      ++ extraModules;
     };
 }

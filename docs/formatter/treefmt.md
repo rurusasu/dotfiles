@@ -118,14 +118,14 @@ _: {
 
 ### treefmt-nix で利用可能なプログラム
 
-| プログラム | 対象ファイル            | Nix設定 | TOML例 |
-| ---------- | ----------------------- | ------- | ------ |
-| nixfmt     | `*.nix`                 | [programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)   | [formatter-nixfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-nixfmt.toml) |
-| shfmt      | `*.sh`                  | [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)     | [formatter-shfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-shfmt.toml) |
-| taplo      | `*.toml`                | [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)     | [formatter-taplo.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-taplo.toml) |
-| stylua     | `*.lua`                 | [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)   | [formatter-stylua.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-stylua.toml) |
-| dprint     | `*.md` など             | [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)   | [formatter-dprint.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-dprint.toml) |
-| oxfmt      | `*.json`, `*.yaml` など | [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)     | [formatter-oxfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml) |
+| プログラム | 対象ファイル            | Nix設定                                                                                     | TOML例                                                                                                   |
+| ---------- | ----------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| nixfmt     | `*.nix`                 | [programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix) | [formatter-nixfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-nixfmt.toml) |
+| shfmt      | `*.sh`                  | [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)   | [formatter-shfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-shfmt.toml)   |
+| taplo      | `*.toml`                | [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)   | [formatter-taplo.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-taplo.toml)   |
+| stylua     | `*.lua`                 | [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix) | [formatter-stylua.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-stylua.toml) |
+| dprint     | `*.md` など             | [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix) | [formatter-dprint.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-dprint.toml) |
+| oxfmt      | `*.json`, `*.yaml` など | [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)   | [formatter-oxfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml)   |
 
 ### Nix flake でのフォーマット実行
 
