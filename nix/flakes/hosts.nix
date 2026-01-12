@@ -24,9 +24,6 @@ in
           Hosts.mkNixos {
             inherit system siteLib;
             hostPath = ../hosts/wsl;
-            users = {
-              nixos = ../home/wsl;
-            };
             extraModules = [
               inputs.nixos-wsl.nixosModules.wsl
             ];

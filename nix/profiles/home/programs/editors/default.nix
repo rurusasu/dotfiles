@@ -1,8 +1,0 @@
-{ ... }:
-{
-  imports = [
-    ./vscode
-    ./cursor
-    ./zed
-  ];
-}

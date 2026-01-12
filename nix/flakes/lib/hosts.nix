@@ -1,13 +1,9 @@
 { inputs }:
-let
-  hmUsers = import ./hm-users.nix { inherit inputs; };
-in
 {
   mkNixos =
     {
       system,
       hostPath,
-      users,
       siteLib,
       extraModules ? [ ],
       overlays ? [ ],
@@ -18,10 +14,7 @@ in
       modules = [
         hostPath
         (_: { nixpkgs.overlays = overlays; })
-        inputs.home-manager.nixosModules.home-manager
-        (hmUsers { inherit users siteLib system; })
         ../../modules/host
-      ]
-      ++ extraModules;
+      ] ++ extraModules;
     };
 }

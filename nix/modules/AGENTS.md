@@ -1,8 +1,8 @@
 # AGENTS
 
-Purpose
-Purpose: reusable modules for host/home.
-Expected contents:
+Purpose: reusable NixOS modules.
 
-- host/: common system defaults (nix settings, allowUnfree, base packages).
-- wsl/: WSL-specific tweaks (nixPath, whoami shim, etc).
+## Expected contents
+
+- `host/` - common system defaults (nix settings, allowUnfree, base packages)
+- `wsl/` - WSL-specific tweaks (nixPath, whoami shim, etc)

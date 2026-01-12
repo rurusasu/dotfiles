@@ -9,6 +9,7 @@ Code editor configurations for cross-platform development.
 | VS Code | `vscode/`   | -            |
 | Cursor  | `cursor/`   | VS Code fork |
 | Zed     | `zed/`      | Native       |
+| Neovim  | `nvim/`     | Native       |
 
 ## Files Per Editor
 
@@ -27,6 +28,15 @@ Code editor configurations for cross-platform development.
 | `settings.json` | Editor settings (JSONC format) |
 | `keymap.json`   | Custom keybindings             |
 
+### Neovim
+
+| File                   | Purpose                       |
+| ---------------------- | ----------------------------- |
+| `init.lua`             | Main config (lazy.nvim setup) |
+| `lua/config/options.lua` | Core editor options         |
+| `lua/config/keymaps.lua` | Key mappings                |
+| `lua/plugins/init.lua` | Plugin specifications         |
+
 ## Deployment Paths
 
 | Editor  | Windows                  | Linux/WSL                |
@@ -34,6 +44,7 @@ Code editor configurations for cross-platform development.
 | VS Code | `%APPDATA%/Code/User/`   | `~/.config/Code/User/`   |
 | Cursor  | `%APPDATA%/Cursor/User/` | `~/.config/Cursor/User/` |
 | Zed     | `%APPDATA%/Zed/`         | `~/.config/zed/`         |
+| Neovim  | `%LOCALAPPDATA%/nvim/`   | `~/.config/nvim/`        |
 
 ## Common Settings
 
@@ -78,3 +89,4 @@ VS Code and Cursor extensions are:
 | VS Code | winget  | Nix                |
 | Cursor  | winget  | AppImage           |
 | Zed     | winget  | Nix (`zed-editor`) |
+| Neovim  | winget  | Nix (`neovim`)     |
