@@ -118,7 +118,8 @@ includes = ["*.toml"]
 
 ### treefmt-nix ソース
 
-- [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+- Nix設定: [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+- TOML例: [examples/formatter-taplo.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-taplo.toml)
 
 ### 利用可能なオプション
 
@@ -178,7 +179,8 @@ name = "my-project"
 ## 参考リンク
 
 - [taplo 公式サイト](https://taplo.tamasfe.dev/)
-- [treefmt-nix taplo 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+- [treefmt-nix taplo (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+- [treefmt-nix taplo (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-taplo.toml)
 - [設定リファレンス](https://taplo.tamasfe.dev/configuration/formatter-options.html)
 - [GitHub リポジトリ](https://github.com/tamasfe/taplo)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)

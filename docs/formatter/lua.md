@@ -101,7 +101,8 @@ includes = ["*.lua"]
 
 ### treefmt-nix ソース
 
-- [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+- Nix設定: [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+- TOML例: [examples/formatter-stylua.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-stylua.toml)
 
 ### 利用可能なオプション
 
@@ -168,6 +169,7 @@ local t = { a = 1, b = 2, c = 3 }
 ## 参考リンク
 
 - [StyLua GitHub](https://github.com/JohnnyMorganz/StyLua)
-- [treefmt-nix stylua 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+- [treefmt-nix stylua (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+- [treefmt-nix stylua (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-stylua.toml)
 - [設定リファレンス](https://github.com/JohnnyMorganz/StyLua#configuration)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=JohnnyMorganz.stylua)

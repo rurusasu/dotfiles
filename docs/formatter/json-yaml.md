@@ -106,7 +106,8 @@ includes = ["*.json", "*.yaml", "*.yml"]
 
 ### treefmt-nix ソース
 
-- [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
+- Nix設定: [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
+- TOML例: [examples/formatter-oxfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml)
 
 ### 利用可能なオプション
 
@@ -201,7 +202,8 @@ dependencies:
 ## 参考リンク
 
 - [oxc 公式サイト](https://oxc.rs/)
-- [treefmt-nix oxfmt 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
+- [treefmt-nix oxfmt (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
+- [treefmt-nix oxfmt (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml)
 - [フォーマッター設定リファレンス](https://oxc.rs/docs/guide/usage/formatter/config-file-reference.html)
 - [GitHub リポジトリ](https://github.com/oxc-project/oxc)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=oxc.oxc-vscode)

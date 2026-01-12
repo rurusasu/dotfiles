@@ -65,7 +65,8 @@ includes = ["*.nix"]
 
 ### treefmt-nix ソース
 
-- [programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+- Nix設定: [programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+- TOML例: [examples/formatter-nixfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-nixfmt.toml)
 
 ### 利用可能なオプション
 
@@ -186,7 +187,8 @@ Nix には複数の Language Server があります：
 ## 参考リンク
 
 - [nixfmt GitHub](https://github.com/serokell/nixfmt)
-- [treefmt-nix nixfmt 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+- [treefmt-nix nixfmt (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+- [treefmt-nix nixfmt (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-nixfmt.toml)
 - [Nix IDE 拡張機能](https://marketplace.visualstudio.com/items?itemName=jnoortheen.nix-ide)
 - [nil Language Server](https://github.com/oxalica/nil)
 - [Nix 公式ドキュメント](https://nixos.org/manual/nix/stable/)

@@ -110,7 +110,8 @@ includes = ["*.md"]
 
 ### treefmt-nix ソース
 
-- [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+- Nix設定: [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+- TOML例: [examples/formatter-dprint.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-dprint.toml)
 
 ### 利用可能なオプション
 
@@ -161,7 +162,8 @@ includes = ["*.md"]
 ## 参考リンク
 
 - [dprint 公式サイト](https://dprint.dev/)
-- [treefmt-nix dprint 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+- [treefmt-nix dprint (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+- [treefmt-nix dprint (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-dprint.toml)
 - [Markdown プラグイン設定](https://dprint.dev/plugins/markdown/config/)
 - [GitHub リポジトリ](https://github.com/dprint/dprint)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=dprint.dprint)

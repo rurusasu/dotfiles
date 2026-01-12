@@ -99,7 +99,8 @@ includes = ["*.sh", "*.bash"]
 
 ### treefmt-nix ソース
 
-- [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+- Nix設定: [programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+- TOML例: [examples/formatter-shfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-shfmt.toml)
 
 ### 利用可能なオプション
 
@@ -198,6 +199,7 @@ shfmt -ln mksh script.sh
 ## 参考リンク
 
 - [shfmt GitHub](https://github.com/mvdan/shfmt)
-- [treefmt-nix shfmt 設定](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+- [treefmt-nix shfmt (Nix)](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+- [treefmt-nix shfmt (TOML例)](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-shfmt.toml)
 - [EditorConfig](https://editorconfig.org/)
 - [VSCode 拡張機能](https://marketplace.visualstudio.com/items?itemName=foxundermoon.shell-format)
