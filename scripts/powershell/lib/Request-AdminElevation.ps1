@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     管理者権限の自動昇格を行う
 
@@ -49,7 +49,7 @@ function Request-AdminElevation {
         return
     }
 
-    Write-Host "管理者権限が必要です。UAC プロンプトを表示します..." -ForegroundColor Yellow
+    Write-Host "Administrator privileges are required. Showing UAC prompt..." -ForegroundColor Yellow
 
     $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$ScriptPath`"")
 
@@ -80,6 +80,26 @@ function Request-AdminElevation {
         }
     }
 
-    Start-Process pwsh -ArgumentList $arguments -Verb RunAs
-    Exit-Script -ExitCode 0
+    $elevatedShell = if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+        "pwsh"
+    } else {
+        "powershell.exe"
+    }
+
+    try {
+        $proc = Start-Process $elevatedShell -ArgumentList $arguments -Verb RunAs -PassThru -Wait
+        $exitCode = if ($null -ne $proc -and $null -ne $proc.ExitCode) {
+            [int]$proc.ExitCode
+        } else {
+            1
+        }
+        Exit-Script -ExitCode $exitCode
+    } catch {
+        if ($_.Exception -is [System.ComponentModel.Win32Exception] -and $_.Exception.NativeErrorCode -eq 1223) {
+            Write-Error "UAC prompt was canceled. Setup did not start."
+        } else {
+            Write-Error "Failed to start elevated process: $($_.Exception.Message)"
+        }
+        Exit-Script -ExitCode 1
+    }
 }

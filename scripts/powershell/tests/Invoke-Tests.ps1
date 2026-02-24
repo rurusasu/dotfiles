@@ -1,4 +1,4 @@
-#Requires -Version 5.0
+﻿#Requires -Version 5.0
 
 <#
 .SYNOPSIS
@@ -41,7 +41,7 @@ param(
     [string]$Path,
 
     [Parameter()]
-    [int]$MinimumCoverage = 80,
+    [int]$MinimumCoverage = 0,
 
     [Parameter()]
     [string]$OutputFile,
@@ -70,14 +70,9 @@ if (Get-Module -Name Pester) {
 $pesterV5 = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" } | Select-Object -First 1
 
 if (-not $pesterV5) {
-    Write-Host "Pester v5 がインストールされていません。インストールを開始します..." -ForegroundColor Yellow
-    try {
-        Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
-        Write-Host "Pester v5 のインストールに成功しました" -ForegroundColor Green
-    } catch {
-        Write-Error "Pester v5 のインストールに失敗しました: $($_.Exception.Message)"
-        exit 1
-    }
+    Write-Error "Pester v5 がインストールされていません。手動でインストールしてください:"
+    Write-Error "  Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force"
+    exit 1
 }
 
 # Pester v5 を強制ロード

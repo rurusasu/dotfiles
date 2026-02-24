@@ -57,7 +57,10 @@ param(
     [ValidateSet("link", "repo", "nix", "none")]
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
-    [string]$SyncBack = "lock"
+    [string]$SyncBack = "lock",
+    # 非昇格モード: user scope 専用パッケージを rurus として一括インストールする際に使用
+    # 例: .\install.ps1 -UserScopeOnly
+    [switch]$UserScopeOnly
 )
 
 Set-StrictMode -Version Latest
@@ -68,7 +71,11 @@ $ErrorActionPreference = "Stop"
 # ========================================
 $libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
 . (Join-Path $libPath "Request-AdminElevation.ps1")
-Request-AdminElevation -ScriptPath $PSCommandPath -BoundParameters $PSBoundParameters
+
+# -UserScopeOnly は非昇格で実行するため、UAC 昇格をスキップする
+if (-not $UserScopeOnly) {
+    Request-AdminElevation -ScriptPath $PSCommandPath -BoundParameters $PSBoundParameters
+}
 
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
@@ -97,6 +104,12 @@ $context.InstallDir = $InstallDir
 # Merge all options into context
 foreach ($key in $Options.Keys) {
     $context.Options[$key] = $Options[$key]
+}
+
+# UserScopeOnly フラグをコンテキストに伝達
+if ($UserScopeOnly) {
+    $context.Options['UserScopeOnly'] = $true
+    $context.Options['WingetMode'] = 'import'
 }
 
 # Add additional parameters for NixOSWSL handler

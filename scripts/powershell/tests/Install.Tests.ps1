@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -181,7 +181,7 @@ Describe 'クラスキャッシュ問題 - 複数回ロード' {
         $ctx = [SetupContext]::new("D:\dotfiles")
 
         # 3. ハンドラーをロード（Get-SetupHandler 経由）
-        $handlersPath = Join-Path $PSScriptRoot ".." "handlers"
+        $handlersPath = Join-Path (Join-Path $PSScriptRoot "..") "handlers"
         $handlers = Get-SetupHandler -HandlersPath $handlersPath
 
         # 4. 各ハンドラーの CanApply を呼び出し
@@ -211,9 +211,12 @@ Describe 'Show-SetupSummary' {
 
         Show-SetupSummary -Results $results
 
+        # -ForEach スコープ外では $symbol/$color が参照できないため変数を固定
+        $expectedSymbol = $symbol
+        $expectedColor = $color
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[$symbol\].*TestHandler" -and
-            $ForegroundColor -eq $color
+            $Object -match "\[$expectedSymbol\].*TestHandler" -and
+            $ForegroundColor -eq $expectedColor
         }
     }
 

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     セットアップハンドラーの基底クラスとコンテキスト定義
 
@@ -367,7 +367,13 @@ function Select-SetupHandler
         [array]$Handlers
     )
 
-    return $Handlers | Sort-Object Order
+    # Sort-Object は PS5.1 で安定ソートが保証されないためインデックスを仸る
+    $indexed = for ($i = 0; $i -lt $Handlers.Count; $i++)
+    {
+        [PSCustomObject]@{ Idx = $i; Item = $Handlers[$i] }
+    }
+    return ($indexed | Sort-Object -Property @{ Expression = { $_.Item.Order } }, @{ Expression = { $_.Idx } }) |
+        ForEach-Object { $_.Item }
 }
 
 <#
@@ -444,10 +450,10 @@ function Invoke-SetupHandler
 
             if ($result.Success)
             {
-                Write-Host "[$($handler.Name)] ✓ $($result.Message)" -ForegroundColor Green
+                Write-Host "[$($handler.Name)] OK $($result.Message)" -ForegroundColor Green
             } else
             {
-                Write-Host "[$($handler.Name)] ✗ $($result.Message)" -ForegroundColor Red
+                Write-Host "[$($handler.Name)] FAIL $($result.Message)" -ForegroundColor Red
                 if ($result.Error)
                 {
                     Write-Host "[$($handler.Name)] Error: $($result.Error.Message)" -ForegroundColor Red
@@ -458,7 +464,7 @@ function Invoke-SetupHandler
             $exception = $_.Exception
             $result = [SetupResult]::CreateFailure($handler.Name, "Unhandled exception", $exception)
             $results += $result
-            Write-Host "[$($handler.Name)] ✗ Exception: $($exception.Message)" -ForegroundColor Red
+            Write-Host "[$($handler.Name)] FAIL Exception: $($exception.Message)" -ForegroundColor Red
         }
     }
 

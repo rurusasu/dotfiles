@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     chezmoi による dotfiles 適用を管理するハンドラー
 
@@ -70,7 +70,15 @@ class ChezmoiHandler : SetupHandlerBase {
             $sourcePath = $this.GetChezmoiSourcePath($ctx)
             $this.Log("chezmoi でターミナル設定を適用します: $sourcePath")
 
-            Invoke-Chezmoi -ExePath $this.ChezmoiExePath --source $sourcePath apply
+            # 設定ファイルテンプレートが変更された場合のために init を先に実行する
+            # init が失敗しても apply は続行する（初回セットアップ済みの場合は通常成功しない）
+            $this.Log("chezmoi init を実行して設定を再生成します")
+            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "--source" $sourcePath "init"
+            if ($LASTEXITCODE -ne 0) {
+                $this.Log("chezmoi init はスキップされました (exit=$LASTEXITCODE)", "Gray")
+            }
+
+            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "--source" $sourcePath "apply"
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     VS Code Server のキャッシュ削除と事前インストールを管理するハンドラー
 
@@ -46,8 +46,14 @@ class VscodeServerHandler : SetupHandlerBase {
 
         # VS Code のインストール確認（preinstall が有効な場合のみ）
         if (-not $skipPreinstall) {
-            $stableProduct = $this.GetVscodeProductInfo("stable")
-            $insidersProduct = $this.GetVscodeProductInfo("insider")
+            try {
+                $stableProduct = $this.GetVscodeProductInfo("stable")
+                $insidersProduct = $this.GetVscodeProductInfo("insider")
+            } catch {
+                $this.LogWarning("VS Code product.json の読み取りに失敗しました: $($_.Exception.Message)")
+                $stableProduct = $null
+                $insidersProduct = $null
+            }
 
             if (-not $stableProduct -and -not $insidersProduct) {
                 $this.Log("VS Code がインストールされていません", "Gray")
@@ -111,7 +117,7 @@ class VscodeServerHandler : SetupHandlerBase {
             "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
         ) -join " && "
 
-        Invoke-Wsl -d $distroName -u root -- sh -lc $cleanup
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cleanup
         $this.Log("VS Code Server キャッシュを削除しました", "Green")
     }
 
@@ -162,17 +168,17 @@ class VscodeServerHandler : SetupHandlerBase {
         $chownOwner = "${safeUser}:" + '$groupName'
 
         $cmd = "set -e; " +
-            "userName='$safeUser'; " +
-            "groupName=`$(id -gn `"$safeUser`" 2>/dev/null || echo `"$safeUser`"); " +
-            "serverRoot='$safeRoot'; " +
-            "serverDir='$safeDir'; " +
-            "url='$safeUrl'; " +
-            "mkdir -p `"$safeDir`"; " +
-            "if [ ! -f `"$safeDir/.nixos-patched`" ]; then curl -fsSL `"$safeUrl`" | tar -xz -C `"$safeDir`" --strip-components=1; fi; " +
-            "if [ -x `"$safeDir/bin/code-server-insiders`" ] && [ ! -e `"$safeDir/bin/code-server`" ]; then ln -s code-server-insiders `"$safeDir/bin/code-server`"; fi; " +
-            "chown -R `"$chownOwner`" `"$safeRoot`""
+        "userName='$safeUser'; " +
+        "groupName=`$(id -gn `"$safeUser`" 2>/dev/null || echo `"$safeUser`"); " +
+        "serverRoot='$safeRoot'; " +
+        "serverDir='$safeDir'; " +
+        "url='$safeUrl'; " +
+        "mkdir -p `"$safeDir`"; " +
+        "if [ ! -f `"$safeDir/.nixos-patched`" ]; then curl -fsSL `"$safeUrl`" | tar -xz -C `"$safeDir`" --strip-components=1; fi; " +
+        "if [ -x `"$safeDir/bin/code-server-insiders`" ] && [ ! -e `"$safeDir/bin/code-server`" ]; then ln -s code-server-insiders `"$safeDir/bin/code-server`"; fi; " +
+        "chown -R `"$chownOwner`" `"$safeRoot`""
 
-        Invoke-Wsl -d $distroName -u root -- sh -lc $cmd
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cmd
     }
 
     <#
@@ -180,7 +186,7 @@ class VscodeServerHandler : SetupHandlerBase {
         WSL のデフォルトユーザーを取得する
     #>
     hidden [string] GetWslDefaultUser([string]$distroName) {
-        $user = Invoke-Wsl -d $distroName -- sh -lc "whoami" | Select-Object -First 1
+        $user = Invoke-Wsl "-d" $distroName "--" "sh" "-lc" "whoami" | Select-Object -First 1
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
             return "nixos"
         }
@@ -242,6 +248,6 @@ class VscodeServerHandler : SetupHandlerBase {
             }
         }
 
-        return $candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        return @($candidates | Where-Object { $_ -ne $null }) | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
 }

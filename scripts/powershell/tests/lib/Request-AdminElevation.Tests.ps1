@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Request-AdminElevation.ps1 のテスト
 #>

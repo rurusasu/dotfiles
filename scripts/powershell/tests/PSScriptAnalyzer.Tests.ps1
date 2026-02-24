@@ -1,12 +1,10 @@
-BeforeAll {
+﻿BeforeAll {
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
-    # PSScriptAnalyzer モジュールの確認とインストール
+    # PSScriptAnalyzer モジュールの確認
     if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-        Write-Host "PSScriptAnalyzer がインストールされていません。インストールを開始します..." -ForegroundColor Yellow
-        Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
-        Write-Host "PSScriptAnalyzer のインストールに成功しました" -ForegroundColor Green
+        throw "PSScriptAnalyzer がインストールされていません。手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
     }
 
     Import-Module PSScriptAnalyzer -Force

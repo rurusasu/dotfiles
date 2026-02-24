@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Docker Desktop と WSL の連携を管理するハンドラー
 
@@ -237,7 +237,7 @@ class DockerHandler : SetupHandlerBase {
     #>
     hidden [void] EnsureDockerGroup([string]$distroName) {
         $user = $this.GetWslDefaultUser($distroName)
-        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" "( groupadd docker || true ) && usermod -aG docker $user"
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" "( groupadd docker 2>/dev/null || true ) && usermod -aG docker $user"
     }
 
     <#

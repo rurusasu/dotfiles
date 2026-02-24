@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     外部コマンドのラッパー関数群
 
@@ -75,6 +75,54 @@ function Invoke-Winget {
         [string[]]$Arguments
     )
     & winget @Arguments
+}
+
+<#
+.SYNOPSIS
+    winget list でパッケージのインストール状態を確認する
+.DESCRIPTION
+    PS5.1 クラスメソッドでは [CmdletBinding()] 関数経由の $LASTEXITCODE が伝播しないため、
+    ExitCode を戻り値の PSCustomObject に含めて返す専用関数として分離している。
+.PARAMETER PackageId
+    確認するパッケージ ID
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string[]]; ExitCode=[int] }
+#>
+function Invoke-WingetList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+    $output = & winget list --id $PackageId --exact --accept-source-agreements 2>&1
+    [PSCustomObject]@{
+        Output   = $output
+        ExitCode = $LASTEXITCODE
+    }
+}
+
+<#
+.SYNOPSIS
+    winget install を実行し、ExitCode を PSCustomObject で返す
+.DESCRIPTION
+    PS5.1 クラスメソッドでは [CmdletBinding()] 関数経由の $LASTEXITCODE が伝播しないため、
+    ExitCode を戻り値の PSCustomObject に含めて返す専用関数として分離している。
+.PARAMETER Arguments
+    winget install に渡す引数（"install" を含む全引数）
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string[]]; ExitCode=[int] }
+#>
+function Invoke-WingetInstall {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+    $output = & winget @Arguments 2>&1
+    [PSCustomObject]@{
+        Output   = $output
+        ExitCode = $LASTEXITCODE
+    }
 }
 
 <#

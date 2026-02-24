@@ -31,7 +31,10 @@ git clone https://github.com/rurusasu/dotfiles.git
 cd dotfiles
 
 # 2. インストール実行（管理者権限は自動で取得されます）
-.\install.ps1
+\.\install.cmd
+
+# 参考: PowerShell スクリプトを直接実行する場合
+# .\install.ps1
 ```
 
 これにより:
@@ -61,6 +64,7 @@ dotfiles/
 ├── windows/                # Windows-side config files
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner
+├── install.cmd             # Windows launcher for install.ps1
 ├── install.ps1             # NixOS WSL installer
 └── flake.nix               # Nix flake entry point
 ```
