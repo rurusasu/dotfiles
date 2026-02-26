@@ -8,32 +8,37 @@ Purpose: repo-level workflow notes.
 
 ```
 dotfiles/
-├── chezmoi/                # Chezmoi source for user dotfiles (shell/git/starship/vscode/LLM)
-├── nix/                    # NixOS configuration (no Home Manager)
-│   ├── flakes/             # Flake inputs/outputs, treefmt
-│   ├── hosts/              # Host-specific configs (WSL)
-│   ├── profiles/           # Reusable host profiles
-│   ├── modules/            # Custom NixOS modules
-│   ├── packages/           # Package sets for nix profile
-│   ├── lib/                # Helper functions
-│   ├── overlays/           # Nixpkgs overlays
-│   └── templates/          # Project templates
-├── Taskfile.yml            # Task runner (WSL 経由で nix fmt, pre-commit 等を実行)
+├── chezmoi/                # Chezmoi source for user dotfiles
+│   ├── dot_claude/         # → ~/.claude/ (Claude Code)
+│   ├── dot_codex/          # → ~/.codex/ (Codex CLI)
+│   ├── dot_cursor/         # → ~/.cursor/ (Cursor AI)
+│   ├── dot_gemini/         # → ~/.gemini/ (Gemini CLI)
+│   ├── dot_config/         # → ~/.config/ (XDG Base Directory)
+│   │   └── git/            # → ~/.config/git/ (Git config & hooks)
+│   └── ...                 # その他 (shells, cli, terminals, editors 等)
+├── nix/                    # NixOS configuration (flake-parts)
+│   ├── flake/              # Flake-parts modules (entry point)
+│   │   ├── treefmt.nix     # Code formatter configuration
+│   │   └── packages.nix    # Packages and devShell definition
+│   ├── core/               # Shared system configurations
+│   ├── hosts/              # Host-specific configs (WSL/Linux)
+│   ├── modules/            # Reusable NixOS modules
+│   └── templates/          # Flake templates
 ├── scripts/                # All scripts (see scripts/AGENTS.md)
 │   ├── sh/                 # Shell scripts (Linux/WSL)
-│   │   ├── update.sh           # Daily update script
-│   │   ├── nixos-wsl-postinstall.sh
-│   │   └── treefmt.sh
 │   └── powershell/         # PowerShell scripts (Windows)
-│       ├── apply-chezmoi.ps1       # Apply chezmoi dotfiles (auto-installs chezmoi)
-│       ├── update-windows-settings.ps1  # Apply winget packages
-│       ├── update-wslconfig.ps1    # Apply .wslconfig
-│       ├── export-settings.ps1     # Export Windows settings
-│       └── format-ps1.ps1          # Format PowerShell scripts
+│       └── handlers/       # Setup handlers (see handlers/AGENTS.md)
+├── tasks/                  # Taskfile tasks
+│   └── lint/               # Cross-platform linting (see docs/taskfile/lint.md)
 ├── windows/                # Windows-side config files
-│   ├── winget/             # Package management
-│   └── .wslconfig          # WSL configuration
-└── install.cmd             # Windows launcher for installer entrypoint
+│   ├── winget/             # winget package list
+│   └── npm/                # npm global package list
+├── .pre-commit-config.yaml # Pre-commit hooks configuration
+├── .secrets.baseline       # detect-secrets baseline
+├── .cz.toml                # Commitizen config
+├── _typos.toml             # Typos spell checker config
+├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
+└── install.ps1             # NixOS WSL installer (auto-elevates to admin)
 ```
 
 ## Setup Flow
@@ -47,7 +52,7 @@ dotfiles/
 Run from admin PowerShell when setting up fresh or after major changes:
 
 ```powershell
-sudo pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
+sudo pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
 ### Incremental Updates (from WSL)
@@ -66,7 +71,7 @@ chezmoi で Windows に設定を適用。詳細は [docs/chezmoi/](./docs/chezmo
 
 ```powershell
 # GitHub から直接取得（推奨）
-chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
+chezmoi init ai-mate-inc/dotfiles --source-path chezmoi && chezmoi apply
 
 # 同梱スクリプトで一括適用
 .\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
@@ -80,11 +85,44 @@ To test build without applying:
 sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 ```
 
+### PowerShell Tests (Windows)
+
+PowerShell テストは Taskfile で統一管理されています（`task commit` で自動実行）。
+
+```powershell
+# Taskfile 経由（推奨）
+task test:powershell  # PSScriptAnalyzer lint + Pester tests + bats tests
+
+# 直接実行
+cd scripts/powershell/tests
+.\Invoke-Tests.ps1 -All -IncludeBats  # 全テスト（Pester + bats）
+.\Invoke-Tests.ps1                     # デフォルト（scripts/powershell/tests のみ）
+.\Invoke-Tests.ps1 -MinimumCoverage 0  # カバレッジチェックなし（高速）
+```
+
+**テスト対象ディレクトリ:**
+
+- `scripts/powershell/tests/` - Pester テスト（ハンドラー、ライブラリ）
+
 ## Chezmoi
 
 ユーザーレベルの dotfiles を `chezmoi/` で管理（shell, git, terminal, VS Code, LLM configs）。
 
 📖 詳細: [docs/chezmoi/](./docs/chezmoi/)
+
+## Package + Config Workflow (New Package Task)
+
+When asked to install a new package and place its config:
+
+1. Decide target platform/tool:
+   - NixOS/WSL system packages → `nix/core/cli.nix` (see `nix/AGENTS.md`)
+   - Windows packages → `windows/winget/packages.json` (see `windows/winget/AGENTS.md`)
+   - Windows npm globals → `windows/npm/packages.json` (see `windows/npm/AGENTS.md`)
+2. Place configuration in `chezmoi/` under the relevant category (see `chezmoi/AGENTS.md`).
+3. Apply changes:
+   - NixOS/WSL: `nrs` or `nixos-rebuild switch --flake ~/.dotfiles --impure`
+   - Windows: `.\scripts\powershell\update-windows-settings.ps1`
+   - Chezmoi: `chezmoi apply` or `.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi`
 
 ## Formatting & Pre-commit
 
@@ -95,40 +133,68 @@ treefmt を使用して複数のフォーマッターを統一管理。NixOS/WSL
 | 設定             | ファイル                             |
 | ---------------- | ------------------------------------ |
 | Source of truth  | `.treefmt.toml`                      |
-| Nix integration  | `nix/flakes/treefmt.nix`             |
+| Nix integration  | `nix/flake/treefmt.nix`              |
+| Git hooks        | `.pre-commit-config.yaml`            |
 | Task runner      | `Taskfile.yml`                       |
-| Pre-commit hooks | `.pre-commit-config.yaml`            |
 | 詳細ドキュメント | [docs/formatter/](./docs/formatter/) |
+
+### Pre-commit Hooks
+
+`.pre-commit-config.yaml` で一元管理。`nix develop` で devShell に入ると自動インストールされます。
+
+📖 詳細: [docs/git/commit.md](./docs/git/commit.md)
 
 ### Usage
 
 ```bash
-# Via Nix (WSL/NixOS)
-nix fmt
+# DevShell に入る（フック自動インストール）
+nix develop
 
-# Via Taskfile (Windows → WSL)
-task fmt          # nix fmt を実行
-task lint         # pre-commit を実行
-task commit -- "message"  # フォーマット + コミット
-task sync -- "message"    # 全部やって push
+# Via Nix (WSL/NixOS)
+nix fmt                       # フォーマット（auto-fix含む）
+pre-commit run --all-files    # 手動で全フック実行
+
+# Via Taskfile (Windows → WSL/Windows)
+# 詳細は docs/taskfile/ を参照
+task --list           # 利用可能なタスク一覧
 ```
 
-### Prerequisites
+## Linting
 
-PowerShell formatting requires PSScriptAnalyzer:
+クロスプラットフォーム対応の lint システム。全 linter は Nix で提供され、Windows/Linux/Mac で同一設定で実行可能。
+
+📖 詳細: [docs/taskfile/lint.md](./docs/taskfile/lint.md)
 
 ```powershell
-pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
+# 全 linter 実行
+task lint:all
+
+# 個別 linter
+task lint:shellcheck       # Shell script
+task lint:statix           # Nix
+task lint:psscriptanalyzer # PowerShell
+task lint:markdownlint     # Markdown
+task lint:typos            # Spell check
+task lint:gitleaks         # Secret detection
 ```
 
-### Taskfile によるタスク管理
+## AI Agent Skills
 
-`Taskfile.yml` で WSL 経由の NixOS コマンドを実行:
+AI コーディングエージェント (Claude Code, Codex CLI, Gemini CLI, Cursor) のスキルは `chezmoi` で管理。
 
-- `task fmt`: nix fmt を実行
-- `task lint`: pre-commit を実行
-- `task commit`: フォーマット + lint + コミット
-- `task rebuild`: nixos-rebuild switch
+- Source of truth: `chezmoi/dot_claude/skills/`
+- 同期設定: `chezmoi/.chezmoidata/skills_sync.yaml`
+- 自動同期: `chezmoi/.chezmoiscripts/run_after_sync-agent-skills_windows.ps1.tmpl` / `chezmoi/.chezmoiscripts/run_after_sync-agent-skills_linux.sh.tmpl`
+
+運用:
+
+```powershell
+# dotfiles を更新 + 適用（既定動作）
+chezmoi update
+
+# 必要なら明示適用
+chezmoi apply --force
+```
 
 ## Terminal Settings Flow
 

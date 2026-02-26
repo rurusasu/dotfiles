@@ -9,17 +9,16 @@ scripts/
 ├── sh/                           # Shell scripts (Linux/WSL)
 │   ├── update.sh                 # Daily update script (NixOS rebuild + optional winget)
 │   ├── nixos-wsl-postinstall.sh  # Post-install setup for NixOS WSL
-│   └── treefmt.sh                # Code formatting
+│   ├── runner-setup.sh           # GitHub Actions runner setup (self-hosted, WSL)
+│   ├── treefmt.sh                # Code formatting
+│   └── sync-project-config-template.sh # Sync root config files to flake template
 └── powershell/                   # PowerShell scripts (Windows)
     ├── update-windows-settings.ps1  # Apply winget packages to Windows (Admin)
     ├── update-wslconfig.ps1      # Apply .wslconfig to Windows
     ├── export-settings.ps1       # Export Windows settings to dotfiles
     └── format-ps1.ps1            # Format PowerShell scripts via PSScriptAnalyzer
 
-Note: installer entrypoints are in `scripts/powershell/`:
-- `scripts/powershell/install.ps1`: orchestrator (runs user phase first, elevates only when admin tasks are required)
-- `scripts/powershell/install.user.ps1`: user-scope phase (winget user-scope import)
-- `scripts/powershell/install.admin.ps1`: non-winget phase (runs with or without elevation based on task requirements)
+Note: install.ps1 is in the repository root (auto-elevates to admin).
 ```
 
 ## Shell Scripts (Linux/WSL)
@@ -51,6 +50,23 @@ Post-install setup script run after NixOS WSL import.
 2. Generate user/host nix files if missing
 3. Run nixos-rebuild switch
 4. Sync back flake.lock if sync-back=lock
+
+### runner-setup.sh
+
+Self-hosted GitHub Actions runner setup for WSL/NixOS.
+
+**Usage:**
+
+```bash
+REPO=ai-mate-inc/dotfiles \
+RUNNER_NAME="$(hostname)-runner" \
+scripts/sh/runner-setup.sh
+```
+
+**Notes:**
+
+- Prompts for a GitHub PAT (repo admin scope) to fetch a registration token.
+- Creates a user-level systemd service to keep the runner running.
 
 ## PowerShell Scripts (Windows)
 

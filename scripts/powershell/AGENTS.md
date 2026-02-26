@@ -197,33 +197,49 @@ docs: Update handler development guide for new Order convention
 ### テストの実行
 
 ```powershell
+# Taskfile 経由（推奨、commit 時に自動実行）
+task test:powershell  # PSScriptAnalyzer lint + Pester tests + bats tests
+
+# 直接実行
 cd scripts/powershell/tests
 
-# 全テスト実行（カバレッジなし、高速）
-.\Invoke-Tests.ps1 -MinimumCoverage 0
+# 全テスト実行（全ディレクトリ + bats）
+.\Invoke-Tests.ps1 -All -IncludeBats
 
-# 全テスト + カバレッジ（80%以上を要求）
+# デフォルト（scripts/powershell/tests のみ）
 .\Invoke-Tests.ps1
+
+# カバレッジチェックなし（高速）
+.\Invoke-Tests.ps1 -MinimumCoverage 0
 
 # 特定のテストファイルのみ
 .\Invoke-Tests.ps1 -Path .\handlers\Handler.Chezmoi.Tests.ps1 -MinimumCoverage 0
 ```
 
+**テスト対象ディレクトリ:**
+
+- `scripts/powershell/tests/` - Pester テスト（ハンドラー、ライブラリ）
+
 **現在の状態**: 240+ テスト、カバレッジ 95%+
 
-### pre-commit による自動テスト
+### Taskfile による自動テスト
 
-PowerShell ファイルの変更時に自動でテストが実行されます。
+`task commit` で自動実行されます（pre-commit は Nix/Linux 系ツールのみ担当）。
 
-```bash
-# pre-commit を手動実行
-pre-commit run powershell-tests --all-files
+```powershell
+# コミット時に自動実行
+task commit  # fmt → lint → test:powershell → cz commit
 
-# 全フックを実行
-pre-commit run --all-files
+# 手動で PowerShell テストのみ実行
+task test:powershell
 ```
 
-**設定**: [.pre-commit-config.yaml](../../.pre-commit-config.yaml)
+**役割分担:**
+
+| ツール             | 担当                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| pre-commit (WSL)   | Nix/Linux系: treefmt, shellcheck, statix, deadnix, markdownlint, typos, gitleaks, actionlint |
+| Taskfile (Windows) | PowerShell: lint (PSScriptAnalyzer) + tests (Pester + bats)                                  |
 
 ## 📚 プロジェクト概要
 
@@ -231,12 +247,12 @@ pre-commit run --all-files
 
 **主要コンポーネント**:
 
-- [install.ps1](install.ps1) - メインインストールスクリプト（ユーザーフェーズ + 必要時のみ UAC 昇格）
+- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター、UAC 自動昇格付き）
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - [lib/Request-AdminElevation.ps1](lib/Request-AdminElevation.ps1) - UAC 自動昇格（管理者権限チェックと再起動）
-- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（6個）
-- `tests/` - Pester v5 テストスイート（230+ テスト、95%+ カバレッジ）
+- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（8個）
+- `tests/` - Pester v5 テストスイート（240+ テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
 - [treefmt.toml](../../treefmt.toml) - 統一フォーマッター設定（PowerShell含む）
 
@@ -251,8 +267,9 @@ scripts/powershell/
 │   ├── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
 │   └── Request-AdminElevation.ps1 # UAC 自動昇格（管理者権限チェック）
 ├── handlers/                    # セットアップハンドラー
-│   ├── Handler.Winget.ps1       # Order 5: winget パッケージ
-│   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用
+│   ├── Handler.Winget.ps1       # Order 5: winget パッケージ（インストール済みスキップ）
+│   ├── Handler.Npm.ps1          # Order 6: npm グローバルパッケージ
+│   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用（--force で自動上書き）
 │   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定
 │   ├── Handler.VhdManager.ps1   # Order 21: VHD サイズ拡張
 │   ├── Handler.Docker.ps1       # Order 30: Docker Desktop 連携
@@ -265,22 +282,23 @@ scripts/powershell/
 │   ├── handlers/                # 各ハンドラーのテスト
 │   └── lib/                     # ライブラリのテスト
 
-install.ps1                      # メインエントリーポイント（ユーザーフェーズ + admin フェーズ）
+../../install.ps1                # メインエントリーポイント（簡素化済み）
 ../../treefmt.toml               # 統一フォーマッター設定（PowerShell含む）
 ../../docs/scripts/powershell/   # 詳細ドキュメント（このファイルから参照）
 ```
 
 ### ハンドラー実行順序
 
-| Order | ハンドラー   | ファイル                 | 説明                                                              |
-| ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
-| 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（JSON定義ベース）                           |
-| 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用                                             |
-| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                   |
-| 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                                |
-| 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |
-| 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                 |
-| 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL のダウンロードとインストール、Post-install セットアップ |
+| Order | ハンドラー   | ファイル                 | 説明                                                             |
+| ----- | ------------ | ------------------------ | ---------------------------------------------------------------- |
+| 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（import/export、インストール済みスキップ） |
+| 6     | Npm          | Handler.Npm.ps1          | npm グローバルパッケージ管理（インストール済みスキップ）         |
+| 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用（--force で自動上書き、リアルタイムログ）  |
+| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                  |
+| 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                               |
+| 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成              |
+| 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                |
+| 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL インストール、Post-install（リアルタイムログ）         |
 
 ## 🔗 参考資料
 
