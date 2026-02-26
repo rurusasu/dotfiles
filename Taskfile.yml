@@ -104,7 +104,7 @@ tasks:
   install:
     desc: Run Windows installer
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
 
   chezmoi:
     desc: Apply chezmoi dotfiles

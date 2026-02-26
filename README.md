@@ -34,7 +34,7 @@ cd dotfiles
 \.\install.cmd
 
 # 参考: PowerShell スクリプトを直接実行する場合
-# .\install.ps1
+# .\scripts\powershell\install.ps1
 ```
 
 これにより:
@@ -65,7 +65,7 @@ dotfiles/
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner
 ├── install.cmd             # Windows launcher for install.ps1
-├── install.ps1             # NixOS WSL installer
+├── scripts/powershell/install.ps1 # NixOS WSL installer entrypoint
 └── flake.nix               # Nix flake entry point
 ```
 

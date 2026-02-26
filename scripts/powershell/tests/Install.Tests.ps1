@@ -180,8 +180,34 @@ Describe 'クラスキャッシュ問題 - 複数回ロード' {
         # 2. コンテキストを作成
         $ctx = [SetupContext]::new("D:\dotfiles")
 
-        # 3. ハンドラーをロード（Get-SetupHandler 経由）
-        $handlersPath = Join-Path (Join-Path $PSScriptRoot "..") "handlers"
+        # 3. install.ps1 と同様に Get-SetupHandler でロードするが、
+        #    テスト専用ハンドラーを使い Docker/WSL 等の実コマンド実行を回避する
+        $handlersPath = Join-Path $TestDrive "handlers"
+        New-Item -Path $handlersPath -ItemType Directory -Force | Out-Null
+
+        $handlerA = @'
+class FakeAlphaHandler : SetupHandlerBase {
+    FakeAlphaHandler() {
+        $this.Name = "FakeAlpha"
+        $this.Order = 10
+    }
+    [bool] CanApply([SetupContext]$ctx) { return $true }
+    [SetupResult] Apply([SetupContext]$ctx) { return $this.CreateSuccessResult("OK") }
+}
+'@
+        $handlerB = @'
+class FakeBetaHandler : SetupHandlerBase {
+    FakeBetaHandler() {
+        $this.Name = "FakeBeta"
+        $this.Order = 20
+    }
+    [bool] CanApply([SetupContext]$ctx) { return $true }
+    [SetupResult] Apply([SetupContext]$ctx) { return $this.CreateSuccessResult("OK") }
+}
+'@
+        Set-Content -Path (Join-Path $handlersPath "Handler.FakeAlpha.ps1") -Value $handlerA
+        Set-Content -Path (Join-Path $handlersPath "Handler.FakeBeta.ps1") -Value $handlerB
+
         $handlers = Get-SetupHandler -HandlersPath $handlersPath
 
         # 4. 各ハンドラーの CanApply を呼び出し

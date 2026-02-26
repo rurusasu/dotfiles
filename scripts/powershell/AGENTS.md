@@ -231,7 +231,7 @@ pre-commit run --all-files
 
 **主要コンポーネント**:
 
-- [install.ps1](../../install.ps1) - メインインストールスクリプト（ハンドラーオーケストレーター、UAC 自動昇格付き）
+- [install.ps1](install.ps1) - メインインストールスクリプト（ユーザーフェーズ + 必要時のみ UAC 昇格）
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - [lib/Request-AdminElevation.ps1](lib/Request-AdminElevation.ps1) - UAC 自動昇格（管理者権限チェックと再起動）
@@ -265,7 +265,7 @@ scripts/powershell/
 │   ├── handlers/                # 各ハンドラーのテスト
 │   └── lib/                     # ライブラリのテスト
 
-../../install.ps1                # メインエントリーポイント（簡素化済み）
+install.ps1                      # メインエントリーポイント（ユーザーフェーズ + admin フェーズ）
 ../../treefmt.toml               # 統一フォーマッター設定（PowerShell含む）
 ../../docs/scripts/powershell/   # 詳細ドキュメント（このファイルから参照）
 ```

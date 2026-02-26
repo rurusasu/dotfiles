@@ -33,7 +33,7 @@ dotfiles/
 ├── windows/                # Windows-side config files
 │   ├── winget/             # Package management
 │   └── .wslconfig          # WSL configuration
-└── install.ps1             # NixOS WSL installer (auto-elevates to admin)
+└── install.cmd             # Windows launcher for installer entrypoint
 ```
 
 ## Setup Flow
@@ -47,7 +47,7 @@ dotfiles/
 Run from admin PowerShell when setting up fresh or after major changes:
 
 ```powershell
-sudo pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
+sudo pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
 ```
 
 ### Incremental Updates (from WSL)

@@ -505,4 +505,43 @@ function Start-SleepSafe {
     Start-Sleep -Seconds $Seconds
 }
 
+<#
+.SYNOPSIS
+    npm コマンドを実行する
+.PARAMETER Arguments
+    npm に渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-Npm -Arguments @("--version")
+    Invoke-Npm -Arguments @("install", "-g", "@google/gemini-cli")
+#>
+function Invoke-Npm {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+    & npm @Arguments
+}
+
+<#
+.SYNOPSIS
+    bun コマンドを実行する
+.PARAMETER Arguments
+    bun に渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-Bun -Arguments @("--version")
+    Invoke-Bun -Arguments @("add", "-g", "@google/gemini-cli")
+#>
+function Invoke-Bun {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+    & bun @Arguments
+}
 

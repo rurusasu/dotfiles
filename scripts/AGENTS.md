@@ -16,7 +16,10 @@ scripts/
     ├── export-settings.ps1       # Export Windows settings to dotfiles
     └── format-ps1.ps1            # Format PowerShell scripts via PSScriptAnalyzer
 
-Note: install.ps1 is in the repository root (auto-elevates to admin).
+Note: installer entrypoints are in `scripts/powershell/`:
+- `scripts/powershell/install.ps1`: orchestrator (runs user phase first, elevates only when admin tasks are required)
+- `scripts/powershell/install.user.ps1`: user-scope phase (winget user-scope import)
+- `scripts/powershell/install.admin.ps1`: non-winget phase (runs with or without elevation based on task requirements)
 ```
 
 ## Shell Scripts (Linux/WSL)

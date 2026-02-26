@@ -23,7 +23,7 @@ Describe 'Exit-Script' {
 Describe 'Request-AdminElevation' {
     BeforeEach {
         Mock Write-Host { }
-        Mock Start-Process { }
+        Mock Start-Process { [pscustomobject]@{ ExitCode = 0 } }
     }
 
     Context 'when running as administrator' {
@@ -59,7 +59,7 @@ Describe 'Request-AdminElevation' {
             Request-AdminElevation -ScriptPath "C:\test.ps1" -BoundParameters $params
 
             Should -Invoke Write-Host -ParameterFilter {
-                $Object -match "管理者権限が必要です"
+                $Object -match "Administrator privileges are required"
             }
         }
 

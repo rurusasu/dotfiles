@@ -23,13 +23,40 @@
           "PackageIdentifier": "Git.Git"
         },
         {
+          "PackageIdentifier": "GitHub.cli"
+        },
+        {
+          "PackageIdentifier": "GitHub.Copilot"
+        },
+        {
+          "PackageIdentifier": "dprint.dprint"
+        },
+        {
+          "PackageIdentifier": "hadolint.hadolint"
+        },
+        {
+          "PackageIdentifier": "Google.Chrome"
+        },
+        {
+          "PackageIdentifier": "Google.Antigravity"
+        },
+        {
           "PackageIdentifier": "Microsoft.PowerShell"
+        },
+        {
+          "PackageIdentifier": "Microsoft.PowerToys"
         },
         {
           "PackageIdentifier": "Task.Task"
         },
         {
+          "PackageIdentifier": "Starship.Starship"
+        },
+        {
           "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
+        },
+        {
+          "PackageIdentifier": "Neovim.Neovim"
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
@@ -44,10 +71,34 @@
           "PackageIdentifier": "OpenAI.Codex"
         },
         {
+          "PackageIdentifier": "SST.opencode"
+        },
+        {
           "PackageIdentifier": "TablePlus.TablePlus"
         },
         {
           "PackageIdentifier": "twpayne.chezmoi"
+        },
+        {
+          "PackageIdentifier": "BurntSushi.ripgrep.MSVC"
+        },
+        {
+          "PackageIdentifier": "sharkdp.fd"
+        },
+        {
+          "PackageIdentifier": "astral-sh.uv"
+        },
+        {
+          "PackageIdentifier": "Oven-sh.Bun"
+        },
+        {
+          "PackageIdentifier": "eza-community.eza"
+        },
+        {
+          "PackageIdentifier": "junegunn.fzf"
+        },
+        {
+          "PackageIdentifier": "ajeetdsouza.zoxide"
         },
         {
           "PackageIdentifier": "wez.wezterm"
