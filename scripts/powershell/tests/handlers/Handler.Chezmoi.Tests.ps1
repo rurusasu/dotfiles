@@ -224,6 +224,67 @@ Describe 'ChezmoiHandler' {
         }
     }
 
+    Context 'Apply - source repository initialization' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
+            }
+            Mock Write-Host { }
+        }
+
+        It 'should initialize source repository when source-path does not exist' {
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -eq "C:\Users\rurus\.local\share\chezmoi") { return $false }
+                return $true
+            }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return "chezmoi version 2.45.0"
+                }
+                if ($Arguments.Count -ge 1 -and $Arguments[0] -eq "source-path") {
+                    return "C:\Users\rurus\.local\share\chezmoi"
+                }
+            }
+
+            $handler.CanApply($ctx) | Should -Be $true
+            $handler.Apply($ctx) | Out-Null
+
+            Should -Invoke Invoke-Chezmoi -ParameterFilter {
+                $Arguments.Count -ge 4 -and
+                $Arguments[0] -eq "init" -and
+                $Arguments[1] -eq "rurusasu/dotfiles" -and
+                $Arguments[2] -eq "--source-path" -and
+                $Arguments[3] -eq "chezmoi"
+            } -Times 1
+        }
+
+        It 'should skip source repository init when source-path already exists' {
+            Mock Test-PathExist { return $true }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return "chezmoi version 2.45.0"
+                }
+                if ($Arguments.Count -ge 1 -and $Arguments[0] -eq "source-path") {
+                    return "C:\Users\rurus\.local\share\chezmoi"
+                }
+            }
+
+            $handler.CanApply($ctx) | Should -Be $true
+            $handler.Apply($ctx) | Out-Null
+
+            Should -Invoke Invoke-Chezmoi -ParameterFilter {
+                $Arguments.Count -ge 4 -and
+                $Arguments[0] -eq "init" -and
+                $Arguments[1] -eq "rurusasu/dotfiles" -and
+                $Arguments[2] -eq "--source-path" -and
+                $Arguments[3] -eq "chezmoi"
+            } -Times 0
+        }
+    }
+
     Context 'Apply - failure cases' {
         BeforeEach {
             Mock Get-ExternalCommand {
