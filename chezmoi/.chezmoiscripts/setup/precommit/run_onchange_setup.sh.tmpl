@@ -1,0 +1,41 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Setup pre-commit hooks for Linux/macOS
+# hash: {{ include "../.pre-commit-config.yaml" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+DOTFILES_REPO="$(dirname "$CHEZMOI_SOURCE")"
+
+echo "Setting up pre-commit hooks..."
+
+# Install pre-commit via pip if Python is available but pre-commit is not
+if command -v python3 &>/dev/null && ! command -v pre-commit &>/dev/null; then
+  echo "Installing pre-commit via pip..."
+  python3 -m pip install --user pre-commit || true
+fi
+
+# Setup pre-commit in dotfiles repository
+if [[ -f "$DOTFILES_REPO/.pre-commit-config.yaml" ]] && command -v pre-commit &>/dev/null; then
+  pushd "$DOTFILES_REPO" >/dev/null
+  # Unset core.hooksPath if set (common in devcontainers)
+  if git config --get core.hooksPath &>/dev/null; then
+    echo "Unsetting core.hooksPath for pre-commit compatibility..."
+    git config --system --unset-all core.hooksPath 2>/dev/null || true
+    git config --global --unset-all core.hooksPath 2>/dev/null || true
+    git config --local --unset-all core.hooksPath 2>/dev/null || true
+    # XDG Base Directory compliant location
+    git config --file ~/.config/git/config --unset-all core.hooksPath 2>/dev/null || true
+  fi
+  pre-commit install
+  echo "pre-commit hooks installed successfully"
+  popd >/dev/null
+elif [[ ! -f "$DOTFILES_REPO/.pre-commit-config.yaml" ]]; then
+  echo "No .pre-commit-config.yaml found in dotfiles repository"
+else
+  echo "pre-commit not found, skipping hook installation"
+fi
+
+echo "Pre-commit setup complete."
+{{ end -}}

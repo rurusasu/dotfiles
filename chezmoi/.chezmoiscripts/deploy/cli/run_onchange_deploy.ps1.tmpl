@@ -1,0 +1,35 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy CLI tool configurations for Windows
+# hash: {{ include "cli/starship/starship.toml" | sha256sum }}{{ include "cli/fd/ignore" | sha256sum }}{{ include "cli/ripgrep/config" | sha256sum }}{{ include "cli/ghq/config" | sha256sum }}{{ include "cli/zoxide/env" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-File {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (Test-Path -LiteralPath $Source -PathType Leaf) {
+    $destDir = Split-Path -Parent $Destination
+    if (-not (Test-Path -LiteralPath $destDir)) {
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    Write-Host "Deployed: $Destination"
+  }
+}
+
+Write-Host "Deploying CLI tool configurations..."
+
+Deploy-File "$ChezmoiSource\cli\starship\starship.toml" "$HomeDir\.config\starship.toml"
+Deploy-File "$ChezmoiSource\cli\fd\ignore" "$HomeDir\.config\fd\ignore"
+Deploy-File "$ChezmoiSource\cli\ripgrep\config" "$HomeDir\.config\ripgrep\config"
+Deploy-File "$ChezmoiSource\cli\ghq\config" "$HomeDir\.config\ghq\config"
+Deploy-File "$ChezmoiSource\cli\zoxide\env" "$HomeDir\.config\zoxide\env"
+
+Write-Host "CLI tool configurations deployed."
+{{ end -}}

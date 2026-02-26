@@ -1,0 +1,140 @@
+# Codex execpolicy rules (Starlark)
+# Based on chezmoi/dot_claude/settings.json (deny/ask mapped to forbidden/prompt).
+
+# --- Forbidden: destructive or sensitive ---
+prefix_rule(
+    pattern = ["sudo"],
+    decision = "forbidden",
+    justification = "Avoid sudo in automated runs.",
+)
+
+prefix_rule(
+    pattern = ["rm"],
+    decision = "forbidden",
+    justification = "Avoid destructive deletes; prefer safer alternatives or manual review.",
+    match = ["rm -rf .", "rm -rf /", "rm -r *"],
+)
+
+prefix_rule(
+    pattern = ["curl"],
+    decision = "forbidden",
+    justification = "Network fetch requires explicit approval.",
+)
+
+prefix_rule(
+    pattern = ["wget"],
+    decision = "forbidden",
+    justification = "Network fetch requires explicit approval.",
+)
+
+prefix_rule(
+    pattern = ["git", "pop"],
+    decision = "forbidden",
+    justification = "History rewrite/unsafe operation.",
+)
+
+prefix_rule(
+    pattern = ["git", "pull"],
+    decision = "forbidden",
+    justification = "Pull can change working tree unexpectedly.",
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Pushing requires manual review.",
+)
+
+prefix_rule(
+    pattern = ["git", "rm"],
+    decision = "forbidden",
+    justification = "Destructive change; require manual review.",
+)
+
+prefix_rule(
+    pattern = ["git", "rebase"],
+    decision = "forbidden",
+    justification = "Rewrites history.",
+)
+
+prefix_rule(
+    pattern = ["git", "reset"],
+    decision = "forbidden",
+    justification = "Resets can discard work.",
+)
+
+prefix_rule(
+    pattern = ["git", "restore"],
+    decision = "forbidden",
+    justification = "Restore can discard work.",
+)
+
+prefix_rule(
+    pattern = ["git", "revert"],
+    decision = "forbidden",
+    justification = "Requires manual review.",
+)
+
+prefix_rule(
+    pattern = ["git", "stash"],
+    decision = "forbidden",
+    justification = "Stash requires manual review.",
+)
+
+# --- Prompt: ask before risky actions ---
+prefix_rule(
+    pattern = ["git", "checkout"],
+    decision = "prompt",
+    justification = "Confirm before switching branches.",
+    match = ["git checkout main", "git checkout -b feature/test"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "Confirm before creating commits.",
+    match = ["git commit -m \"msg\""],
+)
+
+# --- Allow: safe read-only commands ---
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Read-only status check.",
+)
+
+prefix_rule(
+    pattern = ["git", "diff"],
+    decision = "allow",
+    justification = "Read-only diff.",
+)
+
+prefix_rule(
+    pattern = ["ls"],
+    decision = "allow",
+    justification = "Read-only listing.",
+)
+
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "Read-only search.",
+)
+
+prefix_rule(
+    pattern = ["cat"],
+    decision = "allow",
+    justification = "Read-only view.",
+)
+
+prefix_rule(
+    pattern = ["pwd"],
+    decision = "allow",
+    justification = "Read-only path display.",
+)
+
+prefix_rule(
+    pattern = ["whoami"],
+    decision = "allow",
+    justification = "Read-only identity check.",
+)

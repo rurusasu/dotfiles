@@ -1,13 +1,37 @@
 {
   // Zed settings - uses JSONC format (comments allowed)
-  "theme": "Gruvbox Dark Hard",
+  // Extensions - auto-install listed extensions, unlisted ones are removed
+  "auto_install_extensions": {
+    "github-theme": true,
+    "powershell": true,
+    "dprint": true,
+    "nix": true,
+    "toml": true,
+    "lua": true,
+    "oxc": true,
+    "ruff": true,
+    "python-refactoring": true,
+    "material-icon-theme": true,
+    "typos": true,
+    "github-actions": true,
+    "comments-highlighter": true,
+    "dockerfile": true,
+    "docker-compose": false,
+    "mcp-server-github": false,
+    "mcp-server-linear": false
+  },
+  "icon_theme": {
+    "mode": "dark",
+    "light": "Material Icon Theme",
+    "dark": "Material Icon Theme"
+  },
+  "theme": "GitHub Dark Dimmed",
   "ui_font_size": 14,
   "buffer_font_size": 12,
   "buffer_font_family": "Consolas",
-
+  // Vim mode
+  "vim_mode": false,
   // Editor settings
-  "tab_size": 2,
-  "hard_tabs": false,
   "format_on_save": "on",
   "formatter": "language_server",
   "show_whitespaces": "all",
@@ -18,6 +42,7 @@
   "scrollbar": {
     "show": "auto"
   },
+  "seed_search_query_from_cursor": "always",
   "gutter": {
     "line_numbers": true,
     "code_actions": true,
@@ -31,7 +56,11 @@
     "enabled": true
   },
   "soft_wrap": "editor_width",
-
+  // Tab display stabilization (Zed has no fixed tab width setting)
+  "max_tabs": 20,
+  "tabs": {
+    "show_close_button": "always"
+  },
   // Terminal settings
   "terminal": {
     "shell": {
@@ -39,9 +68,9 @@
     },
     "font_size": 13,
     "line_height": "comfortable",
-    "copy_on_select": false
+    "copy_on_select": false,
+    "vim_mode": false
   },
-
   // File settings
   "file_scan_exclusions": [
     "**/.git",
@@ -52,9 +81,6 @@
     "**/dist",
     "**/.DS_Store"
   ],
-  "remove_trailing_whitespace_on_save": true,
-  "ensure_final_newline_on_save": true,
-
   // Git settings
   "git": {
     "git_gutter": "tracked_files",
@@ -62,20 +88,17 @@
       "enabled": true
     }
   },
-
   // Telemetry
   "telemetry": {
     "diagnostics": false,
     "metrics": false
   },
-
   // Project panel
   "project_panel": {
     "dock": "left",
     "auto_reveal_entries": true,
     "auto_fold_dirs": true
   },
-
   // Language-specific settings
   "languages": {
     "JavaScript": {
@@ -136,10 +159,10 @@
       }
     },
     "PowerShell": {
-      "tab_size": 4,
       "formatter": "language_server"
     },
     "Nix": {
+      "language_servers": ["nixd"],
       "formatter": {
         "external": {
           "command": "nixfmt",
@@ -154,12 +177,85 @@
           "arguments": ["-"]
         }
       }
+    },
+    "Python": {
+      "format_on_save": "on",
+      "formatter": "language_server",
+      "language_servers": ["ty", "ruff", "!basedpyright", "!pyright"],
+      "soft_wrap": "preferred_line_length",
+      "preferred_line_length": 88
+    },
+    "Dockerfile": {
+      "format_on_save": "on",
+      "formatter": "language_server"
+    },
+    "Jupyter": {
+      "format_on_save": "on",
+      "formatter": "language_server",
+      "language_servers": ["ty", "ruff", "!basedpyright", "!pyright"]
     }
   },
-
-  // Assistant (AI) settings
-  "assistant": {
-    "enabled": true,
-    "version": "2"
+  // LSP settings
+  "lsp": {
+    "nixd": {
+      "initialization_options": {
+        "formatting": {
+          "command": ["nixfmt"]
+        },
+        "options": {
+          "nixos": {
+            "expr": "(builtins.getFlake \"/home/vscode/.dotfiles\").nixosConfigurations.nixos.options"
+          }
+        }
+      }
+    },
+    "ty": {
+      "initialization_options": {
+        "settings": {
+          "diagnosticMode": "openFilesOnly",
+          "inlayHints": {
+            "variableTypes": true,
+            "callArgumentNames": true,
+            "genericTypes": true
+          }
+        }
+      }
+    },
+    "typos": {
+      "initialization_options": {
+        "config": "_typos.toml",
+        "diagnosticSeverity": "Information"
+      }
+    },
+    "ruff": {
+      "initialization_options": {
+        "settings": {
+          "lineLength": 88,
+          "lint": {
+            "preview": true
+          },
+          "format": {
+            "preview": true
+          },
+          "organizeImports": true,
+          "fixAll": true,
+          "codeAction": {
+            "fixViolation": {
+              "enable": true
+            },
+            "disableRuleComment": {
+              "enable": true
+            }
+          }
+        }
+      }
+    }
+  },
+  // Agent (AI) settings
+  "agent": {
+    "default_model": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-20250514"
+    }
   }
 }

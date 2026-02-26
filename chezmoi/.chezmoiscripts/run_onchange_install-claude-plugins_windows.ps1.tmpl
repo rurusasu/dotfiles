@@ -1,0 +1,31 @@
+#!/usr/bin/env pwsh
+# Claude Code プラグイン マーケットプレース インストールスクリプト
+# Generated from: {{ range .claude_marketplaces }}{{ .repo }} {{ end }}
+
+$gitCmd = "git"
+$marketplacesDir = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces"
+$gitNonInteractive = @(
+    "-c", "credential.interactive=never",
+    "-c", "core.askPass="
+)
+
+# Ensure directory exists
+if (-not (Test-Path -Path $marketplacesDir)) {
+    New-Item -ItemType Directory -Force -Path $marketplacesDir | Out-Null
+}
+
+{{ range .claude_marketplaces -}}
+# Clone or update {{ .name }}
+$targetDir = Join-Path $marketplacesDir "{{ .name }}"
+if (-not (Test-Path -Path $targetDir)) {
+    Write-Host "Cloning {{ .name }}..."
+    & $gitCmd @gitNonInteractive clone "https://github.com/{{ .repo }}.git" $targetDir
+}
+else {
+    Write-Host "Updating {{ .name }}..."
+    Push-Location $targetDir
+    try { & $gitCmd @gitNonInteractive pull --ff-only } finally { Pop-Location }
+}
+
+{{ end -}}
+Write-Host "Claude Code marketplaces installed at: $marketplacesDir"

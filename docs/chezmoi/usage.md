@@ -8,16 +8,16 @@
 winget install -e --id twpayne.chezmoi
 ```
 
-### Linux/WSL
+### Linux/WSL (NixOS)
 
-NixOS の場合は `nix profile` または Home Manager で管理。
+NixOS では `nixos-rebuild switch` で chezmoi が自動インストールされます（`nix/core/cli.nix` で定義）。
 
 ```bash
-# Nix profile
-nix profile install nixpkgs#chezmoi
+# install.ps1 実行後は chezmoi が使える状態
+chezmoi --version
 
-# または直接インストール
-sh -c "$(curl -fsLS get.chezmoi.io)"
+# 手動で chezmoi を追加インストールしたい場合
+nix profile install nixpkgs#chezmoi
 ```
 
 ## 適用方法

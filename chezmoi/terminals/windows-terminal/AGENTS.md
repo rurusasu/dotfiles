@@ -2,6 +2,10 @@
 
 Windows Terminal is the modern terminal for Windows.
 
+## Documentation
+
+- [Keybinding Policy](../../../docs/chezmoi/keybindings.md)
+
 ## Files
 
 | File            | Deployed To                                                                     |

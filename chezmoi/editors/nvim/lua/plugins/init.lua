@@ -56,7 +56,12 @@ return {
             indent = { enable = true },
         },
         config = function(_, opts)
-            require("nvim-treesitter.configs").setup(opts)
+            local ok, ts_configs = pcall(require, "nvim-treesitter.configs")
+            if not ok then
+                vim.notify("nvim-treesitter is not available. Run :Lazy sync and restart Neovim.", vim.log.levels.WARN)
+                return
+            end
+            ts_configs.setup(opts)
         end,
     },
 

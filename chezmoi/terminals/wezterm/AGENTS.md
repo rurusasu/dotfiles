@@ -2,6 +2,10 @@
 
 WezTerm is a GPU-accelerated cross-platform terminal emulator.
 
+## Documentation
+
+- [Keybinding Policy](../../../docs/chezmoi/keybindings.md)
+
 ## Files
 
 | File          | Deployed To                     |
@@ -15,13 +19,14 @@ WezTerm is a GPU-accelerated cross-platform terminal emulator.
 - **Color scheme**: Gruvbox Dark (custom)
 - **Font**: Consolas, 12pt
 - **Opacity**: 85%
-- **Window decorations**: Resize only
+- **Window decorations**: Title bar + resize (native window controls visible)
 
 ### Features
 
 - IME support enabled
 - Tab bar (hidden when single tab)
-- Fancy tab bar disabled
+- Close button on tabs is available with fancy tab bar; `show_close_tab_button_in_tabs` is nightly-only
+- Fancy tab bar enabled
 
 ### Platform Detection
 

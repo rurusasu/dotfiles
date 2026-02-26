@@ -58,7 +58,7 @@ Self-hosted GitHub Actions runner setup for WSL/NixOS.
 **Usage:**
 
 ```bash
-REPO=ai-mate-inc/dotfiles \
+REPO=rurusasu/dotfiles \
 RUNNER_NAME="$(hostname)-runner" \
 scripts/sh/runner-setup.sh
 ```

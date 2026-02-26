@@ -71,7 +71,7 @@ chezmoi で Windows に設定を適用。詳細は [docs/chezmoi/](./docs/chezmo
 
 ```powershell
 # GitHub から直接取得（推奨）
-chezmoi init ai-mate-inc/dotfiles --source-path chezmoi && chezmoi apply
+chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 
 # 同梱スクリプトで一括適用
 .\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi

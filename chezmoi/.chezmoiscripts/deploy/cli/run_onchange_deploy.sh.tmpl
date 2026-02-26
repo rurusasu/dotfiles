@@ -1,0 +1,31 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy CLI tool configurations for Linux/macOS
+# hash: {{ include "cli/starship/starship.toml" | sha256sum }}{{ include "cli/fd/ignore" | sha256sum }}{{ include "cli/ripgrep/config" | sha256sum }}{{ include "cli/ghq/config" | sha256sum }}{{ include "cli/zoxide/env" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying CLI tool configurations..."
+
+deploy_file "$CHEZMOI_SOURCE/cli/starship/starship.toml" "$HOME_DIR/.config/starship.toml"
+deploy_file "$CHEZMOI_SOURCE/cli/fd/ignore" "$HOME_DIR/.config/fd/ignore"
+deploy_file "$CHEZMOI_SOURCE/cli/ripgrep/config" "$HOME_DIR/.config/ripgrep/config"
+deploy_file "$CHEZMOI_SOURCE/cli/ghq/config" "$HOME_DIR/.config/ghq/config"
+deploy_file "$CHEZMOI_SOURCE/cli/zoxide/env" "$HOME_DIR/.config/zoxide/env"
+
+echo "CLI tool configurations deployed."
+{{ end -}}

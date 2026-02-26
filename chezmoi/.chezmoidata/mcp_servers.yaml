@@ -1,0 +1,133 @@
+# Unified MCP Server Configuration
+# Used by: Claude Code, Codex CLI, Cursor, Gemini CLI
+#
+# Each tool has different config formats, so templates convert this data accordingly.
+
+mcp_servers:
+  # Context7 - Contextual documentation search
+  - name: context7
+    command: bunx
+    args:
+      - "-y"
+      - "@upstash/context7-mcp@latest"
+    startup_timeout_sec: 30
+    # Supported by: codex, claude
+    supports:
+      - codex
+      - claude
+
+  # Linear - Project management
+  - name: linear
+    # URL-based MCP (remote)
+    url: "https://mcp.linear.app/mcp"
+    # For tools that need command-based config
+    command: bunx
+    args:
+      - "-y"
+      - "mcp-remote"
+      - "https://mcp.linear.app/mcp"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Serena - Code intelligence
+  - name: serena
+    command: uvx
+    args:
+      - "--from"
+      - "git+https://github.com/oraios/serena"
+      - "serena"
+      - "start-mcp-server"
+    startup_timeout_sec: 60
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # GitHub - GitHub API integration
+  - name: github
+    command: bunx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-github"
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GH_TOKEN}"
+    supports:
+      - cursor
+      - gemini
+
+  # DeepWiki - Wiki and docs search
+  - name: deepwiki
+    # URL-based MCP (remote) - Codex uses native Streamable HTTP
+    url: "https://mcp.deepwiki.com/mcp"
+    # For tools that need command-based config (stdio bridge)
+    command: bunx
+    args:
+      - "-y"
+      - "mcp-remote"
+      - "https://mcp.deepwiki.com/mcp"
+    startup_timeout_sec: 30
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Tavily - AI-powered web search and extraction
+  - name: tavily
+    command: npx
+    args:
+      - "-y"
+      - "tavily-mcp@latest"
+    env:
+      TAVILY_API_KEY: "${TAVILY_API_KEY}"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Draw.io Official - Open diagrams in draw.io editor (browser)
+  - name: drawio
+    command: npx
+    args:
+      - "-y"
+      - "@drawio/mcp"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Sentry - Error monitoring and debugging (OAuth via remote URL)
+  - name: sentry
+    # URL-based MCP (remote) - Codex uses native Streamable HTTP
+    url: "https://mcp.sentry.dev/mcp"
+    # For tools that need command-based config (stdio bridge)
+    command: bunx
+    args:
+      - "-y"
+      - "mcp-remote"
+      - "https://mcp.sentry.dev/mcp"
+    startup_timeout_sec: 30
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Cloud Run - Google Cloud Run integration
+  - name: cloud-run
+    command: bunx
+    args:
+      - "-y"
+      - "@google-cloud/cloud-run-mcp"
+    startup_timeout_sec: 120
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini

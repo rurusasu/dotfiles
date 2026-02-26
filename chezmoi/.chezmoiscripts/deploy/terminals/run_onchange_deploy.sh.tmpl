@@ -1,0 +1,27 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy terminal configurations for Linux/macOS
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying terminal configurations..."
+
+deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
+
+echo "Terminal configurations deployed."
+{{ end -}}

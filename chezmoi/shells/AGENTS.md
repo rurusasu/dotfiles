@@ -1,14 +1,20 @@
 # Shell Configurations
 
-Shell configuration files for bash, zsh, and POSIX profile.
+Shell configuration files for bash, zsh, PowerShell, and POSIX profile.
+
+## Documentation
+
+- [Keybinding Policy](../../docs/chezmoi/keybindings.md)
 
 ## Files
 
-| File      | Deployed To  | Description                 |
-| --------- | ------------ | --------------------------- |
-| `bashrc`  | `~/.bashrc`  | Bash shell configuration    |
-| `zshrc`   | `~/.zshrc`   | Zsh shell configuration     |
-| `profile` | `~/.profile` | POSIX profile (login shell) |
+| File                               | Deployed To                                                      | Description                    |
+| ---------------------------------- | ---------------------------------------------------------------- | ------------------------------ |
+| `bashrc`                           | `~/.bashrc`                                                      | Bash shell configuration       |
+| `zshrc`                            | `~/.zshrc`                                                       | Zsh shell configuration        |
+| `profile`                          | `~/.profile`                                                     | POSIX profile (login shell)    |
+| `Microsoft.PowerShell_profile.ps1` | `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`        | PowerShell 7 profile           |
+| `Microsoft.PowerShell_profile.ps1` | `~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1` | Windows PowerShell 5.1 profile |
 
 ## Features
 
@@ -23,15 +29,24 @@ Shell configuration files for bash, zsh, and POSIX profile.
 
 - Kubernetes aliases (k, kgn, kgp, kgs)
 - NixOS rebuild aliases (nrs, nrt, nrb)
-- Advanced fzf keybindings (Alt+Z, Alt+D, Alt+T, Alt+R)
+
+### Interactive keybindings (bash/zsh/powershell)
+
+- zoxide jump: `Alt+Z`
+- fzf directory search: `Alt+D`
+- fzf file insert: `Alt+T`
+- fzf history search: `Alt+R`
 
 ## Shell Integration
 
-Shell integrations for fzf and zoxide are managed by **Nix Home Manager**, not these files directly. These files provide:
+- zsh/bash: integrations are primarily managed via shell files in this directory
+- PowerShell: integrations are managed by `Microsoft.PowerShell_profile.ps1`
+
+These files provide:
 
 - Environment variables
 - Aliases
-- Custom functions
+- Custom functions / key handlers
 
 ## Platform Notes
 

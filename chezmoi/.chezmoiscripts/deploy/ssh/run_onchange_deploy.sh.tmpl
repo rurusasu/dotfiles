@@ -1,0 +1,27 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy SSH configuration for Linux/macOS
+# hash: {{ include "ssh/config.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying SSH configuration..."
+
+deploy_file "$CHEZMOI_SOURCE/ssh/config" "$HOME_DIR/.ssh/config"
+
+echo "SSH configuration deployed."
+{{ end -}}

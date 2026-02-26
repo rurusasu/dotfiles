@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "model": "auto",
+  "editor": {
+    "vimMode": false
+  },
+  "permissions": {
+    "allow": ["Read(**/*)", "Write(**/*)", "Shell(*)"],
+    "deny": [
+      "Shell(sudo)",
+      "Shell(curl)",
+      "Shell(wget)",
+      "Shell(rm)",
+      "Read(.env*)",
+      "Write(.env*)",
+      "Read(secrets/**)",
+      "Write(secrets/**)",
+      "Read(**/*id_rsa*)",
+      "Read(**/*id_ed25519*)",
+      "Read(**/*.pem)",
+      "Write(**/*.pem)",
+      "Read(**/*.key)",
+      "Write(**/*.key)",
+      "Write(pyproject.toml)",
+      "Write(requirements.txt)",
+      "Write(uv.lock)"
+    ]
+  },
+  "network": {
+    "useHttp1ForAgent": false
+  },
+  "attribution": {
+    "attributeCommitsToAgent": true,
+    "attributePRsToAgent": true
+  },
+  "mcpServers": {
+{{- $first := true }}
+{{- if hasKey . "mcp_servers" }}
+{{- range .mcp_servers }}
+{{- if has "cursor" .supports }}
+{{- if not $first }},{{ end }}
+{{- $first = false }}
+    "{{ .name }}": {
+      "command": "{{ .command }}",
+      "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
+{{- if hasKey . "env" }},
+      "env": {
+{{- $envFirst := true }}
+{{- range $key, $value := .env }}
+{{- if not $envFirst }},{{ end }}
+{{- $envFirst = false }}
+        "{{ $key }}": "{{ $value }}"
+{{- end }}
+      }
+{{- end }}
+    }
+{{- end }}
+{{- end }}
+{{- end }}
+  }
+}

@@ -1,0 +1,47 @@
+# nix.rules
+# Rules for Dotfiles, Nix, and WSL management (Repo specific)
+
+# Allow Taskfile execution (central to this repo)
+prefix_rule(
+    pattern = ["task"],
+    decision = "allow",
+    justification = "Taskfile is the main entry point for operations in this repository.",
+    match = ["task", "task build", "task test"],
+    not_match = [],
+)
+
+# Allow Nix commands
+prefix_rule(
+    pattern = ["nix"],
+    decision = "allow",
+    justification = "Nix commands are required for environment management.",
+    match = ["nix fmt", "nix flake check", "nix develop", "nix build"],
+    not_match = [],
+)
+
+# Allow WSL interaction (frequently used in Taskfile)
+prefix_rule(
+    pattern = ["wsl"],
+    decision = "allow",
+    justification = "WSL commands are used to interface with the NixOS distro.",
+    match = ["wsl -d NixOS", "wsl --list"],
+    not_match = [],
+)
+
+# Allow Chezmoi
+prefix_rule(
+    pattern = ["chezmoi"],
+    decision = "allow",
+    justification = "Chezmoi is used for dotfiles management.",
+    match = ["chezmoi apply", "chezmoi diff"],
+    not_match = [],
+)
+
+# Allow Git typical operations (that are not covered by safety.rules)
+prefix_rule(
+    pattern = ["git", ["status", "diff", "add", "commit", "pull", "fetch", "log"]],
+    decision = "allow",
+    justification = "Standard safe git operations.",
+    match = ["git status", "git add .", "git commit -m 'fix'", "git pull"],
+    not_match = ["git push -f"],  # Blocked by safety.rules
+)

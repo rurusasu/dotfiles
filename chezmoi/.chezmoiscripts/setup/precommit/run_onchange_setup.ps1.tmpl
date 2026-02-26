@@ -1,0 +1,71 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Setup pre-commit hooks for Windows
+# hash: {{ include "../.pre-commit-config.yaml" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$DotfilesRepo = Split-Path -Parent $ChezmoiSource
+
+Write-Host "Setting up pre-commit hooks..."
+
+# Install pre-commit via pip if Python is available but pre-commit is not
+if ((Get-Command python -ErrorAction SilentlyContinue) -and -not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+  Write-Host "Installing pre-commit via pip..."
+  try {
+    python -m pip install --user pre-commit 2>&1 | Out-Null
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
+    Write-Host "pre-commit installed successfully"
+  }
+  catch {
+    Write-Host "Error installing pre-commit: $_"
+  }
+}
+
+# Setup pre-commit in dotfiles repository
+if ((Test-Path "$DotfilesRepo\.pre-commit-config.yaml") -and (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+  Push-Location $DotfilesRepo
+  try {
+    pre-commit install
+    Write-Host "pre-commit hooks installed successfully"
+  }
+  catch {
+    Write-Host "Error installing pre-commit hooks: $_"
+  }
+  finally {
+    Pop-Location
+  }
+} elseif (-not (Test-Path "$DotfilesRepo\.pre-commit-config.yaml")) {
+  Write-Host "No .pre-commit-config.yaml found in dotfiles repository"
+} elseif (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+  Write-Host "pre-commit not found on Windows. Trying WSL..."
+  if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    try {
+      $DotfilesRepoUnix = $DotfilesRepo.Replace('\', '/')
+      $WslRepoPath = & wsl.exe wslpath -a -- "$DotfilesRepoUnix"
+      if ($LASTEXITCODE -ne 0 -or -not $WslRepoPath) {
+        if ($DotfilesRepo -match '^[A-Za-z]:\\') {
+          $drive = $DotfilesRepo.Substring(0, 1).ToLower()
+          $rest = $DotfilesRepo.Substring(2).Replace('\', '/')
+          $WslRepoPath = "/mnt/$drive$rest"
+        } else {
+          throw "wslpath failed for $DotfilesRepo"
+        }
+      }
+      & wsl.exe -e bash -lc "cd '$WslRepoPath' && pre-commit install"
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "pre-commit hooks installed via WSL"
+      } else {
+        Write-Host "WSL pre-commit install failed. Ensure pre-commit is installed in WSL."
+      }
+    }
+    catch {
+      Write-Host "WSL pre-commit setup error: $_"
+    }
+  } else {
+    Write-Host "WSL not available, skipping hook installation"
+  }
+}
+
+Write-Host "Pre-commit setup complete."
+{{ end -}}

@@ -1,0 +1,30 @@
+{{ if eq .chezmoi.os "windows" -}}
+# NixOS rebuild script
+# This script runs when nix/ directory changes
+#
+# Hash of nix directory (triggers rebuild on change):
+# managed-by-chezmoi
+
+$ErrorActionPreference = "Continue"
+
+Write-Host ""
+Write-Host "=== NixOS Rebuild ===" -ForegroundColor Cyan
+
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    $null = & wsl.exe -d NixOS -- bash -c "exit 0" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Running nixos-rebuild switch..."
+        # Non-interactive sudo: fail fast instead of blocking for password input.
+        & wsl.exe -d NixOS -- bash -lc "cd ~/.dotfiles; sudo -n nixos-rebuild switch --flake . --impure"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "NixOS rebuild completed successfully" -ForegroundColor Green
+        } else {
+            Write-Host "NixOS rebuild failed (requires password or encountered an error)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "NixOS WSL not found, skipping rebuild"
+    }
+} else {
+    Write-Host "WSL not available, skipping NixOS rebuild"
+}
+{{ end -}}

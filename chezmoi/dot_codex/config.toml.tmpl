@@ -1,0 +1,176 @@
+# Codex CLI 設定
+# 参照: https://developers.openai.com/codex/config-reference/
+
+# 使用するデフォルトモデル
+model = "gpt-5.3-codex"
+
+# モデルの推論努力を制御する
+model_reasoning_effort = "medium"
+
+# モデルの推論要約を制御する
+model_reasoning_summary = "auto"
+
+# GPT-5 ファミリー (Responses API) のテキストの冗長性:
+# low | medium | high (デフォルト: medium)
+model_verbosity = "medium"
+
+################################################################################
+# Instruction Overrides
+################################################################################
+
+# カスタム指示ファイルの読み込み (Copilot と統一)
+project_doc_fallback_filenames = [ "copilot-instructions.md" ]
+
+################################################################################
+# 通知設定
+################################################################################
+
+# コマンドの実行後に通知を表示する
+# notify = [ "bash", "-lc", "afplay /System/Library/Sounds/Ping.aiff" ]
+
+################################################################################
+# 承認とサンドボックス設定
+################################################################################
+
+# 承認ポリシー: "untrusted" (信頼できないコマンドのみ確認), "on-failure" (失敗時のみ確認), "on-request" (モデルが判断), "never" (常に確認しない - 危険)
+approval_policy = "on-request"
+
+# ツール呼び出しのファイルシステム/ネットワークサンドボックスポリシー:
+# "read-only" (デフォルト), "workspace-write", "danger-full-access" (サンドボックスなし - 極めて危険)
+sandbox_mode = "read-only"
+
+################################################################################
+# ウェブ検索
+################################################################################
+
+# ウェブ検索モード: disabled | cached | live。デフォルト: "cached"
+# cached はウェブ検索キャッシュ（OpenAI が管理するインデックス）から結果を返す。
+# live は最新のデータを取得する。--yolo やフルアクセスサンドボックス使用時は live がデフォルト。
+web_search = "live"
+
+################################################################################
+# 認証設定
+################################################################################
+
+# MCP OAuth 認証情報の優先保存先: auto (デフォルト) | file | keyring
+mcp_oauth_credentials_store = "auto"
+
+################################################################################
+# mcp 周りの設定
+################################################################################
+
+##########################################################
+# agent 周りの設定
+##########################################################
+
+# 出力から内部的な推論イベントを隠す (デフォルト: false)
+hide_agent_reasoning = false
+
+# 利用可能な場合、生の推論コンテンツを表示する (デフォルト: false)
+show_raw_agent_reasoning = false
+
+################################################################################
+# サンドボックス設定 (詳細)
+################################################################################
+
+[sandbox_workspace_write]
+# /tmp を除外する
+exclude_slash_tmp = true
+# $TMPDIR 環境変数を除外する
+exclude_tmpdir_env_var = true
+
+################################################################################
+# シェル環境ポリシー
+################################################################################
+
+[shell_environment_policy]
+# 含める環境変数
+include_only = [ "PATH", "HOME", "USER", "SHELL", "TERM" ]
+
+################################################################################
+# 特殊な機能
+################################################################################
+
+[features]
+# Windows サンドボックスを有効にする
+elevated_windows_sandbox = true
+# 繰り返しコマンドを高速化する
+shell_snapshot = true
+# サブエージェント (Multi-agent mode)
+multi_agent = true
+
+# 開発中機能の警告を抑制する
+suppress_unstable_features_warning = true
+# ChatGPT Apps 連携
+apps = false
+
+################################################################################
+# スキル設定
+################################################################################
+
+# スキルは `~/.codex/skills/<skill-name>/SKILL.md` を基準に解決される。
+# この repo では chezmoi 管理で配布する前提で、config 側に明示登録する。
+[[skills.config]]
+name = "python-clean-architecture"
+path = "~/.codex/skills/python-clean-architecture"
+enabled = true
+
+[[skills.config]]
+name = "python-docstring"
+path = "~/.codex/skills/python-docstring"
+enabled = true
+
+################################################################################
+# エージェント設定
+################################################################################
+
+# この repo では chezmoi を source of truth としてエージェントを共有する。
+# 追加手順:
+# 1) `chezmoi/dot_codex/agents/<role>.toml` を作成
+# 2) 下記に `[agents.<role>]` を追加し、`description` と `config_file` を必ず設定
+# 3) `config_file` は展開先 `~/.codex/agents/<role>.toml` を指すこと
+# 4) スキル依存がある場合は `[[skills.config]]` もこのファイルで管理する
+# 詳細: `chezmoi/dot_codex/agents/AGENTS.md`
+[agents]
+# セッションあたりの最大エージェントスレッド数 (デフォルト: 6)
+max_threads = 12
+
+# カスタムエージェント: 高速実装用
+[agents.fast_worker]
+description = "Fast scoped implementation agent."
+config_file = "~/.codex/agents/fast_worker.toml"
+
+# カスタムエージェント: Python 実装専任
+[agents.python_coding]
+description = "Python implementation-only agent (no test execution)."
+config_file = "~/.codex/agents/python_coding.toml"
+
+################################################################################
+# MCP サーバー設定 (Generated from .chezmoidata/mcp_servers.yaml)
+################################################################################
+
+[mcp_servers]
+{{- if hasKey . "mcp_servers" }}
+{{- range .mcp_servers }}
+{{- if has "codex" .supports }}
+
+{{- if hasKey . "url" }}
+[mcp_servers.{{ .name }}]
+url = "{{ .url }}"
+{{- else }}
+[mcp_servers.{{ .name }}]
+command = "{{ .command }}"
+args = [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
+{{- if hasKey . "startup_timeout_sec" }}
+startup_timeout_sec = {{ .startup_timeout_sec }}
+{{- end }}
+{{- if hasKey . "env" }}
+[mcp_servers.{{ .name }}.env]
+{{- range $key, $value := .env }}
+{{ $key }} = "{{ $value }}"
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

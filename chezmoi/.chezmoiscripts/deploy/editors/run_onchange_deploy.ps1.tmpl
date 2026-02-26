@@ -1,0 +1,61 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy editor configurations for Windows
+# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-File {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (Test-Path -LiteralPath $Source -PathType Leaf) {
+    $destDir = Split-Path -Parent $Destination
+    if (-not (Test-Path -LiteralPath $destDir)) {
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    Write-Host "Deployed: $Destination"
+  }
+}
+
+Write-Host "Deploying editor configurations..."
+
+# VS Code
+$VSCodeConfig = "$env:APPDATA\Code\User"
+Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeConfig\keybindings.json"
+
+# VS Code Insiders
+$VSCodeInsidersConfig = "$env:APPDATA\Code - Insiders\User"
+Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeInsidersConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeInsidersConfig\keybindings.json"
+
+# Cursor
+$CursorConfig = "$env:APPDATA\Cursor\User"
+Deploy-File "$ChezmoiSource\editors\cursor\settings.json" "$CursorConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\cursor\keybindings.json" "$CursorConfig\keybindings.json"
+
+# Zed
+$ZedConfig = "$env:APPDATA\Zed"
+Deploy-File "$ChezmoiSource\editors\zed\settings.json" "$ZedConfig\settings.json"
+Deploy-File "$ChezmoiSource\editors\zed\keymap.json" "$ZedConfig\keymap.json"
+
+# Neovim
+$NvimConfig = "$env:LOCALAPPDATA\nvim"
+$NvimSource = "$ChezmoiSource\editors\nvim"
+if (Test-Path -LiteralPath $NvimSource) {
+  Write-Host "Deploying Neovim configuration..."
+  if (-not (Test-Path -LiteralPath $NvimConfig)) {
+    New-Item -ItemType Directory -Path $NvimConfig -Force | Out-Null
+  }
+  Copy-Item -Path "$NvimSource\*" -Destination $NvimConfig -Recurse -Force
+  Write-Host "Deployed: $NvimConfig"
+}
+
+Write-Host "Editor configurations deployed."
+{{ end -}}

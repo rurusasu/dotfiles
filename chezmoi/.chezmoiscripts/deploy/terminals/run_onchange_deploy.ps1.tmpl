@@ -1,0 +1,37 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy terminal configurations for Windows
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-File {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (Test-Path -LiteralPath $Source -PathType Leaf) {
+    $destDir = Split-Path -Parent $Destination
+    if (-not (Test-Path -LiteralPath $destDir)) {
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    Write-Host "Deployed: $Destination"
+  }
+}
+
+Write-Host "Deploying terminal configurations..."
+
+Deploy-File "$ChezmoiSource\terminals\wezterm\wezterm.lua" "$HomeDir\.config\wezterm\wezterm.lua"
+
+# Windows Terminal
+$WTSettingsDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
+if (Test-Path -LiteralPath $WTSettingsDir) {
+  Deploy-File "$ChezmoiSource\terminals\windows-terminal\settings.json" "$WTSettingsDir\settings.json"
+}
+
+Write-Host "Terminal configurations deployed."
+{{ end -}}

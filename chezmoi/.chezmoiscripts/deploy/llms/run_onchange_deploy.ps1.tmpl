@@ -1,0 +1,51 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy LLM tool configurations for Windows
+# hash: {{ include "dot_claude/settings.json.tmpl" | sha256sum }}{{ include "dot_claude/dot_claude.json.tmpl" | sha256sum }}{{ include "dot_claude/CLAUDE.md" | sha256sum }}{{ include "dot_codex/config.toml.tmpl" | sha256sum }}{{ include "dot_cursor/rules" | sha256sum }}{{ include "dot_cursor/cli-config.json.tmpl" | sha256sum }}{{ include "dot_gemini/settings.json.tmpl" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-Template {
+  param(
+    [string]$SourceTmpl,
+    [string]$Destination
+  )
+
+  $destDir = Split-Path -Parent $Destination
+  if (-not (Test-Path -LiteralPath $destDir)) {
+    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+  }
+  Get-Content -LiteralPath $SourceTmpl -Raw | chezmoi execute-template | Set-Content -LiteralPath $Destination -NoNewline
+  Write-Host "Deployed: $Destination"
+}
+
+function Deploy-File {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (Test-Path -LiteralPath $Source -PathType Leaf) {
+    $destDir = Split-Path -Parent $Destination
+    if (-not (Test-Path -LiteralPath $destDir)) {
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    Write-Host "Deployed: $Destination"
+  }
+}
+
+Write-Host "Deploying LLM tool configurations..."
+
+Deploy-Template "$ChezmoiSource\dot_claude\settings.json.tmpl" "$HomeDir\.claude\settings.json"
+Deploy-Template "$ChezmoiSource\dot_claude\dot_claude.json.tmpl" "$HomeDir\.claude\.claude.json"
+Deploy-File "$ChezmoiSource\dot_claude\CLAUDE.md" "$HomeDir\.claude\CLAUDE.md"
+Deploy-Template "$ChezmoiSource\dot_codex\config.toml.tmpl" "$HomeDir\.codex\config.toml"
+Deploy-File "$ChezmoiSource\dot_cursor\rules" "$HomeDir\.cursor\rules"
+Deploy-Template "$ChezmoiSource\dot_cursor\cli-config.json.tmpl" "$HomeDir\.cursor\cli-config.json"
+Deploy-Template "$ChezmoiSource\dot_gemini\settings.json.tmpl" "$HomeDir\.gemini\settings.json"
+
+Write-Host "LLM tool configurations deployed."
+{{ end -}}

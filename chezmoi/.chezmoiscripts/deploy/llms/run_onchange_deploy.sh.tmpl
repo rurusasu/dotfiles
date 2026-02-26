@@ -1,0 +1,42 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy LLM tool configurations for Linux/macOS
+# hash: {{ include "dot_claude/settings.json.tmpl" | sha256sum }}{{ include "dot_claude/dot_claude.json.tmpl" | sha256sum }}{{ include "dot_claude/CLAUDE.md" | sha256sum }}{{ include "dot_codex/config.toml.tmpl" | sha256sum }}{{ include "dot_cursor/rules" | sha256sum }}{{ include "dot_cursor/cli-config.json.tmpl" | sha256sum }}{{ include "dot_gemini/settings.json.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_template() {
+  local src_tmpl="$1"
+  local dst="$2"
+
+  mkdir -p "$(dirname "$dst")"
+  chezmoi execute-template < "$src_tmpl" > "$dst"
+  echo "Deployed: $dst"
+}
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying LLM tool configurations..."
+
+deploy_template "$CHEZMOI_SOURCE/dot_claude/settings.json.tmpl" "$HOME_DIR/.claude/settings.json"
+deploy_template "$CHEZMOI_SOURCE/dot_claude/dot_claude.json.tmpl" "$HOME_DIR/.claude/.claude.json"
+deploy_file "$CHEZMOI_SOURCE/dot_claude/CLAUDE.md" "$HOME_DIR/.claude/CLAUDE.md"
+deploy_template "$CHEZMOI_SOURCE/dot_codex/config.toml.tmpl" "$HOME_DIR/.codex/config.toml"
+deploy_file "$CHEZMOI_SOURCE/dot_cursor/rules" "$HOME_DIR/.cursor/rules"
+deploy_template "$CHEZMOI_SOURCE/dot_cursor/cli-config.json.tmpl" "$HOME_DIR/.cursor/cli-config.json"
+deploy_template "$CHEZMOI_SOURCE/dot_gemini/settings.json.tmpl" "$HOME_DIR/.gemini/settings.json"
+
+echo "LLM tool configurations deployed."
+{{ end -}}

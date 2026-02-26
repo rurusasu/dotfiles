@@ -24,9 +24,9 @@ export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
 
 # fd/fzf defaults (mirrors Nix defaults)
 FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"
-export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --type f . /"
+export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --absolute-path --type f . ."
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --type d . /"
+export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --absolute-path --type d . ."
 export FZF_DEFAULT_OPTS="--height=40% --layout=reverse --border --prompt='> '"
 
 # Starship prompt
@@ -57,6 +57,12 @@ else
 fi
 unset color_prompt
 
+# Emit OSC 7 so terminals can open split/tab in current directory
+__emit_osc7_cwd() {
+  printf '\033]7;file://%s%s\033\\' "$HOSTNAME" "${PWD}"
+}
+PROMPT_COMMAND="__emit_osc7_cwd${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+
 # Set xterm title
 case "$TERM" in
   xterm*|rxvt*)
@@ -69,6 +75,11 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
 
+# Task (taskfile.dev) completion
+if command -v task >/dev/null 2>&1; then
+  eval "$(task --completion bash)"
+fi
+
 # SSH agent
 if ! nc -z localhost 22 2>/dev/null; then
   eval "$(ssh-agent -s)" > /dev/null
@@ -80,3 +91,39 @@ __zoxide_zi_widget() {
   result="$(zoxide query -i)" && cd "$result"
 }
 bind -x '"\ez": __zoxide_zi_widget'
+
+# Alt+D: fzf directory search and cd
+__fzf_cd_widget() {
+  local dir
+  dir="$(fd $FD_DEFAULT_OPTS --absolute-path -t d . . | fzf)" || return
+  cd "$dir" || return
+
+  # Show cwd change immediately even if prompt redraw is delayed.
+  printf '\n%s\n' "$PWD"
+
+  READLINE_LINE=""
+  READLINE_POINT=0
+}
+bind -x '"\ed": __fzf_cd_widget'
+
+# Alt+T: fzf file/directory search and insert
+__fzf_file_widget() {
+  local selected
+  selected="$(fd $FD_DEFAULT_OPTS --absolute-path . . | fzf)"
+  if [[ -n "$selected" ]]; then
+    READLINE_LINE="${READLINE_LINE}${selected}"
+    READLINE_POINT=${#READLINE_LINE}
+  fi
+}
+bind -x '"\et": __fzf_file_widget'
+
+# Alt+R: fzf command history search
+__fzf_history_widget() {
+  local selected
+  selected="$(history | sed 's/^ *[0-9]\+ *//' | fzf --tac)"
+  if [[ -n "$selected" ]]; then
+    READLINE_LINE="$selected"
+    READLINE_POINT=${#READLINE_LINE}
+  fi
+}
+bind -x '"\er": __fzf_history_widget'

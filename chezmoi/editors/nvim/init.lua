@@ -22,6 +22,7 @@ vim.g.maplocalleader = " "
 -- Load core settings
 require("config.options")
 require("config.keymaps")
+require("config.osc7").setup()
 
 -- Load plugins
 require("lazy").setup("plugins", {

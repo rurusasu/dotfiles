@@ -82,7 +82,7 @@ config.use_ime = true
 
 -- Window appearance
 config.window_background_opacity = 0.85
-config.window_decorations = "RESIZE"
+config.window_decorations = "TITLE|RESIZE"
 config.window_padding = {
     left = 8,
     right = 8,
@@ -93,9 +93,9 @@ config.window_padding = {
 -- Tab bar settings
 config.enable_tab_bar = true
 config.hide_tab_bar_if_only_one_tab = true
-config.use_fancy_tab_bar = false
+config.use_fancy_tab_bar = true
 config.tab_bar_at_bottom = false
-config.show_new_tab_button_in_tab_bar = false
+config.show_new_tab_button_in_tab_bar = true
 
 -- Leader key (CTRL+Space)
 config.leader = {
@@ -135,6 +135,8 @@ config.keys = {
 
     -- Misc
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
+    { key = "c", mods = "LEADER", action = act.CopyTo("Clipboard") },
+    { key = "v", mods = "LEADER", action = act.PasteFrom("Clipboard") },
     { key = "Space", mods = "LEADER", action = act.QuickSelect },
     { key = "F11", action = act.ToggleFullScreen },
 

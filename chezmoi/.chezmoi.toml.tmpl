@@ -1,0 +1,9 @@
+# chezmoi configuration
+# This file configures how chezmoi runs PowerShell scripts on Windows
+# Required to bypass execution policy restrictions for .chezmoiscripts
+
+sourceDir = {{ .chezmoi.sourceDir | quote }}
+
+[interpreters.ps1]
+    command = "powershell"
+    args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]

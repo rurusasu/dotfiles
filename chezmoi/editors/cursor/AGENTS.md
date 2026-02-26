@@ -2,6 +2,10 @@
 
 Cursor is an AI-powered code editor (VS Code fork).
 
+## Documentation
+
+- [Keybinding Policy](../../../docs/chezmoi/keybindings.md)
+
 ## Files
 
 | File               | Deployed To                                          | Purpose            |
@@ -21,7 +25,7 @@ Cursor uses the same configuration format as VS Code. Settings are largely ident
 
 Inherited from VS Code configuration:
 
-- Vim mode with relative line numbers
+- Editor-native keybindings (no Vim extension dependency)
 - Format on save
 - Prettier/Ruff formatters
 - Material Icon Theme

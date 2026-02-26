@@ -6,5 +6,37 @@
       "text": "\\\r\n"
     },
     "when": "terminalFocus"
+  },
+  {
+    "key": "ctrl+alt+h",
+    "command": "workbench.action.splitEditorRight"
+  },
+  {
+    "key": "ctrl+alt+v",
+    "command": "workbench.action.splitEditorDown"
+  },
+  {
+    "key": "ctrl+alt+x",
+    "command": "workbench.action.closeGroup"
+  },
+  {
+    "key": "ctrl+alt+w",
+    "command": "workbench.action.toggleEditorWidths"
+  },
+  {
+    "key": "ctrl+shift+h",
+    "command": "workbench.action.focusLeftGroup"
+  },
+  {
+    "key": "ctrl+shift+j",
+    "command": "workbench.action.focusBelowGroup"
+  },
+  {
+    "key": "ctrl+shift+k",
+    "command": "workbench.action.focusAboveGroup"
+  },
+  {
+    "key": "ctrl+shift+l",
+    "command": "workbench.action.focusRightGroup"
   }
 ]

@@ -1,0 +1,6 @@
+# Fast Worker Agent - 高速スコープ実装エージェント
+# 軽量モデルで素早くコーディング・バグ修正を行う
+
+model = "gpt-5.3-spark"
+model_reasoning_effort = "low"
+model_verbosity = "low"

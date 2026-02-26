@@ -1,0 +1,29 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy shell configurations for Linux/macOS
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zshrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying shell configurations..."
+
+deploy_file "$CHEZMOI_SOURCE/shells/bashrc" "$HOME_DIR/.bashrc"
+deploy_file "$CHEZMOI_SOURCE/shells/zshrc" "$HOME_DIR/.zshrc"
+deploy_file "$CHEZMOI_SOURCE/shells/profile" "$HOME_DIR/.profile"
+
+echo "Shell configurations deployed."
+{{ end -}}

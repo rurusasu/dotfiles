@@ -1,0 +1,22 @@
+#!/bin/bash
+# Claude Code プラグイン マーケットプレース インストールスクリプト
+# Generated from: {{ range .claude_marketplaces }}{{ .repo }} {{ end }}
+
+MARKETPLACES_DIR="$HOME/.claude/plugins/marketplaces"
+
+# Ensure directory exists
+mkdir -p "$MARKETPLACES_DIR"
+
+{{ range .claude_marketplaces -}}
+# Clone or update {{ .name }}
+TARGET_DIR="$MARKETPLACES_DIR/{{ .name }}"
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Cloning {{ .name }}..."
+    git clone "https://github.com/{{ .repo }}.git" "$TARGET_DIR"
+else
+    echo "Updating {{ .name }}..."
+    cd "$TARGET_DIR" && git pull
+fi
+
+{{ end -}}
+echo "Claude Code marketplaces installed at: $MARKETPLACES_DIR"

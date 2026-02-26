@@ -1,7 +1,5 @@
 {
   "editor.fontSize": 12,
-  "editor.tabSize": 2,
-  "editor.insertSpaces": true,
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "ibecker.treefmt-vscode",
   "editor.minimap.enabled": true,
@@ -75,6 +73,9 @@
   "workbench.sideBar.location": "left",
   "workbench.editor.enablePreviewFromQuickOpen": true,
   "workbench.editor.showTabs": "multiple",
+  "workbench.editor.tabSizing": "fixed",
+  "workbench.editor.tabSizingFixedMinWidth": 180,
+  "workbench.editor.tabSizingFixedMaxWidth": 180,
   "workbench.commandPalette.preserveInput": true,
   "workbench.activityBar.visible": true,
   "workbench.enableExperiments": true,
@@ -95,8 +96,6 @@
     "**/.git/subtree-cache/**": true
   },
   "files.autoSave": "onFocusChange",
-  "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true,
   "files.simpleDialog.enable": false,
   "files.restoreUndoStack": true,
   "files.defaultLanguage": "markdown",
@@ -197,20 +196,80 @@
     "editor.formatOnSave": true
   },
   "nix.enableLanguageServer": true,
-  "nix.serverPath": "nil",
+  "nix.serverPath": "nixd",
   "nix.serverSettings": {
-    "nil": {
+    "nixd": {
       "formatting": {
         "command": ["nixfmt"]
+      },
+      "options": {
+        "nixos": {
+          "expr": "(builtins.getFlake \"/home/vscode/.dotfiles\").nixosConfigurations.nixos.options"
+        }
       }
     }
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 4,
-    "files.encoding": "utf8bom"
+    "editor.formatOnSave": true
   },
+  "[notebook]": {
+    "notebook.formatOnSave.enabled": true,
+    "notebook.defaultFormatter": "charliermarsh.ruff",
+    "notebook.codeActionsOnSave": {
+      "notebook.source.fixAll": "explicit",
+      "notebook.source.organizeImports": "explicit"
+    }
+  },
+  "jupyter.askForKernelRestart": false,
+  "jupyter.enablePlotViewer": true,
+  "jupyter.themeMatplotlibPlots": true,
+  "jupyter.widgetScriptSources": ["jsdelivr.com", "unpkg.com"],
+  "jupyter.exportWithOutputEnabled": true,
+  "jupyter.interactiveWindow.textEditor.executeSelection": true,
+  "[python]": {
+    "editor.formatOnType": true,
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file",
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit",
+      "source.organizeImports": "explicit",
+      "source.removeUnusedImports": "explicit"
+    },
+    "editor.detectIndentation": true,
+    "editor.rulers": [88],
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 88,
+    "editor.suggestSelection": "first"
+  },
+  "ruff.nativeServer": "on",
+  "ruff.enable": true,
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+  "ruff.lint.run": "onSave",
+  "ruff.lint.preview": true,
+  "ruff.organizeImports": true,
+  "ruff.fixAll": true,
+  "ruff.format.preview": true,
+  "ruff.showNotifications": "onError",
+  "ruff.codeAction.fixViolation.enable": true,
+  "ruff.codeAction.disableRuleComment.enable": true,
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [],
+  "python.testing.autoTestDiscoverOnSaveEnabled": true,
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": [],
+  "python.languageServer": "None",
+  "ty.enable": true,
+  "ty.configuration": "${workspaceFolder}/pyproject.toml",
+  "ty.disableLanguageServices": false,
+  "ty.completions.autoImport": true,
+  "ty.logLevel": "info",
   "powershell.scriptAnalysis.enable": true,
   "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
   "powershell.codeFormatting.preset": "OTBS",
@@ -218,8 +277,14 @@
   "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
   "powershell.codeFormatting.whitespaceBetweenParameters": true,
   "powershell.integratedConsole.showOnStartup": false,
+  "task.outputTo": "terminal",
+  "task.tree.nesting": true,
+  "task.tree.sort": "alphanumeric",
+  "task.checkForUpdates": false,
+  "task.notifyWindowOnTaskCompletion": 0,
+  "typos.config": "${workspaceFolder}/_typos.toml",
   "editor.lineNumbers": "on",
   "editor.cursorSurroundingLines": 8,
   "workbench.list.automaticKeyboardNavigation": false,
-  "editor.find.seedSearchStringFromSelection": "never"
+  "editor.find.seedSearchStringFromSelection": "always"
 }

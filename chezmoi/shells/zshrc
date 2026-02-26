@@ -1,28 +1,48 @@
 # ~/.zshrc managed by chezmoi
 
 # Aliases
-alias nrs="sudo nixos-rebuild switch --flake ~/.dotfiles --impure"
+alias nrs="sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default"
 alias nrt="sudo nixos-rebuild test --flake ~/.dotfiles --impure"
 alias nrb="sudo nixos-rebuild boot --flake ~/.dotfiles --impure"
 alias find="fd"
 alias grep="rg"
-# k3s aliases (no sudo needed)
-alias k="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml"
-alias kgn="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get nodes"
-alias kgp="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get pods -A"
-alias kgs="kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get svc -A"
-alias cilium="KUBECONFIG=/etc/rancher/k3s/k3s.yaml cilium"
-alias k3s-status="systemctl status k3s"
+# Kubernetes aliases & completion
+if command -v kubectl >/dev/null 2>&1; then
+  source <(kubectl completion zsh)
+  alias k="kubectl"
+  alias kgn="kubectl get nodes"
+  alias kgp="kubectl get pods -A"
+  alias kgs="kubectl get svc -A"
+fi
+
+if command -v kind >/dev/null 2>&1; then
+  source <(kind completion zsh)
+fi
+
+if command -v helm >/dev/null 2>&1; then
+  source <(helm completion zsh)
+fi
+
+if command -v kubectx >/dev/null 2>&1; then
+  alias kctx="kubectx"
+fi
+
+if command -v kubens >/dev/null 2>&1; then
+  alias kns="kubens"
+fi
+# Task (taskfile.dev) completion
+if command -v task >/dev/null 2>&1; then
+  eval "$(task --completion zsh)"
+fi
 
 # Environment
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
 
 # fd/fzf defaults (mirrors Nix defaults)
 FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"
-export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --type f . /"
+export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --absolute-path --type f . ."
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --type d . /"
+export FZF_ALT_C_COMMAND="fd $FD_DEFAULT_OPTS --absolute-path --type d . ."
 export FZF_DEFAULT_OPTS="--height=40% --layout=reverse --border --prompt='> '"
 
 # Starship prompt
@@ -34,6 +54,13 @@ fi
 if command -v zoxide >/dev/null 2>&1; then
   eval "$(zoxide init zsh --cmd cd)"
 fi
+
+# Emit OSC 7 so terminals can open split/tab in current directory
+autoload -Uz add-zsh-hook
+__emit_osc7_cwd() {
+  printf '\033]7;file://%s%s\033\\' "$HOST" "$PWD"
+}
+add-zsh-hook precmd __emit_osc7_cwd
 
 # Alt+Z: zoxide interactive (history-based directory jump)
 __zoxide_zi_widget() {
@@ -47,7 +74,7 @@ bindkey '^[z' __zoxide_zi_widget  # Alt+Z
 # Alt+D: fzf directory search and cd
 __fzf_cd_widget() {
   local dir
-  dir="$(fd $FD_DEFAULT_OPTS -t d . / | fzf)" && cd "$dir"
+  dir="$(fd $FD_DEFAULT_OPTS --absolute-path -t d . . | fzf)" && cd "$dir"
   zle reset-prompt
 }
 zle -N __fzf_cd_widget
@@ -56,7 +83,7 @@ bindkey '^[d' __fzf_cd_widget  # Alt+D
 # Alt+T: fzf file/directory search and insert
 __fzf_file_widget() {
   local selected
-  selected="$(fd $FD_DEFAULT_OPTS . / | fzf)"
+  selected="$(fd $FD_DEFAULT_OPTS --absolute-path . . | fzf)"
   if [[ -n "$selected" ]]; then
     LBUFFER="$LBUFFER$selected"
   fi

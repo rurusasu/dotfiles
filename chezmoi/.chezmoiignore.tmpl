@@ -1,12 +1,24 @@
-# All directories are deployed via .chezmoiscripts/run_onchange_*
+# Directories deployed via .chezmoiscripts/run_onchange_*
 shells/
 git/
 cli/
 terminals/
 editors/
-llms/
 github/
 ssh/
+
+# Documentation files (not deployed to home)
 README.md
-AGENTS.md
-_AGENTS.md
+**/AGENTS.md
+**/AGENTS.override.md
+
+# OS-specific scripts (patterns match target names, not source names)
+{{ if ne .chezmoi.os "darwin" }}
+.chezmoiscripts/*_darwin.sh
+{{ end }}
+{{ if ne .chezmoi.os "linux" }}
+.chezmoiscripts/*_linux.sh
+{{ end }}
+{{ if ne .chezmoi.os "windows" }}
+.chezmoiscripts/*_windows.ps1
+{{ end }}

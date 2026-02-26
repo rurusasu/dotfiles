@@ -1,0 +1,48 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/usr/bin/env bash
+# Sync Claude skills to Codex/Gemini/Cursor after apply.
+# mode: {{ .skills_sync.mode }}
+# source: {{ .skills_sync.source_agent }}
+# targets: {{ range .skills_sync.target_agents }}{{ . }} {{ end }}
+
+set -euo pipefail
+
+home_dir="${HOME:-/home/$(whoami)}"
+source_agent="{{ .skills_sync.source_agent }}"
+source_skills_dir="$home_dir/.${source_agent}/skills"
+target_agents=({{ range .skills_sync.target_agents }}"{{ . }}" {{ end }})
+
+if [[ ! -d "$source_skills_dir" ]]; then
+  echo "Skills source not found, skipping: $source_skills_dir"
+  exit 0
+fi
+
+shopt -s nullglob
+source_skill_dirs=("$source_skills_dir"/*/)
+
+for agent in "${target_agents[@]}"; do
+  [[ "$agent" == "$source_agent" ]] && continue
+
+  target_root="$home_dir/.${agent}"
+  target_skills_dir="$target_root/skills"
+  mkdir -p "$target_skills_dir"
+
+  # Remove orphaned entries in target.
+  for existing in "$target_skills_dir"/*/; do
+    [[ -d "$existing" ]] || continue
+    skill_name="$(basename "$existing")"
+    if [[ ! -d "$source_skills_dir/$skill_name" ]]; then
+      rm -rf "$existing"
+      echo "Removed orphan skill: .$agent/skills/$skill_name"
+    fi
+  done
+
+  for source_skill in "${source_skill_dirs[@]}"; do
+    skill_name="$(basename "$source_skill")"
+    target_skill="$target_skills_dir/$skill_name"
+    rm -rf "$target_skill"
+    ln -s "$source_skills_dir/$skill_name" "$target_skill"
+    echo "Linked: .$agent/skills/$skill_name -> .${source_agent}/skills/$skill_name"
+  done
+done
+{{ end -}}

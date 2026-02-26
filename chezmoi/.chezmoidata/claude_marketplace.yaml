@@ -1,0 +1,6 @@
+# Claude Code マーケットプレイス設定
+claude_marketplaces:
+  - name: claude-plugins-official
+    repo: anthropics/claude-plugins-official
+  - name: superpowers-marketplace
+    repo: obra/superpowers-marketplace

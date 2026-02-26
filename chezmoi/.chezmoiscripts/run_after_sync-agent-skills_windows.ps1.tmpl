@@ -1,0 +1,57 @@
+{{ if eq .chezmoi.os "windows" -}}
+#!/usr/bin/env pwsh
+# Sync Claude skills to Codex/Gemini/Cursor after apply.
+# mode: {{ .skills_sync.mode }}
+# source: {{ .skills_sync.source_agent }}
+# targets: {{ range .skills_sync.target_agents }}{{ . }} {{ end }}
+
+$ErrorActionPreference = "Stop"
+
+$homeDir = $env:USERPROFILE
+$sourceAgent = "{{ .skills_sync.source_agent }}"
+$targetAgents = @({{ range $i, $agent := .skills_sync.target_agents }}{{ if $i }}, {{ end }}"{{ $agent }}"{{ end }})
+$sourceSkillsDir = Join-Path $homeDir ".$sourceAgent\skills"
+
+if (-not (Test-Path -LiteralPath $sourceSkillsDir -PathType Container)) {
+  Write-Host "Skills source not found, skipping: $sourceSkillsDir"
+  exit 0
+}
+
+$sourceSkillDirs = @(Get-ChildItem -LiteralPath $sourceSkillsDir -Directory -ErrorAction SilentlyContinue)
+
+foreach ($agent in $targetAgents) {
+  if ($agent -eq $sourceAgent) { continue }
+
+  $targetRoot = Join-Path $homeDir ".$agent"
+  $targetSkillsDir = Join-Path $targetRoot "skills"
+  if (-not (Test-Path -LiteralPath $targetSkillsDir -PathType Container)) {
+    New-Item -ItemType Directory -Path $targetSkillsDir -Force | Out-Null
+  }
+
+  # Remove orphaned entries in target.
+  $existingTargetDirs = @(Get-ChildItem -LiteralPath $targetSkillsDir -Directory -ErrorAction SilentlyContinue)
+  foreach ($existing in $existingTargetDirs) {
+    $corresponding = Join-Path $sourceSkillsDir $existing.Name
+    if (-not (Test-Path -LiteralPath $corresponding -PathType Container)) {
+      Remove-Item -LiteralPath $existing.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      Write-Host "Removed orphan skill: .$agent/skills/$($existing.Name)"
+    }
+  }
+
+  foreach ($skillDir in $sourceSkillDirs) {
+    $targetSkillPath = Join-Path $targetSkillsDir $skillDir.Name
+    if (Test-Path -LiteralPath $targetSkillPath) {
+      Remove-Item -LiteralPath $targetSkillPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    try {
+      New-Item -ItemType SymbolicLink -Path $targetSkillPath -Target $skillDir.FullName -Force | Out-Null
+      Write-Host "Linked: .$agent/skills/$($skillDir.Name) -> .${sourceAgent}/skills/$($skillDir.Name)"
+    } catch {
+      # Fallback for environments without symlink permission.
+      Copy-Item -LiteralPath $skillDir.FullName -Destination $targetSkillPath -Recurse -Force
+      Write-Host "Copied (symlink fallback): .$agent/skills/$($skillDir.Name)"
+    }
+  }
+}
+{{ end -}}

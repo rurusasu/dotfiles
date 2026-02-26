@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+{{- $first := true }}
+{{- if hasKey . "mcp_servers" }}
+{{- range .mcp_servers }}
+{{- if has "claude" .supports }}
+{{- if not $first }},{{ end }}
+{{- $first = false }}
+    "{{ .name }}": {
+      "command": "{{ .command }}",
+      "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
+{{- if hasKey . "env" }},
+      "env": {
+{{- $envFirst := true }}
+{{- range $key, $value := .env }}
+{{- if not $envFirst }},{{ end }}
+{{- $envFirst = false }}
+        "{{ $key }}": "{{ $value }}"
+{{- end }}
+      }
+{{- end }}
+    }
+{{- end }}
+{{- end }}
+{{- end }}
+  }
+}

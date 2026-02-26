@@ -2,6 +2,10 @@
 
 Code editor configurations for cross-platform development.
 
+## Documentation
+
+- [Keybinding Policy](../../docs/chezmoi/keybindings.md)
+
 ## Editors
 
 | Editor  | Config Path | Based On     |
@@ -53,7 +57,7 @@ Code editor configurations for cross-platform development.
 - **Font size**: 12pt
 - **Tab size**: 2 spaces
 - **Format on save**: Enabled
-- **Line numbers**: Relative (vim mode)
+- **Line numbers**: On
 - **Word wrap**: On (80 columns)
 
 ### Theme
@@ -61,13 +65,11 @@ Code editor configurations for cross-platform development.
 - **Color theme**: Default Dark Modern / Gruvbox
 - **Icon theme**: Material Icon Theme
 
-### Vim Mode
+### Keybinding Policy
 
-All editors configured with vim keybindings:
-
-- System clipboard integration
-- Leader key: `<Space>`
-- Common Ctrl keys disabled for OS compatibility
+- Follow `docs/chezmoi/keybindings.md`
+- Use editor-native keybindings by default
+- Do not rely on VS Code/Cursor Vim extension
 
 ### Language-specific
 

@@ -8,16 +8,26 @@ Cross-platform dotfiles management using chezmoi.
 
 ```
 chezmoi/
-├── shells/      # Shell configurations (bash, zsh, profile)
-├── git/         # Git configuration
-├── cli/         # CLI tool configurations (fd, ripgrep, starship, ghq, zoxide)
-├── terminals/   # Terminal emulator configurations (wezterm, windows-terminal)
-├── editors/     # Editor configurations (vscode, cursor, zed)
-├── llms/        # LLM tool configs (claude/codex/cursor/gemini)
-├── github/      # GitHub configs (workflows, templates, etc)
-├── ssh/         # SSH config templates
+├── dot_gitconfig.tmpl  # Git config → ~/.gitconfig (global, all platforms)
+├── dot_claude/  # Claude Code config → ~/.claude/
+├── dot_codex/   # Codex CLI config → ~/.codex/
+├── dot_cursor/  # Cursor AI config → ~/.cursor/
+├── dot_gemini/  # Gemini CLI config → ~/.gemini/
+├── shells/      # Shell configurations (bash, zsh, profile) [via scripts]
+├── cli/         # CLI tool configurations (fd, ripgrep, starship, ghq, zoxide) [via scripts]
+├── terminals/   # Terminal emulator configurations (wezterm, windows-terminal) [via scripts]
+├── editors/     # Editor configurations (vscode, cursor, zed) [via scripts]
+├── github/      # GitHub configs (workflows, templates, etc) [via scripts]
+├── ssh/         # SSH config templates [via scripts]
 └── .chezmoiscripts/  # Deployment scripts
 ```
+
+## Deployment Methods
+
+| Directory | Method             | Description                 |
+| --------- | ------------------ | --------------------------- |
+| `dot_*`   | chezmoi native     | 直接 `~/<name>/` にデプロイ |
+| Others    | `.chezmoiscripts/` | スクリプト経由でデプロイ    |
 
 ## Architecture
 
@@ -35,6 +45,11 @@ All configurations are deployed via `.chezmoiscripts/run_onchange_deploy.*`:
 | **Installation**      | Nix (Linux/WSL), winget (Windows) |
 | **Configuration**     | Chezmoi (this directory)          |
 | **Shell Integration** | Nix Home Manager (fzf, zoxide)    |
+
+### Git Hooks
+
+Repository-specific hooks are in `/.githooks/` (not managed by chezmoi).
+Global git config (`dot_gitconfig.tmpl`) does NOT set `core.hooksPath`.
 
 ## Usage
 
@@ -63,6 +78,34 @@ chezmoi apply
 Notes:
 
 - `AGENTS.md` / `README.md` are intentionally ignored (docs only)
+
+## .chezmoiignore Patterns
+
+`.chezmoiignore.tmpl` のパターンは**ターゲット名**（テンプレート処理後の名前）に対してマッチする。
+
+### スクリプトの命名規則
+
+| ソース名                                  | ターゲット名            |
+| ----------------------------------------- | ----------------------- |
+| `run_onchange_install-foo_darwin.sh.tmpl` | `install-foo_darwin.sh` |
+| `run_once_before_setup_windows.ps1.tmpl`  | `setup_windows.ps1`     |
+
+- `run_onchange_`, `run_once_`, `run_`, `before_`, `after_` プレフィックスは除去される
+- `.tmpl` サフィックスは除去される
+
+### OS フィルタリングの正しい書き方
+
+```
+# ✅ 正しい（ターゲット名にマッチ）
+{{ if ne .chezmoi.os "darwin" }}
+.chezmoiscripts/*_darwin.sh
+{{ end }}
+
+# ❌ 間違い（ソース名にマッチしようとしている）
+{{ if ne .chezmoi.os "darwin" }}
+.chezmoiscripts/*_darwin.sh.tmpl
+{{ end }}
+```
 
 ## Platform Support
 

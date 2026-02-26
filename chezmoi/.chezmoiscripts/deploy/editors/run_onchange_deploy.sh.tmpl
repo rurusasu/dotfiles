@@ -1,0 +1,49 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy editor configurations for Linux/macOS
+# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_file() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "Deployed: $dst"
+  fi
+}
+
+echo "Deploying editor configurations..."
+
+# VS Code
+VSCODE_CONFIG="$HOME_DIR/.config/Code/User"
+deploy_file "$CHEZMOI_SOURCE/editors/vscode/settings.json" "$VSCODE_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/vscode/keybindings.json" "$VSCODE_CONFIG/keybindings.json"
+
+# Cursor
+CURSOR_CONFIG="$HOME_DIR/.config/Cursor/User"
+deploy_file "$CHEZMOI_SOURCE/editors/cursor/settings.json" "$CURSOR_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/cursor/keybindings.json" "$CURSOR_CONFIG/keybindings.json"
+
+# Zed
+ZED_CONFIG="$HOME_DIR/.config/zed"
+deploy_file "$CHEZMOI_SOURCE/editors/zed/settings.json" "$ZED_CONFIG/settings.json"
+deploy_file "$CHEZMOI_SOURCE/editors/zed/keymap.json" "$ZED_CONFIG/keymap.json"
+
+# Neovim
+NVIM_CONFIG="$HOME_DIR/.config/nvim"
+deploy_file "$CHEZMOI_SOURCE/editors/nvim/init.lua" "$NVIM_CONFIG/init.lua"
+if [[ -d "$CHEZMOI_SOURCE/editors/nvim/lua" ]]; then
+  mkdir -p "$NVIM_CONFIG/lua"
+  cp -rf "$CHEZMOI_SOURCE/editors/nvim/lua/"* "$NVIM_CONFIG/lua/"
+  echo "Deployed: $NVIM_CONFIG/lua/"
+fi
+
+echo "Editor configurations deployed."
+{{ end -}}

@@ -2,6 +2,10 @@
 
 Zed is a high-performance, native code editor.
 
+## Documentation
+
+- [Extensions](../../../docs/editors/zed/extensions.md) - 拡張機能管理の詳細
+
 ## Files
 
 | File            | Deployed To                          | Purpose            |
@@ -9,71 +13,39 @@ Zed is a high-performance, native code editor.
 | `settings.json` | `~/.config/zed/` or `%APPDATA%/Zed/` | Editor settings    |
 | `keymap.json`   | Same as above                        | Custom keybindings |
 
-## Configuration Format
+## Key Settings
 
-Zed uses JSONC (JSON with comments). Settings syntax differs from VS Code.
-
-## Settings Highlights
-
-### Appearance
-
-- Theme: Gruvbox Dark Hard
-- Font: Consolas, 12pt
-- UI font size: 14pt
-
-### Editor
-
+- Format: JSONC (JSON with comments)
+- Theme: GitHub Dark Dimmed
+- Vim mode: Disabled
 - Tab size: 2 spaces
-- Vim mode: Enabled
-- Relative line numbers: Enabled
 - Format on save: Enabled
 
-### Vim Mode
+## Tab Width Limitation
 
-```json
-"vim_mode": true,
-"vim": {
-  "use_system_clipboard": "always"
-}
-```
+- Zed currently does not provide a setting equivalent to VS Code/Cursor `workbench.editor.tabSizing = fixed`.
+- File tab width (pixel width) cannot be forced to a uniform fixed value.
+- Available alternatives are visual stabilization settings (for example `max_tabs`, `tabs.show_close_button`, icon/status visibility).
 
-### Terminal
+## Extensions
 
-- Shell: pwsh (PowerShell)
-- Font size: 13pt
+`auto_install_extensions` で宣言的に管理。`true` で自動インストール、`false` で禁止。
 
-### Language Formatters
+**現在の拡張機能**: github-theme, powershell, nix, toml, dprint, lua, oxc
+
+## Language Formatters
 
 | Language              | Formatter       |
 | --------------------- | --------------- |
-| Python                | Ruff (external) |
-| JavaScript/TypeScript | Prettier        |
-
-## Keybindings
-
-### Pane Operations (matches WezTerm/WT)
-
-| Key                  | Action         |
-| -------------------- | -------------- |
-| `Ctrl+Alt+H`         | Split right    |
-| `Ctrl+Alt+V`         | Split down     |
-| `Ctrl+Alt+X`         | Close item     |
-| `Ctrl+Alt+W`         | Toggle zoom    |
-| `Ctrl+Shift+H/J/K/L` | Navigate panes |
-
-### Vim Normal Mode
-
-| Key         | Action            |
-| ----------- | ----------------- |
-| `Space+F+F` | File finder       |
-| `Space+F+G` | Search in project |
-| `Space+E`   | Toggle file tree  |
+| JavaScript/TypeScript | oxfmt           |
+| TOML                  | taplo           |
+| Markdown              | dprint          |
+| Lua                   | stylua          |
+| Nix                   | nixfmt          |
+| Shell Script          | shfmt           |
+| PowerShell            | language_server |
 
 ## Installation
 
 - **Linux/WSL**: `nix` (zed-editor package)
 - **Windows**: `winget install Zed.Zed`
-
-## Extensions
-
-Zed uses built-in language support. No extension management needed.

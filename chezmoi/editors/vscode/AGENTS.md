@@ -2,6 +2,10 @@
 
 Visual Studio Code editor configuration.
 
+## Documentation
+
+- [Keybinding Policy](../../../docs/chezmoi/keybindings.md)
+
 ## Files
 
 | File               | Deployed To                                      | Purpose            |
@@ -17,7 +21,7 @@ Visual Studio Code editor configuration.
 - Font size: 12pt
 - Tab size: 2 spaces
 - Format on save: Enabled
-- Line numbers: Relative (vim mode)
+- Line numbers: On
 - Word wrap: 80 columns
 
 ### Theme
@@ -25,12 +29,11 @@ Visual Studio Code editor configuration.
 - Color theme: Default Dark Modern
 - Icon theme: Material Icon Theme
 
-### Vim Mode
+### Keybinding Policy
 
-- System clipboard: Enabled
-- Leader key: `<Space>`
-- Disabled Ctrl keys: `Ctrl+A/C/V/X/Z` (OS compatibility)
-- Enabled Ctrl keys: `Ctrl+D/U/F/B/O` (vim navigation)
+- Follow `docs/chezmoi/keybindings.md`
+- Prefer editor-native shortcuts
+- VS Code Vim extension is not required
 
 ### Language Formatters
 
@@ -47,7 +50,6 @@ Auto-installed extensions:
 - `tobiasalthoff.atom-material-theme`
 - `ms-vscode-remote.remote-containers`
 - `ms-vscode-remote.remote-ssh`
-- `vscodevim.vim`
 - `esbenp.prettier-vscode`
 - `charliermarsh.ruff`
 - And more (see `extensions.json`)

@@ -1,0 +1,35 @@
+# Set identity via local chezmoi data (not committed):
+# ~/.config/chezmoi/chezmoi.toml
+# [data.git]
+#   name = "Your Name"
+#   email = "you@example.com"
+#   signingkey = "~/.ssh/signing_key.pub"
+[user]
+{{- $git := (get . "git" | default (dict)) }}
+  name = {{ get $git "name" | default "YOUR_GIT_NAME" }}
+  email = {{ get $git "email" | default "your.email@example.com" }}
+  signingkey = {{ get $git "signingkey" | default "~/.ssh/signing_key.pub" }}
+
+[commit]
+  gpgsign = false
+
+[gpg]
+  format = ssh
+
+[safe]
+  directory = *
+
+[core]
+  editor = nvim
+{{- if eq .chezmoi.os "windows" }}
+  sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+{{- else }}
+  sshCommand = ssh
+{{- end }}
+
+{{- if ne .chezmoi.os "windows" }}
+[credential "https://github.com"]
+  helper = "!gh auth git-credential"
+[credential "https://gist.github.com"]
+  helper = "!gh auth git-credential"
+{{- end }}

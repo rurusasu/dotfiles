@@ -1,0 +1,85 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Sync editor extensions for Windows (install missing, remove unlisted)
+# hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
+# script-version: 4
+
+$ErrorActionPreference = "Continue"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+
+function Sync-Extensions {
+  param(
+    [string]$EditorCommand,
+    [string]$EditorName,
+    [string]$ExtensionsFile
+  )
+
+  if (-not (Get-Command $EditorCommand -ErrorAction SilentlyContinue)) {
+    Write-Host "$EditorName CLI not found, skipping extension sync"
+    return
+  }
+
+  if (-not (Test-Path -LiteralPath $ExtensionsFile)) {
+    Write-Host "Extensions file not found: $ExtensionsFile"
+    return
+  }
+
+  try {
+    $extensionsData = Get-Content -LiteralPath $ExtensionsFile -Raw | ConvertFrom-Json
+    $managed = $extensionsData.recommendations | ForEach-Object { $_.ToLower() }
+
+    if ($managed.Count -eq 0) {
+      Write-Host "No extensions defined for $EditorName"
+      return
+    }
+
+    # Get currently installed extensions
+    $installed = & $EditorCommand --list-extensions | ForEach-Object { $_.ToLower() }
+
+    # Remove unlisted extensions (retry loop for dependency resolution)
+    $toRemove = @($installed | Where-Object { $_ -notin $managed })
+    $initialCount = $toRemove.Count
+    $maxRetries = [Math]::Max($toRemove.Count, 1)
+    $retryCount = 0
+    while ($toRemove.Count -gt 0 -and $retryCount -lt $maxRetries) {
+      $stillFailing = @()
+      foreach ($ext in $toRemove) {
+        if ($retryCount -eq 0) { Write-Host "  Removing: $ext" }
+        else { Write-Host "  Retrying: $ext" }
+        $result = & $EditorCommand --uninstall-extension $ext 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0 -or $result -like '*depends on this*') {
+          $stillFailing += $ext
+        }
+      }
+      $toRemove = $stillFailing
+      $retryCount++
+    }
+    $removedCount = $initialCount - $toRemove.Count
+    # Report extensions that couldn't be removed (built-in or protected)
+    foreach ($ext in $toRemove) {
+      Write-Host "    (skipped: $ext - built-in or cannot uninstall)"
+    }
+
+    # Install missing extensions
+    $toInstall = $managed | Where-Object { $_ -notin $installed }
+    foreach ($ext in $toInstall) {
+      Write-Host "  Installing: $ext"
+      & $EditorCommand --install-extension $ext --force 2>&1 | Out-Null
+    }
+
+    $installedCount = ($toInstall | Measure-Object).Count
+    Write-Host "$EditorName extensions synced (removed: $removedCount, installed: $installedCount)"
+  }
+  catch {
+    Write-Host "Error syncing $EditorName extensions: $_" -ForegroundColor Red
+  }
+}
+
+Write-Host "Syncing editor extensions..."
+
+Sync-Extensions "code" "VSCode" "$ChezmoiSource\editors\vscode\extensions.json"
+Sync-Extensions "code-insiders" "VSCode Insiders" "$ChezmoiSource\editors\vscode\extensions.json"
+Sync-Extensions "cursor" "Cursor" "$ChezmoiSource\editors\cursor\extensions.json"
+
+Write-Host "Editor extensions sync complete."
+{{ end -}}

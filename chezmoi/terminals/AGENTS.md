@@ -2,6 +2,10 @@
 
 Terminal emulator configurations for cross-platform use.
 
+## Documentation
+
+- [Keybinding Policy](../../docs/chezmoi/keybindings.md)
+
 ## Terminals
 
 | Terminal         | Config Path                      | Platform                    |

@@ -1,15 +1,55 @@
 # Lib Tests
 
-Purpose: `scripts/powershell/lib` の共通ライブラリテスト方針
+Purpose: 共通ライブラリのユニットテスト
 
-## 対象ファイル
+## ファイル一覧
 
-- `SetupHandler.Tests.ps1`: `SetupContext` / `SetupResult` / `SetupHandlerBase`
-- `Invoke-ExternalCommand.Tests.ps1`: `Invoke-*` ラッパー群
-- `Request-AdminElevation.Tests.ps1`: 管理者権限判定と昇格要求フロー
+| ファイル                           | 対象                                        |
+| ---------------------------------- | ------------------------------------------- |
+| `SetupHandler.Tests.ps1`           | SetupContext, SetupResult, SetupHandlerBase |
+| `Invoke-ExternalCommand.Tests.ps1` | 外部コマンドラッパー関数群                  |
 
-## ガイドライン
+## SetupHandler.Tests.ps1
 
-1. ライブラリ API の戻り値と例外経路を両方検証する
-2. 実コマンド実行は避け、`Mock` で副作用を隔離する
-3. カバレッジ対象外の行は理由をコメントで残す
+### テスト対象
+
+- **SetupContext**: コンストラクタ、GetOption、プロパティ設定
+- **SetupResult**: コンストラクタ、CreateSuccess、CreateFailure
+- **SetupHandlerBase**: プロパティ、CanApply/Apply（例外スロー確認）、Log メソッド群
+
+## Invoke-ExternalCommand.Tests.ps1
+
+### テスト対象
+
+すべてのラッパー関数をテスト：
+
+- `Invoke-Wsl`
+- `Invoke-Diskpart`
+- `Get-ExternalCommand`
+- `Test-PathExists`
+- `Get-ProcessSafe`
+- `Stop-ProcessSafe`
+- `Start-ProcessSafe`
+- `Copy-FileSafe`
+- `Get-FileContentSafe`
+- `Get-JsonContent`
+- `New-DirectorySafe`
+- `Get-ChildItemSafe`
+- `Get-RegistryValue`
+- `Get-RegistryChildItem`
+- `Invoke-WebRequestSafe`
+- `Invoke-RestMethodSafe`
+- `Start-SleepSafe`
+
+### カバー不可能なコード
+
+以下は外部コマンド/ファイルシステム操作のため、ユニットテストでカバー不可：
+
+| 関数                   | 行  | コード                       |
+| ---------------------- | --- | ---------------------------- |
+| `Invoke-Chezmoi`       | 53  | `if ($ExePath)`              |
+| `Invoke-Chezmoi`       | 54  | `& $ExePath @Arguments`      |
+| `Invoke-Chezmoi`       | 56  | `& chezmoi @Arguments`       |
+| `Set-ContentNoNewline` | 101 | `Set-Content ... -NoNewline` |
+
+これらは**統合テスト**でカバーする必要があります。

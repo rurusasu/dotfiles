@@ -7,6 +7,7 @@ chezmoi によるユーザー設定管理の詳細ドキュメント。
 - [概要](#概要)
 - [インストールと適用](./usage.md)
 - [ディレクトリ構造](./structure.md)
+- [キーバインド統一方針](./keybindings.md)
 - [シークレット管理](./secrets.md)
 
 ## 概要
@@ -30,7 +31,7 @@ chezmoi はユーザーレベルの dotfiles（設定ファイル）を管理し
 | ---------------------- | --------------------------------- |
 | パッケージインストール | Nix (Linux/WSL), winget (Windows) |
 | ユーザー設定           | Chezmoi                           |
-| シェル統合             | Nix Home Manager (fzf, zoxide)    |
+| シェル統合             | zshrc (chezmoi でデプロイ)        |
 
 ## クイックスタート
 

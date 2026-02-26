@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": ["Read", "Write", "WebSearch", "Bash"],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(rm:*)",
+      "Bash(git pop:*)",
+      "Bash(git pull:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(git restore:*)",
+      "Bash(git revert:*)",
+      "Bash(git stash:*)",
+      "Read(.env*)",
+      "Edit(.env*)",
+      "Write(.env*)",
+      "Read(secrets/*)",
+      "Edit(secrets/*)",
+      "Write(secrets/*)",
+      "Read(id_rsa*)",
+      "Read(id_ed25519*)",
+      "Read(*.pem)",
+      "Edit(*.pem)",
+      "Write(*.pem)",
+      "Read(*.key)",
+      "Edit(*.key)",
+      "Write(*.key)",
+      "Edit(pyproject.toml)",
+      "Write(pyproject.toml)",
+      "Edit(requirements.txt)",
+      "Write(requirements.txt)",
+      "Edit(uv.lock)",
+      "Write(uv.lock)",
+      "Bash(python:*pyproject:*)",
+      "Bash(python3:*pyproject:*)",
+      "Bash(python3 -c:*pyproject:*)"
+    ],
+    "ask": ["Bash(git checkout:*)", "Bash(git commit:*)"]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}

@@ -1,0 +1,16 @@
+# AI agent skills sync configuration
+#
+# Source of truth:
+# - ~/.claude/skills
+#
+# Sync targets:
+# - ~/.codex/skills
+# - ~/.gemini/skills
+# - ~/.cursor/skills
+skills_sync:
+  source_agent: claude
+  target_agents:
+    - codex
+    - gemini
+    - cursor
+  mode: symlink

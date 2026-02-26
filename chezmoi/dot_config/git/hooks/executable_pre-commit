@@ -1,70 +1,36 @@
 #!/usr/bin/env bash
-# Pre-commit hook: コミットを NixOS/WSL からのみ許可
-#
-# このフックは chezmoi で ~/.config/git/hooks/pre-commit に配置され、
-# git config core.hooksPath で参照されます。
-
 set -euo pipefail
 
-# 環境チェック
 check_environment() {
-    # Linux/WSL 環境かチェック
     if [[ "$(uname -s)" != "Linux" ]]; then
-        echo "❌ エラー: コミットは NixOS/WSL からのみ許可されています"
-        echo ""
-        echo "Windows からコミットしようとしています。"
-        echo "WSL に移動してコミットしてください:"
-        echo ""
-        echo "  wsl -d NixOS"
-        echo "  cd ~/.dotfiles"
-        echo "  git add -A && git commit -m 'your message'"
-        echo ""
+        echo "❌ コミットは NixOS/WSL からのみ許可されています"
         return 1
     fi
-
-    # オプション: NixOS 環境かチェック（より厳密）
-    if [[ -f /etc/os-release ]]; then
-        if grep -q "NixOS" /etc/os-release 2>/dev/null; then
-            echo "✓ NixOS 環境を確認"
-        else
-            # NixOS 以外の Linux でも許可（CI 環境など）
-            echo "✓ Linux 環境を確認"
-        fi
+    if [[ -f /etc/os-release ]] && grep -q "NixOS" /etc/os-release 2>/dev/null; then
+        echo "✓ NixOS 環境を確認"
+    else
+        echo "✓ Linux 環境を確認"
     fi
-
     return 0
 }
 
-# フォーマットチェック（nix fmt がある場合）
 run_formatter() {
     if command -v nix &>/dev/null; then
         echo "Running nix fmt..."
-        if ! nix fmt -- --fail-on-change 2>/dev/null; then
-            echo ""
-            echo "❌ フォーマットエラー: 以下を実行してください:"
-            echo "  nix fmt"
-            echo ""
+        if ! nix fmt 2>/dev/null; then
+            echo "❌ フォーマットエラー"
             return 1
         fi
-        echo "✓ フォーマットチェック完了"
+        git add -u
+        echo "✓ フォーマット完了"
     fi
     return 0
 }
 
-# メイン処理
 main() {
     echo "=== Pre-commit checks ==="
-
-    # 環境チェック
-    if ! check_environment; then
-        exit 1
-    fi
-
-    # フォーマットチェック
-    if ! run_formatter; then
-        exit 1
-    fi
-
+    check_environment || exit 1
+    run_formatter || exit 1
     echo "=== All checks passed ==="
 }
 

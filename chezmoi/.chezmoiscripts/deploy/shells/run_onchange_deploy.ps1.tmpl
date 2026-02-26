@@ -1,0 +1,37 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy shell configurations for Windows
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zshrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
+$HomeDir = $env:USERPROFILE
+
+function Deploy-File {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (Test-Path -LiteralPath $Source -PathType Leaf) {
+    $destDir = Split-Path -Parent $Destination
+    if (-not (Test-Path -LiteralPath $destDir)) {
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    Write-Host "Deployed: $Destination"
+  }
+}
+
+Write-Host "Deploying shell configurations..."
+
+Deploy-File "$ChezmoiSource\shells\bashrc" "$HomeDir\.bashrc"
+Deploy-File "$ChezmoiSource\shells\zshrc" "$HomeDir\.zshrc"
+Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
+
+# PowerShell profiles (PowerShell 7 and Windows PowerShell 5.1)
+Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+
+Write-Host "Shell configurations deployed."
+{{ end -}}

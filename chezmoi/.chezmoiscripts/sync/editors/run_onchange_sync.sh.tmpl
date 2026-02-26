@@ -1,0 +1,72 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Sync editor extensions for Linux/macOS (install missing, remove unlisted)
+# hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
+
+set -euo pipefail
+
+CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+
+sync_extensions() {
+  local editor_command="$1"
+  local editor_name="$2"
+  local extensions_file="$3"
+
+  if ! command -v "$editor_command" &>/dev/null; then
+    echo "$editor_name CLI not found, skipping extension sync"
+    return
+  fi
+
+  if [[ ! -f "$extensions_file" ]]; then
+    echo "Extensions file not found: $extensions_file"
+    return
+  fi
+
+  # Get managed extensions (lowercase)
+  local managed
+  managed=$(jq -r '.recommendations[]' "$extensions_file" | tr '[:upper:]' '[:lower:]' | sort)
+
+  if [[ -z "$managed" ]]; then
+    echo "No extensions defined for $editor_name"
+    return
+  fi
+
+  # Get installed extensions (lowercase)
+  local installed
+  installed=$("$editor_command" --list-extensions | tr '[:upper:]' '[:lower:]' | sort)
+
+  # Remove unlisted extensions
+  local to_remove
+  to_remove=$(comm -23 <(echo "$installed") <(echo "$managed")) || true
+  local removed_count=0
+  while IFS= read -r ext; do
+    [[ -z "$ext" ]] && continue
+    echo "  Removing: $ext"
+    if "$editor_command" --uninstall-extension "$ext" &>/dev/null; then
+      removed_count=$((removed_count + 1))
+    else
+      echo "    (skipped: built-in or cannot uninstall)"
+    fi
+  done <<< "$to_remove"
+
+  # Install missing extensions
+  local to_install
+  to_install=$(comm -13 <(echo "$installed") <(echo "$managed")) || true
+  local installed_count=0
+  while IFS= read -r ext; do
+    [[ -z "$ext" ]] && continue
+    echo "  Installing: $ext"
+    "$editor_command" --install-extension "$ext" --force &>/dev/null || true
+    installed_count=$((installed_count + 1))
+  done <<< "$to_install"
+
+  echo "$editor_name extensions synced (removed: $removed_count, installed: $installed_count)"
+}
+
+echo "Syncing editor extensions..."
+
+sync_extensions "code" "VSCode" "$CHEZMOI_SOURCE/editors/vscode/extensions.json"
+sync_extensions "cursor" "Cursor" "$CHEZMOI_SOURCE/editors/cursor/extensions.json"
+
+echo "Editor extensions sync complete."
+{{ end -}}
