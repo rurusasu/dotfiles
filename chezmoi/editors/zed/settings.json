@@ -5,13 +5,6 @@
   "buffer_font_size": 12,
   "buffer_font_family": "Consolas",
 
-  // Vim mode
-  "vim_mode": true,
-  "vim": {
-    "use_system_clipboard": "always",
-    "use_multiline_find": true
-  },
-
   // Editor settings
   "tab_size": 2,
   "hard_tabs": false,

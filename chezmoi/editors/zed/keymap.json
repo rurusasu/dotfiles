@@ -17,13 +17,5 @@
       "ctrl-shift-k": ["workspace::ActivatePaneInDirection", "Up"],
       "ctrl-shift-l": ["workspace::ActivatePaneInDirection", "Right"]
     }
-  },
-  {
-    "context": "Editor && vim_mode == normal",
-    "bindings": {
-      "space f f": "file_finder::Toggle",
-      "space f g": "pane::DeploySearch",
-      "space e": "project_panel::ToggleFocus"
-    }
   }
 ]
