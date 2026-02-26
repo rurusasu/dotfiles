@@ -30,6 +30,8 @@ chezmoi/private_dot_claude/settings.local.json
 # Temporary files
 *.tmp
 *.log
+coverage.xml
+scripts/powershell/coverage.xml
 
 # WSL config (machine-specific)
 windows/.wslconfig
