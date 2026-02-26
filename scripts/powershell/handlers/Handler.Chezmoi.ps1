@@ -20,14 +20,12 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class ChezmoiHandler : SetupHandlerBase {
     # 検出された chezmoi 実行ファイルのパス
     hidden [string]$ChezmoiExePath
-    hidden [string]$DefaultInitRepo
 
     ChezmoiHandler() {
         $this.Name = "Chezmoi"
         $this.Description = "chezmoi による dotfiles 適用"
         $this.Order = 10
         $this.RequiresAdmin = $false
-        $this.DefaultInitRepo = "rurusasu/dotfiles"
     }
 
     <#
@@ -76,12 +74,12 @@ class ChezmoiHandler : SetupHandlerBase {
             # 設定ファイルテンプレートが変更された場合のために init を先に実行する
             # init が失敗しても apply は続行する（初回セットアップ済みの場合は通常成功しない）
             $this.Log("chezmoi init を実行して設定を再生成します")
-            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "--source" $sourcePath "init"
+            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "init" "--source" $sourcePath
             if ($LASTEXITCODE -ne 0) {
                 $this.Log("chezmoi init はスキップされました (exit=$LASTEXITCODE)", "Gray")
             }
 
-            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "--source" $sourcePath "apply"
+            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "apply" "--source" $sourcePath
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
@@ -182,9 +180,9 @@ class ChezmoiHandler : SetupHandlerBase {
         Write-Host "  chezmoi init --source `"$sourcePath`""
         Write-Host "  chezmoi apply"
         Write-Host ""
-        Write-Host "  # 方法2: GitHub から直接取得（クローン不要）"
+        Write-Host "  # 方法2: GitHub から直接取得（ローカル source を使わない場合）"
         Write-Host "  winget install -e --id twpayne.chezmoi"
-        Write-Host "  chezmoi init rurusasu/dotfiles --source-path chezmoi"
+        Write-Host "  chezmoi init rurusasu/dotfiles"
         Write-Host "  chezmoi apply"
         Write-Host ""
     }
@@ -203,13 +201,13 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        $initRepo = $this.GetChezmoiInitRepo($ctx)
-        $this.Log("chezmoi source リポジトリを初期化します: $initRepo", "Gray")
-        Invoke-Chezmoi -ExePath $this.ChezmoiExePath "init" $initRepo "--source-path" "chezmoi"
+        $localSourcePath = $this.GetChezmoiSourcePath($ctx)
+        $this.Log("chezmoi source ディレクトリを初期化します: $localSourcePath", "Gray")
+        Invoke-Chezmoi -ExePath $this.ChezmoiExePath "init" "--source" $localSourcePath
 
         if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("chezmoi source リポジトリの初期化に失敗しました (exit=$LASTEXITCODE)")
-            $this.Log("手動実行: chezmoi init $initRepo --source-path chezmoi", "Yellow")
+            $this.LogWarning("chezmoi source ディレクトリの初期化に失敗しました (exit=$LASTEXITCODE)")
+            $this.Log("手動実行: chezmoi init --source `"$localSourcePath`"", "Yellow")
         }
     }
 
@@ -228,16 +226,5 @@ class ChezmoiHandler : SetupHandlerBase {
         }
 
         return Join-Path $env:USERPROFILE ".local\share\chezmoi"
-    }
-
-    hidden [string] GetChezmoiInitRepo([SetupContext]$ctx) {
-        if ($ctx -and $ctx.Options -and $ctx.Options.ContainsKey("ChezmoiInitRepo")) {
-            $value = [string]$ctx.Options["ChezmoiInitRepo"]
-            if (-not [string]::IsNullOrWhiteSpace($value)) {
-                return $value
-            }
-        }
-
-        return $this.DefaultInitRepo
     }
 }

@@ -182,13 +182,11 @@ Describe 'ChezmoiHandler' {
             $result.Message | Should -Be "dotfiles を適用しました"
         }
 
-        It 'should pass correct arguments to chezmoi apply' {
-            $script:chezmoiArgs = ""
+        It 'should pass correct arguments to chezmoi init and apply' {
             $script:chezmoiExePath = ""
             Mock Invoke-Chezmoi {
                 param($ExePath, $Arguments)
                 $script:chezmoiExePath = $ExePath
-                $script:chezmoiArgs = $Arguments -join " "
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains '--version') {
                     return "chezmoi version 2.45.0"
@@ -199,7 +197,18 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             $script:chezmoiExePath | Should -Be "C:\chezmoi\chezmoi.exe"
-            $script:chezmoiArgs | Should -Match "--source.*D:\\dotfiles\\chezmoi.*apply"
+            Should -Invoke Invoke-Chezmoi -ParameterFilter {
+                $Arguments.Count -ge 3 -and
+                $Arguments[0] -eq "init" -and
+                $Arguments[1] -eq "--source" -and
+                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+            } -Times 1
+            Should -Invoke Invoke-Chezmoi -ParameterFilter {
+                $Arguments.Count -ge 3 -and
+                $Arguments[0] -eq "apply" -and
+                $Arguments[1] -eq "--source" -and
+                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+            } -Times 1
         }
 
         It 'should show success message after completion' {
@@ -232,7 +241,7 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
         }
 
-        It 'should initialize source repository when source-path does not exist' {
+        It 'should run init twice when source-path does not exist' {
             Mock Test-PathExist {
                 param($Path)
                 if ($Path -eq "C:\Users\rurus\.local\share\chezmoi") { return $false }
@@ -252,12 +261,11 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx) | Out-Null
 
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 4 -and
+                $Arguments.Count -ge 3 -and
                 $Arguments[0] -eq "init" -and
-                $Arguments[1] -eq "rurusasu/dotfiles" -and
-                $Arguments[2] -eq "--source-path" -and
-                $Arguments[3] -eq "chezmoi"
-            } -Times 1
+                $Arguments[1] -eq "--source" -and
+                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+            } -Times 2
         }
 
         It 'should skip source repository init when source-path already exists' {
@@ -276,12 +284,11 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx) | Out-Null
 
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 4 -and
+                $Arguments.Count -ge 3 -and
                 $Arguments[0] -eq "init" -and
-                $Arguments[1] -eq "rurusasu/dotfiles" -and
-                $Arguments[2] -eq "--source-path" -and
-                $Arguments[3] -eq "chezmoi"
-            } -Times 0
+                $Arguments[1] -eq "--source" -and
+                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+            } -Times 1
         }
     }
 
@@ -393,6 +400,19 @@ Describe 'ChezmoiHandler' {
             Should -Invoke Write-Host -ParameterFilter {
                 $Object -match "D:\\dotfiles\\chezmoi"
             }
+        }
+
+        It 'should not use deprecated --source-path option in install instructions' {
+            Mock Get-ExternalCommand { return $null }
+            Mock Test-PathExist { return $false }
+            Mock Get-ChildItemSafe { return @() }
+            Mock Write-Host { }
+
+            $handler.CanApply($ctx)
+
+            Should -Invoke Write-Host -ParameterFilter {
+                $Object -match "--source-path"
+            } -Times 0
         }
     }
 
