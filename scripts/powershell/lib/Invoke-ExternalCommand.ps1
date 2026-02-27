@@ -54,9 +54,9 @@ function Invoke-Chezmoi {
         [switch]$MergeStderr
     )
     if ($ExePath) {
-        if ($MergeStderr) { & $ExePath @Arguments 2>&1 } else { & $ExePath @Arguments }
+        if ($MergeStderr) { & $ExePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & $ExePath @Arguments }
     } else {
-        if ($MergeStderr) { & chezmoi @Arguments 2>&1 } else { & chezmoi @Arguments }
+        if ($MergeStderr) { & chezmoi @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & chezmoi @Arguments }
     }
 }
 

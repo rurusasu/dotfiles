@@ -13,6 +13,38 @@ BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
 }
 
+Describe 'Invoke-Chezmoi' {
+    # ExePath を使ったテスト（chezmoi 本体のモックはスコープ競合するため回避）
+    BeforeAll {
+        # 固定出力を持つ偽 chezmoi スクリプトを作成
+        $script:fakeScript = Join-Path $env:TEMP "fake_chezmoi_$(Get-Random).ps1"
+        Set-Content $script:fakeScript -Value "Write-Host 'progress line 1'; Write-Host 'progress line 2'"
+    }
+
+    AfterAll {
+        Remove-Item $script:fakeScript -ErrorAction SilentlyContinue
+    }
+
+    It 'should write each output line to host when MergeStderr is set' {
+        $script:written = @()
+        Mock Write-Host { param($Object) $script:written += $Object }
+
+        Invoke-Chezmoi -ExePath "pwsh" -MergeStderr "-NonInteractive" "-File" $script:fakeScript
+
+        $script:written | Should -Contain "progress line 1"
+        $script:written | Should -Contain "progress line 2"
+    }
+
+    It 'should return output via pipeline when MergeStderr is not set' {
+        Mock Write-Host { }
+
+        $result = Invoke-Chezmoi -ExePath "pwsh" "-NonInteractive" "-File" $script:fakeScript
+
+        Should -Invoke Write-Host -Times 0
+        $result | Should -Contain "progress line 1"
+    }
+}
+
 Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
