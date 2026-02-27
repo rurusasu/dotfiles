@@ -76,7 +76,15 @@ class ChezmoiHandler : SetupHandlerBase {
             New-DirectorySafe -Path $runtimeRoot
             New-DirectorySafe -Path $cachePath
 
-            # install.cmd 経由では非対話実行を優先し、init の確認プロンプト待ちを避ける
+            # config file テンプレートが変更された場合、--no-tty 環境では apply が停止するため
+            # init を先に実行して config を再生成する
+            Invoke-Chezmoi `
+                -ExePath $this.ChezmoiExePath `
+                -MergeStderr `
+                "--persistent-state" $persistentStatePath `
+                "--cache" $cachePath `
+                "--no-tty" "init" "--source" $sourcePath
+
             # -v: 処理中のファイルを逐次出力してハング状態に見えないようにする
             # -MergeStderr: run_after_ スクリプトの stdout/stderr を合流してコンソール表示
             Invoke-Chezmoi `

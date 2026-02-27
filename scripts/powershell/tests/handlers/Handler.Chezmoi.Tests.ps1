@@ -207,9 +207,9 @@ Describe 'ChezmoiHandler' {
                 $Arguments -contains "D:\dotfiles\chezmoi"
             } -Times 1
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 1 -and
-                $Arguments[0] -eq "init"
-            } -Times 0
+                $Arguments -contains "init" -and
+                $Arguments -contains "--source"
+            } -Times 1
         }
 
         It 'should show success message after completion' {
@@ -244,7 +244,7 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
         }
 
-        It 'should not invoke chezmoi init during apply' {
+        It 'should invoke chezmoi init to regenerate config before apply' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains '--version') {
@@ -256,9 +256,9 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx) | Out-Null
 
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 1 -and
-                $Arguments[0] -eq "init"
-            } -Times 0
+                $Arguments -contains "init" -and
+                $Arguments -contains "--source"
+            } -Times 1
         }
 
         It 'should include --no-tty in apply command' {
