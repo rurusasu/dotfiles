@@ -78,8 +78,10 @@ class ChezmoiHandler : SetupHandlerBase {
 
             # install.cmd 経由では非対話実行を優先し、init の確認プロンプト待ちを避ける
             # -v: 処理中のファイルを逐次出力してハング状態に見えないようにする
+            # -MergeStderr: run_after_ スクリプトの stdout/stderr を合流してコンソール表示
             Invoke-Chezmoi `
                 -ExePath $this.ChezmoiExePath `
+                -MergeStderr `
                 "--persistent-state" $persistentStatePath `
                 "--cache" $cachePath `
                 "--no-tty" "apply" "--source" $sourcePath "-v"

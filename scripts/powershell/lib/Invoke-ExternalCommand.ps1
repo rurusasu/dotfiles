@@ -48,12 +48,15 @@ function Invoke-Chezmoi {
     param(
         [Parameter(ValueFromRemainingArguments)]
         [string[]]$Arguments,
-        [string]$ExePath
+        [string]$ExePath,
+        # apply 時に chezmoi スクリプトの stderr 出力（進捗ログ等）を
+        # stdout に合流させてコンソールに表示するために使用する
+        [switch]$MergeStderr
     )
     if ($ExePath) {
-        & $ExePath @Arguments
+        if ($MergeStderr) { & $ExePath @Arguments 2>&1 } else { & $ExePath @Arguments }
     } else {
-        & chezmoi @Arguments
+        if ($MergeStderr) { & chezmoi @Arguments 2>&1 } else { & chezmoi @Arguments }
     }
 }
 
