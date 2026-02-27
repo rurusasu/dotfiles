@@ -282,6 +282,23 @@ Describe 'ChezmoiHandler' {
             } -Times 1
         }
 
+        It 'should include -v in apply command to show progress' {
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return "chezmoi version 2.45.0"
+                }
+            }
+
+            $handler.CanApply($ctx) | Should -Be $true
+            $handler.Apply($ctx) | Out-Null
+
+            Should -Invoke Invoke-Chezmoi -ParameterFilter {
+                $Arguments -contains "-v" -and
+                $Arguments -contains "apply"
+            } -Times 1
+        }
+
         It 'should create runtime directories before apply' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0

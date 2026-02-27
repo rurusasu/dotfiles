@@ -77,11 +77,12 @@ class ChezmoiHandler : SetupHandlerBase {
             New-DirectorySafe -Path $cachePath
 
             # install.cmd 経由では非対話実行を優先し、init の確認プロンプト待ちを避ける
+            # -v: 処理中のファイルを逐次出力してハング状態に見えないようにする
             Invoke-Chezmoi `
                 -ExePath $this.ChezmoiExePath `
                 "--persistent-state" $persistentStatePath `
                 "--cache" $cachePath `
-                "--no-tty" "apply" "--source" $sourcePath
+                "--no-tty" "apply" "--source" $sourcePath "-v"
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
