@@ -86,13 +86,14 @@ class ChezmoiHandler : SetupHandlerBase {
                 "--no-tty" "init" "--source" $sourcePath
 
             # -v: 処理中のファイルを逐次出力してハング状態に見えないようにする
+            # --force: コンフリクト時のプロンプトをスキップして上書き（非対話実行に必須）
             # -MergeStderr: run_after_ スクリプトの stdout/stderr を合流してコンソール表示
             Invoke-Chezmoi `
                 -ExePath $this.ChezmoiExePath `
                 -MergeStderr `
                 "--persistent-state" $persistentStatePath `
                 "--cache" $cachePath `
-                "--no-tty" "apply" "--source" $sourcePath "-v"
+                "--no-tty" "apply" "--source" $sourcePath "--force" "-v"
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
