@@ -68,18 +68,20 @@ class ChezmoiHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $sourcePath = $this.GetChezmoiSourcePath($ctx)
+            $runtimeRoot = $this.GetChezmoiRuntimeRoot()
+            $persistentStatePath = Join-Path $runtimeRoot "chezmoistate.boltdb"
+            $cachePath = Join-Path $runtimeRoot "cache"
+
             $this.Log("chezmoi でターミナル設定を適用します: $sourcePath")
-            $this.EnsureChezmoiSourceRepository($ctx)
+            New-DirectorySafe -Path $runtimeRoot
+            New-DirectorySafe -Path $cachePath
 
-            # 設定ファイルテンプレートが変更された場合のために init を先に実行する
-            # init が失敗しても apply は続行する（初回セットアップ済みの場合は通常成功しない）
-            $this.Log("chezmoi init を実行して設定を再生成します")
-            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "init" "--source" $sourcePath
-            if ($LASTEXITCODE -ne 0) {
-                $this.Log("chezmoi init はスキップされました (exit=$LASTEXITCODE)", "Gray")
-            }
-
-            Invoke-Chezmoi -ExePath $this.ChezmoiExePath "apply" "--source" $sourcePath
+            # install.cmd 経由では非対話実行を優先し、init の確認プロンプト待ちを避ける
+            Invoke-Chezmoi `
+                -ExePath $this.ChezmoiExePath `
+                "--persistent-state" $persistentStatePath `
+                "--cache" $cachePath `
+                "--no-tty" "apply" "--source" $sourcePath
 
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
@@ -195,36 +197,7 @@ class ChezmoiHandler : SetupHandlerBase {
         return Join-Path $ctx.DotfilesPath "chezmoi"
     }
 
-    hidden [void] EnsureChezmoiSourceRepository([SetupContext]$ctx) {
-        $sourceRepoPath = $this.GetChezmoiSourceRepositoryPath()
-        if (Test-PathExist -Path $sourceRepoPath) {
-            return
-        }
-
-        $localSourcePath = $this.GetChezmoiSourcePath($ctx)
-        $this.Log("chezmoi source ディレクトリを初期化します: $localSourcePath", "Gray")
-        Invoke-Chezmoi -ExePath $this.ChezmoiExePath "init" "--source" $localSourcePath
-
-        if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("chezmoi source ディレクトリの初期化に失敗しました (exit=$LASTEXITCODE)")
-            $this.Log("手動実行: chezmoi init --source `"$localSourcePath`"", "Yellow")
-        }
-    }
-
-    hidden [string] GetChezmoiSourceRepositoryPath() {
-        try {
-            $sourcePathOutput = Invoke-Chezmoi -ExePath $this.ChezmoiExePath "source-path"
-            if ($LASTEXITCODE -eq 0 -and $sourcePathOutput) {
-                $sourcePath = (($sourcePathOutput | Select-Object -First 1).ToString()).Trim()
-                if (-not [string]::IsNullOrWhiteSpace($sourcePath)) {
-                    return $sourcePath
-                }
-            }
-        }
-        catch {
-            # フォールバックのデフォルトパスを返す
-        }
-
-        return Join-Path $env:USERPROFILE ".local\share\chezmoi"
+    hidden [string] GetChezmoiRuntimeRoot() {
+        return Join-Path $env:LOCALAPPDATA "chezmoi"
     }
 }

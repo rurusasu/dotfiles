@@ -164,6 +164,7 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
             Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
             Mock Write-Host { }
         }
 
@@ -182,7 +183,7 @@ Describe 'ChezmoiHandler' {
             $result.Message | Should -Be "dotfiles を適用しました"
         }
 
-        It 'should pass correct arguments to chezmoi init and apply' {
+        It 'should pass correct non-interactive arguments to chezmoi apply' {
             $script:chezmoiExePath = ""
             Mock Invoke-Chezmoi {
                 param($ExePath, $Arguments)
@@ -198,17 +199,17 @@ Describe 'ChezmoiHandler' {
 
             $script:chezmoiExePath | Should -Be "C:\chezmoi\chezmoi.exe"
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 3 -and
-                $Arguments[0] -eq "init" -and
-                $Arguments[1] -eq "--source" -and
-                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+                $Arguments -contains "--persistent-state" -and
+                $Arguments -contains "--cache" -and
+                $Arguments -contains "--no-tty" -and
+                $Arguments -contains "apply" -and
+                $Arguments -contains "--source" -and
+                $Arguments -contains "D:\dotfiles\chezmoi"
             } -Times 1
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 3 -and
-                $Arguments[0] -eq "apply" -and
-                $Arguments[1] -eq "--source" -and
-                $Arguments[2] -eq "D:\dotfiles\chezmoi"
-            } -Times 1
+                $Arguments.Count -ge 1 -and
+                $Arguments[0] -eq "init"
+            } -Times 0
         }
 
         It 'should show success message after completion' {
@@ -233,27 +234,21 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'Apply - source repository initialization' {
+    Context 'Apply - non-interactive execution' {
         BeforeEach {
             Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
+            Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
             Mock Write-Host { }
         }
 
-        It 'should run init twice when source-path does not exist' {
-            Mock Test-PathExist {
-                param($Path)
-                if ($Path -eq "C:\Users\rurus\.local\share\chezmoi") { return $false }
-                return $true
-            }
+        It 'should not invoke chezmoi init during apply' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains '--version') {
                     return "chezmoi version 2.45.0"
-                }
-                if ($Arguments.Count -ge 1 -and $Arguments[0] -eq "source-path") {
-                    return "C:\Users\rurus\.local\share\chezmoi"
                 }
             }
 
@@ -261,22 +256,16 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx) | Out-Null
 
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 3 -and
-                $Arguments[0] -eq "init" -and
-                $Arguments[1] -eq "--source" -and
-                $Arguments[2] -eq "D:\dotfiles\chezmoi"
-            } -Times 2
+                $Arguments.Count -ge 1 -and
+                $Arguments[0] -eq "init"
+            } -Times 0
         }
 
-        It 'should skip source repository init when source-path already exists' {
-            Mock Test-PathExist { return $true }
+        It 'should include --no-tty in apply command' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains '--version') {
                     return "chezmoi version 2.45.0"
-                }
-                if ($Arguments.Count -ge 1 -and $Arguments[0] -eq "source-path") {
-                    return "C:\Users\rurus\.local\share\chezmoi"
                 }
             }
 
@@ -284,11 +273,27 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx) | Out-Null
 
             Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments.Count -ge 3 -and
-                $Arguments[0] -eq "init" -and
-                $Arguments[1] -eq "--source" -and
-                $Arguments[2] -eq "D:\dotfiles\chezmoi"
+                $Arguments -contains "--persistent-state" -and
+                $Arguments -contains "--cache" -and
+                $Arguments -contains "--no-tty" -and
+                $Arguments -contains "apply" -and
+                $Arguments -contains "--source" -and
+                $Arguments -contains "D:\dotfiles\chezmoi"
             } -Times 1
+        }
+
+        It 'should create runtime directories before apply' {
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return "chezmoi version 2.45.0"
+                }
+            }
+
+            $handler.CanApply($ctx) | Should -Be $true
+            $handler.Apply($ctx) | Out-Null
+
+            Should -Invoke New-DirectorySafe -Times 2
         }
     }
 
@@ -298,6 +303,7 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
             }
             Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
             Mock Write-Host { }
         }
 
