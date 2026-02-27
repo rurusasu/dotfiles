@@ -65,23 +65,6 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch 完了", "Green")
 
-            # bun install を実行（package.json がある場合）
-            $this.Log("bun install を実行しています...")
-            $bunOutput = Invoke-Wsl -Arguments @("-d", $distroName, "--", "bash", "-lc", "cd ~/.dotfiles && bun install")
-
-            $bunOutput | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    $this.Log("  $_", "Gray")
-                }
-            }
-
-            if ($LASTEXITCODE -ne 0) {
-                $this.LogWarning("bun install が失敗しました (exit code: $LASTEXITCODE)")
-            }
-            else {
-                $this.Log("bun install 完了", "Green")
-            }
-
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }
         catch {
