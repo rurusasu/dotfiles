@@ -128,7 +128,8 @@ enabled = true
 # 追加手順:
 # 1) `chezmoi/dot_codex/agents/<role>.toml` を作成
 # 2) 下記に `[agents.<role>]` を追加し、`description` と `config_file` を必ず設定
-# 3) `config_file` は展開先 `~/.codex/agents/<role>.toml` を指すこと
+# 3) `config_file` は chezmoi テンプレートで絶対パスに展開すること
+#    ※ Windows で Codex CLI が `~` を展開しないため絶対パスが必要
 # 4) スキル依存がある場合は `[[skills.config]]` もこのファイルで管理する
 # 詳細: `chezmoi/dot_codex/agents/AGENTS.md`
 [agents]
@@ -138,12 +139,12 @@ max_threads = 12
 # カスタムエージェント: 高速実装用
 [agents.fast_worker]
 description = "Fast scoped implementation agent."
-config_file = "~/.codex/agents/fast_worker.toml"
+config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/fast_worker.toml"
 
 # カスタムエージェント: Python 実装専任
 [agents.python_coding]
 description = "Python implementation-only agent (no test execution)."
-config_file = "~/.codex/agents/python_coding.toml"
+config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_coding.toml"
 
 ################################################################################
 # MCP サーバー設定 (Generated from .chezmoidata/mcp_servers.yaml)
