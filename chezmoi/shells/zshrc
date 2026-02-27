@@ -36,14 +36,9 @@ if command -v task >/dev/null 2>&1; then
 fi
 
 # PATH: bun global binaries (claude-code, gemini-cli, etc.)
-# WSL interop では $HOME が Windows home にマップされる場合があるため
-# getent で実際の Linux ホームディレクトリを取得して ~/.bun/bin を追加する
-_bun_real_home=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)
-_bun_bin_dir="${_bun_real_home:-$HOME}/.bun/bin"
-if [ -d "$_bun_bin_dir" ]; then
-  export PATH="$_bun_bin_dir:$PATH"
+if [ -d "$HOME/.bun/bin" ]; then
+  export PATH="$HOME/.bun/bin:$PATH"
 fi
-unset _bun_real_home _bun_bin_dir
 
 # Environment
 export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"

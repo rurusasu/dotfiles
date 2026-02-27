@@ -36,7 +36,39 @@ in
     };
 
     environment.systemPackages = with pkgs; [
+      # Dotfiles manager
+      chezmoi
+
+      # Version control
       git
+      gh
+
+      # Modern CLI replacements
+      fd # find alternative
+      ripgrep # grep alternative
+      bat # cat alternative
+      eza # ls alternative
+      zoxide # cd alternative
+      fzf # fuzzy finder
+
+      # Shell prompt
+      starship
+
+      # Editor
+      neovim
+
+      # Task runner
+      go-task
+
+      # Archive tools
+      unzip
+      p7zip
+
+      # Python toolchain
+      uv
+
+      # JavaScript runtime (for claude-code, gemini-cli)
+      bun
     ];
   };
 }

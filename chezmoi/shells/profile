@@ -7,4 +7,10 @@ fi
 if [ -d "$HOME/.local/bin" ]; then
   PATH="$HOME/.local/bin:$PATH"
 fi
+
+# bun global binaries (claude-code, gemini-cli, etc.)
+if [ -d "$HOME/.bun/bin" ]; then
+  PATH="$HOME/.bun/bin:$PATH"
+fi
+
 export PATH

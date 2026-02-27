@@ -14,7 +14,8 @@ deploy_file() {
 
   if [[ -f "$src" ]]; then
     mkdir -p "$(dirname "$dst")"
-    cp -f "$src" "$dst"
+    # CRLF→LF 変換（Windows ソースからコピーする場合に bash/sh が壊れないよう）
+    sed 's/\r//' "$src" > "$dst"
     echo "Deployed: $dst"
   fi
 }
