@@ -67,8 +67,9 @@ in
       # Python toolchain
       uv
 
-      # JavaScript runtime (for claude-code, gemini-cli)
+      # JavaScript runtime (for claude-code, gemini-cli, openclaw)
       bun
+      nodejs_22 # openclaw requires Node.js 22+
 
       # AI coding agents
       opencode
