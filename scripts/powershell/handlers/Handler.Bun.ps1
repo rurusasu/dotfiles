@@ -75,6 +75,8 @@ class BunHandler : SetupHandlerBase {
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
+            $this.CreateBunxShim()
+
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("bun グローバルパッケージをインストールしています...")
             $this.Log("ソース: $packagesPath")
@@ -137,6 +139,30 @@ class BunHandler : SetupHandlerBase {
         catch {
             return $false
         }
+    }
+
+    <#
+    .SYNOPSIS
+        bunx.cmd シムを bun.exe と同じディレクトリに作成する
+    .DESCRIPTION
+        WinGet でインストールした bun には bunx.exe が含まれないため、
+        "bun x %*" を呼び出す .cmd シムを作成して代替する。
+    #>
+    hidden [void] CreateBunxShim() {
+        $bunCmd = Get-Command bun -ErrorAction SilentlyContinue
+        if (-not $bunCmd) { return }
+
+        $bunDir  = Split-Path $bunCmd.Source
+        $shimPath = Join-Path $bunDir "bunx.cmd"
+
+        if (Test-Path $shimPath) {
+            $this.Log("bunx.cmd は既に存在します: $shimPath", "Gray")
+            return
+        }
+
+        $shimContent = "@echo off`r`n""%~dp0bun.exe"" x %*`r`n"
+        [System.IO.File]::WriteAllText($shimPath, $shimContent, [System.Text.Encoding]::ASCII)
+        $this.Log("bunx.cmd を作成しました: $shimPath", "Green")
     }
 
     <#

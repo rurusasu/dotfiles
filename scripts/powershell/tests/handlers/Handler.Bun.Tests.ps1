@@ -97,9 +97,57 @@ Describe 'BunHandler' {
         }
     }
 
+    Context 'CreateBunxShim - bun not found' {
+        BeforeEach {
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'bun' }
+            Mock Write-Host { }
+        }
+
+        It 'should do nothing' {
+            { $handler.CreateBunxShim() } | Should -Not -Throw
+        }
+    }
+
+    Context 'CreateBunxShim - shim already exists' {
+        BeforeEach {
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            $fakeShim   = Join-Path $TestDrive "bunx.cmd"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            New-Item $fakeShim   -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Write-Host { }
+        }
+
+        It 'should skip creation and log gray message' {
+            $handler.CreateBunxShim()
+            (Get-Item $fakeShim).Length | Should -Be 0
+        }
+    }
+
+    Context 'CreateBunxShim - shim does not exist' {
+        BeforeEach {
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Write-Host { }
+        }
+
+        It 'should create bunx.cmd with correct content' {
+            $handler.CreateBunxShim()
+            $shimPath = Join-Path $TestDrive "bunx.cmd"
+            $shimPath | Should -Exist
+            $content = Get-Content $shimPath -Raw
+            $content | Should -Match '@echo off'
+            $content | Should -Match 'bun\.exe" x \%\*'
+        }
+    }
+
     Context 'Apply - all new packages' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\bun.exe" } }
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Get-ExternalCommand { return @{ Source = $fakeBunExe } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
@@ -126,7 +174,10 @@ Describe 'BunHandler' {
 
     Context 'Apply - already installed packages' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\bun.exe" } }
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Get-ExternalCommand { return @{ Source = $fakeBunExe } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
@@ -154,7 +205,10 @@ Describe 'BunHandler' {
 
     Context 'Apply - empty package list' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\bun.exe" } }
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Get-ExternalCommand { return @{ Source = $fakeBunExe } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
@@ -172,7 +226,10 @@ Describe 'BunHandler' {
 
     Context 'Apply - install failure' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\bun.exe" } }
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Get-ExternalCommand { return @{ Source = $fakeBunExe } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
@@ -206,7 +263,10 @@ Describe 'BunHandler' {
 
     Context 'Apply - exception thrown' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\bun.exe" } }
+            $fakeBunExe = Join-Path $TestDrive "bun.exe"
+            New-Item $fakeBunExe -ItemType File -Force | Out-Null
+            Mock Get-Command { return [PSCustomObject]@{ Source = $fakeBunExe } } -ParameterFilter { $Name -eq 'bun' }
+            Mock Get-ExternalCommand { return @{ Source = $fakeBunExe } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent { throw "bun error" }
         }

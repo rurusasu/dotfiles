@@ -78,7 +78,7 @@ mcp_servers:
 
   # Tavily - AI-powered web search and extraction
   - name: tavily
-    command: npx
+    command: bunx
     args:
       - "-y"
       - "tavily-mcp@latest"
@@ -92,7 +92,7 @@ mcp_servers:
 
   # Draw.io Official - Open diagrams in draw.io editor (browser)
   - name: drawio
-    command: npx
+    command: bunx
     args:
       - "-y"
       - "@drawio/mcp"
