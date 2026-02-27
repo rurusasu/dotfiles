@@ -69,6 +69,9 @@ in
 
       # JavaScript runtime (for claude-code, gemini-cli)
       bun
+
+      # AI coding agents
+      opencode
     ];
   };
 }

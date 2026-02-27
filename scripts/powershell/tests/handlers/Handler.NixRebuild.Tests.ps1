@@ -94,16 +94,9 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q")
-                {
-                    $global:LASTEXITCODE = 0
-                    return @("NixOS")
-                }
-                if ($argStr -match "nixos-rebuild")
-                {
-                    $global:LASTEXITCODE = 0
-                    return @("building NixOS...", "activating configuration...")
-                }
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return @("installed") }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -118,16 +111,8 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q")
-                {
-                    $global:LASTEXITCODE = 0
-                    return @("NixOS")
-                }
-                if ($argStr -match "nixos-rebuild")
-                {
-                    $global:LASTEXITCODE = 1
-                    return @("error: build failed")
-                }
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -138,22 +123,53 @@ Describe 'NixRebuildHandler' {
             $result.Message | Should -Match "nixos-rebuild switch が失敗しました"
         }
 
+        It 'should install bun global packages after nixos-rebuild' {
+            $script:bunArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") {
+                    $script:bunArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return @("installed opencode-ai")
+                }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:bunArgs | Should -Match "bun install -g"
+            $script:bunArgs | Should -Match "opencode-ai"
+        }
+
+        It 'should succeed even when bun install fails' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 1; return @("error") }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            # bun install 失敗でも Apply 自体は成功とみなす
+            $result.Success | Should -Be $true
+        }
+
         It 'should pass correct arguments to WSL' {
             $script:wslArgs = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q")
-                {
-                    $global:LASTEXITCODE = 0
-                    return @("NixOS")
-                }
-                if ($argStr -match "nixos-rebuild")
-                {
-                    $script:wslArgs = $argStr
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -172,17 +188,9 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q")
-                {
-                    $global:LASTEXITCODE = 0
-                    return @("CustomNixOS")
-                }
-                if ($argStr -match "nixos-rebuild")
-                {
-                    $script:wslArgs = $argStr
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("CustomNixOS") }
+                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)

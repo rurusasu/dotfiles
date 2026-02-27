@@ -5,6 +5,7 @@
 .DESCRIPTION
     - NixOS ディストリビューションの存在確認
     - nixos-rebuild switch の実行
+    - bun グローバルパッケージのインストール (nix/bun/packages.json)
 
 .NOTES
     Order = 15 (Chezmoi の後、WslConfig の前)
@@ -44,6 +45,46 @@ class NixRebuildHandler : SetupHandlerBase {
         return $true
     }
 
+    hidden [void] InstallBunGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
+        try {
+            if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
+                $this.Log("bun パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
+                return
+            }
+
+            $json = Get-Content -LiteralPath $packagesJsonPath -Raw | ConvertFrom-Json
+            $packages = $json.globalPackages
+            if (-not $packages -or $packages.Count -eq 0) {
+                $this.Log("インストールする bun パッケージがありません", "Gray")
+                return
+            }
+
+            $pkgList = $packages -join " "
+            $this.Log("bun グローバルパッケージをインストールしています: $pkgList")
+
+            $bunOutput = Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "bun install -g $pkgList"
+            )
+
+            $bunOutput | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -ne 0) {
+                $this.LogWarning("bun グローバルパッケージのインストールが失敗しました (exit code: $LASTEXITCODE)")
+            }
+            else {
+                $this.Log("bun グローバルパッケージのインストール完了", "Green")
+            }
+        }
+        catch {
+            $this.LogWarning("bun パッケージインストール中にエラーが発生しました: $_")
+        }
+    }
+
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $distroName = $ctx.DistroName
@@ -64,6 +105,10 @@ class NixRebuildHandler : SetupHandlerBase {
             }
 
             $this.Log("nixos-rebuild switch 完了", "Green")
+
+            # bun グローバルパッケージをインストール
+            $packagesJsonPath = Join-Path $ctx.DotfilesPath "nix\bun\packages.json"
+            $this.InstallBunGlobalPackages($distroName, $packagesJsonPath)
 
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }
