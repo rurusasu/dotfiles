@@ -97,6 +97,63 @@ Describe 'BunHandler' {
         }
     }
 
+    Context 'AddBunBinToPath - bin directory does not exist' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = Join-Path $TestDrive "nouser"
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should do nothing without throwing' {
+            { $handler.AddBunBinToPath() } | Should -Not -Throw
+        }
+    }
+
+    Context 'AddBunBinToPath - already in PATH' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = $TestDrive
+            $bunBin = Join-Path $TestDrive ".bun\bin"
+            New-Item $bunBin -ItemType Directory -Force | Out-Null
+            Mock Get-UserEnvironmentPath { return $bunBin }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should skip and not call Set-UserEnvironmentPath' {
+            $handler.AddBunBinToPath()
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+    }
+
+    Context 'AddBunBinToPath - not yet in PATH' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = $TestDrive
+            $bunBin = Join-Path $TestDrive ".bun\bin"
+            New-Item $bunBin -ItemType Directory -Force | Out-Null
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should call Set-UserEnvironmentPath with bunBin prepended' {
+            $handler.AddBunBinToPath()
+            Should -Invoke Set-UserEnvironmentPath -ParameterFilter {
+                $Path -like "*\.bun\bin*"
+            } -Times 1
+        }
+    }
+
     Context 'CreateBunxShim - bun not found' {
         BeforeEach {
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'bun' }

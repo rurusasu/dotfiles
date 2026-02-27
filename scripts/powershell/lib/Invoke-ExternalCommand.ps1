@@ -548,3 +548,28 @@ function Invoke-Bun {
     & bun @Arguments
 }
 
+<#
+.SYNOPSIS
+    ユーザー環境変数 PATH の現在値を返す
+.DESCRIPTION
+    Pester でモック可能にするため [System.Environment] を直接呼ばずにラップする
+#>
+function Get-UserEnvironmentPath {
+    return [System.Environment]::GetEnvironmentVariable("PATH", "User")
+}
+
+<#
+.SYNOPSIS
+    ユーザー環境変数 PATH を永続的に設定する
+.DESCRIPTION
+    Pester でモック可能にするため [System.Environment] を直接呼ばずにラップする
+#>
+function Set-UserEnvironmentPath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    [System.Environment]::SetEnvironmentVariable("PATH", $Path, "User")
+}
+

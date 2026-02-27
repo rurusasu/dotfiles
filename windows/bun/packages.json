@@ -1,5 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "bun global packages to install on Windows",
-  "globalPackages": ["@google/gemini-cli"]
+  "globalPackages": ["@google/gemini-cli", "@anthropic-ai/claude-code"]
 }

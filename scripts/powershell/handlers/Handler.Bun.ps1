@@ -76,6 +76,7 @@ class BunHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $this.CreateBunxShim()
+            $this.AddBunBinToPath()
 
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("bun グローバルパッケージをインストールしています...")
@@ -139,6 +140,36 @@ class BunHandler : SetupHandlerBase {
         catch {
             return $false
         }
+    }
+
+    <#
+    .SYNOPSIS
+        ~/.bun/bin を User PATH に追加する
+    .DESCRIPTION
+        bun install -g でインストールしたコマンド（claude, gemini 等）を
+        ターミナルから直接実行できるようにするため、~/.bun/bin を永続的に
+        User 環境変数 PATH に追加する。既に含まれている場合はスキップ。
+    #>
+    hidden [void] AddBunBinToPath() {
+        $bunBinPath = Join-Path $env:USERPROFILE ".bun\bin"
+
+        if (-not (Test-Path $bunBinPath)) {
+            $this.Log(".bun\bin ディレクトリが存在しません。スキップ: $bunBinPath", "Gray")
+            return
+        }
+
+        $userPath = Get-UserEnvironmentPath
+        $pathItems = if ($userPath) { $userPath -split ";" } else { @() }
+
+        if ($pathItems -contains $bunBinPath) {
+            $this.Log(".bun\bin は既に PATH に含まれています", "Gray")
+            return
+        }
+
+        $newPath = ($bunBinPath, $userPath | Where-Object { $_ }) -join ";"
+        Set-UserEnvironmentPath -Path $newPath
+        $this.Log(".bun\bin を USER PATH に追加しました: $bunBinPath", "Green")
+        $this.Log("ターミナルを再起動すると claude / gemini コマンドが使えます", "Gray")
     }
 
     <#
