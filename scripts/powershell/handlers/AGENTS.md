@@ -6,6 +6,9 @@ Purpose: セットアップハンドラーの実装
 
 | ファイル                   | Order | 説明                                           |
 | -------------------------- | ----- | ---------------------------------------------- |
+| `Handler.Winget.ps1`       | 5     | winget パッケージインストール                  |
+| `Handler.Codex.ps1`        | 6     | Codex CLI シンボリックリンク作成               |
+| `Handler.Bun.ps1`          | 7     | bun グローバルパッケージ管理                   |
 | `Handler.WslConfig.ps1`    | 10    | .wslconfig 適用と VHD 拡張                     |
 | `Handler.Docker.ps1`       | 20    | Docker Desktop WSL 連携設定                    |
 | `Handler.VscodeServer.ps1` | 30    | VS Code Server キャッシュ削除/事前インストール |

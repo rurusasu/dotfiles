@@ -21,8 +21,8 @@ Describe 'install.user.ps1' {
         $result | Should -BeOfType [bool]
     }
 
-    It 'should target Winget handler only' {
+    It 'should target Winget and Codex handlers only' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\$_.Name -eq "Winget"'
+        $content | Should -Match '\$_.Name -in @\("Winget", "Codex"\)'
     }
 }
