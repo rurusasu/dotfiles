@@ -14,9 +14,8 @@
   "channels": {
     "telegram": {
       "enabled": true,
-      "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/password" }}",
-      "dmPolicy": "allowlist",
-      "allowFrom": ["tg:{{ onepasswordRead "op://Personal/TelegramBot/username" }}"],
+      "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/認証情報" }}",
+      "dmPolicy": "pairing",
       "streaming": "block"
     }
   },
