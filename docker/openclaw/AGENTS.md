@@ -54,7 +54,7 @@ user: "1000:1000" # 非 root 実行
 
 ## GitHub 認証
 
-コンテナ内で git / gh CLI を使う場合は **Fine-grained PAT** を推奨。
+コンテナ内で git を使う場合は **Fine-grained PAT** を使用。
 
 ### 方針
 
@@ -69,27 +69,54 @@ user: "1000:1000" # 非 root 実行
 op://Personal/GitHub/openclaw-token
 ```
 
-### .env への追加項目（未実装・TODO）
+### 仕組み
 
-```dotenv
-GITHUB_TOKEN=<1Password から取得>
+```
+1Password (op://Personal/GitHub/openclaw-token)
+    ↓ op read（Handler.OpenClaw.ps1 が自動取得）
+.env: GITHUB_TOKEN=<PAT>
+    ↓ docker-compose.yml で環境変数として渡す
+コンテナ内 GITHUB_TOKEN + GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh
+    ↓ git が HTTPS 認証時に呼び出す
+PAT をパスワードとして使用
 ```
 
-### docker-compose.yml への追加（未実装・TODO）
+### 実装内容
+
+**Dockerfile**:
+
+- `git` + `openssh-client` をインストール
+- `GIT_ASKPASS` ヘルパースクリプト（`/usr/local/bin/git-credential-askpass.sh`）を追加
+  - `${GITHUB_TOKEN}` はビルド時ではなく**実行時**に評価される
+- `USER bun` 後に git global config を設定（`safe.directory "*"` 含む）
+
+**docker-compose.yml**:
 
 ```yaml
 environment:
   GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
 ```
 
-### git config（Dockerfile または起動スクリプト・未実装・TODO）
+**Handler.OpenClaw.ps1** の `EnsureEnvFile`:
 
-```dockerfile
-RUN git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+- `op` CLI が利用可能かつサインイン済みの場合、自動的に PAT を取得して `.env` に書き込む
+- `op` 未インストール・サインアウト時は `GITHUB_TOKEN=`（空文字）として生成
+
+### 初回セットアップ
+
+1. GitHub で Fine-grained PAT を作成（Contents: Read, Metadata: Read）
+2. 1Password に `op://Personal/GitHub/openclaw-token` として保存
+3. `op signin` でサインイン後、Handler を実行すると `.env` に自動反映
+
+### 既存の .env がある場合
+
+`EnsureEnvFile` は `.env` が存在する場合スキップする。手動で追記するか `.env` を削除して再生成:
+
+```powershell
+Remove-Item docker\openclaw\.env
+pwsh -File scripts\powershell\install.user.ps1
 ```
-
-> 実装時は Handler.OpenClaw.ps1 の `.env` 生成ブロックに
-> `op read op://Personal/GitHub/openclaw-token` を追加する。
 
 ## 運用コマンド
 

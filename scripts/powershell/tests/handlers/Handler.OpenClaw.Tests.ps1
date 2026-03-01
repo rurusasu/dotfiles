@@ -90,6 +90,8 @@ Describe 'OpenClawHandler' {
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
             Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
+            # op CLI は存在しない前提（1Password 未インストール環境を模倣）
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
         }
 
         It 'should start container successfully when config exists' {
@@ -270,6 +272,11 @@ Describe 'OpenClawHandler' {
     }
 
     Context 'Apply - .env content' {
+        BeforeEach {
+            # op CLI は存在しない前提
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+        }
+
         It 'should include OPENCLAW_CONFIG_FILE with forward slashes in .env' {
             $script:envContent = ""
             Mock Write-Host { }
@@ -325,6 +332,34 @@ Describe 'OpenClawHandler' {
             $handler.Apply($ctx)
 
             $script:envContent | Should -Match "TZ=Asia/Tokyo"
+        }
+
+        It 'should include GITHUB_TOKEN in .env (empty when op is not available)' {
+            $script:envContent = ""
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "\.env$") { return $false }
+                return $true
+            }
+            Mock Set-ContentNoNewline {
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envContent = $Value
+                }
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envContent | Should -Match "GITHUB_TOKEN="
         }
     }
 

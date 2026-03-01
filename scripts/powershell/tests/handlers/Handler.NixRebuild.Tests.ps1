@@ -144,7 +144,7 @@ Describe 'NixRebuildHandler' {
             $handler.Apply($ctx)
 
             $script:bunArgs | Should -Match "bun install -g"
-            $script:bunArgs | Should -Match "openclaw"
+            $script:bunArgs | Should -Match "gemini-cli"
         }
 
         It 'should succeed even when bun install fails' {

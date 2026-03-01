@@ -109,6 +109,16 @@ class OpenClawHandler : SetupHandlerBase {
             return
         }
 
+        # 1Password から GITHUB_TOKEN を取得（未設定・サインアウト時は空文字）
+        $githubToken = ""
+        $opCmd = Get-ExternalCommand -Name "op"
+        if ($opCmd) {
+            try {
+                $result = & op read "op://Personal/GitHub/openclaw-token" 2>&1
+                if ($LASTEXITCODE -eq 0) { $githubToken = ($result | Out-String).Trim() }
+            } catch { }
+        }
+
         $configPath = ($this.GetConfigFilePath() -replace '\\', '/')
         $envContent = @"
 OPENCLAW_PORT=18789
@@ -116,6 +126,7 @@ OPENCLAW_UID=1000
 OPENCLAW_GID=1000
 OPENCLAW_CONFIG_FILE=$configPath
 TZ=Asia/Tokyo
+GITHUB_TOKEN=$githubToken
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent

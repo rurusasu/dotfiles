@@ -31,6 +31,9 @@ services:
       # Runtime bun installs (skills) go to the writable data volume
       BUN_INSTALL: /app/data/.bun
       PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # GitHub HTTPS authentication via Fine-grained PAT (set in .env, stored in 1Password)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
