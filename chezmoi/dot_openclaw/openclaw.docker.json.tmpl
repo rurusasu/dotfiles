@@ -14,9 +14,9 @@
   "channels": {
     "telegram": {
       "enabled": true,
-      "botToken": "{{ onepasswordRead "op://Personal/openclaw/telegram bot token" }}",
+      "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/password" }}",
       "dmPolicy": "allowlist",
-      "allowFrom": ["tg:{{ onepasswordRead "op://Personal/openclaw/telegram user id" }}"],
+      "allowFrom": ["tg:{{ onepasswordRead "op://Personal/TelegramBot/username" }}"],
       "streaming": "block"
     }
   },

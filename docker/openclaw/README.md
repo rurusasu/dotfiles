@@ -10,21 +10,24 @@ openclaw を Docker コンテナで動作させ、Telegram から即座に使え
 
 ## 1Password の準備
 
-以下のシークレットを 1Password の **Personal** ボルトに `openclaw` アイテムとして登録：
+**Personal ボルト / `openclaw` アイテム（Login）**
 
-| フィールド名         | 内容                                                                              |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `gateway token`      | openclaw Web UI アクセス用トークン（任意の文字列）                                |
-| `telegram bot token` | BotFather から取得したボットトークン                                              |
-| `telegram user id`   | 自分の Telegram 数値ユーザーID（[@userinfobot](https://t.me/userinfobot) で確認） |
+| フィールド名    | 内容                                               |
+| --------------- | -------------------------------------------------- |
+| `gateway token` | openclaw Web UI アクセス用トークン（任意の文字列） |
+
+**Personal ボルト / `TelegramBot` アイテム（認証情報 / Login）**
+
+| フィールド | 内容                                                                              |
+| ---------- | --------------------------------------------------------------------------------- |
+| パスワード | BotFather から取得したボットトークン（例: `123456:ABCdef...`）                    |
+| ユーザ名   | 自分の Telegram 数値ユーザーID（[@userinfobot](https://t.me/userinfobot) で確認） |
 
 ## 初回セットアップ
 
-### 1. Telegram Bot の作成
+### 1. 確認事項
 
-1. Telegram で [@BotFather](https://t.me/BotFather) を開く
-2. `/newbot` コマンドで Bot を作成
-3. 取得したトークン（例: `123456:ABCdef...`）を 1Password に保存
+- `TelegramBot` アイテムにボットトークンと数値ユーザーIDが登録済みであることを確認
 
 ### 2. 設定ファイルのレンダリング
 
