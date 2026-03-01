@@ -17,13 +17,6 @@
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
-# テスト時にモック可能な op CLI ラッパー関数
-function Invoke-OpAccountList {
-    param([string]$OpExe)
-    $output = & $OpExe account list 2>&1
-    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
-}
-
 class ChezmoiHandler : SetupHandlerBase {
     # 検出された chezmoi 実行ファイルのパス
     hidden [string]$ChezmoiExePath

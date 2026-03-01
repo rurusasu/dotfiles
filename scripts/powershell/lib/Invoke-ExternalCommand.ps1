@@ -550,6 +550,30 @@ function Invoke-Bun {
 
 <#
 .SYNOPSIS
+    1Password CLI の account list を実行する
+.DESCRIPTION
+    Pester でモック可能にするため直接呼び出しを避けてラップする。
+    ExitCode を PSCustomObject に含めて返す。
+.PARAMETER OpExe
+    op.exe のパス
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
+.EXAMPLE
+    $result = Invoke-OpAccountList -OpExe "C:\op.exe"
+    if ($result.ExitCode -eq 0) { "signed in" }
+#>
+function Invoke-OpAccountList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OpExe
+    )
+    $output = & $OpExe account list 2>&1
+    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+<#
+.SYNOPSIS
     ユーザー環境変数 PATH の現在値を返す
 .DESCRIPTION
     Pester でモック可能にするため [System.Environment] を直接呼ばずにラップする
