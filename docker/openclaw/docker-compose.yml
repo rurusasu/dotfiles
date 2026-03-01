@@ -1,0 +1,39 @@
+services:
+  openclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/openclaw:dev
+    container_name: openclaw
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+
+    user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
+
+    environment:
+      TZ: ${TZ:-Asia/Tokyo}
+      # Runtime bun installs (skills) go to the writable data volume
+      BUN_INSTALL: /app/data/.bun
+      PATH: /app/data/.bun/bin:/opt/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    volumes:
+      # Docker-specific config (workspace path = /app/data/workspace, Telegram enabled)
+      - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/home/bun/.openclaw/openclaw.json:ro
+      - openclaw-data:/app/data
+
+volumes:
+  openclaw-data:
+    driver: local
