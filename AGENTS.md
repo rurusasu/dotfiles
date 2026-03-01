@@ -24,6 +24,8 @@ dotfiles/
 │   ├── hosts/              # Host-specific configs (WSL/Linux)
 │   ├── modules/            # Reusable NixOS modules
 │   └── templates/          # Flake templates
+├── docker/                 # Docker コンテナ定義
+│   └── openclaw/           # Telegram AI ゲートウェイ (see docker/openclaw/AGENTS.md)
 ├── scripts/                # All scripts (see scripts/AGENTS.md)
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   └── powershell/         # PowerShell scripts (Windows)
