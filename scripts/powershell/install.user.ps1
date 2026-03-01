@@ -53,7 +53,7 @@ $context.Options["SyncBack"] = $SyncBack
 $handlersPath = Join-Path $PSScriptRoot "handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
 $handlers = Select-SetupHandler -Handlers $handlers
-$handlers = @($handlers | Where-Object { $_.Name -in @("Winget", "Codex") })
+$handlers = @($handlers | Where-Object { $_.Name -in @("Winget", "Codex", "OpenClaw") })
 
 if ($CheckOnly) {
     $canApply = $false

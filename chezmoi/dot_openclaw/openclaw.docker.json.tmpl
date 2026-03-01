@@ -2,6 +2,7 @@
   "agents": {
     "defaults": {
       "workspace": "/app/data/workspace",
+      "model": "openai-codex/gpt-5.3-codex",
       "compaction": {
         "mode": "safeguard"
       },
@@ -14,8 +15,9 @@
   "channels": {
     "telegram": {
       "enabled": true,
-      "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/認証情報" }}",
-      "dmPolicy": "pairing",
+      "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/credential" }}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["{{ .telegramUserId }}"],
       "streaming": "block"
     }
   },

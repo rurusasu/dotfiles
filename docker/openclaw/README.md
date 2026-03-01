@@ -24,29 +24,40 @@ openclaw を Docker コンテナで動作させ、Telegram から即座に使え
 
 ## 初回セットアップ
 
-### 1. 確認事項
+### 1. chezmoi.toml に 1Password CLI パスを追加
+
+`~/.config/chezmoi/chezmoi.toml` に以下を追記（`op` が PATH にない場合）：
+
+```toml
+[onepassword]
+    command = "C:/Users/<USERNAME>/AppData/Local/Microsoft/WinGet/Packages/AgileBits.1Password.CLI_Microsoft.Winget.Source_8wekyb3d8bbwe/op.exe"
+```
+
+> WinGet でインストールした 1Password CLI はデフォルトで PATH に追加されないため必要。
+
+### 2. 確認事項
 
 - `TelegramBot` アイテムの `認証情報` フィールドにボットトークンが登録済みであることを確認
 
-### 2. 設定ファイルのレンダリング
+### 3. 設定ファイルのレンダリング
 
 chezmoi が 1Password からシークレットを取得して設定ファイルを生成：
 
-```bash
-chezmoi apply
+```powershell
+chezmoi apply "$env:USERPROFILE\.openclaw\openclaw.docker.json"
 ```
 
 `~/.openclaw/openclaw.docker.json` が生成されることを確認：
 
-```bash
-cat ~/.openclaw/openclaw.docker.json
+```powershell
+Get-Content "$env:USERPROFILE\.openclaw\openclaw.docker.json"
 ```
 
-### 3. .env の作成
+### 4. .env の作成
 
-```bash
-cp .env.example .env
-# OPENCLAW_UID / OPENCLAW_GID を自分の UID/GID に合わせて編集（id コマンドで確認）
+```powershell
+Copy-Item .env.example .env
+# OPENCLAW_UID / OPENCLAW_GID はデフォルト 1000 のまま（WSL2 デフォルト）
 ```
 
 ### 4. ビルド & 起動
@@ -74,10 +85,11 @@ Docker 用設定の特徴：
 
 ## ボリューム
 
-| ボリューム            | マウント先                          | 用途                         |
-| --------------------- | ----------------------------------- | ---------------------------- |
-| `openclaw-data`       | `/app/data`                         | ワークスペース・ログ・スキル |
-| `.env` の設定ファイル | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定             |
+| ボリューム            | マウント先                          | 用途                                     |
+| --------------------- | ----------------------------------- | ---------------------------------------- |
+| `openclaw-data`       | `/app/data`                         | ワークスペース・ログ・スキル             |
+| `openclaw-home`       | `/home/bun/.openclaw`               | canvas・cron など実行時ステート          |
+| `.env` の設定ファイル | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる） |
 
 ## 操作
 

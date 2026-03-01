@@ -2,23 +2,27 @@
 
 FROM oven/bun:1
 
-USER root
 WORKDIR /app
 
-ENV NODE_ENV=production \
-    BUN_INSTALL=/opt/bun \
-    PATH=/opt/bun/bin:${PATH}
+# Add node → bun symlink for packages that invoke node directly.
+RUN ln -sf /usr/local/bin/bun /usr/local/bin/node
 
-# Install openclaw globally, then set permissions for non-root runtime user.
-RUN mkdir -p /opt/bun \
+# Install openclaw to /home/bun/.bun (user-home path) so extensions pass
+# openclaw's plugin trust validation. Install as root, then chown to bun.
+ENV NODE_ENV=production \
+    BUN_INSTALL=/home/bun/.bun \
+    PATH=/home/bun/.bun/bin:${PATH}
+
+RUN mkdir -p /home/bun/.bun/bin /home/bun/.bun/install/global \
     && bun add -g openclaw \
-    && chmod -R a+rX /opt/bun
+    && chown -R bun:bun /home/bun/.bun
 
 # Pre-create data directories with correct ownership.
-# Named volume at /app/data is initialized from this layer on first run.
 RUN mkdir -p /app/data/workspace /app/data/.bun \
-    && chown -R bun:bun /app/data
+    && mkdir -p /home/bun/.openclaw \
+    && chown -R bun:bun /app/data /home/bun/.openclaw
 
 USER bun
 
 ENTRYPOINT ["openclaw"]
+CMD ["gateway"]

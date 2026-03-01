@@ -9,6 +9,7 @@ services:
 
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+      - "127.0.0.1:1455:1455" # OAuth callback port (required for onboard --auth-choice openai-codex)
 
     read_only: true
     tmpfs:
@@ -25,15 +26,21 @@ services:
 
     environment:
       TZ: ${TZ:-Asia/Tokyo}
+      # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Runtime bun installs (skills) go to the writable data volume
       BUN_INSTALL: /app/data/.bun
-      PATH: /app/data/.bun/bin:/opt/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     volumes:
-      # Docker-specific config (workspace path = /app/data/workspace, Telegram enabled)
+      # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
+      - openclaw-home:/home/bun/.openclaw
+      # Docker-specific config overlaid as read-only on top of the home volume
       - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/home/bun/.openclaw/openclaw.json:ro
       - openclaw-data:/app/data
 
 volumes:
   openclaw-data:
+    driver: local
+  openclaw-home:
     driver: local

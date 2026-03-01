@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.user.ps1"
@@ -21,8 +21,8 @@ Describe 'install.user.ps1' {
         $result | Should -BeOfType [bool]
     }
 
-    It 'should target Winget and Codex handlers only' {
+    It 'should target Winget, Codex and OpenClaw handlers' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\$_.Name -in @\("Winget", "Codex"\)'
+        $content | Should -Match '\$_.Name -in @\("Winget", "Codex", "OpenClaw"\)'
     }
 }

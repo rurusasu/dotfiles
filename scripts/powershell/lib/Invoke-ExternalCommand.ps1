@@ -550,6 +550,26 @@ function Invoke-Bun {
 
 <#
 .SYNOPSIS
+    docker コマンドを実行する
+.PARAMETER Arguments
+    docker に渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-Docker "ps" "--filter" "name=openclaw"
+    Invoke-Docker "compose" "-f" "path/to/docker-compose.yml" "up" "-d"
+#>
+function Invoke-Docker {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$Arguments
+    )
+    & docker @Arguments
+}
+
+<#
+.SYNOPSIS
     1Password CLI の account list を実行する
 .DESCRIPTION
     Pester でモック可能にするため直接呼び出しを避けてラップする。

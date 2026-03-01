@@ -1,0 +1,3 @@
+# 個人識別情報（シークレットではないが個人に紐づくデータ）
+# Telegram ユーザー ID は dmPolicy: allowlist で使用する
+telegramUserId: "8621756912"

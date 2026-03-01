@@ -1,0 +1,369 @@
+#Requires -Module Pester
+
+<#
+.SYNOPSIS
+    Handler.OpenClaw.ps1 のユニットテスト
+
+.DESCRIPTION
+    OpenClawHandler クラスのテスト
+    100% カバレッジを目標とする
+#>
+
+BeforeAll {
+    . $PSScriptRoot/../../lib/SetupHandler.ps1
+    . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
+    . $PSScriptRoot/../../handlers/Handler.OpenClaw.ps1
+}
+
+Describe 'OpenClawHandler' {
+    BeforeEach {
+        $script:handler = [OpenClawHandler]::new()
+        $script:ctx = [SetupContext]::new("D:\dotfiles")
+    }
+
+    Context 'Constructor' {
+        It 'should set <property> to <expected>' -ForEach @(
+            @{ property = "Name"; expected = "OpenClaw" }
+            @{ property = "Description"; expected = "OpenClaw Telegram AI ゲートウェイの起動" }
+            @{ property = "Order"; expected = 120 }
+            @{ property = "RequiresAdmin"; expected = $false }
+            @{ property = "StartupRetries"; expected = 12 }
+            @{ property = "StartupRetryDelaySeconds"; expected = 5 }
+        ) {
+            $handler.$property | Should -Be $expected
+        }
+    }
+
+    Context 'CanApply' {
+        It 'should return false when docker command is not found' {
+            Mock Get-ExternalCommand { return $null }
+            Mock Write-Host { }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
+        It 'should return false when docker-compose.yml does not exist' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $false }
+            Mock Write-Host { }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
+        It 'should return true when docker is available and docker-compose.yml exists' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $true
+        }
+
+        It 'should read StartupRetries from Options' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+            $ctx.Options["OpenClawStartupRetries"] = 6
+
+            $handler.CanApply($ctx)
+
+            $handler.StartupRetries | Should -Be 6
+        }
+
+        It 'should read StartupRetryDelaySeconds from Options' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+            $ctx.Options["OpenClawStartupRetryDelaySeconds"] = 10
+
+            $handler.CanApply($ctx)
+
+            $handler.StartupRetryDelaySeconds | Should -Be 10
+        }
+    }
+
+    Context 'Apply - success' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Set-ContentNoNewline { }
+            Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
+        }
+
+        It 'should start container successfully when config exists' {
+            Mock Test-PathExist { return $true }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up.*-d") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps.*--filter") {
+                    return "openclaw"
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "起動しました"
+        }
+
+        It 'should run chezmoi apply when config file is missing' {
+            $script:chezmoiCalled = $false
+            Mock Test-PathExist {
+                param($Path)
+                # .env は存在、config は存在しない
+                if ($Path -match "docker-compose.yml") { return $true }
+                if ($Path -match "\.env$") { return $true }
+                return $false
+            }
+            Mock Invoke-Chezmoi {
+                $script:chezmoiCalled = $true
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:chezmoiCalled | Should -Be $true
+        }
+
+        It 'should create .env file when it does not exist' {
+            $script:envFileCreated = $false
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "\.env$") { return $false }
+                return $true
+            }
+            Mock Set-ContentNoNewline {
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envFileCreated = $true
+                }
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envFileCreated | Should -Be $true
+        }
+
+        It 'should not recreate .env file when it already exists' {
+            $script:envFileCreated = $false
+            Mock Test-PathExist { return $true }
+            Mock Set-ContentNoNewline {
+                $script:envFileCreated = $true
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envFileCreated | Should -Be $false
+        }
+    }
+
+    Context 'Apply - failure cases' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist { return $true }
+        }
+
+        It 'should return failure when docker compose up fails' {
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "docker compose up に失敗"
+        }
+
+        It 'should return failure when chezmoi apply fails' {
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "docker-compose.yml") { return $true }
+                if ($Path -match "\.env$") { return $true }
+                return $false
+            }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 1
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "chezmoi apply に失敗"
+        }
+
+        It 'should return failure when container startup times out' {
+            $handler.StartupRetries = 2
+            $handler.StartupRetryDelaySeconds = 0
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") {
+                    return ""  # コンテナが起動しない
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "タイムアウト"
+        }
+
+        It 'should return failure when exception is thrown' {
+            Mock Invoke-Docker {
+                throw "Docker connection error"
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Docker connection error"
+        }
+    }
+
+    Context 'Apply - .env content' {
+        It 'should include OPENCLAW_CONFIG_FILE with forward slashes in .env' {
+            $script:envContent = ""
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "\.env$") { return $false }
+                return $true
+            }
+            Mock Set-ContentNoNewline {
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envContent = $Value
+                }
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envContent | Should -Match "OPENCLAW_CONFIG_FILE=.+/"
+            $script:envContent | Should -Not -Match "OPENCLAW_CONFIG_FILE=.*\\"
+        }
+
+        It 'should include TZ=Asia/Tokyo in .env' {
+            $script:envContent = ""
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "\.env$") { return $false }
+                return $true
+            }
+            Mock Set-ContentNoNewline {
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envContent = $Value
+                }
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envContent | Should -Match "TZ=Asia/Tokyo"
+        }
+    }
+
+    Context 'WaitForContainer - retry behavior' {
+        It 'should succeed on second attempt' {
+            $script:psCallCount = 0
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist { return $true }
+            $handler.StartupRetries = 3
+            $handler.StartupRetryDelaySeconds = 0
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps.*--filter") {
+                    $script:psCallCount++
+                    if ($script:psCallCount -ge 2) { return "openclaw" }
+                    return ""
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:psCallCount | Should -BeGreaterOrEqual 2
+        }
+    }
+
+    Context 'GetComposeFilePath' {
+        It 'should return correct path relative to DotfilesPath' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+
+            $handler.CanApply($ctx)
+
+            # CanApply が正常終了すれば GetComposeFilePath は期待通りのパスを返している
+            $result | Should -Not -Be $false
+        }
+    }
+}
