@@ -81,13 +81,22 @@ Describe 'DockerHandler' {
     }
 
     Context 'Apply - WSL write permission' {
-        It 'should skip when WSL is not writable' {
+        BeforeEach {
+            Mock Write-Host { }
             Mock Test-PathExist { return $true }
+            # Docker Desktop が実際に起動/停止しないようにモック
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
+            Mock Start-SleepSafe { }
+        }
+
+        It 'should skip when WSL is not writable' {
             Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return ""
             }
-            Mock Write-Host { }
 
             $result = $handler.Apply($ctx)
 
@@ -97,9 +106,19 @@ Describe 'DockerHandler' {
     }
 
     Context 'Apply - disk space' {
-        It 'should skip when WSL disk space is insufficient' {
+        BeforeEach {
+            Mock Write-Host { }
             Mock Test-PathExist { return $true }
-            $wslCallCount = 0
+            # Docker Desktop が実際に起動/停止しないようにモック
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
+            Mock Start-SleepSafe { }
+        }
+
+        It 'should skip when WSL disk space is insufficient' {
+            $script:wslCallCount = 0
             Mock Invoke-Wsl {
                 $script:wslCallCount++
                 if ($script:wslCallCount -eq 1) {
@@ -113,7 +132,6 @@ Describe 'DockerHandler' {
                 }
                 return ""
             }
-            Mock Write-Host { }
 
             $result = $handler.Apply($ctx)
 
@@ -363,6 +381,8 @@ Describe 'DockerHandler' {
             Mock Start-SleepSafe { }
             Mock New-DirectorySafe { }
             Mock Copy-FileSafe { }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -404,8 +424,13 @@ Describe 'DockerHandler' {
         }
 
         It 'should not start Docker Desktop when already running' {
+            # Docker Desktop だけが動いており、残留プロセスはない
             Mock Get-ProcessSafe {
-                return [PSCustomObject]@{ Name = "Docker Desktop" }
+                param($Name)
+                if ($Name -eq "Docker Desktop" -or $Name -eq "com.docker.backend") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
             }
             Mock Start-ProcessSafe { }
 
@@ -454,8 +479,17 @@ Describe 'DockerHandler' {
         BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
-            Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
+            # Docker Desktop だけが動いており、残留プロセスはない（StopLingeringDockerProcesses が早期リターンするよう）
+            Mock Get-ProcessSafe {
+                param($Name)
+                if ($Name -eq "Docker Desktop" -or $Name -eq "com.docker.backend") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
+            }
             Mock Start-SleepSafe { }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
             Mock New-DirectorySafe { }
             Mock Copy-FileSafe { }
         }

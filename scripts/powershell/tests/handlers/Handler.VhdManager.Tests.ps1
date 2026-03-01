@@ -13,12 +13,17 @@ BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.VhdManager.ps1
+    # Get-VHD (Hyper-V) が存在しない環境でもモック可能にするためダミー関数を定義
+    function global:Get-VHD { param($Path) }
 }
 
 Describe 'VhdManagerHandler' {
     BeforeEach {
         $script:handler = [VhdManagerHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+        # GetVhdxVirtualSize が実際の Get-VHD (Hyper-V) や diskpart を呼ばないようにモック
+        Mock Get-Command { return [PSCustomObject]@{ Name = "Get-VHD" } } -ParameterFilter { $Name -eq "Get-VHD" }
+        Mock Get-VHD { return [PSCustomObject]@{ Size = 0 } }
     }
 
     Context 'Constructor' {
@@ -187,8 +192,6 @@ Describe 'VhdManagerHandler' {
         It 'should skip early when current size equals target size' {
             $script:dockerStopped = $false
             $script:wslShutdown = $false
-            # Get-VHD が存在しない環境でテストするため、関数を定義
-            function global:Get-VHD { }
             Mock Get-Command { return $true } -ParameterFilter { $Name -eq "Get-VHD" }
             Mock Get-VHD { return [PSCustomObject]@{ Size = 64 * 1GB } }
             Mock Stop-ProcessSafe { $script:dockerStopped = $true }
@@ -205,8 +208,6 @@ Describe 'VhdManagerHandler' {
             $result.Message | Should -Match "ターゲットサイズ"
             $script:dockerStopped | Should -Be $false
             $script:wslShutdown | Should -Be $false
-            # クリーンアップ
-            Remove-Item function:Get-VHD -ErrorAction SilentlyContinue
         }
 
         It 'should skip expansion when diskpart returns already at target error' {

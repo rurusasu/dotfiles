@@ -73,12 +73,21 @@ Describe 'Invoke-Wsl' {
 
 Describe 'Invoke-Diskpart' {
     BeforeAll {
-        $script:diskpartInternalCalled = $false
-        $script:setContentCalled = $false
         $script:tempDir = Join-Path $env:TEMP "diskpart_test_$(Get-Random)"
         New-Item -ItemType Directory -Path $script:tempDir -Force | Out-Null
         $script:tempFile = Join-Path $script:tempDir "script.tmp"
+    }
 
+    AfterAll {
+        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        $script:diskpartInternalCalled = $false
+        $script:setContentCalled = $false
+
+        # diskpart.exe が実際に起動しないようにするための安全網
+        Mock Start-Process { return [PSCustomObject]@{ ExitCode = 0 } }
         Mock Invoke-DiskpartInternal {
             $script:diskpartInternalCalled = $true
             return @{
@@ -93,10 +102,6 @@ Describe 'Invoke-Diskpart' {
         Mock New-TemporaryFile {
             return [PSCustomObject]@{ FullName = $script:tempFile }
         }
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It 'should create script file and execute diskpart via internal function' {
