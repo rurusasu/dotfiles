@@ -110,3 +110,23 @@ tasks:
     desc: Apply chezmoi dotfiles
     cmds:
       - chezmoi apply --source {{.TASKFILE_DIR}}/chezmoi
+
+  # ===========================================
+  # Git Hooks
+  # ===========================================
+  hooks:install:
+    desc: Install pre-commit git hooks (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit install --install-hooks"
+    sources:
+      - .pre-commit-config.yaml
+
+  hooks:uninstall:
+    desc: Uninstall pre-commit git hooks (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit uninstall"
+
+  hooks:check:
+    desc: Run all pre-commit hooks manually on all files (via WSL)
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"

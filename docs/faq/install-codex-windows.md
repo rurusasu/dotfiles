@@ -56,11 +56,11 @@ npm install -g @openai/codex
 
 ## フローの整理
 
-| 段階           | 役割                         | Codex との関係                          |
-| -------------- | ---------------------------- | --------------------------------------- |
-| install.cmd    | Phase 1: Winget (user scope) | `OpenAI.Codex` をインストール           |
-| install.cmd    | Phase 2: Chezmoi 等          | `~/.codex/` に config/skills を展開     |
-| 新しいターミナル | PATH 反映                     | `codex` コマンドが使えるようになる      |
+| 段階             | 役割                         | Codex との関係                      |
+| ---------------- | ---------------------------- | ----------------------------------- |
+| install.cmd      | Phase 1: Winget (user scope) | `OpenAI.Codex` をインストール       |
+| install.cmd      | Phase 2: Chezmoi 等          | `~/.codex/` に config/skills を展開 |
+| 新しいターミナル | PATH 反映                    | `codex` コマンドが使えるようになる  |
 
 ## 確認コマンド
 

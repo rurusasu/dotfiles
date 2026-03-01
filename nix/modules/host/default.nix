@@ -71,6 +71,14 @@ in
       bun
       nodejs_22 # openclaw requires Node.js 22+
 
+      # Secret management
+      _1password-cli
+
+      # Formatter & lint runner (for git pre-commit hooks)
+      treefmt
+      pre-commit
+      powershell # provides pwsh for PowerShell test hook
+
       # AI coding agents
       opencode
     ];

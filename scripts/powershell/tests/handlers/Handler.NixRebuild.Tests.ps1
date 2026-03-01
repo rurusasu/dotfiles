@@ -97,6 +97,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return @("installed") }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return @("pre-commit installed") }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -135,6 +136,7 @@ Describe 'NixRebuildHandler' {
                     $global:LASTEXITCODE = 0
                     return @("installed opencode-ai")
                 }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -142,7 +144,7 @@ Describe 'NixRebuildHandler' {
             $handler.Apply($ctx)
 
             $script:bunArgs | Should -Match "bun install -g"
-            $script:bunArgs | Should -Match "opencode-ai"
+            $script:bunArgs | Should -Match "openclaw"
         }
 
         It 'should succeed even when bun install fails' {
@@ -152,6 +154,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 1; return @("error") }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -170,6 +173,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -191,6 +195,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("CustomNixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -198,6 +203,78 @@ Describe 'NixRebuildHandler' {
             $handler.Apply($ctx)
 
             $script:wslArgs | Should -Match "-d CustomNixOS"
+        }
+
+        It 'should install pre-commit hooks after bun packages' {
+            $script:callOrder = [System.Collections.Generic.List[string]]::new()
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") {
+                    $script:callOrder.Add("bun")
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "pre-commit install") {
+                    $script:callOrder.Add("pre-commit")
+                    $global:LASTEXITCODE = 0
+                    return @("pre-commit installed at .git/hooks/pre-commit")
+                }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:callOrder | Should -Contain "bun"
+            $script:callOrder | Should -Contain "pre-commit"
+            $script:callOrder.IndexOf("bun") | Should -BeLessThan $script:callOrder.IndexOf("pre-commit")
+        }
+
+        It 'should succeed even when pre-commit install fails' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 1; return @("error") }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            # pre-commit install 失敗でも Apply 自体は成功とみなす
+            $result.Success | Should -Be $true
+        }
+
+        It 'should pass correct WSL args for pre-commit install' {
+            $script:preCommitArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") {
+                    $script:preCommitArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:preCommitArgs | Should -Match "-d NixOS"
+            $script:preCommitArgs | Should -Match "-u nixos"
+            $script:preCommitArgs | Should -Match "cd ~/.dotfiles"
+            $script:preCommitArgs | Should -Match "pre-commit install --install-hooks"
         }
 
         It 'should return failure when exception is thrown' {

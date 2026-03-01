@@ -17,6 +17,13 @@
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
+# テスト時にモック可能な op CLI ラッパー関数
+function Invoke-OpAccountList {
+    param([string]$OpExe)
+    $output = & $OpExe account list 2>&1
+    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
 class ChezmoiHandler : SetupHandlerBase {
     # 検出された chezmoi 実行ファイルのパス
     hidden [string]$ChezmoiExePath
@@ -71,6 +78,15 @@ class ChezmoiHandler : SetupHandlerBase {
             $runtimeRoot = $this.GetChezmoiRuntimeRoot()
             $persistentStatePath = Join-Path $runtimeRoot "chezmoistate.boltdb"
             $cachePath = Join-Path $runtimeRoot "cache"
+
+            # winget で同セッション内に新規インストールされたツール（op 等）を検出できるよう
+            # レジストリから最新の PATH を読み直す
+            $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+            $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $env:PATH    = "$machinePath;$userPath"
+
+            # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
+            $this.EnsureOnePasswordAvailable()
 
             $this.Log("chezmoi でターミナル設定を適用します: $sourcePath")
             New-DirectorySafe -Path $runtimeRoot
@@ -211,5 +227,87 @@ class ChezmoiHandler : SetupHandlerBase {
 
     hidden [string] GetChezmoiRuntimeRoot() {
         return Join-Path $env:LOCALAPPDATA "chezmoi"
+    }
+
+    <#
+    .SYNOPSIS
+        1Password CLI のサインイン状態を確認し、未設定なら案内して待つ
+    .DESCRIPTION
+        chezmoi テンプレートが onepasswordRead を使用するため、
+        op CLI がサインイン済みである必要がある。
+        デスクトップアプリ連携が有効なら自動で通過する。
+    #>
+    hidden [void] EnsureOnePasswordAvailable() {
+        $opExe = $this.FindOpExe()
+        if (-not $opExe) {
+            $this.LogWarning("1Password CLI (op) が見つかりません。chezmoi テンプレートが失敗する可能性があります")
+            return
+        }
+
+        # サインイン済みか確認（デスクトップアプリ連携が有効なら即通過）
+        $result = Invoke-OpAccountList -OpExe $opExe
+        if ($result.ExitCode -eq 0 -and $result.Output) {
+            $this.Log("1Password CLI: サインイン済み", "Gray")
+            return
+        }
+
+        # 未設定 - デスクトップアプリ連携を案内して最大3回リトライ
+        Write-Host ""
+        Write-Host "========================================"  -ForegroundColor Yellow
+        Write-Host "[Chezmoi] 1Password CLI のセットアップが必要です" -ForegroundColor Yellow
+        Write-Host "========================================"  -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  1. 1Password デスクトップアプリを開く"           -ForegroundColor Cyan
+        Write-Host "  2. 設定 → 開発者"                               -ForegroundColor Cyan
+        Write-Host "  3. 「1Password CLI と統合する」をオンにする"     -ForegroundColor Cyan
+        Write-Host ""
+
+        $maxRetries = 3
+        for ($i = 1; $i -le $maxRetries; $i++) {
+            Write-Host "  設定が完了したら Enter を押してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
+            Read-Host | Out-Null
+
+            $result = Invoke-OpAccountList -OpExe $opExe
+            if ($result.ExitCode -eq 0 -and $result.Output) {
+                # デスクトップアプリ連携が有効 - chezmoi テンプレートは直接 op read を使用できる
+                $this.Log("1Password CLI: サインイン完了", "Green")
+                return
+            }
+
+            if ($i -lt $maxRetries) {
+                $this.LogWarning("1Password CLI のサインインを確認できませんでした。再試行します")
+            }
+        }
+
+        $this.LogWarning("1Password CLI のサインインに失敗しました。chezmoi apply でテンプレートエラーが発生する可能性があります")
+    }
+
+    <#
+    .SYNOPSIS
+        op.exe を探す（PATH または WinGet Packages）
+    #>
+    hidden [string] FindOpExe() {
+        # 1. PATH から検索
+        $cmd = Get-Command "op" -ErrorAction SilentlyContinue
+        if ($cmd) {
+            return $cmd.Source
+        }
+
+        # 2. WinGet Packages ディレクトリ
+        $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+        if (Test-PathExist -Path $packagesRoot) {
+            $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
+                Where-Object { $_.Name -like 'AgileBits.1Password.CLI*' } |
+                Select-Object -First 1
+            if ($pkgDir) {
+                $exe = Get-ChildItem -Path $pkgDir.FullName -Filter "op.exe" -Recurse -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+                if ($exe) {
+                    return $exe.FullName
+                }
+            }
+        }
+
+        return $null
     }
 }

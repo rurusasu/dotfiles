@@ -21,7 +21,7 @@ These instructions are intended to be the **highest priority** global rules for 
 
 - Use Markdown for improved readability.
 - When providing shell commands, ensure they are compatible with the user's environment (Linux/NixOS or Windows/PowerShell).
-- **Explanation**: Briefly explain *why* a solution works before or after the code block.
+- **Explanation**: Briefly explain _why_ a solution works before or after the code block.
 
 ## Context Awareness
 

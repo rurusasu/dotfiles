@@ -3,12 +3,12 @@ repos:
     hooks:
       - id: treefmt
         name: treefmt
-        entry: treefmt --fail-on-change
+        entry: nix fmt -- --fail-on-change
         language: system
         pass_filenames: false
       - id: powershell-tests
         name: powershell tests
-        entry: pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
+        entry: pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
         language: system
         pass_filenames: false
         types: [powershell]

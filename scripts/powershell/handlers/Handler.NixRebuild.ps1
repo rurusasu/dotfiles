@@ -45,6 +45,33 @@ class NixRebuildHandler : SetupHandlerBase {
         return $true
     }
 
+    hidden [void] InstallPreCommitHooks([string]$distroName) {
+        try {
+            $this.Log("pre-commit hooks をインストールしています...")
+
+            $output = Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "cd ~/.dotfiles && pre-commit install --install-hooks"
+            )
+
+            $output | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -ne 0) {
+                $this.LogWarning("pre-commit hooks のインストールが失敗しました (exit code: $LASTEXITCODE)")
+            }
+            else {
+                $this.Log("pre-commit hooks のインストール完了", "Green")
+            }
+        }
+        catch {
+            $this.LogWarning("pre-commit hooks インストール中にエラーが発生しました: $_")
+        }
+    }
+
     hidden [void] InstallBunGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
         try {
             if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
@@ -109,6 +136,9 @@ class NixRebuildHandler : SetupHandlerBase {
             # bun グローバルパッケージをインストール
             $packagesJsonPath = Join-Path $ctx.DotfilesPath "nix\bun\packages.json"
             $this.InstallBunGlobalPackages($distroName, $packagesJsonPath)
+
+            # pre-commit hooks をインストール
+            $this.InstallPreCommitHooks($distroName)
 
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }

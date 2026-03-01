@@ -69,7 +69,8 @@ class SetupContext {
     #>
     SetupContext([string]$dotfilesPath) {
         $this.DotfilesPath = $dotfilesPath
-        $this.InstallDir = Join-Path $env:USERPROFILE "NixOS"
+        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { '~' }
+        $this.InstallDir = Join-Path $homeDir "NixOS"
     }
 
     <#

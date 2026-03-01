@@ -166,6 +166,9 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
+            # op が見つからない想定（EnsureOnePasswordAvailable は警告のみ出して続行）
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
         }
 
         It 'should succeed when chezmoi apply succeeds' {
@@ -242,6 +245,8 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
         }
 
         It 'should invoke chezmoi init to regenerate config before apply' {
@@ -356,6 +361,8 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
         }
 
         It 'should fail when chezmoi apply fails with non-zero exit code' {
@@ -588,6 +595,199 @@ Describe 'ChezmoiHandler' {
 
             # Programs で見つかる
             $result | Should -Be $true
+        }
+    }
+
+    Context 'EnsureOnePasswordAvailable' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
+            }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                return "chezmoi version 2.45.0"
+            }
+            Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+            }
+        }
+
+        It 'should log warning and continue when op is not found' {
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
+            $script:warningLogged = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match '1Password CLI.*見つかりません') { $script:warningLogged = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $script:warningLogged | Should -Be $true
+            $result.Success | Should -Be $true
+        }
+
+        It 'should proceed silently when op is already signed in' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+            }
+            Mock Read-Host { return '' }
+            $script:signedInLogged = $false
+            $script:instructionsShown = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match 'サインイン済み') { $script:signedInLogged = $true }
+                if ($Object -match 'CLI と統合する') { $script:instructionsShown = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:signedInLogged | Should -Be $true
+            # サインイン済みなのでセットアップ案内は表示されない
+            $script:instructionsShown | Should -Be $false
+            Should -Invoke Read-Host -Times 0
+        }
+
+        It 'should show setup instructions when op is not signed in' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            $script:instructionsShown = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match '1Password CLI と統合する') { $script:instructionsShown = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:instructionsShown | Should -Be $true
+        }
+
+        It 'should sign in and log success after user enables integration on retry' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            $script:callCount = 0
+            Mock Invoke-OpAccountList {
+                $script:callCount++
+                # 2回目で成功（ユーザーが連携を有効にした）
+                if ($script:callCount -ge 2) {
+                    return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+                }
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            $script:signedInLogged = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match 'サインイン完了') { $script:signedInLogged = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:signedInLogged | Should -Be $true
+        }
+
+        It 'should log warning after max retries exhausted' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            $script:failureWarningLogged = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match 'サインインに失敗') { $script:failureWarningLogged = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:failureWarningLogged | Should -Be $true
+            Should -Invoke Read-Host -Times 3
+        }
+    }
+
+    Context 'FindOpExe' {
+        BeforeEach {
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                return "chezmoi version 2.45.0"
+            }
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
+            }
+            Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
+            Mock Write-Host { }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+            }
+        }
+
+        It 'should find op from PATH' {
+            Mock Get-Command {
+                return [PSCustomObject]@{ Source = 'C:\tools\op.exe' }
+            } -ParameterFilter { $Name -eq 'op' }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            Should -Invoke Invoke-OpAccountList -ParameterFilter {
+                $OpExe -eq 'C:\tools\op.exe'
+            } -Times 1
+        }
+
+        It 'should find op from WinGet Packages when not in PATH' {
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -like '*WinGet\Packages') { return $true }
+                return $true
+            }
+            Mock Get-ChildItemSafe {
+                param($Path)
+                if ($Path -like '*Packages*') {
+                    return @([PSCustomObject]@{
+                        Name     = 'AgileBits.1Password.CLI_2.32.1'
+                        FullName = 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1'
+                    })
+                }
+                return @()
+            }
+            Mock Get-ChildItem {
+                return @([PSCustomObject]@{ FullName = 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe' })
+            }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            Should -Invoke Invoke-OpAccountList -ParameterFilter {
+                $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
+            } -Times 1
+        }
+
+        It 'should log warning when op is not found anywhere' {
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
+            $script:notFoundWarned = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match '1Password CLI.*見つかりません') { $script:notFoundWarned = $true }
+            }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            $script:notFoundWarned | Should -Be $true
+            Should -Invoke Invoke-OpAccountList -Times 0
         }
     }
 

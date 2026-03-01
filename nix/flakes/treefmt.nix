@@ -18,7 +18,6 @@ _: {
           shfmt.enable = true; # *.sh
           taplo.enable = true; # *.toml
           stylua.enable = true; # *.lua
-          dprint.enable = true; # *.md
           oxfmt.enable = true; # *.json, *.yaml, *.yml
         };
 
