@@ -114,7 +114,7 @@ class OpenClawHandler : SetupHandlerBase {
         $opCmd = Get-ExternalCommand -Name "op"
         if ($opCmd) {
             try {
-                $result = & op read "op://Personal/GitHub/openclaw-token" 2>&1
+                $result = & op read "op://Personal/GitHub/pat-used-openclaw" 2>&1
                 if ($LASTEXITCODE -eq 0) { $githubToken = ($result | Out-String).Trim() }
             } catch { }
         }

@@ -66,13 +66,13 @@ user: "1000:1000" # 非 root 実行
 ### 1Password での保存先
 
 ```
-op://Personal/GitHub/openclaw-token
+op://Personal/GitHub/pat-used-openclaw
 ```
 
 ### 仕組み
 
 ```
-1Password (op://Personal/GitHub/openclaw-token)
+1Password (op://Personal/GitHub/pat-used-openclaw)
     ↓ op read（Handler.OpenClaw.ps1 が自動取得）
 .env: GITHUB_TOKEN=<PAT>
     ↓ docker-compose.yml で環境変数として渡す
@@ -106,7 +106,7 @@ environment:
 ### 初回セットアップ
 
 1. GitHub で Fine-grained PAT を作成（Contents: Read, Metadata: Read）
-2. 1Password に `op://Personal/GitHub/openclaw-token` として保存
+2. 1Password に `op://Personal/GitHub/pat-used-openclaw` として保存
 3. `op signin` でサインイン後、Handler を実行すると `.env` に自動反映
 
 ### 既存の .env がある場合
