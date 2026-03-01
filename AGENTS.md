@@ -140,22 +140,26 @@ treefmt を使用して複数のフォーマッターを統一管理。NixOS/WSL
 
 ### Pre-commit Hooks
 
-`.pre-commit-config.yaml` で一元管理。`nix develop` で devShell に入ると自動インストールされます。
+`.pre-commit-config.yaml` で一元管理。nixos-rebuild 後に自動インストールされます。
+
+> ⚠️ **コミットは必ず `task commit` か WSL 経由で行うこと**
+> `.git/hooks/pre-commit` は NixOS の nix store パスを参照するため、
+> Windows から直接 `git commit` すると hook が失敗します。
 
 📖 詳細: [docs/git/commit.md](./docs/git/commit.md)
 
 ### Usage
 
 ```bash
-# DevShell に入る（フック自動インストール）
-nix develop
+# コミット（推奨）
+task commit -- "メッセージ"   # fmt → pre-commit → git commit (WSL経由)
+task sync   -- "メッセージ"   # commit + push
 
 # Via Nix (WSL/NixOS)
 nix fmt                       # フォーマット（auto-fix含む）
 pre-commit run --all-files    # 手動で全フック実行
 
 # Via Taskfile (Windows → WSL/Windows)
-# 詳細は docs/taskfile/ を参照
 task --list           # 利用可能なタスク一覧
 ```
 

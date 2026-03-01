@@ -220,7 +220,7 @@ cd scripts/powershell/tests
 
 - `scripts/powershell/tests/` - Pester テスト（ハンドラー、ライブラリ）
 
-**現在の状態**: 240+ テスト、カバレッジ 95%+
+**現在の状態**: 350+ テスト、カバレッジ 95%+
 
 ### Taskfile による自動テスト
 
@@ -252,7 +252,7 @@ task test:powershell
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - [lib/Request-AdminElevation.ps1](lib/Request-AdminElevation.ps1) - UAC 自動昇格（管理者権限チェックと再起動）
 - `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（8個）
-- `tests/` - Pester v5 テストスイート（240+ テスト、95%+ カバレッジ）
+- `tests/` - Pester v5 テストスイート（350+ テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
 - [treefmt.toml](../../treefmt.toml) - 統一フォーマッター設定（PowerShell含む）
 
@@ -289,16 +289,17 @@ scripts/powershell/
 
 ### ハンドラー実行順序
 
-| Order | ハンドラー   | ファイル                 | 説明                                                             |
-| ----- | ------------ | ------------------------ | ---------------------------------------------------------------- |
-| 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（import/export、インストール済みスキップ） |
-| 6     | Npm          | Handler.Npm.ps1          | npm グローバルパッケージ管理（インストール済みスキップ）         |
-| 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用（--force で自動上書き、リアルタイムログ）  |
-| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                  |
-| 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                               |
-| 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成              |
-| 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                |
-| 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL インストール、Post-install（リアルタイムログ）         |
+| Order | ハンドラー   | ファイル                 | 説明                                                              |
+| ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
+| 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（import/export、インストール済みスキップ）  |
+| 6     | Npm          | Handler.Npm.ps1          | npm グローバルパッケージ管理（インストール済みスキップ）          |
+| 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用（1Password CLI 連携、--force で自動上書き） |
+| 15    | NixRebuild   | Handler.NixRebuild.ps1   | nixos-rebuild switch、bun グローバル、pre-commit install          |
+| 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                   |
+| 21    | VhdManager   | Handler.VhdManager.ps1   | WSL VHD サイズ拡張                                                |
+| 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |
+| 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                 |
+| 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL インストール、Post-install（リアルタイムログ）          |
 
 ## 🔗 参考資料
 
