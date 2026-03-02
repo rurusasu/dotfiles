@@ -6,7 +6,7 @@ in
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {
     type = types.bool;
     default = false;
-    description = "Enable Docker Desktop WSL2 integration handling for k3s";
+    description = "Enable Docker Desktop WSL2 integration (required for kind to use Docker as container runtime)";
   };
 
   config = {
@@ -81,6 +81,13 @@ in
 
       # AI coding agents
       opencode
+
+      # Kubernetes tools (kind-based local cluster)
+      kind # Local Kubernetes clusters using Docker
+      kubectl # Kubernetes CLI
+      kubernetes-helm # Kubernetes package manager
+      k9s # Kubernetes TUI
+      kubectx # Fast cluster switching
     ];
   };
 }

@@ -20,8 +20,8 @@
   wsl.enable = true;
   wsl.defaultUser = "nixos";
 
-  # Enable Docker Desktop WSL integration handling for k3s
-  # This unmounts /Docker/host before k3s starts to prevent cgroup validation errors
+  # Enable Docker Desktop WSL integration
+  # Required for kind to use Docker Desktop as container runtime
   mySettings.wsl.dockerDesktopIntegration = true;
 
   # This value determines the NixOS release from which the default
