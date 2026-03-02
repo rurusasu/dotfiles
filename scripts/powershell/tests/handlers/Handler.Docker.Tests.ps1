@@ -564,6 +564,9 @@ Describe 'DockerHandler' {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
+            Mock Stop-Process { }
+            Mock Stop-ProcessSafe { }
+            Mock Start-SleepSafe { }
         }
 
         It 'should return failure when exception is thrown during Apply' {
@@ -591,6 +594,8 @@ Describe 'DockerHandler' {
             }
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
+            Mock Stop-Process { }
+            Mock Stop-ProcessSafe { }
         }
 
         It 'should warn and skip when Docker Desktop WSL resources are not found' {
@@ -860,6 +865,7 @@ Describe 'DockerHandler' {
             Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
             Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
             Mock Start-ProcessSafe { }
         }
 
