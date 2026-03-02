@@ -7,9 +7,17 @@ WORKDIR /app
 # Add node → bun symlink for packages that invoke node directly.
 RUN ln -sf /usr/local/bin/bun /usr/local/bin/node
 
-# Install git + SSH client for GitHub access.
+# Install git, SSH client, and GitHub CLI (gh) for GitHub access.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client \
+    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+       | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+       > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
 # GIT_ASKPASS helper: feeds GITHUB_TOKEN as the HTTPS password at runtime.

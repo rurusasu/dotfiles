@@ -33,6 +33,8 @@ services:
       PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # GitHub HTTPS authentication via Fine-grained PAT (set in .env, stored in 1Password)
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # gh CLI uses GH_TOKEN for authentication (falls back to GITHUB_TOKEN)
+      GH_TOKEN: ${GITHUB_TOKEN:-}
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
 
     volumes:
