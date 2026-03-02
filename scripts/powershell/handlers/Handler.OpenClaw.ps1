@@ -76,9 +76,15 @@ class OpenClawHandler : SetupHandlerBase {
             }
 
             # コンテナを起動（--build で最新イメージを使用）
+            # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
+            # 終了コードが 0 であれば成功として扱う
             $composeFile = $this.GetComposeFilePath($ctx)
             $this.Log("OpenClaw コンテナを起動します (--build)")
-            Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
+            try {
+                Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
+            } catch {
+                # NativeCommandError (docker compose build progress → stderr) は無視
+            }
             if ($LASTEXITCODE -ne 0) {
                 return $this.CreateFailureResult("docker compose up に失敗しました (exit: $LASTEXITCODE)")
             }
@@ -114,7 +120,7 @@ class OpenClawHandler : SetupHandlerBase {
         $opCmd = Get-ExternalCommand -Name "op"
         if ($opCmd) {
             try {
-                $result = & op read "op://Personal/GitHub/pat-used-openclaw" 2>&1
+                $result = & op read "op://Personal/d4av65p4wcvcms6lbsbbabrywy/pat-used-openclaw" 2>&1
                 if ($LASTEXITCODE -eq 0) { $githubToken = ($result | Out-String).Trim() }
             } catch { }
         }
