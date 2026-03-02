@@ -12,9 +12,11 @@ This directory contains OpenAI Codex CLI configuration.
   - `agents/fast_worker.toml` - Fast scoped implementation role
   - `agents/python_coding.toml` - Python implementation-only role
 - `rules/` - Custom rules for Codex
+  - `commands.rules` - Shell command rules
   - `nix.rules` - Nix-specific rules
   - `python.rules` - Python-specific rules
   - `safety.rules` - Safety rules
+  - `starlark.rules` - Starlark/Bazel rules
 - `AGENTS.override.md` - Override instructions for AI agents
 
 ## Deployment

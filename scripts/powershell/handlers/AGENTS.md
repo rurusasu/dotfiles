@@ -4,15 +4,20 @@ Purpose: セットアップハンドラーの実装
 
 ## ファイル一覧
 
-| ファイル                   | Order | 説明                                           |
-| -------------------------- | ----- | ---------------------------------------------- |
-| `Handler.Winget.ps1`       | 5     | winget パッケージインストール                  |
-| `Handler.Codex.ps1`        | 6     | Codex CLI シンボリックリンク作成               |
-| `Handler.Bun.ps1`          | 7     | bun グローバルパッケージ管理                   |
-| `Handler.WslConfig.ps1`    | 10    | .wslconfig 適用と VHD 拡張                     |
-| `Handler.Docker.ps1`       | 20    | Docker Desktop WSL 連携設定                    |
-| `Handler.VscodeServer.ps1` | 30    | VS Code Server キャッシュ削除/事前インストール |
-| `Handler.Chezmoi.ps1`      | 100   | chezmoi dotfiles 適用                          |
+| ファイル                   | Order | 説明                                                              |
+| -------------------------- | ----- | ----------------------------------------------------------------- |
+| `Handler.Winget.ps1`       | 5     | winget パッケージ管理（import/export、インストール済みスキップ）  |
+| `Handler.Codex.ps1`        | 6     | Codex CLI シンボリックリンク作成                                  |
+| `Handler.Npm.ps1`          | 6     | npm グローバルパッケージ管理（インストール済みスキップ）          |
+| `Handler.Bun.ps1`          | 7     | bun グローバルパッケージ管理                                      |
+| `Handler.Chezmoi.ps1`      | 10    | chezmoi dotfiles 適用（1Password CLI 連携、--force で自動上書き） |
+| `Handler.NixRebuild.ps1`   | 15    | nixos-rebuild switch、bun グローバル、pre-commit install          |
+| `Handler.WslConfig.ps1`    | 20    | .wslconfig 適用                                                   |
+| `Handler.VhdManager.ps1`   | 21    | WSL VHD サイズ拡張                                                |
+| `Handler.Docker.ps1`       | 30    | Docker Desktop WSL 連携、docker-desktop distro 作成               |
+| `Handler.VscodeServer.ps1` | 40    | VS Code Server キャッシュクリア、事前インストール                 |
+| `Handler.NixOSWSL.ps1`     | 50    | NixOS-WSL インストール、Post-install（リアルタイムログ）          |
+| `Handler.OpenClaw.ps1`     | 120   | OpenClaw Telegram AI ゲートウェイ セットアップ                    |
 
 ## ハンドラー実装ルール
 

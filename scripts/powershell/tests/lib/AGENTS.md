@@ -4,10 +4,11 @@ Purpose: 共通ライブラリのユニットテスト
 
 ## ファイル一覧
 
-| ファイル                           | 対象                                        |
-| ---------------------------------- | ------------------------------------------- |
-| `SetupHandler.Tests.ps1`           | SetupContext, SetupResult, SetupHandlerBase |
-| `Invoke-ExternalCommand.Tests.ps1` | 外部コマンドラッパー関数群                  |
+| ファイル                             | 対象                                        |
+| ------------------------------------ | ------------------------------------------- |
+| `SetupHandler.Tests.ps1`             | SetupContext, SetupResult, SetupHandlerBase |
+| `Invoke-ExternalCommand.Tests.ps1`   | 外部コマンドラッパー関数群                  |
+| `Request-AdminElevation.Tests.ps1`   | UAC 自動昇格関数                            |
 
 ## SetupHandler.Tests.ps1
 

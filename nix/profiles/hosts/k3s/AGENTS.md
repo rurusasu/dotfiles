@@ -16,11 +16,11 @@ GKE検証環境として使用するためのKubernetesクラスタ設定。
 ## Architecture
 
 ```
-kubernetes/
+k3s/
 ├── default.nix              # メインKubernetes設定
 └── plugins/
-    ├── cilium.nix           # Cilium CNIプラグイン管理
-    └── cert-manager.nix     # 将来の本番環境用（現在無効）
+    └── cilium/
+        └── default.nix      # Cilium CNIプラグイン管理
 ```
 
 ## Configuration Details

@@ -251,7 +251,7 @@ task test:powershell
 - [lib/SetupHandler.ps1](lib/SetupHandler.ps1) - ハンドラー基底クラス、共通型定義、オーケストレーション関数
 - [lib/Invoke-ExternalCommand.ps1](lib/Invoke-ExternalCommand.ps1) - テスト可能な外部コマンドラッパー
 - [lib/Request-AdminElevation.ps1](lib/Request-AdminElevation.ps1) - UAC 自動昇格（管理者権限チェックと再起動）
-- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（8個）
+- `handlers/Handler.*.ps1` - 各機能のセットアップハンドラー（12個）
 - `tests/` - Pester v5 テストスイート（350+ テスト、95%+ カバレッジ）
 - [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1) - PSScriptAnalyzer 静的解析設定
 - [treefmt.toml](../../treefmt.toml) - 統一フォーマッター設定（PowerShell含む）
@@ -266,21 +266,29 @@ scripts/powershell/
 │   ├── SetupHandler.ps1         # ハンドラー基底クラス・SetupContext・SetupResult + オーケストレーション関数
 │   ├── Invoke-ExternalCommand.ps1 # 外部コマンドラッパー（Mock可能）
 │   └── Request-AdminElevation.ps1 # UAC 自動昇格（管理者権限チェック）
-├── handlers/                    # セットアップハンドラー
-│   ├── Handler.Winget.ps1       # Order 5: winget パッケージ（インストール済みスキップ）
-│   ├── Handler.Npm.ps1          # Order 6: npm グローバルパッケージ
-│   ├── Handler.Chezmoi.ps1      # Order 10: dotfiles 適用（--force で自動上書き）
-│   ├── Handler.WslConfig.ps1    # Order 20: WSL 設定
-│   ├── Handler.VhdManager.ps1   # Order 21: VHD サイズ拡張
-│   ├── Handler.Docker.ps1       # Order 30: Docker Desktop 連携
-│   ├── Handler.VscodeServer.ps1 # Order 40: VS Code Server 管理
-│   └── Handler.NixOSWSL.ps1     # Order 50: NixOS-WSL インストール
+├── handlers/                    # セットアップハンドラー（12個）
+│   ├── Handler.Winget.ps1       # Order 5:   winget パッケージ（インストール済みスキップ）
+│   ├── Handler.Codex.ps1        # Order 6:   Codex CLI シンボリックリンク作成
+│   ├── Handler.Npm.ps1          # Order 6:   npm グローバルパッケージ
+│   ├── Handler.Bun.ps1          # Order 7:   bun グローバルパッケージ
+│   ├── Handler.Chezmoi.ps1      # Order 10:  dotfiles 適用（--force で自動上書き）
+│   ├── Handler.NixRebuild.ps1   # Order 15:  nixos-rebuild switch
+│   ├── Handler.WslConfig.ps1    # Order 20:  WSL 設定
+│   ├── Handler.VhdManager.ps1   # Order 21:  VHD サイズ拡張
+│   ├── Handler.Docker.ps1       # Order 30:  Docker Desktop 連携
+│   ├── Handler.VscodeServer.ps1 # Order 40:  VS Code Server 管理
+│   ├── Handler.NixOSWSL.ps1     # Order 50:  NixOS-WSL インストール
+│   └── Handler.OpenClaw.ps1     # Order 120: OpenClaw Telegram AI ゲートウェイ
 ├── tests/                       # テストファイル
-│   ├── Invoke-Tests.ps1         # テストランナー（Pester v5 自動インストール）
-│   ├── Install.Tests.ps1        # オーケストレーション関数のテスト
-│   ├── PSScriptAnalyzer.Tests.ps1 # PSScriptAnalyzer 静的解析テスト
-│   ├── handlers/                # 各ハンドラーのテスト
-│   └── lib/                     # ライブラリのテスト
+│   ├── Invoke-Tests.ps1             # テストランナー（Pester v5 自動インストール）
+│   ├── Install.Tests.ps1            # オーケストレーション関数のテスト
+│   ├── Install.Admin.Tests.ps1      # 管理者ハンドラーのテスト
+│   ├── Install.User.Tests.ps1       # ユーザーハンドラーのテスト
+│   ├── Install.Orchestrator.Tests.ps1 # オーケストレーターのテスト
+│   ├── Integration.Tests.ps1        # インテグレーションテスト（Windows/NixOS ツール確認）
+│   ├── PSScriptAnalyzer.Tests.ps1   # PSScriptAnalyzer 静的解析テスト
+│   ├── handlers/                    # 各ハンドラーのテスト（12個）
+│   └── lib/                         # ライブラリのテスト
 
 ../../install.ps1                # メインエントリーポイント（簡素化済み）
 ../../treefmt.toml               # 統一フォーマッター設定（PowerShell含む）
@@ -292,7 +300,9 @@ scripts/powershell/
 | Order | ハンドラー   | ファイル                 | 説明                                                              |
 | ----- | ------------ | ------------------------ | ----------------------------------------------------------------- |
 | 5     | Winget       | Handler.Winget.ps1       | winget パッケージ管理（import/export、インストール済みスキップ）  |
+| 6     | Codex        | Handler.Codex.ps1        | Codex CLI シンボリックリンク作成                                  |
 | 6     | Npm          | Handler.Npm.ps1          | npm グローバルパッケージ管理（インストール済みスキップ）          |
+| 7     | Bun          | Handler.Bun.ps1          | bun グローバルパッケージ管理                                      |
 | 10    | Chezmoi      | Handler.Chezmoi.ps1      | chezmoi dotfiles 適用（1Password CLI 連携、--force で自動上書き） |
 | 15    | NixRebuild   | Handler.NixRebuild.ps1   | nixos-rebuild switch、bun グローバル、pre-commit install          |
 | 20    | WslConfig    | Handler.WslConfig.ps1    | .wslconfig 適用                                                   |
@@ -300,6 +310,7 @@ scripts/powershell/
 | 30    | Docker       | Handler.Docker.ps1       | Docker Desktop WSL 連携、docker-desktop distro 作成               |
 | 40    | VscodeServer | Handler.VscodeServer.ps1 | VS Code Server キャッシュクリア、事前インストール                 |
 | 50    | NixOSWSL     | Handler.NixOSWSL.ps1     | NixOS-WSL インストール、Post-install（リアルタイムログ）          |
+| 120   | OpenClaw     | Handler.OpenClaw.ps1     | OpenClaw Telegram AI ゲートウェイ セットアップ                    |
 
 ## 🔗 参考資料
 

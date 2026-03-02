@@ -8,5 +8,5 @@ Expected contents:
 - Export: winget export -o packages.json
 - Import: winget import -i packages.json --accept-package-agreements
 - Some packages may require manual installation (license agreements, unavailable sources)
-- Use scripts/export-settings.ps1 to update package list
-- Use scripts/apply-settings.ps1 to install packages
+- Export: Handler.Winget.ps1 (scripts/powershell/handlers/) handles export
+- Import: install.ps1 (scripts/powershell/) runs all handlers including Winget

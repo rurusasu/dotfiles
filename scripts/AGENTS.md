@@ -9,18 +9,18 @@ scripts/
 ├── sh/                           # Shell scripts (Linux/WSL)
 │   ├── update.sh                 # Daily update script (NixOS rebuild + optional winget)
 │   ├── nixos-wsl-postinstall.sh  # Post-install setup for NixOS WSL
-│   ├── runner-setup.sh           # GitHub Actions runner setup (self-hosted, WSL)
 │   ├── treefmt.sh                # Code formatting
-│   ├── sync-project-config-template.sh # Sync root config files to flake template
 │   └── tests/
 │       └── integration_test.sh   # NixOS インテグレーションテスト（ツール存在確認）
 └── powershell/                   # PowerShell scripts (Windows)
-    ├── update-windows-settings.ps1  # Apply winget packages to Windows (Admin)
-    ├── update-wslconfig.ps1      # Apply .wslconfig to Windows
-    ├── export-settings.ps1       # Export Windows settings to dotfiles
-    └── format-ps1.ps1            # Format PowerShell scripts via PSScriptAnalyzer
-
-Note: install.ps1 is in the repository root (auto-elevates to admin).
+    ├── install.ps1               # メインインストールスクリプト（UAC 自動昇格付き）
+    ├── install.admin.ps1         # 管理者権限ハンドラー実行
+    ├── install.user.ps1          # ユーザー権限ハンドラー実行
+    ├── Debug-WingetDetection.ps1 # winget 検出デバッグ用
+    ├── PSScriptAnalyzerSettings.psd1 # PSScriptAnalyzer 設定
+    ├── lib/                      # 共通ライブラリ (see powershell/AGENTS.md)
+    ├── handlers/                 # セットアップハンドラー 12 個 (see handlers/AGENTS.md)
+    └── tests/                    # Pester テストスイート (see tests/AGENTS.md)
 ```
 
 ## Shell Scripts (Linux/WSL)
@@ -53,74 +53,20 @@ Post-install setup script run after NixOS WSL import.
 3. Run nixos-rebuild switch
 4. Sync back flake.lock if sync-back=lock
 
-### runner-setup.sh
-
-Self-hosted GitHub Actions runner setup for WSL/NixOS.
-
-**Usage:**
-
-```bash
-REPO=rurusasu/dotfiles \
-RUNNER_NAME="$(hostname)-runner" \
-scripts/sh/runner-setup.sh
-```
-
-**Notes:**
-
-- Prompts for a GitHub PAT (repo admin scope) to fetch a registration token.
-- Creates a user-level systemd service to keep the runner running.
-
 ## PowerShell Scripts (Windows)
 
-### update-wslconfig.ps1
+PowerShell スクリプトの詳細は [powershell/AGENTS.md](./powershell/AGENTS.md) を参照。
 
-Apply `.wslconfig` from `windows/.wslconfig` to `%USERPROFILE%\.wslconfig`.
+### install.ps1
 
-**Usage:**
-
-```powershell
-.\scripts\powershell\update-wslconfig.ps1
-wsl --shutdown  # To apply changes
-```
-
-### update-windows-settings.ps1
-
-Apply settings from dotfiles to Windows (winget import only).
-
-Note: Windows Terminal and WezTerm settings are managed by chezmoi:
-
-- `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
-- `chezmoi/dot_config/wezterm/wezterm.lua`
+メインインストールスクリプト。UAC 自動昇格付きでセットアップハンドラーを実行する。
 
 **Usage:**
 
 ```powershell
-# Full apply (requires Administrator)
-.\scripts\powershell\update-windows-settings.ps1
+# GitHub から直接取得してインストール
+irm https://raw.githubusercontent.com/rurusasu/dotfiles/main/scripts/powershell/install.ps1 | iex
 
-# Skip winget package installation
-.\scripts\powershell\update-windows-settings.ps1 -SkipWinget
-```
-
-**Parameters:**
-
-- `-SkipWinget`: Skip winget package installation
-
-### export-settings.ps1
-
-Export current Windows settings to dotfiles.
-
-**What it exports:**
-
-- Winget package list to `windows/winget/packages.json`
-
-**Note:** Windows Terminal and WezTerm settings are managed by chezmoi:
-
-- `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
-- `chezmoi/dot_config/wezterm/wezterm.lua`
-
-**Usage:**
-
-```powershell
-.\scripts\powershell\export-settings.ps1
+# ローカルで実行（管理者権限不要。スクリプトが自動で UAC 昇格）
+.\scripts\powershell\install.ps1
 ```

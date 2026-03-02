@@ -6,10 +6,18 @@ Purpose: ハンドラーのユニットテスト
 
 | ファイル                         | 対象                |
 | -------------------------------- | ------------------- |
+| `Handler.Winget.Tests.ps1`       | WingetHandler       |
+| `Handler.Codex.Tests.ps1`        | CodexHandler        |
+| `Handler.Npm.Tests.ps1`          | NpmHandler          |
+| `Handler.Bun.Tests.ps1`          | BunHandler          |
+| `Handler.Chezmoi.Tests.ps1`      | ChezmoiHandler      |
+| `Handler.NixRebuild.Tests.ps1`   | NixRebuildHandler   |
 | `Handler.WslConfig.Tests.ps1`    | WslConfigHandler    |
+| `Handler.VhdManager.Tests.ps1`   | VhdManagerHandler   |
 | `Handler.Docker.Tests.ps1`       | DockerHandler       |
 | `Handler.VscodeServer.Tests.ps1` | VscodeServerHandler |
-| `Handler.Chezmoi.Tests.ps1`      | ChezmoiHandler      |
+| `Handler.NixOSWSL.Tests.ps1`     | NixOSWSLHandler     |
+| `Handler.OpenClaw.Tests.ps1`     | OpenClawHandler     |
 
 ## テスト構造
 

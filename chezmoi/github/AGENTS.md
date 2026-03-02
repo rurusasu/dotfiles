@@ -6,15 +6,16 @@ This directory contains GitHub configuration templates for new projects.
 
 ```
 github/
-├── dependabot.yml           # Dependabot version update config
-├── FUNDING.yml              # Sponsor button configuration
-├── CODEOWNERS               # Code ownership rules
-├── pull_request_template.md # PR template
+├── dependabot.yml            # Dependabot version update config
+├── FUNDING.yml               # Sponsor button configuration
+├── CODEOWNERS                # Code ownership rules
+├── copilot-instructions.md   # GitHub Copilot instructions
+├── pull_request_template.md  # PR template
 ├── workflows/
-│   └── ci.yml               # Basic CI workflow
+│   └── ci.yml                # Basic CI workflow
 └── ISSUE_TEMPLATE/
-    ├── bug_report.yml       # Bug report template
-    └── feature_request.yml  # Feature request template
+    ├── bug_report.yml        # Bug report template
+    └── feature_request.yml   # Feature request template
 ```
 
 ## Deployment
