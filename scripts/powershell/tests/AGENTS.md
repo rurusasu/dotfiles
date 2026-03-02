@@ -14,6 +14,7 @@ Purpose: PowerShell ユニットテストのガイドライン
 scripts/powershell/tests/   # メインテストディレクトリ
 ├── AGENTS.md               # このファイル
 ├── Invoke-Tests.ps1        # 統合テストランナー（Pester + bats）
+├── Integration.Tests.ps1   # インテグレーションテスト（Windows/NixOS ツール存在確認）
 ├── handlers/               # ハンドラーテスト
 │   ├── Handler.Chezmoi.Tests.ps1
 │   ├── Handler.Docker.Tests.ps1

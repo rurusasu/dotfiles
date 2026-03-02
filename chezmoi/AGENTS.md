@@ -107,6 +107,20 @@ Notes:
 {{ end }}
 ```
 
+### 外部コマンド依存ファイルの除外
+
+`lookPath` を使って CLI ツールが未インストールの環境でテンプレートエラーを防ぐ:
+
+```
+# op (1Password CLI) が未インストール時は .openclaw/ を無視
+{{ if not (lookPath "op") -}}
+.openclaw/
+{{ end -}}
+```
+
+`lookPath "cmd"` はコマンドが PATH になければ空文字列を返す（エラーにならない）。
+`onepasswordRead` 等を使うテンプレートファイルを含むディレクトリに対して使用する。
+
 ## Platform Support
 
 - Windows (native)

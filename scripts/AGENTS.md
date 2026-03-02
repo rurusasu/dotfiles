@@ -11,7 +11,9 @@ scripts/
 │   ├── nixos-wsl-postinstall.sh  # Post-install setup for NixOS WSL
 │   ├── runner-setup.sh           # GitHub Actions runner setup (self-hosted, WSL)
 │   ├── treefmt.sh                # Code formatting
-│   └── sync-project-config-template.sh # Sync root config files to flake template
+│   ├── sync-project-config-template.sh # Sync root config files to flake template
+│   └── tests/
+│       └── integration_test.sh   # NixOS インテグレーションテスト（ツール存在確認）
 └── powershell/                   # PowerShell scripts (Windows)
     ├── update-windows-settings.ps1  # Apply winget packages to Windows (Admin)
     ├── update-wslconfig.ps1      # Apply .wslconfig to Windows
