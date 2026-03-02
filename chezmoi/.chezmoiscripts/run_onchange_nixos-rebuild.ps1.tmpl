@@ -3,7 +3,7 @@
 # This script runs when nix/ directory changes
 #
 # Hash of nix directory (triggers rebuild on change):
-# managed-by-chezmoi
+# {{ output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "$d=$null; try{$d=wsl --list --quiet 2>&1}catch{$d=''}; if($d -match 'NixOS'){wsl -d NixOS -- bash -c 'find ~/.dotfiles/nix -name ''*.nix'' -exec sha256sum {} + 2>/dev/null|sort|sha256sum|cut -d\" \" -f1' 2>$null}else{'no-nixos'}" | trim }}
 
 $ErrorActionPreference = "Continue"
 
