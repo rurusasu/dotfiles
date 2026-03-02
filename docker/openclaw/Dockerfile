@@ -34,12 +34,20 @@ ENV NODE_ENV=production \
 
 RUN mkdir -p /home/bun/.bun/bin /home/bun/.bun/install/global \
     && bun add -g openclaw \
+    # Pre-install acpx into the plugin-bundled path so the ACP runtime backend works
+    # at runtime without needing npm (not installed) or a writable filesystem.
+    && cd /home/bun/.bun/install/global/node_modules/openclaw/extensions/acpx \
+    && bun install --production \
+    && cd /app \
+    # Install Gemini CLI so sessions_spawn(runtime="acp", agentId="gemini") can work.
+    && bun add -g @google/gemini-cli \
     && chown -R bun:bun /home/bun/.bun
 
 # Pre-create data directories with correct ownership.
+# ~/.gemini is created here so the named-volume fallback inherits bun ownership.
 RUN mkdir -p /app/data/workspace /app/data/.bun \
-    && mkdir -p /home/bun/.openclaw \
-    && chown -R bun:bun /app/data /home/bun/.openclaw
+    && mkdir -p /home/bun/.openclaw /home/bun/.gemini \
+    && chown -R bun:bun /app/data /home/bun/.openclaw /home/bun/.gemini
 
 USER bun
 
