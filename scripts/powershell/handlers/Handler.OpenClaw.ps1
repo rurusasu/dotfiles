@@ -52,6 +52,13 @@ class OpenClawHandler : SetupHandlerBase {
             return $false
         }
 
+        # op (1Password CLI) が必要（openclaw.docker.json の生成に使用）
+        $opCmd = Get-ExternalCommand -Name "op"
+        if (-not $opCmd) {
+            $this.Log("op (1Password CLI) が見つかりません。OpenClaw をスキップします", "Gray")
+            return $false
+        }
+
         return $true
     }
 
