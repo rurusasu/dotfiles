@@ -20,6 +20,9 @@ class OpenClawHandler : SetupHandlerBase {
     # コンテナ起動待機設定
     [int]$StartupRetries = 12
     [int]$StartupRetryDelaySeconds = 5
+    # docker compose up リトライ設定（Docker 起動直後の一時的な失敗への対策）
+    [int]$ComposeRetries = 2
+    [int]$ComposeRetryDelaySeconds = 10
 
     OpenClawHandler() {
         $this.Name = "OpenClaw"
@@ -39,6 +42,8 @@ class OpenClawHandler : SetupHandlerBase {
     [bool] CanApply([SetupContext]$ctx) {
         $this.StartupRetries = $ctx.GetOption("OpenClawStartupRetries", 12)
         $this.StartupRetryDelaySeconds = $ctx.GetOption("OpenClawStartupRetryDelaySeconds", 5)
+        $this.ComposeRetries = $ctx.GetOption("OpenClawComposeRetries", 2)
+        $this.ComposeRetryDelaySeconds = $ctx.GetOption("OpenClawComposeRetryDelaySeconds", 10)
 
         $dockerCmd = Get-ExternalCommand -Name "docker"
         if (-not $dockerCmd) {
@@ -85,12 +90,20 @@ class OpenClawHandler : SetupHandlerBase {
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
             # 終了コードが 0 であれば成功として扱う
+            # Docker 起動直後の一時的な失敗に備えてリトライする
             $composeFile = $this.GetComposeFilePath($ctx)
             $this.Log("OpenClaw コンテナを起動します (--build)")
-            try {
-                Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
-            } catch {
-                # NativeCommandError (docker compose build progress → stderr) は無視
+            for ($attempt = 1; $attempt -le $this.ComposeRetries; $attempt++) {
+                try {
+                    Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
+                } catch {
+                    # NativeCommandError (docker compose build progress → stderr) は無視
+                }
+                if ($LASTEXITCODE -eq 0) { break }
+                if ($attempt -lt $this.ComposeRetries) {
+                    $this.LogWarning("docker compose up に失敗しました (exit: $LASTEXITCODE)、再試行します... ($attempt/$($this.ComposeRetries))")
+                    Start-SleepSafe -Seconds $this.ComposeRetryDelaySeconds
+                }
             }
             if ($LASTEXITCODE -ne 0) {
                 return $this.CreateFailureResult("docker compose up に失敗しました (exit: $LASTEXITCODE)")

@@ -29,6 +29,8 @@ Describe 'OpenClawHandler' {
             @{ property = "RequiresAdmin"; expected = $false }
             @{ property = "StartupRetries"; expected = 12 }
             @{ property = "StartupRetryDelaySeconds"; expected = 5 }
+            @{ property = "ComposeRetries"; expected = 2 }
+            @{ property = "ComposeRetryDelaySeconds"; expected = 10 }
         ) {
             $handler.$property | Should -Be $expected
         }
@@ -81,6 +83,26 @@ Describe 'OpenClawHandler' {
             $handler.CanApply($ctx)
 
             $handler.StartupRetryDelaySeconds | Should -Be 10
+        }
+
+        It 'should read ComposeRetries from Options' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+            $ctx.Options["OpenClawComposeRetries"] = 5
+
+            $handler.CanApply($ctx)
+
+            $handler.ComposeRetries | Should -Be 5
+        }
+
+        It 'should read ComposeRetryDelaySeconds from Options' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+            $ctx.Options["OpenClawComposeRetryDelaySeconds"] = 30
+
+            $handler.CanApply($ctx)
+
+            $handler.ComposeRetryDelaySeconds | Should -Be 30
         }
     }
 
@@ -268,6 +290,75 @@ Describe 'OpenClawHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "Docker connection error"
+        }
+    }
+
+    Context 'Apply - compose retry behavior' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist { return $true }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+        }
+
+        It 'should succeed on second compose attempt when first fails' {
+            $script:composeCallCount = 0
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $script:composeCallCount++
+                    if ($script:composeCallCount -lt 2) {
+                        $global:LASTEXITCODE = 1
+                        return ""
+                    }
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+            $handler.ComposeRetries = 2
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:composeCallCount | Should -Be 2
+        }
+
+        It 'should log warning and sleep between compose retries' {
+            $script:warningLogged = $false
+            $script:sleepCalled = $false
+            Mock Write-Host {
+                param($Object, $ForegroundColor)
+                if ($Object -match "再試行") { $script:warningLogged = $true }
+            }
+            Mock Start-SleepSafe {
+                $script:sleepCalled = $true
+            }
+            $script:composeCallCount = 0
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") {
+                    $script:composeCallCount++
+                    if ($script:composeCallCount -lt 2) {
+                        $global:LASTEXITCODE = 1
+                        return ""
+                    }
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+            $handler.ComposeRetries = 2
+            $handler.ComposeRetryDelaySeconds = 0
+
+            $handler.Apply($ctx)
+
+            $script:warningLogged | Should -Be $true
+            $script:sleepCalled | Should -Be $true
         }
     }
 
