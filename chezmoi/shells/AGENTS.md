@@ -48,6 +48,24 @@ These files provide:
 - Aliases
 - Custom functions / key handlers
 
+## 1Password Secret Integration
+
+各シェル設定の末尾で `~/.config/shell/secret.sh` (または `.ps1`) を source する:
+
+```bash
+# .bashrc / .zshrc
+[[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
+```
+
+```powershell
+# Microsoft.PowerShell_profile.ps1
+$_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
+if (Test-Path $_secretPs1) { . $_secretPs1 }
+```
+
+- secret ファイルは `chezmoi/secret/` で管理・deploy scripts 経由で配置される
+- `op` が PATH にない環境では自動スキップ (Git Bash / WSL / Windows 全対応)
+
 ## Platform Notes
 
 - **Windows**: These files are deployed but typically used in WSL/Git Bash

@@ -14,6 +14,7 @@ chezmoi/
 ├── dot_cursor/  # Cursor AI config → ~/.cursor/
 ├── dot_gemini/  # Gemini CLI config → ~/.gemini/
 ├── shells/      # Shell configurations (bash, zsh, profile) [via scripts]
+├── secret/      # 1Password-managed secret loaders (GH_TOKEN, TAVILY_API_KEY) [via scripts]
 ├── cli/         # CLI tool configurations (fd, ripgrep, starship, ghq, zoxide) [via scripts]
 ├── terminals/   # Terminal emulator configurations (wezterm, windows-terminal) [via scripts]
 ├── editors/     # Editor configurations (vscode, cursor, zed) [via scripts]
