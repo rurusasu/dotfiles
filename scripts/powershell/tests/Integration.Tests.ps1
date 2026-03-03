@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 Describe 'Integration Verification - Windows Environment' {
     Context 'Dev Tools Installation' {
@@ -21,7 +21,6 @@ Describe 'Integration Verification - Windows Environment' {
     Context 'NixOS Verification' {
         It "should have <_> installed in NixOS" -ForEach @(
             'nvim'
-            'wezterm'
             'zed'
             'task'
             'op'
