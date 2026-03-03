@@ -102,3 +102,8 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
     Set-PSReadLineKeyHandler -Chord Alt+t -ScriptBlock { Invoke-FzfInsertFile }
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }
 }
+
+# 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
+$_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
+if (Test-Path $_secretPs1) { . $_secretPs1 }
+Remove-Variable _secretPs1

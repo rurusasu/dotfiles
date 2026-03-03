@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy shell configurations for Windows
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zshrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zshrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/env.ps1" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -32,6 +32,10 @@ Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
 # PowerShell profiles (PowerShell 7 and Windows PowerShell 5.1)
 Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
 Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+
+# 1Password-managed secret loaders (Git Bash / WSL bash / PowerShell)
+Deploy-File "$ChezmoiSource\secret\env.sh"  "$HomeDir\.config\shell\secret.sh"
+Deploy-File "$ChezmoiSource\secret\env.ps1" "$HomeDir\.config\shell\secret.ps1"
 
 Write-Host "Shell configurations deployed."
 {{ end -}}
