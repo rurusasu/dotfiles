@@ -127,3 +127,6 @@ __fzf_history_widget() {
   fi
 }
 bind -x '"\er": __fzf_history_widget'
+
+# 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
+[[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
