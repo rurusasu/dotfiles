@@ -7,6 +7,6 @@
 #   op item create --category login --title "Tavily" ...
 
 if (Get-Command op -ErrorAction SilentlyContinue) {
-  try { $env:GH_TOKEN       = & op read "op://Personal/GitHubUsedUserPAT/password" 2>$null } catch {}
+  try { $env:GH_TOKEN       = & op read "op://Personal/GitHubUsedUserPAT/credential" 2>$null } catch {}
   try { $env:TAVILY_API_KEY = & op read "op://Personal/Tavily/credential" 2>$null } catch {}
 }

@@ -7,6 +7,6 @@
 #   op item create --category login --title "Tavily" ...
 
 if command -v op &>/dev/null 2>&1; then
-  export GH_TOKEN=$(op read "op://Personal/GitHubUsedUserPAT/password" 2>/dev/null)
+  export GH_TOKEN=$(op read "op://Personal/GitHubUsedUserPAT/credential" 2>/dev/null)
   export TAVILY_API_KEY=$(op read "op://Personal/Tavily/credential" 2>/dev/null)
 fi
