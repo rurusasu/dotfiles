@@ -106,16 +106,25 @@ docker exec -it openclaw sh
 - `acpx: not found`
   - `openclaw.docker.json` の `plugins.entries.acpx.config.command` を `/usr/local/bin/acpx` に固定
 - `sessions_spawn(runtime:"acp")` が initialize で詰まる
-  - `acpx.config.json` の `agents.gemini.command` を `gemini --experimental-acp` に固定（デフォルト `gemini` のままだと ACP ハンドシェイク未成立）
+  - `acpx.config.json` の `agents.gemini.command` を `gemini --experimental-acp -m gemini-2.5-flash-lite` に固定（デフォルト `gemini` のままだと ACP ハンドシェイク未成立）
+  - `docker-compose.yml` の `environment.HOME` を `/home/bun` に固定し、認証ファイル参照先を安定化する
 - `sessions_spawn(runtime:"acp")` が 429 で失敗
   - ローカル設定不備ではなく Gemini 側の一時容量制限 (`MODEL_CAPACITY_EXHAUSTED`) を疑う
+- `sessions_send` が `ok` でも本文を返さない
+  - 既知挙動として payload 本文が空/保留になるケースがある
+  - `docker logs openclaw` の `[agent:nested] session=agent:gemini:acp:...` 行で実本文を確認する
 - `plugin telegram: duplicate plugin id`
   - `/home/bun/.openclaw/extensions/telegram` の旧拡張を退避/削除し、stock 側のみ利用
 
 ## サブエージェント完了判定の運用ルール
 
+- デフォルトは Codex 子（`sessions_spawn` で `runtime:"acp"` を付けず `agentId:"main"`）を使い、Gemini 子は明示要件がある場合のみ使う
 - announce は `best-effort` のため、完了判定の唯一ソースにしない
-- `sessions_spawn` 後は `runId` / `childSessionKey` を保持し、`sessions_history` か `/subagents info` で状態確認する
+- `sessions_spawn` 後は `runId` / `childSessionKey` を保持する
+- 子への実タスク送信は `sessions_send(timeoutSeconds>0)` で同期回収する（推奨）
+- `sessions_history` は補助用途に限定する（環境によって空を返すケースがある）
+- `accepted` は投入成功のみ。`completed/failed/timed out` を必ず別途判定する
+- `429 MODEL_CAPACITY_EXHAUSTED` は再試行（指数バックオフ）を前提にする
 - 追跡不能が起きる場合は `chezmoi/dot_openclaw/openclaw.docker.json.tmpl` で以下を確認する
   - `agents.defaults.subagents.maxSpawnDepth = 2`
   - `agents.defaults.sandbox.sessionToolsVisibility = "all"`
@@ -127,3 +136,5 @@ docker exec -it openclaw sh
 - https://docs.openclaw.ai/tools/subagents
 - https://docs.openclaw.ai/concepts/session-tool
 - https://docs.openclaw.ai/tools
+- https://github.com/openclaw/openclaw/issues/29593
+- https://github.com/openclaw/openclaw/pull/32683

@@ -26,6 +26,7 @@ services:
 
     environment:
       TZ: ${TZ:-Asia/Tokyo}
+      HOME: /home/bun
       # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Runtime bun installs (skills) go to the writable data volume

@@ -146,7 +146,8 @@ docker compose down -v && docker compose up -d
 認証情報は `GEMINI_CREDENTIALS_DIR` マウントから継続利用される。
 
 さらに `docker/openclaw/acpx.config.json` を `/home/bun/.acpx/config.json` に投入し、
-`acpx gemini` が `gemini --experimental-acp` で起動するよう固定する。
+`acpx gemini` が `gemini --experimental-acp -m gemini-2.5-flash-lite` で起動するよう固定する。
+`HOME` は `docker-compose.yml` の環境変数で `/home/bun` に固定し、認証ファイル参照先のぶれを防ぐ。
 
 設定変更後は再作成で反映:
 
@@ -154,17 +155,32 @@ docker compose down -v && docker compose up -d
 docker compose up -d --build --force-recreate
 ```
 
-`acpx --verbose --timeout 20 gemini exec "ping"` が
+`acpx --verbose --timeout 120 gemini exec "ping"` が
 `initialize -> session/new` まで進んで `429 RESOURCE_EXHAUSTED` になる場合は、
 ローカル設定ではなく Gemini 側の一時的な容量制限が原因。
+
+補足（2026-03-04 再テスト）:
+
+- コンテナ内 `acpx --verbose --timeout 300 gemini exec "Reply exactly: pong"` は成功
+- `sessions_spawn -> sessions_send` は成功しても、`sessions_send` の戻り payload に本文が入らないケースあり
+- この場合でも gateway ログに `[agent:nested] ... pong` が出ていれば子実行自体は成功
+- 既知事象として `sessions_history` 永続化/取得の不安定さが報告されている
 
 ### Subagents の完了判定を安定化する
 
 `sessions_spawn` は非同期で `accepted` を返すため、announce だけで完了判定しない。
 
+運用方針（推奨）:
+
+- 子タスクは `sessions_spawn`（`runtime:"acp"` を付けない、`agentId:"main"`）による Codex 子を第一選択にする
+- Gemini は Gemini 固有機能が必要な時だけ明示指定して使う
+
 - 1. `sessions_spawn` 後に `runId` / `childSessionKey` を保持する
-- 2. `sessions_history(childSessionKey)` または `/subagents info` で完了状態を確認する
-- 3. announce はユーザー通知用途として扱う（機械判定の唯一ソースにしない）
+- 2. 子への実タスク送信は `sessions_send(timeoutSeconds>0)` で同期回収する（推奨）
+- 3. `sessions_history(childSessionKey)` は補助用途に限定する（環境によって空のままになるケースあり）
+- 4. announce はユーザー通知用途として扱う（機械判定の唯一ソースにしない）
+- 5. `accepted` は実行成功ではないため、`timeout` / `failed` / `429` を明示判定する
+- 6. `429 MODEL_CAPACITY_EXHAUSTED` は指数バックオフで再試行する
 
 このリポジトリの Docker 設定では、子セッション追跡を安定化するために
 `openclaw.docker.json` 側で以下を明示する:
@@ -174,9 +190,17 @@ docker compose up -d --build --force-recreate
 - `tools.sessions.visibility = "all"`
 - `tools.agentToAgent.enabled = true`
 
+運用上の既知事項:
+
+- 一部環境では `sessions_history` が空を返すことがある（子実行自体は成功していても履歴取得できない）
+- この場合は `sessions_send(timeoutSeconds)` の戻り本文を正として扱う
+- `sessions_send` の payload 本文が空の場合は gateway ログの `[agent:nested]` を正として扱う
+
 Sources:
 
 - https://docs.openclaw.ai/tools/subagents
 - https://docs.openclaw.ai/concepts/session-tool
 - https://docs.openclaw.ai/tools
 - https://docs.openclaw.ai/session
+- https://github.com/openclaw/openclaw/issues/29593
+- https://github.com/openclaw/openclaw/pull/32683
