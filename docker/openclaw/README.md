@@ -157,3 +157,25 @@ docker compose up -d --build --force-recreate
 `acpx --verbose --timeout 20 gemini exec "ping"` が
 `initialize -> session/new` まで進んで `429 RESOURCE_EXHAUSTED` になる場合は、
 ローカル設定ではなく Gemini 側の一時的な容量制限が原因。
+
+### Subagents の完了判定を安定化する
+
+`sessions_spawn` は非同期で `accepted` を返すため、announce だけで完了判定しない。
+
+- 1. `sessions_spawn` 後に `runId` / `childSessionKey` を保持する
+- 2. `sessions_history(childSessionKey)` または `/subagents info` で完了状態を確認する
+- 3. announce はユーザー通知用途として扱う（機械判定の唯一ソースにしない）
+
+このリポジトリの Docker 設定では、子セッション追跡を安定化するために
+`openclaw.docker.json` 側で以下を明示する:
+
+- `agents.defaults.subagents.maxSpawnDepth = 2`
+- `agents.defaults.sandbox.sessionToolsVisibility = "all"`
+- `tools.sessions.visibility = "tree"`
+
+Sources:
+
+- https://docs.openclaw.ai/tools/subagents
+- https://docs.openclaw.ai/concepts/session-tool
+- https://docs.openclaw.ai/tools
+- https://docs.openclaw.ai/session

@@ -111,3 +111,18 @@ docker exec -it openclaw sh
   - ローカル設定不備ではなく Gemini 側の一時容量制限 (`MODEL_CAPACITY_EXHAUSTED`) を疑う
 - `plugin telegram: duplicate plugin id`
   - `/home/bun/.openclaw/extensions/telegram` の旧拡張を退避/削除し、stock 側のみ利用
+
+## サブエージェント完了判定の運用ルール
+
+- announce は `best-effort` のため、完了判定の唯一ソースにしない
+- `sessions_spawn` 後は `runId` / `childSessionKey` を保持し、`sessions_history` か `/subagents info` で状態確認する
+- 追跡不能が起きる場合は `chezmoi/dot_openclaw/openclaw.docker.json.tmpl` で以下を確認する
+  - `agents.defaults.subagents.maxSpawnDepth = 2`
+  - `agents.defaults.sandbox.sessionToolsVisibility = "all"`
+  - `tools.sessions.visibility = "tree"`
+
+参照:
+
+- https://docs.openclaw.ai/tools/subagents
+- https://docs.openclaw.ai/concepts/session-tool
+- https://docs.openclaw.ai/tools

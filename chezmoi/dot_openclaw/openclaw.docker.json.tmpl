@@ -8,8 +8,18 @@
       },
       "maxConcurrent": 4,
       "subagents": {
-        "maxConcurrent": 8
+        "maxConcurrent": 8,
+        "maxSpawnDepth": 2,
+        "maxChildrenPerAgent": 5
+      },
+      "sandbox": {
+        "sessionToolsVisibility": "all"
       }
+    }
+  },
+  "tools": {
+    "sessions": {
+      "visibility": "tree"
     }
   },
   "channels": {
