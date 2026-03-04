@@ -171,7 +171,7 @@ docker compose up -d --build --force-recreate
 
 - `agents.defaults.subagents.maxSpawnDepth = 2`
 - `agents.defaults.sandbox.sessionToolsVisibility = "all"`
-- `tools.sessions.visibility = "tree"`
+- `tools.sessions.visibility = "all"`
 
 Sources:
 

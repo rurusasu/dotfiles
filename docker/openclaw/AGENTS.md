@@ -119,7 +119,7 @@ docker exec -it openclaw sh
 - 追跡不能が起きる場合は `chezmoi/dot_openclaw/openclaw.docker.json.tmpl` で以下を確認する
   - `agents.defaults.subagents.maxSpawnDepth = 2`
   - `agents.defaults.sandbox.sessionToolsVisibility = "all"`
-  - `tools.sessions.visibility = "tree"`
+  - `tools.sessions.visibility = "all"`
 
 参照:
 
