@@ -7,6 +7,10 @@ ARG GEMINI_CLI_VERSION=0.31.0
 
 WORKDIR /app
 
+COPY entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
+COPY gemini.settings.json /app/gemini.settings.json
+COPY acpx.config.json /app/acpx.config.json
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client unzip \
     && install -m 0755 -d /etc/apt/keyrings \
@@ -45,6 +49,7 @@ RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then echo "${GITHUB_T
 
 RUN mkdir -p /app/data/workspace /app/data/.bun \
     && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx \
+    && chmod +x /usr/local/bin/openclaw-entrypoint.sh \
     && chown -R 1000:1000 /app/data /home/bun
 
 USER 1000:1000
@@ -53,5 +58,5 @@ RUN git config --global user.name "openclaw" \
     && git config --global user.email "openclaw@container" \
     && git config --global safe.directory "*"
 
-ENTRYPOINT ["openclaw"]
+ENTRYPOINT ["/usr/local/bin/openclaw-entrypoint.sh"]
 CMD ["gateway"]

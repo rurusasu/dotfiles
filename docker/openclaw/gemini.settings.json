@@ -1,0 +1,22 @@
+{
+  "codeAssist": {
+    "enableCodeCompletion": true,
+    "enableInlineChat": true
+  },
+  "preferences": {
+    "language": "auto",
+    "codeStyle": {
+      "indentSize": 2,
+      "useTabs": false
+    }
+  },
+  "general": {
+    "previewFeatures": true
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "mcpServers": {}
+}

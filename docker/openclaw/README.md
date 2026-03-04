@@ -85,11 +85,13 @@ Docker 用設定の特徴：
 
 ## ボリューム
 
-| ボリューム            | マウント先                          | 用途                                     |
-| --------------------- | ----------------------------------- | ---------------------------------------- |
-| `openclaw-data`       | `/app/data`                         | ワークスペース・ログ・スキル             |
-| `openclaw-home`       | `/home/bun/.openclaw`               | canvas・cron など実行時ステート          |
-| `.env` の設定ファイル | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる） |
+| ボリューム             | マウント先                          | 用途                                     |
+| ---------------------- | ----------------------------------- | ---------------------------------------- |
+| `openclaw-data`        | `/app/data`                         | ワークスペース・ログ・スキル             |
+| `openclaw-home`        | `/home/bun/.openclaw`               | canvas・cron など実行時ステート          |
+| `.env` の設定ファイル  | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる） |
+| `gemini.settings.json` | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）  |
+| `acpx.config.json`     | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）  |
 
 ## 操作
 
@@ -112,7 +114,31 @@ docker compose run --rm openclaw --help
 
 # コンテナ内の設定確認
 docker compose exec openclaw cat /home/bun/.openclaw/openclaw.json
+docker compose exec openclaw cat /home/bun/.gemini/settings.json
+docker compose exec openclaw cat /home/bun/.acpx/config.json
 
 # ボリュームリセット（ワークスペースも消えるので注意）
 docker compose down -v && docker compose up -d
 ```
+
+### ACPX + Gemini が不安定なとき
+
+`sessions_spawn(runtime:"acp")` がタイムアウトする場合、ホスト側 `~/.gemini/settings.json` の
+`mcpServers` がコンテナ内で解決できず初期化遅延を起こすことがある。
+
+この構成では起動時 entrypoint が `docker/openclaw/gemini.settings.json` を
+`/home/bun/.gemini/settings.json` に上書きし、Docker 内では最小設定（`mcpServers: {}`）を使う。
+認証情報は `GEMINI_CREDENTIALS_DIR` マウントから継続利用される。
+
+さらに `docker/openclaw/acpx.config.json` を `/home/bun/.acpx/config.json` に投入し、
+`acpx gemini` が `gemini --experimental-acp` で起動するよう固定する。
+
+設定変更後は再作成で反映:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+`acpx --verbose --timeout 20 gemini exec "ping"` が
+`initialize -> session/new` まで進んで `429 RESOURCE_EXHAUSTED` になる場合は、
+ローカル設定ではなく Gemini 側の一時的な容量制限が原因。

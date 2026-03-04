@@ -6,6 +6,9 @@
 
 - `docker/openclaw/Dockerfile`
 - `docker/openclaw/docker-compose.yml`
+- `docker/openclaw/entrypoint.sh`
+- `docker/openclaw/acpx.config.json`
+- `docker/openclaw/gemini.settings.json`
 - `docker/openclaw/.env`（通常は自動生成。手動編集は最小限）
 - `chezmoi/dot_openclaw/openclaw.docker.json.tmpl`（設定の source of truth）
 
@@ -91,7 +94,15 @@ docker exec -it openclaw sh
 
 - `acpx exited with code 1`
   - `openclaw-acpx` が `/home/bun/.acpx` に mount され、書き込み可能か確認
+- `Invalid JSON in /home/bun/.acpx/config.json`
+  - `config.json` の途中切れ（0 byte / 壊れ JSON）を疑う
+  - `entrypoint.sh` が `/app/acpx.config.json` を起動時に再投入する設計なので、`docker compose up -d --build --force-recreate` を優先
+  - コンテナ内確認: `cat /home/bun/.acpx/config.json`
 - `acpx: not found`
   - `openclaw.docker.json` の `plugins.entries.acpx.config.command` を `/usr/local/bin/acpx` に固定
+- `sessions_spawn(runtime:"acp")` が initialize で詰まる
+  - `acpx.config.json` の `agents.gemini.command` を `gemini --experimental-acp` に固定（デフォルト `gemini` のままだと ACP ハンドシェイク未成立）
+- `sessions_spawn(runtime:"acp")` が 429 で失敗
+  - ローカル設定不備ではなく Gemini 側の一時容量制限 (`MODEL_CAPACITY_EXHAUSTED`) を疑う
 - `plugin telegram: duplicate plugin id`
   - `/home/bun/.openclaw/extensions/telegram` の旧拡張を退避/削除し、stock 側のみ利用
