@@ -127,10 +127,6 @@ class OpenClawHandler : SetupHandlerBase {
             } else {
                 Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
             }
-
-            if ($secretFile -and (Test-PathExist -Path $secretFile)) {
-                Remove-Item -LiteralPath $secretFile -Force -ErrorAction SilentlyContinue
-            }
         }
     }
 
@@ -166,10 +162,10 @@ GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
 
     <#
     .SYNOPSIS
-        GitHub token の Docker secret 一時ファイルを生成する
+        GitHub token の Docker secret ファイルを生成する
     .DESCRIPTION
         1Password が利用可能なら op read を優先し、未取得時は OPENCLAW_GITHUB_TOKEN をフォールバックする。
-        どちらも空の場合は空ファイルを作成する（起動は継続）。
+        Docker compose の secrets は起動後も元ファイルを参照するため、削除しない固定パスに保存する。
     #>
     hidden [string] CreateGitHubTokenSecretFile() {
         $githubToken = ""
@@ -197,14 +193,16 @@ GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
         }
 
         try {
-            $tmp = New-TemporaryFile
-            Set-ContentNoNewline -Path $tmp.FullName -Value $githubToken
-            return $tmp.FullName
+            $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+            $secretDir = Join-Path $homeDir ".openclaw\secrets"
+            [System.IO.Directory]::CreateDirectory($secretDir) | Out-Null
+            $secretFile = Join-Path $secretDir "github_token"
+            [System.IO.File]::WriteAllText($secretFile, $githubToken)
+            return $secretFile
         } catch {
-            # Fallback: temp file creation/write failure should not abort startup.
-            $tmpPath = [System.IO.Path]::GetTempFileName()
-            Set-Content -Path $tmpPath -Value $githubToken -NoNewline
-            return $tmpPath
+            $fallback = Join-Path ([System.IO.Path]::GetTempPath()) "openclaw_github_token"
+            [System.IO.File]::WriteAllText($fallback, $githubToken)
+            return $fallback
         }
     }
 

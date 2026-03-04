@@ -18,7 +18,7 @@
 
 1. `chezmoi apply` で設定を展開
 2. `.env` を生成（`OPENCLAW_CONFIG_FILE` など。PAT は含めない）
-3. 1Password から GitHub PAT を取得し、Docker secret 一時ファイルを生成
+3. 1Password から GitHub PAT を取得し、`~/.openclaw/secrets/github_token` を更新
 4. `docker compose up -d --build` で起動
 
 通常の起動・復旧はこのコマンドを使う。
@@ -84,7 +84,7 @@ pwsh -File scripts\powershell\install.user.ps1
 ```
 
 手動起動する場合は `OPENCLAW_GITHUB_TOKEN_FILE` をセットする。
-（Handler はこれを一時ファイルで自動設定する）
+（Handler は `~/.openclaw/secrets/github_token` を自動設定する）
 
 ## 手動操作コマンド（Handler 非経由時）
 

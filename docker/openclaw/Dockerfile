@@ -47,6 +47,11 @@ RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then if [ -f /run/sec
     > /usr/local/bin/git-credential-askpass.sh \
     && chmod +x /usr/local/bin/git-credential-askpass.sh
 
+# gh wrapper: auto-load GH_TOKEN/GITHUB_TOKEN from Docker secret for docker exec sessions.
+RUN printf '#!/bin/sh\nif [ -f /run/secrets/github_token ]; then token="$(cat /run/secrets/github_token)"; export GH_TOKEN="$token"; export GITHUB_TOKEN="$token"; fi\nexec /usr/bin/gh "$@"\n' \
+    > /usr/local/bin/gh \
+    && chmod +x /usr/local/bin/gh
+
 RUN mkdir -p /app/data/workspace /app/data/.bun \
     && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx \
     && chmod +x /usr/local/bin/openclaw-entrypoint.sh \

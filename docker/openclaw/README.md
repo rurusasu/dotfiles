@@ -61,7 +61,7 @@ Copy-Item .env.example .env
 ```
 
 `.env` には GitHub PAT を保存しない。PAT は起動時に `Handler.OpenClaw.ps1` が
-1Password から取得し、Docker secret 一時ファイル経由で注入する。
+1Password から取得し、`~/.openclaw/secrets/github_token` 経由で Docker secret として注入する。
 
 ### 4. ビルド & 起動
 
@@ -88,14 +88,14 @@ Docker 用設定の特徴：
 
 ## ボリューム
 
-| ボリューム                       | マウント先                          | 用途                                     |
-| -------------------------------- | ----------------------------------- | ---------------------------------------- |
-| `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル             |
-| `openclaw-home`                  | `/home/bun/.openclaw`               | canvas・cron など実行時ステート          |
-| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる） |
-| `gemini.settings.json`           | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）  |
-| `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）  |
-| Docker secret `github_token`     | `/run/secrets/github_token`         | GitHub PAT（起動時の一時ファイル由来）   |
+| ボリューム                       | マウント先                          | 用途                                                  |
+| -------------------------------- | ----------------------------------- | ----------------------------------------------------- |
+| `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル                          |
+| `openclaw-home`                  | `/home/bun/.openclaw`               | canvas・cron など実行時ステート                       |
+| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる）              |
+| `gemini.settings.json`           | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）               |
+| `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）               |
+| Docker secret `github_token`     | `/run/secrets/github_token`         | GitHub PAT（`~/.openclaw/secrets/github_token` 由来） |
 
 ## 操作
 
