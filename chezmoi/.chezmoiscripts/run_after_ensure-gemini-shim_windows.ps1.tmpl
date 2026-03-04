@@ -1,0 +1,56 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+
+$entrypoint = Join-Path $env:USERPROFILE ".bun\install\global\node_modules\@google\gemini-cli\dist\index.js"
+if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
+  Write-Host "[gemini-shim] Skip: Gemini CLI entrypoint not found."
+  return
+}
+
+$isHealthy = $false
+try {
+  $output = & gemini --version 2>$null
+  if ($LASTEXITCODE -eq 0 -and ($output -match '\d+\.\d+')) {
+    $isHealthy = $true
+  }
+} catch {
+  $isHealthy = $false
+}
+
+if ($isHealthy) {
+  Write-Host "[gemini-shim] gemini command is healthy. No action needed."
+  return
+}
+
+$localBin = Join-Path $env:USERPROFILE ".local\bin"
+New-Item -ItemType Directory -Path $localBin -Force | Out-Null
+
+$shimPath = Join-Path $localBin "gemini.cmd"
+$shimContent = @(
+  "@echo off"
+  "setlocal"
+  "set ""GEMINI_JS=%USERPROFILE%\.bun\install\global\node_modules\@google\gemini-cli\dist\index.js"""
+  "if not exist ""%GEMINI_JS%"" ("
+  "  echo [ERROR] Gemini CLI entrypoint not found: %GEMINI_JS%"
+  "  exit /b 1"
+  ")"
+  "bun ""%GEMINI_JS%"" %*"
+  "exit /b %ERRORLEVEL%"
+  ""
+) -join "`r`n"
+[System.IO.File]::WriteAllText($shimPath, $shimContent, [System.Text.Encoding]::ASCII)
+
+$userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+$items = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+$items = @($items | Where-Object { $_ -ne $localBin })
+$newUserPath = (@($localBin) + $items) -join ";"
+[System.Environment]::SetEnvironmentVariable("PATH", $newUserPath, "User")
+
+$processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+if (-not ($processItems -contains $localBin)) {
+  $env:PATH = "$localBin;$env:PATH"
+}
+
+Write-Host "[gemini-shim] Created: $shimPath"
+Write-Host "[gemini-shim] Prepended to user PATH: $localBin"
+{{ end -}}

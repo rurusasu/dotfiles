@@ -334,4 +334,60 @@ Describe 'BunHandler' {
             $result.Message | Should -Match "bun error"
         }
     }
+
+    Context 'EnsureGeminiCommandShim - gemini command healthy' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = $TestDrive
+            $entryDir = Join-Path $TestDrive ".bun\install\global\node_modules\@google\gemini-cli\dist"
+            New-Item $entryDir -ItemType Directory -Force | Out-Null
+            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Mock gemini {
+                $global:LASTEXITCODE = 0
+                return "0.32.0"
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should skip shim creation when gemini is healthy' {
+            $handler.EnsureGeminiCommandShim()
+            (Join-Path $TestDrive ".local\bin\gemini.cmd") | Should -Not -Exist
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+    }
+
+    Context 'EnsureGeminiCommandShim - gemini command broken' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = $TestDrive
+            $entryDir = Join-Path $TestDrive ".bun\install\global\node_modules\@google\gemini-cli\dist"
+            New-Item $entryDir -ItemType Directory -Force | Out-Null
+            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Mock gemini {
+                $global:LASTEXITCODE = 1
+                throw "broken"
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should create gemini.cmd shim and prepend .local\bin to user PATH' {
+            $handler.EnsureGeminiCommandShim()
+            $shimPath = Join-Path $TestDrive ".local\bin\gemini.cmd"
+            $shimPath | Should -Exist
+            $content = Get-Content $shimPath -Raw
+            $content | Should -Match 'GEMINI_JS'
+            $content | Should -Match 'bun "%GEMINI_JS%" %\*'
+            Should -Invoke Set-UserEnvironmentPath -Times 1
+        }
+    }
 }

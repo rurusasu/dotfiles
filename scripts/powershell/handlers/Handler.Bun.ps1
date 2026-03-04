@@ -115,6 +115,8 @@ class BunHandler : SetupHandlerBase {
                 }
             }
 
+            $this.EnsureGeminiCommandShim()
+
             if ($failed.Count -eq 0) {
                 return $this.CreateSuccessResult("$($succeeded.Count) 個インストール, $skipped 個スキップ")
             }
@@ -194,6 +196,79 @@ class BunHandler : SetupHandlerBase {
         $shimContent = "@echo off`r`n""%~dp0bun.exe"" x %*`r`n"
         [System.IO.File]::WriteAllText($shimPath, $shimContent, [System.Text.Encoding]::ASCII)
         $this.Log("bunx.cmd を作成しました: $shimPath", "Green")
+    }
+
+    <#
+    .SYNOPSIS
+        Windows で gemini コマンドが壊れている場合に shim を作成する
+    .DESCRIPTION
+        Bun の gemini.exe ラッパーが shebang を解釈できず失敗するケース向け。
+        ~/.local/bin/gemini.cmd を作成し、bun + index.js 直実行で回避する。
+    #>
+    hidden [void] EnsureGeminiCommandShim() {
+        $entrypoint = Join-Path $env:USERPROFILE ".bun\install\global\node_modules\@google\gemini-cli\dist\index.js"
+        if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
+            $this.Log("Gemini CLI のエントリポイントが見つからないため shim 作成をスキップします", "Gray")
+            return
+        }
+
+        if ($this.TestGeminiCommand()) {
+            $this.Log("gemini コマンドは正常です。shim 作成は不要です", "Gray")
+            return
+        }
+
+        $localBin = Join-Path $env:USERPROFILE ".local\bin"
+        New-Item -ItemType Directory -Path $localBin -Force | Out-Null
+
+        $shimPath = Join-Path $localBin "gemini.cmd"
+        $shimContent = @(
+            "@echo off"
+            "setlocal"
+            "set ""GEMINI_JS=%USERPROFILE%\.bun\install\global\node_modules\@google\gemini-cli\dist\index.js"""
+            "if not exist ""%GEMINI_JS%"" ("
+            "  echo [ERROR] Gemini CLI entrypoint not found: %GEMINI_JS%"
+            "  exit /b 1"
+            ")"
+            "bun ""%GEMINI_JS%"" %*"
+            "exit /b %ERRORLEVEL%"
+            ""
+        ) -join "`r`n"
+        [System.IO.File]::WriteAllText($shimPath, $shimContent, [System.Text.Encoding]::ASCII)
+
+        $this.PrependUserPath($localBin)
+        $this.Log("gemini.cmd shim を作成しました: $shimPath", "Green")
+        $this.Log("Windows では ~/.local/bin/gemini.cmd を優先して実行します", "Gray")
+    }
+
+    <#
+    .SYNOPSIS
+        gemini コマンドのヘルスチェック
+    #>
+    hidden [bool] TestGeminiCommand() {
+        try {
+            $output = & gemini --version 2>&1
+            return ($LASTEXITCODE -eq 0 -and ($output -match '\d+\.\d+'))
+        }
+        catch {
+            return $false
+        }
+    }
+
+    <#
+    .SYNOPSIS
+        指定パスを User PATH の先頭に追加する
+    #>
+    hidden [void] PrependUserPath([string]$pathToPrepend) {
+        $userPath = Get-UserEnvironmentPath
+        $items = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+        $items = @($items | Where-Object { $_ -ne $pathToPrepend })
+        $newPath = (@($pathToPrepend) + $items) -join ";"
+        Set-UserEnvironmentPath -Path $newPath
+
+        $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+        if (-not ($processItems -contains $pathToPrepend)) {
+            $env:PATH = "$pathToPrepend;$env:PATH"
+        }
     }
 
     <#
