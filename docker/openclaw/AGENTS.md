@@ -120,6 +120,7 @@ docker exec -it openclaw sh
   - `agents.defaults.subagents.maxSpawnDepth = 2`
   - `agents.defaults.sandbox.sessionToolsVisibility = "all"`
   - `tools.sessions.visibility = "all"`
+  - `tools.agentToAgent.enabled = true`
 
 参照:
 
