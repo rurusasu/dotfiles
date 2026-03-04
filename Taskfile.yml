@@ -91,12 +91,12 @@ tasks:
   test:
     desc: Run PowerShell tests
     cmds:
-      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0"
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration"
 
   test:coverage:
     desc: Run PowerShell tests with coverage
     cmds:
-      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1"
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration"
 
   # ===========================================
   # Windows Setup

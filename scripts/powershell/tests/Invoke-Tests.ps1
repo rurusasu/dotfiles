@@ -22,6 +22,9 @@
 .PARAMETER ShowCoverage
     詳細なカバレッジレポートを表示するか
 
+.PARAMETER IncludeIntegration
+    Integration.Tests.ps1 を実行対象に含めるか
+
 .EXAMPLE
     .\Invoke-Tests.ps1
     全テストを実行
@@ -38,7 +41,7 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$Path,
+    [string[]]$Path,
 
     [Parameter()]
     [int]$MinimumCoverage = 0,
@@ -50,7 +53,10 @@ param(
     [string]$CoverageOutputFile,
 
     [Parameter()]
-    [switch]$ShowCoverage
+    [switch]$ShowCoverage,
+
+    [Parameter()]
+    [switch]$IncludeIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -102,7 +108,12 @@ if ($MinimumCoverage -gt 0) {
 
 # テストパスの決定
 if (-not $Path) {
-    $Path = $scriptRoot
+    $testFiles = Get-ChildItem -Path $scriptRoot -Filter "*.Tests.ps1" -Recurse
+    if (-not $IncludeIntegration) {
+        $testFiles = $testFiles | Where-Object { $_.Name -ne "Integration.Tests.ps1" }
+    }
+
+    $Path = @($testFiles.FullName)
 }
 
 # Pester 設定
@@ -155,6 +166,11 @@ Write-Host ""
 
 # テスト実行
 $result = Invoke-Pester -Configuration $pesterConfig
+
+if (-not $result) {
+    Write-Host "FAIL: Test runner did not return a result." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "===============================================" -ForegroundColor Cyan
