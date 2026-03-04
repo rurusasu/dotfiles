@@ -5,6 +5,7 @@
 .DESCRIPTION
     - chezmoi で生成された設定ファイルの確認
     - .env ファイルの自動生成（存在しない場合）
+    - 1Password から GitHub PAT を取得して Docker secret 一時ファイルを生成
     - docker compose で OpenClaw コンテナをビルド・起動
     - コンテナの起動確認
 
@@ -57,13 +58,6 @@ class OpenClawHandler : SetupHandlerBase {
             return $false
         }
 
-        # op (1Password CLI) が必要（openclaw.docker.json の生成に使用）
-        $opCmd = Get-ExternalCommand -Name "op"
-        if (-not $opCmd) {
-            $this.Log("op (1Password CLI) が見つかりません。OpenClaw をスキップします", "Gray")
-            return $false
-        }
-
         return $true
     }
 
@@ -72,6 +66,9 @@ class OpenClawHandler : SetupHandlerBase {
         OpenClaw コンテナを起動する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
+        $secretFile = $null
+        $originalSecretFileEnv = $env:OPENCLAW_GITHUB_TOKEN_FILE
+
         try {
             # .env ファイルの確認・生成
             $this.EnsureEnvFile($ctx)
@@ -86,6 +83,10 @@ class OpenClawHandler : SetupHandlerBase {
                     return $this.CreateFailureResult("chezmoi apply に失敗しました")
                 }
             }
+
+            # GitHub token は .env ではなく Docker secret 一時ファイルで渡す
+            $secretFile = $this.CreateGitHubTokenSecretFile()
+            $env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretFile -replace '\\', '/')
 
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
@@ -120,6 +121,16 @@ class OpenClawHandler : SetupHandlerBase {
             return $this.CreateSuccessResult("OpenClaw コンテナを起動しました")
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
+        } finally {
+            if ($null -ne $originalSecretFileEnv) {
+                $env:OPENCLAW_GITHUB_TOKEN_FILE = $originalSecretFileEnv
+            } else {
+                Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
+            }
+
+            if ($secretFile -and (Test-PathExist -Path $secretFile)) {
+                Remove-Item -LiteralPath $secretFile -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 
@@ -138,16 +149,6 @@ class OpenClawHandler : SetupHandlerBase {
             return
         }
 
-        # 1Password から GITHUB_TOKEN を取得（未設定・サインアウト時は空文字）
-        $githubToken = ""
-        $opCmd = Get-ExternalCommand -Name "op"
-        if ($opCmd) {
-            try {
-                $result = & op read "op://Personal/GitHubUsedOpenClawPAT/credential" 2>&1
-                if ($LASTEXITCODE -eq 0) { $githubToken = ($result | Out-String).Trim() }
-            } catch { }
-        }
-
         $configPath = ($this.GetConfigFilePath() -replace '\\', '/')
         $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
         $geminiCredentialsDir = ((Join-Path $homeDir ".gemini") -replace '\\', '/')
@@ -157,11 +158,54 @@ OPENCLAW_UID=1000
 OPENCLAW_GID=1000
 OPENCLAW_CONFIG_FILE=$configPath
 TZ=Asia/Tokyo
-GITHUB_TOKEN=$githubToken
 GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
+    }
+
+    <#
+    .SYNOPSIS
+        GitHub token の Docker secret 一時ファイルを生成する
+    .DESCRIPTION
+        1Password が利用可能なら op read を優先し、未取得時は OPENCLAW_GITHUB_TOKEN をフォールバックする。
+        どちらも空の場合は空ファイルを作成する（起動は継続）。
+    #>
+    hidden [string] CreateGitHubTokenSecretFile() {
+        $githubToken = ""
+        $opCmd = Get-ExternalCommand -Name "op"
+        if ($opCmd) {
+            try {
+                $result = & op read "op://Personal/GitHubUsedOpenClawPAT/credential" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    $githubToken = ($result | Out-String).Trim()
+                } else {
+                    $this.Log("op read に失敗しました。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
+                }
+            } catch {
+                $this.Log("op read で例外が発生しました。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
+            }
+        } else {
+            $this.Log("op (1Password CLI) が見つかりません。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
+        }
+
+        if ([string]::IsNullOrWhiteSpace($githubToken)) {
+            $githubToken = [string]$env:OPENCLAW_GITHUB_TOKEN
+        }
+        if ([string]::IsNullOrWhiteSpace($githubToken)) {
+            $this.LogWarning("GitHub token が未取得です。GitHub 連携が必要な操作は失敗する可能性があります")
+        }
+
+        try {
+            $tmp = New-TemporaryFile
+            Set-ContentNoNewline -Path $tmp.FullName -Value $githubToken
+            return $tmp.FullName
+        } catch {
+            # Fallback: temp file creation/write failure should not abort startup.
+            $tmpPath = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $tmpPath -Value $githubToken -NoNewline
+            return $tmpPath
+        }
     }
 
     <#

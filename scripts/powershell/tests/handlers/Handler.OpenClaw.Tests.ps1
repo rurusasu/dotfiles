@@ -117,7 +117,11 @@ Describe 'OpenClawHandler' {
         }
 
         It 'should start container successfully when config exists' {
-            Mock Test-PathExist { return $true }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "jobs\.seed\.json$") { return $false }
+                return $true
+            }
             Mock Invoke-Docker {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -297,7 +301,11 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Start-SleepSafe { }
-            Mock Test-PathExist { return $true }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "jobs\.seed\.json$") { return $false }
+                return $true
+            }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
         }
 
@@ -425,7 +433,7 @@ Describe 'OpenClawHandler' {
             $script:envContent | Should -Match "TZ=Asia/Tokyo"
         }
 
-        It 'should include GITHUB_TOKEN in .env (empty when op is not available)' {
+        It 'should not include GITHUB_TOKEN in .env' {
             $script:envContent = ""
             Mock Write-Host { }
             Mock Start-SleepSafe { }
@@ -450,7 +458,7 @@ Describe 'OpenClawHandler' {
 
             $handler.Apply($ctx)
 
-            $script:envContent | Should -Match "GITHUB_TOKEN="
+            $script:envContent | Should -Not -Match "GITHUB_TOKEN="
         }
 
         It 'should include GEMINI_CREDENTIALS_DIR in .env with forward slashes' {

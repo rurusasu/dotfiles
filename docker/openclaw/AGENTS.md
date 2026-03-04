@@ -17,8 +17,9 @@
 `scripts/powershell/install.user.ps1` (Handler.OpenClaw.ps1) が以下を一括実行する。
 
 1. `chezmoi apply` で設定を展開
-2. `.env` を生成（`OPENCLAW_CONFIG_FILE` / `GITHUB_TOKEN` など）
-3. `docker compose up -d --build` で起動
+2. `.env` を生成（`OPENCLAW_CONFIG_FILE` など。PAT は含めない）
+3. 1Password から GitHub PAT を取得し、Docker secret 一時ファイルを生成
+4. `docker compose up -d --build` で起動
 
 通常の起動・復旧はこのコマンドを使う。
 
@@ -64,14 +65,15 @@ docker restart openclaw
 ## GitHub 認証の実装ルール
 
 - 認証方式は Fine-grained PAT のみ（Classic PAT 不使用）
-- PAT は 1Password から `.env` の `GITHUB_TOKEN` へ注入
+- PAT は 1Password から起動時に取得し、Docker secret `github_token` として注入
 - コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` を使う
+- `entrypoint.sh` が `/run/secrets/github_token` を読み、`GITHUB_TOKEN` と `GH_TOKEN` をプロセス環境へ export
 - `Dockerfile` 側で `git-credential-askpass.sh` を配置する
 
 1Password 参照先:
 
 ```text
-op://Personal/d4av65p4wcvcms6lbsbbabrywy/pat-used-openclaw
+op://Personal/GitHubUsedOpenClawPAT/credential
 ```
 
 `.env` が既にある場合、Handler の `EnsureEnvFile` は再生成をスキップする。再生成したい場合:
@@ -80,6 +82,9 @@ op://Personal/d4av65p4wcvcms6lbsbbabrywy/pat-used-openclaw
 Remove-Item docker\openclaw\.env
 pwsh -File scripts\powershell\install.user.ps1
 ```
+
+手動起動する場合は `OPENCLAW_GITHUB_TOKEN_FILE` をセットする。
+（Handler はこれを一時ファイルで自動設定する）
 
 ## 手動操作コマンド（Handler 非経由時）
 

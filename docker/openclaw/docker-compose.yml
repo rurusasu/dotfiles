@@ -31,15 +31,14 @@ services:
       # Runtime bun installs (skills) go to the writable data volume
       BUN_INSTALL: /app/data/.bun
       PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      # GitHub HTTPS authentication via Fine-grained PAT (set in .env, stored in 1Password)
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      # gh CLI uses GH_TOKEN for authentication (falls back to GITHUB_TOKEN)
-      GH_TOKEN: ${GITHUB_TOKEN:-}
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
       # Gemini CLI authentication for ACP agent sessions (sessions_spawn agentId="gemini")
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
+
+    secrets:
+      - github_token
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
@@ -65,3 +64,7 @@ volumes:
   # Fallback empty volume when GEMINI_CREDENTIALS_DIR is not set in .env
   gemini-credentials:
     driver: local
+
+secrets:
+  github_token:
+    file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE for docker compose}

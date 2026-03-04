@@ -42,8 +42,8 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} \
     && npm cache clean --force
 
-# GIT_ASKPASS helper: feeds GITHUB_TOKEN as the HTTPS password at runtime.
-RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then echo "${GITHUB_TOKEN}"; else echo "x-access-token"; fi\n' \
+# GIT_ASKPASS helper: feeds GitHub token from Docker secret first, env fallback second.
+RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then if [ -f /run/secrets/github_token ]; then cat /run/secrets/github_token; else echo "${GITHUB_TOKEN}"; fi; else echo "x-access-token"; fi\n' \
     > /usr/local/bin/git-credential-askpass.sh \
     && chmod +x /usr/local/bin/git-credential-askpass.sh
 
