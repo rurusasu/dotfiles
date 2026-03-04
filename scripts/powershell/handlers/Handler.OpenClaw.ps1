@@ -110,11 +110,14 @@ class OpenClawHandler : SetupHandlerBase {
             }
 
             # コンテナ起動の確認
-            if ($this.WaitForContainer()) {
-                return $this.CreateSuccessResult("OpenClaw コンテナを起動しました")
-            } else {
+            if (-not $this.WaitForContainer()) {
                 return $this.CreateFailureResult("コンテナの起動確認がタイムアウトしました ($($this.StartupRetries * $this.StartupRetryDelaySeconds)秒)")
             }
+
+            # cron ジョブのシード（新規 volume の場合のみ）
+            $this.SeedCronJobs()
+
+            return $this.CreateSuccessResult("OpenClaw コンテナを起動しました")
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
@@ -156,6 +159,44 @@ GITHUB_TOKEN=$githubToken
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
+    }
+
+    <#
+    .SYNOPSIS
+        cron/jobs.json が存在しない場合にシードファイルをコピーする
+    .DESCRIPTION
+        新規セットアップや volume 再作成後、chezmoi が展開した
+        ~/.openclaw/cron/jobs.seed.json をコンテナ内に投入してリスタートする。
+        jobs.json がすでに存在する場合は何もしない。
+    #>
+    hidden [void] SeedCronJobs() {
+        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        $seedFile = Join-Path $homeDir ".openclaw\cron\jobs.seed.json"
+
+        if (-not (Test-PathExist -Path $seedFile)) {
+            $this.Log("cron seed ファイルが見つかりません: $seedFile", "Gray")
+            return
+        }
+
+        # コンテナ内に jobs.json がすでに存在するか確認
+        $existing = Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "test -f //home/bun/.openclaw/cron/jobs.json && echo exists"
+        if ($existing -match "exists") {
+            $this.Log("cron/jobs.json はすでに存在します。シードをスキップします", "Gray")
+            return
+        }
+
+        $this.Log("cron/jobs.json が存在しません。シードファイルをコピーします")
+        Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/bun/.openclaw/cron"
+        Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw://home/bun/.openclaw/cron/jobs.json"
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("cron seed のコピーに失敗しました")
+            return
+        }
+
+        $this.Log("cron seed をコピーしました。コンテナを再起動します")
+        Invoke-Docker "restart" "openclaw"
+        $this.WaitForContainer() | Out-Null
+        $this.Log("cron ジョブを復元しました", "Green")
     }
 
     <#

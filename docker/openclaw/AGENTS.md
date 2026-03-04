@@ -135,6 +135,45 @@ docker compose -f docker/openclaw/docker-compose.yml logs -f
 docker exec -it openclaw sh
 ```
 
+## cron ジョブ
+
+### 登録済みジョブ
+
+| 時刻（JST） | 名前                     | 内容                                            |
+| ----------- | ------------------------ | ----------------------------------------------- |
+| 23:55       | `lifelog-daily-scaffold` | `bun run new` — 日次/週次/月次/年次ファイル生成 |
+| 23:58       | `lifelog-daily-git-sync` | git add/commit/push → GitHub                    |
+
+### 自動復元（新規セットアップ時）
+
+`Handler.OpenClaw.ps1` がコンテナ起動後に `cron/jobs.json` の有無を確認し、
+存在しない場合は chezmoi が展開したシードファイルを自動コピーして再起動する。
+
+```
+chezmoi/dot_openclaw/cron/jobs.seed.json.tmpl
+    ↓ chezmoi apply（.telegramUserId を展開）
+~/.openclaw/cron/jobs.seed.json
+    ↓ Handler.OpenClaw.ps1（jobs.json 不在時のみ）
+コンテナ内 /home/bun/.openclaw/cron/jobs.json
+```
+
+### 手動リストア
+
+volume を削除して再作成した場合など、Handler を再実行するだけで復元される:
+
+```powershell
+pwsh -File scripts/powershell/install.user.ps1
+```
+
+seed ファイルだけコピーしたい場合:
+
+```powershell
+$seed = "$env:USERPROFILE\.openclaw\cron\jobs.seed.json"
+docker exec openclaw //bin/sh -c "mkdir -p //home/bun/.openclaw/cron"
+docker cp $seed openclaw://home/bun/.openclaw/cron/jobs.json
+docker restart openclaw
+```
+
 ## 設定ファイルの更新
 
 ```powershell

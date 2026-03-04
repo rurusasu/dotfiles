@@ -15,10 +15,10 @@ Notes:
 
 ## 1Password アイテム一覧 (動作確認済み)
 
-| 環境変数 | op:// パス | 用途 |
-|---------|-----------|------|
-| `GH_TOKEN` | `op://Personal/GitHubUsedUserPAT/credential` | gh CLI・GitHub MCP サーバー (Windows/NixOS 汎用) |
-| `TAVILY_API_KEY` | `op://Personal/TavilyUsedUserPAT/credential` | Tavily MCP サーバー |
+| 環境変数         | op:// パス                                   | 用途                                             |
+| ---------------- | -------------------------------------------- | ------------------------------------------------ |
+| `GH_TOKEN`       | `op://Personal/GitHubUsedUserPAT/credential` | gh CLI・GitHub MCP サーバー (Windows/NixOS 汎用) |
+| `TAVILY_API_KEY` | `op://Personal/TavilyUsedUserPAT/credential` | Tavily MCP サーバー                              |
 
 - アイテムカテゴリ: `API_CREDENTIAL` (認証情報フィールド = `credential`)
 - OpenClaw 専用 PAT は `Handler.OpenClaw.ps1` が `op://Personal/GitHubUsedOpenClawPAT/credential` を直接参照

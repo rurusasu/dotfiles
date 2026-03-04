@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "16d4e720-d83a-4ea2-aa94-9bfe912ab1a9",
+      "agentId": "main",
+      "sessionKey": "agent:main:telegram:direct:{{ .telegramUserId }}",
+      "name": "lifelog-daily-scaffold",
+      "enabled": true,
+      "createdAtMs": 1772578800776,
+      "updatedAtMs": 1772578837691,
+      "schedule": {
+        "kind": "cron",
+        "expr": "55 23 * * *",
+        "tz": "Asia/Tokyo"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run in /app/data/workspace/lifelog: `bun run new`.\n\nThen send exactly one short status message:\n- Success: \"✅ lifelog scaffold created/checked for today (daily/weekly/monthly/yearly).\"\n- Failure: \"⚠️ lifelog scaffold failed: <brief reason>\""
+      },
+      "delivery": {
+        "mode": "announce"
+      }
+    },
+    {
+      "id": "acc4b111-8ed1-4f5a-bc75-9330e2aeedcc",
+      "agentId": "main",
+      "sessionKey": "agent:main:telegram:direct:{{ .telegramUserId }}",
+      "name": "lifelog-daily-git-sync",
+      "enabled": true,
+      "createdAtMs": 1772578883782,
+      "updatedAtMs": 1772578883782,
+      "schedule": {
+        "kind": "cron",
+        "expr": "58 23 * * *",
+        "tz": "Asia/Tokyo"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "In /app/data/workspace/lifelog, run:\n1) `git add daily weekly monthly yearly`\n2) If there are no staged changes, send: \"ℹ️ lifelog sync: no changes to commit today.\"\n3) If there are changes, commit with message: `chore(lifelog): daily scaffold update for $(date +%F)` and push to `origin main`, then send: \"✅ lifelog sync pushed to GitHub.\"\n4) On any failure, send: \"⚠️ lifelog sync failed: <brief reason>\""
+      },
+      "delivery": {
+        "mode": "announce",
+        "to": "{{ .telegramUserId }}",
+        "channel": "telegram"
+      }
+    }
+  ]
+}
