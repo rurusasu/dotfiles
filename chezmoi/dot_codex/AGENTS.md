@@ -34,17 +34,21 @@ Deployed to `~/.codex/` via chezmoi on all platforms.
 
 config.toml で設定している MCP サーバーと依存関係：
 
-| Server   | 依存関係         | 備考                                       |
-| -------- | ---------------- | ------------------------------------------ |
-| context7 | Bun (bunx)       | `startup_timeout_sec` でタイムアウト調整可 |
-| linear   | なし (OAuth URL) | 初回は `codex mcp login linear` が必要     |
-| serena   | uv (uvx)         | Windows: `winget install astral-sh.uv`     |
+| Server   | 依存関係                 | 備考                                                           |
+| -------- | ------------------------ | -------------------------------------------------------------- |
+| context7 | Bun (bunx)               | `startup_timeout_sec` でタイムアウト調整可                     |
+| tavily   | Bun (bunx) + API Key     | `TAVILY_API_KEY` を 1Password (`op read`) から自動注入         |
+| drawio   | Bun (bunx)               | 起動が遅い環境では `startup_timeout_sec` を 30+ に設定         |
+| linear   | なし (OAuth URL)         | 初回は `codex mcp login linear` が必要（PAT/env 自動注入不可） |
+| sentry   | なし (OAuth URL)         | 初回は `codex mcp login sentry` が必要（PAT/env 自動注入不可） |
+| serena   | uv (uvx)                 | Windows: `winget install astral-sh.uv`                         |
 
 ### トラブルシューティング
 
-- **MCP タイムアウト**: `startup_timeout_sec` を増やす（デフォルト10秒）
+- **MCP タイムアウト**: `startup_timeout_sec` を増やす（`drawio` / `tavily` は 30 秒を推奨）
 - **serena 起動失敗**: `uvx` コマンドが必要。uv をインストールする
-- **linear ログインエラー**: `codex mcp login linear` を実行
+- **linear/sentry ログインエラー**: `codex mcp login linear` / `codex mcp login sentry` を実行
+- **Tavily 認証エラー**: `op` 連携で `TAVILY_API_KEY` がシェルに注入されているか確認する
 
 ## Configuration Notes
 

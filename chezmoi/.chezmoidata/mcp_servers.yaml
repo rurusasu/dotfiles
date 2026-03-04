@@ -82,6 +82,7 @@ mcp_servers:
     args:
       - "-y"
       - "tavily-mcp@latest"
+    startup_timeout_sec: 30
     env:
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
     supports:
@@ -96,6 +97,7 @@ mcp_servers:
     args:
       - "-y"
       - "@drawio/mcp"
+    startup_timeout_sec: 30
     supports:
       - codex
       - claude
