@@ -52,11 +52,17 @@
     }
   },
   "plugins": {
-    "enabled": true,
-    "allow": ["telegram", "acpx", "google-gemini-cli-auth"],
+    "allow": [
+      "telegram",
+      "acpx",
+      "google-gemini-cli-auth"
+    ],
     "entries": {
       "acpx": {
-        "enabled": true
+        "enabled": true,
+        "config": {
+          "command": "/usr/local/bin/acpx"
+        }
       },
       "google-gemini-cli-auth": {
         "enabled": true
@@ -66,8 +72,6 @@
   "acp": {
     "enabled": true,
     "backend": "acpx",
-    "defaultAgent": "gemini",
-    "allowedAgents": ["pi", "claude", "codex", "opencode", "gemini"],
     "dispatch": {
       "enabled": true
     }

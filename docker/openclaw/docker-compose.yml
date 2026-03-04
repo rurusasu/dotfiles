@@ -19,7 +19,7 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
-    mem_limit: 512m
+    mem_limit: 2g
     cpus: 1.0
 
     user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
@@ -38,10 +38,14 @@ services:
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
       # Gemini CLI authentication for ACP agent sessions (sessions_spawn agentId="gemini")
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Raise Node heap to avoid startup OOM with npm/Node runtime
+      NODE_OPTIONS: --max-old-space-size=1536
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
       - openclaw-home:/home/bun/.openclaw
+      # ACPX writes runtime state under ~/.acpx; mount it explicitly because /home/bun is read-only.
+      - openclaw-acpx:/home/bun/.acpx
       # Docker-specific config overlaid as read-only on top of the home volume
       - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/home/bun/.openclaw/openclaw.json:ro
       - openclaw-data:/app/data
@@ -55,6 +59,8 @@ volumes:
   openclaw-data:
     driver: local
   openclaw-home:
+    driver: local
+  openclaw-acpx:
     driver: local
   # Fallback empty volume when GEMINI_CREDENTIALS_DIR is not set in .env
   gemini-credentials:
