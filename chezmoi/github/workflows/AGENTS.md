@@ -1,22 +1,10 @@
-# GitHub Actions Workflows
+# chezmoi/github/workflows: Actions テンプレート
 
-This directory contains GitHub Actions workflow templates.
+## 編集対象
 
-## Files
+- `ci.yml`
 
-- `ci.yml` - Basic CI workflow template
+## 変更ルール
 
-## Usage
-
-These are starting templates. Customize for your project:
-
-- Add appropriate build steps
-- Configure test frameworks
-- Set up deployment if needed
-
-## Common Additions
-
-- Linting workflows
-- Security scanning
-- Release automation
-- Documentation deployment
+- 汎用 CI テンプレートとして再利用可能な内容に保つ。
+- 言語・フレームワーク依存の処理はコメントで分離する。

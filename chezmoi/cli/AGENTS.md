@@ -1,65 +1,20 @@
-# CLI Tool Configurations
+# chezmoi/cli: CLI 設定の編集基準
 
-Configuration files for command-line tools.
+## 管理対象
 
-## Tools
+- `fd/ignore`
+- `ripgrep/config`
+- `starship/starship.toml`
+- `ghq/config`
+- `zoxide/env`
 
-| Tool     | Config Path              | Deployed To                | Description                 |
-| -------- | ------------------------ | -------------------------- | --------------------------- |
-| fd       | `fd/ignore`              | `~/.config/fd/ignore`      | File finder ignore patterns |
-| ripgrep  | `ripgrep/config`         | `~/.config/ripgrep/config` | Search tool options         |
-| starship | `starship/starship.toml` | `~/.config/starship.toml`  | Prompt configuration        |
-| ghq      | `ghq/config`             | `~/.config/ghq/config`     | Git repository manager      |
-| zoxide   | `zoxide/env`             | (reference)                | Directory jumper env vars   |
+## ルール
 
-## Installation
+- 設定ファイルのみ管理する。
+- shell 初期化コードは `chezmoi/shells/` または Nix 側で管理する。
 
-Tools are installed via:
+## 反映
 
-- **Linux/WSL**: Nix Home Manager (`home.packages`)
-- **Windows**: winget or scoop
-
-## Tool Details
-
-### fd
-
-Fast file finder. Ignore patterns exclude:
-
-- `.git/`, `node_modules/`, `target/`, `__pycache__/`
-- Build directories, package caches
-- WSL system paths
-
-### ripgrep
-
-Fast search tool. Options:
-
-- Smart-case matching
-- Hidden files included
-- `.git/` excluded
-
-### starship
-
-Cross-shell prompt. Shows:
-
-- OS symbol, username, hostname
-- Directory (git-aware truncation)
-- Git branch and status
-- Nix shell indicator
-
-### ghq
-
-Git repository manager. Configured for:
-
-- Root directory: `~/ghq`
-- SSH protocol for GitHub
-
-### zoxide
-
-Smarter `cd` command. Environment:
-
-- Excludes WSL system directories
-- Shell integration via Nix (not this file)
-
-## Shell Integration Note
-
-fzf and zoxide shell integrations are managed by **Nix Home Manager**, which injects initialization code into shell configs automatically.
+```bash
+chezmoi apply
+```

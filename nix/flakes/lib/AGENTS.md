@@ -1,8 +1,11 @@
-# AGENTS
+# nix/flakes/lib: flake 補助関数
 
-Purpose: helper functions used by flake-parts.
+## 管理対象
 
-## Expected contents
+- `hosts.nix`: `mkNixos` などの構築ヘルパー
+- `shared-modules.nix`: 共有モジュール定義
 
-- `hosts.nix` - mkNixos wrapper (nixosSystem + shared modules)
-- `shared-modules.nix` - shared module list (currently empty)
+## 変更ルール
+
+- 依存方向は `lib -> hosts/modules/profiles` に限定する。
+- ホスト固有条件をこの層へ持ち込まない。

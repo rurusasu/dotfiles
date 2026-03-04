@@ -1,56 +1,13 @@
-# Lib Tests
+# tests/lib: ライブラリテスト方針
 
-Purpose: 共通ライブラリのユニットテスト
+## 対象
 
-## ファイル一覧
+- `SetupHandler.Tests.ps1`
+- `Invoke-ExternalCommand.Tests.ps1`
+- `Request-AdminElevation.Tests.ps1`
 
-| ファイル                           | 対象                                        |
-| ---------------------------------- | ------------------------------------------- |
-| `SetupHandler.Tests.ps1`           | SetupContext, SetupResult, SetupHandlerBase |
-| `Invoke-ExternalCommand.Tests.ps1` | 外部コマンドラッパー関数群                  |
-| `Request-AdminElevation.Tests.ps1` | UAC 自動昇格関数                            |
+## 重点確認
 
-## SetupHandler.Tests.ps1
-
-### テスト対象
-
-- **SetupContext**: コンストラクタ、GetOption、プロパティ設定
-- **SetupResult**: コンストラクタ、CreateSuccess、CreateFailure
-- **SetupHandlerBase**: プロパティ、CanApply/Apply（例外スロー確認）、Log メソッド群
-
-## Invoke-ExternalCommand.Tests.ps1
-
-### テスト対象
-
-すべてのラッパー関数をテスト：
-
-- `Invoke-Wsl`
-- `Invoke-Diskpart`
-- `Get-ExternalCommand`
-- `Test-PathExists`
-- `Get-ProcessSafe`
-- `Stop-ProcessSafe`
-- `Start-ProcessSafe`
-- `Copy-FileSafe`
-- `Get-FileContentSafe`
-- `Get-JsonContent`
-- `New-DirectorySafe`
-- `Get-ChildItemSafe`
-- `Get-RegistryValue`
-- `Get-RegistryChildItem`
-- `Invoke-WebRequestSafe`
-- `Invoke-RestMethodSafe`
-- `Start-SleepSafe`
-
-### カバー不可能なコード
-
-以下は外部コマンド/ファイルシステム操作のため、ユニットテストでカバー不可：
-
-| 関数                   | 行  | コード                       |
-| ---------------------- | --- | ---------------------------- |
-| `Invoke-Chezmoi`       | 53  | `if ($ExePath)`              |
-| `Invoke-Chezmoi`       | 54  | `& $ExePath @Arguments`      |
-| `Invoke-Chezmoi`       | 56  | `& chezmoi @Arguments`       |
-| `Set-ContentNoNewline` | 101 | `Set-Content ... -NoNewline` |
-
-これらは**統合テスト**でカバーする必要があります。
+1. `SetupContext` / `SetupResult` / `SetupHandlerBase` の契約を壊していないこと。
+2. ラッパー関数の引数処理と例外処理が維持されること。
+3. 実コマンド実行が必要な部分は統合テストで補うこと。

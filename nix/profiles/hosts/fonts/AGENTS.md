@@ -1,9 +1,10 @@
-# AGENTS
+# nix/profiles/hosts/fonts: フォント設定
 
-Purpose: System-level font configuration.
-Expected contents:
+## 管理対象
 
-- default.nix: fonts.packages configuration.
-  Notes:
-- Uses NixOS fonts.packages (system-wide fonts).
-- Different from home.packages (user-level).
+- `default.nix`: `fonts.packages` を定義
+
+## ルール
+
+- system-wide フォントのみ扱う。
+- user-level フォント管理は別レイヤーに置く。

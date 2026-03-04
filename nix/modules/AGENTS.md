@@ -1,8 +1,11 @@
-# AGENTS
+# nix/modules: 再利用モジュール
 
-Purpose: reusable NixOS modules.
+## 管理対象
 
-## Expected contents
+- `host/`: 共通システム設定
+- `wsl/`: WSL 固有調整
 
-- `host/` - common system defaults (nix settings, allowUnfree, base packages)
-- `wsl/` - WSL-specific tweaks (nixPath, whoami shim, etc)
+## ルール
+
+- ホスト依存が強い設定は `nix/hosts/*` に残す。
+- ここでは複数ホストで再利用できる単位に分割する。

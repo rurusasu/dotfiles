@@ -1,38 +1,19 @@
-# AGENTS
+# nix/packages: `nix profile` 向け package set
 
-Purpose: Package sets for nix profile install.
+## 管理対象
 
-## Expected contents
+- `default.nix`: package set 定義
+- 必要に応じて `<package>/default.nix`: custom package build
 
-- `default.nix` - Main package set definitions for nix profile
-- `<package>/default.nix` - Custom package builds (if any)
-
-## Usage
-
-Install packages without Home Manager using `nix profile`:
+## 利用コマンド
 
 ```bash
-# Enable flakes (one-time setup)
-# Add to ~/.config/nix/nix.conf:
-# experimental-features = nix-command flakes
-
-# Install from this repo
-nix profile install github:yourusername/dotfiles#default
-nix profile install .#minimal  # local repo
+nix profile install .#default
+nix profile install .#minimal
 nix profile install .#full
-
-# Update packages
 nix profile upgrade '.*'
 ```
 
-## Available package sets
+## ルール
 
-- `default` - Core + dev + terminal tools
-- `minimal` - Just core CLI tools
-- `full` - Everything including LLM tools and editors
-- `core`, `dev`, `llm`, `terminal`, `editors` - Individual sets
-
-## Notes
-
-- User dotfiles (configs) are managed by chezmoi, not Nix
-- Nix only handles package installation
+- パッケージ配布が責務。dotfiles 設定は扱わない。

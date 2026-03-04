@@ -1,24 +1,20 @@
-# AGENTS
+# windows: Windows 側設定の編集基準
 
-Purpose
+## 管理対象
 
-- Windows-side configuration files.
+- `winget/packages.json`: winget パッケージ
+- `npm/packages.json`: npm グローバルパッケージ
+- `bun/packages.json`: bun グローバルパッケージ
+- `.wslconfig*`: WSL 設定
+- `docker-vhd-size.conf`, `expand-docker-vhd.ps1`: Docker VHD 管理
 
-## Directory Structure
+## 編集ルール
 
+- ターミナル設定は `windows/` ではなく `chezmoi/terminals/` を編集する。
+- 実行ロジック変更は `scripts/powershell/` 側を編集する。
+
+## 実行
+
+```powershell
+pwsh -File scripts/powershell/install.ps1
 ```
-windows/
-├── winget/                  # Package management (winget export/import)
-├── npm/                     # npm global packages (packages.json)
-├── bun/                     # bun global packages (packages.json)
-├── .wslconfig               # WSL configuration
-├── .wslconfig.example       # WSL config template/example
-├── docker-vhd-size.conf     # Docker VHD size configuration
-└── expand-docker-vhd.ps1   # Script to expand Docker VHD
-```
-
-Note:
-
-- Windows Terminal settings are managed by chezmoi at `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
-- WezTerm settings are managed by chezmoi at `chezmoi/terminals/wezterm/wezterm.lua`
-- All scripts are in `scripts/` directory (see [scripts/AGENTS.md](../scripts/AGENTS.md))

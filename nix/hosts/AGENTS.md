@@ -1,9 +1,11 @@
-# AGENTS
+# nix/hosts: ホスト別システム定義
 
-Purpose
-Purpose: per-host system definitions (NixOS).
-Expected contents:
+## 構成
 
-- <host>/default.nix: imports modules and configuration.nix.
-- <host>/configuration.nix: host-specific system config (copy from /etc/nixos when applicable).
-- <host>/hardware-configuration.nix: hardware config (NixOS only).
+- `<host>/default.nix`: imports と統合
+- `<host>/configuration.nix`: ホスト固有設定
+- `<host>/hardware-configuration.nix`: NixOS ハードウェア設定
+
+## ルール
+
+- 共通化できる内容は `nix/modules/` または `nix/profiles/` へ移す。

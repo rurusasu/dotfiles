@@ -1,7 +1,10 @@
-# AGENTS
+# nix/lib: 共有ヘルパー
 
-Purpose
-Purpose: shared Nix helpers (pkgs/lib/system wiring).
-Expected contents:
+## 管理対象
 
-- default.nix: exports pkgs, lib, system for modules/profiles.
+- `default.nix`: `pkgs`, `lib`, `system` など共通値の公開
+
+## 変更ルール
+
+- ここは再利用前提の最小 API にする。
+- ホスト専用の値は `nix/hosts/` に置く。

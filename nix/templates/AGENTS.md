@@ -1,30 +1,16 @@
-# AGENTS
+# nix/templates: 開発環境テンプレート
 
-Purpose: Nix flake templates for project development environments.
-Expected contents:
+## 管理対象
 
-- python/: Python development environment template (flake.nix, .envrc).
+- `python/` などの `nix flake init --template` 用テンプレート
 
-## Usage
+## 利用コマンド
 
 ```bash
-# Initialize a new project with template
 nix flake init --template github:YOUR_USER/dotfiles#python
-
-# Enable direnv
 direnv allow
 ```
 
-## Team Setup
+## ルール
 
-1. Install Nix: `curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install`
-2. Add to shell: `echo 'eval "$(direnv hook bash)"' >> ~/.bashrc`
-3. Clone project and run `direnv allow`
-
-## References
-
-- [nix-direnv](https://github.com/nix-community/nix-direnv)
-- [dev-templates](https://github.com/the-nix-way/dev-templates)
-- [Determinate Systems Nix Installer](https://determinate.systems/posts/determinate-nix-installer)
-- [devenv with Flakes](https://devenv.sh/guides/using-with-flakes/)
-- [NixOS & Flakes Book - Dev Environments](https://nixos-and-flakes.thiscute.world/development/dev-environments)
+- テンプレートは再現可能な最小開発環境に限定する。

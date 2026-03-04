@@ -1,8 +1,10 @@
-# AGENTS
+# nix/profiles: 機能単位プロファイル
 
-Purpose: shared profiles (feature bundles) for NixOS hosts.
+## 管理対象
 
-## Expected contents
+- `hosts/`: NixOS 向け機能バンドル
+- `home/`: Home Manager 向け（利用時のみ）
 
-- `hosts/` - host profiles (fonts, k3s, etc)
-- `home/` - home-manager profiles (per-user config)
+## ルール
+
+- ホスト特化ではなく機能単位で分割する。

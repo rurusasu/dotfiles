@@ -1,94 +1,17 @@
-# Editor Configurations
+# chezmoi/editors: エディタ設定の編集基準
 
-Code editor configurations for cross-platform development.
+## 管理対象
 
-## Documentation
+- `vscode/`, `cursor/`, `zed/`, `nvim/`
 
-- [Keybinding Policy](../../docs/chezmoi/keybindings.md)
+## 共通ルール
 
-## Editors
+1. フォーマッタ設定は言語ごとに明示する。
+2. キーバインド方針は `docs/chezmoi/keybindings.md` に合わせる。
+3. VS Code 系 (`vscode`, `cursor`) は設定差分を最小化する。
 
-| Editor  | Config Path | Based On     |
-| ------- | ----------- | ------------ |
-| VS Code | `vscode/`   | -            |
-| Cursor  | `cursor/`   | VS Code fork |
-| Zed     | `zed/`      | Native       |
-| Neovim  | `nvim/`     | Native       |
+## 反映
 
-## Files Per Editor
-
-### VS Code / Cursor (VS Code-based)
-
-| File               | Purpose                         |
-| ------------------ | ------------------------------- |
-| `settings.json`    | Editor settings                 |
-| `keybindings.json` | Custom keybindings              |
-| `extensions.json`  | Extension list (auto-installed) |
-
-### Zed
-
-| File            | Purpose                        |
-| --------------- | ------------------------------ |
-| `settings.json` | Editor settings (JSONC format) |
-| `keymap.json`   | Custom keybindings             |
-
-### Neovim
-
-| File                     | Purpose                       |
-| ------------------------ | ----------------------------- |
-| `init.lua`               | Main config (lazy.nvim setup) |
-| `lua/config/options.lua` | Core editor options           |
-| `lua/config/keymaps.lua` | Key mappings                  |
-| `lua/plugins/init.lua`   | Plugin specifications         |
-
-## Deployment Paths
-
-| Editor  | Windows                  | Linux/WSL                |
-| ------- | ------------------------ | ------------------------ |
-| VS Code | `%APPDATA%/Code/User/`   | `~/.config/Code/User/`   |
-| Cursor  | `%APPDATA%/Cursor/User/` | `~/.config/Cursor/User/` |
-| Zed     | `%APPDATA%/Zed/`         | `~/.config/zed/`         |
-| Neovim  | `%LOCALAPPDATA%/nvim/`   | `~/.config/nvim/`        |
-
-## Common Settings
-
-### Editor Behavior
-
-- **Font size**: 12pt
-- **Tab size**: 2 spaces
-- **Format on save**: Enabled
-- **Line numbers**: On
-- **Word wrap**: On (80 columns)
-
-### Theme
-
-- **Color theme**: Default Dark Modern / Gruvbox
-- **Icon theme**: Material Icon Theme
-
-### Keybinding Policy
-
-- Follow `docs/chezmoi/keybindings.md`
-- Use editor-native keybindings by default
-- Do not rely on VS Code/Cursor Vim extension
-
-### Language-specific
-
-- **Python**: Ruff formatter
-- **JavaScript/TypeScript/JSON**: Prettier
-
-## Extension Management
-
-VS Code and Cursor extensions are:
-
-1. Listed in `extensions.json`
-2. Auto-installed by deployment scripts via CLI
-3. Checked before install (skip if already installed)
-
-## Installation
-
-| Editor  | Windows | Linux/WSL          |
-| ------- | ------- | ------------------ |
-| VS Code | winget  | Nix                |
-| Cursor  | winget  | AppImage           |
-| Zed     | winget  | Nix (`zed-editor`) |
-| Neovim  | winget  | Nix (`neovim`)     |
+```bash
+chezmoi apply
+```

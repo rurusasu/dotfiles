@@ -1,48 +1,12 @@
-# Cursor Configuration
+# chezmoi/editors/cursor: Cursor 設定
 
-Cursor is an AI-powered code editor (VS Code fork).
+## 編集対象
 
-## Documentation
+- `settings.json`
+- `keybindings.json`
+- `extensions.json`
 
-- [Keybinding Policy](../../../docs/chezmoi/keybindings.md)
+## 変更ルール
 
-## Files
-
-| File               | Deployed To                                          | Purpose            |
-| ------------------ | ---------------------------------------------------- | ------------------ |
-| `settings.json`    | `~/.config/Cursor/User/` or `%APPDATA%/Cursor/User/` | Editor settings    |
-| `keybindings.json` | Same as above                                        | Custom keybindings |
-| `extensions.json`  | N/A (used by script)                                 | Extension list     |
-
-## Configuration
-
-Cursor uses the same configuration format as VS Code. Settings are largely identical with Cursor-specific additions:
-
-- `cursor.cpp.disabledLanguages`: []
-- `cursor.general.enableShadowWorkspace`: true
-
-## Settings
-
-Inherited from VS Code configuration:
-
-- Editor-native keybindings (no Vim extension dependency)
-- Format on save
-- Prettier/Ruff formatters
-- Material Icon Theme
-
-## Extensions
-
-Same extensions as VS Code, installed via `cursor --install-extension`.
-
-## AI Features
-
-Cursor's AI features are configured through the app itself, not settings files.
-
-## Installation
-
-- **Linux**: AppImage or download from cursor.sh
-- **Windows**: `winget install Anysphere.Cursor`
-
-## Note
-
-Cursor is not available in nixpkgs. Install manually or via package manager.
+- VS Code ベース設定との差分は Cursor 固有項目だけにする。
+- キーバインド方針は VS Code と同じ基準で維持する。

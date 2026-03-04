@@ -1,30 +1,12 @@
-# secret
+# chezmoi/secret: 1Password 経由の環境変数注入
 
-Purpose: Shell-startup secret injection via 1Password CLI.
-Expected contents:
+## 管理対象
 
-- env.sh: Bash/Zsh secret loader (GH_TOKEN, TAVILY_API_KEY via `op read`).
-- env.ps1: PowerShell secret loader (same secrets).
+- `env.sh`（bash/zsh）
+- `env.ps1`（PowerShell）
 
-Notes:
+## ルール
 
-- Deployed to `~/.config/shell/secret.sh` and `~/.config/shell/secret.ps1`.
-- Sourced by .bashrc, .zshrc, and Microsoft.PowerShell_profile.ps1.
-- No actual secrets stored here — only `op://` references resolved at runtime.
-- Covers: Linux bash/zsh, WSL NixOS, Git Bash (Windows), PowerShell.
-
-## 1Password アイテム一覧 (動作確認済み)
-
-| 環境変数         | op:// パス                                   | 用途                                             |
-| ---------------- | -------------------------------------------- | ------------------------------------------------ |
-| `GH_TOKEN`       | `op://Personal/GitHubUsedUserPAT/credential` | gh CLI・GitHub MCP サーバー (Windows/NixOS 汎用) |
-| `TAVILY_API_KEY` | `op://Personal/TavilyUsedUserPAT/credential` | Tavily MCP サーバー                              |
-
-- アイテムカテゴリ: `API_CREDENTIAL` (認証情報フィールド = `credential`)
-- OpenClaw 専用 PAT は `Handler.OpenClaw.ps1` が `op://Personal/GitHubUsedOpenClawPAT/credential` を直接参照
-
-## 前提条件
-
-- 1Password デスクトップアプリの CLI 統合を有効化:
-  設定 → 開発者 → 「1Password CLI との統合を有効にする」
-- `op` が PATH に存在しない場合は各ローダーが自動スキップする
+- 実シークレットは保存しない。`op://` 参照のみ保持する。
+- `op` がない環境で安全にスキップできる実装を維持する。
+- 追加する環境変数は用途を明確にする。

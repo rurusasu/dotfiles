@@ -1,8 +1,11 @@
-# AGENTS
+# nix/hosts/linux: Linux ホスト設定
 
-Purpose
-Purpose: generic Linux host system configuration.
-Expected contents:
+## 管理対象
 
-- default.nix: imports host modules and configuration.nix.
-- configuration.nix: Linux host-specific system config (non-WSL).
+- `default.nix`
+- `configuration.nix`
+
+## ルール
+
+- Linux 固有設定のみ置く。
+- 共通設定は `nix/modules/host` に集約する。

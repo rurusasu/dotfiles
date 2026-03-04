@@ -1,10 +1,11 @@
-# AGENTS
+# nix/profiles/hosts: システム機能プロファイル
 
-Purpose: System-level NixOS host profiles.
-Expected contents:
+## 管理対象
 
-- default.nix: imports all host profile modules.
-- fonts/: system font configuration.
-  Notes:
-- These are NixOS module options (not Home Manager).
-- Imported by hosts in nix/hosts/.
+- `default.nix`: host profile の集約
+- `fonts/` など機能別プロファイル
+
+## ルール
+
+- ここは NixOS module options を扱う。
+- ユーザー単位設定はここに置かない。

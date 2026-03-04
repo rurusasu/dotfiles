@@ -1,52 +1,10 @@
-# zoxide Configuration
+# chezmoi/cli/zoxide: zoxide 環境設定
 
-zoxide is a smarter `cd` command that learns your habits.
+## 編集対象
 
-## Files
+- `env`（参照用環境変数）
 
-| File  | Purpose                           |
-| ----- | --------------------------------- |
-| `env` | Environment variables (reference) |
+## 変更ルール
 
-## Environment Variables
-
-- `_ZO_EXCLUDE_DIRS`: Directories to exclude from database
-  - `/mnt/wsl/*`: WSL system mount
-  - `/mnt/wslg/*`: WSL graphics mount
-
-## Shell Integration
-
-Shell integration is managed by **Nix Home Manager**, not this file:
-
-```nix
-programs.zoxide = {
-  enable = true;
-  enableBashIntegration = true;
-  enableZshIntegration = true;
-  options = [ "--cmd cd" ];
-};
-```
-
-This replaces `cd` with `z` functionality.
-
-## Installation
-
-- **Linux/WSL**: `nix` (programs.zoxide)
-- **Windows**: `winget install ajeetdsouza.zoxide`
-
-## Usage
-
-```bash
-# Jump to directory matching "foo"
-cd foo
-
-# Interactive selection
-cdi
-
-# Add directory to database
-zoxide add /path/to/dir
-```
-
-## Database
-
-zoxide maintains a database of frequently visited directories at `~/.local/share/zoxide/db.zo`.
+- 除外ディレクトリは誤ジャンプ防止目的に限定する。
+- shell integration 本体は Nix/Home Manager 側で管理する。

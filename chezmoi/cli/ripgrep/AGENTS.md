@@ -1,39 +1,10 @@
-# ripgrep Configuration
+# chezmoi/cli/ripgrep: rg デフォルト設定
 
-ripgrep (rg) is a fast line-oriented search tool.
+## 編集対象
 
-## Files
+- `config` -> `~/.config/ripgrep/config`
 
-| File     | Deployed To                |
-| -------- | -------------------------- |
-| `config` | `~/.config/ripgrep/config` |
+## 変更ルール
 
-## Configuration
-
-Current settings:
-
-- `--smart-case`: Case-insensitive unless uppercase is used
-- `--hidden`: Include hidden files
-- `--glob=!.git/*`: Exclude .git directory
-
-## Installation
-
-- **Linux/WSL**: `nix` (home.packages)
-- **Windows**: `winget install BurntSushi.ripgrep.MSVC`
-
-## Usage
-
-```bash
-# Search pattern
-rg pattern
-
-# Search in specific file types
-rg -t py pattern
-
-# Search with context
-rg -C 3 pattern
-```
-
-## Environment Variable
-
-ripgrep reads config from `RIPGREP_CONFIG_PATH`. The deployment places config in the standard XDG location.
+- `--hidden` や `--glob` 変更時は検索結果への影響を確認する。
+- チーム共通で困るオプションは追加しない。

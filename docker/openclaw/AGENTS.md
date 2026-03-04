@@ -1,183 +1,97 @@
-# docker/openclaw
+# openclaw Docker: 実装時の必須ルール
 
-Purpose: Docker コンテナで openclaw (Telegram AI ゲートウェイ) を実行する構成。
+このディレクトリは、openclaw (Telegram AI gateway) を Docker で動かすための構成を管理する。
 
-## ファイル構成
+## 変更時に必ず触るファイル
 
-| ファイル             | 説明                                             |
-| -------------------- | ------------------------------------------------ |
-| `Dockerfile`         | Bun ベースイメージ + openclaw グローバル Install |
-| `docker-compose.yml` | コンテナ定義（セキュリティ設定・ボリューム）     |
-| `.env`               | 環境変数（gitignore済み・Handler が自動生成）    |
-| `.env.example`       | .env のテンプレート                              |
-| `.dockerignore`      | イメージに含めないファイルの除外設定             |
+- `docker/openclaw/Dockerfile`
+- `docker/openclaw/docker-compose.yml`
+- `docker/openclaw/.env`（通常は自動生成。手動編集は最小限）
+- `chezmoi/dot_openclaw/openclaw.docker.json.tmpl`（設定の source of truth）
 
-## 設定フロー
+## 起動と再生成の正規フロー
 
-```
-1Password (シークレット)
-    ↓ onepasswordRead()
-chezmoi/dot_openclaw/openclaw.docker.json.tmpl
-    ↓ chezmoi apply
-~/.openclaw/openclaw.docker.json   ← 1Password から値が展開済み
-    ↓ read-only マウント
-Docker コンテナ内 /home/bun/.openclaw/openclaw.json
-```
+`scripts/powershell/install.user.ps1` (Handler.OpenClaw.ps1) が以下を一括実行する。
 
-Handler.OpenClaw.ps1 が以下を担う:
+1. `chezmoi apply` で設定を展開
+2. `.env` を生成（`OPENCLAW_CONFIG_FILE` / `GITHUB_TOKEN` など）
+3. `docker compose up -d --build` で起動
 
-1. `chezmoi apply` で config ファイルを生成
-2. `.env` を自動生成（`OPENCLAW_CONFIG_FILE` 等）
-3. `docker compose up -d --build` でコンテナ起動
+通常の起動・復旧はこのコマンドを使う。
 
-## セキュリティ設定
-
-```yaml
-read_only: true # コンテナ fs は読み取り専用
-tmpfs:
-  - /tmp:size=64m # /tmp のみ書き込み可
-cap_drop: [ALL] # Linux ケーパビリティ全削除
-security_opt:
-  - no-new-privileges:true
-pids_limit: 256
-mem_limit: 512m
-user: "1000:1000" # 非 root 実行
+```powershell
+pwsh -File scripts/powershell/install.user.ps1
 ```
 
-## ボリューム
+## 設定値の流れ（変更影響の把握用）
 
-| ボリューム         | コンテナ内パス                      | 用途                      |
-| ------------------ | ----------------------------------- | ------------------------- |
-| `openclaw-home`    | `/home/bun/.openclaw`               | canvas / cron 等の状態    |
-| `openclaw-data`    | `/app/data`                         | workspace / skills / .bun |
-| config file (bind) | `/home/bun/.openclaw/openclaw.json` | chezmoi 生成の設定 (ro)   |
-
-## GitHub 認証
-
-コンテナ内で git を使う場合は **Fine-grained PAT** を使用。
-
-### 方針
-
-- Classic PAT ではなく **Fine-grained PAT** を使用（リポジトリ単位で権限を限定）
-- 必要な権限のみ付与（Contents: Read / Metadata: Read 程度）
-- 有効期限を設定（最大 90 日）
-- 1Password に保存し、`.env` 経由でコンテナに渡す
-
-### 1Password での保存先
-
+```text
+1Password secret
+  -> chezmoi template (dot_openclaw/openclaw.docker.json.tmpl)
+  -> ~/.openclaw/openclaw.docker.json
+  -> container: /home/bun/.openclaw/openclaw.json (read-only bind)
 ```
+
+1Password の値変更後は再展開してコンテナ再起動する。
+
+```powershell
+chezmoi apply
+docker restart openclaw
+```
+
+## セキュリティ制約（設計前提）
+
+`docker-compose.yml` は以下前提で維持する。
+
+- `read_only: true`
+- `tmpfs: /tmp`
+- `cap_drop: [ALL]`
+- `security_opt: no-new-privileges:true`
+- `user: "1000:1000"`
+
+つまり、コンテナ内で永続的に書き込めるのは volume と tmpfs のみ。
+
+## 必須ボリューム（書き込み先）
+
+- `openclaw-home` -> `/home/bun/.openclaw`（openclaw state）
+- `openclaw-acpx` -> `/home/bun/.acpx`（acpx runtime state）
+- `openclaw-data` -> `/app/data`（workspace / skills / .bun）
+- bind mount -> `/home/bun/.openclaw/openclaw.json`（config read-only）
+
+## GitHub 認証の実装ルール
+
+- 認証方式は Fine-grained PAT のみ（Classic PAT 不使用）
+- PAT は 1Password から `.env` の `GITHUB_TOKEN` へ注入
+- コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` を使う
+- `Dockerfile` 側で `git-credential-askpass.sh` を配置する
+
+1Password 参照先:
+
+```text
 op://Personal/d4av65p4wcvcms6lbsbbabrywy/pat-used-openclaw
 ```
 
-> Vault に "GitHub" という名前のアイテムが複数あるため、タイトルではなくアイテム ID で指定。
-
-### 仕組み
-
-```
-1Password (op://Personal/d4av65p4wcvcms6lbsbbabrywy/pat-used-openclaw)
-    ↓ op read（Handler.OpenClaw.ps1 が自動取得）
-.env: GITHUB_TOKEN=<PAT>
-    ↓ docker-compose.yml で環境変数として渡す
-コンテナ内 GITHUB_TOKEN + GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh
-    ↓ git が HTTPS 認証時に呼び出す
-PAT をパスワードとして使用
-```
-
-### 実装内容
-
-**Dockerfile**:
-
-- `git` + `openssh-client` をインストール
-- `GIT_ASKPASS` ヘルパースクリプト（`/usr/local/bin/git-credential-askpass.sh`）を追加
-  - `${GITHUB_TOKEN}` はビルド時ではなく**実行時**に評価される
-- `USER bun` 後に git global config を設定（`safe.directory "*"` 含む）
-
-**docker-compose.yml**:
-
-```yaml
-environment:
-  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-  GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
-```
-
-**Handler.OpenClaw.ps1** の `EnsureEnvFile`:
-
-- `op` CLI が利用可能かつサインイン済みの場合、自動的に PAT を取得して `.env` に書き込む
-- `op` 未インストール・サインアウト時は `GITHUB_TOKEN=`（空文字）として生成
-
-### 初回セットアップ
-
-1. GitHub で Fine-grained PAT を作成（Contents: Read, Metadata: Read）
-2. 1Password に `pat-used-openclaw` フィールドとして GitHub アイテム (`d4av65p4wcvcms6lbsbbabrywy`) に保存
-3. `op signin` でサインイン後、Handler を実行すると `.env` に自動反映
-
-### 既存の .env がある場合
-
-`EnsureEnvFile` は `.env` が存在する場合スキップする。手動で追記するか `.env` を削除して再生成:
+`.env` が既にある場合、Handler の `EnsureEnvFile` は再生成をスキップする。再生成したい場合:
 
 ```powershell
 Remove-Item docker\openclaw\.env
 pwsh -File scripts\powershell\install.user.ps1
 ```
 
-## 運用コマンド
+## 手動操作コマンド（Handler 非経由時）
 
 ```powershell
-# 起動（Handler 経由・推奨）
-pwsh -File scripts/powershell/install.user.ps1
-
-# 手動操作
 docker compose -f docker/openclaw/docker-compose.yml up -d --build
 docker compose -f docker/openclaw/docker-compose.yml down
 docker compose -f docker/openclaw/docker-compose.yml logs -f
-
-# コンテナ内確認
 docker exec -it openclaw sh
 ```
 
-## cron ジョブ
+## 既知障害の一次切り分け
 
-### 登録済みジョブ
-
-| 時刻（JST） | 名前                     | 内容                                            |
-| ----------- | ------------------------ | ----------------------------------------------- |
-| 23:55       | `lifelog-daily-scaffold` | `bun run new` — 日次/週次/月次/年次ファイル生成 |
-| 23:58       | `lifelog-daily-git-sync` | git add/commit/push → GitHub                    |
-
-### 自動復元（新規セットアップ時）
-
-`Handler.OpenClaw.ps1` がコンテナ起動後に `cron/jobs.json` の有無を確認し、
-存在しない場合は chezmoi が展開したシードファイルを自動コピーして再起動する。
-
-```
-chezmoi/dot_openclaw/cron/jobs.seed.json.tmpl
-    ↓ chezmoi apply（.telegramUserId を展開）
-~/.openclaw/cron/jobs.seed.json
-    ↓ Handler.OpenClaw.ps1（jobs.json 不在時のみ）
-コンテナ内 /home/bun/.openclaw/cron/jobs.json
-```
-
-### 手動リストア
-
-volume を削除して再作成した場合など、Handler を再実行するだけで復元される:
-
-```powershell
-pwsh -File scripts/powershell/install.user.ps1
-```
-
-seed ファイルだけコピーしたい場合:
-
-```powershell
-$seed = "$env:USERPROFILE\.openclaw\cron\jobs.seed.json"
-docker exec openclaw //bin/sh -c "mkdir -p //home/bun/.openclaw/cron"
-docker cp $seed openclaw://home/bun/.openclaw/cron/jobs.json
-docker restart openclaw
-```
-
-## 設定ファイルの更新
-
-```powershell
-# 1Password の値が変わった場合
-chezmoi apply   # openclaw.docker.json を再生成
-docker restart openclaw
-```
+- `acpx exited with code 1`
+  - `openclaw-acpx` が `/home/bun/.acpx` に mount され、書き込み可能か確認
+- `acpx: not found`
+  - `openclaw.docker.json` の `plugins.entries.acpx.config.command` を `/usr/local/bin/acpx` に固定
+- `plugin telegram: duplicate plugin id`
+  - `/home/bun/.openclaw/extensions/telegram` の旧拡張を退避/削除し、stock 側のみ利用

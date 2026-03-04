@@ -1,31 +1,14 @@
-# Claude Code Configuration
+# chezmoi/dot_claude: Claude Code 設定
 
-This directory contains Claude Code settings and global instructions.
+## 管理対象
 
-## Files
+- `settings.json`
+- `CLAUDE.md`
+- `agents/`
+- `plugins/`
 
-- `settings.json` - Claude Code application settings
-- `CLAUDE.md` - Global instructions for Claude Code sessions
-- `agents/` - Claude Code subagents (`~/.claude/agents/`)
-- `plugins/` - Claude Code plugins
-  - `run_onchange_install-superpowers.ps1` - Plugin installer script
-  - `superpowers/` - Superpowers plugin directory
+## ルール
 
-## CLAUDE.md
-
-The CLAUDE.md file contains persistent instructions that apply to all Claude Code sessions. Use it for:
-
-- Preferred coding style and conventions
-- Project-independent guidelines
-- Common patterns and preferences
-
-## Deployment
-
-Deployed to `~/.claude/` via chezmoi on all platforms.
-
-## Installation
-
-| Platform | Method     | Config                                                               |
-| -------- | ---------- | -------------------------------------------------------------------- |
-| NixOS    | Nix flakes | [`nix/core/cli.nix`](../../nix/core/cli.nix)                         |
-| Windows  | winget     | [`windows/winget/packages.json`](../../windows/winget/packages.json) |
+- セッション全体の運用ルールは `CLAUDE.md` へ。
+- 役割別挙動は `agents/` へ分離する。
+- ツール追加時は deploy 後に実際の読込を確認する。

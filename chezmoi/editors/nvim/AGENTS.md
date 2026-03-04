@@ -1,54 +1,13 @@
-# Neovim Configuration
+# chezmoi/editors/nvim: Neovim 設定
 
-Neovim configuration using lazy.nvim plugin manager.
+## 管理対象
 
-## Structure
+- `init.lua`
+- `lua/config/*.lua`
+- `lua/plugins/init.lua`
 
-```
-nvim/
-├── init.lua              # Entry point, lazy.nvim bootstrap
-└── lua/
-    ├── config/
-    │   ├── options.lua   # Core vim options
-    │   └── keymaps.lua   # Key mappings
-    └── plugins/
-        └── init.lua      # Plugin specifications
-```
+## 変更ルール
 
-## Plugin Manager
-
-Uses [lazy.nvim](https://github.com/folke/lazy.nvim) for plugin management.
-Plugins are lazy-loaded by default for fast startup.
-
-## Included Plugins
-
-| Plugin           | Purpose             |
-| ---------------- | ------------------- |
-| gruvbox.nvim     | Color scheme        |
-| oil.nvim         | File explorer       |
-| telescope.nvim   | Fuzzy finder        |
-| nvim-treesitter  | Syntax highlighting |
-| lualine.nvim     | Status line         |
-| gitsigns.nvim    | Git integration     |
-| which-key.nvim   | Key binding help    |
-| Comment.nvim     | Commenting          |
-| nvim-autopairs   | Auto pairs          |
-| nvim-surround    | Surround editing    |
-| indent-blankline | Indent guides       |
-
-## Key Mappings
-
-Leader key: `<Space>`
-
-| Key          | Action              |
-| ------------ | ------------------- |
-| `<leader>e`  | File explorer (Oil) |
-| `<leader>ff` | Find files          |
-| `<leader>fg` | Live grep           |
-| `<leader>fb` | Buffers             |
-| `<leader>w`  | Save file           |
-| `<leader>q`  | Quit                |
-
-## Deployment
-
-Deployed to `~/.config/nvim/` on Linux/WSL.
+- plugin 追加時は起動速度への影響を確認する。
+- キーマップ衝突を避ける。
+- lazy.nvim 前提の構成を維持する。

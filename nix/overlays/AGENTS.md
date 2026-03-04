@@ -1,9 +1,10 @@
-# AGENTS
+# nix/overlays: パッケージ上書き
 
-Purpose
-Purpose: overlays for package overrides.
-Expected contents:
+## 管理対象
 
-- overlay files (if used), e.g. default.nix or <name>.nix.
-  Notes:
-- Keep empty if not used.
+- `default.nix` または `<name>.nix` の overlay 定義
+
+## ルール
+
+- overlay が不要なら空ディレクトリのままでよい。
+- 一時的なワークアラウンドはコメントで期限/目的を明記する。

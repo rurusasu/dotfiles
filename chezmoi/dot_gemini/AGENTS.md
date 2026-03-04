@@ -1,18 +1,10 @@
-# Gemini CLI Configuration
+# chezmoi/dot_gemini: Gemini CLI 設定
 
-This directory contains Google Gemini CLI configuration.
+## 編集対象
 
-## Files
+- `settings.json`
 
-- `settings.json` - Gemini CLI settings
+## ルール
 
-## Deployment
-
-Deployed to `~/.gemini/` via chezmoi on all platforms.
-
-## Installation
-
-| Platform | Method | Config                                                         |
-| -------- | ------ | -------------------------------------------------------------- |
-| NixOS    | Nix    | [`nix/core/cli.nix`](../../nix/core/cli.nix)                   |
-| Windows  | npm    | [`windows/npm/packages.json`](../../windows/npm/packages.json) |
+- ここは Gemini CLI 設定のみ扱う。
+- インストール方法の変更は `nix/core/cli.nix` または `windows/npm/packages.json` 側で管理する。

@@ -1,12 +1,17 @@
-# AGENTS
+# windows/winget: パッケージ管理運用
 
-Purpose: Windows package management via winget.
-Expected contents:
+## 編集対象
 
-- packages.json: Exported winget package list
-  Notes:
-- Export: winget export -o packages.json
-- Import: winget import -i packages.json --accept-package-agreements
-- Some packages may require manual installation (license agreements, unavailable sources)
-- Export: Handler.Winget.ps1 (scripts/powershell/handlers/) handles export
-- Import: install.ps1 (scripts/powershell/) runs all handlers including Winget
+- `packages.json` のみを source of truth とする。
+
+## 実行コマンド
+
+```powershell
+winget export -o packages.json
+winget import -i packages.json --accept-package-agreements
+```
+
+## 実装上の注意
+
+- 一部パッケージは対話や手動操作が必要。
+- 自動処理は `scripts/powershell/handlers/Handler.Winget.ps1` が担う。

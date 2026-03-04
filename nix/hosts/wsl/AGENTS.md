@@ -1,8 +1,11 @@
-# AGENTS
+# nix/hosts/wsl: NixOS WSL ホスト設定
 
-Purpose
-Purpose: NixOS WSL host configuration.
-Expected contents:
+## 管理対象
 
-- default.nix: imports host modules, wsl module, and configuration.nix.
-- configuration.nix: WSL host-specific system config.
+- `default.nix`
+- `configuration.nix`
+
+## ルール
+
+- WSL 固有設定のみ置く。
+- 汎用化できる調整は `nix/modules/wsl` に寄せる。

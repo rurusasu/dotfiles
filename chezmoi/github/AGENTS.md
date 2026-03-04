@@ -1,39 +1,12 @@
-# GitHub Configuration Templates
+# chezmoi/github: GitHub テンプレート管理
 
-This directory contains GitHub configuration templates for new projects.
+## 管理対象
 
-## Structure
+- `CODEOWNERS`, `FUNDING.yml`, `dependabot.yml`
+- `workflows/`
+- `ISSUE_TEMPLATE/`
 
-```
-github/
-├── dependabot.yml            # Dependabot version update config
-├── FUNDING.yml               # Sponsor button configuration
-├── CODEOWNERS                # Code ownership rules
-├── copilot-instructions.md   # GitHub Copilot instructions
-├── pull_request_template.md  # PR template
-├── workflows/
-│   └── ci.yml                # Basic CI workflow
-└── ISSUE_TEMPLATE/
-    ├── bug_report.yml        # Bug report template
-    └── feature_request.yml   # Feature request template
-```
+## 変更ルール
 
-## Deployment
-
-Templates are deployed to `~/.github-template/`.
-
-## Usage
-
-Copy templates to your project's `.github/` directory:
-
-```bash
-cp -r ~/.github-template/* /path/to/project/.github/
-```
-
-Or use a helper script to initialize a new project with these templates.
-
-## Customization
-
-- Edit `CODEOWNERS` to set your username
-- Configure `FUNDING.yml` with your sponsorship links
-- Modify workflow files based on your project's needs
+- ここはテンプレート用途。特定リポジトリ依存値は最小化する。
+- 利用時は `~/.github-template/` から `.github/` にコピーして調整する。

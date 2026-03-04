@@ -1,28 +1,11 @@
-# SSH Configuration
+# chezmoi/ssh: SSH 設定テンプレート
 
-## Overview
+## 編集対象
 
-OS-independent SSH configuration with 1Password SSH Agent integration.
+- `config.tmpl`
 
-## Files
+## 変更ルール
 
-- `config.tmpl` - SSH config template with OS-specific 1Password agent paths
-
-## 1Password SSH Agent Paths
-
-| OS        | Agent Path                                                         |
-| --------- | ------------------------------------------------------------------ |
-| Windows   | `//./pipe/openssh-ssh-agent`                                       |
-| macOS     | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
-| Linux/WSL | `~/.1password/agent.sock`                                          |
-
-## GitHub Hosts
-
-- `github.com-personal` - Personal account (rurusasu)
-- `github.com` - Work account (default)
-
-## Requirements
-
-1. 1Password desktop app with SSH Agent enabled
-2. SSH keys stored in 1Password with "Use for SSH" enabled
-3. Public keys exported to `~/.ssh/` (referenced by IdentityFile)
+- 1Password SSH Agent の OS 別パス分岐を維持する。
+- GitHub host alias 変更時は既存リポジトリ接続への影響を確認する。
+- 秘密鍵の実体は置かない。

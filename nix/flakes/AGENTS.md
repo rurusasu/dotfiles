@@ -1,19 +1,15 @@
-# AGENTS
+# nix/flakes: flake-parts 出力定義
 
-Purpose: flake-parts entrypoint and composition for outputs.
+## 管理対象
 
-## Expected contents
+- `default.nix`: flake-parts エントリ
+- `hosts.nix`: `nixosConfigurations` wiring
+- `packages.nix`: package outputs
+- `systems.nix`: 対応プラットフォーム
+- `templates.nix`: flake templates
+- `treefmt.nix`: formatter wiring
 
-- `default.nix` - flake-parts config (imports, perSystem, flake outputs)
-- `hosts.nix` - nixosConfigurations wiring
-- `packages.nix` - package sets for `nix profile install`
-- `systems.nix` - supported systems list
-- `templates.nix` - project templates
-- `treefmt.nix` - treefmt integration
-- `lib/` - helper functions used by flake-parts
+## 変更ルール
 
-## Notes
-
-- Keep outputs small; push logic into nix/hosts, nix/modules, nix/profiles
-- nixosConfigurations attribute name should match networking.hostName
-- Current host: `nixos` (WSL)
+- 実装ロジックは `nix/hosts`, `nix/modules`, `nix/profiles` に寄せる。
+- ここは出力配線を最小限に保つ。

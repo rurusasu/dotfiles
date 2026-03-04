@@ -1,36 +1,22 @@
-# AGENTS
+# nix: 構成変更時の作業基準
 
-Purpose: Nix configuration root for this repo.
+## 役割
 
-## Architecture
+- NixOS/WSL のシステム構成
+- flake-parts による出力定義
+- `nix profile` 向け package set
 
-- **No Home Manager** - Packages installed via `nix profile`, dotfiles managed by chezmoi
-- NixOS-WSL for system configuration
-- Flakes with flake-parts for composition
+## 編集先の目安
 
-## Expected contents
+- ホスト固有: `nix/hosts/`
+- 再利用モジュール: `nix/modules/`
+- プロファイル: `nix/profiles/`
+- package set: `nix/packages/`
+- flake wiring: `nix/flakes/`
 
-- `flake.nix` lives at repo root (not here); this tree is referenced by flake modules
-- `nix/flakes/` - flake-parts composition and outputs wiring
-- `nix/hosts/<host>/` - per-host NixOS system configs
-- `nix/modules/` - reusable modules (host and wsl)
-- `nix/packages/` - package sets for `nix profile install`
-- `nix/profiles/` - shared feature bundles for hosts
-- `nix/overlays/` - nixpkgs overlays (if any)
-- `nix/templates/` - project templates for `nix flake init`
-- `nix/lib/` - utility functions
-
-## Usage
+## 実行
 
 ```bash
-# Install packages (any system with Nix + flakes)
 nix profile install .#default
-
-# Rebuild NixOS-WSL
 sudo nixos-rebuild switch --flake .#nixos
 ```
-
-## Notes
-
-- User dotfiles are managed by chezmoi (repo root `chezmoi/`)
-- `windows/install-nixos-wsl.ps1` requires admin elevation
