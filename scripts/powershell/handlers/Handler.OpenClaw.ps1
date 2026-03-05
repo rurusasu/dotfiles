@@ -148,6 +148,8 @@ class OpenClawHandler : SetupHandlerBase {
         $configPath = ($this.GetConfigFilePath() -replace '\\', '/')
         $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
         $geminiCredentialsDir = ((Join-Path $homeDir ".gemini") -replace '\\', '/')
+        $claudeCredentialsDir = ((Join-Path $homeDir ".claude") -replace '\\', '/')
+        $claudeConfigJson = ((Join-Path $homeDir ".claude.json") -replace '\\', '/')
         $envContent = @"
 OPENCLAW_PORT=18789
 OPENCLAW_UID=1000
@@ -155,6 +157,8 @@ OPENCLAW_GID=1000
 OPENCLAW_CONFIG_FILE=$configPath
 TZ=Asia/Tokyo
 GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
+CLAUDE_CREDENTIALS_DIR=$claudeCredentialsDir
+CLAUDE_CONFIG_JSON=$claudeConfigJson
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent

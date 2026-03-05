@@ -54,6 +54,14 @@ services:
       # Set GEMINI_CREDENTIALS_DIR in .env (e.g. C:/Users/<you>/.gemini).
       # Leave unset to use an empty volume — API key auth via GEMINI_API_KEY still works.
       - ${GEMINI_CREDENTIALS_DIR:-gemini-credentials}:/home/bun/.gemini
+      # Claude Code OAuth credentials (.credentials.json) and config (.claude.json).
+      # Authenticate once on the host with `claude`, then this mount keeps tokens refreshable.
+      # Set CLAUDE_CREDENTIALS_DIR in .env (e.g. C:/Users/<you>/.claude).
+      # Leave unset to use an empty volume — API key auth via ANTHROPIC_API_KEY still works.
+      - ${CLAUDE_CREDENTIALS_DIR:-claude-credentials}:/home/bun/.claude
+      # Claude Code expects $HOME/.claude.json at the HOME root (not inside .claude/).
+      # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
+      - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/bun/.claude.json:ro
 
 volumes:
   openclaw-data:
@@ -64,6 +72,9 @@ volumes:
     driver: local
   # Fallback empty volume when GEMINI_CREDENTIALS_DIR is not set in .env
   gemini-credentials:
+    driver: local
+  # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
+  claude-credentials:
     driver: local
 
 secrets:

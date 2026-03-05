@@ -18,6 +18,16 @@ if [ -f /app/acpx.config.json ]; then
   mv "$tmp" /home/bun/.acpx/config.json
 fi
 
+# Claude Code: ensure credentials dir exists and set container-safe defaults.
+mkdir -p /home/bun/.claude
+if [ ! -f /home/bun/.claude/settings.json ]; then
+  cat >/home/bun/.claude/settings.json <<'CEOF'
+{"permissions":{"allow":["Bash(*)","Read(*)","Write(*)","Edit(*)","Glob(*)","Grep(*)"],"deny":[]},"hasCompletedOnboarding":true}
+CEOF
+fi
+# Claude Code expects $HOME/.claude.json at the HOME root.
+# In this container, that file is bind-mounted from the host via docker-compose.
+
 # Enforce Codex-first child-session policy inside workspace instructions.
 workspace_dir="/app/data/workspace"
 workspace_agents="$workspace_dir/AGENTS.md"
@@ -32,7 +42,8 @@ if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
 
 ## BEGIN OPENCLAW CODEX-FIRST RULES
 
-- Default child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`, `agentId:"main"`), unless Gemini is explicitly requested.
+- Default child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`, `agentId:"main"`), unless Claude or Gemini is explicitly requested.
+- Use Claude child sessions via `sessions_spawn(runtime:"acp", agentId:"claude")` for Claude-specific capabilities.
 - Use Gemini child sessions only when needed for Gemini-specific capabilities.
 - For ACP child runs, treat `accepted` as enqueue only and verify completion with `sessions_send(timeoutSeconds>0)`.
 - If `sessions_send` returns empty payload, confirm child output from gateway logs (`[agent:nested]`).

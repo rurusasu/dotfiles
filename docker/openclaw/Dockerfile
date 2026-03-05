@@ -2,7 +2,7 @@
 
 FROM node:22-bookworm-slim
 
-ARG OPENCLAW_VERSION=2026.3.1
+ARG OPENCLAW_VERSION=2026.3.2
 ARG GEMINI_CLI_VERSION=0.31.0
 
 WORKDIR /app
@@ -40,6 +40,8 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm --prefix /usr/local/lib/node_modules/openclaw/extensions/acpx install --omit=dev \
     && ln -sf /usr/local/lib/node_modules/openclaw/extensions/acpx/node_modules/.bin/acpx /usr/local/bin/acpx \
     && npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} \
+    && npm install -g @anthropic-ai/claude-code \
+    && npm install -g @zed-industries/claude-agent-acp \
     && npm cache clean --force
 
 # GIT_ASKPASS helper: feeds GitHub token from Docker secret first, env fallback second.
@@ -53,7 +55,7 @@ RUN printf '#!/bin/sh\nif [ -f /run/secrets/github_token ]; then token="$(cat /r
     && chmod +x /usr/local/bin/gh
 
 RUN mkdir -p /app/data/workspace /app/data/.bun \
-    && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx \
+    && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx /home/bun/.claude \
     && chmod +x /usr/local/bin/openclaw-entrypoint.sh \
     && chown -R 1000:1000 /app/data /home/bun
 
