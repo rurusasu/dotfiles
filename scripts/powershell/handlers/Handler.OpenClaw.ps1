@@ -67,6 +67,7 @@ class OpenClawHandler : SetupHandlerBase {
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
         $originalGitHubToken = $env:GITHUB_TOKEN
+        $originalXaiApiKey = $env:XAI_API_KEY
 
         try {
             # .env ファイルの確認・生成
@@ -85,6 +86,9 @@ class OpenClawHandler : SetupHandlerBase {
 
             # GitHub token を環境変数で注入（ディスクに書き込まない）
             $env:GITHUB_TOKEN = $this.ResolveGitHubToken()
+
+            # xAI API key を環境変数で注入（Grok x_search 用）
+            $env:XAI_API_KEY = $this.ResolveOpSecret("op://Personal/xAI-Grok-Twitter/console/apikey", "XAI_API_KEY")
 
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
@@ -124,6 +128,11 @@ class OpenClawHandler : SetupHandlerBase {
                 $env:GITHUB_TOKEN = $originalGitHubToken
             } else {
                 Remove-Item -Path Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+            if ($null -ne $originalXaiApiKey) {
+                $env:XAI_API_KEY = $originalXaiApiKey
+            } else {
+                Remove-Item -Path Env:\XAI_API_KEY -ErrorAction SilentlyContinue
             }
         }
     }
@@ -195,6 +204,29 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
         }
 
         return $githubToken
+    }
+
+    <#
+    .SYNOPSIS
+        1Password からシークレットを取得する（汎用）
+    .DESCRIPTION
+        op read でシークレットを取得する。失敗時は空文字を返し警告を出す。
+    #>
+    hidden [string] ResolveOpSecret([string]$opRef, [string]$label) {
+        $opCmd = Get-ExternalCommand -Name "op"
+        if ($opCmd) {
+            try {
+                $result = & op read $opRef 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    return ($result | Out-String).Trim()
+                } else {
+                    $this.LogWarning("$label の取得に失敗しました (op read)")
+                }
+            } catch {
+                $this.LogWarning("$label の取得で例外が発生しました")
+            }
+        }
+        return ""
     }
 
     <#
