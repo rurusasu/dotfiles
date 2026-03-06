@@ -293,7 +293,7 @@ Describe 'OpenClawHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match "Docker connection error"
+            $result.Message | Should -Match "docker compose up に失敗"
         }
     }
 
