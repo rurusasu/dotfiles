@@ -19,16 +19,16 @@ description: |
 
 **このスキルは各サービスの利用規約を厳守する。絶対に違反しないこと。**
 
-| 情報源             | 取得方法            | 根拠                                                                                      |
-| ------------------ | ------------------- | ----------------------------------------------------------------------------------------- |
-| Zenn               | 公式RSSフィード     | Zenn公式ドキュメント `zenn.dev/zenn/articles/zenn-feed-rss` で提供                        |
-| はてなブックマーク | 公式RSSフィード     | はてな公式提供。カテゴリURL末尾に `.rss` 付加で取得可能                                   |
-| Hacker News        | 公式Firebase API    | `github.com/HackerNews/API` で公開。認証不要・無料                                        |
-| X (Twitter)        | web_search **のみ** | X利用規約でスクレイピング・自動データ収集を明確に禁止。検索エンジン経由の公開情報参照のみ |
+| 情報源             | 取得方法            | 根拠                                                               |
+| ------------------ | ------------------- | ------------------------------------------------------------------ |
+| Zenn               | 公式RSSフィード     | Zenn公式ドキュメント `zenn.dev/zenn/articles/zenn-feed-rss` で提供 |
+| はてなブックマーク | 公式RSSフィード     | はてな公式提供。カテゴリURL末尾に `.rss` 付加で取得可能            |
+| Hacker News        | 公式Firebase API    | `github.com/HackerNews/API` で公開。認証不要・無料                 |
+| X (Twitter)        | Grok API `x_search` | xAI 公式 API（`docs.x.ai`）。1Password から APIキーを取得して使用  |
 
 **禁止事項:**
 
-- X (Twitter) のページを直接スクレイピングすること
+- X (Twitter) のページを直接スクレイピングすること（Grok API 経由は可）
 - 各サービスへの過度なリクエスト（短時間での大量アクセス）
 - 記事本文の全文取得・複製（タイトル・URL・メタデータのみ取得すること）
 
@@ -97,25 +97,59 @@ web_fetch: https://hacker-news.firebaseio.com/v0/item/{id}.json
 
 ### 4. X (Twitter) テックトレンド
 
-**X (Twitter) は利用規約でスクレイピング・自動データ収集を明確に禁止している。**
+xAI の Grok API `x_search` ツールで X の投稿をリアルタイム検索する。
 
-以下の方法のみ使用する:
+#### 方法A（デフォルト）: Grok API `x_search`
 
-#### 方法A（デフォルト）: web_search を使用
+Bash で `curl` を使い、Grok API の Responses エンドポイントに `x_search` ツールを指定してリクエストする。
 
+**APIキー取得:**
+
+```bash
+XAI_API_KEY=$(op read 'op://Personal/xAI-Grok-Twitter/console/apikey')
 ```
-web_search: "X Twitter tech AI trending today 2026"
-web_search: "Twitter テック トレンド 話題 今日"
+
+**リクエスト例:**
+
+```bash
+curl -s https://api.x.ai/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $XAI_API_KEY" \
+  -d '{
+    "model": "grok-4-1-fast",
+    "input": [{"role": "user", "content": "今日のテック系・AI関連で話題のX投稿を10件、タイトル・投稿者・URL・要約付きで教えて"}],
+    "tools": [{"type": "x_search"}]
+  }'
 ```
 
-#### 方法B: Claude in Chrome を使用
+**パラメータ:**
 
-ユーザーが明示的に指示した場合のみ、ユーザーのブラウザで通常のブラウジングとして閲覧。
+| パラメータ           | 型     | 説明                    | 上限 |
+| -------------------- | ------ | ----------------------- | ---- |
+| `allowed_x_handles`  | array  | 特定ユーザーに限定      | 10   |
+| `excluded_x_handles` | array  | 特定ユーザーを除外      | 10   |
+| `from_date`          | string | 検索開始日 (YYYY-MM-DD) | -    |
+| `to_date`            | string | 検索終了日 (YYYY-MM-DD) | -    |
 
-- これは手動ブラウジングの代行であり、自動スクレイピングではない
-- 大量データ収集は行わない。表示されている内容を読み取る程度にとどめる
+**個別ツイートURL対応:**
+ユーザーから `https://x.com/{handle}/status/{id}` を共有された場合:
 
-web_search経由の場合、リアルタイム性が低い点をユーザーに説明すること。
+1. URL を正規表現 `x\.com/([^/]+)/status/(\d+)` で検証
+2. handle を `allowed_x_handles` に指定し、status ID をクエリに含めて `x_search` で取得
+3. 例: `"Find the tweet by @{handle} with status ID {id}"`
+
+**コスト:** $2.50〜$5 / 1,000 ツール呼び出し。1日1回10件程度なら無料クレジット内。
+
+#### 方法B（フォールバック）: web_search + アグリゲーター
+
+APIキーが利用不可の場合:
+
+- `web_search: "X Twitter tech AI trending today"`
+- `web_fetch: https://twittrend.jp` （日本のトレンドキーワード）
+- `web_fetch: https://getdaytrends.com/japan/` （トレンド＋ツイート数）
+- `web_fetch: https://tweethunter.io/trending/ai` （AI系トレンドツイート）
+
+リアルタイム性は方法Aより劣る。
 
 ## 記事本文のダウンロード
 
@@ -186,9 +220,9 @@ score: スコア/ブックマーク数（取得できた場合）
   - 方法: `web_fetch` で外部サイトを取得
   - 注意事項: 同上。ペイウォール記事は取得不可
 - X (Twitter)
-  - 記事本文取得: ❌ 不可
-  - 方法: web_search結果のサマリのみ
-  - 注意事項: X利用規約で自動データ収集禁止。検索結果の要約のみ保存
+  - 投稿内容取得: ✅ Grok API `x_search` 経由で可能
+  - 方法: Grok API がX投稿のテキスト・メタデータを返す
+  - 注意事項: xAI公式APIのため規約準拠。直接スクレイピングは引き続き禁止
 
 ### サーバー負荷への配慮
 
@@ -277,4 +311,6 @@ score: スコア/ブックマーク数（取得できた場合）
   2. `web_fetch: https://www.daemonology.net/hn-daily/` (Hacker News Daily) で上位記事を取得
   3. `web_fetch: https://www.hntoplinks.com/` (HN Top Links) を参照
 - **Zenn RSSは正常動作**: `web_fetch: https://zenn.dev/feed` で安定的にXMLが取得可能（text/xml）
-- **X検索結果が少ない**: 検索クエリを英語・日本語両方で試す。`Twittrend.jp` で過去のトレンドデータも参照可能
+- **Grok API エラー**: APIキーが無効または期限切れの場合、`op read 'op://Personal/xAI-Grok-Twitter/console/apikey'` でキーを確認。console.x.ai でキーを再生成し 1Password を更新する
+- **Grok API 429 (Rate Limit)**: 無料クレジット超過の可能性。console.x.ai で使用量を確認。フォールバック（方法B: web_search + アグリゲーター）に切り替える
+- **X検索結果が少ない**: 検索クエリを英語・日本語両方で試す。`from_date`/`to_date` で範囲を広げる。フォールバックとして `twittrend.jp` や `getdaytrends.com` も参照可能

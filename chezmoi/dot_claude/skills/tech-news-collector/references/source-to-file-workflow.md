@@ -16,7 +16,7 @@
 - 取得件数は合計15〜20件以内に抑える。
 - 保存先は `/mnt/user-data/outputs/tech-news-YYYY-MM-DD/` を使う。
 - 失敗したURL（403 / robots / paywall）はスキップし、`report.md` に失敗理由を記録する。
-- X は本文取得しない。検索結果の要約のみ保存する。
+- X は Grok API `x_search` で投稿内容を取得する。APIキー不可時は web_search フォールバック。
 
 ## Directory Layout
 
