@@ -68,9 +68,12 @@ docker restart openclaw
 ## GitHub 認証の実装ルール
 
 - 認証方式は Fine-grained PAT のみ（Classic PAT 不使用）
-- PAT は 1Password に保存し、`op run` で環境変数 `GITHUB_TOKEN` として注入（ディスクに書き込まない）
+- PAT は 1Password に保存し、Docker secret としてコンテナに注入する（環境変数に直接渡さない）
+- Handler が 1Password から PAT を取得 → 一時ファイル `~/.openclaw/secrets/github_token` に書き出し → `OPENCLAW_GITHUB_TOKEN_FILE` 環境変数をセット → `docker compose up` → finally で一時ファイル削除
+- `docker-compose.yml` の `secrets.github_token.file` が `OPENCLAW_GITHUB_TOKEN_FILE` を参照し、コンテナ内 `/run/secrets/github_token`（tmpfs）に注入
+- `entrypoint.sh` が `/run/secrets/github_token` を読み取り、`GITHUB_TOKEN` と `GH_TOKEN` をプロセス環境へ export
 - コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` が `GITHUB_TOKEN` 環境変数を返す
-- `entrypoint.sh` が `GITHUB_TOKEN` を `GH_TOKEN` へ同期する（`gh` CLI 互換）
+- **禁止**: `docker-compose.yml` の `environment` セクションに `GITHUB_TOKEN` を直接書かないこと（`docker inspect` で丸見えになる）
 
 1Password 参照先:
 
@@ -85,12 +88,16 @@ Remove-Item docker\openclaw\.env
 pwsh -File scripts\powershell\install.user.ps1
 ```
 
-手動起動（`op run` でトークン注入）:
+手動起動（Docker secret 経由でトークン注入）:
 
 ```powershell
-$env:GITHUB_TOKEN = op read "op://Personal/GitHubUsedOpenClawPAT/credential"
+$secretDir = "$env:USERPROFILE\.openclaw\secrets"
+New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+op read "op://Personal/GitHubUsedOpenClawPAT/credential" | Set-Content -NoNewline "$secretDir\github_token"
+$env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretDir -replace '\\', '/') + '/github_token'
 docker compose -f docker/openclaw/docker-compose.yml up -d --build
-Remove-Item Env:\GITHUB_TOKEN
+Remove-Item "$secretDir\github_token" -Force
+Remove-Item Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
 ```
 
 ## 手動操作コマンド（Handler 非経由時）

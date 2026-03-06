@@ -1,6 +1,29 @@
 #!/bin/sh
 set -eu
 
+# --- GitHub token: read from Docker secret and export ---
+_secret_file="/run/secrets/github_token"
+if [ -f "$_secret_file" ]; then
+  GITHUB_TOKEN="$(cat "$_secret_file")"
+  export GITHUB_TOKEN
+  GH_TOKEN="$GITHUB_TOKEN"
+  export GH_TOKEN
+else
+  echo "[FATAL] Docker secret not found: $_secret_file" >&2
+  echo "[FATAL] Ensure OPENCLAW_GITHUB_TOKEN_FILE is set and 'docker compose up' includes the secret." >&2
+  exit 1
+fi
+if [ -z "$GITHUB_TOKEN" ]; then
+  echo "[FATAL] GitHub token is empty (secret file exists but is blank)." >&2
+  echo "[FATAL] Re-run the Handler or verify 1Password PAT." >&2
+  exit 1
+fi
+# Validate GIT_ASKPASS script exists and is executable
+if [ ! -x "${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" ]; then
+  echo "[FATAL] GIT_ASKPASS script not found or not executable: ${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" >&2
+  exit 1
+fi
+
 # Host ~/.gemini may contain MCP commands that are unavailable in this container.
 # Force a minimal settings.json on each boot to keep ACPX Gemini startup stable.
 if [ -f /app/gemini.settings.json ]; then

@@ -66,8 +66,8 @@ class OpenClawHandler : SetupHandlerBase {
         OpenClaw コンテナを起動する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
-        $originalGitHubToken = $env:GITHUB_TOKEN
         $originalXaiApiKey = $env:XAI_API_KEY
+        $secretFile = ""
 
         try {
             # .env ファイルの確認・生成
@@ -84,8 +84,8 @@ class OpenClawHandler : SetupHandlerBase {
                 }
             }
 
-            # GitHub token を環境変数で注入（ディスクに書き込まない）
-            $env:GITHUB_TOKEN = $this.ResolveGitHubToken()
+            # GitHub token を Docker secret 用一時ファイルに書き出す
+            $secretFile = $this.WriteGitHubTokenSecret()
 
             # xAI API key を環境変数で注入（Grok x_search 用）
             $env:XAI_API_KEY = $this.ResolveOpSecret("op://Personal/xAI-Grok-Twitter/console/apikey", "XAI_API_KEY")
@@ -124,11 +124,11 @@ class OpenClawHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         } finally {
-            if ($null -ne $originalGitHubToken) {
-                $env:GITHUB_TOKEN = $originalGitHubToken
-            } else {
-                Remove-Item -Path Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
+            # Docker secret 用一時ファイルを確実に削除（ディスクにトークンを残さない）
+            if ($secretFile -and (Test-Path $secretFile)) {
+                Remove-Item -Path $secretFile -Force -ErrorAction SilentlyContinue
             }
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
             if ($null -ne $originalXaiApiKey) {
                 $env:XAI_API_KEY = $originalXaiApiKey
             } else {
@@ -173,12 +173,13 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
 
     <#
     .SYNOPSIS
-        GitHub token を取得する（ディスクに書き込まない）
+        GitHub token を Docker secret 用一時ファイルに書き出す
     .DESCRIPTION
-        1Password が利用可能なら op read を優先し、未取得時は OPENCLAW_GITHUB_TOKEN 環境変数をフォールバックする。
-        取得したトークンは呼び出し元で GITHUB_TOKEN 環境変数にセットし、docker compose が環境変数経由でコンテナに注入する。
+        1Password から PAT を取得し、一時ファイルに書き込んで OPENCLAW_GITHUB_TOKEN_FILE 環境変数をセットする。
+        docker compose が secrets.github_token.file としてこのパスを参照し、コンテナ内 /run/secrets/github_token に注入する。
+        一時ファイルは finally ブロックで確実に削除される。
     #>
-    hidden [string] ResolveGitHubToken() {
+    hidden [string] WriteGitHubTokenSecret() {
         $githubToken = ""
         $opCmd = Get-ExternalCommand -Name "op"
         if ($opCmd) {
@@ -200,10 +201,20 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
             $githubToken = [string]$env:OPENCLAW_GITHUB_TOKEN
         }
         if ([string]::IsNullOrWhiteSpace($githubToken)) {
-            $this.LogWarning("GitHub token が未取得です。GitHub 連携が必要な操作は失敗する可能性があります")
+            throw "GitHub token が未取得です。1Password にサインインしているか確認してください (op read `"op://Personal/GitHubUsedOpenClawPAT/credential`")"
         }
 
-        return $githubToken
+        # 一時ファイルに書き出し（docker compose secret 用）
+        $secretDir = Join-Path (Split-Path $this.GetConfigFilePath()) "secrets"
+        if (-not (Test-Path $secretDir)) {
+            New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+        }
+        $secretFile = Join-Path $secretDir "github_token"
+        Set-ContentNoNewline -Path $secretFile -Value $githubToken
+        $env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretFile -replace '\\', '/')
+        $this.Log("GitHub token を Docker secret ファイルに書き出しました", "Gray")
+
+        return $secretFile
     }
 
     <#

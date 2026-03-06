@@ -98,6 +98,11 @@ tasks:
     cmds:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration"
 
+  test:entrypoint:
+    desc: Run openclaw entrypoint.sh shell tests
+    cmds:
+      - bash docker/openclaw/tests/test-entrypoint.sh
+
   # ===========================================
   # Windows Setup
   # ===========================================

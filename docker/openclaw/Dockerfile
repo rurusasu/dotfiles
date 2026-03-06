@@ -10,6 +10,7 @@ WORKDIR /app
 COPY entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
 COPY gemini.settings.json /app/gemini.settings.json
 COPY acpx.config.json /app/acpx.config.json
+COPY tests/ /app/tests/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client unzip \

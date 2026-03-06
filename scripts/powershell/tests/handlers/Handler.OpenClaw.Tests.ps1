@@ -114,6 +114,12 @@ Describe 'OpenClawHandler' {
             Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
             # op CLI は存在しない前提（1Password 未インストール環境を模倣）
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            # WriteGitHubTokenSecret が token 未取得で throw しないよう環境変数を設定
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_success"
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
         }
 
         It 'should start container successfully when config exists' {
@@ -203,7 +209,10 @@ Describe 'OpenClawHandler' {
             $script:envFileCreated = $false
             Mock Test-PathExist { return $true }
             Mock Set-ContentNoNewline {
-                $script:envFileCreated = $true
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envFileCreated = $true
+                }
             }
             Mock Invoke-Docker {
                 param($Arguments)
@@ -226,8 +235,14 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Start-SleepSafe { }
+            Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_failure"
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
         }
 
         It 'should return failure when docker compose up fails' {
@@ -302,12 +317,18 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Start-SleepSafe { }
+            Mock Set-ContentNoNewline { }
             Mock Test-PathExist {
                 param($Path)
                 if ($Path -match "jobs\.seed\.json$") { return $false }
                 return $true
             }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_compose_retry"
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
         }
 
         It 'should succeed on second compose attempt when first fails' {
@@ -493,6 +514,16 @@ Describe 'OpenClawHandler' {
     }
 
     Context 'WaitForContainer - retry behavior' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Set-ContentNoNewline { }
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_wait"
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+        }
+
         It 'should succeed on second attempt' {
             $script:psCallCount = 0
             Mock Write-Host { }

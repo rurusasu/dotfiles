@@ -27,9 +27,6 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/bun
-      # GitHub PAT — injected at runtime via `op run` (no file on disk)
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GH_TOKEN: ${GITHUB_TOKEN:-}
       # xAI Grok API key for X/Twitter search (news skill)
       XAI_API_KEY: ${XAI_API_KEY:-}
       # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
@@ -67,6 +64,9 @@ services:
       # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
       - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/bun/.claude.json:ro
 
+    secrets:
+      - github_token
+
 volumes:
   openclaw-data:
     driver: local
@@ -80,3 +80,7 @@ volumes:
   # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
   claude-credentials:
     driver: local
+
+secrets:
+  github_token:
+    file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE in .env or host env}
