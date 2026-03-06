@@ -206,25 +206,14 @@ pong
 OpenClaw 2026.3.2 以降を推奨。2026.3.1 以前では ACPX が Claude Code を PTY なしで
 spawn し、Ink (React terminal UI) の raw mode 要件でクラッシュする（PR #34020 で修正）。
 
-## X/Twitter URL ルーティング
+## スキルとサブエージェント
 
-- `x.com` / `twitter.com` の URL に対して `web_fetch` を使用してはならない（JS レンダリング必須のためエラーページしか返らない）
-- X の投稿内容を取得するには、Grok API `x_search` を `curl` + `$XAI_API_KEY` で呼び出す
-- `$XAI_API_KEY` は `docker-compose.yml` の `environment` でコンテナに注入済み
+- ニュース収集・X/Twitter 投稿取得などの手順は `skills/news/SKILL.md` に集約されている
+- OpenClaw（Codex）は調査・Web 取得タスクを Claude Code サブエージェントに委譲する: `sessions_spawn(runtime:"acp", agentId:"claude")`
+- スキルは `entrypoint.sh` が `/home/bun/.claude/skills/` → `/app/data/workspace/skills/` にシンボリックリンクで配置する
+- X/Twitter URL は `web_fetch` 不可（JS 必須）。Grok API `x_search` + `$XAI_API_KEY` を使用（詳細は `skills/news/SKILL.md`）
 
-```bash
-# 特定ツイートの取得（handle と status ID を URL から抽出）
-curl -s https://api.x.ai/v1/responses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $XAI_API_KEY" \
-  -d '{
-    "model": "grok-4-1-fast",
-    "input": [{"role": "user", "content": "Find the tweet by @{handle} with status ID {id}"}],
-    "tools": [{"type": "x_search"}]
-  }'
-```
-
-1Password 参照先:
+xAI API Key の 1Password 参照先:
 
 ```text
 op://Personal/xAI-Grok-Twitter/console/apikey

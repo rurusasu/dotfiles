@@ -42,31 +42,14 @@ if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
 
 ## BEGIN OPENCLAW CODEX-FIRST RULES
 
-- Default child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`, `agentId:"main"`), unless Claude or Gemini is explicitly requested.
-- Use Claude child sessions via `sessions_spawn(runtime:"acp", agentId:"claude")` for Claude-specific capabilities.
+- For research, web fetching, news collection, and investigative tasks, spawn a Claude Code sub-agent: `sessions_spawn(runtime:"acp", agentId:"claude")`.
+- Claude Code has access to `web_fetch`, `web_search`, skills (`/app/data/workspace/skills/`), and shell tools. Delegate data gathering to it.
+- Skills in `/app/data/workspace/skills/` contain detailed procedures. Follow the SKILL.md in each skill directory.
+- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** They require JS rendering and always fail. Use Grok API `x_search` via `curl` + `$XAI_API_KEY` (see `skills/news/SKILL.md`).
+- Default other child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`), unless Claude or Gemini is explicitly requested.
 - Use Gemini child sessions only when needed for Gemini-specific capabilities.
 - For ACP child runs, treat `accepted` as enqueue only and verify completion with `sessions_send(timeoutSeconds>0)`.
 - If `sessions_send` returns empty payload, confirm child output from gateway logs (`[agent:nested]`).
-
-## BEGIN X/TWITTER URL ROUTING RULES
-
-- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** These sites require JS rendering and `web_fetch` always returns an error page.
-- To retrieve X/Twitter post content, use the Grok API `x_search` tool via `curl`:
-  ```bash
-  curl -s https://api.x.ai/v1/responses \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $XAI_API_KEY" \
-    -d '{
-      "model": "grok-4-1-fast",
-      "input": [{"role": "user", "content": "Find the tweet by @{handle} with status ID {id}"}],
-      "tools": [{"type": "x_search"}]
-    }'
-  ```
-- Extract `handle` and `id` from the URL pattern: `x.com/{handle}/status/{id}` or `twitter.com/{handle}/status/{id}`.
-- For general X/Twitter trend searches, use `x_search` with a descriptive query instead of a specific status ID.
-- `$XAI_API_KEY` is available as an environment variable inside this container.
-
-## END X/TWITTER URL ROUTING RULES
 
 ## END OPENCLAW CODEX-FIRST RULES
 EOF
