@@ -1,6 +1,9 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy SSH configuration for Windows
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
+{{- if lookPath "op" }}
+# pubkey-hash: {{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+{{- end }}
 
 $ErrorActionPreference = "Stop"
 
@@ -23,9 +26,30 @@ function Deploy-File {
   }
 }
 
+function Deploy-Content {
+  param(
+    [string]$Content,
+    [string]$Destination
+  )
+
+  $destDir = Split-Path -Parent $Destination
+  if (-not (Test-Path -LiteralPath $destDir)) {
+    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+  }
+  Set-Content -Path $Destination -Value $Content -NoNewline -Force
+  Write-Host "Deployed: $Destination"
+}
+
 Write-Host "Deploying SSH configuration..."
 
 Deploy-File "$ChezmoiSource\ssh\config" "$HomeDir\.ssh\config"
+
+{{- if lookPath "op" }}
+$pubkey = '{{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
+Deploy-Content $pubkey "$HomeDir\.ssh\signing_key.pub"
+{{- else }}
+Write-Host "WARNING: op CLI not available, skipping signing_key.pub deployment"
+{{- end }}
 
 Write-Host "SSH configuration deployed."
 {{ end -}}

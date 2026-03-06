@@ -2,6 +2,9 @@
 #!/bin/bash
 # Deploy SSH configuration for Linux/macOS
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
+{{- if lookPath "op" }}
+# pubkey-hash: {{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+{{- end }}
 
 set -euo pipefail
 
@@ -19,9 +22,25 @@ deploy_file() {
   fi
 }
 
+deploy_content() {
+  local content="$1"
+  local dst="$2"
+
+  mkdir -p "$(dirname "$dst")"
+  printf '%s' "$content" > "$dst"
+  echo "Deployed: $dst"
+}
+
 echo "Deploying SSH configuration..."
 
 deploy_file "$CHEZMOI_SOURCE/ssh/config" "$HOME_DIR/.ssh/config"
+
+{{- if lookPath "op" }}
+PUBKEY='{{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
+deploy_content "$PUBKEY" "$HOME_DIR/.ssh/signing_key.pub"
+{{- else }}
+echo "WARNING: op CLI not available, skipping signing_key.pub deployment"
+{{- end }}
 
 echo "SSH configuration deployed."
 {{ end -}}
