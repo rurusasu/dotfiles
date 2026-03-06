@@ -48,6 +48,11 @@ let
     # cursor-cli  # if available
   ];
 
+  # Communication
+  communication = with pkgs; [
+    slack
+  ];
+
   # Terminal and shell
   terminal = with pkgs; [
     wezterm
@@ -78,7 +83,7 @@ in
   # Full: everything
   full = pkgs.buildEnv {
     name = "dotfiles-full";
-    paths = core ++ dev ++ llm ++ terminal ++ editors;
+    paths = core ++ dev ++ llm ++ communication ++ terminal ++ editors;
   };
 
   # Individual package sets for selective install
@@ -86,6 +91,7 @@ in
     core
     dev
     llm
+    communication
     terminal
     editors
     ;

@@ -107,6 +107,9 @@
           "PackageIdentifier": "wez.wezterm"
         },
         {
+          "PackageIdentifier": "SlackTechnologies.Slack"
+        },
+        {
           "PackageIdentifier": "ZedIndustries.Zed"
         }
       ],
