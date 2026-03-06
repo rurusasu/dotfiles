@@ -36,6 +36,22 @@
       "dmPolicy": "allowlist",
       "allowFrom": ["{{ .telegramUserId }}"],
       "streaming": "block"
+    },
+    "slack": {
+      "enabled": true,
+      "mode": "socket",
+{{- if lookPath "op" }}
+      "botToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/botToken" }}",
+      "appToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/appToken" }}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["{{ onepasswordRead "op://Personal/Slack/MIKI_CO/slack_user_id" }}"],
+{{- else }}
+      "botToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
+      "appToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["PLACEHOLDER_REQUIRES_OP_SIGNIN"],
+{{- end }}
+      "streaming": "block"
     }
   },
   "messages": {
@@ -75,6 +91,7 @@
   "plugins": {
     "allow": [
       "telegram",
+      "slack",
       "acpx",
       "google-gemini-cli-auth"
     ],

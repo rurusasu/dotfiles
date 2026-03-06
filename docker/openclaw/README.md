@@ -22,6 +22,19 @@ openclaw を Docker コンテナで動作させ、Telegram から即座に使え
 | ---------- | -------------------------------------------------------- |
 | `認証情報` | BotFather から取得したボットトークン（例: `123456:...`） |
 
+**Personal ボルト / `SlackBot-OpenClaw` アイテム（API_CREDENTIAL タイプ）**
+
+| フィールド | 内容                                                |
+| ---------- | --------------------------------------------------- |
+| `botToken` | Slack Bot User OAuth Token（`xoxb-...`）            |
+| `appToken` | Slack App-Level Token（`xapp-...`、Socket Mode 用） |
+
+**Personal ボルト / `Slack` アイテム**
+
+| セクション / フィールド     | 内容                                           |
+| --------------------------- | ---------------------------------------------- |
+| `MIKI_CO` / `slack_user_id` | 自分の Slack ユーザー ID（`U` で始まる文字列） |
+
 ## 初回セットアップ
 
 ### 1. chezmoi.toml に 1Password CLI パスを追加
