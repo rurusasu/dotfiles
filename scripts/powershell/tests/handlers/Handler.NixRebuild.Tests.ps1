@@ -96,6 +96,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return @("installed") }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return @("pre-commit installed") }
                 return ""
@@ -131,6 +132,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") {
                     $script:bunArgs = $argStr
                     $global:LASTEXITCODE = 0
@@ -147,12 +149,39 @@ Describe 'NixRebuildHandler' {
             $script:bunArgs | Should -Match "gemini-cli"
         }
 
+        It 'should skip already installed bun packages' {
+            $script:bunInstallCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") {
+                    $global:LASTEXITCODE = 0
+                    return @("@google/gemini-cli@0.32.1", "@anthropic-ai/claude-code@2.1.70")
+                }
+                if ($argStr -match "bun install") {
+                    $script:bunInstallCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:bunInstallCalled | Should -Be $false
+        }
+
         It 'should succeed even when bun install fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
@@ -172,6 +201,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
@@ -194,6 +224,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("CustomNixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
@@ -212,6 +243,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") {
                     $script:callOrder.Add("bun")
                     $global:LASTEXITCODE = 0
@@ -240,6 +272,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 1; return @("error") }
                 return ""
@@ -259,6 +292,7 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") {
                     $script:preCommitArgs = $argStr

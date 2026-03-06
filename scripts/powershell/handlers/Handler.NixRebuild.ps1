@@ -86,7 +86,29 @@ class NixRebuildHandler : SetupHandlerBase {
                 return
             }
 
-            $pkgList = $packages -join " "
+            # インストール済みパッケージを取得してフィルタリング
+            $installedOutput = Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "bun pm ls -g 2>/dev/null"
+            )
+            $toInstall = @()
+            $skipped = 0
+            foreach ($pkg in $packages) {
+                $pkgName = $pkg -replace '@[\d\.]+$', ''
+                if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
+                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                    $skipped++
+                } else {
+                    $toInstall += $pkg
+                }
+            }
+
+            if ($toInstall.Count -eq 0) {
+                $this.Log("bun グローバルパッケージはすべてインストール済みです ($skipped 個スキップ)", "Gray")
+                return
+            }
+
+            $pkgList = $toInstall -join " "
             $this.Log("bun グローバルパッケージをインストールしています: $pkgList")
 
             $bunOutput = Invoke-Wsl -Arguments @(
@@ -104,7 +126,7 @@ class NixRebuildHandler : SetupHandlerBase {
                 $this.LogWarning("bun グローバルパッケージのインストールが失敗しました (exit code: $LASTEXITCODE)")
             }
             else {
-                $this.Log("bun グローバルパッケージのインストール完了", "Green")
+                $this.Log("bun グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
             }
         }
         catch {

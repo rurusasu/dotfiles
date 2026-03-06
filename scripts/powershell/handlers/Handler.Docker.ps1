@@ -9,7 +9,7 @@
     - docker グループへのユーザー追加
 
 .NOTES
-    Order = 20 (WSL 依存処理)
+    Order = 30 (WSL 依存処理)
     WslConfig の後、VscodeServer の前に実行
 #>
 

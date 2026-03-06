@@ -8,7 +8,7 @@
     - VS Code Server を事前インストール
 
 .NOTES
-    Order = 30 (WSL 依存処理)
+    Order = 40 (WSL 依存処理)
     Docker の後に実行
 #>
 

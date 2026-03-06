@@ -7,7 +7,7 @@
     - chezmoi apply の実行
 
 .NOTES
-    Order = 100 (WSL 非依存処理)
+    Order = 10 (WSL 非依存処理)
     WSL 関連の処理とは独立して実行可能
 #>
 
