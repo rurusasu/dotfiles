@@ -1,5 +1,5 @@
 ---
-name: news-collect
+name: news
 description: |
   テック系ニュースの人気記事を複数の情報源から一括収集するスキル。
   対応ソース: Zenn（トレンド）、はてなブックマーク（IT人気エントリー）、Hacker News（トップストーリー）、X/Twitter（テックトレンド）。
