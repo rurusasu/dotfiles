@@ -37,6 +37,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
+      # Log level: info (default), debug, trace
+      OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
 
     secrets:
       - github_token
