@@ -12,3 +12,9 @@ repos:
         language: system
         pass_filenames: false
         types: [powershell]
+      - id: chezmoi-template-lint
+        name: chezmoi template lint
+        entry: pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -Path ./scripts/powershell/tests/chezmoi -MinimumCoverage 0"
+        language: system
+        pass_filenames: false
+        files: '\.tmpl$'
