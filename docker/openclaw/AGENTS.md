@@ -68,10 +68,9 @@ docker restart openclaw
 ## GitHub 認証の実装ルール
 
 - 認証方式は Fine-grained PAT のみ（Classic PAT 不使用）
-- PAT は 1Password から起動時に取得し、Docker secret `github_token` として注入
-- コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` を使う
-- `entrypoint.sh` が `/run/secrets/github_token` を読み、`GITHUB_TOKEN` と `GH_TOKEN` をプロセス環境へ export
-- `Dockerfile` 側で `git-credential-askpass.sh` を配置する
+- PAT は 1Password に保存し、`op run` で環境変数 `GITHUB_TOKEN` として注入（ディスクに書き込まない）
+- コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` が `GITHUB_TOKEN` 環境変数を返す
+- `entrypoint.sh` が `GITHUB_TOKEN` を `GH_TOKEN` へ同期する（`gh` CLI 互換）
 
 1Password 参照先:
 
@@ -86,8 +85,13 @@ Remove-Item docker\openclaw\.env
 pwsh -File scripts\powershell\install.user.ps1
 ```
 
-手動起動する場合は `OPENCLAW_GITHUB_TOKEN_FILE` をセットする。
-（Handler は `~/.openclaw/secrets/github_token` を自動設定する）
+手動起動（`op run` でトークン注入）:
+
+```powershell
+$env:GITHUB_TOKEN = op read "op://Personal/GitHubUsedOpenClawPAT/credential"
+docker compose -f docker/openclaw/docker-compose.yml up -d --build
+Remove-Item Env:\GITHUB_TOKEN
+```
 
 ## 手動操作コマンド（Handler 非経由時）
 
@@ -99,6 +103,23 @@ docker exec -it openclaw sh
 ```
 
 ## Claude Code ACP 連携（ACPX 経由）
+
+### 禁止事項: OpenClaw のメインモデルに Claude Max 認証を使用しないこと
+
+OpenClaw の `agents.defaults.model` を `anthropic/claude-opus-4-6` 等に変更し、
+Claude Max の setup-token（`claude setup-token`）や OAuth トークンで認証してはならない。
+
+Anthropic の Consumer ToS（2026年2月改定）により、Claude Free/Pro/Max の OAuth 認証は
+**Claude Code と claude.ai 専用** と明確化されている。OpenClaw のメインモデルとして
+Claude Max 認証を使うのは規約違反となる。
+
+> OAuth authentication (used with Free, Pro, and Max plans) is intended exclusively
+> for Claude Code and Claude.ai. Using OAuth tokens obtained through Claude Free, Pro,
+> or Max accounts in any other product, tool, or service is not permitted.
+
+Anthropic API Key（従量課金）または Bedrock/Vertex 経由であれば問題ない。
+
+参照: https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access/
 
 ### 構成
 

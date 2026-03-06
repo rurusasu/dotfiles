@@ -74,7 +74,7 @@ Copy-Item .env.example .env
 ```
 
 `.env` には GitHub PAT を保存しない。PAT は起動時に `Handler.OpenClaw.ps1` が
-1Password から取得し、`~/.openclaw/secrets/github_token` 経由で Docker secret として注入する。
+1Password から取得し、環境変数 `GITHUB_TOKEN` 経由で docker compose に注入する（ディスクに書き込まない）。
 
 ### 4. ビルド & 起動
 
@@ -101,14 +101,14 @@ Docker 用設定の特徴：
 
 ## ボリューム
 
-| ボリューム                       | マウント先                          | 用途                                                  |
-| -------------------------------- | ----------------------------------- | ----------------------------------------------------- |
-| `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル                          |
-| `openclaw-home`                  | `/home/bun/.openclaw`               | canvas・cron など実行時ステート                       |
-| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる）              |
-| `gemini.settings.json`           | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）               |
-| `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）               |
-| Docker secret `github_token`     | `/run/secrets/github_token`         | GitHub PAT（`~/.openclaw/secrets/github_token` 由来） |
+| ボリューム                       | マウント先                          | 用途                                          |
+| -------------------------------- | ----------------------------------- | --------------------------------------------- |
+| `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル                  |
+| `openclaw-home`                  | `/home/bun/.openclaw`               | canvas・cron など実行時ステート               |
+| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる）      |
+| `gemini.settings.json`           | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）       |
+| `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）       |
+| 環境変数 `GITHUB_TOKEN`          | （コンテナ環境変数）                | GitHub PAT（`op run` で注入、ディスク不使用） |
 
 ## 操作
 
@@ -123,15 +123,12 @@ chezmoi apply && docker compose restart openclaw
 docker compose build --no-cache && docker compose up -d --force-recreate
 ```
 
-Handler を使わず手動で起動する場合は、`OPENCLAW_GITHUB_TOKEN_FILE` を事前に渡す:
+Handler を使わず手動で起動する場合は、`GITHUB_TOKEN` を環境変数で渡す:
 
 ```powershell
-$tmp = New-TemporaryFile
-op read "op://Personal/GitHubUsedOpenClawPAT/credential" | Set-Content -NoNewline $tmp
-$env:OPENCLAW_GITHUB_TOKEN_FILE = ($tmp.FullName -replace '\\', '/')
+$env:GITHUB_TOKEN = op read "op://Personal/GitHubUsedOpenClawPAT/credential"
 docker compose up -d --build
-Remove-Item $tmp -Force
-Remove-Item Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
+Remove-Item Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
 ```
 
 ## トラブルシューティング

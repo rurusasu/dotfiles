@@ -44,15 +44,10 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm install -g @zed-industries/claude-agent-acp \
     && npm cache clean --force
 
-# GIT_ASKPASS helper: feeds GitHub token from Docker secret first, env fallback second.
-RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then if [ -f /run/secrets/github_token ]; then cat /run/secrets/github_token; else echo "${GITHUB_TOKEN}"; fi; else echo "x-access-token"; fi\n' \
+# GIT_ASKPASS helper: feeds GITHUB_TOKEN env var to git credential prompts.
+RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then echo "${GITHUB_TOKEN}"; else echo "x-access-token"; fi\n' \
     > /usr/local/bin/git-credential-askpass.sh \
     && chmod +x /usr/local/bin/git-credential-askpass.sh
-
-# gh wrapper: auto-load GH_TOKEN/GITHUB_TOKEN from Docker secret for docker exec sessions.
-RUN printf '#!/bin/sh\nif [ -f /run/secrets/github_token ]; then token="$(cat /run/secrets/github_token)"; export GH_TOKEN="$token"; export GITHUB_TOKEN="$token"; fi\nexec /usr/bin/gh "$@"\n' \
-    > /usr/local/bin/gh \
-    && chmod +x /usr/local/bin/gh
 
 RUN mkdir -p /app/data/workspace /app/data/.bun \
     && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx /home/bun/.claude \

@@ -66,8 +66,7 @@ class OpenClawHandler : SetupHandlerBase {
         OpenClaw コンテナを起動する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
-        $secretFile = $null
-        $originalSecretFileEnv = $env:OPENCLAW_GITHUB_TOKEN_FILE
+        $originalGitHubToken = $env:GITHUB_TOKEN
 
         try {
             # .env ファイルの確認・生成
@@ -84,9 +83,8 @@ class OpenClawHandler : SetupHandlerBase {
                 }
             }
 
-            # GitHub token は .env ではなく Docker secret 一時ファイルで渡す
-            $secretFile = $this.CreateGitHubTokenSecretFile()
-            $env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretFile -replace '\\', '/')
+            # GitHub token を環境変数で注入（ディスクに書き込まない）
+            $env:GITHUB_TOKEN = $this.ResolveGitHubToken()
 
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
@@ -122,10 +120,10 @@ class OpenClawHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         } finally {
-            if ($null -ne $originalSecretFileEnv) {
-                $env:OPENCLAW_GITHUB_TOKEN_FILE = $originalSecretFileEnv
+            if ($null -ne $originalGitHubToken) {
+                $env:GITHUB_TOKEN = $originalGitHubToken
             } else {
-                Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
+                Remove-Item -Path Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
             }
         }
     }
@@ -166,12 +164,12 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
 
     <#
     .SYNOPSIS
-        GitHub token の Docker secret ファイルを生成する
+        GitHub token を取得する（ディスクに書き込まない）
     .DESCRIPTION
-        1Password が利用可能なら op read を優先し、未取得時は OPENCLAW_GITHUB_TOKEN をフォールバックする。
-        Docker compose の secrets は起動後も元ファイルを参照するため、削除しない固定パスに保存する。
+        1Password が利用可能なら op read を優先し、未取得時は OPENCLAW_GITHUB_TOKEN 環境変数をフォールバックする。
+        取得したトークンは呼び出し元で GITHUB_TOKEN 環境変数にセットし、docker compose が環境変数経由でコンテナに注入する。
     #>
-    hidden [string] CreateGitHubTokenSecretFile() {
+    hidden [string] ResolveGitHubToken() {
         $githubToken = ""
         $opCmd = Get-ExternalCommand -Name "op"
         if ($opCmd) {
@@ -196,18 +194,7 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
             $this.LogWarning("GitHub token が未取得です。GitHub 連携が必要な操作は失敗する可能性があります")
         }
 
-        try {
-            $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-            $secretDir = Join-Path $homeDir ".openclaw\secrets"
-            [System.IO.Directory]::CreateDirectory($secretDir) | Out-Null
-            $secretFile = Join-Path $secretDir "github_token"
-            [System.IO.File]::WriteAllText($secretFile, $githubToken)
-            return $secretFile
-        } catch {
-            $fallback = Join-Path ([System.IO.Path]::GetTempPath()) "openclaw_github_token"
-            [System.IO.File]::WriteAllText($fallback, $githubToken)
-            return $fallback
-        }
+        return $githubToken
     }
 
     <#

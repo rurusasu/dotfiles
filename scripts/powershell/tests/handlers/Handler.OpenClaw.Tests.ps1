@@ -227,6 +227,7 @@ Describe 'OpenClawHandler' {
             Mock Write-Host { }
             Mock Start-SleepSafe { }
             Mock Test-PathExist { return $true }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
         }
 
         It 'should return failure when docker compose up fails' {
@@ -293,7 +294,7 @@ Describe 'OpenClawHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match "docker compose up に失敗"
+            $result.Message | Should -Match "Docker connection error"
         }
     }
 

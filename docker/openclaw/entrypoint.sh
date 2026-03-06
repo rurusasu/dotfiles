@@ -52,11 +52,4 @@ if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
 EOF
 fi
 
-# Prefer Docker secret for GitHub auth and export for gh CLI compatibility.
-if [ -f /run/secrets/github_token ]; then
-  token="$(cat /run/secrets/github_token)"
-  export GITHUB_TOKEN="$token"
-  export GH_TOKEN="$token"
-fi
-
 exec openclaw "$@"

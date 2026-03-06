@@ -27,6 +27,9 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/bun
+      # GitHub PAT — injected at runtime via `op run` (no file on disk)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GH_TOKEN: ${GITHUB_TOKEN:-}
       # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Runtime bun installs (skills) go to the writable data volume
@@ -39,9 +42,6 @@ services:
       NODE_OPTIONS: --max-old-space-size=1536
       # Log level: info (default), debug, trace
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
-
-    secrets:
-      - github_token
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
@@ -78,7 +78,3 @@ volumes:
   # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
   claude-credentials:
     driver: local
-
-secrets:
-  github_token:
-    file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE for docker compose}
