@@ -24,16 +24,16 @@ openclaw を Docker コンテナで動作させ、Telegram から即座に使え
 
 **Personal ボルト / `SlackBot-OpenClaw` アイテム（API_CREDENTIAL タイプ）**
 
-| フィールド | 内容                                                |
-| ---------- | --------------------------------------------------- |
-| `botToken` | Slack Bot User OAuth Token（`xoxb-...`）            |
-| `appToken` | Slack App-Level Token（`xapp-...`、Socket Mode 用） |
+| フィールド        | 内容                                                |
+| ----------------- | --------------------------------------------------- |
+| `bot_token`       | Slack Bot User OAuth Token（`xoxb-...`）            |
+| `app_level_token` | Slack App-Level Token（`xapp-...`、Socket Mode 用） |
 
-**Personal ボルト / `Slack` アイテム**
+**Personal ボルト / `Slack` アイテム（UUID: `22w7ub2pldlpo6tlmggc7g67mu`）**
 
-| セクション / フィールド     | 内容                                           |
-| --------------------------- | ---------------------------------------------- |
-| `MIKI_CO` / `slack_user_id` | 自分の Slack ユーザー ID（`U` で始まる文字列） |
+| セクション / フィールド      | 内容                                           |
+| ---------------------------- | ---------------------------------------------- |
+| `Miki _Co` / `slack_user_id` | 自分の Slack ユーザー ID（`U` で始まる文字列） |
 
 ## 初回セットアップ
 

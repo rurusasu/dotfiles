@@ -41,10 +41,10 @@
       "enabled": true,
       "mode": "socket",
 {{- if lookPath "op" }}
-      "botToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/botToken" }}",
-      "appToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/appToken" }}",
+      "botToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/bot_token" }}",
+      "appToken": "{{ onepasswordRead "op://Personal/SlackBot-OpenClaw/app_level_token" }}",
       "dmPolicy": "allowlist",
-      "allowFrom": ["{{ onepasswordRead "op://Personal/Slack/MIKI_CO/slack_user_id" }}"],
+      "allowFrom": ["{{ onepasswordRead "op://Personal/22w7ub2pldlpo6tlmggc7g67mu/Miki _Co/slack_user_id" }}"],
 {{- else }}
       "botToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
       "appToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
