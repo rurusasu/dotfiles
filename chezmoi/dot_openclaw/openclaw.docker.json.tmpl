@@ -28,7 +28,11 @@
   "channels": {
     "telegram": {
       "enabled": true,
+{{- if lookPath "op" }}
       "botToken": "{{ onepasswordRead "op://Personal/TelegramBot/credential" }}",
+{{- else }}
+      "botToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
+{{- end }}
       "dmPolicy": "allowlist",
       "allowFrom": ["{{ .telegramUserId }}"],
       "streaming": "block"
@@ -52,7 +56,11 @@
     "bind": "loopback",
     "auth": {
       "mode": "token",
+{{- if lookPath "op" }}
       "token": "{{ onepasswordRead "op://Personal/openclaw/gateway token" }}"
+{{- else }}
+      "token": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
+{{- end }}
     },
     "tailscale": {
       "mode": "off",
