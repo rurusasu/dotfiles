@@ -206,6 +206,30 @@ pong
 OpenClaw 2026.3.2 以降を推奨。2026.3.1 以前では ACPX が Claude Code を PTY なしで
 spawn し、Ink (React terminal UI) の raw mode 要件でクラッシュする（PR #34020 で修正）。
 
+## X/Twitter URL ルーティング
+
+- `x.com` / `twitter.com` の URL に対して `web_fetch` を使用してはならない（JS レンダリング必須のためエラーページしか返らない）
+- X の投稿内容を取得するには、Grok API `x_search` を `curl` + `$XAI_API_KEY` で呼び出す
+- `$XAI_API_KEY` は `docker-compose.yml` の `environment` でコンテナに注入済み
+
+```bash
+# 特定ツイートの取得（handle と status ID を URL から抽出）
+curl -s https://api.x.ai/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $XAI_API_KEY" \
+  -d '{
+    "model": "grok-4-1-fast",
+    "input": [{"role": "user", "content": "Find the tweet by @{handle} with status ID {id}"}],
+    "tools": [{"type": "x_search"}]
+  }'
+```
+
+1Password 参照先:
+
+```text
+op://Personal/xAI-Grok-Twitter/console/apikey
+```
+
 ## 既知障害の一次切り分け
 
 - `acpx exited with code 1`
