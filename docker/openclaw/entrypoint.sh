@@ -52,4 +52,21 @@ if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
 EOF
 fi
 
+# Symlink Claude Code skills into workspace so OpenClaw (Codex) can use them directly.
+claude_skills="/home/bun/.claude/skills"
+workspace_skills="$workspace_dir/skills"
+if [ -d "$claude_skills" ]; then
+  mkdir -p "$workspace_skills"
+  for skill_dir in "$claude_skills"/*/; do
+    skill_name="$(basename "$skill_dir")"
+    target="$workspace_skills/$skill_name"
+    if [ -L "$target" ]; then
+      rm "$target"
+    elif [ -d "$target" ]; then
+      rm -rf "$target"
+    fi
+    ln -s "$skill_dir" "$target"
+  done
+fi
+
 exec openclaw "$@"
