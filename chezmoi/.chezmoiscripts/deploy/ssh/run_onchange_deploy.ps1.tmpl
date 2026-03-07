@@ -7,24 +7,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
 $HomeDir = $env:USERPROFILE
-
-function Deploy-File {
-  param(
-    [string]$Source,
-    [string]$Destination
-  )
-
-  if (Test-Path -LiteralPath $Source -PathType Leaf) {
-    $destDir = Split-Path -Parent $Destination
-    if (-not (Test-Path -LiteralPath $destDir)) {
-      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-    Copy-Item -LiteralPath $Source -Destination $Destination -Force
-    Write-Host "Deployed: $Destination"
-  }
-}
 
 function Deploy-Content {
   param(
@@ -42,7 +25,11 @@ function Deploy-Content {
 
 Write-Host "Deploying SSH configuration..."
 
-Deploy-File "$ChezmoiSource\ssh\config" "$HomeDir\.ssh\config"
+# Render ssh/config.tmpl inline (chezmoi template engine resolves this at apply time)
+$sshConfig = @'
+{{ include "ssh/config.tmpl" }}
+'@
+Deploy-Content $sshConfig "$HomeDir\.ssh\config"
 
 {{- if lookPath "op" }}
 $pubkey = '{{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'

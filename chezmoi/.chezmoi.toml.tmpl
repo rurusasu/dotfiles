@@ -1,9 +1,12 @@
 # chezmoi configuration
-# This file configures how chezmoi runs PowerShell scripts on Windows
-# Required to bypass execution policy restrictions for .chezmoiscripts
 
 sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [interpreters.ps1]
     command = "powershell"
     args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+
+[data.git]
+    name = {{ promptStringOnce . "git.name" "Git user name" | quote }}
+    email = {{ promptStringOnce . "git.email" "Git email address" | quote }}
+    signingkey = {{ promptStringOnce . "git.signingkey" "SSH signing key path (default: ~/.ssh/signing_key.pub)" | default "~/.ssh/signing_key.pub" | quote }}

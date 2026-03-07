@@ -15,14 +15,7 @@ Host *
     IdentityAgent ~/.1password/agent.sock
 {{- end }}
 
-# Personal GitHub (rurusasu)
-Host github.com-personal
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/personal_key.pub
-    IdentitiesOnly yes
-
-# Work GitHub
+# GitHub (default)
 Host github.com
     HostName github.com
     User git

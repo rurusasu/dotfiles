@@ -15,6 +15,9 @@
 1. `.chezmoiignore.tmpl` がターゲット名ベースで正しく除外されること。
 2. `onepasswordRead` を使う箇所は `lookPath "op"` でガードすること。
 3. `AGENTS.md`/`README.md` は deploy 対象にしないこと。
+4. `.tmpl` ファイルを deploy スクリプトから参照する場合は `include` でインライン展開すること（ファイルコピーでは未展開のまま配置される）。
+5. SSH config の `IdentityFile` で参照する公開鍵は、deploy スクリプトで必ずデプロイすること。
+6. `gpg.ssh.program` には 1Password の `op-ssh-sign` を使うこと（`ssh-keygen` は 1Password の鍵にアクセスできない）。
 
 ## 実行
 
