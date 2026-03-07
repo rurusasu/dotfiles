@@ -51,7 +51,13 @@
       "dmPolicy": "allowlist",
       "allowFrom": ["PLACEHOLDER_REQUIRES_OP_SIGNIN"],
 {{- end }}
-      "groupPolicy": "open",
+      "groupPolicy": "allowlist",
+      "channels": [
+        {"id": "C0AK3SQKFV2", "requireMention": true},
+        {"id": "C0AK64UPVNW", "requireMention": true},
+        {"id": "C0AJVDKGN6A", "requireMention": true},
+        {"id": "C0AJZSPV84S", "requireMention": true}
+      ],
       "streaming": "block"
     }
   },

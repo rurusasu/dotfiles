@@ -45,6 +45,8 @@ docker restart openclaw
 
 ## セキュリティ制約（設計前提）
 
+### コンテナ硬化
+
 `docker-compose.yml` は以下前提で維持する。
 
 - `read_only: true`
@@ -52,8 +54,24 @@ docker restart openclaw
 - `cap_drop: [ALL]`
 - `security_opt: no-new-privileges:true`
 - `user: "1000:1000"`
+- `pids_limit: 256`
+- `mem_limit: 2g`
+- ポートは `127.0.0.1` にバインド（外部公開しない）
 
 つまり、コンテナ内で永続的に書き込めるのは volume と tmpfs のみ。
+
+### チャンネルアクセス制御
+
+- Telegram: `dmPolicy: "allowlist"` + `allowFrom` でユーザー ID を限定
+- Slack DM: `dmPolicy: "allowlist"` + `allowFrom` でユーザー ID を限定
+- Slack チャンネル: `groupPolicy: "allowlist"` + `channels` で許可チャンネル ID を明示指定、`requireMention: true`
+- Slack ユーザー ID は 1Password に保存（アカウント特定に使えるため）
+- Slack チャンネル ID はテンプレートにべた書きで可（URL に含まれる公開情報であり秘匿不要）
+
+### Gateway
+
+- `gateway.mode: "local"` + `gateway.bind: "loopback"` + `gateway.auth.mode: "token"` で保護
+- gateway token は 1Password から取得
 
 ## 必須ボリューム（書き込み先）
 
