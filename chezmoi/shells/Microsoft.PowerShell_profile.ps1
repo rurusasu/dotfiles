@@ -23,6 +23,9 @@ function Write-Osc7CurrentDirectory {
     $host.UI.Write($osc7)
 }
 
+# Disable Oh My Posh if present (starship takes over prompt)
+if ($env:POSH_THEME) { Remove-Item Env:\POSH_THEME -ErrorAction SilentlyContinue }
+
 # starship prompt
 if (Get-Command starship -ErrorAction SilentlyContinue) {
     function Invoke-Starship-PreCommand {
