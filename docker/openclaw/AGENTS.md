@@ -437,6 +437,35 @@ docker rmi openclaw-sandbox-common:bookworm-slim openclaw-sandbox:bookworm-slim
 task sandbox:build
 ```
 
+### アプリのビルド・デプロイ（自律実行）
+
+sandbox 内で Docker CLI が使える。実装したアプリを自律的にビルド・起動する手順:
+
+1. `/workspace/<app>/` にコードと `Dockerfile` を作成
+2. sandbox 内で `docker build` + `docker run` を実行
+3. 起動後に `docker logs` や `curl` で動作確認
+
+```bash
+# 例: paper-viewer をビルドして起動
+cd /workspace/paper-viewer
+docker build -t paper-viewer:dev .
+docker run -d --name paper-viewer \
+  -p 3000:3000 \
+  -v /workspace/lifelog:/data/lifelog:ro \
+  paper-viewer:dev
+
+# 動作確認
+docker logs paper-viewer
+curl -s http://localhost:3000/api/list | head
+```
+
+**注意点:**
+
+- sandbox の `network: none` でも Docker socket 経由のコンテナ操作は可能
+- 起動したコンテナには network が付与されるので `pnpm install` 等も Dockerfile 内で実行可能
+- lifelog データは `/workspace/lifelog` を読み取りマウントする
+- ポート公開は Gateway コンテナのポートマッピングとは独立
+
 ### 動作確認コマンド
 
 ```bash

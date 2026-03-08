@@ -20,7 +20,11 @@
         "docker": {
           "image": "openclaw-sandbox-common:bookworm-slim",
           "network": "none",
-          "user": "0:0"
+          "user": "0:0",
+          "binds": [
+            "/var/run/docker.sock:/var/run/docker.sock"
+          ],
+          "dangerouslyAllowExternalBindSources": true
         }
       }
     }

@@ -135,7 +135,7 @@ tasks:
           -f "{{.BUILD_DIR}}/Dockerfile.sandbox"
           "{{.BUILD_DIR}}/"
       - cmd: >-
-          docker build -t "{{.SBX_COMMON}}"
+          docker build -t "{{.SBX_COMMON}}-base"
           --build-arg BASE_IMAGE={{.SBX_BASE}}
           --build-arg "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip"
           --build-arg INSTALL_PNPM=1
@@ -144,6 +144,10 @@ tasks:
           --build-arg FINAL_USER=root
           -f "{{.BUILD_DIR}}/Dockerfile.sandbox-common"
           "{{.BUILD_DIR}}/"
+      # Layer Docker CLI on top for autonomous container management
+      - cmd: >-
+          printf 'FROM docker:27-cli AS docker-cli\nFROM {{.SBX_COMMON}}-base\nCOPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker\n'
+          | docker build -t "{{.SBX_COMMON}}" -f - .
 
   sandbox:ps:
     desc: List running sandbox containers
