@@ -2,15 +2,57 @@
   "agents": {
     "defaults": {
       "workspace": "/app/data/workspace",
-      "model": "openai-codex/gpt-5.3-codex",
-      "compaction": {
-        "mode": "safeguard"
+      "model": {
+        "primary": "{{ .openclaw.models.primary }}",
+        "fallbacks": ["{{ .openclaw.models.fallback }}"]
       },
-      "maxConcurrent": 4,
+      "models": {
+        "{{ .openclaw.models.primary }}": { "alias": "gpt54" },
+        "{{ .openclaw.models.fallback }}": { "alias": "codex" },
+        "anthropic/claude-sonnet-4-6": { "alias": "sonnet" }
+      },
+      "imageModel": {
+        "primary": "{{ .openclaw.models.image }}"
+      },
+      "pdfModel": {
+        "primary": "{{ .openclaw.models.pdf }}"
+      },
+      "thinkingDefault": "{{ .openclaw.agent.thinkingDefault }}",
+      "timeoutSeconds": {{ .openclaw.agent.timeoutSeconds }},
+      "contextTokens": {{ .openclaw.agent.contextTokens }},
+      "maxConcurrent": {{ .openclaw.agent.maxConcurrent }},
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": {{ .openclaw.compaction.reserveTokensFloor }},
+        "identifierPolicy": "strict",
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": {{ .openclaw.compaction.memoryFlushSoftThreshold }}
+        }
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "{{ .openclaw.contextPruning.ttl }}",
+        "keepLastAssistants": {{ .openclaw.contextPruning.keepLastAssistants }},
+        "softTrimRatio": {{ .openclaw.contextPruning.softTrimRatio }},
+        "hardClearRatio": {{ .openclaw.contextPruning.hardClearRatio }},
+        "softTrim": {
+          "maxChars": 4000,
+          "headChars": 1500,
+          "tailChars": 1500
+        },
+        "hardClear": {
+          "enabled": true,
+          "placeholder": "[Old tool result content cleared]"
+        }
+      },
       "subagents": {
-        "maxConcurrent": 8,
-        "maxSpawnDepth": 2,
-        "maxChildrenPerAgent": 5
+        "model": "{{ .openclaw.models.subagent }}",
+        "maxConcurrent": {{ .openclaw.subagent.maxConcurrent }},
+        "maxSpawnDepth": {{ .openclaw.subagent.maxSpawnDepth }},
+        "maxChildrenPerAgent": {{ .openclaw.subagent.maxChildrenPerAgent }},
+        "runTimeoutSeconds": {{ .openclaw.subagent.runTimeoutSeconds }},
+        "archiveAfterMinutes": {{ .openclaw.subagent.archiveAfterMinutes }}
       },
       "sandbox": {
         "sessionToolsVisibility": "all",
@@ -21,22 +63,71 @@
           "image": "openclaw-sandbox-common:bookworm-slim",
           "network": "bridge",
           "user": "0:0",
+          "readOnlyRoot": true,
+          "tmpfs": ["/tmp", "/var/tmp", "/run"],
+          "capDrop": ["ALL"],
+          "pidsLimit": {{ .openclaw.sandbox.pidsLimit }},
+          "memory": "{{ .openclaw.sandbox.memory }}",
+          "memorySwap": "{{ .openclaw.sandbox.memorySwap }}",
+          "cpus": {{ .openclaw.sandbox.cpus }},
           "env": {
             "DOCKER_HOST": "tcp://host.docker.internal:2375",
             "GITHUB_TOKEN": "@@GITHUB_TOKEN@@",
             "GH_TOKEN": "@@GITHUB_TOKEN@@",
-            "XAI_API_KEY": "@@XAI_API_KEY@@"
+            "XAI_API_KEY": "@@XAI_API_KEY@@",
+            "PLAYWRIGHT_BROWSERS_PATH": "/root/.cache/ms-playwright",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "url.https://x-access-token:@@GITHUB_TOKEN@@@github.com/.insteadOf",
+            "GIT_CONFIG_VALUE_0": "https://github.com/"
           }
+        },
+        "prune": {
+          "idleHours": 24,
+          "maxAgeDays": 7
         }
       }
     }
   },
   "tools": {
+    "profile": "coding",
     "sessions": {
       "visibility": "all"
     },
     "agentToAgent": {
       "enabled": true
+    },
+    "exec": {
+      "timeoutSec": {{ .openclaw.tools.execTimeoutSec }},
+      "backgroundMs": {{ .openclaw.tools.execBackgroundMs }},
+      "cleanupMs": {{ .openclaw.tools.execCleanupMs }},
+      "notifyOnExit": true,
+      "notifyOnExitEmptySuccess": false
+    },
+    "web": {
+      "search": {
+        "enabled": true,
+        "maxResults": 5,
+        "timeoutSeconds": 30,
+        "cacheTtlMinutes": 15
+      },
+      "fetch": {
+        "enabled": true,
+        "maxChars": {{ .openclaw.tools.webFetchMaxChars }},
+        "timeoutSeconds": 30,
+        "cacheTtlMinutes": 15
+      }
+    },
+    "loopDetection": {
+      "enabled": true,
+      "historySize": 30,
+      "warningThreshold": 10,
+      "criticalThreshold": 20,
+      "globalCircuitBreakerThreshold": 30,
+      "detectors": {
+        "genericRepeat": true,
+        "knownPollNoProgress": true,
+        "pingPong": true
+      }
     }
   },
   "channels": {
@@ -53,7 +144,15 @@
 {{- else }}
       "allowFrom": ["PLACEHOLDER_REQUIRES_OP_SIGNIN"],
 {{- end }}
-      "streaming": "block"
+      "streaming": "block",
+      "historyLimit": {{ .openclaw.channels.telegramHistoryLimit }},
+      "replyToMode": "first",
+      "retry": {
+        "attempts": 3,
+        "minDelayMs": 400,
+        "maxDelayMs": 30000,
+        "jitter": 0.1
+      }
     },
     "slack": {
       "enabled": true,
@@ -76,11 +175,26 @@
         "C0AJVDKGN6A": {"requireMention": true},
         "C0AJZSPV84S": {"requireMention": true}
       },
-      "streaming": "block"
+      "streaming": "block",
+      "historyLimit": {{ .openclaw.channels.slackHistoryLimit }},
+      "replyToMode": "off",
+      "thread": {
+        "historyScope": "thread",
+        "inheritParent": false
+      }
     }
   },
   "messages": {
-    "ackReactionScope": "group-mentions"
+    "ackReactionScope": "group-mentions",
+    "queue": {
+      "mode": "collect",
+      "debounceMs": {{ .openclaw.messages.queueDebounceMs }},
+      "cap": 20,
+      "drop": "summarize"
+    },
+    "inbound": {
+      "debounceMs": {{ .openclaw.messages.inboundDebounceMs }}
+    }
   },
   "commands": {
     "native": "auto",
@@ -89,12 +203,25 @@
     "ownerDisplay": "raw"
   },
   "session": {
-    "dmScope": "per-channel-peer"
+    "dmScope": "per-channel-peer",
+    "reset": {
+      "mode": "idle",
+      "idleMinutes": {{ .openclaw.session.idleMinutes }}
+    },
+    "resetTriggers": ["/new", "/reset"],
+    "maintenance": {
+      "mode": "warn",
+      "pruneAfter": "{{ .openclaw.session.pruneAfter }}",
+      "maxEntries": {{ .openclaw.session.maxEntries }}
+    }
   },
   "gateway": {
     "port": 18789,
     "mode": "local",
     "bind": "loopback",
+    "reload": {
+      "mode": "hybrid"
+    },
     "auth": {
       "mode": "token",
 {{- if lookPath "op" }}
@@ -106,6 +233,9 @@
     "tailscale": {
       "mode": "off",
       "resetOnExit": false
+    },
+    "controlUi": {
+      "enabled": true
     }
   },
   "skills": {
@@ -140,4 +270,3 @@
     }
   }
 }
-

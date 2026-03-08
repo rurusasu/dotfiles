@@ -1,0 +1,72 @@
+# OpenClaw shared configuration data
+# Referenced by: openclaw.docker.json.tmpl
+# Tuning parameters extracted for cross-config reuse and easy adjustment.
+#
+# NOTE: Secrets (tokens, API keys) are NOT stored here.
+#       They are resolved via 1Password (onepasswordRead) in templates.
+
+openclaw:
+  # --- Model configuration ---
+  models:
+    primary: "openai-codex/gpt-5.4"
+    fallback: "openai-codex/gpt-5.3-codex"
+    image: "openai-codex/gpt-5.4"
+    pdf: "anthropic/claude-sonnet-4-6"
+    subagent: "openai-codex/gpt-5.4"
+
+  # --- Agent defaults ---
+  agent:
+    maxConcurrent: 4
+    timeoutSeconds: 600
+    contextTokens: 200000
+    thinkingDefault: "low"
+
+  # --- Subagent limits ---
+  subagent:
+    maxConcurrent: 8
+    maxSpawnDepth: 2
+    maxChildrenPerAgent: 5
+    runTimeoutSeconds: 300
+    archiveAfterMinutes: 30
+
+  # --- Sandbox resource limits ---
+  sandbox:
+    pidsLimit: 256
+    memory: "1g"
+    memorySwap: "2g"
+    cpus: 1
+
+  # --- Compaction tuning ---
+  compaction:
+    reserveTokensFloor: 24000
+    memoryFlushSoftThreshold: 150000
+
+  # --- Context pruning ---
+  contextPruning:
+    ttl: "1h"
+    keepLastAssistants: 3
+    softTrimRatio: 0.3
+    hardClearRatio: 0.5
+
+  # --- Tool exec limits ---
+  tools:
+    execTimeoutSec: 120
+    execBackgroundMs: 30000
+    execCleanupMs: 5000
+    webFetchMaxChars: 50000
+
+  # --- Session maintenance ---
+  session:
+    idleMinutes: 60
+    pruneAfter: "7d"
+    maxEntries: 1000
+
+  # --- Message queue ---
+  messages:
+    queueDebounceMs: 1500
+    inboundDebounceMs: 800
+
+  # --- Channel defaults ---
+  channels:
+    telegramHistoryLimit: 50
+    slackHistoryLimit: 100
