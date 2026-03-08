@@ -13,7 +13,14 @@
         "maxChildrenPerAgent": 5
       },
       "sandbox": {
-        "sessionToolsVisibility": "all"
+        "sessionToolsVisibility": "all",
+        "mode": "all",
+        "scope": "session",
+        "workspaceAccess": "rw",
+        "docker": {
+          "image": "openclaw-sandbox-common:bookworm-slim",
+          "network": "none"
+        }
       }
     }
   },

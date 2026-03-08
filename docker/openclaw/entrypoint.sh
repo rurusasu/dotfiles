@@ -94,6 +94,25 @@ if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
 EOF
 fi
 
+# Inject built-in sandbox rules into workspace AGENTS.md.
+if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
+  cat >>"$workspace_agents" <<'EOF'
+
+## BEGIN SANDBOX RULES
+
+- Tool execution (`shell_exec`, `file_write`, etc.) runs inside an isolated Docker sandbox container.
+- The sandbox image (`openclaw-sandbox-common:bookworm-slim`) includes: Python 3, Node.js, git, curl, jq.
+- Sandbox containers have no network access (`network: "none"`) and no secrets.
+- Each session gets its own sandbox container (`scope: "session"`), destroyed when the session ends.
+- The workspace is mounted read-write at `/workspace` inside the sandbox.
+- To run Python code, use `shell_exec("python3 script.py")` directly — no HTTP API needed.
+- To run Node.js code, use `shell_exec("node script.js")` directly.
+- To install packages, the sandbox network must be temporarily enabled or packages must be pre-installed in the image.
+
+## END SANDBOX RULES
+EOF
+fi
+
 # Symlink Claude Code skills into workspace so OpenClaw (Codex) can use them directly.
 claude_skills="/home/bun/.claude/skills"
 workspace_skills="$workspace_dir/skills"

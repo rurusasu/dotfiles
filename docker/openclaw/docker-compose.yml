@@ -40,6 +40,8 @@ services:
       NODE_OPTIONS: --max-old-space-size=1536
       # Log level: info (default), debug, trace
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
+      # Enable built-in sandbox (tool execution in sibling Docker containers)
+      OPENCLAW_SANDBOX: "1"
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
@@ -62,6 +64,10 @@ services:
       # Claude Code expects $HOME/.claude.json at the HOME root (not inside .claude/).
       # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
       - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/bun/.claude.json:ro
+      # Docker socket for built-in sandbox (sibling container spawning).
+      # Required for agents.defaults.sandbox.mode != "off".
+      # Security: grants ability to create/manage Docker containers on the host.
+      - /var/run/docker.sock:/var/run/docker.sock
 
     secrets:
       - github_token

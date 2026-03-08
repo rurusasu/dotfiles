@@ -102,6 +102,8 @@ Docker 用設定の特徴：
 
 ## ボリューム
 
+### openclaw コンテナ
+
 | ボリューム                       | マウント先                          | 用途                                                         |
 | -------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
 | `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル                                 |
@@ -111,6 +113,12 @@ Docker 用設定の特徴：
 | `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）                      |
 | Docker secret `github_token`     | `/run/secrets/github_token`         | GitHub PAT（environment-based secret で注入）                |
 | Docker secret `xai_api_key`      | `/run/secrets/xai_api_key`          | xAI API Key（environment-based secret で注入、オプショナル） |
+
+### Docker socket
+
+| マウント               | 用途                                             |
+| ---------------------- | ------------------------------------------------ |
+| `/var/run/docker.sock` | ビルトイン sandbox（sibling コンテナ生成に必要） |
 
 ## 操作
 
@@ -219,3 +227,86 @@ Sources:
 - https://docs.openclaw.ai/session
 - https://github.com/openclaw/openclaw/issues/29593
 - https://github.com/openclaw/openclaw/pull/32683
+
+## ビルトイン Sandbox
+
+OpenClaw のビルトイン sandbox 機能を使い、ツール実行（`shell_exec` 等）を隔離された
+sibling Docker コンテナ内で実行する。
+
+### 仕組み
+
+```
+openclaw (Gateway) ── Docker socket ──▶ Docker Engine
+                                          │
+                                     ┌────▼────────────────┐
+                                     │ sandbox container    │
+                                     │ (per session)        │
+                                     │ network: none        │
+                                     │ Python/Node/git/curl │
+                                     └─────────────────────┘
+```
+
+- Gateway が Docker Engine API 経由で sandbox コンテナを自動生成・管理
+- セッションごとに独立コンテナ（`scope: "session"`）
+- セッション終了時に自動削除
+- `docker ps` で確認可能
+
+### 設定
+
+`openclaw.docker.json` の `agents.defaults.sandbox`:
+
+```json
+{
+  "mode": "all",
+  "scope": "session",
+  "workspaceAccess": "rw",
+  "docker": {
+    "image": "openclaw-sandbox-common:bookworm-slim",
+    "network": "none"
+  }
+}
+```
+
+| 設定              | 値                                      | 説明                                   |
+| ----------------- | --------------------------------------- | -------------------------------------- |
+| `mode`            | `"all"`                                 | 全セッションで sandbox を使用          |
+| `scope`           | `"session"`                             | セッションごとに独立コンテナ           |
+| `workspaceAccess` | `"rw"`                                  | ワークスペースを読み書き可能でマウント |
+| `docker.image`    | `openclaw-sandbox-common:bookworm-slim` | Python 3, Node.js, git, curl, jq 入り  |
+| `docker.network`  | `"none"`                                | ネットワークアクセスなし               |
+
+### セキュリティ上の注意
+
+Docker socket マウント（`/var/run/docker.sock`）は Gateway コンテナにホスト Docker への
+アクセス権を与える。これは sandbox コンテナ生成に必須だが、理論上は任意のコンテナ操作が可能。
+以下の対策で緩和する:
+
+- `dmPolicy: "allowlist"` で信頼ユーザーのみに限定
+- `groupPolicy: "allowlist"` + `requireMention: true` でチャンネルアクセスを限定
+- Gateway 自体は `read_only: true` + `cap_drop: ALL` で hardened
+- sandbox コンテナは `network: "none"`（外部通信不可）
+
+### 動作確認
+
+```bash
+# sandbox 有効化の確認（設定ダンプ）
+docker exec openclaw openclaw sandbox explain
+
+# sandbox イメージの確認
+docker exec openclaw docker images | grep sandbox
+
+# 実行中の sandbox コンテナ一覧
+docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim"
+```
+
+### トラブルシューティング
+
+- sandbox コンテナが起動しない
+  - `docker exec openclaw docker info` で Docker socket アクセスを確認
+  - WSL2 環境では Docker Desktop の設定で「Expose daemon on tcp://...」ではなく socket 経由を使う
+- `openclaw-sandbox-common:bookworm-slim` イメージが見つからない
+  - `docker exec openclaw openclaw sandbox build` で sandbox イメージをビルド
+  - または `OPENCLAW_SANDBOX=1` 環境変数で起動時に自動ビルド
+- sandbox 内でパッケージインストールが失敗
+  - `docker.network: "none"` のためネットワークアクセス不可
+  - 必要なパッケージは `docker.setupCommand` で事前インストールするか、カスタムイメージを使う

@@ -114,6 +114,21 @@ tasks:
     cmds:
       - bash docker/openclaw/tests/test-entrypoint.sh
 
+  sandbox:explain:
+    desc: Show effective sandbox configuration
+    cmds:
+      - docker exec openclaw openclaw sandbox explain
+
+  sandbox:build:
+    desc: Build sandbox Docker images
+    cmds:
+      - docker exec openclaw openclaw sandbox build
+
+  sandbox:ps:
+    desc: List running sandbox containers
+    cmds:
+      - docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim"
+
   # ===========================================
   # Windows Setup
   # ===========================================

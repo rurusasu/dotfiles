@@ -24,6 +24,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI for built-in sandbox (spawns sibling containers via mounted socket).
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
+
 # Install bun for runtime skills while keeping Node/npm as primary runtime.
 ENV BUN_INSTALL=/home/bun/.bun
 RUN mkdir -p /home/bun \

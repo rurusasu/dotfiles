@@ -7,10 +7,11 @@
 - `docker/openclaw/Dockerfile`
 - `docker/openclaw/docker-compose.yml`
 - `docker/openclaw/entrypoint.sh`
-- `docker/openclaw/acpx.config.json`
-- `docker/openclaw/gemini.settings.json`
+- `docker/openclaw/config/acpx.config.json`
+- `docker/openclaw/config/gemini.settings.json`
 - `docker/openclaw/.env`（通常は自動生成。手動編集は最小限）
 - `chezmoi/dot_openclaw/openclaw.docker.json.tmpl`（設定の source of truth）
+- `docker/openclaw/apps/sandbox/` — sandbox サイドカーコンテナ
 
 ## 起動と再生成の正規フロー
 
@@ -60,6 +61,10 @@ docker restart openclaw
 
 つまり、コンテナ内で永続的に書き込めるのは volume と tmpfs のみ。
 
+ビルトイン sandbox コンテナは OpenClaw が Docker Engine 経由で自動生成するため、
+上記の hardened ルールは Gateway コンテナ自体に適用される。
+sandbox コンテナの隔離は `agents.defaults.sandbox.docker` 設定（`network: "none"` 等）で制御する。
+
 ### チャンネルアクセス制御
 
 - Telegram: `dmPolicy: "allowlist"` + `allowFrom` でユーザー ID を限定
@@ -75,6 +80,8 @@ docker restart openclaw
 
 ## 必須ボリューム（書き込み先）
 
+### openclaw コンテナ
+
 - `openclaw-home` -> `/home/bun/.openclaw`（openclaw state）
 - `openclaw-acpx` -> `/home/bun/.acpx`（acpx runtime state）
 - `openclaw-data` -> `/app/data`（workspace / skills / .bun）
@@ -82,6 +89,10 @@ docker restart openclaw
 - bind mount -> `/home/bun/.claude`（Claude Code OAuth 認証情報）
 - bind mount -> `/home/bun/.claude.json:ro`（Claude Code 設定ファイル）
 - bind mount -> `/home/bun/.gemini`（Gemini CLI OAuth 認証情報）
+
+### Docker socket
+
+- `/var/run/docker.sock` -> `/var/run/docker.sock`（ビルトイン sandbox のコンテナ生成に必要）
 
 ## シークレット注入の実装ルール
 
@@ -369,3 +380,70 @@ op://Personal/xAI-Grok-Twitter/console/apikey
 - https://github.com/openclaw/openclaw/issues/29593
 - https://github.com/openclaw/openclaw/pull/32683
 - https://github.com/openclaw/acpx
+
+## ビルトイン Sandbox
+
+### 概要
+
+OpenClaw のビルトイン sandbox 機能を使い、エージェントのツール実行（`shell_exec`, `file_write` 等）を
+隔離された sibling Docker コンテナ内で自動実行する。
+
+### 仕組み
+
+- Gateway が Docker Engine API 経由で sandbox コンテナを自動生成
+- Docker socket（`/var/run/docker.sock`）を Gateway コンテナにマウントして実現
+- セッションごとに独立コンテナ（`scope: "session"`）、セッション終了時に自動削除
+- イメージ `openclaw-sandbox-common:bookworm-slim` に Python 3, Node.js, git, curl, jq が含まれる
+
+### 設定（`openclaw.docker.json.tmpl`）
+
+```json
+"sandbox": {
+  "sessionToolsVisibility": "all",
+  "mode": "all",
+  "scope": "session",
+  "workspaceAccess": "rw",
+  "docker": {
+    "image": "openclaw-sandbox-common:bookworm-slim",
+    "network": "none"
+  }
+}
+```
+
+### Docker socket マウントのセキュリティ
+
+Docker socket アクセスは Gateway に任意のコンテナ操作権限を与える。以下で緩和:
+
+- `dmPolicy: "allowlist"` でユーザーを限定（信頼できるユーザーのみ Gateway を操作可能）
+- sandbox コンテナは `network: "none"`（外部通信不可）
+- sandbox コンテナにシークレットは注入されない
+- Gateway 自体は `read_only: true` + `cap_drop: ALL`
+
+### 動作確認コマンド
+
+```bash
+# sandbox 設定の確認
+docker exec openclaw openclaw sandbox explain
+
+# sandbox イメージの確認
+docker exec openclaw docker images | grep sandbox
+
+# 実行中の sandbox コンテナ一覧
+docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim"
+```
+
+### 既知障害の一次切り分け
+
+- sandbox コンテナが起動しない
+  - `docker exec openclaw docker info` で socket アクセスを確認
+  - WSL2: Docker Desktop 設定で socket 経由を使用しているか確認
+- sandbox イメージが見つからない
+  - `docker exec openclaw openclaw sandbox build` でイメージをビルド
+  - `OPENCLAW_SANDBOX=1` が `docker-compose.yml` の `environment` に設定されているか確認
+- sandbox 内でパッケージインストールが失敗
+  - `docker.network: "none"` のためネットワーク不可
+  - `docker.setupCommand` で事前インストールするか、カスタムイメージを使う
+
+参照:
+
+- https://docs.openclaw.ai/gateway/sandboxing
