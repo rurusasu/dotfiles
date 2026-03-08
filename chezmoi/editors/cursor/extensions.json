@@ -2,7 +2,6 @@
   "recommendations": [
     "Anthropic.claude-code",
     "openai.chatgpt",
-    "coderabbit.coderabbit-vscode",
     "breaking-brake.cc-wf-studio",
     "PKief.material-icon-theme",
     "tekumara.typos-vscode",

@@ -71,7 +71,7 @@
   "breadcrumbs.filePath": "last",
   "workbench.editor.enablePreview": false,
   "workbench.sideBar.location": "left",
-  "workbench.activityBar.location": "left",
+  "workbench.activityBar.location": "default",
   "workbench.editor.enablePreviewFromQuickOpen": true,
   "workbench.editor.showTabs": "multiple",
   "workbench.editor.tabSizing": "fixed",
