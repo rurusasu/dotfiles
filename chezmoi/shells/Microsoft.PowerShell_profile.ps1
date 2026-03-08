@@ -106,6 +106,23 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }
 }
 
+# bun global CLI shims (bun's .exe wrapper fails to pass env vars on Windows)
+$_bunGlobalModules = Join-Path $HOME ".bun\install\global\node_modules"
+$_bunCliShims = @{
+    claude = "@anthropic-ai\claude-code\cli.js"
+    gemini = "@google\gemini-cli\dist\index.js"
+}
+foreach ($_entry in $_bunCliShims.GetEnumerator()) {
+    $_entrypoint = Join-Path $_bunGlobalModules $_entry.Value
+    if (Test-Path -LiteralPath $_entrypoint -PathType Leaf) {
+        $__ep = $_entrypoint
+        New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
+            [scriptblock]::Create("& bun `"$__ep`" @args")
+        ) -Force | Out-Null
+    }
+}
+Remove-Variable _bunGlobalModules, _bunCliShims, _entry, _entrypoint, __ep -ErrorAction SilentlyContinue
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
 if (Test-Path $_secretPs1) { . $_secretPs1 }
