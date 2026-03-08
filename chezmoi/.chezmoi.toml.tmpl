@@ -5,8 +5,3 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
 [interpreters.ps1]
     command = "powershell"
     args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
-
-[data.git]
-    name = {{ .git.name | quote }}
-    email = {{ .git.email | quote }}
-    signingkey = {{ .git.signingkey | default "~/.ssh/signing_key.pub" | quote }}
