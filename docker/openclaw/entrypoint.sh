@@ -85,9 +85,18 @@ else
   echo "[entrypoint] docker CLI not available or socket not mounted; skipping sandbox image check"
 fi
 
-# Workspace is /app/data (sandbox mounts it as /workspace).
-# lifelog, .bun, etc. are siblings under /app/data and accessible in sandbox.
+# Sandbox only mounts /app/data/workspace → /workspace.
+# Mirror /app/data/lifelog into workspace so sandbox can read it at /workspace/lifelog.
 workspace_dir="/app/data/workspace"
+_lifelog_src="/app/data/lifelog"
+_lifelog_dst="$workspace_dir/lifelog"
+if [ -d "$_lifelog_src" ]; then
+  # Remove stale symlink from previous config
+  [ -L "$_lifelog_dst" ] && rm -f "$_lifelog_dst"
+  mkdir -p "$_lifelog_dst"
+  cp -au "$_lifelog_src/." "$_lifelog_dst/" 2>&1
+  echo "[entrypoint] lifelog synced to $_lifelog_dst ($(du -sh "$_lifelog_dst" | cut -f1))"
+fi
 
 # Enforce Codex-first child-session policy inside workspace instructions.
 workspace_agents="$workspace_dir/AGENTS.md"
