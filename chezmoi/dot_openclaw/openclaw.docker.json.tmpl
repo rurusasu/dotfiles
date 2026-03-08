@@ -41,7 +41,11 @@
       "botToken": "PLACEHOLDER_REQUIRES_OP_SIGNIN",
 {{- end }}
       "dmPolicy": "allowlist",
-      "allowFrom": ["{{ .telegramUserId }}"],
+{{- if lookPath "op" }}
+      "allowFrom": ["{{ onepasswordRead "op://Personal/TelegramBot/user_id" }}"],
+{{- else }}
+      "allowFrom": ["PLACEHOLDER_REQUIRES_OP_SIGNIN"],
+{{- end }}
       "streaming": "block"
     },
     "slack": {

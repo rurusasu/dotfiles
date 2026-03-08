@@ -1,7 +1,3 @@
-# 個人識別情報（シークレットではないが個人に紐づくデータ）
-# Telegram ユーザー ID は dmPolicy: allowlist で使用する
-telegramUserId: "8621756912"
-
 # Git ユーザー情報（create_dot_gitconfig.tmpl から参照される）
 # chezmoi.toml には [data.git] を持たせず、ここを唯一のソースとする
 # PC ごとに変更したい場合は chezmoi edit-config で [data.git] を追加して上書き

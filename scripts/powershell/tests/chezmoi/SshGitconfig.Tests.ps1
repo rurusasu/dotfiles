@@ -90,6 +90,12 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Match 'eq \.chezmoi\.os "windows"'
         $script:gitconfigContent | Should -Match 'eq \.chezmoi\.os "darwin"'
     }
+
+    It '[safe] directory = * を使用していないこと' {
+        $script:gitconfigContent | Should -Not -Match 'directory\s*=\s*\*' -Because (
+            "CVE-2022-24765: safe.directory = * は dubious ownership チェックを全無効化する"
+        )
+    }
 }
 
 Describe 'SSH deploy スクリプト' {
@@ -166,15 +172,44 @@ Describe 'chezmoi.toml テンプレート' {
         $script:tomlContent = Get-Content -Path $script:chezmoiToml -Raw
     }
 
-    It 'git.name の promptStringOnce が設定されていること' {
-        $script:tomlContent | Should -Match 'promptStringOnce.*git\.name'
+    It '[data.git] セクションが含まれていないこと' {
+        $script:tomlContent | Should -Not -Match '\[data\.git\]' -Because (
+            "git データは .chezmoidata/personal.yaml から供給する。" +
+            "chezmoi.toml に [data.git] があると優先され、破損値が永続化する"
+        )
     }
 
-    It 'git.email の promptStringOnce が設定されていること' {
-        $script:tomlContent | Should -Match 'promptStringOnce.*git\.email'
+    It 'promptStringOnce を使用していないこと' {
+        $script:tomlContent | Should -Not -Match 'promptStringOnce' -Because (
+            "非対話環境で stdin から不正な値を読み取るリスクがある"
+        )
+    }
+
+    It 'sourceDir が設定されていること' {
+        $script:tomlContent | Should -Match 'sourceDir'
+    }
+}
+
+Describe 'personal.yaml の git データ' {
+    BeforeAll {
+        $script:personalYaml = Get-Content -Path (Join-Path $script:chezmoiRoot ".chezmoidata/personal.yaml") -Raw
+    }
+
+    It 'git.name が設定されていること' {
+        $script:personalYaml | Should -Match 'name:\s*".+"'
+    }
+
+    It 'git.email が設定されていること' {
+        $script:personalYaml | Should -Match 'email:\s*".+"'
     }
 
     It 'git.signingkey のデフォルト値が signing_key.pub であること' {
-        $script:tomlContent | Should -Match 'signing_key\.pub'
+        $script:personalYaml | Should -Match 'signing_key\.pub'
+    }
+
+    It 'telegramUserId が含まれていないこと' {
+        $script:personalYaml | Should -Not -Match 'telegramUserId' -Because (
+            "Telegram User ID は 1Password から取得する。公開リポジトリにコミットしない"
+        )
     }
 }
