@@ -23,6 +23,9 @@ services:
     cpus: 1.0
 
     user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
+    # Grant access to Docker socket (GID 0 on Docker Desktop WSL2) for built-in sandbox.
+    group_add:
+      - "0"
 
     environment:
       TZ: ${TZ:-Asia/Tokyo}
