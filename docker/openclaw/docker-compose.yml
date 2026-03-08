@@ -15,6 +15,7 @@ services:
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
       - "127.0.0.1:1455:1455" # OAuth callback port (required for onboard --auth-choice openai-codex)
+      - "127.0.0.1:2375:2375" # Docker API proxy for sandbox containers (socat → Docker socket)
 
     read_only: true
     tmpfs:

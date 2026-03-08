@@ -13,7 +13,7 @@ COPY config/acpx.config.json /app/acpx.config.json
 COPY tests/ /app/tests/
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client unzip \
+    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client socat unzip \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \

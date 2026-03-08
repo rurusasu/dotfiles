@@ -19,12 +19,11 @@
         "workspaceAccess": "rw",
         "docker": {
           "image": "openclaw-sandbox-common:bookworm-slim",
-          "network": "none",
+          "network": "bridge",
           "user": "0:0",
-          "binds": [
-            "/var/run/docker.sock:/var/run/docker.sock"
-          ],
-          "dangerouslyAllowExternalBindSources": true
+          "env": {
+            "DOCKER_HOST": "tcp://host.docker.internal:2375"
+          }
         }
       }
     }
