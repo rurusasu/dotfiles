@@ -85,12 +85,9 @@ else
   echo "[entrypoint] docker CLI not available or socket not mounted; skipping sandbox image check"
 fi
 
-# Symlink shared data directories into workspace so sandbox containers can access them.
-# Sandbox only mounts /app/data/workspace → /workspace; paths outside are blocked.
+# Workspace is /app/data (sandbox mounts it as /workspace).
+# lifelog, .bun, etc. are siblings under /app/data and accessible in sandbox.
 workspace_dir="/app/data/workspace"
-if [ -d "/app/data/lifelog" ] && [ ! -e "$workspace_dir/lifelog" ]; then
-  ln -s /app/data/lifelog "$workspace_dir/lifelog"
-fi
 
 # Enforce Codex-first child-session policy inside workspace instructions.
 workspace_agents="$workspace_dir/AGENTS.md"
