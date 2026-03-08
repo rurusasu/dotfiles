@@ -106,18 +106,29 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }
 }
 
-# bun global CLI shims (bun's .exe wrapper fails to pass env vars on Windows)
-# Claude Code uses `where.exe git` to find bash.exe via ../../bin/bash.exe.
-# Git-for-Windows user install puts git.exe in mingw64\bin which breaks that
-# heuristic, so we ensure Git\cmd (which contains git.exe -> Git\cmd\git.exe)
-# is in PATH before mingw64\bin.
-$_gitCmd = Join-Path $env:LOCALAPPDATA "Programs\Git\cmd"
-if ((Test-Path $_gitCmd) -and ($env:PATH -notlike "*$_gitCmd*")) {
-    $env:PATH = "$_gitCmd;$env:PATH"
-}
-Remove-Variable _gitCmd -ErrorAction SilentlyContinue
-
+# bun global CLI shims
+# bun's .exe wrapper on Windows cannot pass env vars to child processes.
+# Define PowerShell functions that call bun + entrypoint directly.
+# Claude Code also needs CLAUDE_CODE_GIT_BASH_PATH set explicitly within
+# the function scope to ensure bun inherits it.
 $_bunGlobalModules = Join-Path $HOME ".bun\install\global\node_modules"
+
+# Detect git-bash path once at profile load
+$_gitBashPath = $env:CLAUDE_CODE_GIT_BASH_PATH
+if (-not $_gitBashPath) {
+    # Fallback: derive from Git install location
+    foreach ($_candidate in @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe"),
+        "C:\Program Files\Git\bin\bash.exe",
+        "C:\Program Files (x86)\Git\bin\bash.exe"
+    )) {
+        if (Test-Path -LiteralPath $_candidate -PathType Leaf) {
+            $_gitBashPath = $_candidate
+            break
+        }
+    }
+}
+
 $_bunCliShims = @{
     claude = "@anthropic-ai\claude-code\cli.js"
     gemini = "@google\gemini-cli\dist\index.js"
@@ -126,12 +137,18 @@ foreach ($_entry in $_bunCliShims.GetEnumerator()) {
     $_entrypoint = Join-Path $_bunGlobalModules $_entry.Value
     if (Test-Path -LiteralPath $_entrypoint -PathType Leaf) {
         $__ep = $_entrypoint
-        New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
-            [scriptblock]::Create("& bun `"$__ep`" @args")
-        ) -Force | Out-Null
+        if ($_entry.Key -eq "claude" -and $_gitBashPath) {
+            New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
+                [scriptblock]::Create("`$env:CLAUDE_CODE_GIT_BASH_PATH = '$_gitBashPath'; & bun `"$__ep`" @args")
+            ) -Force | Out-Null
+        } else {
+            New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
+                [scriptblock]::Create("& bun `"$__ep`" @args")
+            ) -Force | Out-Null
+        }
     }
 }
-Remove-Variable _bunGlobalModules, _bunCliShims, _entry, _entrypoint, __ep -ErrorAction SilentlyContinue
+Remove-Variable _bunGlobalModules, _bunCliShims, _entry, _entrypoint, __ep, _gitBashPath, _candidate -ErrorAction SilentlyContinue
 
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
