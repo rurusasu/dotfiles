@@ -107,6 +107,16 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
 }
 
 # bun global CLI shims (bun's .exe wrapper fails to pass env vars on Windows)
+# Claude Code uses `where.exe git` to find bash.exe via ../../bin/bash.exe.
+# Git-for-Windows user install puts git.exe in mingw64\bin which breaks that
+# heuristic, so we ensure Git\cmd (which contains git.exe -> Git\cmd\git.exe)
+# is in PATH before mingw64\bin.
+$_gitCmd = Join-Path $env:LOCALAPPDATA "Programs\Git\cmd"
+if ((Test-Path $_gitCmd) -and ($env:PATH -notlike "*$_gitCmd*")) {
+    $env:PATH = "$_gitCmd;$env:PATH"
+}
+Remove-Variable _gitCmd -ErrorAction SilentlyContinue
+
 $_bunGlobalModules = Join-Path $HOME ".bun\install\global\node_modules"
 $_bunCliShims = @{
     claude = "@anthropic-ai\claude-code\cli.js"
