@@ -23,6 +23,6 @@ README.md
 {{ if ne .chezmoi.os "windows" }}
 .chezmoiscripts/*_windows.ps1
 {{ end }}
-{{ if not (lookPath "op") -}}
+{{ if not .openclaw_enabled -}}
 .openclaw/
 {{ end -}}

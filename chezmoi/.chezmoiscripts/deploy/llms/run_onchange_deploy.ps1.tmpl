@@ -47,5 +47,23 @@ Deploy-File "$ChezmoiSource\dot_cursor\rules" "$HomeDir\.cursor\rules"
 Deploy-Template "$ChezmoiSource\dot_cursor\cli-config.json.tmpl" "$HomeDir\.cursor\cli-config.json"
 Deploy-Template "$ChezmoiSource\dot_gemini\settings.json.tmpl" "$HomeDir\.gemini\settings.json"
 
+# Set CLAUDE_CODE_GIT_BASH_PATH as persistent user env var
+# Claude Code checks this before loading settings.json, so process-level vars are too late
+if (-not [System.Environment]::GetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "User")) {
+  $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+  if ($gitCmd) {
+    $execPath = & git --exec-path 2>$null
+    if ($execPath) {
+      $gitRoot = Split-Path (Split-Path (Split-Path $execPath))
+      $bashPath = Join-Path $gitRoot "bin\bash.exe"
+      if (Test-Path $bashPath) {
+        [System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", $bashPath, "User")
+        $env:CLAUDE_CODE_GIT_BASH_PATH = $bashPath
+        Write-Host "Set CLAUDE_CODE_GIT_BASH_PATH = $bashPath (User scope)"
+      }
+    }
+  }
+}
+
 Write-Host "LLM tool configurations deployed."
 {{ end -}}
