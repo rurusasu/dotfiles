@@ -6,6 +6,8 @@ $ErrorActionPreference = "Stop"
 
 $ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
 $HomeDir = $env:USERPROFILE
+# OneDrive フォルダリダイレクト対応: Documents が $HOME\Documents とは限らない
+$MyDocuments = [Environment]::GetFolderPath('MyDocuments')
 
 function Deploy-File {
   param(
@@ -30,8 +32,9 @@ Deploy-File "$ChezmoiSource\shells\zshrc" "$HomeDir\.zshrc"
 Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
 
 # PowerShell profiles (PowerShell 7 and Windows PowerShell 5.1)
-Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
-Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$HomeDir\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+# $MyDocuments は OneDrive リダイレクト時に正しいパスを返す
+Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocuments\PowerShell\Microsoft.PowerShell_profile.ps1"
+Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocuments\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
 
 # 1Password-managed secret loaders (Git Bash / WSL bash / PowerShell)
 Deploy-File "$ChezmoiSource\secret\env.sh"  "$HomeDir\.config\shell\secret.sh"
