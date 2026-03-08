@@ -419,20 +419,22 @@ Docker socket アクセスは Gateway に任意のコンテナ操作権限を与
 - sandbox コンテナにシークレットは注入されない
 - Gateway 自体は `read_only: true` + `cap_drop: ALL`
 
-### sandbox イメージの自動ビルド
+### sandbox イメージのビルド
 
-`entrypoint.sh` がコンテナ起動時に sandbox イメージの存在を確認し、不足していれば
-OpenClaw リポジトリの Dockerfile を取得して自動ビルドする。
+sandbox イメージは **ホスト側で BuildKit を使ってビルドする**（コンテナ内の legacy builder
+では ARG 評価の問題があるため）。`entrypoint.sh` は起動時にイメージの存在を確認し、
+不足していれば警告を出す。
 
 - `openclaw-sandbox:bookworm-slim` — ベースイメージ（Debian slim + 基本ツール）
-- `openclaw-sandbox-common:bookworm-slim` — 実行イメージ（+ Python 3, Node.js, npm, git 等）
-
-初回起動時のみビルドが走る（数分かかる）。以降はイメージがキャッシュされるため即起動。
-イメージを再ビルドしたい場合は削除してからコンテナを再起動する:
+- `openclaw-sandbox-common:bookworm-slim` — 実行イメージ（+ pnpm, bun, Python 3, Node.js, npm, git 等）
 
 ```bash
+# 初回 or イメージ再ビルド時
+task sandbox:build
+
+# イメージ削除 → 再ビルド
 docker rmi openclaw-sandbox-common:bookworm-slim openclaw-sandbox:bookworm-slim
-docker compose restart openclaw
+task sandbox:build
 ```
 
 ### 動作確認コマンド

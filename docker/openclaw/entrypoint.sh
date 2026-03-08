@@ -67,33 +67,20 @@ fi
 # Claude Code expects $HOME/.claude.json at the HOME root.
 # In this container, that file is bind-mounted from the host via docker-compose.
 
-# --- Build sandbox images if missing (requires Docker socket mount) ---
-_sandbox_repo="https://raw.githubusercontent.com/openclaw/openclaw/main"
+# --- Verify sandbox images exist (build must be done on host via `task sandbox:build`) ---
 _sandbox_base="openclaw-sandbox:bookworm-slim"
 _sandbox_common="openclaw-sandbox-common:bookworm-slim"
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  if ! docker image inspect "$_sandbox_base" >/dev/null 2>&1; then
-    echo "[entrypoint] building sandbox base image: $_sandbox_base"
-    mkdir -p /tmp/sandbox-build
-    curl -fsSL "$_sandbox_repo/Dockerfile.sandbox" -o /tmp/sandbox-build/Dockerfile
-    docker build -t "$_sandbox_base" /tmp/sandbox-build/
+  _missing=""
+  docker image inspect "$_sandbox_base" >/dev/null 2>&1 || _missing="$_sandbox_base"
+  docker image inspect "$_sandbox_common" >/dev/null 2>&1 || _missing="$_missing $_sandbox_common"
+  if [ -n "$_missing" ]; then
+    echo "[entrypoint] WARNING: sandbox image(s) missing:$_missing" >&2
+    echo "[entrypoint] Run 'task sandbox:build' on the host to build them." >&2
+  else
+    echo "[entrypoint] sandbox images: $_sandbox_base ok, $_sandbox_common ok"
   fi
-  if ! docker image inspect "$_sandbox_common" >/dev/null 2>&1; then
-    echo "[entrypoint] building sandbox common image: $_sandbox_common"
-    mkdir -p /tmp/sandbox-build
-    curl -fsSL "$_sandbox_repo/Dockerfile.sandbox-common" -o /tmp/sandbox-build/Dockerfile.sandbox-common
-    docker build -t "$_sandbox_common" \
-      --build-arg BASE_IMAGE="$_sandbox_base" \
-      --build-arg "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip" \
-      --build-arg INSTALL_PNPM=0 \
-      --build-arg INSTALL_BUN=0 \
-      --build-arg INSTALL_BREW=0 \
-      --build-arg FINAL_USER=sandbox \
-      -f /tmp/sandbox-build/Dockerfile.sandbox-common \
-      /tmp/sandbox-build/
-  fi
-  echo "[entrypoint] sandbox images: $_sandbox_base ok, $_sandbox_common ok"
 else
   echo "[entrypoint] docker CLI not available or socket not mounted; skipping sandbox image check"
 fi

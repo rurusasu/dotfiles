@@ -6,6 +6,11 @@ services:
     image: local/openclaw:dev
     container_name: openclaw
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
@@ -42,7 +47,8 @@ services:
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
       # Log level: info (default), debug, trace
-      OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
+      # trace includes sandbox exec I/O — safe here because sandbox has no secrets
+      OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-trace}
       # Enable built-in sandbox (tool execution in sibling Docker containers)
       OPENCLAW_SANDBOX: "1"
 

@@ -120,14 +120,65 @@ tasks:
       - docker exec openclaw openclaw sandbox explain
 
   sandbox:build:
-    desc: Build sandbox Docker images
+    desc: Build sandbox Docker images from OpenClaw upstream Dockerfiles
+    vars:
+      SBX_BASE: openclaw-sandbox:bookworm-slim
+      SBX_COMMON: openclaw-sandbox-common:bookworm-slim
+      SBX_REPO: https://raw.githubusercontent.com/openclaw/openclaw/main
+      BUILD_DIR: '{{.TEMP | default "/tmp"}}/openclaw-sandbox-build'
     cmds:
-      - docker exec openclaw openclaw sandbox build
+      - cmd: mkdir -p "{{.BUILD_DIR}}"
+      - cmd: curl -fsSL "{{.SBX_REPO}}/Dockerfile.sandbox" -o "{{.BUILD_DIR}}/Dockerfile.sandbox"
+      - cmd: curl -fsSL "{{.SBX_REPO}}/Dockerfile.sandbox-common" -o "{{.BUILD_DIR}}/Dockerfile.sandbox-common"
+      - cmd: >-
+          docker build -t "{{.SBX_BASE}}"
+          -f "{{.BUILD_DIR}}/Dockerfile.sandbox"
+          "{{.BUILD_DIR}}/"
+      - cmd: >-
+          docker build -t "{{.SBX_COMMON}}"
+          --build-arg BASE_IMAGE={{.SBX_BASE}}
+          --build-arg "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip"
+          --build-arg INSTALL_PNPM=1
+          --build-arg INSTALL_BUN=1
+          --build-arg INSTALL_BREW=0
+          --build-arg FINAL_USER=root
+          -f "{{.BUILD_DIR}}/Dockerfile.sandbox-common"
+          "{{.BUILD_DIR}}/"
 
   sandbox:ps:
     desc: List running sandbox containers
     cmds:
       - docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim"
+
+  sandbox:logs:
+    desc: Tail logs from all running sandbox containers
+    vars:
+      SBX_IMAGE: openclaw-sandbox-common:bookworm-slim
+    cmds:
+      - bash -c 'for id in $(docker ps -q --filter "ancestor={{.SBX_IMAGE}}"); do name=$(docker inspect --format "{{ "{{" }}.Name{{ "}}" }}" "$id"); docker logs -f --tail 50 "$id" 2>&1 | sed "s|^|[$name] |" & done; wait'
+
+  sandbox:logs:all:
+    desc: Dump full logs from all sandbox containers (including stopped)
+    vars:
+      SBX_IMAGE: openclaw-sandbox-common:bookworm-slim
+    cmds:
+      - bash -c 'for id in $(docker ps -aq --filter "ancestor={{.SBX_IMAGE}}"); do name=$(docker inspect --format "{{ "{{" }}.Name{{ "}}" }}" "$id"); status=$(docker inspect --format "{{ "{{" }}.State.Status{{ "}}" }}" "$id"); echo "=== $name ($status) ==="; docker logs "$id" 2>&1; echo; done'
+
+  sandbox:exec:
+    desc: Open a shell in a running sandbox container (use -- <container-name-substring>)
+    cmds:
+      - bash -c 'match=$(docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format "{{ "{{" }}.Names{{ "}}" }}" | grep -m1 "{{.CLI_ARGS}}"); if [ -z "$match" ]; then echo "No sandbox container matching \"{{.CLI_ARGS}}\""; docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format "  {{ "{{" }}.Names{{ "}}" }}"; exit 1; fi; echo "Attaching to $match"; docker exec -it "$match" /bin/bash'
+
+  sandbox:history:
+    desc: Show recent exec commands in sandbox containers (via docker events)
+    cmds:
+      - docker events --filter "type=container" --filter "image=openclaw-sandbox-common:bookworm-slim" --filter "event=exec_start" --since 1h
+
+  sandbox:prune:
+    desc: Remove all sandbox containers (orphans included)
+    prompt: This will kill and remove all sandbox containers. Continue?
+    cmds:
+      - bash -c 'ids=$(docker ps -aq --filter "ancestor=openclaw-sandbox-common:bookworm-slim"); if [ -z "$ids" ]; then echo "No sandbox containers found"; else docker rm -f $ids; fi'
 
   # ===========================================
   # Windows Setup
