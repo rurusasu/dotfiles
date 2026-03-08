@@ -5,7 +5,7 @@
 .DESCRIPTION
     - chezmoi で生成された設定ファイルの確認
     - .env ファイルの自動生成（存在しない場合）
-    - 1Password から GitHub PAT を取得して Docker secret 一時ファイルを生成
+    - 1Password からシークレットを取得して ~/.openclaw/secrets/ に永続化
     - docker compose で OpenClaw コンテナをビルド・起動
     - コンテナの起動確認
 
@@ -66,9 +66,6 @@ class OpenClawHandler : SetupHandlerBase {
         OpenClaw コンテナを起動する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
-        $originalXaiApiKey = $env:XAI_API_KEY
-        $secretFile = ""
-
         try {
             # .env ファイルの確認・生成
             $this.EnsureEnvFile($ctx)
@@ -84,11 +81,18 @@ class OpenClawHandler : SetupHandlerBase {
                 }
             }
 
-            # GitHub token を Docker secret 用一時ファイルに書き出す
-            $secretFile = $this.WriteGitHubTokenSecret()
-
-            # xAI API key を環境変数で注入（Grok x_search 用）
-            $env:XAI_API_KEY = $this.ResolveOpSecret("op://Personal/xAI-Grok-Twitter/console/apikey", "XAI_API_KEY")
+            # 1Password からシークレットを取得し、永続ファイルに書き出す
+            # ファイルは削除しない（docker compose が file: で参照し続けるため）
+            $this.WriteSecretFile(
+                "op://Personal/GitHubUsedOpenClawPAT/credential",
+                "github_token",
+                $true
+            )
+            $this.WriteSecretFile(
+                "op://Personal/xAI-Grok-Twitter/console/apikey",
+                "xai_api_key",
+                $false
+            )
 
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
@@ -123,17 +127,6 @@ class OpenClawHandler : SetupHandlerBase {
             return $this.CreateSuccessResult("OpenClaw コンテナを起動しました")
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
-        } finally {
-            # Docker secret 用一時ファイルを確実に削除（ディスクにトークンを残さない）
-            if ($secretFile -and (Test-Path $secretFile)) {
-                Remove-Item -Path $secretFile -Force -ErrorAction SilentlyContinue
-            }
-            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
-            if ($null -ne $originalXaiApiKey) {
-                $env:XAI_API_KEY = $originalXaiApiKey
-            } else {
-                Remove-Item -Path Env:\XAI_API_KEY -ErrorAction SilentlyContinue
-            }
         }
     }
 
@@ -157,6 +150,7 @@ class OpenClawHandler : SetupHandlerBase {
         $geminiCredentialsDir = ((Join-Path $homeDir ".gemini") -replace '\\', '/')
         $claudeCredentialsDir = ((Join-Path $homeDir ".claude") -replace '\\', '/')
         $claudeConfigJson = ((Join-Path $homeDir ".claude.json") -replace '\\', '/')
+        $secretDir = ($this.GetSecretDir() -replace '\\', '/')
         $envContent = @"
 OPENCLAW_PORT=18789
 OPENCLAW_UID=1000
@@ -166,6 +160,8 @@ TZ=Asia/Tokyo
 GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
 CLAUDE_CREDENTIALS_DIR=$claudeCredentialsDir
 CLAUDE_CONFIG_JSON=$claudeConfigJson
+OPENCLAW_GITHUB_TOKEN_FILE=$secretDir/github_token
+OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
@@ -173,71 +169,54 @@ CLAUDE_CONFIG_JSON=$claudeConfigJson
 
     <#
     .SYNOPSIS
-        GitHub token を Docker secret 用一時ファイルに書き出す
+        1Password からシークレットを取得してファイルに永続化する
     .DESCRIPTION
-        1Password から PAT を取得し、一時ファイルに書き込んで OPENCLAW_GITHUB_TOKEN_FILE 環境変数をセットする。
-        docker compose が secrets.github_token.file としてこのパスを参照し、コンテナ内 /run/secrets/github_token に注入する。
-        一時ファイルは finally ブロックで確実に削除される。
+        op read でシークレットを取得し、~/.openclaw/secrets/<name> に書き出す。
+        ファイルは削除しない（docker compose の file: secret が参照し続けるため）。
+        .env にファイルパスを OPENCLAW_<NAME>_FILE として追記する。
     #>
-    hidden [string] WriteGitHubTokenSecret() {
-        $githubToken = ""
-        $opCmd = Get-ExternalCommand -Name "op"
-        if ($opCmd) {
-            try {
-                $result = & op read "op://Personal/GitHubUsedOpenClawPAT/credential" 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    $githubToken = ($result | Out-String).Trim()
-                } else {
-                    $this.Log("op read に失敗しました。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
-                }
-            } catch {
-                $this.Log("op read で例外が発生しました。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
-            }
-        } else {
-            $this.Log("op (1Password CLI) が見つかりません。OPENCLAW_GITHUB_TOKEN を確認します", "Yellow")
-        }
-
-        if ([string]::IsNullOrWhiteSpace($githubToken)) {
-            $githubToken = [string]$env:OPENCLAW_GITHUB_TOKEN
-        }
-        if ([string]::IsNullOrWhiteSpace($githubToken)) {
-            throw "GitHub token が未取得です。1Password にサインインしているか確認してください (op read `"op://Personal/GitHubUsedOpenClawPAT/credential`")"
-        }
-
-        # 一時ファイルに書き出し（docker compose secret 用）
-        $secretDir = Join-Path (Split-Path $this.GetConfigFilePath()) "secrets"
-        if (-not (Test-Path $secretDir)) {
-            New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
-        }
-        $secretFile = Join-Path $secretDir "github_token"
-        Set-ContentNoNewline -Path $secretFile -Value $githubToken
-        $env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretFile -replace '\\', '/')
-        $this.Log("GitHub token を Docker secret ファイルに書き出しました", "Gray")
-
-        return $secretFile
-    }
-
-    <#
-    .SYNOPSIS
-        1Password からシークレットを取得する（汎用）
-    .DESCRIPTION
-        op read でシークレットを取得する。失敗時は空文字を返し警告を出す。
-    #>
-    hidden [string] ResolveOpSecret([string]$opRef, [string]$label) {
+    hidden [void] WriteSecretFile([string]$opRef, [string]$name, [bool]$required) {
+        $value = ""
         $opCmd = Get-ExternalCommand -Name "op"
         if ($opCmd) {
             try {
                 $result = & op read $opRef 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                    return ($result | Out-String).Trim()
+                    $value = ($result | Out-String).Trim()
                 } else {
-                    $this.LogWarning("$label の取得に失敗しました (op read)")
+                    $this.LogWarning("$name の取得に失敗しました (op read)")
                 }
             } catch {
-                $this.LogWarning("$label の取得で例外が発生しました")
+                $this.LogWarning("$name の取得で例外が発生しました")
             }
         }
-        return ""
+
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $envName = "OPENCLAW_$($name.ToUpper())"
+            $value = [string][Environment]::GetEnvironmentVariable($envName)
+        }
+        if ([string]::IsNullOrWhiteSpace($value) -and $required) {
+            throw "$name が未取得です。1Password にサインインしているか確認してください (op read `"$opRef`")"
+        }
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            return
+        }
+
+        $secretDir = $this.GetSecretDir()
+        if (-not (Test-Path $secretDir)) {
+            New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+        }
+        $secretFile = Join-Path $secretDir $name
+        Set-ContentNoNewline -Path $secretFile -Value $value
+        $this.Log("$name を永続シークレットファイルに書き出しました", "Gray")
+    }
+
+    <#
+    .SYNOPSIS
+        シークレットディレクトリのパスを返す
+    #>
+    hidden [string] GetSecretDir() {
+        return Join-Path (Split-Path $this.GetConfigFilePath()) "secrets"
     }
 
     <#

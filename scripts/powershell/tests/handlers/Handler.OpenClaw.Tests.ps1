@@ -114,12 +114,16 @@ Describe 'OpenClawHandler' {
             Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
             # op CLI は存在しない前提（1Password 未インストール環境を模倣）
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
-            # WriteGitHubTokenSecret が token 未取得で throw しないよう環境変数を設定
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            # WriteSecretFile が token 未取得で throw しないよう環境変数を設定
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_success"
+            $env:OPENCLAW_XAI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should start container successfully when config exists' {
@@ -238,11 +242,15 @@ Describe 'OpenClawHandler' {
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_failure"
+            $env:OPENCLAW_XAI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should return failure when docker compose up fails' {
@@ -324,11 +332,15 @@ Describe 'OpenClawHandler' {
                 return $true
             }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_compose_retry"
+            $env:OPENCLAW_XAI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should succeed on second compose attempt when first fails' {
@@ -396,6 +408,15 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             # op CLI は存在しない前提
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_env_content"
+            $env:OPENCLAW_XAI_API_KEY = ""
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should include OPENCLAW_CONFIG_FILE with forward slashes in .env' {
@@ -455,7 +476,7 @@ Describe 'OpenClawHandler' {
             $script:envContent | Should -Match "TZ=Asia/Tokyo"
         }
 
-        It 'should not include GITHUB_TOKEN in .env' {
+        It 'should include OPENCLAW_GITHUB_TOKEN_FILE in .env but not raw token value' {
             $script:envContent = ""
             Mock Write-Host { }
             Mock Start-SleepSafe { }
@@ -480,7 +501,8 @@ Describe 'OpenClawHandler' {
 
             $handler.Apply($ctx)
 
-            $script:envContent | Should -Not -Match "GITHUB_TOKEN="
+            $script:envContent | Should -Match "OPENCLAW_GITHUB_TOKEN_FILE=.+/github_token"
+            $script:envContent | Should -Not -Match "GITHUB_TOKEN=ghp_"
         }
 
         It 'should include GEMINI_CREDENTIALS_DIR in .env with forward slashes' {
@@ -517,11 +539,15 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
             Mock Set-ContentNoNewline { }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_wait"
+            $env:OPENCLAW_XAI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should succeed on second attempt' {

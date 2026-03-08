@@ -17,9 +17,9 @@
 `scripts/powershell/install.user.ps1` (Handler.OpenClaw.ps1) が以下を一括実行する。
 
 1. `chezmoi apply` で設定を展開
-2. `.env` を生成（`OPENCLAW_CONFIG_FILE` など。PAT は含めない）
-3. 1Password から GitHub PAT を取得し、`~/.openclaw/secrets/github_token` を更新
-4. `docker compose up -d --build` で起動
+2. `.env` を生成（`OPENCLAW_CONFIG_FILE` など。シークレットは含めない）
+3. 1Password からシークレットを取得し、環境変数にセット（`OPENCLAW_GITHUB_TOKEN`, `OPENCLAW_XAI_API_KEY`）
+4. `docker compose up -d --build` で起動（Docker Compose が環境変数から environment-based secret を生成し、コンテナ内 `/run/secrets/` に注入）
 
 通常の起動・復旧はこのコマンドを使う。
 
@@ -83,21 +83,43 @@ docker restart openclaw
 - bind mount -> `/home/bun/.claude.json:ro`（Claude Code 設定ファイル）
 - bind mount -> `/home/bun/.gemini`（Gemini CLI OAuth 認証情報）
 
-## GitHub 認証の実装ルール
+## シークレット注入の実装ルール
 
-- 認証方式は Fine-grained PAT のみ（Classic PAT 不使用）
-- PAT は 1Password に保存し、Docker secret としてコンテナに注入する（環境変数に直接渡さない）
-- Handler が 1Password から PAT を取得 → 一時ファイル `~/.openclaw/secrets/github_token` に書き出し → `OPENCLAW_GITHUB_TOKEN_FILE` 環境変数をセット → `docker compose up` → finally で一時ファイル削除
-- `docker-compose.yml` の `secrets.github_token.file` が `OPENCLAW_GITHUB_TOKEN_FILE` を参照し、コンテナ内 `/run/secrets/github_token`（tmpfs）に注入
-- `entrypoint.sh` が `/run/secrets/github_token` を読み取り、`GITHUB_TOKEN` と `GH_TOKEN` をプロセス環境へ export
+すべての 1Password 由来シークレットは **Docker Compose file-based secrets** で注入する。
+シークレットファイルは `~/.openclaw/secrets/` に永続化し、`.env` からパスを参照する。
+
+### なぜ `file:` ベースか（`environment:` ベースを使わない理由）
+
+Docker Compose の `environment:` ベース secrets は、コンテナ作成後・起動前に `docker cp` でコンテナ内に書き込む実装。
+`read_only: true` 環境ではルートファイルシステムへの書き込みが拒否されるため **構造的に動作しない**。
+`file:` ベースは bind mount で処理されるため `read_only: true` でも動作する。
+これは Docker Engine API の制限であり、修正の見込みなし。
+
+参照:
+
+- https://github.com/docker/compose/issues/12031 (configs + read_only の根本原因説明)
+- https://github.com/docker/compose/issues/12303 (secrets + read_only の feature request、12031 の duplicate としてクローズ)
+
+### 設計方針
+
+- **禁止**: `docker-compose.yml` の `environment` セクションにシークレットを直接書かないこと（`docker inspect` で丸見えになる）
+- **禁止**: シークレットファイルを `finally` ブロックで削除しないこと（コンテナ再作成時に secret が空になる）
+- **禁止**: `secrets.*.environment` を使わないこと（`read_only: true` と非互換）
+- Handler が 1Password からシークレットを取得 → `~/.openclaw/secrets/` にファイルとして永続化 → `.env` にファイルパスを記録 → `docker compose up` が `file:` 経由で `/run/secrets/` に注入
+- `entrypoint.sh` が `/run/secrets/*` を読み取り、アプリケーション用の環境変数（`GITHUB_TOKEN`, `XAI_API_KEY` 等）にセットする
 - コンテナ内 git 認証は `GIT_ASKPASS=/usr/local/bin/git-credential-askpass.sh` が `GITHUB_TOKEN` 環境変数を返す
-- **禁止**: `docker-compose.yml` の `environment` セクションに `GITHUB_TOKEN` を直接書かないこと（`docker inspect` で丸見えになる）
 
-1Password 参照先:
+### シークレット一覧
 
-```text
-op://Personal/GitHubUsedOpenClawPAT/credential
-```
+| 1Password 参照先                                 | ホスト側ファイル                   | `.env` 変数名                | コンテナ内                                   | 必須 |
+| ------------------------------------------------ | ---------------------------------- | ---------------------------- | -------------------------------------------- | ---- |
+| `op://Personal/GitHubUsedOpenClawPAT/credential` | `~/.openclaw/secrets/github_token` | `OPENCLAW_GITHUB_TOKEN_FILE` | `/run/secrets/github_token` → `GITHUB_TOKEN` | Yes  |
+| `op://Personal/xAI-Grok-Twitter/console/apikey`  | `~/.openclaw/secrets/xai_api_key`  | `OPENCLAW_XAI_API_KEY_FILE`  | `/run/secrets/xai_api_key` → `XAI_API_KEY`   | No   |
+
+### GitHub PAT の要件
+
+- Fine-grained PAT のみ（Classic PAT 不使用）
+- 対象リポジトリへの `Contents: Read and write` 権限が必要（push するため）
 
 `.env` が既にある場合、Handler の `EnsureEnvFile` は再生成をスキップする。再生成したい場合:
 
@@ -106,16 +128,16 @@ Remove-Item docker\openclaw\.env
 pwsh -File scripts\powershell\install.user.ps1
 ```
 
-手動起動（Docker secret 経由でトークン注入）:
+手動起動（file-based secret でトークン注入）:
 
 ```powershell
 $secretDir = "$env:USERPROFILE\.openclaw\secrets"
 New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
 op read "op://Personal/GitHubUsedOpenClawPAT/credential" | Set-Content -NoNewline "$secretDir\github_token"
+op read "op://Personal/xAI-Grok-Twitter/console/apikey" | Set-Content -NoNewline "$secretDir\xai_api_key"
 $env:OPENCLAW_GITHUB_TOKEN_FILE = ($secretDir -replace '\\', '/') + '/github_token'
+$env:OPENCLAW_XAI_API_KEY_FILE = ($secretDir -replace '\\', '/') + '/xai_api_key'
 docker compose -f docker/openclaw/docker-compose.yml up -d --build
-Remove-Item "$secretDir\github_token" -Force
-Remove-Item Env:\OPENCLAW_GITHUB_TOKEN_FILE -ErrorAction SilentlyContinue
 ```
 
 ## 手動操作コマンド（Handler 非経由時）

@@ -253,7 +253,7 @@ else
   assert "askpass handles lowercase 'password' prompt" \
     '[ "$got_lower" = "ghp_test123" ]'
 
-  # --- Test: Docker secret file ---
+  # --- Test: Docker secret (environment-based) ---
   assert "/run/secrets/github_token exists" \
     '[ -f /run/secrets/github_token ]'
 
@@ -266,6 +266,20 @@ else
   _secret_token="$(cat /run/secrets/github_token 2>/dev/null || true)"
   assert "GITHUB_TOKEN matches Docker secret content" \
     '[ "${GITHUB_TOKEN:-}" = "$_secret_token" ] || [ -n "$_secret_token" ]'
+
+  # --- Test: xAI API key secret ---
+  if [ -f /run/secrets/xai_api_key ]; then
+    assert "/run/secrets/xai_api_key exists" 'true'
+    _xai_token="$(cat /run/secrets/xai_api_key 2>/dev/null || true)"
+    if [ -n "$_xai_token" ]; then
+      assert "XAI_API_KEY is set from secret" \
+        '[ -n "${XAI_API_KEY:-}" ] || [ -n "$_xai_token" ]'
+    else
+      printf "  SKIP: xai_api_key secret is empty (optional)\n"
+    fi
+  else
+    printf "  SKIP: /run/secrets/xai_api_key not found (optional)\n"
+  fi
 
   # --- Test: GIT_ASKPASS environment variable ---
   assert "GIT_ASKPASS is set in container environment" \

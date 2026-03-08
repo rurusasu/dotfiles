@@ -33,6 +33,9 @@ chezmoi/private_dot_claude/settings.local.json
 coverage.xml
 scripts/powershell/coverage.xml
 
+# Docker env files
+docker/**/.env
+
 # WSL config (machine-specific)
 windows/.wslconfig
 result

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# --- GitHub token: read from Docker secret and export ---
+# --- GitHub token: read from Docker secret (file-based) and export ---
 _secret_file="/run/secrets/github_token"
 if [ -f "$_secret_file" ]; then
   GITHUB_TOKEN="$(cat "$_secret_file")"
@@ -10,7 +10,7 @@ if [ -f "$_secret_file" ]; then
   export GH_TOKEN
 else
   echo "[FATAL] Docker secret not found: $_secret_file" >&2
-  echo "[FATAL] Ensure OPENCLAW_GITHUB_TOKEN_FILE is set and 'docker compose up' includes the secret." >&2
+  echo "[FATAL] Run the Handler (install.user.ps1) to write secrets to ~/.openclaw/secrets/ and update .env." >&2
   exit 1
 fi
 if [ -z "$GITHUB_TOKEN" ]; then
@@ -18,6 +18,22 @@ if [ -z "$GITHUB_TOKEN" ]; then
   echo "[FATAL] Re-run the Handler or verify 1Password PAT." >&2
   exit 1
 fi
+
+# --- xAI API key: read from Docker secret (file-based, optional) and export ---
+_xai_secret_file="/run/secrets/xai_api_key"
+if [ -f "$_xai_secret_file" ]; then
+  _xai_key="$(cat "$_xai_secret_file")"
+  if [ -n "$_xai_key" ]; then
+    XAI_API_KEY="$_xai_key"
+    export XAI_API_KEY
+  fi
+fi
+# --- Log secret injection status ---
+_gh_len=$(printf "%s" "$GITHUB_TOKEN" | wc -c)
+_xai_status="not set"
+if [ -n "${XAI_API_KEY:-}" ]; then _xai_status="ok ($(printf "%s" "$XAI_API_KEY" | wc -c) chars)"; fi
+echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_status}"
+
 # Validate GIT_ASKPASS script exists and is executable
 if [ ! -x "${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" ]; then
   echo "[FATAL] GIT_ASKPASS script not found or not executable: ${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" >&2

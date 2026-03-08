@@ -8,8 +8,8 @@ ARG GEMINI_CLI_VERSION=0.31.0
 WORKDIR /app
 
 COPY entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
-COPY gemini.settings.json /app/gemini.settings.json
-COPY acpx.config.json /app/acpx.config.json
+COPY config/gemini.settings.json /app/gemini.settings.json
+COPY config/acpx.config.json /app/acpx.config.json
 COPY tests/ /app/tests/
 
 RUN apt-get update \

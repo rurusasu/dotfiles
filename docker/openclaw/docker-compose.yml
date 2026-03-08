@@ -27,8 +27,7 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/bun
-      # xAI Grok API key for X/Twitter search (news skill)
-      XAI_API_KEY: ${XAI_API_KEY:-}
+      # xAI Grok API key: injected via Docker secret (see secrets section below)
       # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Runtime bun installs (skills) go to the writable data volume
@@ -66,6 +65,7 @@ services:
 
     secrets:
       - github_token
+      - xai_api_key
 
 volumes:
   openclaw-data:
@@ -83,4 +83,6 @@ volumes:
 
 secrets:
   github_token:
-    file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE in .env or host env}
+    file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE in .env}
+  xai_api_key:
+    file: ${OPENCLAW_XAI_API_KEY_FILE:?Set OPENCLAW_XAI_API_KEY_FILE in .env}
