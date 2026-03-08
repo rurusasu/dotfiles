@@ -38,7 +38,7 @@ echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_st
 _config_tmpl="/app/openclaw.json.tmpl"
 _config_out="/home/bun/.openclaw/openclaw.json"
 if [ -f "$_config_tmpl" ]; then
-  sed "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" "$_config_tmpl" >"$_config_out"
+  sed -e "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" -e "s|@@XAI_API_KEY@@|${XAI_API_KEY:-}|g" "$_config_tmpl" >"$_config_out"
   echo "[entrypoint] config rendered to $_config_out"
 fi
 
