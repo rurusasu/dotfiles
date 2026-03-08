@@ -58,8 +58,8 @@ services:
       - openclaw-home:/home/bun/.openclaw
       # ACPX writes runtime state under ~/.acpx; mount it explicitly because /home/bun is read-only.
       - openclaw-acpx:/home/bun/.acpx
-      # Docker-specific config overlaid as read-only on top of the home volume
-      - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/home/bun/.openclaw/openclaw.json:ro
+      # Docker-specific config template — entrypoint renders secrets into the writable home volume
+      - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/app/openclaw.json.tmpl:ro
       - openclaw-data:/app/data
       # Gemini CLI OAuth credentials (oauth_creds.json + google_accounts.json).
       # Authenticate once on the host with `gemini`, then this mount keeps tokens refreshable.

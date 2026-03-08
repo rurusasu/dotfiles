@@ -34,6 +34,14 @@ _xai_status="not set"
 if [ -n "${XAI_API_KEY:-}" ]; then _xai_status="ok ($(printf "%s" "$XAI_API_KEY" | wc -c) chars)"; fi
 echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_status}"
 
+# --- Render config template: replace @@PLACEHOLDERS@@ with runtime secrets ---
+_config_tmpl="/app/openclaw.json.tmpl"
+_config_out="/home/bun/.openclaw/openclaw.json"
+if [ -f "$_config_tmpl" ]; then
+  sed "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" "$_config_tmpl" >"$_config_out"
+  echo "[entrypoint] config rendered to $_config_out"
+fi
+
 # Validate GIT_ASKPASS script exists and is executable
 if [ ! -x "${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" ]; then
   echo "[FATAL] GIT_ASKPASS script not found or not executable: ${GIT_ASKPASS:-/usr/local/bin/git-credential-askpass.sh}" >&2
