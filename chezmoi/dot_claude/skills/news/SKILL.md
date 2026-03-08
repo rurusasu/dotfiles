@@ -138,6 +138,14 @@ curl -s https://api.x.ai/v1/responses \
 2. handle を `allowed_x_handles` に指定し、status ID をクエリに含めて `x_search` で取得
 3. 例: `"Find the tweet by @{handle} with status ID {id}"`
 
+**論文リンク抽出時の優先順位（重要）:**
+
+- ユーザーが「論文本文が欲しい」と言った場合、**要約は作らず本文取得を最優先**する
+- 論文ソースは **arXiv（arxiv.org）を第一優先**とする
+- X投稿内にPDF直リンクや他サイトリンクしかない場合でも、タイトル・著者・キーワードからまず arXiv 原本（`/abs/`）を検索する
+- arXiv 原本が見つかったら `https://arxiv.org/pdf/{id}.pdf` も取得対象に含める
+- arXiv 原本が見つからない場合のみ OpenReview / 出版社ページ / PDF直リンクへフォールバックする
+
 **コスト:** $2.50〜$5 / 1,000 ツール呼び出し。1日1回10件程度なら無料クレジット内。
 
 #### 方法B（フォールバック）: web_search + アグリゲーター

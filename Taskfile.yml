@@ -30,13 +30,24 @@ tasks:
       - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"
 
   # ===========================================
+  # Sync (chezmoi re-add)
+  # ===========================================
+  skills:sync:
+    desc: Sync openclaw skills from deployed ~/.claude/skills/ back to chezmoi source
+    cmds:
+      - chezmoi re-add ~/.claude/skills/
+    status:
+      - chezmoi diff ~/.claude/skills/ | grep -qv .
+
+  # ===========================================
   # Git Operations (via NixOS)
   # ===========================================
   commit:
-    desc: Format, lint, and commit (via WSL)
+    desc: Sync skills, format, lint, and commit (via WSL)
     vars:
       MSG: '{{.CLI_ARGS | default "update"}}'
     cmds:
+      - task: skills:sync
       - task: fmt
       - task: lint
       - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && git commit -m '{{.MSG}}'"
