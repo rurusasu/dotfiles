@@ -251,6 +251,17 @@ openclaw (Gateway) ── Docker socket ──▶ Docker Engine
 - セッション終了時に自動削除
 - `docker ps` で確認可能
 
+### パスマッピング
+
+Gateway コンテナの `/app/data/workspace/` が sandbox 内では `/workspace/` にマウントされる。
+sandbox 内のツール（`shell_exec`, `file_write` 等）では **`/workspace/` パスを使用すること**。
+`/app/data/` パスは sandbox 内に存在しない。
+
+| Gateway | sandbox | 用途 |
+|---|---|---|
+| `/app/data/workspace/` | `/workspace/` | ワークスペース |
+| `/app/data/workspace/lifelog/` | `/workspace/lifelog/` | lifelog |
+
 ### 設定
 
 `openclaw.docker.json` の `agents.defaults.sandbox`:

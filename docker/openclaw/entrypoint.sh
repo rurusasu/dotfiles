@@ -154,6 +154,7 @@ if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
 - To run Python code, use `shell_exec("python3 script.py")` directly — no HTTP API needed.
 - To run Node.js code, use `shell_exec("node script.js")` directly.
 - To install packages, the sandbox network must be temporarily enabled or packages must be pre-installed in the image.
+- **Path mapping**: `/app/data/workspace/` on the host container corresponds to `/workspace/` inside the sandbox. Always use `/workspace/` paths in sandbox tools (`shell_exec`, `file_write`, etc.). For example, write lifelog files to `/workspace/lifelog/`, NOT `/app/data/lifelog/`.
 
 ## END SANDBOX RULES
 EOF
