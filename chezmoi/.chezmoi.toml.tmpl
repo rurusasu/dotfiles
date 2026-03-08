@@ -7,6 +7,6 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
     args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
 
 [data.git]
-    name = {{ promptStringOnce . "git.name" "Git user name" | quote }}
-    email = {{ promptStringOnce . "git.email" "Git email address" | quote }}
-    signingkey = {{ promptStringOnce . "git.signingkey" "SSH signing key path (default: ~/.ssh/signing_key.pub)" | default "~/.ssh/signing_key.pub" | quote }}
+    name = {{ .git.name | quote }}
+    email = {{ .git.email | quote }}
+    signingkey = {{ .git.signingkey | default "~/.ssh/signing_key.pub" | quote }}

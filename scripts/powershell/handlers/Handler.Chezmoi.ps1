@@ -85,18 +85,19 @@ class ChezmoiHandler : SetupHandlerBase {
             New-DirectorySafe -Path $runtimeRoot
             New-DirectorySafe -Path $cachePath
 
-            # config file テンプレートが変更された場合、--no-tty 環境では apply が停止するため
-            # init を先に実行して config を再生成する
+            # config file テンプレートが変更された場合、init で config を再生成する
+            # git データは .chezmoidata/personal.yaml から供給されるためプロンプトは発生しない
+            $this.Log("chezmoi init を実行中...")
             Invoke-Chezmoi `
                 -ExePath $this.ChezmoiExePath `
                 -MergeStderr `
                 "--persistent-state" $persistentStatePath `
                 "--cache" $cachePath `
-                "--no-tty" "init" "--source" $sourcePath
+                "--no-tty" "init" "--source" $sourcePath "-v"
 
-            # -v: 処理中のファイルを逐次出力してハング状態に見えないようにする
             # --force: コンフリクト時のプロンプトをスキップして上書き（非対話実行に必須）
             # -MergeStderr: run_after_ スクリプトの stdout/stderr を合流してコンソール表示
+            $this.Log("chezmoi apply を実行中...")
             Invoke-Chezmoi `
                 -ExePath $this.ChezmoiExePath `
                 -MergeStderr `
@@ -241,6 +242,12 @@ class ChezmoiHandler : SetupHandlerBase {
         $result = Invoke-OpAccountList -OpExe $opExe
         if ($result.ExitCode -eq 0 -and $result.Output) {
             $this.Log("1Password CLI: サインイン済み", "Gray")
+            return
+        }
+
+        # 非対話環境では Read-Host がハングするためスキップ
+        if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+            $this.LogWarning("1Password CLI が未認証ですが、非対話環境のためセットアップ案内をスキップします")
             return
         }
 

@@ -2,6 +2,14 @@
 # Telegram ユーザー ID は dmPolicy: allowlist で使用する
 telegramUserId: "8621756912"
 
+# Git ユーザー情報（.chezmoi.toml.tmpl の promptStringOnce で参照される）
+# ここにデフォルト値を設定しておくことで、chezmoi init が非対話で完了する
+# PC ごとに変更したい場合は chezmoi edit-config で [data.git] を上書き
+git:
+  name: "Kohei Miki"
+  email: "rurusasu@gmail.com"
+  signingkey: "~/.ssh/signing_key.pub"
+
 # オプショナルサービスの有効化フラグ
 # install.cmd 初回実行時の対話確認で自動的に chezmoi.toml [data] に永続化される
 # 手動変更は不要（変更したい場合は chezmoi edit-config で openclaw_enabled を編集）

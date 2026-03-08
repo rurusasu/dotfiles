@@ -132,16 +132,19 @@ class BunHandler : SetupHandlerBase {
     <#
     .SYNOPSIS
         指定パッケージが bun でグローバルインストール済みか確認する
+    .DESCRIPTION
+        ~/.bun/install/global/node_modules/ 配下にパッケージディレクトリが
+        存在するかで判定する。bun pm ls -g は不安定なため使用しない。
+        スコープ付きパッケージ (@org/pkg) にも対応。
     #>
     hidden [bool] IsPackageInstalled([string]$pkgName) {
-        try {
-            $output = Invoke-Bun -Arguments @("pm", "ls", "-g") 2>&1
-            if ($LASTEXITCODE -ne 0) { return $false }
-            return ($output | Where-Object { $_ -match [regex]::Escape($pkgName) }).Count -gt 0
-        }
-        catch {
-            return $false
-        }
+        $globalModules = Join-Path $env:USERPROFILE ".bun\install\global\node_modules"
+        if (-not (Test-Path $globalModules)) { return $false }
+
+        # パッケージディレクトリの存在チェック
+        # スコープ付き (@anthropic-ai/claude-code) もそのまま node_modules 配下に存在する
+        $pkgPath = Join-Path $globalModules $pkgName
+        return (Test-Path -LiteralPath $pkgPath -PathType Container)
     }
 
     <#

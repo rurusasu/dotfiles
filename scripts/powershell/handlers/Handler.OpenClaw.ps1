@@ -61,8 +61,13 @@ class OpenClawHandler : SetupHandlerBase {
         # ── Layer 1: 対話確認（永続フラグ） ──
         # chezmoi.toml の openclaw_enabled で過去の選択を確認する。
         # 未設定（$null）なら対話的に確認し、結果を chezmoi.toml に永続化する。
+        # 非対話環境（バックグラウンド実行等）では Read-Host がハングするためスキップする。
         $enabled = $this.ReadOpenClawEnabled()
         if ($null -eq $enabled) {
+            if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+                $this.Log("非対話環境のためスキップします (対話モードで install.cmd を実行してください)", "Yellow")
+                return $false
+            }
             # 初回: ユーザーに確認
             Write-Host ""
             Write-Host "  OpenClaw (Telegram AI ゲートウェイ) を検出しました。" -ForegroundColor Yellow

@@ -14,9 +14,6 @@
           "PackageIdentifier": "Anthropic.Claude"
         },
         {
-          "PackageIdentifier": "Anthropic.ClaudeCode"
-        },
-        {
           "PackageIdentifier": "Anysphere.Cursor"
         },
         {
