@@ -71,10 +71,8 @@
           "memorySwap": "{{ .openclaw.sandbox.memorySwap }}",
           "cpus": {{ .openclaw.sandbox.cpus }},
           "env": {
-            "DOCKER_HOST": "tcp://host.docker.internal:2375",
             "GITHUB_TOKEN": "@@GITHUB_TOKEN@@",
             "GH_TOKEN": "@@GITHUB_TOKEN@@",
-            "XAI_API_KEY": "@@XAI_API_KEY@@",
             "PLAYWRIGHT_BROWSERS_PATH": "/root/.cache/ms-playwright",
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "url.https://x-access-token:@@GITHUB_TOKEN@@@github.com/.insteadOf",
