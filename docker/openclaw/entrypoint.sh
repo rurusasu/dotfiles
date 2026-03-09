@@ -93,15 +93,7 @@ else
   echo "[entrypoint] docker CLI not available or socket not mounted; skipping sandbox image check"
 fi
 
-# Proxy Docker socket as TCP so sandbox containers can use Docker CLI.
-# Unix sockets don't propagate through Docker Desktop named volumes,
-# so we expose the socket as TCP on a loopback port instead.
 workspace_dir="/app/data/workspace"
-_docker_proxy_port=2375
-if [ -S /var/run/docker.sock ]; then
-  socat TCP-LISTEN:$_docker_proxy_port,bind=0.0.0.0,fork,reuseaddr UNIX-CONNECT:/var/run/docker.sock &
-  echo "[entrypoint] docker socket proxied to tcp://0.0.0.0:$_docker_proxy_port"
-fi
 
 # Mirror /app/data/lifelog into workspace so sandbox can read it at /workspace/lifelog.
 _lifelog_src="/app/data/lifelog"
