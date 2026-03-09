@@ -184,6 +184,11 @@ tasks:
     cmds:
       - bash -c 'ids=$(docker ps -aq --filter "ancestor=openclaw-sandbox-common:bookworm-slim"); if [ -z "$ids" ]; then echo "No sandbox containers found"; else docker rm -f $ids; fi'
 
+  sandbox:gc:
+    desc: Remove exited sandbox containers (safety net for orphans)
+    cmds:
+      - bash -c 'ids=$(docker ps -aq --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --filter "status=exited"); if [ -z "$ids" ]; then echo "No exited sandbox containers"; else echo "Removing $ids"; docker rm $ids; fi'
+
   # ===========================================
   # Windows Setup
   # ===========================================

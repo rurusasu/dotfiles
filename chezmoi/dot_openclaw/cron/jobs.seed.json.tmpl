@@ -52,6 +52,29 @@
         "to": "{{ $telegramUserId }}",
         "channel": "telegram"
       }
+    },
+    {
+      "id": "f1a2b3c4-sandbox-gc-0001-000000000001",
+      "agentId": "main",
+      "sessionKey": "agent:main:telegram:direct:{{ $telegramUserId }}",
+      "name": "sandbox-gc",
+      "enabled": true,
+      "createdAtMs": 1741510800000,
+      "updatedAtMs": 1741510800000,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *",
+        "tz": "Asia/Tokyo"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run sandbox garbage collection: remove all exited sandbox containers.\n\nExecute: `docker ps -aq --filter ancestor=openclaw-sandbox-common:bookworm-slim --filter status=exited | xargs -r docker rm`\n\nDo NOT send a message unless containers were actually removed. If removed, send: \"🧹 sandbox-gc: removed N exited container(s).\""
+      },
+      "delivery": {
+        "mode": "silent"
+      }
     }
   ]
 }
