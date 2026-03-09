@@ -7,13 +7,13 @@ OpenClaw のモデル設定に関するドキュメント。
 
 ## 現在の設定値
 
-| キー | 値 | エイリアス | 用途 |
-|------|-----|-----------|------|
-| `primary` | `openai-codex/gpt-5.4` | gpt54 | メインのコード生成・推論 |
-| `fallback` | `openai-codex/gpt-5.3-codex` | codex | プライマリ障害時の代替 |
-| `image` | `openai-codex/gpt-5.4` | - | 画像認識・解析 |
-| `pdf` | `anthropic/claude-sonnet-4-6` | sonnet | PDF 読み取り・解析 |
-| `subagent` | `openai-codex/gpt-5.4` | - | サブエージェント用 |
+| キー       | 値                            | エイリアス | 用途                     |
+| ---------- | ----------------------------- | ---------- | ------------------------ |
+| `primary`  | `openai-codex/gpt-5.4`        | gpt54      | メインのコード生成・推論 |
+| `fallback` | `openai-codex/gpt-5.3-codex`  | codex      | プライマリ障害時の代替   |
+| `image`    | `openai-codex/gpt-5.4`        | -          | 画像認識・解析           |
+| `pdf`      | `anthropic/claude-sonnet-4-6` | sonnet     | PDF 読み取り・解析       |
+| `subagent` | `openai-codex/gpt-5.4`        | -          | サブエージェント用       |
 
 エイリアスはコマンドやログに表示される表示名。
 
@@ -27,14 +27,14 @@ provider/model
 
 ## 対応プロバイダ (ビルトイン)
 
-| プロバイダ | 説明 |
-|-----------|------|
-| `openai` | OpenAI API (GPT 系) |
+| プロバイダ     | 説明                                |
+| -------------- | ----------------------------------- |
+| `openai`       | OpenAI API (GPT 系)                 |
 | `openai-codex` | OpenAI Codex API (コーディング特化) |
-| `anthropic` | Anthropic API (Claude 系) |
-| `google` | Google AI (Gemini 系) |
-| `mistral` | Mistral AI |
-| `groq` | Groq (高速推論) |
+| `anthropic`    | Anthropic API (Claude 系)           |
+| `google`       | Google AI (Gemini 系)               |
+| `mistral`      | Mistral AI                          |
+| `groq`         | Groq (高速推論)                     |
 
 ## 設定の根拠
 

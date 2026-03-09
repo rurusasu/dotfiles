@@ -257,10 +257,10 @@ Gateway コンテナの `/app/data/workspace/` が sandbox 内では `/workspace
 sandbox 内のツール（`shell_exec`, `file_write` 等）では **`/workspace/` パスを使用すること**。
 `/app/data/` パスは sandbox 内に存在しない。
 
-| Gateway | sandbox | 用途 |
-|---|---|---|
-| `/app/data/workspace/` | `/workspace/` | ワークスペース |
-| `/app/data/workspace/lifelog/` | `/workspace/lifelog/` | lifelog |
+| Gateway                        | sandbox               | 用途           |
+| ------------------------------ | --------------------- | -------------- |
+| `/app/data/workspace/`         | `/workspace/`         | ワークスペース |
+| `/app/data/workspace/lifelog/` | `/workspace/lifelog/` | lifelog        |
 
 ### 設定
 
