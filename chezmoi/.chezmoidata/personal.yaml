@@ -9,4 +9,4 @@ git:
 # オプショナルサービスの有効化フラグ
 # install.cmd 初回実行時の対話確認で自動的に chezmoi.toml [data] に永続化される
 # 手動変更は不要（変更したい場合は chezmoi edit-config で openclaw_enabled を編集）
-openclaw_enabled: false
+openclaw_enabled: true
