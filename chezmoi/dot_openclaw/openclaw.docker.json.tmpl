@@ -216,7 +216,7 @@
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "loopback",
+    "bind": "lan",
     "reload": {
       "mode": "hybrid"
     },
@@ -233,7 +233,11 @@
       "resetOnExit": false
     },
     "controlUi": {
-      "enabled": true
+      "enabled": true,
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
     }
   },
   "skills": {
