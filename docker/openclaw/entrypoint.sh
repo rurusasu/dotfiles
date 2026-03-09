@@ -139,14 +139,16 @@ if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
 ## BEGIN SANDBOX RULES
 
 - Tool execution (`shell_exec`, `file_write`, etc.) runs inside an isolated Docker sandbox container.
-- The sandbox image (`openclaw-sandbox-common:bookworm-slim`) includes: Python 3, Node.js, git, curl, jq.
-- Sandbox containers have no network access (`network: "none"`) and no secrets.
+- The sandbox image (`openclaw-sandbox-common:bookworm-slim`) includes: Python 3, Node.js, git, curl, jq, gh CLI, Playwright CLI, Chromium.
+- Sandbox containers use `network: "bridge"` (external access available for pnpm install, Playwright E2E, etc.).
+- Sandbox containers have NO access to the Docker daemon (no `DOCKER_HOST`). Docker build/run must be done on the gateway side.
 - Each session gets its own sandbox container (`scope: "session"`), destroyed when the session ends.
 - The workspace is mounted read-write at `/workspace` inside the sandbox.
-- To run Python code, use `shell_exec("python3 script.py")` directly — no HTTP API needed.
+- To run Python code, use `shell_exec("python3 script.py")` directly.
 - To run Node.js code, use `shell_exec("node script.js")` directly.
-- To install packages, the sandbox network must be temporarily enabled or packages must be pre-installed in the image.
-- **Path mapping**: `/app/data/workspace/` on the host container corresponds to `/workspace/` inside the sandbox. Always use `/workspace/` paths in sandbox tools (`shell_exec`, `file_write`, etc.). For example, write lifelog files to `/workspace/lifelog/`, NOT `/app/data/lifelog/`.
+- Playwright CLI (`@playwright/cli`) is available for E2E testing. `@playwright/test` is not installed.
+- SYS_ADMIN is not required — Playwright launches Chromium with `--no-sandbox` by default.
+- **Path mapping**: `/app/data/workspace/` on the gateway corresponds to `/workspace/` inside the sandbox. Always use `/workspace/` paths in sandbox tools.
 
 ## END SANDBOX RULES
 EOF
