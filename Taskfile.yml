@@ -199,20 +199,20 @@ tasks:
         msg: "Gateway container 'openclaw' is not running. Start it first."
     cmds:
       - docker exec openclaw mkdir -p
-        /app/data/cache/uv
-        /app/data/cache/pnpm
-        /app/data/cache/bun
-        /app/data/cache/npm
+        /app/data/workspace/.cache/uv
+        /app/data/workspace/.cache/pnpm
+        /app/data/workspace/.cache/bun
+        /app/data/workspace/.cache/npm
 
   sandbox:cache-clean:
     desc: Remove all sandbox package caches
     prompt: This will delete all cached packages. Continue?
     cmds:
       - docker exec openclaw rm -rf
-        /app/data/cache/uv
-        /app/data/cache/pnpm
-        /app/data/cache/bun
-        /app/data/cache/npm
+        /app/data/workspace/.cache/uv
+        /app/data/workspace/.cache/pnpm
+        /app/data/workspace/.cache/bun
+        /app/data/workspace/.cache/npm
       - task: sandbox:cache-init
 
   # ===========================================
