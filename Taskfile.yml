@@ -120,9 +120,10 @@ tasks:
       - docker exec openclaw openclaw sandbox explain
 
   sandbox:build:
-    desc: Build sandbox Docker images from OpenClaw upstream Dockerfiles
+    desc: Build sandbox Docker images from OpenClaw upstream + custom layer
     vars:
       SBX_BASE: openclaw-sandbox:bookworm-slim
+      SBX_COMMON_BASE: openclaw-sandbox-common:bookworm-slim-base
       SBX_COMMON: openclaw-sandbox-common:bookworm-slim
       SBX_REPO: https://raw.githubusercontent.com/openclaw/openclaw/main
       BUILD_DIR: '{{.TEMP | default "/tmp"}}/openclaw-sandbox-build'
@@ -135,7 +136,7 @@ tasks:
           -f "{{.BUILD_DIR}}/Dockerfile.sandbox"
           "{{.BUILD_DIR}}/"
       - cmd: >-
-          docker build -t "{{.SBX_COMMON}}-base"
+          docker build -t "{{.SBX_COMMON_BASE}}"
           --build-arg BASE_IMAGE={{.SBX_BASE}}
           --build-arg "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip"
           --build-arg INSTALL_PNPM=1
@@ -144,10 +145,12 @@ tasks:
           --build-arg FINAL_USER=root
           -f "{{.BUILD_DIR}}/Dockerfile.sandbox-common"
           "{{.BUILD_DIR}}/"
-      # Layer Docker CLI + gh CLI on top for autonomous container management & GitHub ops
+      # Custom layer: uv, gh CLI, Playwright, git config
       - cmd: >-
-          printf 'FROM docker:27-cli AS docker-cli\nFROM {{.SBX_COMMON}}-base\nCOPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker\nRUN apt-get update && apt-get install -y --no-install-recommends gpg && install -m 0755 -d /etc/apt/keyrings && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list && apt-get update && apt-get install -y --no-install-recommends gh && rm -rf /var/lib/apt/lists/*\nRUN npm install -g @playwright/cli && npx -y playwright install --with-deps chromium\nRUN git config --global user.name "openclaw" && git config --global user.email "openclaw@sandbox" && git config --global safe.directory "*"\n'
-          | docker build -t "{{.SBX_COMMON}}" -f - .
+          docker build -t "{{.SBX_COMMON}}"
+          --build-arg SBX_COMMON_BASE={{.SBX_COMMON_BASE}}
+          -f docker/openclaw/Dockerfile.sandbox-custom
+          docker/openclaw/
 
   sandbox:ps:
     desc: List running sandbox containers
@@ -188,6 +191,29 @@ tasks:
     desc: Remove exited sandbox containers (safety net for orphans)
     cmds:
       - bash -c 'ids=$(docker ps -aq --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --filter "status=exited"); if [ -z "$ids" ]; then echo "No exited sandbox containers"; else echo "Removing $ids"; docker rm $ids; fi'
+
+  sandbox:cache-init:
+    desc: Initialize sandbox cache directories on gateway
+    preconditions:
+      - sh: docker ps -q -f name=^openclaw$ | grep -q .
+        msg: "Gateway container 'openclaw' is not running. Start it first."
+    cmds:
+      - docker exec openclaw mkdir -p
+        /app/data/cache/uv
+        /app/data/cache/pnpm
+        /app/data/cache/bun
+        /app/data/cache/npm
+
+  sandbox:cache-clean:
+    desc: Remove all sandbox package caches
+    prompt: This will delete all cached packages. Continue?
+    cmds:
+      - docker exec openclaw rm -rf
+        /app/data/cache/uv
+        /app/data/cache/pnpm
+        /app/data/cache/bun
+        /app/data/cache/npm
+      - task: sandbox:cache-init
 
   # ===========================================
   # Windows Setup
