@@ -212,14 +212,17 @@ Describe 'BunHandler' {
                 }
             }
             Mock Invoke-Bun {
-                param($Arguments)
-                if ($Arguments -contains "ls") {
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
                 $global:LASTEXITCODE = 0
                 return "installed"
             }
+            # IsPackageInstalled / EnsureGeminiCommandShim が実環境のディレクトリを参照しないようにする
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($Path -and $Path -like '*\.bun\install\*') -or
+                ($LiteralPath -and $LiteralPath -like '*\.bun\install\*')
+            }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return "" }
+            Mock Set-UserEnvironmentPath { }
         }
 
         It 'should return success result' {

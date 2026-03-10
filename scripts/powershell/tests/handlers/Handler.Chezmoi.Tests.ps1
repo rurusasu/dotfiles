@@ -659,6 +659,7 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
             $script:instructionsShown = $false
             Mock Write-Host {
                 param($Object)
@@ -683,6 +684,7 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
             $script:signedInLogged = $false
             Mock Write-Host {
                 param($Object)
@@ -701,6 +703,7 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
             $script:failureWarningLogged = $false
             Mock Write-Host {
                 param($Object)

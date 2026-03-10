@@ -64,7 +64,7 @@ class OpenClawHandler : SetupHandlerBase {
         # 非対話環境（バックグラウンド実行等）では Read-Host がハングするためスキップする。
         $enabled = $this.ReadOpenClawEnabled()
         if ($null -eq $enabled) {
-            if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+            if (-not (Test-InteractiveEnvironment)) {
                 $this.Log("非対話環境のためスキップします (対話モードで install.cmd を実行してください)", "Yellow")
                 return $false
             }

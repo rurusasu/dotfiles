@@ -14,6 +14,13 @@ openclaw:
     pdf: "anthropic/claude-sonnet-4-6"
     subagent: "openai-codex/gpt-5.4"
 
+  # --- Agent-specific model overrides ---
+  agentModels:
+    claude:
+      primary: "anthropic/claude-sonnet-4-6"
+    gemini:
+      primary: "google/gemini-2.5-flash-lite"
+
   # --- Agent defaults ---
   agent:
     maxConcurrent: 4

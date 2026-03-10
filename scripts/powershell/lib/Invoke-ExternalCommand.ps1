@@ -617,3 +617,14 @@ function Set-UserEnvironmentPath {
     [System.Environment]::SetEnvironmentVariable("PATH", $Path, "User")
 }
 
+<#
+.SYNOPSIS
+    対話環境かどうかを判定する
+.DESCRIPTION
+    Pester でモック可能にするため [Environment]::UserInteractive / [Console]::IsInputRedirected を
+    直接呼ばずにラップする。非対話環境（CI、リダイレクト入力）では $false を返す。
+#>
+function Test-InteractiveEnvironment {
+    return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+}
+

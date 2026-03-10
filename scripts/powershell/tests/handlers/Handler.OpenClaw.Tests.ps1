@@ -59,6 +59,10 @@ Describe 'OpenClawHandler' {
         It 'should return true when docker is available and docker-compose.yml exists' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $true }
+            Mock Write-Host { }
+            # ReadOpenClawEnabled が $true を返すよう chezmoi.toml を模倣
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
 
             $result = $handler.CanApply($ctx)
 
@@ -151,33 +155,19 @@ Describe 'OpenClawHandler' {
             $result.Message | Should -Match "起動しました"
         }
 
-        It 'should run chezmoi apply when config file is missing' {
-            $script:chezmoiCalled = $false
+        It 'should return failure when config file is missing' {
             Mock Test-PathExist {
                 param($Path)
                 # .env は存在、config は存在しない
-                if ($Path -match "docker-compose.yml") { return $true }
+                if ($Path -match "docker-compose\.yml") { return $true }
                 if ($Path -match "\.env$") { return $true }
                 return $false
             }
-            Mock Invoke-Chezmoi {
-                $script:chezmoiCalled = $true
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-Docker {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "up") {
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                if ($argStr -match "ps") { return "openclaw" }
-                return ""
-            }
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
-            $script:chezmoiCalled | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "openclaw\.docker\.json"
         }
 
         It 'should create .env file when it does not exist' {
@@ -270,21 +260,15 @@ Describe 'OpenClawHandler' {
             $result.Message | Should -Match "docker compose up に失敗"
         }
 
-        It 'should return failure when chezmoi apply fails' {
-            Mock Test-PathExist {
-                param($Path)
-                if ($Path -match "docker-compose.yml") { return $true }
-                if ($Path -match "\.env$") { return $true }
-                return $false
-            }
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 1
-            }
+        It 'should return failure when required secret is missing' {
+            Mock Test-PathExist { return $true }
+            # op CLI なし、かつ必須の GITHUB_TOKEN も空 → WriteSecretFile が throw
+            $env:OPENCLAW_GITHUB_TOKEN = ""
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match "chezmoi apply に失敗"
+            $result.Message | Should -Match "github_token"
         }
 
         It 'should return failure when container startup times out' {

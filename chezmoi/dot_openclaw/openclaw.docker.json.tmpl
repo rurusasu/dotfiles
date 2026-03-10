@@ -84,7 +84,37 @@
           "maxAgeDays": 7
         }
       }
-    }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true
+      },
+      {
+        "id": "claude",
+        "model": "{{ .openclaw.agentModels.claude.primary }}",
+        "workspace": "/home/bun/.openclaw/workspace-claude",
+        "runtime": {
+          "type": "acp",
+          "acp": {
+            "agent": "claude",
+            "backend": "acpx"
+          }
+        }
+      },
+      {
+        "id": "gemini",
+        "model": "{{ .openclaw.agentModels.gemini.primary }}",
+        "workspace": "/home/bun/.openclaw/workspace-gemini",
+        "runtime": {
+          "type": "acp",
+          "acp": {
+            "agent": "gemini",
+            "backend": "acpx"
+          }
+        }
+      }
+    ]
   },
   "tools": {
     "profile": "coding",

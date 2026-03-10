@@ -246,7 +246,7 @@ class ChezmoiHandler : SetupHandlerBase {
         }
 
         # 非対話環境では Read-Host がハングするためスキップ
-        if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+        if (-not (Test-InteractiveEnvironment)) {
             $this.LogWarning("1Password CLI が未認証ですが、非対話環境のためセットアップ案内をスキップします")
             return
         }
