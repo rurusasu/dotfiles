@@ -86,8 +86,8 @@
           }
         },
         "prune": {
-          "idleHours": 24,
-          "maxAgeDays": 7
+          "idleHours": {{ .openclaw.prune.idleHours }},
+          "maxAgeDays": {{ .openclaw.prune.maxAgeDays }}
         }
       }
     },
