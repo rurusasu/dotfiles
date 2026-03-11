@@ -1,5 +1,9 @@
 # PowerShell profile managed by chezmoi
 
+# Rebuild PATH from registry to ensure User PATH is available in elevated sessions.
+# Windows Terminal with "elevate: true" may not inherit User-scope PATH entries.
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
+
 # Aliases
 if (Get-Command rg -ErrorAction SilentlyContinue) {
     Set-Alias -Name grep -Value rg -Scope Global
