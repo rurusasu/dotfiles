@@ -107,6 +107,9 @@
           "PackageIdentifier": "SlackTechnologies.Slack"
         },
         {
+          "PackageIdentifier": "Rustlang.Rustup"
+        },
+        {
           "PackageIdentifier": "ZedIndustries.Zed"
         }
       ],

@@ -208,6 +208,9 @@ class WingetHandler : SetupHandlerBase {
                 }
             }
 
+            # Rustup インストール後: ~/.cargo/bin を PATH に追加
+            $this.EnsureCargoPath()
+
             $summary = "インストール済み: $installed, スキップ: $skipped, 失敗: $failed"
             $this.Log($summary, "Green")
 
@@ -277,6 +280,35 @@ class WingetHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    <#
+    .SYNOPSIS
+        ~/.cargo/bin を User PATH に追加する
+    .DESCRIPTION
+        Rustup (Rustlang.Rustup) インストール後、cargo 等のコマンドを
+        ターミナルから直接実行できるようにするため、~/.cargo/bin を
+        永続的に User 環境変数 PATH に追加する。
+    #>
+    hidden [void] EnsureCargoPath() {
+        $cargoBinPath = Join-Path $env:USERPROFILE ".cargo\bin"
+
+        if (-not (Test-Path $cargoBinPath)) {
+            return
+        }
+
+        $userPath = Get-UserEnvironmentPath
+        $pathItems = if ($userPath) { $userPath -split ";" } else { @() }
+
+        if ($pathItems -contains $cargoBinPath) {
+            $this.Log(".cargo\bin は既に PATH に含まれています", "Gray")
+            return
+        }
+
+        $newPath = ($pathItems + @($cargoBinPath) | Where-Object { $_ }) -join ";"
+        Set-UserEnvironmentPath -Path $newPath
+        $env:PATH = "$env:PATH;$cargoBinPath"
+        $this.Log(".cargo\bin を USER PATH に追加しました: $cargoBinPath", "Green")
     }
 
     <#

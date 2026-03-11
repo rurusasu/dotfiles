@@ -33,6 +33,9 @@ let
     python3
     go
 
+    # Rust toolchain
+    rustup
+
     # Build tools
     gnumake
     cmake
