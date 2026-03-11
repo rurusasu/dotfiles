@@ -404,6 +404,99 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'EnsureCargoPath - .cargo\bin does not exist' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-WingetInstall {
+                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            }
+            Mock Set-UserEnvironmentPath { }
+        }
+
+        It 'should not modify PATH' {
+            $ctx.Options["WingetMode"] = "import"
+            $handler.Apply($ctx)
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+    }
+
+    Context 'EnsureCargoPath - .cargo\bin exists but not in PATH' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-WingetInstall {
+                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;C:\other" }
+            Mock Set-UserEnvironmentPath { }
+        }
+
+        It 'should add .cargo\bin to User PATH' {
+            $ctx.Options["WingetMode"] = "import"
+            $handler.Apply($ctx)
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter {
+                $Path -like "*\.cargo\bin*"
+            }
+        }
+    }
+
+    Context 'EnsureCargoPath - .cargo\bin already in PATH' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-WingetInstall {
+                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            }
+            $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$cargoBin" }.GetNewClosure()
+            Mock Set-UserEnvironmentPath { }
+        }
+
+        It 'should not modify PATH' {
+            $ctx.Options["WingetMode"] = "import"
+            $handler.Apply($ctx)
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+    }
+
     Context 'Apply - exception thrown' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
