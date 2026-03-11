@@ -105,6 +105,11 @@ class ChezmoiHandler : SetupHandlerBase {
                 "--cache" $cachePath `
                 "--no-tty" "apply" "--source" $sourcePath "--force" "-v"
 
+            # 管理者昇格セッション対応: Windows Terminal の elevate: true により
+            # 別ユーザーのプロファイルが読まれるケースがある。
+            # admin フェーズ (管理者権限) なので他ユーザーの Documents にもデプロイ可能。
+            $this.DeployProfileToOtherUsers($sourcePath)
+
             if ($LASTEXITCODE -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
                 $this.Log("Windows Terminal を起動中なら、再起動すると確実に反映されます", "Gray")
@@ -309,5 +314,36 @@ class ChezmoiHandler : SetupHandlerBase {
         }
 
         return $null
+    }
+
+    <#
+    .SYNOPSIS
+        他ユーザーの Documents にも PowerShell プロファイルをデプロイする
+    .DESCRIPTION
+        Windows Terminal の elevate: true 設定により、管理者昇格セッションでは
+        別ユーザーのプロファイルが読み込まれることがある。
+        管理者権限で実行されるこのハンドラーから、他ユーザーの Documents にも
+        プロファイルをコピーすることで昇格セッションでもプロファイルが有効になる。
+    #>
+    hidden [void] DeployProfileToOtherUsers([string]$sourcePath) {
+        $profileSource = Join-Path $sourcePath "shells\Microsoft.PowerShell_profile.ps1"
+        if (-not (Test-Path -LiteralPath $profileSource -PathType Leaf)) { return }
+
+        Get-ChildItem "C:\Users" -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notin @("Public", "Default", "Default User", "All Users", $env:USERNAME) } |
+            ForEach-Object {
+                $docs = Join-Path $_.FullName "Documents"
+                if (Test-Path $docs) {
+                    foreach ($subDir in @("PowerShell", "WindowsPowerShell")) {
+                        $dest = Join-Path $docs "$subDir\Microsoft.PowerShell_profile.ps1"
+                        $destDir = Split-Path -Parent $dest
+                        if (-not (Test-Path $destDir)) {
+                            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                        }
+                        Copy-Item -LiteralPath $profileSource -Destination $dest -Force
+                        $this.Log("プロファイルをデプロイ: $dest", "Green")
+                    }
+                }
+            }
     }
 }

@@ -38,6 +38,11 @@ Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
 Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocuments\PowerShell\Microsoft.PowerShell_profile.ps1"
 Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocuments\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
 
+# 管理者昇格セッション対応: Windows Terminal の elevate: true により
+# 別ユーザーのプロファイルが読まれるケースがある。
+# 管理者権限が必要なため、install.cmd の admin フェーズ (Handler.Chezmoi) で
+# 他ユーザーの Documents にもデプロイされる。ここでは現ユーザーのみ。
+
 # 1Password-managed secret loaders (Git Bash / WSL bash / PowerShell)
 Deploy-File "$ChezmoiSource\secret\env.sh"  "$HomeDir\.config\shell\secret.sh"
 Deploy-File "$ChezmoiSource\secret\env.ps1" "$HomeDir\.config\shell\secret.ps1"
