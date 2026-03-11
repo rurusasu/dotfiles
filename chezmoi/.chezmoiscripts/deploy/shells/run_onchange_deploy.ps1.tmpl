@@ -7,7 +7,9 @@ $ErrorActionPreference = "Stop"
 $ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
 $HomeDir = $env:USERPROFILE
 # OneDrive フォルダリダイレクト対応: Documents が $HOME\Documents とは限らない
+# 管理者昇格コンテキストでは GetFolderPath が空を返すことがあるためフォールバック
 $MyDocuments = [Environment]::GetFolderPath('MyDocuments')
+if (-not $MyDocuments) { $MyDocuments = Join-Path $HomeDir "Documents" }
 
 function Deploy-File {
   param(
