@@ -1,6 +1,16 @@
 ﻿#Requires -Module Pester
 
 Describe 'Integration Verification - Windows Environment' {
+    Context 'GUI Apps Installation' {
+        It "should have <_> installed" -ForEach @(
+            'Obsidian.Obsidian'
+        ) {
+            $result = & winget list --id $_ --accept-source-agreements 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "winget パッケージ '$_' がインストールされていません" }
+            Write-Host "確認完了: '$_'"
+        }
+    }
+
     Context 'Dev Tools Installation' {
         It "should have <_> installed" -ForEach @(
             'antigravity'
@@ -25,6 +35,7 @@ Describe 'Integration Verification - Windows Environment' {
             'zed'
             'task'
             'op'
+            'obsidian'
         ) {
             $output = & wsl -d NixOS -- bash -lc "command -v $_"
             if ($LASTEXITCODE -ne 0) { throw "NixOS: '$_' が見つかりません" }

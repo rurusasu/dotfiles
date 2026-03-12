@@ -169,6 +169,8 @@ Describe 'ChezmoiHandler' {
             # op が見つからない想定（EnsureOnePasswordAvailable は警告のみ出して続行）
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
+            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            Mock Test-Path { return $false }
         }
 
         It 'should succeed when chezmoi apply succeeds' {
@@ -247,6 +249,8 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
+            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            Mock Test-Path { return $false }
         }
 
         It 'should invoke chezmoi init to regenerate config before apply' {
@@ -363,6 +367,8 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
+            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            Mock Test-Path { return $false }
         }
 
         It 'should fail when chezmoi apply fails with non-zero exit code' {
@@ -612,6 +618,8 @@ Describe 'ChezmoiHandler' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
             }
+            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            Mock Test-Path { return $false }
         }
 
         It 'should log warning and continue when op is not found' {
@@ -733,6 +741,8 @@ Describe 'ChezmoiHandler' {
             Mock Invoke-OpAccountList {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
+            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            Mock Test-Path { return $false }
         }
 
         It 'should find op from PATH' {

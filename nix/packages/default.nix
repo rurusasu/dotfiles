@@ -63,9 +63,10 @@ let
     starship
   ];
 
-  # Editors (CLI)
+  # Editors and knowledge tools
   editors = with pkgs; [
     neovim
+    obsidian
     # vscode  # Usually installed via OS package manager
   ];
 

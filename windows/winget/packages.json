@@ -110,6 +110,9 @@
           "PackageIdentifier": "Rustlang.Rustup"
         },
         {
+          "PackageIdentifier": "Obsidian.Obsidian"
+        },
+        {
           "PackageIdentifier": "ZedIndustries.Zed"
         }
       ],
