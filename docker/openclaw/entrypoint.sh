@@ -141,6 +141,7 @@ if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
 - Tool execution (`shell_exec`, `file_write`, etc.) runs inside an isolated Docker sandbox container.
 - The sandbox image (`openclaw-sandbox-common:bookworm-slim`) includes: Python 3, Node.js, git, curl, jq, gh CLI, Playwright CLI, Chromium.
 - Sandbox containers use `network: "bridge"` (external access available for pnpm install, Playwright E2E, etc.).
+- `$XAI_API_KEY` is available in the sandbox environment for Grok API calls (`x_search`). Use `curl` with this key for X/Twitter content retrieval.
 - Sandbox containers have NO access to the Docker daemon (no `DOCKER_HOST`). Docker build/run must be done on the gateway side.
 - Each session gets its own sandbox container (`scope: "session"`), destroyed when the session ends.
 - The workspace is mounted read-write at `/workspace` inside the sandbox.

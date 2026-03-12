@@ -65,6 +65,39 @@ INNER_EOF
   fi
 }
 
+run_sandbox_injection() {
+  _workspace_dir="$1"
+  _workspace_agents="$_workspace_dir/AGENTS.md"
+
+  if [ ! -f "$_workspace_agents" ]; then
+    mkdir -p "$_workspace_dir"
+    cat >"$_workspace_agents" <<'INNER_EOF'
+# AGENTS.md - Workspace
+INNER_EOF
+  fi
+  if ! grep -q "BEGIN SANDBOX RULES" "$_workspace_agents"; then
+    cat >>"$_workspace_agents" <<'INNER_EOF'
+
+## BEGIN SANDBOX RULES
+
+- Tool execution (`shell_exec`, `file_write`, etc.) runs inside an isolated Docker sandbox container.
+- The sandbox image (`openclaw-sandbox-common:bookworm-slim`) includes: Python 3, Node.js, git, curl, jq, gh CLI, Playwright CLI, Chromium.
+- Sandbox containers use `network: "bridge"` (external access available for pnpm install, Playwright E2E, etc.).
+- `$XAI_API_KEY` is available in the sandbox environment for Grok API calls (`x_search`). Use `curl` with this key for X/Twitter content retrieval.
+- Sandbox containers have NO access to the Docker daemon (no `DOCKER_HOST`). Docker build/run must be done on the gateway side.
+- Each session gets its own sandbox container (`scope: "session"`), destroyed when the session ends.
+- The workspace is mounted read-write at `/workspace` inside the sandbox.
+- To run Python code, use `shell_exec("python3 script.py")` directly.
+- To run Node.js code, use `shell_exec("node script.js")` directly.
+- Playwright CLI (`@playwright/cli`) is available for E2E testing. `@playwright/test` is not installed.
+- SYS_ADMIN is not required — Playwright launches Chromium with `--no-sandbox` by default.
+- **Path mapping**: `/app/data/workspace/` on the gateway corresponds to `/workspace/` inside the sandbox. Always use `/workspace/` paths in sandbox tools.
+
+## END SANDBOX RULES
+INNER_EOF
+  fi
+}
+
 run_skills_symlink() {
   _claude_skills="$1"
   _workspace_skills="$2"
@@ -138,7 +171,35 @@ assert "appends rules to existing file" \
   'grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$ws2/AGENTS.md"'
 
 # ============================================================
-# Test Suite 2: Skills symlink creation
+# Test Suite 2: SANDBOX RULES injection
+# ============================================================
+printf "\n=== SANDBOX RULES injection ===\n"
+
+ws_sbx="$WORK/ws_sbx"
+run_agents_injection "$ws_sbx"
+run_sandbox_injection "$ws_sbx"
+
+assert "contains BEGIN SANDBOX RULES marker" \
+  'grep -q "BEGIN SANDBOX RULES" "$ws_sbx/AGENTS.md"'
+
+assert "contains END SANDBOX RULES marker" \
+  'grep -q "END SANDBOX RULES" "$ws_sbx/AGENTS.md"'
+
+assert "SANDBOX RULES mentions XAI_API_KEY in sandbox environment" \
+  'grep -q "XAI_API_KEY.*sandbox environment" "$ws_sbx/AGENTS.md"'
+
+assert "SANDBOX RULES mentions network bridge" \
+  'grep -q "network.*bridge" "$ws_sbx/AGENTS.md"'
+
+# Idempotency check
+count_sbx_before=$(grep -c "BEGIN SANDBOX RULES" "$ws_sbx/AGENTS.md")
+run_sandbox_injection "$ws_sbx"
+count_sbx_after=$(grep -c "BEGIN SANDBOX RULES" "$ws_sbx/AGENTS.md")
+assert "sandbox rules idempotent ($count_sbx_before -> $count_sbx_after)" \
+  '[ "$count_sbx_before" = "$count_sbx_after" ]'
+
+# ============================================================
+# Test Suite 3: Skills symlink creation
 # ============================================================
 printf "\n=== Skills symlink ===\n"
 
