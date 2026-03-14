@@ -7,8 +7,6 @@
     1. User phase (no elevation): install.user.ps1
     2. Admin phase (elevate only when required): install.admin.ps1
 
-.PARAMETER UserScopeOnly
-    Run only the user phase.
 #>
 
 [CmdletBinding()]
@@ -22,7 +20,6 @@ param(
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
     [string]$SyncBack = "lock",
-    [switch]$UserScopeOnly,
     [switch]$NoPause
 )
 
@@ -76,12 +73,6 @@ Write-Host ""
 
 & $userScriptPath @phaseParams
 
-if ($UserScopeOnly) {
-    Write-Host ""
-    Write-Host "UserScopeOnly mode: admin phase skipped." -ForegroundColor Yellow
-    Write-Host ""
-    return
-}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
