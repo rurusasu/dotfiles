@@ -24,7 +24,7 @@ class WingetHandler : SetupHandlerBase {
         $this.Name = "Winget"
         $this.Description = "winget パッケージ管理"
         $this.Order = 5
-        $this.RequiresAdmin = $true
+        $this.RequiresAdmin = $false
     }
 
     <#
