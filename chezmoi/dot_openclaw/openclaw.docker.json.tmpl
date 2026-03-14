@@ -58,7 +58,7 @@
         "sessionToolsVisibility": "all",
         "mode": "all",
         "scope": "session",
-        "workspaceAccess": "rw",
+        "workspaceAccess": "none",
         "docker": {
           "image": "openclaw-sandbox-common:bookworm-slim",
           "network": "bridge",
@@ -66,12 +66,7 @@
           "readOnlyRoot": true,
           "tmpfs": ["/tmp", "/var/tmp", "/run"],
           "capDrop": ["ALL"],
-          "binds": [
-            "/app/data/workspace/.cache/uv:/root/.cache/uv:rw",
-            "/app/data/workspace/.cache/pnpm:/root/.local/share/pnpm/store:rw",
-            "/app/data/workspace/.cache/bun:/root/.bun/install/cache:rw",
-            "/app/data/workspace/.cache/npm:/root/.npm:rw"
-          ],
+          "binds": [],
           "pidsLimit": {{ .openclaw.sandbox.pidsLimit }},
           "memory": "{{ .openclaw.sandbox.memory }}",
           "memorySwap": "{{ .openclaw.sandbox.memorySwap }}",
@@ -209,6 +204,7 @@
       "groupPolicy": "allowlist",
       "channels": {
         "C0AK3SQKFV2": {"requireMention": true},
+        "C0AK70NLE6S": {"requireMention": true},
         "C0AK64UPVNW": {"requireMention": true},
         "C0AJVDKGN6A": {"requireMention": true},
         "C0AJZSPV84S": {"requireMention": true}
@@ -283,6 +279,9 @@
   "skills": {
     "install": {
       "nodeManager": "bun"
+    },
+    "load": {
+      "extraDirs": ["/app/data/superpowers/skills"]
     }
   },
   "plugins": {

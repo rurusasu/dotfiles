@@ -197,16 +197,22 @@ if [ -d "$_sp_dir/skills" ]; then
   mkdir -p "$HOME/.gemini/extensions"
   ln -sfn "$_sp_dir" "$HOME/.gemini/extensions/superpowers"
 
-  # Workspace skills (alongside existing Claude skills symlinks)
-  mkdir -p "$workspace_dir/skills"
-  ln -sfn "$_sp_dir/skills" "$workspace_dir/skills/superpowers"
+  # Workspace skills — copy (not symlink) so sandbox containers can read them.
+  # Sandbox only mounts /app/data/workspace/ → /workspace/; symlink targets
+  # outside that tree are invisible inside the sandbox.
+  # Remove stale symlink first to avoid cp "same file" error.
+  [ -L "$workspace_dir/skills/superpowers" ] && rm -f "$workspace_dir/skills/superpowers"
+  mkdir -p "$workspace_dir/skills/superpowers"
+  cp -rLf "$_sp_dir/skills/." "$workspace_dir/skills/superpowers/"
 
   echo "[entrypoint] superpowers: wired to agents ($(git -C "$_sp_dir" rev-parse --short HEAD 2>/dev/null || echo 'unknown'))"
 else
   echo "[WARN] superpowers: skills/ directory not found; skipping agent wiring"
 fi
 
-# Symlink Claude Code skills into workspace so OpenClaw (Codex) can use them directly.
+# Copy Claude Code skills into workspace so sandbox containers can read them.
+# Sandbox only mounts /app/data/workspace/ → /workspace/; symlink targets
+# outside that tree (/home/bun/.claude/skills/) are invisible inside the sandbox.
 claude_skills="/home/bun/.claude/skills"
 workspace_skills="$workspace_dir/skills"
 if [ -d "$claude_skills" ]; then
@@ -214,12 +220,33 @@ if [ -d "$claude_skills" ]; then
   for skill_dir in "$claude_skills"/*/; do
     skill_name="$(basename "$skill_dir")"
     target="$workspace_skills/$skill_name"
+    # Remove stale symlink or previous copy
     if [ -L "$target" ]; then
       rm "$target"
     elif [ -d "$target" ]; then
       rm -rf "$target"
     fi
-    ln -s "$skill_dir" "$target"
+    cp -rL "$skill_dir" "$target"
+  done
+fi
+
+# --- Invalidate stale skill snapshots ---
+# On container restart, new skills (e.g. superpowers) may have been added.
+# OpenClaw caches a skills snapshot per session in sessions.json (version: 0).
+# Snapshots with version 0 are never auto-refreshed (refresh requires version > 0).
+# Removing skillsSnapshot from all session entries forces a fresh rebuild on next turn.
+_sessions_dir="/home/bun/.openclaw/agents"
+if [ -d "$_sessions_dir" ]; then
+  find "$_sessions_dir" -name "sessions.json" -type f 2>/dev/null | while read -r _sf; do
+    if grep -q '"skillsSnapshot"' "$_sf" 2>/dev/null; then
+      node -e "
+        const fs = require('fs');
+        const d = JSON.parse(fs.readFileSync('$_sf','utf-8'));
+        let n = 0;
+        for (const k of Object.keys(d)) { if (d[k].skillsSnapshot) { delete d[k].skillsSnapshot; n++; } }
+        if (n > 0) { fs.writeFileSync('$_sf', JSON.stringify(d, null, 2)); console.log('[entrypoint] invalidated', n, 'stale skill snapshots in', '$_sf'); }
+      " 2>/dev/null || true
+    fi
   done
 fi
 
@@ -238,7 +265,8 @@ fi
 # 2. Superpowers status
 if [ -d "/app/data/superpowers/skills" ]; then
   _sp_rev="$(git -C /app/data/superpowers rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-  echo "[entrypoint]   superpowers: rev=$_sp_rev"
+  _sp_count="$(find /app/data/superpowers/skills -maxdepth 2 -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
+  echo "[entrypoint]   superpowers: rev=$_sp_rev skills=$_sp_count"
 else
   echo "[entrypoint]   superpowers: not available"
 fi

@@ -463,7 +463,7 @@ Gateway コンテナ内の `/app/data/workspace/` と sandbox 内の `/workspace
   "sessionToolsVisibility": "all",
   "mode": "all",
   "scope": "session",
-  "workspaceAccess": "rw",
+  "workspaceAccess": "none",
   "docker": {
     "image": "openclaw-sandbox-common:bookworm-slim",
     "network": "bridge"
