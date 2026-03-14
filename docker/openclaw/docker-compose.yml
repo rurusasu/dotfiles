@@ -43,14 +43,10 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/bun
       # xAI Grok API key: injected via Docker secret (see secrets section below)
-      # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Runtime bun installs (skills) go to the writable data volume
       BUN_INSTALL: /app/data/.bun
       PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
-      # Gemini CLI authentication for ACP agent sessions (sessions_spawn agentId="gemini")
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
       # Log level: info (default), debug, trace
@@ -88,6 +84,7 @@ services:
     secrets:
       - github_token
       - xai_api_key
+      - gemini_api_key
 
 volumes:
   openclaw-data:
@@ -108,3 +105,5 @@ secrets:
     file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE in .env}
   xai_api_key:
     file: ${OPENCLAW_XAI_API_KEY_FILE:?Set OPENCLAW_XAI_API_KEY_FILE in .env}
+  gemini_api_key:
+    file: ${OPENCLAW_GEMINI_API_KEY_FILE:?Set OPENCLAW_GEMINI_API_KEY_FILE in .env}
