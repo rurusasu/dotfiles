@@ -249,6 +249,20 @@ class WingetHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
+        指定されたパッケージがインストール済みかどうかを確認する
+    #>
+    hidden [bool] IsPackageInstalled([string]$packageId) {
+        try {
+            Invoke-Winget -Arguments @("list", "--id", $packageId, "--exact", "--disable-interactivity") | Out-Null
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            return $false
+        }
+    }
+
+    <#
+    .SYNOPSIS
         インストール済みパッケージをエクスポートする (winget export)
     #>
     hidden [SetupResult] ExportPackages([SetupContext]$ctx) {
