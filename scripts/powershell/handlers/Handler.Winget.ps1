@@ -149,6 +149,7 @@ class WingetHandler : SetupHandlerBase {
 
             if ($toInstall.Count -eq 0) {
                 $this.Log("すべてのパッケージがインストール済みです", "Green")
+                $this.EnsureCargoPath()
                 return $this.CreateSuccessResult("インストール済み: $($packages.Count) 個")
             }
 
