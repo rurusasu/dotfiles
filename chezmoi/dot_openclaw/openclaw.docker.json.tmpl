@@ -30,6 +30,20 @@
           "softThresholdTokens": {{ .openclaw.compaction.memoryFlushSoftThreshold }}
         }
       },
+      "memorySearch": {
+        "enabled": true,
+        "provider": "gemini",
+        "model": "gemini-embedding-2-preview",
+        "sources": ["memory", "sessions"],
+        "experimental": {
+          "sessionMemory": true
+        },
+        "query": {
+          "hybrid": {
+            "enabled": true
+          }
+        }
+      },
       "contextPruning": {
         "mode": "cache-ttl",
         "ttl": "{{ .openclaw.contextPruning.ttl }}",
