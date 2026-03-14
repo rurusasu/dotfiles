@@ -189,4 +189,34 @@ if [ -d "$claude_skills" ]; then
   done
 fi
 
+# --- Startup health summary ---
+echo "[entrypoint] === STARTUP HEALTH ==="
+
+# 1. Workspace git status
+if [ -d "$workspace_dir/.git" ]; then
+  _ws_rev="$(git -C "$workspace_dir" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+  _ws_dirty="$(git -C "$workspace_dir" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  echo "[entrypoint]   workspace: rev=$_ws_rev dirty_files=$_ws_dirty"
+else
+  echo "[entrypoint]   workspace: not a git repo"
+fi
+
+# 2. Agent policy block
+if grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents" 2>/dev/null; then
+  echo "[entrypoint]   agent_policy: claude-first OK"
+elif grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents" 2>/dev/null; then
+  echo "[entrypoint]   agent_policy: WARNING — codex-first still present"
+else
+  echo "[entrypoint]   agent_policy: WARNING — no policy block found"
+fi
+
+# 3. Old policy cleanup confirmation
+if grep -q "CODEX-FIRST" "$workspace_agents" 2>/dev/null; then
+  echo "[entrypoint]   old_policy_cleanup: FAILED — CODEX-FIRST remnants found"
+else
+  echo "[entrypoint]   old_policy_cleanup: clean"
+fi
+
+echo "[entrypoint] === END HEALTH ==="
+
 exec openclaw "$@"
