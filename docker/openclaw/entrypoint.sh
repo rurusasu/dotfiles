@@ -28,11 +28,22 @@ if [ -f "$_xai_secret_file" ]; then
     export XAI_API_KEY
   fi
 fi
+# --- Gemini API key (embedding): read from Docker secret ---
+_gemini_secret_file="/run/secrets/gemini_api_key"
+if [ -f "$_gemini_secret_file" ]; then
+  _gemini_key="$(cat "$_gemini_secret_file")"
+  if [ -n "$_gemini_key" ]; then
+    GEMINI_API_KEY="$_gemini_key"
+    export GEMINI_API_KEY
+  fi
+fi
 # --- Log secret injection status ---
 _gh_len=$(printf "%s" "$GITHUB_TOKEN" | wc -c)
 _xai_status="not set"
 if [ -n "${XAI_API_KEY:-}" ]; then _xai_status="ok ($(printf "%s" "$XAI_API_KEY" | wc -c) chars)"; fi
-echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_status}"
+_gemini_status="not set"
+if [ -n "${GEMINI_API_KEY:-}" ]; then _gemini_status="ok ($(printf "%s" "$GEMINI_API_KEY" | wc -c) chars)"; fi
+echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_status}, GEMINI_API_KEY=${_gemini_status}"
 
 # --- Render config template: replace @@PLACEHOLDERS@@ with runtime secrets ---
 _config_tmpl="/app/openclaw.json.tmpl"
