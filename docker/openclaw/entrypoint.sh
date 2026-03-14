@@ -106,6 +106,16 @@ if [ -d "$_lifelog_src" ]; then
   echo "[entrypoint] lifelog synced to $_lifelog_dst ($(du -sh "$_lifelog_dst" | cut -f1))"
 fi
 
+# Pull latest workspace from remote (if it's a git repo with a remote).
+# Runs before AGENTS.md creation guard so that pulled AGENTS.md is preserved.
+if [ -d "$workspace_dir/.git" ] && git -C "$workspace_dir" remote get-url origin >/dev/null 2>&1; then
+  if git -C "$workspace_dir" pull --ff-only 2>&1; then
+    echo "[entrypoint] workspace: git pull ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"
+  else
+    echo "[entrypoint] WARNING: workspace git pull failed — continuing with local state" >&2
+  fi
+fi
+
 # Enforce Codex-first child-session policy inside workspace instructions.
 workspace_agents="$workspace_dir/AGENTS.md"
 if [ ! -f "$workspace_agents" ]; then
