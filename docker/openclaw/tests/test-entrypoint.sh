@@ -46,21 +46,27 @@ run_agents_injection() {
 # AGENTS.md - Workspace
 INNER_EOF
   fi
-  if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$_workspace_agents"; then
+
+  # Remove legacy CODEX-FIRST block if present.
+  if grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$_workspace_agents" 2>/dev/null; then
+    sed -i '/## BEGIN OPENCLAW CODEX-FIRST RULES/,/## END OPENCLAW CODEX-FIRST RULES/d' "$_workspace_agents"
+  fi
+
+  if ! grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$_workspace_agents"; then
     cat >>"$_workspace_agents" <<'INNER_EOF'
 
-## BEGIN OPENCLAW CODEX-FIRST RULES
+## BEGIN OPENCLAW CLAUDE-FIRST RULES
 
-- For research, web fetching, news collection, and investigative tasks, spawn a Claude Code sub-agent: `sessions_spawn(runtime:"acp", agentId:"claude")`.
-- Claude Code has access to `web_fetch`, `web_search`, skills (`/app/data/workspace/skills/`), and shell tools. Delegate data gathering to it.
-- Skills in `/app/data/workspace/skills/` contain detailed procedures. Follow the SKILL.md in each skill directory.
-- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** They require JS rendering and always fail. Use Grok API `x_search` via `curl` + `$XAI_API_KEY` (see `skills/news/SKILL.md`).
-- Default other child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`), unless Claude or Gemini is explicitly requested.
-- Use Gemini child sessions only when needed for Gemini-specific capabilities.
-- For ACP child runs, treat `accepted` as enqueue only and verify completion with `sessions_send(timeoutSeconds>0)`.
-- If `sessions_send` returns empty payload, confirm child output from gateway logs (`[agent:nested]`).
+- すべてのタスクはデフォルトで Claude Code に委譲する: `sessions_spawn(runtime:"acp", agentId:"claude")`
+- Claude Code は `web_fetch`, `web_search`, skills, shell tools にアクセスできる
+- Skills は `/app/data/workspace/skills/` に配置。各スキルの SKILL.md に従うこと
+- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** Grok API `x_search` via `curl` + `$XAI_API_KEY` を使用
+- Codex 子セッションは明示的に要求された場合のみ: `sessions_spawn` (without `runtime:"acp"`)
+- Gemini 子セッションは明示的に要求された場合のみ: `sessions_spawn(runtime:"acp", agentId:"gemini")`
+- ACP 子セッションでは `accepted` は enqueue のみ。`sessions_send(timeoutSeconds>0)` で完了確認すること
+- `sessions_send` が空 payload を返した場合、gateway ログ (`[agent:nested]`) で実出力を確認
 
-## END OPENCLAW CODEX-FIRST RULES
+## END OPENCLAW CLAUDE-FIRST RULES
 INNER_EOF
   fi
 }
@@ -130,10 +136,10 @@ assert "creates AGENTS.md when absent" \
   '[ -f "$ws1/AGENTS.md" ]'
 
 assert "contains BEGIN marker" \
-  'grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$ws1/AGENTS.md"'
+  'grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$ws1/AGENTS.md"'
 
 assert "contains END marker" \
-  'grep -q "END OPENCLAW CODEX-FIRST RULES" "$ws1/AGENTS.md"'
+  'grep -q "END OPENCLAW CLAUDE-FIRST RULES" "$ws1/AGENTS.md"'
 
 assert "contains Claude Code sub-agent delegation rule" \
   'grep -q "sessions_spawn.*agentId:\"claude\"" "$ws1/AGENTS.md"'
@@ -151,9 +157,9 @@ assert "contains XAI_API_KEY reference" \
   'grep -q "XAI_API_KEY" "$ws1/AGENTS.md"'
 
 # --- Test: idempotency (run twice, no duplication) ---
-count_before=$(grep -c "BEGIN OPENCLAW CODEX-FIRST RULES" "$ws1/AGENTS.md")
+count_before=$(grep -c "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$ws1/AGENTS.md")
 run_agents_injection "$ws1"
-count_after=$(grep -c "BEGIN OPENCLAW CODEX-FIRST RULES" "$ws1/AGENTS.md")
+count_after=$(grep -c "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$ws1/AGENTS.md")
 
 assert "idempotent: marker count unchanged after re-run ($count_before -> $count_after)" \
   '[ "$count_before" = "$count_after" ]'
@@ -168,7 +174,30 @@ assert "preserves existing content" \
   'grep -q "Some custom content" "$ws2/AGENTS.md"'
 
 assert "appends rules to existing file" \
-  'grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$ws2/AGENTS.md"'
+  'grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$ws2/AGENTS.md"'
+
+# --- Test: migration from CODEX-FIRST to CLAUDE-FIRST ---
+ws3="$WORK/ws3"
+mkdir -p "$ws3"
+cat >"$ws3/AGENTS.md" <<'MIGRATE_EOF'
+# AGENTS.md - Workspace
+
+## BEGIN OPENCLAW CODEX-FIRST RULES
+
+- Default other child tasks to Codex via `sessions_spawn`.
+
+## END OPENCLAW CODEX-FIRST RULES
+MIGRATE_EOF
+run_agents_injection "$ws3"
+
+assert "migration: CODEX-FIRST block removed" \
+  '! grep -q "CODEX-FIRST" "$ws3/AGENTS.md"'
+
+assert "migration: CLAUDE-FIRST block injected" \
+  'grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$ws3/AGENTS.md"'
+
+assert "migration: header preserved" \
+  'grep -q "# AGENTS.md - Workspace" "$ws3/AGENTS.md"'
 
 # ============================================================
 # Test Suite 2: SANDBOX RULES injection
