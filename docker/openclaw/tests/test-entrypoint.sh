@@ -123,6 +123,23 @@ run_skills_symlink() {
   fi
 }
 
+run_superpowers_wiring() {
+  _sp_dir="$1"
+  _home="$2"
+  _workspace_dir="$3"
+
+  if [ -d "$_sp_dir/skills" ]; then
+    mkdir -p "$_home/.agents/skills"
+    ln -sfn "$_sp_dir/skills" "$_home/.agents/skills/superpowers"
+
+    mkdir -p "$_home/.gemini/extensions"
+    ln -sfn "$_sp_dir" "$_home/.gemini/extensions/superpowers"
+
+    mkdir -p "$_workspace_dir/skills"
+    ln -sfn "$_sp_dir/skills" "$_workspace_dir/skills/superpowers"
+  fi
+}
+
 # ============================================================
 # Test Suite 1: AGENTS.md injection
 # ============================================================
@@ -317,7 +334,96 @@ assert "skips when claude_skills dir is absent" \
   '[ ! -d "$workspace_skills2" ]'
 
 # ============================================================
-# Test Suite 3: GitHub authentication chain (container-only)
+# Test Suite 4: Superpowers wiring
+# ============================================================
+printf "\n=== Superpowers wiring ===\n"
+
+# --- Setup: create dummy superpowers repo structure ---
+sp_dir="$WORK/superpowers"
+sp_home="$WORK/sp_home"
+sp_workspace="$WORK/sp_workspace"
+mkdir -p "$sp_dir/skills/brainstorming"
+printf "# Brainstorming\n" >"$sp_dir/skills/brainstorming/SKILL.md"
+mkdir -p "$sp_dir/skills/writing-plans"
+printf "# Writing Plans\n" >"$sp_dir/skills/writing-plans/SKILL.md"
+mkdir -p "$sp_dir/docs"
+printf "# README\n" >"$sp_dir/docs/README.md"
+
+run_superpowers_wiring "$sp_dir" "$sp_home" "$sp_workspace"
+
+if $HAS_SYMLINKS; then
+  assert "agents/skills/superpowers symlink exists" \
+    '[ -L "$sp_home/.agents/skills/superpowers" ]'
+
+  assert "agents/skills/superpowers points to skills/" \
+    'readlink "$sp_home/.agents/skills/superpowers" | grep -q "superpowers/skills"'
+
+  assert "gemini/extensions/superpowers symlink exists" \
+    '[ -L "$sp_home/.gemini/extensions/superpowers" ]'
+
+  assert "gemini/extensions/superpowers points to full repo (not skills/)" \
+    'readlink "$sp_home/.gemini/extensions/superpowers" | grep -q "superpowers$"'
+
+  assert "workspace/skills/superpowers symlink exists" \
+    '[ -L "$sp_workspace/skills/superpowers" ]'
+else
+  assert "agents/skills/superpowers dir exists (copy mode)" \
+    '[ -d "$sp_home/.agents/skills/superpowers" ]'
+
+  assert "gemini/extensions/superpowers dir exists (copy mode)" \
+    '[ -d "$sp_home/.gemini/extensions/superpowers" ]'
+
+  assert "workspace/skills/superpowers dir exists (copy mode)" \
+    '[ -d "$sp_workspace/skills/superpowers" ]'
+fi
+
+assert "superpowers SKILL.md accessible via agents path" \
+  '[ -f "$sp_home/.agents/skills/superpowers/brainstorming/SKILL.md" ]'
+
+assert "superpowers SKILL.md accessible via workspace path" \
+  '[ -f "$sp_workspace/skills/superpowers/brainstorming/SKILL.md" ]'
+
+assert "gemini extension has full repo (docs/ visible)" \
+  '[ -f "$sp_home/.gemini/extensions/superpowers/docs/README.md" ]'
+
+# --- Test: idempotency (re-run updates symlinks) ---
+run_superpowers_wiring "$sp_dir" "$sp_home" "$sp_workspace"
+
+if $HAS_SYMLINKS; then
+  assert "agents symlink survives re-run" \
+    '[ -L "$sp_home/.agents/skills/superpowers" ]'
+else
+  assert "agents dir survives re-run (copy mode)" \
+    '[ -d "$sp_home/.agents/skills/superpowers" ]'
+fi
+
+assert "SKILL.md still accessible after re-run" \
+  '[ -f "$sp_home/.agents/skills/superpowers/brainstorming/SKILL.md" ]'
+
+# --- Test: no skills dir = no-op ---
+sp_empty="$WORK/sp_empty"
+sp_home2="$WORK/sp_home2"
+sp_ws2="$WORK/sp_ws2"
+mkdir -p "$sp_empty"
+
+run_superpowers_wiring "$sp_empty" "$sp_home2" "$sp_ws2"
+
+assert "skips wiring when skills/ dir is absent" \
+  '[ ! -d "$sp_home2/.agents" ]'
+
+# --- Test: .git exists but skills/ missing (corrupted clone) ---
+sp_corrupt="$WORK/sp_corrupt"
+sp_home3="$WORK/sp_home3"
+sp_ws3="$WORK/sp_ws3"
+mkdir -p "$sp_corrupt/.git"
+
+run_superpowers_wiring "$sp_corrupt" "$sp_home3" "$sp_ws3"
+
+assert "skips wiring when .git exists but skills/ is absent" \
+  '[ ! -d "$sp_home3/.agents" ]'
+
+# ============================================================
+# Test Suite 5: GitHub authentication chain (container-only)
 # ============================================================
 askpass="/usr/local/bin/git-credential-askpass.sh"
 
