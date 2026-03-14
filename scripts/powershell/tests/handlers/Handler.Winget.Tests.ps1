@@ -93,10 +93,15 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            # machine scope インストール成功
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @("Successfully installed"); ExitCode = 0 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } else {
+                    $global:LASTEXITCODE = 0
+                }
             }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
         It 'should return success result' {
@@ -107,35 +112,27 @@ Describe 'WingetHandler' {
         }
 
         It 'should call winget install for each package' {
-            $script:installCalls = @()
-            Mock Invoke-WingetInstall {
+            $script:installIds = @()
+            Mock Invoke-Winget {
                 param($Arguments)
-                if ($Arguments -contains "install") {
-                    $script:installCalls += $Arguments | Where-Object { $_ -notmatch "^-" -and $_ -ne "install" -and $_ -ne "machine" -and $_ -ne "user" } | Select-Object -First 1
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } elseif ($Arguments -contains "install") {
+                    $idIndex = [array]::IndexOf($Arguments, "--id") + 1
+                    if ($idIndex -gt 0 -and $idIndex -lt $Arguments.Count) {
+                        $script:installIds += $Arguments[$idIndex]
+                    }
+                    $global:LASTEXITCODE = 0
                 }
-                [PSCustomObject]@{ Output = @(); ExitCode = 0 }
             }
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
-            $script:installCalls | Should -Contain "Git.Git"
-            $script:installCalls | Should -Contain "twpayne.chezmoi"
-        }
-
-        It 'should use --scope machine' {
-            $script:capturedArgs = @()
-            Mock Invoke-WingetInstall {
-                param($Arguments)
-                $script:capturedArgs = $Arguments
-                [PSCustomObject]@{ Output = @(); ExitCode = 0 }
-            }
-            $ctx.Options["WingetMode"] = "import"
-            $handler.Apply($ctx)
-            $script:capturedArgs | Should -Contain "--scope"
-            $script:capturedArgs | Should -Contain "machine"
+            $script:installIds | Should -Contain "Git.Git"
+            $script:installIds | Should -Contain "twpayne.chezmoi"
         }
     }
 
-    Context 'Apply - import mode: all packages already installed (machine scope)' {
+    Context 'Apply - import mode: all packages already installed' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -151,29 +148,32 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            # PACKAGE_ALREADY_INSTALLED 終了コード (0x8A150011 = -1978335215)
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @("Package already installed."); ExitCode = -1978335215 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
             }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should skip and count as skipped' {
+        It 'should skip and return success' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "スキップ"
+            $result.Message | Should -Match "インストール済み"
         }
 
-        It 'should not retry user scope when already installed at machine scope' {
-            $script:callCount = 0
-            Mock Invoke-WingetInstall {
-                $script:callCount++
-                [PSCustomObject]@{ Output = @("Package already installed."); ExitCode = -1978335215 }
+        It 'should not call winget install' {
+            $script:installCalled = $false
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
             }
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
-            # ALREADY_INSTALLED は user scope リトライ不要 (1回のみ呼び出し)
-            $script:callCount | Should -Be 1
+            $script:installCalled | Should -Be $false
         }
     }
 
@@ -193,9 +193,15 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @("Error: package not found"); ExitCode = 1 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } else {
+                    $global:LASTEXITCODE = 1
+                }
             }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
         It 'should return success with partial failure warning' {
@@ -203,77 +209,6 @@ Describe 'WingetHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "一部失敗"
-        }
-    }
-
-    Context 'Apply - import mode: machine scope fails, user scope succeeds' {
-        BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExist { return $true }
-            Mock Get-JsonContent {
-                return [PSCustomObject]@{
-                    Sources = @(
-                        [PSCustomObject]@{
-                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
-                            Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "UserScope.App" }
-                            )
-                        }
-                    )
-                }
-            }
-        }
-
-        It 'should install with user scope when machine scope fails' {
-            $script:callCount = 0
-            Mock Invoke-WingetInstall {
-                $script:callCount++
-                if ($script:callCount -eq 1) {
-                    [PSCustomObject]@{ Output = @("machine scope not supported"); ExitCode = 1 }
-                } else {
-                    [PSCustomObject]@{ Output = @("Installed"); ExitCode = 0 }
-                }
-            }
-            $ctx.Options["WingetMode"] = "import"
-            $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "インストール"
-            $script:callCount | Should -Be 2
-        }
-
-        It 'should count user scope already-installed as skipped' {
-            $script:callCount = 0
-            Mock Invoke-WingetInstall {
-                $script:callCount++
-                if ($script:callCount -eq 1) {
-                    [PSCustomObject]@{ Output = @(); ExitCode = 1 }
-                } else {
-                    [PSCustomObject]@{ Output = @("Package already installed."); ExitCode = -1978335215 }
-                }
-            }
-            $ctx.Options["WingetMode"] = "import"
-            $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "スキップ"
-        }
-
-        It 'should skip and warn when admin context blocks user scope install (0x8A15002B)' {
-            $script:callCount = 0
-            Mock Invoke-WingetInstall {
-                $script:callCount++
-                if ($script:callCount -eq 1) {
-                    # machine scope 失敗
-                    [PSCustomObject]@{ Output = @(); ExitCode = 1 }
-                } else {
-                    # user scope: 0x8A15002B = already installed / no upgrade applicable
-                    [PSCustomObject]@{ Output = @("Package already installed. Attempting to upgrade..."; "No applicable upgrade found."); ExitCode = -1978335189 }
-                }
-            }
-            $ctx.Options["WingetMode"] = "import"
-            $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            # no-upgrade は skip 扱い (fail ではない)
-            $result.Message | Should -Not -Match "一部失敗"
         }
     }
 
@@ -293,22 +228,130 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @(); ExitCode = 0 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } else {
+                    $global:LASTEXITCODE = 0
+                }
             }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
         It 'should pass --source msstore for msstore packages' {
             $script:capturedArgs = $null
-            Mock Invoke-WingetInstall {
+            Mock Invoke-Winget {
                 param($Arguments)
-                $script:capturedArgs = $Arguments
-                [PSCustomObject]@{ Output = @(); ExitCode = 0 }
+                if ($Arguments -contains "install") {
+                    $script:capturedArgs = $Arguments
+                }
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } else {
+                    $global:LASTEXITCODE = 0
+                }
             }
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
             $script:capturedArgs | Should -Contain "--source"
             $script:capturedArgs | Should -Contain "msstore"
+        }
+    }
+
+    Context 'Apply - import mode: msstore package already installed' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "msstore" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "9NT1R1C2HH7J" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+            }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should skip without calling install' {
+            $script:installCalled = $false
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
+            }
+            $ctx.Options["WingetMode"] = "import"
+            $handler.Apply($ctx)
+            $script:installCalled | Should -Be $false
+        }
+    }
+
+    Context 'Apply - import mode: empty packages' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @()
+                        }
+                    )
+                }
+            }
+        }
+
+        It 'should return success with empty message' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "空"
+        }
+    }
+
+    Context 'Apply - import mode: IsPackageInstalled throws exception' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "Error.Package" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    throw "winget list failed"
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should treat as not installed and attempt install' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "インストール"
         }
     }
 
