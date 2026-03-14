@@ -32,16 +32,9 @@
       },
       "memorySearch": {
         "enabled": true,
-        "provider": "gemini",
-        "model": "gemini-embedding-2-preview",
         "sources": ["memory", "sessions"],
         "experimental": {
           "sessionMemory": true
-        },
-        "query": {
-          "hybrid": {
-            "enabled": true
-          }
         }
       },
       "contextPruning": {
@@ -322,6 +315,13 @@
     "backend": "acpx",
     "dispatch": {
       "enabled": true
+    }
+  },
+  "memory": {
+    "backend": "qmd",
+    "qmd": {
+      "searchMode": "search",
+      "includeDefaultMemory": true
     }
   }
 }

@@ -84,7 +84,6 @@ services:
     secrets:
       - github_token
       - xai_api_key
-      - gemini_api_key
 
 volumes:
   openclaw-data:
@@ -105,5 +104,3 @@ secrets:
     file: ${OPENCLAW_GITHUB_TOKEN_FILE:?Set OPENCLAW_GITHUB_TOKEN_FILE in .env}
   xai_api_key:
     file: ${OPENCLAW_XAI_API_KEY_FILE:?Set OPENCLAW_XAI_API_KEY_FILE in .env}
-  gemini_api_key:
-    file: ${OPENCLAW_GEMINI_API_KEY_FILE:?Set OPENCLAW_GEMINI_API_KEY_FILE in .env}

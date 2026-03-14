@@ -123,13 +123,11 @@ Describe 'OpenClawHandler' {
             # WriteSecretFile が token 未取得で throw しないよう環境変数を設定
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_success"
             $env:OPENCLAW_XAI_API_KEY = ""
-            $env:OPENCLAW_GEMINI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
-            Remove-Item -Path Env:\OPENCLAW_GEMINI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should start container successfully when config exists' {
@@ -238,13 +236,11 @@ Describe 'OpenClawHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_failure"
             $env:OPENCLAW_XAI_API_KEY = ""
-            $env:OPENCLAW_GEMINI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
-            Remove-Item -Path Env:\OPENCLAW_GEMINI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should return failure when docker compose up fails' {
@@ -324,13 +320,11 @@ Describe 'OpenClawHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_compose_retry"
             $env:OPENCLAW_XAI_API_KEY = ""
-            $env:OPENCLAW_GEMINI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
-            Remove-Item -Path Env:\OPENCLAW_GEMINI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should succeed on second compose attempt when first fails' {
@@ -524,33 +518,6 @@ Describe 'OpenClawHandler' {
             $script:envContent | Should -Not -Match "GEMINI_CREDENTIALS_DIR=.*\\"
         }
 
-        It 'should include OPENCLAW_GEMINI_API_KEY_FILE in .env' {
-            $script:envContent = ""
-            Mock Write-Host { }
-            Mock Start-SleepSafe { }
-            Mock Test-PathExist {
-                param($Path)
-                if ($Path -match "\.env$") { return $false }
-                return $true
-            }
-            Mock Set-ContentNoNewline {
-                param($Path, $Value)
-                if ($Path -match "\.env$") {
-                    $script:envContent = $Value
-                }
-            }
-            Mock Invoke-Docker {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "ps") { return "openclaw" }
-                return ""
-            }
-
-            $handler.Apply($ctx)
-
-            $script:envContent | Should -Match "OPENCLAW_GEMINI_API_KEY_FILE=.+/gemini_api_key"
-        }
     }
 
     Context 'WaitForContainer - retry behavior' {
@@ -561,13 +528,11 @@ Describe 'OpenClawHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_wait"
             $env:OPENCLAW_XAI_API_KEY = ""
-            $env:OPENCLAW_GEMINI_API_KEY = ""
         }
 
         AfterEach {
             Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
-            Remove-Item -Path Env:\OPENCLAW_GEMINI_API_KEY -ErrorAction SilentlyContinue
         }
 
         It 'should succeed on second attempt' {

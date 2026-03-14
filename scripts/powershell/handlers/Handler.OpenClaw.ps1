@@ -137,12 +137,6 @@ class OpenClawHandler : SetupHandlerBase {
                 "xai_api_key",
                 $false
             )
-            $this.WriteSecretFile(
-                "op://Personal/OpenClawGeminiAPI/credential",
-                "gemini_api_key",
-                $false
-            )
-
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
             # 終了コードが 0 であれば成功として扱う
@@ -306,7 +300,6 @@ CLAUDE_CREDENTIALS_DIR=$claudeCredentialsDir
 CLAUDE_CONFIG_JSON=$claudeConfigJson
 OPENCLAW_GITHUB_TOKEN_FILE=$secretDir/github_token
 OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
-OPENCLAW_GEMINI_API_KEY_FILE=$secretDir/gemini_api_key
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent

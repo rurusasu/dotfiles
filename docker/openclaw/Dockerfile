@@ -48,6 +48,13 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm install -g @zed-industries/claude-agent-acp \
     && npm cache clean --force
 
+# QMD: local hybrid search engine for memory (BM25 + vector via GGUF models).
+# Installed via bun from GitHub source; requires build step since dist/ is not in repo.
+RUN bun install -g --trust https://github.com/tobi/qmd \
+    && cd /home/bun/.bun/install/global/node_modules/@tobilu/qmd \
+    && bun install --frozen-lockfile \
+    && bun run build
+
 # GIT_ASKPASS helper: feeds GITHUB_TOKEN env var to git credential prompts.
 RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then echo "${GITHUB_TOKEN}"; else echo "x-access-token"; fi\n' \
     > /usr/local/bin/git-credential-askpass.sh \
