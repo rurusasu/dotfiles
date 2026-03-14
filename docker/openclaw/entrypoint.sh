@@ -172,6 +172,40 @@ if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
 EOF
 fi
 
+# --- Superpowers: clone or update obra/superpowers ---
+_sp_dir="/app/data/superpowers"
+_sp_repo="https://github.com/obra/superpowers.git"
+
+if [ ! -d "$_sp_dir/.git" ]; then
+  echo "[entrypoint] superpowers: cloning..."
+  if ! git clone --depth 1 --single-branch "$_sp_repo" "$_sp_dir" 2>&1; then
+    echo "[WARN] superpowers clone failed; skills unavailable"
+  fi
+else
+  if ! git -C "$_sp_dir" pull --ff-only 2>&1; then
+    echo "[WARN] superpowers pull failed; using cached version"
+  fi
+fi
+
+# --- Superpowers: wire to agent skill-discovery paths ---
+if [ -d "$_sp_dir/skills" ]; then
+  # Codex / OpenCode / generic (~/.agents/skills/ -- writable via tmpfs)
+  mkdir -p "$HOME/.agents/skills"
+  ln -sfn "$_sp_dir/skills" "$HOME/.agents/skills/superpowers"
+
+  # Gemini CLI (~/.gemini/extensions/ expects full repo, not just skills/)
+  mkdir -p "$HOME/.gemini/extensions"
+  ln -sfn "$_sp_dir" "$HOME/.gemini/extensions/superpowers"
+
+  # Workspace skills (alongside existing Claude skills symlinks)
+  mkdir -p "$workspace_dir/skills"
+  ln -sfn "$_sp_dir/skills" "$workspace_dir/skills/superpowers"
+
+  echo "[entrypoint] superpowers: wired to agents ($(git -C "$_sp_dir" rev-parse --short HEAD 2>/dev/null || echo 'unknown'))"
+else
+  echo "[WARN] superpowers: skills/ directory not found; skipping agent wiring"
+fi
+
 # Symlink Claude Code skills into workspace so OpenClaw (Codex) can use them directly.
 claude_skills="/home/bun/.claude/skills"
 workspace_skills="$workspace_dir/skills"
@@ -201,7 +235,15 @@ else
   echo "[entrypoint]   workspace: not a git repo"
 fi
 
-# 2. Agent policy block
+# 2. Superpowers status
+if [ -d "/app/data/superpowers/skills" ]; then
+  _sp_rev="$(git -C /app/data/superpowers rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+  echo "[entrypoint]   superpowers: rev=$_sp_rev"
+else
+  echo "[entrypoint]   superpowers: not available"
+fi
+
+# 3. Agent policy block
 if grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents" 2>/dev/null; then
   echo "[entrypoint]   agent_policy: claude-first OK"
 elif grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents" 2>/dev/null; then
@@ -210,7 +252,7 @@ else
   echo "[entrypoint]   agent_policy: WARNING — no policy block found"
 fi
 
-# 3. Old policy cleanup confirmation
+# 4. Old policy cleanup confirmation
 if grep -q "CODEX-FIRST" "$workspace_agents" 2>/dev/null; then
   echo "[entrypoint]   old_policy_cleanup: FAILED — CODEX-FIRST remnants found"
 else
