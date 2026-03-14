@@ -464,8 +464,9 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
             }
             Mock Set-UserEnvironmentPath { }
         }
@@ -493,9 +494,11 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
             }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like "*\.cargo\bin" }
             Mock Get-UserEnvironmentPath { return "C:\Windows;C:\other" }
             Mock Set-UserEnvironmentPath { }
         }
@@ -525,9 +528,11 @@ Describe 'WingetHandler' {
                     )
                 }
             }
-            Mock Invoke-WingetInstall {
-                [PSCustomObject]@{ Output = @(); ExitCode = -1978335215 }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
             }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like "*\.cargo\bin" }
             $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
             Mock Get-UserEnvironmentPath { return "C:\Windows;$cargoBin" }.GetNewClosure()
             Mock Set-UserEnvironmentPath { }
