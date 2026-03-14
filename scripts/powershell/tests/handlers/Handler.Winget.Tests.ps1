@@ -16,7 +16,7 @@ Describe 'WingetHandler' {
             @{ property = "Name"; expected = "Winget"; checkType = "Be" }
             @{ property = "Description"; expected = $null; checkType = "Not -BeNullOrEmpty" }
             @{ property = "Order"; expected = 5; checkType = "Be" }
-            @{ property = "RequiresAdmin"; expected = $true; checkType = "Be" }
+            @{ property = "RequiresAdmin"; expected = $false; checkType = "Be" }
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
