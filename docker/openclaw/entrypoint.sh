@@ -116,7 +116,7 @@ if [ -d "$workspace_dir/.git" ] && git -C "$workspace_dir" remote get-url origin
   fi
 fi
 
-# Enforce Codex-first child-session policy inside workspace instructions.
+# Enforce Claude-first child-session policy inside workspace instructions.
 workspace_agents="$workspace_dir/AGENTS.md"
 if [ ! -f "$workspace_agents" ]; then
   mkdir -p "$workspace_dir"
@@ -124,21 +124,28 @@ if [ ! -f "$workspace_agents" ]; then
 # AGENTS.md - Workspace
 EOF
 fi
-if ! grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents"; then
+
+# Remove legacy CODEX-FIRST block if present (migration from previous policy).
+if grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents" 2>/dev/null; then
+  sed -i '/## BEGIN OPENCLAW CODEX-FIRST RULES/,/## END OPENCLAW CODEX-FIRST RULES/d' "$workspace_agents"
+  echo "[entrypoint] removed legacy CODEX-FIRST policy block"
+fi
+
+if ! grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents"; then
   cat >>"$workspace_agents" <<'EOF'
 
-## BEGIN OPENCLAW CODEX-FIRST RULES
+## BEGIN OPENCLAW CLAUDE-FIRST RULES
 
-- For research, web fetching, news collection, and investigative tasks, spawn a Claude Code sub-agent: `sessions_spawn(runtime:"acp", agentId:"claude")`.
-- Claude Code has access to `web_fetch`, `web_search`, skills (`/app/data/workspace/skills/`), and shell tools. Delegate data gathering to it.
-- Skills in `/app/data/workspace/skills/` contain detailed procedures. Follow the SKILL.md in each skill directory.
-- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** They require JS rendering and always fail. Use Grok API `x_search` via `curl` + `$XAI_API_KEY` (see `skills/news/SKILL.md`).
-- Default other child tasks to Codex via `sessions_spawn` (without `runtime:"acp"`), unless Claude or Gemini is explicitly requested.
-- Use Gemini child sessions only when needed for Gemini-specific capabilities.
-- For ACP child runs, treat `accepted` as enqueue only and verify completion with `sessions_send(timeoutSeconds>0)`.
-- If `sessions_send` returns empty payload, confirm child output from gateway logs (`[agent:nested]`).
+- すべてのタスクはデフォルトで Claude Code に委譲する: `sessions_spawn(runtime:"acp", agentId:"claude")`
+- Claude Code は `web_fetch`, `web_search`, skills, shell tools にアクセスできる
+- Skills は `/app/data/workspace/skills/` に配置。各スキルの SKILL.md に従うこと
+- **NEVER use `web_fetch` for `x.com` or `twitter.com` URLs.** Grok API `x_search` via `curl` + `$XAI_API_KEY` を使用
+- Codex 子セッションは明示的に要求された場合のみ: `sessions_spawn` (without `runtime:"acp"`)
+- Gemini 子セッションは明示的に要求された場合のみ: `sessions_spawn(runtime:"acp", agentId:"gemini")`
+- ACP 子セッションでは `accepted` は enqueue のみ。`sessions_send(timeoutSeconds>0)` で完了確認すること
+- `sessions_send` が空 payload を返した場合、gateway ログ (`[agent:nested]`) で実出力を確認
 
-## END OPENCLAW CODEX-FIRST RULES
+## END OPENCLAW CLAUDE-FIRST RULES
 EOF
 fi
 
