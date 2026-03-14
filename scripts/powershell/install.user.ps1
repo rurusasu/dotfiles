@@ -43,7 +43,6 @@ foreach ($key in $Options.Keys) {
     $context.Options[$key] = $Options[$key]
 }
 
-$context.Options["UserScopeOnly"] = $true
 $context.Options["WingetMode"] = "import"
 $context.Options["ReleaseTag"] = $ReleaseTag
 $context.Options["PostInstallScript"] = $PostInstallScript
