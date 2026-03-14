@@ -91,7 +91,7 @@ $context.Options["SyncBack"] = $SyncBack
 $handlersPath = Join-Path $PSScriptRoot "handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
 $handlers = Select-SetupHandler -Handlers $handlers
-$handlers = @($handlers | Where-Object { $_.Name -ne "Winget" })
+$handlers = @($handlers | Where-Object { $_.Name -notin @("Winget", "OpenClaw") })
 
 $adminApplicableCount = 0
 foreach ($handler in $handlers) {

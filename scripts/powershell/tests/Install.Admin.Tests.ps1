@@ -21,8 +21,8 @@ Describe 'install.admin.ps1' {
         $result | Should -BeOfType [bool]
     }
 
-    It 'should exclude Winget handler from execution target' {
+    It 'should exclude Winget and OpenClaw handlers from execution target' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\$_.Name -ne "Winget"'
+        $content | Should -Match '\$_.Name -notin @\("Winget", "OpenClaw"\)'
     }
 }
