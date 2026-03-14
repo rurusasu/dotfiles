@@ -342,6 +342,13 @@ op://Personal/xAI-Grok-Twitter/console/apikey
   - `docker logs openclaw` の `[agent:nested] session=agent:gemini:acp:...` 行で実本文を確認する
 - `plugin telegram: duplicate plugin id`
   - `/home/bun/.openclaw/extensions/telegram` の旧拡張を退避/削除し、stock 側のみ利用
+- DNS 障害で Slack / Telegram が応答不能になる
+  - ログに `getaddrinfo ENOTFOUND slack.com` や `pong wasn't received` が連続する場合、ネットワーク一時障害による接続断
+  - Slack Socket Mode には openclaw 側に再接続設定がなく、Bolt ライブラリ内部任せ。DNS 障害後にリカバリーできずハングすることがある
+  - Telegram は `channels.telegram.retry` でリトライ回数を増やし、`channels.telegram.network` で IPv6 問題を回避できる
+  - 最終防衛は Docker healthcheck（`/health` エンドポイント）+ `restart: unless-stopped` による自動再起動
+  - `docker-compose.yml` の healthcheck 設定: `interval: 30s`, `timeout: 10s`, `retries: 3`, `start_period: 60s`
+  - healthcheck は Gateway プロセスの HTTP 応答のみを検査する。Slack/Telegram の接続状態までは検知しないため、プロセスがハングせず HTTP だけ応答する場合は再起動されない
 - Slack 接続が確立しない / `slack: not connected`
   - 1Password の `SlackBot-OpenClaw` に `botToken`（`xoxb-...`）と `appToken`（`xapp-...`）が正しく登録されているか確認
   - Slack App で Socket Mode が有効化されているか確認（Settings → Socket Mode → Enable）

@@ -76,7 +76,6 @@ openclaw:
   # --- Sandbox prune ---
   prune:
     idleHours: 6
-    maxAgeDays: 7
 
   # --- Channel defaults ---
   channels:

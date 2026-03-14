@@ -6,6 +6,12 @@ services:
     image: local/openclaw:dev
     container_name: openclaw
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     logging:
       driver: json-file
       options:

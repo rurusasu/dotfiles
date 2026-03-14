@@ -87,8 +87,7 @@
           }
         },
         "prune": {
-          "idleHours": {{ .openclaw.prune.idleHours }},
-          "maxAgeDays": {{ .openclaw.prune.maxAgeDays }}
+          "idleHours": {{ .openclaw.prune.idleHours }}
         }
       }
     },
@@ -183,10 +182,14 @@
       "historyLimit": {{ .openclaw.channels.telegramHistoryLimit }},
       "replyToMode": "first",
       "retry": {
-        "attempts": 3,
-        "minDelayMs": 400,
+        "attempts": 5,
+        "minDelayMs": 1000,
         "maxDelayMs": 30000,
-        "jitter": 0.1
+        "jitter": 0.3
+      },
+      "network": {
+        "autoSelectFamily": false,
+        "dnsResultOrder": "ipv4first"
       }
     },
     "slack": {
