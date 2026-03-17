@@ -112,7 +112,7 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
 
 # Ensure CLAUDE_CODE_GIT_BASH_PATH is set for the entire session.
 # Claude Code needs this env var to locate bash.exe on Windows.
-# Set it at session level so ALL child processes (bun, node, etc.) inherit it.
+# Set it at session level so ALL child processes (node, pnpm, etc.) inherit it.
 if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
     foreach ($_candidate in @(
         (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe"),
@@ -127,24 +127,30 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
     Remove-Variable _candidate -ErrorAction SilentlyContinue
 }
 
-# bun global CLI shims
-# bun's .exe wrapper on Windows cannot pass env vars to child processes.
-# Define PowerShell functions that call bun + entrypoint directly.
-$_bunGlobalModules = Join-Path $HOME ".bun\install\global\node_modules"
-$_bunCliShims = @{
-    claude = "@anthropic-ai\claude-code\cli.js"
-    gemini = "@google\gemini-cli\dist\index.js"
-}
-foreach ($_entry in $_bunCliShims.GetEnumerator()) {
-    $_entrypoint = Join-Path $_bunGlobalModules $_entry.Value
-    if (Test-Path -LiteralPath $_entrypoint -PathType Leaf) {
-        $__ep = $_entrypoint
-        New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
-            [scriptblock]::Create("& bun `"$__ep`" @args")
-        ) -Force | Out-Null
+# pnpm global CLI shims
+# pnpm's global bin may not be in PATH yet, or Windows shims may not pass env vars.
+# Define PowerShell functions that call node + entrypoint directly.
+$_pnpmGlobalRoot = $null
+try {
+    $_pnpmGlobalRoot = (& pnpm root -g 2>$null)
+    if ($_pnpmGlobalRoot) { $_pnpmGlobalRoot = $_pnpmGlobalRoot.Trim() }
+} catch {}
+if ($_pnpmGlobalRoot -and (Test-Path $_pnpmGlobalRoot)) {
+    $_pnpmCliShims = @{
+        claude = "@anthropic-ai\claude-code\cli.js"
+        gemini = "@google\gemini-cli\dist\index.js"
+    }
+    foreach ($_entry in $_pnpmCliShims.GetEnumerator()) {
+        $_entrypoint = Join-Path $_pnpmGlobalRoot $_entry.Value
+        if (Test-Path -LiteralPath $_entrypoint -PathType Leaf) {
+            $__ep = $_entrypoint
+            New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
+                [scriptblock]::Create("& node `"$__ep`" @args")
+            ) -Force | Out-Null
+        }
     }
 }
-Remove-Variable _bunGlobalModules, _bunCliShims, _entry, _entrypoint, __ep -ErrorAction SilentlyContinue
+Remove-Variable _pnpmGlobalRoot, _pnpmCliShims, _entry, _entrypoint, __ep -ErrorAction SilentlyContinue
 
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
