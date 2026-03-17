@@ -33,11 +33,12 @@ RUN corepack enable && corepack prepare pnpm@latest --activate \
 
 ENV NODE_ENV=production \
     HOME=/home/app \
+    PNPM_HOME=/usr/local/share/pnpm \
     NPM_CONFIG_AUDIT=false \
     NPM_CONFIG_FUND=false \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_LOGLEVEL=warn \
-    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/usr/local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm --prefix /usr/local/lib/node_modules/openclaw/extensions/acpx install --omit=dev \
