@@ -1,5 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "description": "bun global packages to install on NixOS",
+  "description": "pnpm global packages to install on NixOS",
   "globalPackages": ["@google/gemini-cli", "@anthropic-ai/claude-code"]
 }
