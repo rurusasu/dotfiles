@@ -25,7 +25,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /home/bun/.agents:size=1m,mode=0777
+      - /home/app/.agents:size=1m,mode=0777
     cap_drop:
       - ALL
     security_opt:
@@ -41,11 +41,9 @@ services:
 
     environment:
       TZ: ${TZ:-Asia/Tokyo}
-      HOME: /home/bun
+      HOME: /home/app
       # xAI Grok API key: injected via Docker secret (see secrets section below)
-      # Runtime bun installs (skills) go to the writable data volume
-      BUN_INSTALL: /app/data/.bun
-      PATH: /app/data/.bun/bin:/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
@@ -57,9 +55,9 @@ services:
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
-      - openclaw-home:/home/bun/.openclaw
-      # ACPX writes runtime state under ~/.acpx; mount it explicitly because /home/bun is read-only.
-      - openclaw-acpx:/home/bun/.acpx
+      - openclaw-home:/home/app/.openclaw
+      # ACPX writes runtime state under ~/.acpx; mount it explicitly because /home/app is read-only.
+      - openclaw-acpx:/home/app/.acpx
       # Docker-specific config template — entrypoint renders secrets into the writable home volume
       - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/app/openclaw.json.tmpl:ro
       - openclaw-data:/app/data
@@ -67,15 +65,15 @@ services:
       # Authenticate once on the host with `gemini`, then this mount keeps tokens refreshable.
       # Set GEMINI_CREDENTIALS_DIR in .env (e.g. C:/Users/<you>/.gemini).
       # Leave unset to use an empty volume — API key auth via GEMINI_API_KEY still works.
-      - ${GEMINI_CREDENTIALS_DIR:-gemini-credentials}:/home/bun/.gemini
+      - ${GEMINI_CREDENTIALS_DIR:-gemini-credentials}:/home/app/.gemini
       # Claude Code OAuth credentials (.credentials.json) and config (.claude.json).
       # Authenticate once on the host with `claude`, then this mount keeps tokens refreshable.
       # Set CLAUDE_CREDENTIALS_DIR in .env (e.g. C:/Users/<you>/.claude).
       # Leave unset to use an empty volume — API key auth via ANTHROPIC_API_KEY still works.
-      - ${CLAUDE_CREDENTIALS_DIR:-claude-credentials}:/home/bun/.claude
+      - ${CLAUDE_CREDENTIALS_DIR:-claude-credentials}:/home/app/.claude
       # Claude Code expects $HOME/.claude.json at the HOME root (not inside .claude/).
       # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
-      - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/bun/.claude.json:ro
+      - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/app/.claude.json:ro
       # Docker socket for built-in sandbox (sibling container spawning).
       # Required for agents.defaults.sandbox.mode != "off".
       # Security: grants ability to create/manage Docker containers on the host.
