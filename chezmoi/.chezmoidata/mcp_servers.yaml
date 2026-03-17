@@ -6,9 +6,9 @@
 mcp_servers:
   # Context7 - Contextual documentation search
   - name: context7
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "@upstash/context7-mcp@latest"
     startup_timeout_sec: 30
     # Supported by: codex, claude
@@ -21,9 +21,9 @@ mcp_servers:
     # URL-based MCP (remote)
     url: "https://mcp.linear.app/mcp"
     # For tools that need command-based config
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "mcp-remote"
       - "https://mcp.linear.app/mcp"
     supports:
@@ -49,9 +49,9 @@ mcp_servers:
 
   # GitHub - GitHub API integration
   - name: github
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "@modelcontextprotocol/server-github"
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: "${GH_TOKEN}"
@@ -64,9 +64,9 @@ mcp_servers:
     # URL-based MCP (remote) - Codex uses native Streamable HTTP
     url: "https://mcp.deepwiki.com/mcp"
     # For tools that need command-based config (stdio bridge)
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "mcp-remote"
       - "https://mcp.deepwiki.com/mcp"
     startup_timeout_sec: 30
@@ -78,9 +78,9 @@ mcp_servers:
 
   # Tavily - AI-powered web search and extraction
   - name: tavily
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "tavily-mcp@latest"
     startup_timeout_sec: 30
     env:
@@ -93,9 +93,9 @@ mcp_servers:
 
   # Draw.io Official - Open diagrams in draw.io editor (browser)
   - name: drawio
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "@drawio/mcp"
     startup_timeout_sec: 30
     supports:
@@ -109,9 +109,9 @@ mcp_servers:
     # URL-based MCP (remote) - Codex uses native Streamable HTTP
     url: "https://mcp.sentry.dev/mcp"
     # For tools that need command-based config (stdio bridge)
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "mcp-remote"
       - "https://mcp.sentry.dev/mcp"
     startup_timeout_sec: 30
@@ -123,9 +123,9 @@ mcp_servers:
 
   # Cloud Run - Google Cloud Run integration
   - name: cloud-run
-    command: bunx
+    command: pnpm
     args:
-      - "-y"
+      - "dlx"
       - "@google-cloud/cloud-run-mcp"
     startup_timeout_sec: 120
     supports:
