@@ -15,17 +15,20 @@
 ### Task 1: MCP Servers — `bunx` → `pnpm dlx`
 
 **Files:**
+
 - Modify: `chezmoi/.chezmoidata/mcp_servers.yaml`
 
 - [ ] **Step 1: Replace all `bunx` commands with `pnpm dlx`**
 
 In `mcp_servers.yaml`, for each server entry that has `command: bunx`:
+
 - Change `command: bunx` → `command: pnpm`
 - Change `args: ["-y", ...]` → `args: ["dlx", ...]` (remove `-y`, keep remaining args)
 
 Affected servers (8): context7, linear, github, deepwiki, tavily, drawio, sentry, cloud-run
 
 Example before:
+
 ```yaml
 command: bunx
 args:
@@ -34,6 +37,7 @@ args:
 ```
 
 Example after:
+
 ```yaml
 command: pnpm
 args:
@@ -58,6 +62,7 @@ git commit -m "refactor(mcp): replace bunx with pnpm dlx in all MCP server confi
 ### Task 2: Package Lists — Move bun → pnpm
 
 **Files:**
+
 - Move: `windows/bun/packages.json` → `windows/pnpm/packages.json`
 - Move: `nix/bun/packages.json` → `nix/pnpm/packages.json`
 
@@ -73,6 +78,7 @@ rmdir windows/bun nix/bun
 - [ ] **Step 2: Update description in both files**
 
 `windows/pnpm/packages.json`:
+
 ```json
 {
   "$schema": "https://json.schemastore.org/package.json",
@@ -82,6 +88,7 @@ rmdir windows/bun nix/bun
 ```
 
 `nix/pnpm/packages.json`:
+
 ```json
 {
   "$schema": "https://json.schemastore.org/package.json",
@@ -102,6 +109,7 @@ git commit -m "refactor: move bun package lists to pnpm directories"
 ### Task 3: Invoke-ExternalCommand — Replace `Invoke-Bun` with `Invoke-Pnpm`
 
 **Files:**
+
 - Modify: `scripts/powershell/lib/Invoke-ExternalCommand.ps1`
 
 - [ ] **Step 1: Replace `Invoke-Bun` with `Invoke-Pnpm`**
@@ -144,12 +152,14 @@ git commit -m "refactor(lib): replace Invoke-Bun with Invoke-Pnpm"
 ### Task 4: PowerShell Handler — `Handler.Bun.ps1` → `Handler.Pnpm.ps1`
 
 **Files:**
+
 - Delete: `scripts/powershell/handlers/Handler.Bun.ps1`
 - Create: `scripts/powershell/handlers/Handler.Pnpm.ps1`
 
 - [ ] **Step 1: Create `Handler.Pnpm.ps1`**
 
 Write the new handler. Key differences from BunHandler:
+
 - Class name: `PnpmHandler`
 - Name: `"Pnpm"`
 - Description: `"pnpm グローバルパッケージ管理（Windows）"`
@@ -411,12 +421,14 @@ git commit -m "refactor(handler): replace BunHandler with PnpmHandler"
 ### Task 5: PowerShell Handler Tests — `Handler.Bun.Tests.ps1` → `Handler.Pnpm.Tests.ps1`
 
 **Files:**
+
 - Delete: `scripts/powershell/tests/handlers/Handler.Bun.Tests.ps1`
 - Create: `scripts/powershell/tests/handlers/Handler.Pnpm.Tests.ps1`
 
 - [ ] **Step 1: Create `Handler.Pnpm.Tests.ps1`**
 
 Mirror the existing test structure but adapted for PnpmHandler:
+
 - Source `Handler.Pnpm.ps1` instead of `Handler.Bun.ps1`
 - Class: `PnpmHandler`
 - Mock `Invoke-Pnpm` instead of `Invoke-Bun`
@@ -450,6 +462,7 @@ git commit -m "test(handler): replace BunHandler tests with PnpmHandler tests"
 ### Task 6: PowerShell Profile — Replace bun shims
 
 **Files:**
+
 - Modify: `chezmoi/shells/Microsoft.PowerShell_profile.ps1`
 
 - [ ] **Step 1: Replace bun CLI shims section (lines 130-147)**
@@ -486,10 +499,13 @@ Remove-Variable _pnpmGlobalRoot, _pnpmCliShims, _entry, _entrypoint, __ep -Error
 - [ ] **Step 2: Update comment on line 115**
 
 Change:
+
 ```powershell
 # Set it at session level so ALL child processes (bun, node, etc.) inherit it.
 ```
+
 To:
+
 ```powershell
 # Set it at session level so ALL child processes (node, pnpm, etc.) inherit it.
 ```
@@ -506,11 +522,13 @@ git commit -m "refactor(profile): replace bun CLI shims with pnpm/node shims"
 ### Task 7: Docker — Dockerfile
 
 **Files:**
+
 - Modify: `docker/openclaw/Dockerfile`
 
 - [ ] **Step 1: Remove bun install and replace with pnpm via corepack (lines 30-33)**
 
 Replace:
+
 ```dockerfile
 # Install bun for runtime skills while keeping Node/npm as primary runtime.
 ENV BUN_INSTALL=/home/bun/.bun
@@ -519,6 +537,7 @@ RUN mkdir -p /home/bun \
 ```
 
 With:
+
 ```dockerfile
 # Enable pnpm via corepack (ships with Node.js 22).
 RUN corepack enable && corepack prepare pnpm@latest --activate \
@@ -528,6 +547,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate \
 - [ ] **Step 2: Update ENV block (lines 35-41)**
 
 Replace:
+
 ```dockerfile
 ENV NODE_ENV=production \
     HOME=/home/bun \
@@ -536,6 +556,7 @@ ENV NODE_ENV=production \
 ```
 
 With:
+
 ```dockerfile
 ENV NODE_ENV=production \
     HOME=/home/app \
@@ -549,6 +570,7 @@ ENV NODE_ENV=production \
 - [ ] **Step 3: Replace qmd install (lines 51-56)**
 
 Replace:
+
 ```dockerfile
 RUN bun install -g --trust https://github.com/tobi/qmd \
     && cd /home/bun/.bun/install/global/node_modules/@tobilu/qmd \
@@ -557,6 +579,7 @@ RUN bun install -g --trust https://github.com/tobi/qmd \
 ```
 
 With:
+
 ```dockerfile
 # QMD: local hybrid search engine for memory (BM25 + vector via GGUF models).
 # Clone from GitHub and build with pnpm since it's not published to npm.
@@ -570,6 +593,7 @@ RUN git clone --depth 1 https://github.com/tobi/qmd /opt/qmd \
 - [ ] **Step 4: Update directory creation (lines 63-66)**
 
 Replace all `/home/bun` with `/home/app`:
+
 ```dockerfile
 RUN mkdir -p /app/data/workspace \
     && mkdir -p /home/app/.openclaw /home/app/.gemini /home/app/.acpx /home/app/.claude \
@@ -591,6 +615,7 @@ git commit -m "refactor(docker): replace bun with pnpm via corepack, rename /hom
 ### Task 8: Docker — docker-compose.yml
 
 **Files:**
+
 - Modify: `docker/openclaw/docker-compose.yml`
 
 - [ ] **Step 1: Replace all `/home/bun` with `/home/app`**
@@ -602,6 +627,7 @@ All volume mounts, tmpfs, environment vars referencing `/home/bun`.
 - Change `HOME: /home/bun` → `HOME: /home/app`
 - Remove `BUN_INSTALL: /app/data/.bun` and its comment (`# Runtime bun installs (skills) go to the writable data volume`)
 - Change PATH to remove bun paths:
+
   ```yaml
   PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   ```
@@ -630,6 +656,7 @@ git commit -m "refactor(docker): update docker-compose for /home/app and remove 
 ### Task 9: Docker — entrypoint.sh
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh`
 
 - [ ] **Step 1: Replace all `/home/bun` with `/home/app`**
@@ -650,11 +677,13 @@ git commit -m "refactor(docker): update entrypoint.sh paths from /home/bun to /h
 ### Task 10: NixRebuild Handler — `InstallBunGlobalPackages` → `InstallPnpmGlobalPackages`
 
 **Files:**
+
 - Modify: `scripts/powershell/handlers/Handler.NixRebuild.ps1`
 
 - [ ] **Step 1: Rename method and update all bun references**
 
 In `Handler.NixRebuild.ps1`:
+
 - Rename `InstallBunGlobalPackages` → `InstallPnpmGlobalPackages`
 - Update description comment (line 8): `bun グローバルパッケージ` → `pnpm グローバルパッケージ`
 - Line 78: `"bun パッケージ設定が..."` → `"pnpm パッケージ設定が..."`
@@ -671,6 +700,7 @@ In `Handler.NixRebuild.ps1`:
 - [ ] **Step 2: Update NixRebuild tests**
 
 In `scripts/powershell/tests/handlers/Handler.NixRebuild.Tests.ps1`:
+
 - Update all mocks and assertions referencing `bun` commands to `pnpm`
 - Update path references from `nix\bun\packages.json` to `nix\pnpm\packages.json`
 - Update any `Invoke-Bun` mocks to `Invoke-Pnpm`
@@ -692,6 +722,7 @@ git commit -m "refactor(handler): migrate NixRebuild handler from bun to pnpm"
 ### Task 11: OpenClaw Handler — Update Docker paths
 
 **Files:**
+
 - Modify: `scripts/powershell/handlers/Handler.OpenClaw.ps1`
 
 - [ ] **Step 1: Replace `/home/bun` with `/home/app` in Docker exec commands**
@@ -719,6 +750,7 @@ git commit -m "refactor(handler): update OpenClaw handler Docker paths from /hom
 ### Task 12: Nix — Remove bun from system packages
 
 **Files:**
+
 - Modify: `nix/modules/host/default.nix`
 
 - [ ] **Step 1: Remove `bun` from packages list (line 71)**
@@ -744,14 +776,17 @@ git commit -m "refactor(nix): remove bun from system packages, pnpm available vi
 ### Task 13: Taskfile — Remove bun references
 
 **Files:**
+
 - Modify: `Taskfile.yml`
 
 - [ ] **Step 1: Remove `INSTALL_BUN=1` from sandbox build (line 143)**
 
 Change:
+
 ```yaml
 --build-arg INSTALL_BUN=1
 ```
+
 To: remove this line entirely (or set to `--build-arg INSTALL_BUN=0`)
 
 - [ ] **Step 2: Remove bun cache from sandbox:cache-init (line 204)**
@@ -774,15 +809,19 @@ git commit -m "refactor(taskfile): remove bun references from sandbox tasks"
 ### Task 14: Shell Script — Update tool check
 
 **Files:**
+
 - Modify: `check_nixos.sh`
 
 - [ ] **Step 1: Replace `bun` with `pnpm` in tool check list (line 11)**
 
 Change:
+
 ```bash
 for t in fzf eza zoxide rg fd starship git gh nvim task bun claude gemini uv zsh pwsh; do
 ```
+
 To:
+
 ```bash
 for t in fzf eza zoxide rg fd starship git gh nvim task pnpm claude gemini uv zsh pwsh; do
 ```
@@ -799,6 +838,7 @@ git commit -m "refactor: replace bun with pnpm in NixOS tool check"
 ### Task 15: Docker — README.md path updates
 
 **Files:**
+
 - Modify: `docker/openclaw/README.md`
 
 - [ ] **Step 1: Replace all `/home/bun` with `/home/app`**
