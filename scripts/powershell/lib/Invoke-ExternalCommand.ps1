@@ -482,22 +482,22 @@ function Invoke-Npm {
 
 <#
 .SYNOPSIS
-    bun コマンドを実行する
+    pnpm コマンドを実行する
 .PARAMETER Arguments
-    bun に渡す引数
+    pnpm に渡す引数
 .OUTPUTS
     コマンドの出力
 .EXAMPLE
-    Invoke-Bun -Arguments @("--version")
-    Invoke-Bun -Arguments @("add", "-g", "@google/gemini-cli")
+    Invoke-Pnpm -Arguments @("--version")
+    Invoke-Pnpm -Arguments @("add", "-g", "@google/gemini-cli")
 #>
-function Invoke-Bun {
+function Invoke-Pnpm {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & bun @Arguments
+    & pnpm @Arguments
 }
 
 <#
