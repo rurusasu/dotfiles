@@ -140,7 +140,7 @@ tasks:
           --build-arg BASE_IMAGE={{.SBX_BASE}}
           --build-arg "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip"
           --build-arg INSTALL_PNPM=1
-          --build-arg INSTALL_BUN=1
+          --build-arg INSTALL_BUN=0
           --build-arg INSTALL_BREW=0
           --build-arg FINAL_USER=root
           -f "{{.BUILD_DIR}}/Dockerfile.sandbox-common"
@@ -201,7 +201,6 @@ tasks:
       - docker exec openclaw mkdir -p
         /app/data/workspace/.cache/uv
         /app/data/workspace/.cache/pnpm
-        /app/data/workspace/.cache/bun
         /app/data/workspace/.cache/npm
 
   sandbox:cache-clean:
@@ -211,7 +210,6 @@ tasks:
       - docker exec openclaw rm -rf
         /app/data/workspace/.cache/uv
         /app/data/workspace/.cache/pnpm
-        /app/data/workspace/.cache/bun
         /app/data/workspace/.cache/npm
       - task: sandbox:cache-init
 
