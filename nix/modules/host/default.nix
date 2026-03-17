@@ -67,8 +67,7 @@ in
       # Python toolchain
       uv
 
-      # JavaScript runtime (for claude-code, gemini-cli, openclaw)
-      bun
+      # JavaScript runtime (for claude-code, gemini-cli, openclaw — pnpm via corepack)
       nodejs_22 # openclaw requires Node.js 22+
 
       # Secret management
