@@ -17,6 +17,7 @@
 ### Task 1: Add memorySearch to OpenClaw config template
 
 **Files:**
+
 - Modify: `chezmoi/dot_openclaw/openclaw.docker.json.tmpl:32` (after `compaction` block)
 
 - [ ] **Step 1: Add memorySearch section after compaction block**
@@ -55,6 +56,7 @@ git commit -m "feat(openclaw): add memorySearch config with Gemini embedding"
 ### Task 2: Unify secrets in docker-compose.yml
 
 **Files:**
+
 - Modify: `docker/openclaw/docker-compose.yml:43-53` (environment section), `docker/openclaw/docker-compose.yml:88-90` (secrets section), `docker/openclaw/docker-compose.yml:106-110` (top-level secrets)
 
 - [ ] **Step 1: Remove OPENAI_API_KEY and GEMINI_API_KEY env vars**
@@ -62,15 +64,15 @@ git commit -m "feat(openclaw): add memorySearch config with Gemini embedding"
 In `docker/openclaw/docker-compose.yml`, remove these lines from the `environment:` section:
 
 ```yaml
-      # Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+# Optional: set OPENAI_API_KEY in .env for embeddings (not required for Codex OAuth)
+OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 ```
 
 and:
 
 ```yaml
-      # Gemini CLI authentication for ACP agent sessions (sessions_spawn agentId="gemini")
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+# Gemini CLI authentication for ACP agent sessions (sessions_spawn agentId="gemini")
+GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 ```
 
 - [ ] **Step 2: Add gemini_api_key to service secrets list**
@@ -78,10 +80,10 @@ and:
 In the `services.openclaw.secrets:` section (around line 88), add:
 
 ```yaml
-    secrets:
-      - github_token
-      - xai_api_key
-      - gemini_api_key
+secrets:
+  - github_token
+  - xai_api_key
+  - gemini_api_key
 ```
 
 - [ ] **Step 3: Add gemini_api_key to top-level secrets definition**
@@ -89,8 +91,8 @@ In the `services.openclaw.secrets:` section (around line 88), add:
 In the top-level `secrets:` section (around line 106), add:
 
 ```yaml
-  gemini_api_key:
-    file: ${OPENCLAW_GEMINI_API_KEY_FILE:?Set OPENCLAW_GEMINI_API_KEY_FILE in .env}
+gemini_api_key:
+  file: ${OPENCLAW_GEMINI_API_KEY_FILE:?Set OPENCLAW_GEMINI_API_KEY_FILE in .env}
 ```
 
 - [ ] **Step 4: Validate compose syntax**
@@ -108,6 +110,7 @@ git commit -m "feat(openclaw): unify secrets via Docker secrets, add gemini_api_
 ### Task 3: Add GEMINI_API_KEY secret reading to entrypoint.sh
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh:30-35` (after xAI block, before log output)
 
 - [ ] **Step 1: Add Gemini secret reading block after xAI block (after line 30)**
@@ -126,7 +129,7 @@ if [ -f "$_gemini_secret_file" ]; then
 fi
 ```
 
-- [ ] **Step 2: Add _gemini_status variable and extend log line**
+- [ ] **Step 2: Add \_gemini_status variable and extend log line**
 
 Add after the existing `_xai_status` initialization (the line containing `_xai_status="not set"`):
 
@@ -158,6 +161,7 @@ git commit -m "feat(openclaw): read GEMINI_API_KEY from Docker secret for embedd
 ### Task 4: Update Handler.OpenClaw.ps1
 
 **Files:**
+
 - Modify: `scripts/powershell/handlers/Handler.OpenClaw.ps1:135-139` (WriteSecretFile calls)
 - Modify: `scripts/powershell/handlers/Handler.OpenClaw.ps1:293-304` (EnsureEnvFile content)
 - Test: `scripts/powershell/tests/handlers/Handler.OpenClaw.Tests.ps1`
@@ -245,6 +249,7 @@ git commit -m "feat(openclaw): add gemini_api_key to Handler secrets and .env ge
 ### Task 5: Create .env.example
 
 **Files:**
+
 - Create: `docker/openclaw/.env.example`
 
 - [ ] **Step 1: Create .env.example file**
@@ -275,6 +280,7 @@ git commit -m "docs(openclaw): add .env.example for manual setup reference"
 ### Task 6: Write secrets file, deploy, and verify
 
 **Files:**
+
 - No code changes — operational steps
 
 - [ ] **Step 1: Write Gemini API key secret file from 1Password**
@@ -313,6 +319,7 @@ Expected: `[entrypoint] secrets: GITHUB_TOKEN=... chars, XAI_API_KEY=ok (...), G
 Run: `docker exec openclaw sh -c 'openclaw memory status --deep --json 2>&1'`
 
 Expected output should show:
+
 - `"provider": "gemini"` (not `"none"`)
 - `"searchMode"` should not be `"fts-only"`
 - `"embeddingProbe": { "ok": true }` (Gemini API reachable)

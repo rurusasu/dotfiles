@@ -63,17 +63,20 @@ OpenClaw の builtin memorySearch を有効化し、Gemini embedding (`gemini-em
 ### 2. `docker/openclaw/docker-compose.yml`
 
 **削除** — `environment:` から:
+
 ```yaml
 OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 ```
 
 **追加** — `services.openclaw.secrets:` に:
+
 ```yaml
 - gemini_api_key
 ```
 
 **追加** — トップレベル `secrets:` に:
+
 ```yaml
 gemini_api_key:
   file: ${OPENCLAW_GEMINI_API_KEY_FILE:?Set OPENCLAW_GEMINI_API_KEY_FILE in .env}
@@ -107,6 +110,7 @@ echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_st
 ### 4. `scripts/powershell/handlers/Handler.OpenClaw.ps1`
 
 **`WriteSecretFile` 呼び出し追加:**
+
 ```powershell
 $this.WriteSecretFile(
     "op://Personal/OpenClawGeminiAPI/credential",
@@ -116,6 +120,7 @@ $this.WriteSecretFile(
 ```
 
 **`EnsureEnvFile` に追加** — `OPENCLAW_XAI_API_KEY_FILE` 行の直後に:
+
 ```
 OPENCLAW_GEMINI_API_KEY_FILE=$secretDir/gemini_api_key
 ```
@@ -126,28 +131,28 @@ OPENCLAW_GEMINI_API_KEY_FILE=$secretDir/gemini_api_key
 
 ## Storage
 
-| データ | 保存先 | 永続化 | git 管理 |
-|---|---|---|---|
-| セッションログ (.jsonl) | `openclaw-home` volume `/home/bun/.openclaw/agents/*/sessions/` | volume 存続中 | No |
-| SQLite インデックス (.sqlite) | `openclaw-home` volume `/home/bun/.openclaw/memory/` | volume 存続中 | No |
-| memory ファイル (.md) | `openclaw-data` volume `/app/data/workspace/memory/` | volume 存続中 | workspace が git repo なら Yes |
-| secrets ファイル | ホスト `~/.openclaw/secrets/` | 永続 | No (.gitignore) |
+| データ                        | 保存先                                                          | 永続化        | git 管理                       |
+| ----------------------------- | --------------------------------------------------------------- | ------------- | ------------------------------ |
+| セッションログ (.jsonl)       | `openclaw-home` volume `/home/bun/.openclaw/agents/*/sessions/` | volume 存続中 | No                             |
+| SQLite インデックス (.sqlite) | `openclaw-home` volume `/home/bun/.openclaw/memory/`            | volume 存続中 | No                             |
+| memory ファイル (.md)         | `openclaw-data` volume `/app/data/workspace/memory/`            | volume 存続中 | workspace が git repo なら Yes |
+| secrets ファイル              | ホスト `~/.openclaw/secrets/`                                   | 永続          | No (.gitignore)                |
 
 ## Configuration Defaults (変更不要)
 
 以下は OpenClaw のデフォルト値がそのまま適用される。チューニングが必要になった場合に明示指定する。
 
-| 設定 | デフォルト | 説明 |
-|---|---|---|
-| `sync.onSessionStart` | true | セッション開始時にインデックス同期 |
-| `sync.onSearch` | true | 検索時に変更検知 → 遅延 reindex |
-| `sync.watch` | true | ファイル変更を chokidar で監視 |
-| `sync.sessions.deltaBytes` | 100000 | reindex トリガーの最小バイト数 |
-| `sync.sessions.deltaMessages` | 50 | reindex トリガーの最小メッセージ数 |
-| `query.hybrid.vectorWeight` | (provider default) | ベクトル重み |
-| `query.hybrid.textWeight` | (provider default) | BM25 重み |
-| `query.maxResults` | 6 | 検索結果の最大数 |
-| `cache.enabled` | true | embedding キャッシュ |
+| 設定                          | デフォルト         | 説明                               |
+| ----------------------------- | ------------------ | ---------------------------------- |
+| `sync.onSessionStart`         | true               | セッション開始時にインデックス同期 |
+| `sync.onSearch`               | true               | 検索時に変更検知 → 遅延 reindex    |
+| `sync.watch`                  | true               | ファイル変更を chokidar で監視     |
+| `sync.sessions.deltaBytes`    | 100000             | reindex トリガーの最小バイト数     |
+| `sync.sessions.deltaMessages` | 50                 | reindex トリガーの最小メッセージ数 |
+| `query.hybrid.vectorWeight`   | (provider default) | ベクトル重み                       |
+| `query.hybrid.textWeight`     | (provider default) | BM25 重み                          |
+| `query.maxResults`            | 6                  | 検索結果の最大数                   |
+| `cache.enabled`               | true               | embedding キャッシュ               |
 
 ## Security
 

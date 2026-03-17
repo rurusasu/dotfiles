@@ -20,7 +20,7 @@ services:
 
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
-      - "127.0.0.1:1455:1455" # OAuth callback port (required for onboard --auth-choice openai-codex)
+      - "127.0.0.1:${OPENCLAW_OAUTH_PORT:-1456}:1455" # OAuth callback port (default 1456 to avoid conflict with local codex login on 1455)
 
     read_only: true
     tmpfs:

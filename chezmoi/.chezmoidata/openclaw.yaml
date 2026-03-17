@@ -8,8 +8,8 @@
 openclaw:
   # --- Model configuration ---
   models:
-    primary: "openai-codex/gpt-5.4"
-    fallback: "openai-codex/gpt-5.3-codex"
+    primary: "openai-codex/gpt-5.3-codex"
+    fallback: "openai-codex/gpt-5.4"
     image: "openai-codex/gpt-5.4"
     pdf: "anthropic/claude-sonnet-4-6"
     subagent: "openai-codex/gpt-5.4"

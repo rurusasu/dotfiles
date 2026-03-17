@@ -94,6 +94,7 @@ fi
 ```
 
 設計方針:
+
 - `--ff-only`（ブランチ指定なし）: 現在チェックアウト中のブランチをそのまま pull する。main 以外のブランチにも対応
 - `--ff-only` は fast-forward 不可能な場合（コンフリクト、diverged history）に失敗する。ローカルに未コミットの変更がある場合も同様に失敗する
 - 失敗しても起動を止めない（WARNING を出して既存のローカル状態で継続）
@@ -136,11 +137,13 @@ echo "[entrypoint] === END HEALTH ==="
 ```
 
 確認項目:
+
 1. **workspace の git 状態** — rev と未コミットファイル数
 2. **Claude-first ポリシーの注入確認** — 新ブロックが存在するか
 3. **旧 CODEX-FIRST ブロックの削除確認** — 残骸が無いか
 
 正常時の出力例:
+
 ```
 [entrypoint] === STARTUP HEALTH ===
 [entrypoint]   workspace: rev=b3d4246 dirty_files=0

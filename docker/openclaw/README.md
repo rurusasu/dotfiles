@@ -151,14 +151,14 @@ OpenClaw はスキル（`SKILL.md` を持つディレクトリ）を複数のソ
 
 ### スキル読み込み優先度（低→高）
 
-| 優先度 | ソース | パス | 設定方法 |
-|--------|--------|------|----------|
-| 1 (低) | `extraDirs` | `skills.load.extraDirs` で任意パス指定 | `openclaw.docker.json` |
-| 2 | bundled | OpenClaw 同梱 | 変更不可 |
-| 3 | managed | `~/.openclaw/skills/` | `openclaw skills install <npm-package>` |
-| 4 | personal agents | `~/.agents/skills/` | 手動配置 or シンボリックリンク |
-| 5 | project agents | `<workspace>/.agents/skills/` | 手動配置 |
-| 6 (高) | workspace | `<workspace>/skills/` | 手動配置 or entrypoint でコピー |
+| 優先度 | ソース          | パス                                   | 設定方法                                |
+| ------ | --------------- | -------------------------------------- | --------------------------------------- |
+| 1 (低) | `extraDirs`     | `skills.load.extraDirs` で任意パス指定 | `openclaw.docker.json`                  |
+| 2      | bundled         | OpenClaw 同梱                          | 変更不可                                |
+| 3      | managed         | `~/.openclaw/skills/`                  | `openclaw skills install <npm-package>` |
+| 4      | personal agents | `~/.agents/skills/`                    | 手動配置 or シンボリックリンク          |
+| 5      | project agents  | `<workspace>/.agents/skills/`          | 手動配置                                |
+| 6 (高) | workspace       | `<workspace>/skills/`                  | 手動配置 or entrypoint でコピー         |
 
 ### スキルの最小構成
 
@@ -179,6 +179,7 @@ description: Use when ... （エージェントがスキルを選択する判断
 ```
 
 オプションの frontmatter:
+
 - `user-invocable: false` — `/my_skill` スラッシュコマンドを無効化
 - `disable-model-invocation: true` — エージェントの `available_skills` に表示しない
 - `metadata.openclaw.requires.bins: ["curl"]` — 必須バイナリ（なければスキップ）
@@ -407,13 +408,13 @@ sandbox 内のツール（`shell_exec`, `file_write` 等）では **`/workspace/
 }
 ```
 
-| 設定              | 値                                      | 説明                                                                 |
-| ----------------- | --------------------------------------- | -------------------------------------------------------------------- |
-| `mode`            | `"all"`                                 | 全セッションで sandbox を使用                                        |
-| `scope`           | `"session"`                             | セッションごとに独立コンテナ                                         |
-| `workspaceAccess` | `"none"`                                | sandbox は独立ワークスペースを使用（スキル・AGENTS.md は自動同期）   |
-| `docker.image`    | `openclaw-sandbox-common:bookworm-slim` | Python 3, Node.js, git, curl, jq 入り                                |
-| `docker.network`  | `"bridge"`                              | 外部通信可能（pnpm install, Playwright E2E, API 呼び出し等に必要）   |
+| 設定              | 値                                      | 説明                                                               |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------ |
+| `mode`            | `"all"`                                 | 全セッションで sandbox を使用                                      |
+| `scope`           | `"session"`                             | セッションごとに独立コンテナ                                       |
+| `workspaceAccess` | `"none"`                                | sandbox は独立ワークスペースを使用（スキル・AGENTS.md は自動同期） |
+| `docker.image`    | `openclaw-sandbox-common:bookworm-slim` | Python 3, Node.js, git, curl, jq 入り                              |
+| `docker.network`  | `"bridge"`                              | 外部通信可能（pnpm install, Playwright E2E, API 呼び出し等に必要） |
 
 ### セキュリティ上の注意
 

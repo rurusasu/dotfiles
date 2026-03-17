@@ -15,6 +15,7 @@
 ## Task 1: Add workspace git pull to entrypoint.sh
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh:107-108` (insert after lifelog sync, before AGENTS.md injection)
 
 - [ ] **Step 1: Add git pull block after lifelog sync (line 107)**
@@ -45,6 +46,7 @@ git commit -m "feat(openclaw): add workspace git pull on startup"
 ## Task 2: Replace Codex-first with Claude-first policy in entrypoint.sh
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh:109-133` (the CODEX-FIRST injection block — line numbers shift after Task 1)
 
 - [ ] **Step 1: Add old CODEX-FIRST block deletion logic**
@@ -86,10 +88,13 @@ fi
 - [ ] **Step 3: Update the comment above the block**
 
 Change:
+
 ```sh
 # Enforce Codex-first child-session policy inside workspace instructions.
 ```
+
 To:
+
 ```sh
 # Enforce Claude-first child-session policy inside workspace instructions.
 ```
@@ -106,6 +111,7 @@ git commit -m "feat(openclaw): replace Codex-first with Claude-first child-sessi
 ## Task 3: Add startup health check logging to entrypoint.sh
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh` (insert before `exec openclaw "$@"`, the last line)
 
 - [ ] **Step 1: Add health check block before exec**
@@ -156,11 +162,13 @@ git commit -m "feat(openclaw): add startup health check logging"
 ## Task 4: Update tests for Claude-first policy
 
 **Files:**
+
 - Modify: `docker/openclaw/tests/test-entrypoint.sh`
 
 - [ ] **Step 1: Update `run_agents_injection` function**
 
 Replace the function body (lines 39-66) to match the new entrypoint logic:
+
 1. Add CODEX-FIRST deletion logic (sed removal)
 2. Replace CODEX-FIRST block content with CLAUDE-FIRST block content
 3. Update grep guard from `"BEGIN OPENCLAW CODEX-FIRST RULES"` to `"BEGIN OPENCLAW CLAUDE-FIRST RULES"`
@@ -282,6 +290,7 @@ git commit -m "test(openclaw): update tests for Claude-first policy and add migr
 - [ ] **Step 1: Review complete entrypoint.sh**
 
 Read `docker/openclaw/entrypoint.sh` and verify:
+
 1. git pull block is between lifelog sync and AGENTS.md injection
 2. CODEX-FIRST deletion logic is after the creation guard, before CLAUDE-FIRST injection
 3. CLAUDE-FIRST injection replaces CODEX-FIRST

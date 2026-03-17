@@ -19,6 +19,7 @@
 コンテナは `read_only: true` で動作するため、Codex/OpenCode のスキル検出パス `~/.agents/` を書き込み可能にする tmpfs が必要。
 
 **Files:**
+
 - Modify: `docker/openclaw/docker-compose.yml:26-27`
 
 - [ ] **Step 1: tmpfs に ~/.agents 追加**
@@ -26,9 +27,9 @@
 `docker/openclaw/docker-compose.yml` の既存 tmpfs セクションに1行追加:
 
 ```yaml
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-      - /home/bun/.agents:size=1m,mode=0755
+tmpfs:
+  - /tmp:size=64m,mode=1777
+  - /home/bun/.agents:size=1m,mode=0755
 ```
 
 - [ ] **Step 2: Commit**
@@ -45,6 +46,7 @@ git commit -m "feat(openclaw): add tmpfs for ~/.agents skill discovery path"
 `# Symlink Claude Code skills into workspace` セクション（L175）の前に superpowers の clone/pull + 配線ロジックを追加する。
 
 **Files:**
+
 - Modify: `docker/openclaw/entrypoint.sh` (L174 の前に挿入)
 
 - [ ] **Step 1: superpowers clone/pull セクションを追加**
@@ -119,6 +121,7 @@ git commit -m "feat(openclaw): add superpowers clone/pull and agent wiring in en
 テストでは git clone/pull は実行せず、ダミーの superpowers ディレクトリを作成して配線ロジックのみを検証する（既存の skills symlink テストと同じパターン）。
 
 **Files:**
+
 - Modify: `docker/openclaw/tests/test-entrypoint.sh`
 
 - [ ] **Step 1: superpowers 配線の関数を追加**
@@ -262,29 +265,32 @@ git commit -m "test(openclaw): add superpowers wiring tests"
 ### Task 4: AGENTS.md に superpowers セクションと新エージェント追加手順を追加
 
 **Files:**
+
 - Modify: `docker/openclaw/AGENTS.md`
 
 - [ ] **Step 1: superpowers セクションを追加**
 
 `## スキルとサブエージェント` セクション（L267 付近）の末尾、`### スキル変更のコミット手順` の前に以下を追加:
 
-```markdown
+````markdown
 ### Superpowers（obra/superpowers）
 
 [obra/superpowers](https://github.com/obra/superpowers) スキルフレームワークがコンテナ内の全エージェントに自動配信される。
 
 **仕組み:**
+
 - `entrypoint.sh` が `/app/data/superpowers` に `obra/superpowers` を shallow clone
 - 各エージェントのスキル検出パスにシンボリックリンクで配線:
 
-| エージェント | 検出パス | リンク対象 |
-|---|---|---|
-| Codex / OpenCode | `~/.agents/skills/superpowers` | `skills/` |
-| Gemini CLI | `~/.gemini/extensions/superpowers` | リポジトリ全体 |
-| Claude Code | ホスト側 marketplace plugin がマウント経由で利用可能 |
-| Workspace 経由 | `/app/data/workspace/skills/superpowers` | `skills/` |
+| エージェント     | 検出パス                                             | リンク対象     |
+| ---------------- | ---------------------------------------------------- | -------------- |
+| Codex / OpenCode | `~/.agents/skills/superpowers`                       | `skills/`      |
+| Gemini CLI       | `~/.gemini/extensions/superpowers`                   | リポジトリ全体 |
+| Claude Code      | ホスト側 marketplace plugin がマウント経由で利用可能 |
+| Workspace 経由   | `/app/data/workspace/skills/superpowers`             | `skills/`      |
 
 **更新:**
+
 - コンテナ再起動時に `git pull --ff-only` で自動更新
 - pull 失敗時はキャッシュ版で続行（コンテナ起動を妨げない）
 
@@ -298,6 +304,7 @@ git commit -m "test(openclaw): add superpowers wiring tests"
 mkdir -p "$HOME/<agent-config-dir>"
 ln -sfn "$_sp_dir/skills" "$HOME/<agent-config-dir>/superpowers"
 ```
+````
 
 3. 検出パスが read-only FS 上の場合、`docker-compose.yml` の tmpfs に追加:
 
@@ -308,14 +315,15 @@ tmpfs:
 
 4. Gemini CLI のようにリポジトリ全体を期待するエージェントは `$_sp_dir` をリンク（`$_sp_dir/skills` ではなく）
 5. `tests/test-entrypoint.sh` の `run_superpowers_wiring` にリンク先を追加しテストを更新
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add docker/openclaw/AGENTS.md
 git commit -m "docs(openclaw): add superpowers section and new agent wiring guide to AGENTS.md"
-```
+````
 
 ---
 
@@ -339,6 +347,7 @@ docker compose logs openclaw | grep superpowers
 ```
 
 Expected:
+
 ```
 [entrypoint] superpowers: cloning...
 [entrypoint] superpowers: wired to agents (abc1234)
