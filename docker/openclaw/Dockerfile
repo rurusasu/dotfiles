@@ -27,18 +27,17 @@ RUN apt-get update \
 # Docker CLI for built-in sandbox (spawns sibling containers via mounted socket).
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
 
-# Install bun for runtime skills while keeping Node/npm as primary runtime.
-ENV BUN_INSTALL=/home/bun/.bun
-RUN mkdir -p /home/bun \
-    && curl -fsSL https://bun.sh/install | bash
+# Enable pnpm via corepack (ships with Node.js 22).
+RUN corepack enable && corepack prepare pnpm@latest --activate \
+    && mkdir -p /home/app
 
 ENV NODE_ENV=production \
-    HOME=/home/bun \
+    HOME=/home/app \
     NPM_CONFIG_AUDIT=false \
     NPM_CONFIG_FUND=false \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_LOGLEVEL=warn \
-    PATH=/home/bun/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm --prefix /usr/local/lib/node_modules/openclaw/extensions/acpx install --omit=dev \
@@ -49,21 +48,22 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm cache clean --force
 
 # QMD: local hybrid search engine for memory (BM25 + vector via GGUF models).
-# Installed via bun from GitHub source; requires build step since dist/ is not in repo.
-RUN bun install -g --trust https://github.com/tobi/qmd \
-    && cd /home/bun/.bun/install/global/node_modules/@tobilu/qmd \
-    && bun install --frozen-lockfile \
-    && bun run build
+# Clone from GitHub and build with pnpm since it's not published to npm.
+RUN git clone --depth 1 https://github.com/tobi/qmd /opt/qmd \
+    && cd /opt/qmd \
+    && pnpm install --frozen-lockfile \
+    && pnpm run build \
+    && pnpm link --global
 
 # GIT_ASKPASS helper: feeds GITHUB_TOKEN env var to git credential prompts.
 RUN printf '#!/bin/sh\nif echo "$1" | grep -qi "password"; then echo "${GITHUB_TOKEN}"; else echo "x-access-token"; fi\n' \
     > /usr/local/bin/git-credential-askpass.sh \
     && chmod +x /usr/local/bin/git-credential-askpass.sh
 
-RUN mkdir -p /app/data/workspace /app/data/.bun \
-    && mkdir -p /home/bun/.openclaw /home/bun/.gemini /home/bun/.bun /home/bun/.acpx /home/bun/.claude \
+RUN mkdir -p /app/data/workspace \
+    && mkdir -p /home/app/.openclaw /home/app/.gemini /home/app/.acpx /home/app/.claude \
     && chmod +x /usr/local/bin/openclaw-entrypoint.sh \
-    && chown -R 1000:1000 /app/data /home/bun
+    && chown -R 1000:1000 /app/data /home/app
 
 USER 1000:1000
 
