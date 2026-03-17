@@ -4,7 +4,7 @@
 
 - `winget/packages.json`: winget パッケージ
 - `npm/packages.json`: npm グローバルパッケージ
-- `bun/packages.json`: bun グローバルパッケージ
+- `pnpm/packages.json`: pnpm グローバルパッケージ
 - `.wslconfig*`: WSL 設定
 - `docker-vhd-size.conf`, `expand-docker-vhd.ps1`: Docker VHD 管理
 
