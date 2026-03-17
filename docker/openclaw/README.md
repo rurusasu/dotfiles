@@ -98,7 +98,7 @@ Docker 用設定の特徴：
 - ワークスペース: `/app/data/workspace`（名前付きボリューム内）
 - Telegram / Slack DM: `dmPolicy = allowlist`（許可ユーザーのみ応答）
 - Slack チャンネル: `groupPolicy = allowlist`（許可チャンネルのみ、メンション必須）
-- スキルの実行時インストール先: `/app/data/.bun`（ボリューム内）
+- スキルの実行時インストール先: `/app/data`（ボリューム内）
 
 ## ボリューム
 
@@ -107,8 +107,8 @@ Docker 用設定の特徴：
 | ボリューム                       | マウント先                          | 用途                                                         |
 | -------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
 | `openclaw-data`                  | `/app/data`                         | ワークスペース・ログ・スキル                                 |
-| `openclaw-home`                  | `/home/bun/.openclaw`               | canvas・cron など実行時ステート                              |
-| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/bun/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる）                     |
+| `openclaw-home`                  | `/home/app/.openclaw`               | canvas・cron など実行時ステート                              |
+| `.env` の `OPENCLAW_CONFIG_FILE` | `/home/app/.openclaw/openclaw.json` | 読み取り専用設定（home volume に重ねる）                     |
 | `gemini.settings.json`           | `/app/gemini.settings.json`         | Docker 用 Gemini 最小設定（イメージ内）                      |
 | `acpx.config.json`               | `/app/acpx.config.json`             | Gemini 実行コマンド上書き（ACP モード）                      |
 | Docker secret `github_token`     | `/run/secrets/github_token`         | GitHub PAT（environment-based secret で注入）                |
@@ -254,7 +254,7 @@ done
 ```bash
 docker exec openclaw node -e "
   const fs = require('fs');
-  const p = '/home/bun/.openclaw/agents/main/sessions/sessions.json';
+  const p = '/home/app/.openclaw/agents/main/sessions/sessions.json';
   const d = JSON.parse(fs.readFileSync(p,'utf-8'));
   for (const k of Object.keys(d)) delete d[k].skillsSnapshot;
   fs.writeFileSync(p, JSON.stringify(d, null, 2));
@@ -281,9 +281,9 @@ docker exec openclaw sh -c 'openclaw agent --agent main --message "Count all ski
 docker compose run --rm openclaw --help
 
 # コンテナ内の設定確認
-docker compose exec openclaw cat /home/bun/.openclaw/openclaw.json
-docker compose exec openclaw cat /home/bun/.gemini/settings.json
-docker compose exec openclaw cat /home/bun/.acpx/config.json
+docker compose exec openclaw cat /home/app/.openclaw/openclaw.json
+docker compose exec openclaw cat /home/app/.gemini/settings.json
+docker compose exec openclaw cat /home/app/.acpx/config.json
 
 # ボリュームリセット（ワークスペースも消えるので注意）
 docker compose down -v && docker compose up -d
@@ -295,12 +295,12 @@ docker compose down -v && docker compose up -d
 `mcpServers` がコンテナ内で解決できず初期化遅延を起こすことがある。
 
 この構成では起動時 entrypoint が `docker/openclaw/gemini.settings.json` を
-`/home/bun/.gemini/settings.json` に上書きし、Docker 内では最小設定（`mcpServers: {}`）を使う。
+`/home/app/.gemini/settings.json` に上書きし、Docker 内では最小設定（`mcpServers: {}`）を使う。
 認証情報は `GEMINI_CREDENTIALS_DIR` マウントから継続利用される。
 
-さらに `docker/openclaw/acpx.config.json` を `/home/bun/.acpx/config.json` に投入し、
+さらに `docker/openclaw/acpx.config.json` を `/home/app/.acpx/config.json` に投入し、
 `acpx gemini` が `gemini --experimental-acp -m gemini-2.5-flash-lite` で起動するよう固定する。
-`HOME` は `docker-compose.yml` の環境変数で `/home/bun` に固定し、認証ファイル参照先のぶれを防ぐ。
+`HOME` は `docker-compose.yml` の環境変数で `/home/app` に固定し、認証ファイル参照先のぶれを防ぐ。
 
 設定変更後は再作成で反映:
 
