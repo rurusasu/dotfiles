@@ -51,7 +51,7 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
 # Clone from GitHub and build with pnpm since it's not published to npm.
 RUN git clone --depth 1 https://github.com/tobi/qmd /opt/qmd \
     && cd /opt/qmd \
-    && pnpm install --frozen-lockfile \
+    && pnpm install --no-frozen-lockfile \
     && pnpm run build \
     && pnpm link --global
 
