@@ -5,7 +5,7 @@
 .DESCRIPTION
     - NixOS ディストリビューションの存在確認
     - nixos-rebuild switch の実行
-    - bun グローバルパッケージのインストール (nix/bun/packages.json)
+    - pnpm グローバルパッケージのインストール (nix/pnpm/packages.json)
 
 .NOTES
     Order = 15 (Chezmoi の後、WslConfig の前)
@@ -72,24 +72,24 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
-    hidden [void] InstallBunGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
+    hidden [void] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
         try {
             if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
-                $this.Log("bun パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
+                $this.Log("pnpm パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
                 return
             }
 
             $json = Get-Content -LiteralPath $packagesJsonPath -Raw | ConvertFrom-Json
             $packages = $json.globalPackages
             if (-not $packages -or $packages.Count -eq 0) {
-                $this.Log("インストールする bun パッケージがありません", "Gray")
+                $this.Log("インストールする pnpm パッケージがありません", "Gray")
                 return
             }
 
             # インストール済みパッケージを取得してフィルタリング
             $installedOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "bun pm ls -g 2>/dev/null"
+                "bash", "-lc", "pnpm ls -g --depth=0 2>/dev/null"
             )
             $toInstall = @()
             $skipped = 0
@@ -104,33 +104,33 @@ class NixRebuildHandler : SetupHandlerBase {
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("bun グローバルパッケージはすべてインストール済みです ($skipped 個スキップ)", "Gray")
+                $this.Log("pnpm グローバルパッケージはすべてインストール済みです ($skipped 個スキップ)", "Gray")
                 return
             }
 
             $pkgList = $toInstall -join " "
-            $this.Log("bun グローバルパッケージをインストールしています: $pkgList")
+            $this.Log("pnpm グローバルパッケージをインストールしています: $pkgList")
 
-            $bunOutput = Invoke-Wsl -Arguments @(
+            $pnpmOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "bun install -g $pkgList"
+                "bash", "-lc", "pnpm add -g $pkgList"
             )
 
-            $bunOutput | ForEach-Object {
+            $pnpmOutput | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
                     $this.Log("  $_", "Gray")
                 }
             }
 
             if ($LASTEXITCODE -ne 0) {
-                $this.LogWarning("bun グローバルパッケージのインストールが失敗しました (exit code: $LASTEXITCODE)")
+                $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $LASTEXITCODE)")
             }
             else {
-                $this.Log("bun グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
+                $this.Log("pnpm グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
             }
         }
         catch {
-            $this.LogWarning("bun パッケージインストール中にエラーが発生しました: $_")
+            $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
         }
     }
 
@@ -155,9 +155,9 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch 完了", "Green")
 
-            # bun グローバルパッケージをインストール
-            $packagesJsonPath = Join-Path $ctx.DotfilesPath "nix\bun\packages.json"
-            $this.InstallBunGlobalPackages($distroName, $packagesJsonPath)
+            # pnpm グローバルパッケージをインストール
+            $packagesJsonPath = Join-Path $ctx.DotfilesPath "nix\pnpm\packages.json"
+            $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)
 
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)

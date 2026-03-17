@@ -96,8 +96,8 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return @("installed") }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return @("pre-commit installed") }
                 return ""
             }
@@ -125,16 +125,16 @@ Describe 'NixRebuildHandler' {
             $result.Message | Should -Match "nixos-rebuild switch が失敗しました"
         }
 
-        It 'should install bun global packages after nixos-rebuild' {
-            $script:bunArgs = ""
+        It 'should install pnpm global packages after nixos-rebuild' {
+            $script:pnpmArgs = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") {
-                    $script:bunArgs = $argStr
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") {
+                    $script:pnpmArgs = $argStr
                     $global:LASTEXITCODE = 0
                     return @("installed opencode-ai")
                 }
@@ -145,23 +145,23 @@ Describe 'NixRebuildHandler' {
 
             $handler.Apply($ctx)
 
-            $script:bunArgs | Should -Match "bun install -g"
-            $script:bunArgs | Should -Match "gemini-cli"
+            $script:pnpmArgs | Should -Match "pnpm add -g"
+            $script:pnpmArgs | Should -Match "gemini-cli"
         }
 
-        It 'should skip already installed bun packages' {
-            $script:bunInstallCalled = $false
+        It 'should skip already installed pnpm packages' {
+            $script:pnpmAddCalled = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") {
+                if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
                     return @("@google/gemini-cli@0.32.1", "@anthropic-ai/claude-code@2.1.70")
                 }
-                if ($argStr -match "bun install") {
-                    $script:bunInstallCalled = $true
+                if ($argStr -match "pnpm add") {
+                    $script:pnpmAddCalled = $true
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -172,17 +172,17 @@ Describe 'NixRebuildHandler' {
 
             $handler.Apply($ctx)
 
-            $script:bunInstallCalled | Should -Be $false
+            $script:pnpmAddCalled | Should -Be $false
         }
 
-        It 'should succeed even when bun install fails' {
+        It 'should succeed even when pnpm global install fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 1; return @("error") }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
@@ -190,7 +190,7 @@ Describe 'NixRebuildHandler' {
 
             $result = $handler.Apply($ctx)
 
-            # bun install 失敗でも Apply 自体は成功とみなす
+            # pnpm add 失敗でも Apply 自体は成功とみなす
             $result.Success | Should -Be $true
         }
 
@@ -201,8 +201,8 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
@@ -224,8 +224,8 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("CustomNixOS") }
                 if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
@@ -236,16 +236,16 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-d CustomNixOS"
         }
 
-        It 'should install pre-commit hooks after bun packages' {
+        It 'should install pre-commit hooks after pnpm packages' {
             $script:callOrder = [System.Collections.Generic.List[string]]::new()
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") {
-                    $script:callOrder.Add("bun")
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") {
+                    $script:callOrder.Add("pnpm")
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -261,9 +261,9 @@ Describe 'NixRebuildHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            $script:callOrder | Should -Contain "bun"
+            $script:callOrder | Should -Contain "pnpm"
             $script:callOrder | Should -Contain "pre-commit"
-            $script:callOrder.IndexOf("bun") | Should -BeLessThan $script:callOrder.IndexOf("pre-commit")
+            $script:callOrder.IndexOf("pnpm") | Should -BeLessThan $script:callOrder.IndexOf("pre-commit")
         }
 
         It 'should succeed even when pre-commit install fails' {
@@ -272,8 +272,8 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 1; return @("error") }
                 return ""
             }
@@ -292,8 +292,8 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun pm ls") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "bun install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") {
                     $script:preCommitArgs = $argStr
                     $global:LASTEXITCODE = 0
