@@ -36,7 +36,7 @@ echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_st
 
 # --- Render config template: replace @@PLACEHOLDERS@@ with runtime secrets ---
 _config_tmpl="/app/openclaw.json.tmpl"
-_config_out="/home/bun/.openclaw/openclaw.json"
+_config_out="/home/app/.openclaw/openclaw.json"
 if [ -f "$_config_tmpl" ]; then
   sed -e "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" -e "s|@@XAI_API_KEY@@|${XAI_API_KEY:-}|g" "$_config_tmpl" >"$_config_out"
   echo "[entrypoint] config rendered to $_config_out"
@@ -51,24 +51,24 @@ fi
 # Host ~/.gemini may contain MCP commands that are unavailable in this container.
 # Force a minimal settings.json on each boot to keep ACPX Gemini startup stable.
 if [ -f /app/gemini.settings.json ]; then
-  mkdir -p /home/bun/.gemini
-  tmp="/home/bun/.gemini/.settings.json.tmp.$$"
+  mkdir -p /home/app/.gemini
+  tmp="/home/app/.gemini/.settings.json.tmp.$$"
   cp /app/gemini.settings.json "$tmp"
-  mv "$tmp" /home/bun/.gemini/settings.json
+  mv "$tmp" /home/app/.gemini/settings.json
 fi
 
 # Ensure ACPX uses Gemini in ACP server mode.
 if [ -f /app/acpx.config.json ]; then
-  mkdir -p /home/bun/.acpx
-  tmp="/home/bun/.acpx/.config.json.tmp.$$"
+  mkdir -p /home/app/.acpx
+  tmp="/home/app/.acpx/.config.json.tmp.$$"
   cp /app/acpx.config.json "$tmp"
-  mv "$tmp" /home/bun/.acpx/config.json
+  mv "$tmp" /home/app/.acpx/config.json
 fi
 
 # Claude Code: ensure credentials dir exists and set container-safe defaults.
-mkdir -p /home/bun/.claude
-if [ ! -f /home/bun/.claude/settings.json ]; then
-  cat >/home/bun/.claude/settings.json <<'CEOF'
+mkdir -p /home/app/.claude
+if [ ! -f /home/app/.claude/settings.json ]; then
+  cat >/home/app/.claude/settings.json <<'CEOF'
 {"permissions":{"allow":["Bash(*)","Read(*)","Write(*)","Edit(*)","Glob(*)","Grep(*)"],"deny":[]},"hasCompletedOnboarding":true}
 CEOF
 fi
@@ -212,8 +212,8 @@ fi
 
 # Copy Claude Code skills into workspace so sandbox containers can read them.
 # Sandbox only mounts /app/data/workspace/ → /workspace/; symlink targets
-# outside that tree (/home/bun/.claude/skills/) are invisible inside the sandbox.
-claude_skills="/home/bun/.claude/skills"
+# outside that tree (/home/app/.claude/skills/) are invisible inside the sandbox.
+claude_skills="/home/app/.claude/skills"
 workspace_skills="$workspace_dir/skills"
 if [ -d "$claude_skills" ]; then
   mkdir -p "$workspace_skills"
@@ -235,7 +235,7 @@ fi
 # OpenClaw caches a skills snapshot per session in sessions.json (version: 0).
 # Snapshots with version 0 are never auto-refreshed (refresh requires version > 0).
 # Removing skillsSnapshot from all session entries forces a fresh rebuild on next turn.
-_sessions_dir="/home/bun/.openclaw/agents"
+_sessions_dir="/home/app/.openclaw/agents"
 if [ -d "$_sessions_dir" ]; then
   find "$_sessions_dir" -name "sessions.json" -type f 2>/dev/null | while read -r _sf; do
     if grep -q '"skillsSnapshot"' "$_sf" 2>/dev/null; then
