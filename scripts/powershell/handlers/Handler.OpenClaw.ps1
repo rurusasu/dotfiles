@@ -375,15 +375,15 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
         }
 
         # コンテナ内に jobs.json がすでに存在するか確認
-        $existing = Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "test -f //home/bun/.openclaw/cron/jobs.json && echo exists"
+        $existing = Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "test -f //home/app/.openclaw/cron/jobs.json && echo exists"
         if ($existing -match "exists") {
             $this.Log("cron/jobs.json はすでに存在します。シードをスキップします", "Gray")
             return
         }
 
         $this.Log("cron/jobs.json が存在しません。シードファイルをコピーします")
-        Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/bun/.openclaw/cron"
-        Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw://home/bun/.openclaw/cron/jobs.json"
+        Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/app/.openclaw/cron"
+        Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw://home/app/.openclaw/cron/jobs.json"
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("cron seed のコピーに失敗しました")
             return
