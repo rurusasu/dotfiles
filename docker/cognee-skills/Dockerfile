@@ -3,7 +3,8 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git libpq-dev build-essential \
     && rm -rf /var/lib/apt/lists/*
 ARG COGNEE_COMMIT=d4913de215730bd9825115d978e7842acf0062b9
 RUN git clone https://github.com/rurusasu/cognee.git /app/cognee \
@@ -12,8 +13,7 @@ RUN git clone https://github.com/rurusasu/cognee.git /app/cognee \
 WORKDIR /app/cognee
 RUN uv venv /app/.venv \
     && uv pip install --python /app/.venv/bin/python \
-       -e ".[falkordb]" \
-       cognee-community-hybrid-adapter-falkor
+       -e "."
 
 WORKDIR /app/cognee/cognee-mcp
 RUN uv pip install --python /app/.venv/bin/python -e .
