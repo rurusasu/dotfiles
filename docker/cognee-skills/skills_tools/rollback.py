@@ -60,10 +60,15 @@ async def rollback_skill_impl(
         await cognee.add(rollback_data, dataset_name=f"skill_{skill_name}_amendments")
         await cognee.cognify()
 
+        # Disable auto-amend after rollback (spec: requires manual approval to re-enable)
+        from .log_execution import _auto_amend_disabled
+        _auto_amend_disabled.add(skill_name)
+
         result = {
             "status": "rolled_back",
             "amendment_id": amendment_id,
             "skill_name": skill_name,
+            "auto_amend_disabled": True,
         }
 
         return [types.TextContent(type="text", text=json.dumps(result))]

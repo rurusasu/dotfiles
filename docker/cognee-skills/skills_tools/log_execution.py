@@ -11,12 +11,11 @@ from uuid import uuid4
 import sys
 import mcp.types as types
 
-from .models import Execution, Skill
+from .models import Execution
 from .health import calculate_health_score, needs_improvement
 
 # Rate limiting: track last amendment time per skill
 _last_amendment: dict[str, datetime] = {}
-_consecutive_failures: dict[str, int] = {}
 _auto_amend_disabled: set[str] = set()
 
 BUFFER_DIR = Path("/tmp/skill-logs")

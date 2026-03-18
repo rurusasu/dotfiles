@@ -236,7 +236,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
         $secretDir = ((Join-Path $homeDir ".openclaw\secrets") -replace '\\', '/')
 
         # chezmoi ソースディレクトリから dot_claude/skills パスを構築
-        $chezmoiSourceDir = ((Join-Path $ctx.DotfilesPath "home") -replace '\\', '/')
+        $chezmoiSourceDir = ((Join-Path $ctx.DotfilesPath "chezmoi") -replace '\\', '/')
         $skillsPath = "${chezmoiSourceDir}/dot_claude/skills"
 
         $envContent = @"
@@ -245,9 +245,9 @@ EMBEDDING_PROVIDER=gemini
 EMBEDDING_MODEL=gemini-embedding-2-preview
 SKILLS_PATH=$skillsPath
 OPENCLAW_GEMINI_API_KEY_FILE=$secretDir/gemini_api_key
-SKILL_HEALTH_CHECK_ENABLED=true
-SKILL_HEALTH_CHECK_INTERVAL=60
-SKILL_HEALTH_CHECK_TIMEOUT=10
+SKILL_HEALTH_WINDOW=20
+SKILL_HEALTH_THRESHOLD=0.7
+SKILL_CORRECTION_PENALTY=0.05
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
