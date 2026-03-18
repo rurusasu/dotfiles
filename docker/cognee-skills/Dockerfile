@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git libpq-dev build-essential \
     && rm -rf /var/lib/apt/lists/*
-ARG COGNEE_COMMIT=d4913de215730bd9825115d978e7842acf0062b9
+ARG COGNEE_COMMIT=3b7551b
 RUN git clone https://github.com/rurusasu/cognee.git /app/cognee \
     && cd /app/cognee && git checkout ${COGNEE_COMMIT}
 
