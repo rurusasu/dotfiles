@@ -82,6 +82,9 @@ services:
     secrets:
       - github_token
       - xai_api_key
+    networks:
+      - default
+      - cognee-network
 
 volumes:
   openclaw-data:
@@ -96,6 +99,11 @@ volumes:
   # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
   claude-credentials:
     driver: local
+
+networks:
+  default:
+  cognee-network:
+    external: true
 
 secrets:
   github_token:
