@@ -5,8 +5,8 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
-ARG COGNEE_COMMIT=main
-RUN git clone https://github.com/topoteretes/cognee.git /app/cognee \
+ARG COGNEE_COMMIT=d4913de215730bd9825115d978e7842acf0062b9
+RUN git clone https://github.com/rurusasu/cognee.git /app/cognee \
     && cd /app/cognee && git checkout ${COGNEE_COMMIT}
 
 WORKDIR /app/cognee
