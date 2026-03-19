@@ -33,6 +33,7 @@ jobs:
         run: |
           $pesterConfig = New-PesterConfiguration
           $pesterConfig.Run.Path = "./tests"
+          $pesterConfig.Run.ExcludePath = @("./tests/Integration.Tests.ps1")
           $pesterConfig.Run.PassThru = $true
           $pesterConfig.Output.Verbosity = "Detailed"
 

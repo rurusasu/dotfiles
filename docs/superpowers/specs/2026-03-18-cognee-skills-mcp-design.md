@@ -99,17 +99,17 @@ FalkorDB のグラフに保存するノードとエッジ:
 
 ### ノード定義
 
-| ノード | フィールド |
-|---|---|
-| Skill | id, name, source_path, agent_type (claude/codex/cursor/openclaw/gemini) |
-| SkillVersion | version, content (スキルディレクトリ全ファイルの内容), content_hash, created_at |
-| Execution | id, agent, task_description, success (bool), error, duration_ms, timestamp |
-| Feedback | type (user_correction/auto), message, timestamp |
-| Amendment | id, diff, rationale, status (proposed/applied/rolled_back), score_before, score_after |
+| ノード       | フィールド                                                                            |
+| ------------ | ------------------------------------------------------------------------------------- |
+| Skill        | id, name, source_path, agent_type (claude/codex/cursor/openclaw/gemini)               |
+| SkillVersion | version, content (スキルディレクトリ全ファイルの内容), content_hash, created_at       |
+| Execution    | id, agent, task_description, success (bool), error, duration_ms, timestamp            |
+| Feedback     | type (user_correction/auto), message, timestamp                                       |
+| Amendment    | id, diff, rationale, status (proposed/applied/rolled_back), score_before, score_after |
 
 ### Source of Truth
 
-cognee グラフがスキルの正（Source of Truth）。スキルディレクトリの全ファイル（SKILL.md, scripts/*, references/*, assets/*）を cognee の Custom DataPoint としてグラフに保存する。
+cognee グラフがスキルの正（Source of Truth）。スキルディレクトリの全ファイル（SKILL.md, scripts/_, references/_, assets/\*）を cognee の Custom DataPoint としてグラフに保存する。
 
 ```
 cognee グラフ（正）
@@ -283,7 +283,7 @@ services:
       falkordb:
         condition: service_healthy
     volumes:
-      - ${SKILLS_PATH}:/skills:rw  # スキルディレクトリのみマウント
+      - ${SKILLS_PATH}:/skills:rw # スキルディレクトリのみマウント
     networks:
       - cognee-network
     restart: unless-stopped
@@ -397,12 +397,12 @@ MCP 非対応。将来的に ChatGPT Actions（OpenAPI spec）で対応。当面
 
 qmd と統一。新規 API キー・secret の追加はゼロ。
 
-| 変数 | 値 | 共有元 |
-|---|---|---|
-| GEMINI_API_KEY | Docker secret 経由 | openclaw と同じ secret |
-| EMBEDDING_MODEL | gemini-embedding-2-preview | qmd と同じモデル |
-| LLM_PROVIDER | gemini | .env で切り替え可能 |
-| EMBEDDING_PROVIDER | gemini | .env で切り替え可能 |
+| 変数               | 値                         | 共有元                 |
+| ------------------ | -------------------------- | ---------------------- |
+| GEMINI_API_KEY     | Docker secret 経由         | openclaw と同じ secret |
+| EMBEDDING_MODEL    | gemini-embedding-2-preview | qmd と同じモデル       |
+| LLM_PROVIDER       | gemini                     | .env で切り替え可能    |
+| EMBEDDING_PROVIDER | gemini                     | .env で切り替え可能    |
 
 ## Error Handling
 
@@ -429,11 +429,11 @@ qmd と統一。新規 API キー・secret の追加はゼロ。
 
 ## Storage
 
-| データ | 保存先 | 永続化 |
-|---|---|---|
-| スキルグラフ（ノード・エッジ） | FalkorDB volume (`falkordb-data`) | Docker named volume |
-| ベクトルインデックス | FalkorDB volume (`falkordb-data`) | Docker named volume |
-| スキルファイル（デプロイ先） | ホスト側 skills ディレクトリ | git 管理 |
+| データ                          | 保存先                                          | 永続化                                      |
+| ------------------------------- | ----------------------------------------------- | ------------------------------------------- |
+| スキルグラフ（ノード・エッジ）  | FalkorDB volume (`falkordb-data`)               | Docker named volume                         |
+| ベクトルインデックス            | FalkorDB volume (`falkordb-data`)               | Docker named volume                         |
+| スキルファイル（デプロイ先）    | ホスト側 skills ディレクトリ                    | git 管理                                    |
 | FalkorDB ダウン時のバッファログ | cognee-mcp-skills コンテナ内 `/tmp/skill-logs/` | tmpfs（再起動で消失、復旧後にグラフへ投入） |
 
 ### バックアップ
