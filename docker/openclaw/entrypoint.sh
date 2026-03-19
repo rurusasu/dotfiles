@@ -65,6 +65,43 @@ if [ -f /app/acpx.config.json ]; then
   mv "$tmp" /home/app/.acpx/config.json
 fi
 
+# Codex OAuth: seed auth-profiles.json from host's ~/.codex/auth.json (ro mount).
+# OpenClaw manages its own refresh cycle; we only inject the initial token.
+_codex_auth="/app/codex-auth.json"
+if [ -f "$_codex_auth" ] && [ -s "$_codex_auth" ]; then
+  node -e "
+    const fs = require('fs');
+    const src = JSON.parse(fs.readFileSync('$_codex_auth', 'utf8'));
+    if (!src.tokens || !src.tokens.access_token) { console.log('[entrypoint] codex-auth: no tokens found, skipping'); process.exit(0); }
+    const profile = {
+      type: 'oauth',
+      provider: 'openai-codex',
+      access: src.tokens.access_token,
+      refresh: src.tokens.refresh_token,
+      expires: Date.now() + 864000000,
+      accountId: src.tokens.account_id || ''
+    };
+    const agents = ['main','claude','gemini'];
+    let updated = 0;
+    for (const agent of agents) {
+      const f = '/home/app/.openclaw/agents/' + agent + '/agent/auth-profiles.json';
+      try {
+        const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const existing = d.profiles['openai-codex:default'];
+        if (existing && existing.refresh === profile.refresh) continue;
+        d.profiles['openai-codex:default'] = profile;
+        if (d.usageStats) delete d.usageStats['openai-codex:default'];
+        fs.writeFileSync(f, JSON.stringify(d, null, 2));
+        updated++;
+      } catch(e) {}
+    }
+    if (updated > 0) console.log('[entrypoint] codex-auth: injected tokens into ' + updated + ' agent(s)');
+    else console.log('[entrypoint] codex-auth: tokens already current');
+  " 2>/dev/null || echo "[entrypoint] codex-auth: injection skipped (agent dirs may not exist yet)"
+else
+  echo "[entrypoint] codex-auth: no host auth file mounted, skipping"
+fi
+
 # Claude Code: ensure credentials dir exists and set container-safe defaults.
 mkdir -p /home/app/.claude
 if [ ! -f /home/app/.claude/settings.json ]; then

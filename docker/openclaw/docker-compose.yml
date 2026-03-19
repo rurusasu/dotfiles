@@ -74,6 +74,13 @@ services:
       # Claude Code expects $HOME/.claude.json at the HOME root (not inside .claude/).
       # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
       - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/app/.claude.json:ro
+      # Codex OAuth credentials (auth.json).
+      # Authenticate once on the host with `codex login`, then this mount keeps tokens
+      # available on container restart. Entrypoint copies tokens into auth-profiles.json
+      # so OpenClaw manages its own refresh cycle independently.
+      # Set CODEX_AUTH_FILE in .env (e.g. C:/Users/<you>/.codex/auth.json).
+      # Leave unset to skip — OpenClaw can still auth via its own OAuth flow (port 1455).
+      - ${CODEX_AUTH_FILE:-/dev/null}:/app/codex-auth.json:ro
       # Docker socket for built-in sandbox (sibling container spawning).
       # Required for agents.defaults.sandbox.mode != "off".
       # Security: grants ability to create/manage Docker containers on the host.
