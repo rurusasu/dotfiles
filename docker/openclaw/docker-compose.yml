@@ -43,7 +43,7 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/app
       # xAI Grok API key: injected via Docker secret (see secrets section below)
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /usr/local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
@@ -104,6 +104,7 @@ networks:
   default:
   cognee-network:
     external: true
+    name: cognee-skills_cognee-network
 
 secrets:
   github_token:

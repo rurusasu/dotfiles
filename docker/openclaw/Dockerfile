@@ -13,7 +13,7 @@ COPY config/acpx.config.json /app/acpx.config.json
 COPY tests/ /app/tests/
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client socat unzip \
+    && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client socat unzip build-essential python3 \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
@@ -52,8 +52,12 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
 # Clone from GitHub and build with pnpm since it's not published to npm.
 RUN git clone --depth 1 https://github.com/tobi/qmd /opt/qmd \
     && cd /opt/qmd \
-    && pnpm install --no-frozen-lockfile \
+    && NODE_ENV=development pnpm install --no-frozen-lockfile \
+    && cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3 \
+    && npx --yes node-gyp rebuild \
+    && cd /opt/qmd \
     && pnpm run build \
+    && touch package-lock.json \
     && pnpm link --global
 
 # GIT_ASKPASS helper: feeds GITHUB_TOKEN env var to git credential prompts.
