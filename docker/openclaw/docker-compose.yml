@@ -43,7 +43,7 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
       HOME: /home/app
       # xAI Grok API key: injected via Docker secret (see secrets section below)
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /usr/local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       GIT_ASKPASS: /usr/local/bin/git-credential-askpass.sh
       # Raise Node heap to avoid startup OOM with npm/Node runtime
       NODE_OPTIONS: --max-old-space-size=1536
@@ -74,6 +74,13 @@ services:
       # Claude Code expects $HOME/.claude.json at the HOME root (not inside .claude/).
       # Bind-mount the host file directly. Set CLAUDE_CONFIG_JSON in .env.
       - ${CLAUDE_CONFIG_JSON:-/dev/null}:/home/app/.claude.json:ro
+      # Codex OAuth credentials (auth.json).
+      # Authenticate once on the host with `codex login`, then this mount keeps tokens
+      # available on container restart. Entrypoint copies tokens into auth-profiles.json
+      # so OpenClaw manages its own refresh cycle independently.
+      # Set CODEX_AUTH_FILE in .env (e.g. C:/Users/<you>/.codex/auth.json).
+      # Leave unset to skip — OpenClaw can still auth via its own OAuth flow (port 1455).
+      - ${CODEX_AUTH_FILE:-/dev/null}:/app/codex-auth.json:ro
       # Docker socket for built-in sandbox (sibling container spawning).
       # Required for agents.defaults.sandbox.mode != "off".
       # Security: grants ability to create/manage Docker containers on the host.
@@ -82,6 +89,9 @@ services:
     secrets:
       - github_token
       - xai_api_key
+    networks:
+      - default
+      - cognee-network
 
 volumes:
   openclaw-data:
@@ -96,6 +106,12 @@ volumes:
   # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
   claude-credentials:
     driver: local
+
+networks:
+  default:
+  cognee-network:
+    external: true
+    name: cognee-skills_cognee-network
 
 secrets:
   github_token:

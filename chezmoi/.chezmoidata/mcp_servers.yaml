@@ -133,3 +133,12 @@ mcp_servers:
       - claude
       - cursor
       - gemini
+
+  # cognee-skills - Self-improving skills via cognee knowledge graph
+  - name: cognee-skills
+    url: "http://localhost:8000/mcp"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
