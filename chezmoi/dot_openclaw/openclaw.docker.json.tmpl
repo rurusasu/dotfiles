@@ -296,7 +296,8 @@
       "telegram",
       "slack",
       "acpx",
-      "google-gemini-cli-auth"
+      "google-gemini-cli-auth",
+      "openclaw-mcp-bridge"
     ],
     "entries": {
       "acpx": {
@@ -307,6 +308,20 @@
       },
       "google-gemini-cli-auth": {
         "enabled": true
+      },
+      "openclaw-mcp-bridge": {
+        "enabled": true,
+        "config": {
+          "mode": "direct",
+          "toolPrefix": true,
+          "servers": {
+            "cognee-skills": {
+              "transport": "streamable-http",
+              "url": "http://cognee-mcp-skills:8000/mcp",
+              "description": "Cognee MCP skills"
+            }
+          }
+        }
       }
     }
   },

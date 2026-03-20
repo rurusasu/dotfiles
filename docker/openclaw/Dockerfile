@@ -48,6 +48,15 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && npm install -g @zed-industries/claude-agent-acp \
     && npm cache clean --force
 
+# Install openclaw-mcp-bridge plugin into extensions directory
+RUN cd /tmp \
+    && npm pack @aiwerk/openclaw-mcp-bridge 2>/dev/null \
+    && tar xzf aiwerk-openclaw-mcp-bridge-*.tgz \
+    && mv package /usr/local/lib/node_modules/openclaw/extensions/openclaw-mcp-bridge \
+    && cd /usr/local/lib/node_modules/openclaw/extensions/openclaw-mcp-bridge \
+    && npm install --omit=dev \
+    && rm -rf /tmp/aiwerk-openclaw-mcp-bridge-*.tgz
+
 # QMD: local hybrid search engine for memory (BM25 + vector via GGUF models).
 # Clone from GitHub and build with pnpm since it's not published to npm.
 RUN git clone --depth 1 https://github.com/tobi/qmd /opt/qmd \
