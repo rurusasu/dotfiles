@@ -28,8 +28,13 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_$
 # Playwright (Chromium only)
 # Browser binaries are installed at build time into PLAYWRIGHT_BROWSERS_PATH.
 # Runtime writes (profiles, temp) go to /tmp (covered by tmpfs).
-ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
-RUN npx -y playwright install --with-deps chromium
+# Installed as root but made readable for UID 1000 (sandbox runs as node user).
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+RUN npx -y playwright install --with-deps chromium \
+    && chmod -R a+rX /home/node/.cache/ms-playwright
+
+# Ensure /home/bun and /home/node exist for OpenClaw's sandbox runtime
+RUN mkdir -p /home/bun /home/node
 
 # Git defaults for sandbox operations
 # safe.directory "*" is intentionally permissive - sandbox containers are

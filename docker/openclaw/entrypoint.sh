@@ -130,17 +130,29 @@ else
   echo "[entrypoint] docker CLI not available or socket not mounted; skipping sandbox image check"
 fi
 
-workspace_dir="/app/data/workspace"
+workspace_dir="${OPENCLAW_WORKSPACE_POSIX:-/app/data/workspace}"
 
-# Mirror /app/data/lifelog into workspace so sandbox can read it at /workspace/lifelog.
-_lifelog_src="/app/data/lifelog"
+# Ensure lifelog repo exists in workspace.
+# On host bind mounts (Windows NTFS), cp -au preserves source permissions which
+# become immutable on NTFS — sandbox cannot write to copied dirs.
+# Use git clone instead so files get native host permissions.
 _lifelog_dst="$workspace_dir/lifelog"
-if [ -d "$_lifelog_src" ]; then
-  # Remove stale symlink from previous config
-  [ -L "$_lifelog_dst" ] && rm -f "$_lifelog_dst"
-  mkdir -p "$_lifelog_dst"
-  cp -au "$_lifelog_src/." "$_lifelog_dst/" 2>&1
-  echo "[entrypoint] lifelog synced to $_lifelog_dst ($(du -sh "$_lifelog_dst" | cut -f1))"
+_lifelog_src="/app/data/lifelog"
+if [ -d "$_lifelog_dst/.git" ]; then
+  echo "[entrypoint] lifelog: already present in workspace, skipping"
+elif [ -d "$_lifelog_src/.git" ]; then
+  _lifelog_remote="$(git -C "$_lifelog_src" remote get-url origin 2>/dev/null || true)"
+  if [ -n "$_lifelog_remote" ]; then
+    [ -L "$_lifelog_dst" ] && rm -f "$_lifelog_dst"
+    rm -rf "$_lifelog_dst"
+    if git clone --depth 1 "$_lifelog_remote" "$_lifelog_dst" 2>&1; then
+      echo "[entrypoint] lifelog: cloned from $_lifelog_remote"
+    else
+      echo "[entrypoint] WARNING: lifelog clone failed; continuing without lifelog" >&2
+    fi
+  else
+    echo "[entrypoint] lifelog: source has no remote, skipping"
+  fi
 fi
 
 # Pull latest workspace from remote (if it's a git repo with a remote).
@@ -154,22 +166,27 @@ if [ -d "$workspace_dir/.git" ] && git -C "$workspace_dir" remote get-url origin
 fi
 
 # Enforce Claude-first child-session policy inside workspace instructions.
+# On host bind mounts, the gateway user (UID 1000) may not have write permission.
+# Skip file modifications if the file is not writable.
 workspace_agents="$workspace_dir/AGENTS.md"
 if [ ! -f "$workspace_agents" ]; then
-  mkdir -p "$workspace_dir"
-  cat >"$workspace_agents" <<'EOF'
+  if mkdir -p "$workspace_dir" 2>/dev/null && cat >"$workspace_agents" <<'EOF'; then true; else echo "[entrypoint] WARNING: cannot create workspace AGENTS.md (read-only bind mount?); skipping" >&2; fi
 # AGENTS.md - Workspace
 EOF
 fi
 
-# Remove legacy CODEX-FIRST block if present (migration from previous policy).
-if grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents" 2>/dev/null; then
-  sed -i '/## BEGIN OPENCLAW CODEX-FIRST RULES/,/## END OPENCLAW CODEX-FIRST RULES/d' "$workspace_agents"
-  echo "[entrypoint] removed legacy CODEX-FIRST policy block"
-fi
+if [ ! -w "$workspace_agents" ]; then
+  echo "[entrypoint] workspace AGENTS.md is not writable; skipping policy injection"
+else
 
-if ! grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents"; then
-  cat >>"$workspace_agents" <<'EOF'
+  # Remove legacy CODEX-FIRST block if present (migration from previous policy).
+  if grep -q "BEGIN OPENCLAW CODEX-FIRST RULES" "$workspace_agents" 2>/dev/null; then
+    sed -i '/## BEGIN OPENCLAW CODEX-FIRST RULES/,/## END OPENCLAW CODEX-FIRST RULES/d' "$workspace_agents"
+    echo "[entrypoint] removed legacy CODEX-FIRST policy block"
+  fi
+
+  if ! grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents"; then
+    cat >>"$workspace_agents" <<'EOF'
 
 ## BEGIN OPENCLAW CLAUDE-FIRST RULES
 
@@ -184,11 +201,11 @@ if ! grep -q "BEGIN OPENCLAW CLAUDE-FIRST RULES" "$workspace_agents"; then
 
 ## END OPENCLAW CLAUDE-FIRST RULES
 EOF
-fi
+  fi
 
-# Inject built-in sandbox rules into workspace AGENTS.md.
-if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
-  cat >>"$workspace_agents" <<'EOF'
+  # Inject built-in sandbox rules into workspace AGENTS.md.
+  if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
+    cat >>"$workspace_agents" <<'EOF'
 
 ## BEGIN SANDBOX RULES
 
@@ -207,7 +224,9 @@ if ! grep -q "BEGIN SANDBOX RULES" "$workspace_agents"; then
 
 ## END SANDBOX RULES
 EOF
-fi
+  fi
+
+fi # end: workspace_agents writable check
 
 # --- Superpowers: clone or update obra/superpowers ---
 _sp_dir="/app/data/superpowers"
@@ -237,10 +256,14 @@ if [ -d "$_sp_dir/skills" ]; then
   # Workspace skills — copy (not symlink) so sandbox containers can read them.
   # Sandbox only mounts /app/data/workspace/ → /workspace/; symlink targets
   # outside that tree are invisible inside the sandbox.
-  # Remove stale symlink first to avoid cp "same file" error.
-  [ -L "$workspace_dir/skills/superpowers" ] && rm -f "$workspace_dir/skills/superpowers"
-  mkdir -p "$workspace_dir/skills/superpowers"
-  cp -rLf "$_sp_dir/skills/." "$workspace_dir/skills/superpowers/"
+  # On host bind mounts, skip if workspace is not writable.
+  if [ -w "$workspace_dir" ]; then
+    [ -L "$workspace_dir/skills/superpowers" ] && rm -f "$workspace_dir/skills/superpowers"
+    mkdir -p "$workspace_dir/skills/superpowers"
+    cp -rLf "$_sp_dir/skills/." "$workspace_dir/skills/superpowers/"
+  else
+    echo "[entrypoint] superpowers: workspace not writable; skipping skill copy"
+  fi
 
   echo "[entrypoint] superpowers: wired to agents ($(git -C "$_sp_dir" rev-parse --short HEAD 2>/dev/null || echo 'unknown'))"
 else
@@ -252,7 +275,7 @@ fi
 # outside that tree (/home/app/.claude/skills/) are invisible inside the sandbox.
 claude_skills="/home/app/.claude/skills"
 workspace_skills="$workspace_dir/skills"
-if [ -d "$claude_skills" ]; then
+if [ -d "$claude_skills" ] && [ -w "$workspace_dir" ]; then
   mkdir -p "$workspace_skills"
   for skill_dir in "$claude_skills"/*/; do
     skill_name="$(basename "$skill_dir")"
@@ -265,6 +288,8 @@ if [ -d "$claude_skills" ]; then
     fi
     cp -rL "$skill_dir" "$target"
   done
+elif [ -d "$claude_skills" ]; then
+  echo "[entrypoint] claude-skills: workspace not writable; skipping skill copy"
 fi
 
 # --- Invalidate stale skill snapshots ---

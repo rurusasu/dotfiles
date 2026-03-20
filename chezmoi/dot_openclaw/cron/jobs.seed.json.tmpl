@@ -2,6 +2,7 @@
 {{- if lookPath "op" -}}
 {{-   $telegramUserId = onepasswordRead "op://Personal/TelegramBot/user_id" -}}
 {{- end -}}
+{{- $ws := .openclaw.workspace.sandboxPath -}}
 {
   "version": 1,
   "jobs": [
@@ -22,7 +23,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run in /app/data/workspace/lifelog: `bun run new`.\n\nThen send exactly one short status message:\n- Success: \"✅ lifelog scaffold created/checked for today (daily/weekly/monthly/yearly).\"\n- Failure: \"⚠️ lifelog scaffold failed: <brief reason>\""
+        "message": "Run in {{ $ws }}/lifelog: `bun run new`.\n\nThen send exactly one short status message:\n- Success: \"✅ lifelog scaffold created/checked for today (daily/weekly/monthly/yearly).\"\n- Failure: \"⚠️ lifelog scaffold failed: <brief reason>\""
       },
       "delivery": {
         "mode": "announce"
@@ -45,12 +46,34 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "In /app/data/workspace/lifelog, run:\n1) `git add daily weekly monthly yearly`\n2) If there are no staged changes, send: \"ℹ️ lifelog sync: no changes to commit today.\"\n3) If there are changes, commit with message: `chore(lifelog): daily scaffold update for $(date +%F)` and push to `origin main`, then send: \"✅ lifelog sync pushed to GitHub.\"\n4) On any failure, send: \"⚠️ lifelog sync failed: <brief reason>\""
+        "message": "In {{ $ws }}/lifelog, run:\n1) `git add daily weekly monthly yearly`\n2) If there are no staged changes, send: \"ℹ️ lifelog sync: no changes to commit today.\"\n3) If there are changes, commit with message: `chore(lifelog): daily scaffold update for $(date +%F)` and push to `origin main`, then send: \"✅ lifelog sync pushed to GitHub.\"\n4) On any failure, send: \"⚠️ lifelog sync failed: <brief reason>\""
       },
       "delivery": {
         "mode": "announce",
         "to": "{{ $telegramUserId }}",
         "channel": "telegram"
+      }
+    },
+    {
+      "id": "c542f9b7-6eba-49b5-bb50-cf83857386c1",
+      "agentId": "main",
+      "name": "workspace-git-sync",
+      "enabled": true,
+      "createdAtMs": 1773936163895,
+      "updatedAtMs": 1773936163895,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 600000,
+        "anchorMs": 1773936163895
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "In {{ $ws }}, run:\n1) `git add -A`\n2) If there are no staged changes: do nothing silently.\n3) If there are staged changes: commit with message `chore(workspace): auto-sync $(date +%F_%H%M)` and push to `origin main`.\n4) Then `git pull --ff-only origin main` to pick up any remote changes.\n5) On any failure, report briefly."
+      },
+      "delivery": {
+        "mode": "silent"
       }
     },
     {

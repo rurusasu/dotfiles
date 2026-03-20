@@ -289,6 +289,9 @@ class OpenClawHandler : SetupHandlerBase {
         $claudeCredentialsDir = ((Join-Path $homeDir ".claude") -replace '\\', '/')
         $claudeConfigJson = ((Join-Path $homeDir ".claude.json") -replace '\\', '/')
         $secretDir = ($this.GetSecretDir() -replace '\\', '/')
+        $workspaceHostDir = ((Join-Path $homeDir "openclaw-workspace") -replace '\\', '/')
+        # Convert Windows path to Docker Desktop POSIX path: C:/Users/x -> /c/Users/x
+        $workspacePosixDir = $workspaceHostDir -replace '^([A-Z]):', { '/' + $_.Groups[1].Value.ToLower() }
         $envContent = @"
 OPENCLAW_PORT=18789
 OPENCLAW_UID=1000
@@ -298,6 +301,8 @@ TZ=Asia/Tokyo
 GEMINI_CREDENTIALS_DIR=$geminiCredentialsDir
 CLAUDE_CREDENTIALS_DIR=$claudeCredentialsDir
 CLAUDE_CONFIG_JSON=$claudeConfigJson
+OPENCLAW_WORKSPACE_DIR=$workspaceHostDir
+OPENCLAW_WORKSPACE_POSIX=$workspacePosixDir
 OPENCLAW_GITHUB_TOKEN_FILE=$secretDir/github_token
 OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
 "@

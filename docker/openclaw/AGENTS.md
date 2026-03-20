@@ -223,6 +223,112 @@ docker compose -f docker/openclaw/docker-compose.yml logs -f
 docker exec -it openclaw sh
 ```
 
+## Sandbox Workspace アクセスと永続化
+
+### 背景: Windows + WSL + Docker 構成でのパスマッピング不一致
+
+sandbox は Gateway の子コンテナではなく、Docker Engine から直接作成される **sibling コンテナ** である。
+OpenClaw が `workspaceAccess: "rw"` で sandbox に渡す bind source はコンテナ内パスだが、
+Docker Engine はこれを **ホスト上のパス** として解釈する。
+named volume の実体はホスト上の別の場所にあるため、sandbox と gateway は同じ workspace を指さない。
+
+経緯:
+
+- `9e65a58`: `workspaceAccess: "rw"` に変更を試みた
+- `24dcda1`: パスマッピング不一致により書き込みが反映されないことを確認、`"none"` に revert
+- 参照: [Issue #31331](https://github.com/openclaw/openclaw/issues/31331), [PR #31457](https://github.com/openclaw/openclaw/pull/31457)
+
+### 解決策: POSIX パスによる gateway workspace + workspaceAccess: "rw"
+
+gateway の workspace パスを Docker Desktop が解決できる POSIX パス（`/c/Users/...`）に設定する。
+`workspaceAccess: "rw"` で OpenClaw が sandbox に workspace を自動マウントする際、
+このパスが Docker Engine にそのまま渡され、同じ物理ディレクトリを参照する。
+
+```
+Host:     C:/Users/rurus/openclaw-workspace          (実ファイル)
+Gateway:  bind mount → /c/Users/rurus/...            (docker-compose.yml, OPENCLAW_WORKSPACE_POSIX)
+Sandbox:  auto mount → /workspace:rw                 (workspaceAccess: "rw" が自動設定)
+          source: /c/Users/rurus/openclaw-workspace   ← Docker Engine が Windows FS に解決
+```
+
+#### パス形式の使い分け（重要）
+
+Docker Desktop WSL2 環境では、パス形式の選択が重要。
+
+| 用途                                          | 変数名                     | パス形式         | 例                                  |
+| --------------------------------------------- | -------------------------- | ---------------- | ----------------------------------- |
+| docker-compose.yml bind source                | `OPENCLAW_WORKSPACE_DIR`   | Windows          | `C:/Users/rurus/openclaw-workspace` |
+| gateway workspace + sandbox auto-mount source | `OPENCLAW_WORKSPACE_POSIX` | POSIX (`/c/...`) | `/c/Users/rurus/openclaw-workspace` |
+
+**試行して失敗したパス形式:**
+
+| 形式                          | 結果         | 理由                                                                     |
+| ----------------------------- | ------------ | ------------------------------------------------------------------------ |
+| `C:/Users/...`                | 拒否         | OpenClaw が `C:` をパスコンポーネントとして解釈（POSIX 非準拠）          |
+| `/mnt/c/Users/...`            | 書き込み不達 | Docker VM 内に新ディレクトリが作られるだけで Windows FS にマップされない |
+| `/run/desktop/mnt/host/c/...` | 拒否         | OpenClaw が `/run` をシステムディレクトリとしてブロック                  |
+| `/c/Users/...`                | **成功**     | Docker Desktop が Windows FS に解決し、OpenClaw も POSIX パスとして受理  |
+
+**試行して失敗したアプローチ:**
+
+| アプローチ                                                          | 結果                      | 理由                                                           |
+| ------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------- |
+| `workspaceAccess: "none"` + 明示的 `binds` → `/workspace`           | Duplicate mount point     | OpenClaw が `"none"` でも `/workspace` に auto-mount する      |
+| `workspaceAccess: "none"` + 明示的 `binds` → `/home/user/workspace` | Sandbox path is read-only | sandbox セキュリティが `/workspace` 以外への書き込みをブロック |
+
+#### 変更したファイル
+
+| ファイル                             | 変更内容                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| `chezmoi/.chezmoidata/openclaw.yaml` | `openclaw.workspace.hostPath`（Windows用）と `sandboxPath`（POSIX用）を追加 |
+| `docker-compose.yml`                 | `${OPENCLAW_WORKSPACE_DIR}:${OPENCLAW_WORKSPACE_POSIX}` bind mount を追加   |
+| `openclaw.docker.json.tmpl`          | `workspace` を `sandboxPath` に変更、`workspaceAccess: "rw"` に設定         |
+| `Handler.OpenClaw.ps1`               | `.env` に `OPENCLAW_WORKSPACE_DIR` と `OPENCLAW_WORKSPACE_POSIX` を生成     |
+| `entrypoint.sh`                      | workspace パスを `OPENCLAW_WORKSPACE_POSIX` 環境変数から取得                |
+
+#### sandbox 設定の説明
+
+```jsonc
+"workspace": "/c/Users/rurus/openclaw-workspace",  // POSIX パスで gateway workspace を指定
+"workspaceAccess": "rw",                            // sandbox に workspace を read-write でマウント
+// 明示的 binds は不要 — OpenClaw が workspace パスを sandbox に自動マウントする
+```
+
+OpenClaw が `workspaceAccess: "rw"` で sandbox を作成する際、gateway の workspace パス
+（`/c/Users/rurus/openclaw-workspace`）を Docker Engine に bind source として渡す。
+Docker Desktop は `/c/...` パスを Windows ファイルシステムに解決するため、
+sandbox の `/workspace` とホストの `C:/Users/rurus/openclaw-workspace` が同じ物理ディレクトリを指す。
+
+#### ワークスペースパスの変更
+
+パスは `chezmoi/.chezmoidata/openclaw.yaml` で管理。2つの形式を設定する:
+
+| 変数          | 用途                                                 | 例                                  |
+| ------------- | ---------------------------------------------------- | ----------------------------------- |
+| `hostPath`    | docker-compose.yml bind source（Windows パス）       | `C:/Users/rurus/openclaw-workspace` |
+| `sandboxPath` | gateway workspace + sandbox auto-mount（POSIX パス） | `/c/Users/rurus/openclaw-workspace` |
+
+### ツール実行場所の整理
+
+| ツール                          | 実行場所                            | 対象                                                                         |
+| ------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
+| `memory_search` / `memory_get`  | **Gateway 側**（AgentRuntime 内）   | メモリの読み取り・検索（SQLite + QMD）                                       |
+| `file_write` / `write` / `edit` | **Sandbox 内**                      | `/workspace/` に書く → **ホスト bind mount 経由で gateway workspace に反映** |
+| メモリフラッシュ（自動）        | **Sandbox 内**（`file_write` 経由） | コンテキスト圧縮前に MEMORY.md / memory/ に自動保存                          |
+
+**注意: メモリの書き込み専用ツールは存在しない。**
+`memory_search` / `memory_get` は読み取り専用。メモリ書き込み（MEMORY.md, memory/YYYY-MM-DD.md）も
+USER.md / SOUL.md の編集も、すべて `file_write` 経由で workspace に書く。
+ホスト bind mount により、sandbox の `file_write` が gateway workspace に反映される。
+
+### パスマッピングの既知バグ（修正済み）
+
+過去に sandbox のパス検証で以下の問題が発生した。現在のバージョンでは修正済みだが、アップグレード時に再発しないか注意。
+
+- [#9560](https://github.com/openclaw/openclaw/issues/9560): コンテナ内パス `/workspace/...` がホスト側パスと直接比較され "Path escapes sandbox root" エラー
+- [#30582](https://github.com/openclaw/openclaw/issues/30582): `workspaceAccess: "rw"` でも `mkdirp` が境界チェックに失敗（2026.2.26 リグレッション、PR #30610 で修正）
+- [#16790](https://github.com/openclaw/openclaw/issues/16790): システムプロンプトにホスト側パスが注入され、sandbox 内で使えない
+
 ## ビルド時トラブルシューティング
 
 - `acpx exited with code 1` → `openclaw-acpx` が `/home/app/.acpx` に mount され書き込み可能か確認

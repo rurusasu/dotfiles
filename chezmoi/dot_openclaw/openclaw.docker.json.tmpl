@@ -1,7 +1,7 @@
 {
   "agents": {
     "defaults": {
-      "workspace": "/app/data/workspace",
+      "workspace": "{{ .openclaw.workspace.sandboxPath }}",
       "model": {
         "primary": "{{ .openclaw.models.primary }}",
         "fallbacks": ["{{ .openclaw.models.fallback }}"]
@@ -65,15 +65,14 @@
         "sessionToolsVisibility": "all",
         "mode": "all",
         "scope": "session",
-        "workspaceAccess": "none",
+        "workspaceAccess": "rw",
         "docker": {
           "image": "openclaw-sandbox-common:bookworm-slim",
           "network": "bridge",
-          "user": "0:0",
+          "user": "1000:1000",
           "readOnlyRoot": false,
           "tmpfs": ["/tmp", "/var/tmp", "/run"],
           "capDrop": ["ALL"],
-          "binds": [],
           "pidsLimit": {{ .openclaw.sandbox.pidsLimit }},
           "memory": "{{ .openclaw.sandbox.memory }}",
           "memorySwap": "{{ .openclaw.sandbox.memorySwap }}",
@@ -82,7 +81,7 @@
             "GITHUB_TOKEN": "@@GITHUB_TOKEN@@",
             "GH_TOKEN": "@@GITHUB_TOKEN@@",
             "XAI_API_KEY": "@@XAI_API_KEY@@",
-            "PLAYWRIGHT_BROWSERS_PATH": "/root/.cache/ms-playwright",
+            "PLAYWRIGHT_BROWSERS_PATH": "/home/node/.cache/ms-playwright",
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "url.https://x-access-token:@@GITHUB_TOKEN@@@github.com/.insteadOf",
             "GIT_CONFIG_VALUE_0": "https://github.com/"
@@ -216,7 +215,7 @@
         "C0AJVDKGN6A": {"requireMention": true},
         "C0AJZSPV84S": {"requireMention": true}
       },
-      "streaming": "block",
+      "streaming": "partial",
       "historyLimit": {{ .openclaw.channels.slackHistoryLimit }},
       "replyToMode": "off",
       "thread": {
@@ -285,7 +284,7 @@
   },
   "skills": {
     "install": {
-      "nodeManager": "bun"
+      "nodeManager": "pnpm"
     },
     "load": {
       "extraDirs": ["/app/data/superpowers/skills"]

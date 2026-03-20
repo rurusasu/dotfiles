@@ -26,6 +26,7 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /home/app/.agents:size=1m,mode=0777
+      - /home/bun:size=1m,uid=1000,gid=1000,mode=0755
     cap_drop:
       - ALL
     security_opt:
@@ -52,6 +53,8 @@ services:
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-trace}
       # Enable built-in sandbox (tool execution in sibling Docker containers)
       OPENCLAW_SANDBOX: "1"
+      # Workspace POSIX path (used by entrypoint to locate workspace directory)
+      OPENCLAW_WORKSPACE_POSIX: ${OPENCLAW_WORKSPACE_POSIX:?Set OPENCLAW_WORKSPACE_POSIX in .env}
 
     volumes:
       # Writable state dir for canvas, cron, etc. (read_only:true requires explicit writable mounts)
@@ -61,6 +64,11 @@ services:
       # Docker-specific config template — entrypoint renders secrets into the writable home volume
       - ${OPENCLAW_CONFIG_FILE:?Set OPENCLAW_CONFIG_FILE in .env}:/app/openclaw.json.tmpl:ro
       - openclaw-data:/app/data
+      # Workspace: bind mount from host at the POSIX path that Docker Engine can resolve.
+      # The gateway workspace path matches the sandbox POSIX path so that when OpenClaw
+      # creates a sandbox with workspaceAccess: "rw", Docker Engine resolves the same physical directory.
+      # Docker Desktop WSL2 resolves /c/Users/... to the Windows filesystem.
+      - ${OPENCLAW_WORKSPACE_DIR:?Set OPENCLAW_WORKSPACE_DIR in .env}:${OPENCLAW_WORKSPACE_POSIX:?Set OPENCLAW_WORKSPACE_POSIX in .env}
       # Gemini CLI OAuth credentials (oauth_creds.json + google_accounts.json).
       # Authenticate once on the host with `gemini`, then this mount keeps tokens refreshable.
       # Set GEMINI_CREDENTIALS_DIR in .env (e.g. C:/Users/<you>/.gemini).

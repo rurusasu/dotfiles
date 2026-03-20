@@ -36,6 +36,20 @@ openclaw:
     runTimeoutSeconds: 300
     archiveAfterMinutes: 30
 
+  # --- Workspace host path ---
+  # ホスト上のワークスペースディレクトリ（Docker Engine が直接解決できるパス）。
+  # gateway と sandbox の両方が同じ物理ディレクトリを参照するために必要。
+  # named volume ではなく bind mount を使うことで、sibling コンテナ間のパスマッピング不一致を回避する。
+  # hostPath:    Docker Compose 用（Windows パス形式）。docker-compose.yml の bind mount に使用。
+  # sandboxPath: OpenClaw sandbox binds 用（POSIX パス形式）。sandbox が Docker Engine に渡すパス。
+  #              Docker Desktop WSL2 では /c/Users/... 形式を使う。
+  #              注意: /mnt/c/ は Docker VM 内で Windows FS にマップされない。
+  #                    /run/desktop/... は OpenClaw が /run をブロックするため使えない。
+  #                    C:/ は POSIX パスとして拒否される。
+  workspace:
+    hostPath: "C:/Users/rurus/openclaw-workspace"
+    sandboxPath: "/c/Users/rurus/openclaw-workspace"
+
   # --- Sandbox resource limits ---
   sandbox:
     pidsLimit: 256
