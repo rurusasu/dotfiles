@@ -71,6 +71,24 @@ docker restart openclaw
 - Slack ユーザー ID は 1Password に保存（アカウント特定に使えるため）
 - Slack チャンネル ID はテンプレートにべた書きで可（URL に含まれる公開情報であり秘匿不要）
 
+### Slack チャンネルごとの専用エージェント（1エージェント = 1チャンネル）
+
+各 Slack チャンネルに専用エージェント（ACP 経由 Claude Code）を割り当て、コンテキストの混入を防止する。
+チャンネル間でセッション・メモリ・ワークスペースが完全に分離される。
+
+**設計判断:**
+
+- チャンネルごとにエージェントを分離することで、異なるチャンネルの文脈が混ざらない（記事「1エージェント = 1用途」の設計思想）
+- すべて ACP 経由（`claude-agent-acp`）で Claude Code を使用。Consumer ToS により Claude Max 認証を直接モデル指定で使うのは規約違反のため、ACP ランタイムが必須
+- `bindings` の `peer.kind: "channel"` + `peer.id` でチャンネル ID ベースのルーティング
+- binding にマッチしない Slack DM や Telegram は `main`（default）エージェントにフォールバック
+
+**設定の管理:**
+
+- チャンネルリストは `chezmoi/.chezmoidata/openclaw.yaml` の `slackAgents` で一元管理
+- テンプレート（`openclaw.docker.json.tmpl`）は `range` ループで `agents.list`、`bindings`、`channels.slack.channels` を自動生成
+- チャンネルの追加・削除は `openclaw.yaml` の `slackAgents` リストを編集するだけでよい
+
 ### Gateway
 
 - `gateway.mode: "local"` + `gateway.bind: "loopback"` + `gateway.auth.mode: "token"` で保護

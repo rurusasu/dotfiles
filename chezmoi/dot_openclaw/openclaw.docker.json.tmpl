@@ -120,9 +120,42 @@
             "backend": "acpx"
           }
         }
-      }
+      },
+{{- /* --- Slack per-channel agents (ACP 経由 Claude Code) ---
+     「1エージェント = 1チャンネル」設計。各チャンネルに専用エージェントを割り当て、
+     コンテキスト混入を防止する。ACP 経由が必須（Claude Max の直接モデル指定は ToS 違反）。
+     チャンネルリストは .chezmoidata/openclaw.yaml の slackAgents で一元管理。
+     binding にマッチしない Slack DM / Telegram は main にフォールバック。 */ -}}
+{{- $lastSlack := sub (len .openclaw.slackAgents) 1 -}}
+{{- range $i, $agent := .openclaw.slackAgents }}
+      {
+        "id": "{{ $agent.id }}",
+        "model": "{{ $.openclaw.agentModels.claude.primary }}",
+        "workspace": "/home/app/.openclaw/workspace-{{ $agent.id }}",
+        "runtime": {
+          "type": "acp",
+          "acp": {
+            "agent": "claude",
+            "backend": "acpx"
+          }
+        }
+      }{{ if lt $i $lastSlack }},{{ end }}
+{{- end }}
     ]
   },
+  {{- /* --- Bindings: Slack チャンネル → 専用エージェントへのルーティング ---
+       peer.kind="channel" でチャンネル ID ベースのマッチング。
+       most-specific-wins ルールにより、ここで定義されたチャンネルは専用エージェントに、
+       それ以外は default (main) エージェントにルーティングされる。 */ -}}
+  "bindings": [
+{{- $lastBind := sub (len .openclaw.slackAgents) 1 -}}
+{{- range $i, $agent := .openclaw.slackAgents }}
+    {
+      "agentId": "{{ $agent.id }}",
+      "match": { "channel": "slack", "peer": { "kind": "channel", "id": "{{ $agent.channelId }}" } }
+    }{{ if lt $i $lastBind }},{{ end }}
+{{- end }}
+  ],
   "tools": {
     "profile": "coding",
     "sessions": {
@@ -208,12 +241,12 @@
       "allowFrom": ["PLACEHOLDER_REQUIRES_OP_SIGNIN"],
 {{- end }}
       "groupPolicy": "allowlist",
+      {{- /* slackAgents から許可チャンネル一覧を自動生成 */ -}}
       "channels": {
-        "C0AK3SQKFV2": {"requireMention": true},
-        "C0AK70NLE6S": {"requireMention": true},
-        "C0AK64UPVNW": {"requireMention": true},
-        "C0AJVDKGN6A": {"requireMention": true},
-        "C0AJZSPV84S": {"requireMention": true}
+{{- $lastCh := sub (len .openclaw.slackAgents) 1 -}}
+{{- range $i, $agent := .openclaw.slackAgents }}
+        "{{ $agent.channelId }}": {"requireMention": true}{{ if lt $i $lastCh }},{{ end }}
+{{- end }}
       },
       "streaming": "partial",
       "historyLimit": {{ .openclaw.channels.slackHistoryLimit }},

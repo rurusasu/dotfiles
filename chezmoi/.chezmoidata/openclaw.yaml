@@ -95,3 +95,28 @@ openclaw:
   channels:
     telegramHistoryLimit: 50
     slackHistoryLimit: 100
+
+  # --- Slack per-channel agents ---
+  # 「1エージェント = 1チャンネル」設計: 各チャンネルに専用エージェント（ACP経由 Claude Code）を割り当て、
+  # コンテキストの混入を防止する。すべて ACP 経由が必須（Claude Max の直接モデル指定は Consumer ToS 違反）。
+  #
+  # このリストから openclaw.docker.json.tmpl が以下を自動生成する:
+  #   - agents.list: 各チャンネル専用エージェント（独立 workspace）
+  #   - bindings:    peer.kind="channel" でチャンネル ID ベースのルーティング
+  #   - channels.slack.channels: requireMention 設定
+  #
+  # チャンネルの追加・削除はここだけ編集すればよい。テンプレート側の変更は不要。
+  #
+  # id:        エージェントID（agents.list + bindings で使用）
+  # channelId: Slack チャンネル ID（bindings.match.peer.id + channels.slack.channels で使用）
+  slackAgents:
+    - id: "slack-C0AK3SQKFV2"
+      channelId: "C0AK3SQKFV2"
+    - id: "slack-C0AK70NLE6S"
+      channelId: "C0AK70NLE6S"
+    - id: "slack-C0AK64UPVNW"
+      channelId: "C0AK64UPVNW"
+    - id: "slack-C0AJVDKGN6A"
+      channelId: "C0AJVDKGN6A"
+    - id: "slack-C0AJZSPV84S"
+      channelId: "C0AJZSPV84S"
