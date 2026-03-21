@@ -15,6 +15,9 @@ def register_tools(mcp):
     from .amend import amend_skill_impl
     from .evaluate import evaluate_amendment_impl
     from .rollback import rollback_skill_impl
+    from .ingest_transcript import ingest_transcript_impl
+    from .batch_cognify import batch_cognify_impl
+    from .search_knowledge import search_knowledge_impl
 
     @mcp.tool(name="log_skill_execution", description="Log a skill execution result for tracking and improvement analysis.")
     async def log_skill_execution(skill_name: str, agent: str, task_description: str, success: bool, error: str = None, duration_ms: int = None):
@@ -43,3 +46,15 @@ def register_tools(mcp):
     @mcp.tool(name="rollback_skill", description="Rollback a skill to its pre-amendment version if the amendment did not improve it.")
     async def rollback_skill(amendment_id: str):
         return await rollback_skill_impl(amendment_id)
+
+    @mcp.tool(name="ingest_transcript", description="Ingest a session JSONL file into the Cognee knowledge graph for permanent knowledge extraction.")
+    async def ingest_transcript(agent_id: str, session_id: str, file_path: str):
+        return await ingest_transcript_impl(agent_id, session_id, file_path)
+
+    @mcp.tool(name="batch_cognify", description="Run cognee.cognify() to build knowledge graph from all recently added data. Call after batch ingest_transcript calls.")
+    async def batch_cognify():
+        return await batch_cognify_impl()
+
+    @mcp.tool(name="search_knowledge", description="Search the Cognee knowledge graph for conversation-extracted knowledge (facts, decisions, lessons, relationships).")
+    async def search_knowledge(query: str, agent_id: str = None, source: str = None, limit: int = 10):
+        return await search_knowledge_impl(query, agent_id, source, limit)
