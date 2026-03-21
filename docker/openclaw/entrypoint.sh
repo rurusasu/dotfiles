@@ -226,7 +226,58 @@ EOF
 EOF
   fi
 
+  # Inject Cognee skill feedback rules.
+  if ! grep -q "BEGIN COGNEE FEEDBACK RULES" "$workspace_agents"; then
+    cat >>"$workspace_agents" <<'EOF'
+
+## BEGIN COGNEE FEEDBACK RULES
+
+- `/feedback <スキル名> <問題内容>` コマンドでスキルのフィードバックを記録できる
+- フィードバック記録時は cognee-skills MCP の `log_skill_execution` を
+  `success=false, error="ユーザー指摘: <問題内容>"` で呼び出すこと
+- スコアが閾値以下に下がると自動改善が発火する
+
+## END COGNEE FEEDBACK RULES
+EOF
+  fi
+
 fi # end: workspace_agents writable check
+
+# --- PostToolUse hook for skill execution logging ---
+_claude_settings="/home/app/.claude/settings.json"
+if [ -f "$_claude_settings" ]; then
+  # Merge PostToolUse hook into existing settings
+  if ! grep -q "log-skill-execution" "$_claude_settings" 2>/dev/null; then
+    _tmp=$(mktemp)
+    if node -e "
+      const fs = require('fs');
+      const s = JSON.parse(fs.readFileSync('$_claude_settings', 'utf8'));
+      s.hooks = s.hooks || {};
+      s.hooks.PostToolUse = s.hooks.PostToolUse || [];
+      s.hooks.PostToolUse.push({ hook: 'node /app/data/hooks/log-skill-execution.js' });
+      fs.writeFileSync('$_tmp', JSON.stringify(s, null, 2));
+    " && mv "$_tmp" "$_claude_settings"; then
+      echo "[entrypoint] PostToolUse hook wired into Claude Code settings"
+    else
+      rm -f "$_tmp"
+      echo "[entrypoint] WARNING: failed to wire PostToolUse hook" >&2
+    fi
+  fi
+else
+  # Create minimal settings with hook
+  cat >"$_claude_settings" <<'HOOKEOF'
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hook": "node /app/data/hooks/log-skill-execution.js"
+      }
+    ]
+  }
+}
+HOOKEOF
+  echo "[entrypoint] created Claude Code settings with PostToolUse hook"
+fi
 
 # --- Superpowers: clone or update obra/superpowers ---
 _sp_dir="/app/data/superpowers"

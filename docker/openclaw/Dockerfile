@@ -11,6 +11,7 @@ COPY entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
 COPY config/gemini.settings.json /app/gemini.settings.json
 COPY config/acpx.config.json /app/acpx.config.json
 COPY tests/ /app/tests/
+COPY hooks/ /app/data/hooks/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client socat unzip build-essential python3 \

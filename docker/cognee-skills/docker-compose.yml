@@ -24,6 +24,7 @@ services:
         condition: service_healthy
     volumes:
       - ${SKILLS_PATH}:/skills:rw
+      - openclaw-home:/openclaw-sessions:ro
     networks:
       - cognee-network
     healthcheck:
@@ -73,6 +74,9 @@ networks:
 volumes:
   falkordb-data:
   ollama-data:
+  openclaw-home:
+    external: true
+    name: openclaw_openclaw-home
 
 secrets:
   gemini_api_key:
