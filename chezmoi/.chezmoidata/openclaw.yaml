@@ -95,6 +95,7 @@ openclaw:
   channels:
     telegramHistoryLimit: 50
     slackHistoryLimit: 100
+    slackThreadInitialHistoryLimit: 50
 
   # --- Slack per-channel agents ---
   # 「1エージェント = 1チャンネル」設計: 各チャンネルに専用エージェント（ACP経由 Claude Code）を割り当て、
