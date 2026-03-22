@@ -78,12 +78,12 @@ Describe 'WslConfigHandler' {
 
         It 'should copy .wslconfig and return success result' {
             $script:copyFileCalled = $false
-            $script:shutdownCalled = $false
+            $script:terminateCalled = $false
             Mock Copy-FileSafe { $script:copyFileCalled = $true }
             Mock Invoke-Wsl {
                 param($Arguments)
-                if ($Arguments -contains "--shutdown") {
-                    $script:shutdownCalled = $true
+                if ($Arguments -contains "--terminate") {
+                    $script:terminateCalled = $true
                 }
             }
 
@@ -92,7 +92,7 @@ Describe 'WslConfigHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Be ".wslconfig を適用しました"
             $script:copyFileCalled | Should -Be $true
-            $script:shutdownCalled | Should -Be $true
+            $script:terminateCalled | Should -Be $true
         }
 
         It 'should return failure when Copy-FileSafe throws exception' {

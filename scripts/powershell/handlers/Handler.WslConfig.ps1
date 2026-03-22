@@ -62,9 +62,11 @@ class WslConfigHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("ファイルコピーに失敗: $($_.Exception.Message)", $_.Exception)
             }
 
-            # WSL を再起動して設定を反映
-            $this.Log("WSL を再起動して設定を反映します")
-            Invoke-Wsl --shutdown
+            # .wslconfig は全 WSL ディストリビューションに影響するため再起動が必要
+            # ただし wsl --shutdown は Docker Desktop の WSL 統合を壊す可能性があるため
+            # 対象ディストリビューションのみ再起動する
+            $this.Log("WSL ディストリビューション '$($ctx.DistroName)' を再起動して設定を反映します")
+            Invoke-Wsl --terminate $ctx.DistroName
 
             return $this.CreateSuccessResult(".wslconfig を適用しました")
         } catch {
