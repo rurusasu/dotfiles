@@ -1,0 +1,26 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy Kaggle API credentials for Windows
+{{- if lookPath "op" }}
+# token-hash: {{ onepasswordRead "op://Personal/Kaggle/c4patuuzwob2vcwt43qqphoyeu" | sha256sum }}
+{{- end }}
+
+$ErrorActionPreference = "Stop"
+
+$KaggleDir = "$env:USERPROFILE\.kaggle"
+
+{{- if lookPath "op" }}
+Write-Host "Deploying Kaggle API credentials..."
+
+if (-not (Test-Path -LiteralPath $KaggleDir)) {
+  New-Item -ItemType Directory -Path $KaggleDir -Force | Out-Null
+}
+
+$token = '{{ onepasswordRead "op://Personal/Kaggle/c4patuuzwob2vcwt43qqphoyeu" }}'
+
+# New API Token method: ~/.kaggle/access_token
+Set-Content -Path "$KaggleDir\access_token" -Value $token -NoNewline -Force
+Write-Host "Deployed: $KaggleDir\access_token"
+{{- else }}
+Write-Host "WARNING: op CLI not available, skipping Kaggle API credentials deployment"
+{{- end }}
+{{ end -}}

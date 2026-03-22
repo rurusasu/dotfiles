@@ -1,0 +1,28 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy Kaggle API credentials for Linux/macOS
+{{- if lookPath "op" }}
+# token-hash: {{ onepasswordRead "op://Personal/Kaggle/c4patuuzwob2vcwt43qqphoyeu" | sha256sum }}
+{{- end }}
+
+set -euo pipefail
+
+HOME_DIR="${HOME:-/home/$(whoami)}"
+KAGGLE_DIR="$HOME_DIR/.kaggle"
+
+{{- if lookPath "op" }}
+echo "Deploying Kaggle API credentials..."
+
+mkdir -p "$KAGGLE_DIR"
+
+TOKEN='{{ onepasswordRead "op://Personal/Kaggle/c4patuuzwob2vcwt43qqphoyeu" }}'
+
+# New API Token method: ~/.kaggle/access_token
+printf '%s' "$TOKEN" > "$KAGGLE_DIR/access_token"
+chmod 600 "$KAGGLE_DIR/access_token"
+
+echo "Deployed: $KAGGLE_DIR/access_token"
+{{- else }}
+echo "WARNING: op CLI not available, skipping Kaggle API credentials deployment"
+{{- end }}
+{{ end -}}
