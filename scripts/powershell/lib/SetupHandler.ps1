@@ -193,6 +193,10 @@ class SetupHandlerBase {
     # 管理者権限が必要かどうか
     [bool]$RequiresAdmin = $false
 
+    # ログバッファリング（CanApply 中はバッファリングし、スキップ時は破棄）
+    hidden [bool]$_bufferLogs = $false
+    hidden [System.Collections.ArrayList]$_logBuffer = [System.Collections.ArrayList]::new()
+
     <#
     .SYNOPSIS
         実行可否を判定する（派生クラスでオーバーライド必須）
@@ -261,6 +265,10 @@ class SetupHandlerBase {
         文字色（デフォルト: Cyan）
     #>
     [void] Log([string]$message, [string]$color) {
+        if ($this._bufferLogs) {
+            $this._logBuffer.Add(@{ Message = $message; Color = $color }) | Out-Null
+            return
+        }
         Write-Host "[$($this.Name)] $message" -ForegroundColor $color
     }
 
@@ -275,6 +283,10 @@ class SetupHandlerBase {
         出力するメッセージ
     #>
     [void] LogWarning([string]$message) {
+        if ($this._bufferLogs) {
+            $this._logBuffer.Add(@{ Message = $message; Color = "Yellow" }) | Out-Null
+            return
+        }
         Write-Host "[$($this.Name)] $message" -ForegroundColor Yellow
     }
 
@@ -285,7 +297,24 @@ class SetupHandlerBase {
         出力するメッセージ
     #>
     [void] LogError([string]$message) {
+        if ($this._bufferLogs) {
+            $this._logBuffer.Add(@{ Message = $message; Color = "Red" }) | Out-Null
+            return
+        }
         Write-Host "[$($this.Name)] $message" -ForegroundColor Red
+    }
+
+    # バッファされたログを出力する
+    hidden [void] FlushLogBuffer() {
+        foreach ($entry in $this._logBuffer) {
+            Write-Host "[$($this.Name)] $($entry.Message)" -ForegroundColor $entry.Color
+        }
+        $this._logBuffer.Clear()
+    }
+
+    # バッファを破棄する
+    hidden [void] ClearLogBuffer() {
+        $this._logBuffer.Clear()
     }
 }
 
@@ -423,26 +452,31 @@ function Invoke-SetupHandler
             continue
         }
 
-        # Check if handler can apply
+        # Check if handler can apply (buffer logs during check)
         $canApply = $false
+        $handler._bufferLogs = $true
         try
         {
             $canApply = $handler.CanApply($Context)
         } catch
         {
+            $handler._bufferLogs = $false
+            $handler.ClearLogBuffer()
             Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
             continue
         }
+        $handler._bufferLogs = $false
 
         if (-not $canApply)
         {
-            Write-Host "[$($handler.Name)] Skipped (CanApply returned false)" -ForegroundColor Gray
+            $handler.ClearLogBuffer()
             continue
         }
 
         # Execute handler
         Write-Host ""
         Write-Host "[$($handler.Name)] $($handler.Description)" -ForegroundColor Cyan
+        $handler.FlushLogBuffer()
 
         try
         {
@@ -451,7 +485,7 @@ function Invoke-SetupHandler
 
             if ($result.Success)
             {
-                Write-Host "[$($handler.Name)] OK $($result.Message)" -ForegroundColor Green
+                # Summary で表示するため OK ログは省略
             } else
             {
                 Write-Host "[$($handler.Name)] FAIL $($result.Message)" -ForegroundColor Red
