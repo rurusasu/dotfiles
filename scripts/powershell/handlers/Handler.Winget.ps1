@@ -136,11 +136,14 @@ class WingetHandler : SetupHandlerBase {
                 return $this.CreateSuccessResult("パッケージリストが空です")
             }
 
+            # インストール済みパッケージを一括取得（winget list を1回だけ実行）
+            $installedIds = $this.GetInstalledPackageIds()
+
             # 未インストールのパッケージをフィルタリング
             $toInstall = @()
             $skipped = 0
             foreach ($pkg in $packages) {
-                if ($this.IsPackageInstalled($pkg.Id)) {
+                if ($pkg.Id -in $installedIds) {
                     $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
                     $skipped++
                 } else {
@@ -197,7 +200,41 @@ class WingetHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
+        インストール済みパッケージの ID リストを一括取得する
+    .DESCRIPTION
+        winget list を1回実行し、全インストール済みパッケージ ID を返す。
+        パッケージごとに winget を呼ぶより大幅に高速。
+    #>
+    hidden [string[]] GetInstalledPackageIds() {
+        try {
+            $output = Invoke-Winget -Arguments @("list", "--disable-interactivity")
+            if ($LASTEXITCODE -ne 0) { return @() }
+            # winget list の出力からパッケージ ID を抽出
+            # 形式: Name  Id  Version  Source
+            # ヘッダー行とセパレーター行をスキップし、ID 列を取得
+            $ids = @()
+            $headerFound = $false
+            foreach ($line in $output) {
+                if ($line -match '^-{2,}') { $headerFound = $true; continue }
+                if (-not $headerFound) { continue }
+                # 2つ以上のスペースで分割して ID 列（2列目）を取得
+                $parts = @($line -split '\s{2,}' | Where-Object { $_ })
+                if ($parts.Count -ge 2) {
+                    $ids += $parts[1].Trim()
+                }
+            }
+            return $ids
+        }
+        catch {
+            return @()
+        }
+    }
+
+    <#
+    .SYNOPSIS
         指定されたパッケージがインストール済みかどうかを確認する
+    .DESCRIPTION
+        個別チェック用。一括チェックには GetInstalledPackageIds を使用。
     #>
     hidden [bool] IsPackageInstalled([string]$packageId) {
         try {

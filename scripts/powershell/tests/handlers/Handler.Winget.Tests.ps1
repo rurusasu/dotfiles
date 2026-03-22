@@ -154,6 +154,15 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    # GetInstalledPackageIds 用: winget list の出力を模倣
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name          Id         Version  Source",
+                        "-------------------------------------------",
+                        "Git           Git.Git    2.43.0   winget"
+                    )
+                }
                 $global:LASTEXITCODE = 0
             }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
@@ -172,6 +181,14 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "install") {
                     $script:installCalled = $true
+                }
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name          Id         Version  Source",
+                        "-------------------------------------------",
+                        "Git           Git.Git    2.43.0   winget"
+                    )
                 }
                 $global:LASTEXITCODE = 0
             }
@@ -281,6 +298,14 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name              Id            Version  Source",
+                        "-------------------------------------------------",
+                        "Windows Terminal  9NT1R1C2HH7J  1.19.0   msstore"
+                    )
+                }
                 $global:LASTEXITCODE = 0
             }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
@@ -292,6 +317,14 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "install") {
                     $script:installCalled = $true
+                }
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name              Id            Version  Source",
+                        "-------------------------------------------------",
+                        "Windows Terminal  9NT1R1C2HH7J  1.19.0   msstore"
+                    )
                 }
                 $global:LASTEXITCODE = 0
             }
