@@ -315,7 +315,7 @@ class ChezmoiHandler : SetupHandlerBase {
         $profileSource = Join-Path $sourcePath "shells\Microsoft.PowerShell_profile.ps1"
         if (-not (Test-Path -LiteralPath $profileSource -PathType Leaf)) { return }
 
-        $usersDir = Split-Path (Split-Path $env:USERPROFILE)
+        $usersDir = Split-Path $env:USERPROFILE
         Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -notin @("Public", "Default", "Default User", "All Users", $env:USERNAME) } |
             ForEach-Object {
