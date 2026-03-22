@@ -120,7 +120,7 @@ class ChezmoiHandler : SetupHandlerBase {
             } else {
                 $this.LogError("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
                 $this.Log("手動で実行してください: chezmoi --source `"$sourcePath`" apply", "Yellow")
-                return $this.CreateFailureResult("chezmoi apply が失敗しました (exit=$LASTEXITCODE)")
+                return $this.CreateFailureResult("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
             }
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
