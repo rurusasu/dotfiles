@@ -100,6 +100,10 @@ $handlers = Select-SetupHandler -Handlers $handlers
 # Phase 2: Phase = 2 のハンドラー（デフォルト）を実行
 $handlers = @($handlers | Where-Object { $_.Phase -eq 2 })
 
+# standalone 実行時にも同意プロンプトが走るようにする
+# （通常は install.user.ps1 で実行済みだが、admin 単独実行時に未設定のサービスを検出）
+Invoke-ConsentPrompt -Handlers $handlers
+
 $adminApplicableCount = 0
 foreach ($handler in $handlers) {
     if (-not $handler.RequiresAdmin) {

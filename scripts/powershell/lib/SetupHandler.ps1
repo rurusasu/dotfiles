@@ -194,8 +194,8 @@ class SetupHandlerBase {
     [bool]$RequiresAdmin = $false
 
     # 実行フェーズ (1 = User Scope, 2 = Admin/後半)
-    # Phase 1: winget, codex, npm, pnpm, openclaw, cognee-skills など
-    # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager など
+    # Phase 1: winget, codex, npm, pnpm
+    # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager, openclaw, cognee-skills
     [int]$Phase = 2
 
     # オプショナルサービスの同意設定（設定されている場合、一括同意プロンプトの対象になる）

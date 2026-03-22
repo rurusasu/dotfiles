@@ -142,12 +142,13 @@ class NixRebuildHandler : SetupHandlerBase {
                 return
             }
 
-            $pkgList = $toInstall -join " "
-            $this.Log("pnpm グローバルパッケージをインストールしています: $pkgList")
+            # シェルメタ文字を含むパッケージ名（@scope/pkg 等）を安全に渡すためクォート
+            $quotedPkgs = ($toInstall | ForEach-Object { "'$($_ -replace "'", "'\\''")'" }) -join " "
+            $this.Log("pnpm グローバルパッケージをインストールしています: $($toInstall -join ', ')")
 
             $pnpmOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "pnpm add -g $pkgList"
+                "bash", "-lc", "pnpm add -g $quotedPkgs"
             )
 
             $pnpmOutput | ForEach-Object {

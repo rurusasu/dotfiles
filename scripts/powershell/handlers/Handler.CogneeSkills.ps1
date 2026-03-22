@@ -231,7 +231,7 @@ SKILL_CORRECTION_PENALTY=0.05
     hidden [void] EnsureDockerNetwork() {
         $networkName = "cognee-network"
         $existing = Invoke-Docker "network" "ls" "--filter" "name=$networkName" "--format" "{{.Name}}"
-        if ($existing -match $networkName) {
+        if ($existing | Where-Object { $_ -eq $networkName }) {
             $this.Log("Docker ネットワーク '$networkName' は既に存在します", "Gray")
             return
         }
