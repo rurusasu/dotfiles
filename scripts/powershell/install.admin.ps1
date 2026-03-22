@@ -158,6 +158,14 @@ if ($LogFile) {
     try { Stop-Transcript | Out-Null } catch { }
 }
 
+# 管理者昇格ウィンドウが即座に閉じないよう pause
+# （LogFile が指定されている = install.ps1 から別ウィンドウで起動された）
+if ($LogFile) {
+    Write-Host ""
+    Write-Host "Press Enter to close..." -ForegroundColor Gray
+    Read-Host | Out-Null
+}
+
 if ($failedCount -gt 0) {
     throw "Admin phase failed with $failedCount handler failure(s)."
 }
