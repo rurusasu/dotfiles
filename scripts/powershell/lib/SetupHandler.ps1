@@ -403,12 +403,18 @@ function Invoke-ConsentPrompt {
     if (-not (Test-InteractiveEnvironment)) { return }
 
     Write-Host ""
-    Write-Host "  オプションサービスを検出しました:" -ForegroundColor Yellow
+    Write-Host "  ========================================" -ForegroundColor Yellow
+    Write-Host "  追加セットアップ (Docker コンテナ)" -ForegroundColor Yellow
+    Write-Host "  ========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  以下のサービスをこの PC にセットアップできます。" -ForegroundColor White
+    Write-Host "  Docker コンテナとしてビルド・起動されます。" -ForegroundColor Gray
+    Write-Host ""
     for ($i = 0; $i -lt $pending.Count; $i++) {
         Write-Host "  [$($i + 1)] $($pending[$i].ConsentLabel)" -ForegroundColor Cyan
     }
     Write-Host ""
-    $answer = Read-Host "  セットアップするサービス (例: 1,2 / all / none) [none]"
+    $answer = Read-Host "  セットアップする番号を入力 (例: 1,2 / all / none) [none]"
 
     if ([string]::IsNullOrWhiteSpace($answer)) { $answer = "none" }
 

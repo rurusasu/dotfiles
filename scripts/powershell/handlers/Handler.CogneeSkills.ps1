@@ -39,7 +39,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
         $this.Order = 130
         $this.RequiresAdmin = $false
         $this.ConsentKey = "cognee_skills_enabled"
-        $this.ConsentLabel = "CogneeSkills (スキルサーバー)"
+        $this.ConsentLabel = "CogneeSkills — AI スキル学習・改善サーバー (cognee)"
     }
 
     <#
