@@ -174,7 +174,8 @@ class OpenClawHandler : SetupHandlerBase {
         $envFile = Join-Path $composeDir ".env"
 
         if (Test-PathExist -Path $envFile) {
-            $this.Log(".env ファイルが存在します: $envFile", "Gray")
+            # 既存 .env に必須変数が不足していれば追記
+            $this.EnsureEnvVars($envFile, $ctx)
             return
         }
 
@@ -203,6 +204,45 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
+    }
+
+    <#
+    .SYNOPSIS
+        既存 .env に必須変数が不足していれば追記する
+    .DESCRIPTION
+        .env のスキーマが変更された場合、既存ファイルに不足する変数を追記。
+    #>
+    hidden [void] EnsureEnvVars([string]$envFile, [SetupContext]$ctx) {
+        $content = Get-Content $envFile -Raw -ErrorAction SilentlyContinue
+        if (-not $content) { return }
+
+        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        $secretDir = ($this.GetSecretDir() -replace '\\', '/')
+        $workspaceHostDir = ((Join-Path $homeDir "openclaw-workspace") -replace '\\', '/')
+        $workspacePosixDir = $workspaceHostDir -replace '^([A-Z]):', { '/' + $_.Groups[1].Value.ToLower() }
+
+        $requiredVars = @{
+            "OPENCLAW_GITHUB_TOKEN_FILE" = "$secretDir/github_token"
+            "OPENCLAW_XAI_API_KEY_FILE"  = "$secretDir/xai_api_key"
+            "OPENCLAW_WORKSPACE_DIR"     = $workspaceHostDir
+            "OPENCLAW_WORKSPACE_POSIX"   = $workspacePosixDir
+        }
+
+        $appended = @()
+        foreach ($key in $requiredVars.Keys) {
+            if ($content -notmatch "(?m)^$([regex]::Escape($key))=") {
+                $appended += "$key=$($requiredVars[$key])"
+            }
+        }
+
+        if ($appended.Count -gt 0) {
+            $nl = [Environment]::NewLine
+            $appendText = $nl + ($appended -join $nl) + $nl
+            [System.IO.File]::AppendAllText($envFile, $appendText)
+            $this.Log("$($appended.Count) 個の変数を .env に追記しました: $($appended -join ', ')")
+        } else {
+            $this.Log(".env ファイルが存在します: $envFile", "Gray")
+        }
     }
 
     <#
