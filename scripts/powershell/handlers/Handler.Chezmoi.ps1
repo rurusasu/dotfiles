@@ -74,9 +74,23 @@ class ChezmoiHandler : SetupHandlerBase {
 
             # winget で同セッション内に新規インストールされたツール（op 等）を検出できるよう
             # レジストリから最新の PATH を読み直す
+            # 管理者昇格セッションでは別ユーザーの User PATH も含める
             $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
             $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-            $env:PATH    = "$machinePath;$userPath"
+            $pathParts   = @($machinePath, $userPath)
+            $usersDir = Split-Path (Split-Path $env:USERPROFILE)
+            foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+                $sid = try {
+                    ([System.Security.Principal.NTAccount]$userDir.Name).Translate(
+                        [System.Security.Principal.SecurityIdentifier]).Value
+                } catch { $null }
+                if ($sid) {
+                    $regPath = "Registry::HKEY_USERS\$sid\Environment"
+                    $otherPath = try { (Get-ItemProperty -Path $regPath -Name PATH -ErrorAction SilentlyContinue).PATH } catch { $null }
+                    if ($otherPath) { $pathParts += $otherPath }
+                }
+            }
+            $env:PATH = ($pathParts | Where-Object { $_ }) -join ";"
 
             # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
             $this.EnsureOnePasswordAvailable()
@@ -298,17 +312,30 @@ class ChezmoiHandler : SetupHandlerBase {
             return $cmd.Source
         }
 
-        # 2. WinGet Packages ディレクトリ
-        $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-        if (Test-PathExist -Path $packagesRoot) {
-            $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
-                Where-Object { $_.Name -like 'AgileBits.1Password.CLI*' } |
-                Select-Object -First 1
-            if ($pkgDir) {
-                $exe = Get-ChildItem -Path $pkgDir.FullName -Filter "op.exe" -Recurse -ErrorAction SilentlyContinue |
+        # 2. WinGet Packages ディレクトリ（現在のユーザー + 他ユーザー）
+        # 管理者昇格セッションでは $env:LOCALAPPDATA が昇格ユーザーを指すため、
+        # 元のユーザーの WinGet Packages も検索する
+        $searchRoots = @($env:LOCALAPPDATA)
+        $usersDir = Split-Path (Split-Path $env:USERPROFILE)
+        foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+            $otherAppData = Join-Path $userDir.FullName "AppData\Local"
+            if ($otherAppData -ne $env:LOCALAPPDATA -and (Test-Path $otherAppData)) {
+                $searchRoots += $otherAppData
+            }
+        }
+
+        foreach ($appData in $searchRoots) {
+            $packagesRoot = Join-Path $appData "Microsoft\WinGet\Packages"
+            if (Test-PathExist -Path $packagesRoot) {
+                $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
+                    Where-Object { $_.Name -like 'AgileBits.1Password.CLI*' } |
                     Select-Object -First 1
-                if ($exe) {
-                    return $exe.FullName
+                if ($pkgDir) {
+                    $exe = Get-ChildItem -Path $pkgDir.FullName -Filter "op.exe" -Recurse -ErrorAction SilentlyContinue |
+                        Select-Object -First 1
+                    if ($exe) {
+                        return $exe.FullName
+                    }
                 }
             }
         }
