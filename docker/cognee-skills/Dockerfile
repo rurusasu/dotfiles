@@ -13,9 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # cognee ソースを取得（コミットが変わらない限りキャッシュされる）
 ARG COGNEE_COMMIT=3b7551b
-RUN git clone --depth 1 https://github.com/rurusasu/cognee.git /app/cognee \
-    && cd /app/cognee && git fetch --depth 1 origin ${COGNEE_COMMIT} \
-    && git checkout ${COGNEE_COMMIT} \
+RUN git clone https://github.com/rurusasu/cognee.git /app/cognee \
+    && cd /app/cognee && git checkout ${COGNEE_COMMIT} \
     && rm -rf .git
 
 # venv 作成 + 依存インストール（cognee ソースが変わらない限りキャッシュ）
