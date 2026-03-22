@@ -434,9 +434,19 @@ function Invoke-ConsentPrompt {
     for ($i = 0; $i -lt $pending.Count; $i++) {
         $enabled = $i -in $selectedIndices
         $pending[$i].WriteConsentFlag($enabled)
-        $status = if ($enabled) { "有効" } else { "スキップ" }
-        $color = if ($enabled) { "Green" } else { "Gray" }
-        Write-Host "  $($pending[$i].Name): $status" -ForegroundColor $color
+    }
+
+    # 全サービスのステータスを表示（既存承認済み含む）
+    $allConsent = @($Handlers | Where-Object { $_.NeedsConsent() })
+    foreach ($h in $allConsent) {
+        $flag = $h.ReadConsentFlag()
+        if ($flag -eq $true) {
+            Write-Host "  $($h.Name): 有効" -ForegroundColor Green
+        } elseif ($flag -eq $false) {
+            Write-Host "  $($h.Name): 無効" -ForegroundColor Gray
+        } else {
+            Write-Host "  $($h.Name): 未設定" -ForegroundColor Yellow
+        }
     }
     Write-Host ""
 }
