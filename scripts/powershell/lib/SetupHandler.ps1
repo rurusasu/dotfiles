@@ -436,7 +436,6 @@ function Invoke-SetupHandler
 
         if (-not $canApply)
         {
-            Write-Host "[$($handler.Name)] Skipped (CanApply returned false)" -ForegroundColor Gray
             continue
         }
 
@@ -451,7 +450,7 @@ function Invoke-SetupHandler
 
             if ($result.Success)
             {
-                Write-Host "[$($handler.Name)] OK $($result.Message)" -ForegroundColor Green
+                # Summary で表示するため OK ログは省略
             } else
             {
                 Write-Host "[$($handler.Name)] FAIL $($result.Message)" -ForegroundColor Red
