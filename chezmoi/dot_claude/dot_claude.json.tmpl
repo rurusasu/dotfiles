@@ -7,8 +7,12 @@
 {{- if not $first }},{{ end }}
 {{- $first = false }}
     "{{ .name }}": {
+{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+      "url": "{{ .url }}"
+{{- else }}
       "command": "{{ .command }}",
       "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
+{{- end }}
 {{- if hasKey . "env" }},
       "env": {
 {{- $envFirst := true }}
