@@ -50,13 +50,14 @@ $context.Options["SyncMode"] = $SyncMode
 $context.Options["SyncBack"] = $SyncBack
 
 $handlersPath = Join-Path $PSScriptRoot "handlers"
-$handlers = Get-SetupHandler -HandlersPath $handlersPath
-$handlers = Select-SetupHandler -Handlers $handlers
-# Phase 1: Phase = 1 のハンドラーのみ実行
-$handlers = @($handlers | Where-Object { $_.Phase -eq 1 })
+$allHandlers = Get-SetupHandler -HandlersPath $handlersPath
+$allHandlers = Select-SetupHandler -Handlers $allHandlers
 
-# オプショナルサービスの一括同意プロンプト
-Invoke-ConsentPrompt -Handlers $handlers
+# オプショナルサービスの一括同意プロンプト（全 Phase 対象）
+Invoke-ConsentPrompt -Handlers $allHandlers
+
+# Phase 1: Phase = 1 のハンドラーのみ実行
+$handlers = @($allHandlers | Where-Object { $_.Phase -eq 1 })
 
 if ($CheckOnly) {
     $canApply = $false

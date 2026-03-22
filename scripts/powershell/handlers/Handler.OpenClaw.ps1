@@ -42,7 +42,7 @@ class OpenClawHandler : SetupHandlerBase {
         $this.Description = "OpenClaw Telegram AI ゲートウェイの起動"
         $this.Order = 120
         $this.RequiresAdmin = $false
-        $this.Phase = 1
+        $this.Phase = 2
         $this.ConsentKey = "openclaw_enabled"
         $this.ConsentLabel = "OpenClaw — Telegram/Slack 連携 AI ボット"
     }
@@ -229,9 +229,11 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
         }
 
         $appended = @()
+        $appendedKeys = @()
         foreach ($key in $requiredVars.Keys) {
             if ($content -notmatch "(?m)^$([regex]::Escape($key))=") {
                 $appended += "$key=$($requiredVars[$key])"
+                $appendedKeys += $key
             }
         }
 
@@ -239,7 +241,7 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
             $nl = [Environment]::NewLine
             $appendText = $nl + ($appended -join $nl) + $nl
             [System.IO.File]::AppendAllText($envFile, $appendText)
-            $this.Log("$($appended.Count) 個の変数を .env に追記しました: $($appended -join ', ')")
+            $this.Log("$($appended.Count) 個の変数を .env に追記しました: $($appendedKeys -join ', ')")
         } else {
             $this.Log(".env ファイルが存在します: $envFile", "Gray")
         }
