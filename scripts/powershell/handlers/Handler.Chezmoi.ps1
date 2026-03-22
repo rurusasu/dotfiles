@@ -298,22 +298,8 @@ class ChezmoiHandler : SetupHandlerBase {
             return $cmd.Source
         }
 
-        # 2. WinGet Packages ディレクトリ
-        $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-        if (Test-PathExist -Path $packagesRoot) {
-            $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
-                Where-Object { $_.Name -like 'AgileBits.1Password.CLI*' } |
-                Select-Object -First 1
-            if ($pkgDir) {
-                $exe = Get-ChildItem -Path $pkgDir.FullName -Filter "op.exe" -Recurse -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-                if ($exe) {
-                    return $exe.FullName
-                }
-            }
-        }
-
-        return $null
+        # 2. 全ユーザーの WinGet Packages を検索（管理者昇格セッション対応）
+        return Find-WinGetExe -PackagePattern 'AgileBits.1Password.CLI*' -ExeFilter 'op.exe'
     }
 
     <#

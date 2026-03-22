@@ -121,6 +121,11 @@ Describe 'OpenClawHandler' {
             Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
             # op CLI は存在しない前提（1Password 未インストール環境を模倣）
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            # CanApply の Layer 1 で Read-Host ハングを防ぐ
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             # WriteSecretFile が token 未取得で throw しないよう環境変数を設定
@@ -235,8 +240,12 @@ Describe 'OpenClawHandler' {
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_failure"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -319,8 +328,12 @@ Describe 'OpenClawHandler' {
                 return $true
             }
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_compose_retry"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -395,8 +408,12 @@ Describe 'OpenClawHandler' {
         BeforeEach {
             # op CLI は存在しない前提
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_env_content"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -526,9 +543,13 @@ Describe 'OpenClawHandler' {
     Context 'WaitForContainer - retry behavior' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock Set-ContentNoNewline { }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_wait"
             $env:OPENCLAW_XAI_API_KEY = ""
         }

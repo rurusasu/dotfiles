@@ -320,10 +320,14 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
     #>
     hidden [void] WriteSecretFile([string]$opRef, [string]$name, [bool]$required) {
         $value = ""
-        $opCmd = Get-ExternalCommand -Name "op"
-        if ($opCmd) {
+        # PATH + 全ユーザーの WinGet Packages から op を検索（管理者昇格セッション対応）
+        $opExe = Get-Command "op" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+        if (-not $opExe) {
+            $opExe = Find-WinGetExe -PackagePattern 'AgileBits.1Password.CLI*' -ExeFilter 'op.exe'
+        }
+        if ($opExe) {
             try {
-                $result = & op read $opRef 2>&1
+                $result = & $opExe read $opRef 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     $value = ($result | Out-String).Trim()
                 } else {

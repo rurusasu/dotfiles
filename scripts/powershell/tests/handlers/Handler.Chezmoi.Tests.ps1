@@ -760,24 +760,11 @@ Describe 'ChezmoiHandler' {
 
         It 'should find op from WinGet Packages when not in PATH' {
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Test-PathExist {
-                param($Path)
-                if ($Path -like '*WinGet\Packages') { return $true }
-                return $true
-            }
-            Mock Get-ChildItemSafe {
-                param($Path)
-                if ($Path -like '*Packages*') {
-                    return @([PSCustomObject]@{
-                        Name     = 'AgileBits.1Password.CLI_2.32.1'
-                        FullName = 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1'
-                    })
-                }
-                return @()
-            }
-            Mock Get-ChildItem {
-                return @([PSCustomObject]@{ FullName = 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe' })
-            }
+            # Find-WinGetExe が全ユーザーの WinGet Packages を検索するため、
+            # Get-ChildItem と Test-Path をモックして op.exe を返す
+            Mock Find-WinGetExe {
+                return 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
+            } -ParameterFilter { $PackagePattern -like '*1Password*' }
 
             $handler.CanApply($ctx)
             $handler.Apply($ctx)
@@ -789,7 +776,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should log warning when op is not found anywhere' {
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             $script:notFoundWarned = $false
             Mock Write-Host {
                 param($Object)

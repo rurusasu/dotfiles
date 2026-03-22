@@ -179,6 +179,53 @@ function Get-ExternalCommand {
 
 <#
 .SYNOPSIS
+    WinGet Packages から実行ファイルを検索する（全ユーザー対応）
+.DESCRIPTION
+    管理者昇格セッションでは $env:LOCALAPPDATA が昇格ユーザーを指すため、
+    元のユーザーにインストールされたパッケージが見つからない。
+    全ユーザーの AppData\Local\Microsoft\WinGet\Packages を走査して検索する。
+.PARAMETER PackagePattern
+    パッケージディレクトリ名のワイルドカードパターン (例: 'AgileBits.1Password.CLI*')
+.PARAMETER ExeFilter
+    実行ファイル名のフィルター (例: 'op.exe')
+.OUTPUTS
+    見つかった実行ファイルのフルパス、見つからない場合は $null
+#>
+function Find-WinGetExe {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackagePattern,
+        [Parameter(Mandatory)]
+        [string]$ExeFilter
+    )
+    $searchRoots = @($env:LOCALAPPDATA)
+    $usersDir = Split-Path (Split-Path $env:USERPROFILE)
+    foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+        $otherAppData = Join-Path $userDir.FullName "AppData\Local"
+        if ($otherAppData -ne $env:LOCALAPPDATA -and (Test-Path $otherAppData)) {
+            $searchRoots += $otherAppData
+        }
+    }
+
+    foreach ($appData in $searchRoots) {
+        $packagesRoot = Join-Path $appData "Microsoft\WinGet\Packages"
+        if (-not (Test-Path $packagesRoot)) { continue }
+        $pkgDir = Get-ChildItem -Path $packagesRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like $PackagePattern } |
+            Select-Object -First 1
+        if ($pkgDir) {
+            $exe = Get-ChildItem -Path $pkgDir.FullName -Filter $ExeFilter -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($exe) { return $exe.FullName }
+        }
+    }
+
+    return $null
+}
+
+<#
+.SYNOPSIS
     パスの存在を確認する
 .PARAMETER Path
     確認するパス
