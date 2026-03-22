@@ -375,8 +375,24 @@ class SetupHandlerBase {
     }
 
     hidden [string] GetChezmoiTomlPath() {
-        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-        return Join-Path $homeDir ".config\chezmoi\chezmoi.toml"
+        # 管理者昇格セッションでは $env:USERPROFILE が別ユーザーを指すため、
+        # 全ユーザーのホームから chezmoi.toml を検索する
+        $candidates = @(
+            Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
+        )
+        $usersDir = Split-Path $env:USERPROFILE
+        foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+            $candidate = Join-Path $userDir.FullName ".config\chezmoi\chezmoi.toml"
+            if ($candidate -notin $candidates) {
+                $candidates += $candidate
+            }
+        }
+        # 既に存在するファイルを優先
+        foreach ($c in $candidates) {
+            if (Test-Path $c -ErrorAction SilentlyContinue) { return $c }
+        }
+        # 見つからなければ現在のユーザーのパスを返す（新規作成用）
+        return $candidates[0]
     }
 }
 
