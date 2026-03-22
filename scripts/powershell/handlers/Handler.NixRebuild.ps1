@@ -49,6 +49,12 @@ class NixRebuildHandler : SetupHandlerBase {
         try {
             $this.Log("pre-commit hooks をインストールしています...")
 
+            # core.hooksPath が設定されていると pre-commit install が拒否するため解除
+            Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; true"
+            )
+
             $output = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
                 "bash", "-lc", "cd ~/.dotfiles && pre-commit install --install-hooks"
@@ -72,6 +78,24 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
+    hidden [void] EnsurePnpmAvailable([string]$distroName) {
+        $pnpmCheck = Invoke-Wsl -Arguments @(
+            "-d", $distroName, "-u", "nixos", "--",
+            "bash", "-lc", "command -v pnpm"
+        )
+        if ($LASTEXITCODE -ne 0 -or -not $pnpmCheck) {
+            $this.Log("pnpm が見つかりません。corepack で有効化します...")
+            Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "corepack enable && corepack prepare pnpm@latest --activate"
+            )
+            if ($LASTEXITCODE -ne 0) {
+                throw "corepack による pnpm の有効化に失敗しました (exit code: $LASTEXITCODE)"
+            }
+            $this.Log("pnpm を有効化しました", "Green")
+        }
+    }
+
     hidden [void] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
         try {
             if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
@@ -85,6 +109,9 @@ class NixRebuildHandler : SetupHandlerBase {
                 $this.Log("インストールする pnpm パッケージがありません", "Gray")
                 return
             }
+
+            # pnpm が利用可能か確認し、なければ corepack で有効化
+            $this.EnsurePnpmAvailable($distroName)
 
             # インストール済みパッケージを取得してフィルタリング
             $installedOutput = Invoke-Wsl -Arguments @(
