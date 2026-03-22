@@ -137,13 +137,14 @@ class WingetHandler : SetupHandlerBase {
             }
 
             # インストール済みパッケージを一括取得（winget list を1回だけ実行）
+            # 正規表現で検出できないパッケージ（ARP エントリ等）は個別チェックにフォールバック
             $installedIds = $this.GetInstalledPackageIds()
 
             # 未インストールのパッケージをフィルタリング
             $toInstall = @()
             $skipped = 0
             foreach ($pkg in $packages) {
-                if ($pkg.Id -in $installedIds) {
+                if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
                     $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
                     $skipped++
                 } else {
@@ -209,16 +210,21 @@ class WingetHandler : SetupHandlerBase {
         try {
             $output = Invoke-Winget -Arguments @("list", "--disable-interactivity")
             if ($LASTEXITCODE -ne 0) { return @() }
-            # winget list の出力からパッケージ ID を抽出
-            # 形式: Name  Id  Version  Source (固定幅カラム、2+ スペース区切り)
+            # winget list の固定幅カラムは CJK 文字や省略記号で列位置がずれるため、
+            # パッケージ ID のフォーマット (Publisher.Package) を正規表現で直接抽出する。
+            # winget の公式 ID は必ず "組織名.パッケージ名" の形式。
             $ids = @()
-            $headerFound = $false
+            $headerPassed = $false
             foreach ($line in $output) {
-                if ($line -match '^-{2,}') { $headerFound = $true; continue }
-                if (-not $headerFound) { continue }
-                $parts = @($line -split '\s{2,}' | Where-Object { $_ })
-                if ($parts.Count -ge 2) {
-                    $ids += $parts[1].Trim()
+                if ($line -match '^-{2,}') { $headerPassed = $true; continue }
+                if (-not $headerPassed) { continue }
+                # Publisher.Package 形式の ID を抽出 (例: Git.Git, Microsoft.VCRedist.2015+.x64)
+                if ($line -match '(\S+\.\S+)') {
+                    $candidate = $Matches[1]
+                    # ARP エントリ (ARP\Machine\...) や URL は除外
+                    if ($candidate -notmatch '^ARP\\' -and $candidate -notmatch '://') {
+                        $ids += $candidate
+                    }
                 }
             }
             return $ids
