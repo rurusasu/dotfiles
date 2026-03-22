@@ -19,10 +19,16 @@ param(
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
     [string]$SyncBack = "lock",
-    [switch]$CheckOnly
+    [switch]$CheckOnly,
+    [string]$LogFile = ""
 )
 
 Set-StrictMode -Version Latest
+
+# ログファイルが指定されている場合、全出力をファイルにもコピー
+if ($LogFile) {
+    Start-Transcript -Path $LogFile -Force | Out-Null
+}
 $ErrorActionPreference = "Stop"
 
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
@@ -142,6 +148,12 @@ if ($adminApplicableCount -gt 0 -and (Test-IsAdminCurrent)) {
 Show-SetupSummary -Results $results
 
 $failedCount = @($results | Where-Object { -not $_.Success }).Count
+
+# Transcript を確実に閉じる（throw 前に）
+if ($LogFile) {
+    try { Stop-Transcript | Out-Null } catch { }
+}
+
 if ($failedCount -gt 0) {
     throw "Admin phase failed with $failedCount handler failure(s)."
 }

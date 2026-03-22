@@ -39,3 +39,4 @@ docker/**/.env
 # WSL config (machine-specific)
 windows/.wslconfig
 result
+.admin-phase.log

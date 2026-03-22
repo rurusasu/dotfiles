@@ -133,7 +133,24 @@ if ($adminRequired) {
             $argList += $PostInstallScript
         }
 
+        # 管理者昇格プロセスの出力をログファイルに記録し、終了後に表示
+        # $env:TEMP はユーザーごとに異なるため、リポジトリルートの一時ファイルを使用
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+        $logFile = Join-Path $repoRoot ".admin-phase.log"
+        if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+        # admin スクリプトにログファイルパスを渡す
+        $argList += "-LogFile"
+        $argList += $logFile
+
         $proc = Start-Process -FilePath $shell -ArgumentList $argList -Verb RunAs -Wait -PassThru
+
+        # ログファイルの内容を元のコンソールに表示
+        if (Test-Path $logFile) {
+            Write-Host ""
+            Get-Content $logFile | ForEach-Object { Write-Host $_ }
+        }
+
         if ($null -ne $proc -and $proc.ExitCode -ne 0) {
             throw "Admin phase failed with exit code $($proc.ExitCode)."
         }
