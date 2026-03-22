@@ -416,7 +416,9 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
                 $this.Log("コンテナが起動しました", "Green")
                 return $true
             }
-            Start-SleepSafe -Seconds $this.StartupRetryDelaySeconds
+            if ($i -lt $this.StartupRetries) {
+                Start-SleepSafe -Seconds $this.StartupRetryDelaySeconds
+            }
         }
         return $false
     }
