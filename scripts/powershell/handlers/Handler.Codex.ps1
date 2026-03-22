@@ -20,6 +20,7 @@ class CodexHandler : SetupHandlerBase {
         $this.Description = "Codex CLI シンボリックリンク作成"
         $this.Order = 6
         $this.RequiresAdmin = $false
+        $this.Phase = 1
     }
 
     <#

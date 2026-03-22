@@ -91,8 +91,8 @@ $context.Options["SyncBack"] = $SyncBack
 $handlersPath = Join-Path $PSScriptRoot "handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
 $handlers = Select-SetupHandler -Handlers $handlers
-# Phase 2: 管理者権限が必要なハンドラーのみ実行
-$handlers = @($handlers | Where-Object { $_.RequiresAdmin })
+# Phase 2: Phase = 2 のハンドラー（デフォルト）を実行
+$handlers = @($handlers | Where-Object { $_.Phase -eq 2 })
 
 $adminApplicableCount = 0
 foreach ($handler in $handlers) {

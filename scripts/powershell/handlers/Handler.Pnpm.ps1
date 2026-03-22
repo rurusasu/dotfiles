@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     pnpm グローバルパッケージ管理ハンドラー（Windows）
 
@@ -20,6 +20,7 @@ class PnpmHandler : SetupHandlerBase {
         $this.Description = "pnpm グローバルパッケージ管理（Windows）"
         $this.Order = 7
         $this.RequiresAdmin = $false
+        $this.Phase = 1
     }
 
     [bool] CanApply([SetupContext]$ctx) {

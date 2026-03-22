@@ -22,6 +22,7 @@ class NpmHandler : SetupHandlerBase {
         $this.Description = "npm グローバルパッケージ管理"
         $this.Order = 6
         $this.RequiresAdmin = $false
+        $this.Phase = 1
     }
 
     <#

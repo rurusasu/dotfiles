@@ -42,6 +42,7 @@ class OpenClawHandler : SetupHandlerBase {
         $this.Description = "OpenClaw Telegram AI ゲートウェイの起動"
         $this.Order = 120
         $this.RequiresAdmin = $false
+        $this.Phase = 1
         $this.ConsentKey = "openclaw_enabled"
         $this.ConsentLabel = "OpenClaw — Telegram/Slack 連携 AI ボット"
     }
