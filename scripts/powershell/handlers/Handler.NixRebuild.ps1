@@ -49,10 +49,11 @@ class NixRebuildHandler : SetupHandlerBase {
         try {
             $this.Log("pre-commit hooks をインストールしています...")
 
-            # core.hooksPath が設定されていると pre-commit install が拒否するため解除
+            # core.hooksPath が設定されていると pre-commit install が拒否するため
+            # local/global/system すべてのレベルで解除する
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; true"
+                "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; git config --global --unset-all core.hooksPath 2>/dev/null; true"
             )
 
             $output = Invoke-Wsl -Arguments @(
@@ -84,15 +85,17 @@ class NixRebuildHandler : SetupHandlerBase {
             "bash", "-lc", "command -v pnpm"
         )
         if ($LASTEXITCODE -ne 0 -or -not $pnpmCheck) {
-            $this.Log("pnpm が見つかりません。corepack で有効化します...")
+            $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
+            # NixOS では corepack enable が read-only store のため失敗する
+            # npm install -g で直接インストールする
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "corepack enable && corepack prepare pnpm@latest --activate"
+                "bash", "-lc", "npm install -g pnpm"
             )
             if ($LASTEXITCODE -ne 0) {
-                throw "corepack による pnpm の有効化に失敗しました (exit code: $LASTEXITCODE)"
+                throw "pnpm のインストールに失敗しました (exit code: $LASTEXITCODE)"
             }
-            $this.Log("pnpm を有効化しました", "Green")
+            $this.Log("pnpm をインストールしました", "Green")
         }
     }
 

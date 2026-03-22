@@ -343,7 +343,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "corepack") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
@@ -365,7 +365,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
-                if ($argStr -match "corepack") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
@@ -386,7 +386,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
-                if ($argStr -match "corepack") { $global:LASTEXITCODE = 1; return @("error") }
+                if ($argStr -match "npm install -g pnpm") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
                 return ""
