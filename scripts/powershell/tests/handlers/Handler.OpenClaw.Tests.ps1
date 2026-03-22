@@ -38,7 +38,7 @@ Describe 'OpenClawHandler' {
 
     Context 'CanApply' {
         It 'should return false when docker command is not found' {
-            # Layer 1 をバイパス: ReadOpenClawEnabled が $true を返すようにする
+            # Layer 1 をバイパス: ReadConsentFlag が $true を返すようにする
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock Get-ExternalCommand { return $null }
@@ -63,7 +63,7 @@ Describe 'OpenClawHandler' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
-            # ReadOpenClawEnabled が $true を返すよう chezmoi.toml を模倣
+            # ReadConsentFlag が $true を返すよう chezmoi.toml を模倣
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
 

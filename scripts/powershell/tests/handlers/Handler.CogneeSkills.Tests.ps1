@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -36,11 +36,10 @@ Describe 'CogneeSkillsHandler' {
         }
     }
 
-    Context 'CanApply - Layer 1: flag is null and non-interactive' {
+    Context 'CanApply - consent flag is null (not yet decided)' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Test-InteractiveEnvironment { return $false }
         }
 
         It 'should return false' {
@@ -49,50 +48,31 @@ Describe 'CogneeSkillsHandler' {
         }
     }
 
-    Context 'CanApply - Layer 1: flag is null, interactive, user answers n' {
-        BeforeEach {
-            Mock Write-Host { }
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Test-InteractiveEnvironment { return $true }
-            Mock Read-Host { return "n" }
-            # WriteCogneeSkillsEnabled が書き込みを試みるのをモック
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
-        }
-
-        It 'should return false' {
-            $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
-        }
-    }
-
-    Context 'CanApply - Layer 1: flag is null, interactive, user answers y' {
-        BeforeEach {
-            Mock Write-Host { }
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Test-InteractiveEnvironment { return $true }
-            Mock Read-Host { return "y" }
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
-            # Layer 2: docker + compose
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
-            Mock Test-PathExist { return $true }
-        }
-
-        It 'should proceed to Layer 2 and return true' {
-            $result = $handler.CanApply($ctx)
-            $result | Should -Be $true
-        }
-    }
-
-    Context 'CanApply - Layer 1: flag is false' {
+    Context 'CanApply - consent flag is false' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock Get-Content { return "[data]`ncognee_skills_enabled = false" } -ParameterFilter { $Path -like '*chezmoi.toml' }
         }
 
-        It 'should return false silently' {
+        It 'should return false' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $false
+        }
+    }
+
+    Context 'CanApply - consent flag is true, proceeds to Layer 2' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`ncognee_skills_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-PathExist { return $true }
+        }
+
+        It 'should return true' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
         }
     }
 

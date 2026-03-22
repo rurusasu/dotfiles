@@ -38,6 +38,8 @@ class CogneeSkillsHandler : SetupHandlerBase {
         $this.Description = "CogneeSkills スキルサーバーの起動"
         $this.Order = 130
         $this.RequiresAdmin = $false
+        $this.ConsentKey = "cognee_skills_enabled"
+        $this.ConsentLabel = "CogneeSkills (スキルサーバー)"
     }
 
     <#
@@ -54,30 +56,15 @@ class CogneeSkillsHandler : SetupHandlerBase {
         $this.ComposeRetries = $ctx.GetOption("CogneeSkillsComposeRetries", 2)
         $this.ComposeRetryDelaySeconds = $ctx.GetOption("CogneeSkillsComposeRetryDelaySeconds", 10)
 
-        # ── Layer 1: 対話確認（永続フラグ） ──
-        # chezmoi.toml の cognee_skills_enabled で過去の選択を確認する。
-        # 未設定（$null）なら対話的に確認し、結果を chezmoi.toml に永続化する。
-        # 非対話環境（バックグラウンド実行等）では Read-Host がハングするためスキップする。
-        $enabled = $this.ReadCogneeSkillsEnabled()
-        if ($null -eq $enabled) {
-            if (-not (Test-InteractiveEnvironment)) {
-                $this.Log("非対話環境のためスキップします (対話モードで install.cmd を実行してください)", "Yellow")
-                return $false
+        # ── Layer 1: 同意フラグ確認 ──
+        # Invoke-ConsentPrompt で事前に永続化済みのフラグを参照する
+        $enabled = $this.ReadConsentFlag()
+        if ($null -eq $enabled -or -not $enabled) {
+            if ($null -eq $enabled) {
+                $this.Log("未設定のためスキップします (install.cmd の同意プロンプトで有効化してください)", "Gray")
+            } else {
+                $this.Log("CogneeSkills は無効です (chezmoi.toml)", "Gray")
             }
-            # 初回: ユーザーに確認
-            Write-Host ""
-            Write-Host "  CogneeSkills (スキルサーバー) を検出しました。" -ForegroundColor Yellow
-            Write-Host "  この PC で CogneeSkills をセットアップしますか？" -ForegroundColor Yellow
-            Write-Host "  (Docker コンテナのビルド・起動を行います)" -ForegroundColor Gray
-            $answer = Read-Host "  [y/N]"
-            $enabled = ($answer -match '^[yY]')
-            $this.WriteCogneeSkillsEnabled($enabled)
-            $this.Log("選択を chezmoi.toml に記録しました (cognee_skills_enabled = $($enabled.ToString().ToLower()))")
-            if (-not $enabled) {
-                return $false
-            }
-        } elseif (-not $enabled) {
-            $this.Log("CogneeSkills は無効です (chezmoi.toml)", "Gray")
             return $false
         }
 
@@ -141,75 +128,6 @@ class CogneeSkillsHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
-    }
-
-    # ────────────────────────────────────────────────────────
-    # chezmoi.toml フラグ管理
-    # ────────────────────────────────────────────────────────
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml から cognee_skills_enabled フラグを読み取る
-    .OUTPUTS
-        $true  — 有効化済み（過去にユーザーが承認）
-        $false — 無効化済み（過去にユーザーが拒否）
-        $null  — 未設定（初回、ユーザーに確認が必要）
-    #>
-    hidden [object] ReadCogneeSkillsEnabled() {
-        $tomlPath = $this.GetChezmoiTomlPath()
-        if (-not (Test-Path $tomlPath)) { return $null }
-        $content = Get-Content $tomlPath -Raw -ErrorAction SilentlyContinue
-        if (-not $content) { return $null }
-        if ($content -match 'cognee_skills_enabled\s*=\s*(true|false)') {
-            return ($Matches[1] -eq 'true')
-        }
-        return $null
-    }
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml に cognee_skills_enabled フラグを永続化する
-    .DESCRIPTION
-        ファイルが存在しない場合は作成する。
-        [data] セクションがない場合は追加する。
-        既存の値がある場合は更新する。
-    #>
-    hidden [void] WriteCogneeSkillsEnabled([bool]$enabled) {
-        $tomlPath = $this.GetChezmoiTomlPath()
-        $value = if ($enabled) { "true" } else { "false" }
-        $nl = [Environment]::NewLine
-
-        $dir = Split-Path $tomlPath
-        if (-not (Test-Path $dir)) {
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        }
-
-        if (-not (Test-Path $tomlPath)) {
-            [System.IO.File]::WriteAllText($tomlPath, "[data]${nl}cognee_skills_enabled = ${value}${nl}")
-            return
-        }
-
-        $content = Get-Content $tomlPath -Raw
-        if ($content -match 'cognee_skills_enabled\s*=') {
-            # 既存の値を更新
-            $content = $content -replace '(cognee_skills_enabled\s*=\s*)\w+', "`${1}${value}"
-        } elseif ($content -match '\[data\]') {
-            # [data] セクションの直後に追記
-            $content = $content -replace '(\[data\]\s*\r?\n)', "`$1cognee_skills_enabled = ${value}${nl}"
-        } else {
-            # [data] セクションごと追加
-            $content = "${content}${nl}[data]${nl}cognee_skills_enabled = ${value}${nl}"
-        }
-        [System.IO.File]::WriteAllText($tomlPath, $content)
-    }
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml のパスを返す
-    #>
-    hidden [string] GetChezmoiTomlPath() {
-        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-        return Join-Path $homeDir ".config\chezmoi\chezmoi.toml"
     }
 
     # ────────────────────────────────────────────────────────

@@ -91,7 +91,8 @@ $context.Options["SyncBack"] = $SyncBack
 $handlersPath = Join-Path $PSScriptRoot "handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
 $handlers = Select-SetupHandler -Handlers $handlers
-$handlers = @($handlers | Where-Object { $_.Name -notin @("Winget", "OpenClaw") })
+# Phase 2: 管理者権限が必要なハンドラーのみ実行
+$handlers = @($handlers | Where-Object { $_.RequiresAdmin })
 
 $adminApplicableCount = 0
 foreach ($handler in $handlers) {

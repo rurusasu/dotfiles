@@ -42,6 +42,8 @@ class OpenClawHandler : SetupHandlerBase {
         $this.Description = "OpenClaw Telegram AI ゲートウェイの起動"
         $this.Order = 120
         $this.RequiresAdmin = $false
+        $this.ConsentKey = "openclaw_enabled"
+        $this.ConsentLabel = "OpenClaw (Telegram AI ゲートウェイ)"
     }
 
     <#
@@ -58,32 +60,15 @@ class OpenClawHandler : SetupHandlerBase {
         $this.ComposeRetries = $ctx.GetOption("OpenClawComposeRetries", 2)
         $this.ComposeRetryDelaySeconds = $ctx.GetOption("OpenClawComposeRetryDelaySeconds", 10)
 
-        # ── Layer 1: 対話確認（永続フラグ） ──
-        # chezmoi.toml の openclaw_enabled で過去の選択を確認する。
-        # 未設定（$null）なら対話的に確認し、結果を chezmoi.toml に永続化する。
-        # 非対話環境（バックグラウンド実行等）では Read-Host がハングするためスキップする。
-        $enabled = $this.ReadOpenClawEnabled()
-        if ($null -eq $enabled) {
-            if (-not (Test-InteractiveEnvironment)) {
-                $this.Log("非対話環境のためスキップします (対話モードで install.cmd を実行してください)", "Yellow")
-                return $false
+        # ── Layer 1: 同意フラグ確認 ──
+        # Invoke-ConsentPrompt で事前に永続化済みのフラグを参照する
+        $enabled = $this.ReadConsentFlag()
+        if ($null -eq $enabled -or -not $enabled) {
+            if ($null -eq $enabled) {
+                $this.Log("未設定のためスキップします (install.cmd の同意プロンプトで有効化してください)", "Gray")
+            } else {
+                $this.Log("OpenClaw は無効です (chezmoi.toml)", "Gray")
             }
-            # 初回: ユーザーに確認
-            Write-Host ""
-            Write-Host "  OpenClaw (Telegram AI ゲートウェイ) を検出しました。" -ForegroundColor Yellow
-            Write-Host "  この PC で OpenClaw をセットアップしますか？" -ForegroundColor Yellow
-            Write-Host "  (Docker コンテナのビルド・起動を行います)" -ForegroundColor Gray
-            $answer = Read-Host "  [y/N]"
-            $enabled = ($answer -match '^[yY]')
-            $this.WriteOpenClawEnabled($enabled)
-            $this.Log("選択を chezmoi.toml に記録しました (openclaw_enabled = $($enabled.ToString().ToLower()))")
-            if (-not $enabled) {
-                return $false
-            }
-            # フラグを有効化したので chezmoi apply で .openclaw/ 設定を展開
-            $this.ApplyChezmoiConfig()
-        } elseif (-not $enabled) {
-            $this.Log("OpenClaw は無効です (chezmoi.toml)", "Gray")
             return $false
         }
 
@@ -171,97 +156,6 @@ class OpenClawHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
-    }
-
-    # ────────────────────────────────────────────────────────
-    # chezmoi.toml フラグ管理
-    # ────────────────────────────────────────────────────────
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml から openclaw_enabled フラグを読み取る
-    .OUTPUTS
-        $true  — 有効化済み（過去にユーザーが承認）
-        $false — 無効化済み（過去にユーザーが拒否）
-        $null  — 未設定（初回、ユーザーに確認が必要）
-    #>
-    hidden [object] ReadOpenClawEnabled() {
-        $tomlPath = $this.GetChezmoiTomlPath()
-        if (-not (Test-Path $tomlPath)) { return $null }
-        $content = Get-Content $tomlPath -Raw -ErrorAction SilentlyContinue
-        if (-not $content) { return $null }
-        if ($content -match 'openclaw_enabled\s*=\s*(true|false)') {
-            return ($Matches[1] -eq 'true')
-        }
-        return $null
-    }
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml に openclaw_enabled フラグを永続化する
-    .DESCRIPTION
-        ファイルが存在しない場合は作成する。
-        [data] セクションがない場合は追加する。
-        既存の値がある場合は更新する。
-    #>
-    hidden [void] WriteOpenClawEnabled([bool]$enabled) {
-        $tomlPath = $this.GetChezmoiTomlPath()
-        $value = if ($enabled) { "true" } else { "false" }
-        $nl = [Environment]::NewLine
-
-        $dir = Split-Path $tomlPath
-        if (-not (Test-Path $dir)) {
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        }
-
-        if (-not (Test-Path $tomlPath)) {
-            [System.IO.File]::WriteAllText($tomlPath, "[data]${nl}openclaw_enabled = ${value}${nl}")
-            return
-        }
-
-        $content = Get-Content $tomlPath -Raw
-        if ($content -match 'openclaw_enabled\s*=') {
-            # 既存の値を更新
-            $content = $content -replace '(openclaw_enabled\s*=\s*)\w+', "`${1}${value}"
-        } elseif ($content -match '\[data\]') {
-            # [data] セクションの直後に追記
-            $content = $content -replace '(\[data\]\s*\r?\n)', "`$1openclaw_enabled = ${value}${nl}"
-        } else {
-            # [data] セクションごと追加
-            $content = "${content}${nl}[data]${nl}openclaw_enabled = ${value}${nl}"
-        }
-        [System.IO.File]::WriteAllText($tomlPath, $content)
-    }
-
-    <#
-    .SYNOPSIS
-        chezmoi apply を実行して .openclaw/ 設定ファイルを展開する
-    .DESCRIPTION
-        WriteOpenClawEnabled で openclaw_enabled = true を書き込んだ直後に呼ぶ。
-        Chezmoi ハンドラーは既に実行済み (Order < 120) のため、
-        フラグ変更後の再適用が必要。
-    #>
-    hidden [void] ApplyChezmoiConfig() {
-        $chezmoiCmd = Get-ExternalCommand -Name "chezmoi"
-        if (-not $chezmoiCmd) {
-            $this.LogWarning("chezmoi が見つかりません — 設定ファイルの展開をスキップします")
-            return
-        }
-        $this.Log("chezmoi apply で OpenClaw 設定を展開しています...")
-        try {
-            & chezmoi apply 2>&1 | Out-Null
-        } catch {
-            $this.LogWarning("chezmoi apply に失敗しました: $($_.Exception.Message)")
-        }
-    }
-
-    <#
-    .SYNOPSIS
-        chezmoi.toml のパスを返す
-    #>
-    hidden [string] GetChezmoiTomlPath() {
-        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-        return Join-Path $homeDir ".config\chezmoi\chezmoi.toml"
     }
 
     # ────────────────────────────────────────────────────────

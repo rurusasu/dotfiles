@@ -52,7 +52,11 @@ $context.Options["SyncBack"] = $SyncBack
 $handlersPath = Join-Path $PSScriptRoot "handlers"
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
 $handlers = Select-SetupHandler -Handlers $handlers
-$handlers = @($handlers | Where-Object { $_.Name -in @("Winget", "Codex", "OpenClaw") })
+# Phase 1: 管理者権限不要のハンドラーのみ実行
+$handlers = @($handlers | Where-Object { -not $_.RequiresAdmin })
+
+# オプショナルサービスの一括同意プロンプト
+Invoke-ConsentPrompt -Handlers $handlers
 
 if ($CheckOnly) {
     $canApply = $false

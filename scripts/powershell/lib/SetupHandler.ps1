@@ -193,6 +193,12 @@ class SetupHandlerBase {
     # 管理者権限が必要かどうか
     [bool]$RequiresAdmin = $false
 
+    # オプショナルサービスの同意設定（設定されている場合、一括同意プロンプトの対象になる）
+    # ConsentKey: chezmoi.toml の [data] セクションに保存するキー名 (例: "openclaw_enabled")
+    # ConsentLabel: 一括同意プロンプトに表示する説明文
+    [string]$ConsentKey = ""
+    [string]$ConsentLabel = ""
+
     # ログバッファリング（CanApply 中はバッファリングし、スキップ時は破棄）
     hidden [bool]$_bufferLogs = $false
     hidden [System.Collections.ArrayList]$_logBuffer = [System.Collections.ArrayList]::new()
@@ -316,6 +322,117 @@ class SetupHandlerBase {
     hidden [void] ClearLogBuffer() {
         $this._logBuffer.Clear()
     }
+
+    # このハンドラーが同意プロンプト対象かどうか
+    [bool] NeedsConsent() {
+        return -not [string]::IsNullOrEmpty($this.ConsentKey)
+    }
+
+    # chezmoi.toml から同意フラグを読み取る ($true / $false / $null)
+    [object] ReadConsentFlag() {
+        if (-not $this.NeedsConsent()) { return $null }
+        $tomlPath = $this.GetChezmoiTomlPath()
+        if (-not (Test-Path $tomlPath)) { return $null }
+        $content = Get-Content $tomlPath -Raw -ErrorAction SilentlyContinue
+        if (-not $content) { return $null }
+        if ($content -match "$([regex]::Escape($this.ConsentKey))\s*=\s*(true|false)") {
+            return ($Matches[1] -eq 'true')
+        }
+        return $null
+    }
+
+    # chezmoi.toml に同意フラグを永続化する
+    [void] WriteConsentFlag([bool]$enabled) {
+        if (-not $this.NeedsConsent()) { return }
+        $tomlPath = $this.GetChezmoiTomlPath()
+        $value = if ($enabled) { "true" } else { "false" }
+        $nl = [Environment]::NewLine
+
+        $dir = Split-Path $tomlPath
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+
+        if (-not (Test-Path $tomlPath)) {
+            [System.IO.File]::WriteAllText($tomlPath, "[data]${nl}$($this.ConsentKey) = ${value}${nl}")
+            return
+        }
+
+        $content = Get-Content $tomlPath -Raw
+        if ($content -match "$([regex]::Escape($this.ConsentKey))\s*=") {
+            $content = $content -replace "($([regex]::Escape($this.ConsentKey))\s*=\s*)\w+", "`${1}${value}"
+        } elseif ($content -match '\[data\]') {
+            $content = $content -replace '(\[data\]\s*\r?\n)', "`$1$($this.ConsentKey) = ${value}${nl}"
+        } else {
+            $content = "${content}${nl}[data]${nl}$($this.ConsentKey) = ${value}${nl}"
+        }
+        [System.IO.File]::WriteAllText($tomlPath, $content)
+    }
+
+    hidden [string] GetChezmoiTomlPath() {
+        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        return Join-Path $homeDir ".config\chezmoi\chezmoi.toml"
+    }
+}
+
+<#
+.SYNOPSIS
+    オプショナルサービスの一括同意プロンプトを表示する
+.DESCRIPTION
+    ConsentKey が設定されていて、chezmoi.toml にフラグが未設定のハンドラーを
+    一覧表示し、ユーザーに一括で選択させる。結果は chezmoi.toml に永続化する。
+    非対話環境ではスキップする。
+.PARAMETER Handlers
+    全ハンドラーの配列
+#>
+function Invoke-ConsentPrompt {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [array]$Handlers
+    )
+
+    # 同意が必要なハンドラーを抽出（ConsentKey があり、フラグ未設定）
+    $pending = @($Handlers | Where-Object {
+        $_.NeedsConsent() -and ($null -eq $_.ReadConsentFlag())
+    })
+
+    if ($pending.Count -eq 0) { return }
+
+    # 非対話環境ではスキップ
+    if (-not (Test-InteractiveEnvironment)) { return }
+
+    Write-Host ""
+    Write-Host "  オプションサービスを検出しました:" -ForegroundColor Yellow
+    for ($i = 0; $i -lt $pending.Count; $i++) {
+        Write-Host "  [$($i + 1)] $($pending[$i].ConsentLabel)" -ForegroundColor Cyan
+    }
+    Write-Host ""
+    $answer = Read-Host "  セットアップするサービス (例: 1,2 / all / none) [none]"
+
+    if ([string]::IsNullOrWhiteSpace($answer)) { $answer = "none" }
+
+    $selectedIndices = @()
+    if ($answer -ieq "all") {
+        $selectedIndices = 0..($pending.Count - 1)
+    } elseif ($answer -ine "none") {
+        $selectedIndices = @($answer -split '[,\s]+' | ForEach-Object {
+            $num = 0
+            if ([int]::TryParse($_.Trim(), [ref]$num) -and $num -ge 1 -and $num -le $pending.Count) {
+                $num - 1
+            }
+        })
+    }
+
+    # 選択結果を永続化
+    for ($i = 0; $i -lt $pending.Count; $i++) {
+        $enabled = $i -in $selectedIndices
+        $pending[$i].WriteConsentFlag($enabled)
+        $status = if ($enabled) { "有効" } else { "スキップ" }
+        $color = if ($enabled) { "Green" } else { "Gray" }
+        Write-Host "  $($pending[$i].Name): $status" -ForegroundColor $color
+    }
+    Write-Host ""
 }
 
 # ========================================
