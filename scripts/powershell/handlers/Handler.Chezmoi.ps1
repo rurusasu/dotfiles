@@ -105,17 +105,20 @@ class ChezmoiHandler : SetupHandlerBase {
                 "--cache" $cachePath `
                 "--no-tty" "apply" "--source" $sourcePath "--force" "-v"
 
+            # chezmoi apply の終了コードを保存（後続処理で上書きされるのを防ぐ）
+            $chezmoiExitCode = $LASTEXITCODE
+
             # 管理者昇格セッション対応: Windows Terminal の elevate: true により
             # 別ユーザーのプロファイルが読まれるケースがある。
             # admin フェーズ (管理者権限) なので他ユーザーの Documents にもデプロイ可能。
             $this.DeployProfileToOtherUsers($sourcePath)
 
-            if ($LASTEXITCODE -eq 0) {
+            if ($chezmoiExitCode -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
                 $this.Log("Windows Terminal を起動中なら、再起動すると確実に反映されます", "Gray")
                 return $this.CreateSuccessResult("dotfiles を適用しました")
             } else {
-                $this.LogError("chezmoi apply が失敗しました (exit=$LASTEXITCODE)")
+                $this.LogError("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
                 $this.Log("手動で実行してください: chezmoi --source `"$sourcePath`" apply", "Yellow")
                 return $this.CreateFailureResult("chezmoi apply が失敗しました (exit=$LASTEXITCODE)")
             }

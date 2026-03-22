@@ -327,7 +327,7 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
 
         $this.Log("cron/jobs.json が存在しません。シードファイルをコピーします")
         Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/app/.openclaw/cron"
-        Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw://home/app/.openclaw/cron/jobs.json"
+        Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw:/home/app/.openclaw/cron/jobs.json"
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("cron seed のコピーに失敗しました")
             return

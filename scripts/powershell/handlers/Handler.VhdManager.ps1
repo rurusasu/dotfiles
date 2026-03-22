@@ -260,10 +260,24 @@ exit
         $distroName = $ctx.DistroName
         $this.Log("WSL 内でファイルシステムを縮小します...")
 
-        Invoke-Wsl -d $distroName -u root -- sh -lc "e2fsck -f -y /dev/sdb" 2>$null
+        # ルートデバイスを動的に検出（ResizeFilesystem と同じロジック）
+        $findRoot = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/" {print "/dev/"\$1; exit}'''
+        $dev = Invoke-Wsl -d $distroName -u root -- sh -lc $findRoot | Select-Object -First 1
+        if (-not $dev) {
+            $findFallback = 'lsblk -f | awk ''\$2=="ext4" && \$7=="/mnt/wslg/distro" {print "/dev/"\$1; exit}'''
+            $dev = Invoke-Wsl -d $distroName -u root -- sh -lc $findFallback | Select-Object -First 1
+        }
+        if (-not $dev) {
+            $this.LogWarning("縮小対象のデバイスを特定できませんでした")
+            return
+        }
+        $dev = $dev.Trim()
+        $this.Log("デバイス: $dev")
+
+        Invoke-Wsl -d $distroName -u root -- sh -lc "e2fsck -f -y $dev" 2>$null
 
         $targetSizeK = [math]::Floor($targetBytes / 1KB)
-        Invoke-Wsl -d $distroName -u root -- sh -lc "resize2fs /dev/sdb ${targetSizeK}K" 2>$null
+        Invoke-Wsl -d $distroName -u root -- sh -lc "resize2fs $dev ${targetSizeK}K" 2>$null
 
         Invoke-Wsl --shutdown
 

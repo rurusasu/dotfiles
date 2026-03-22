@@ -95,6 +95,9 @@ class CogneeSkillsHandler : SetupHandlerBase {
             # .env ファイルの確認・生成
             $this.EnsureEnvFile($ctx)
 
+            # Gemini API キーのシークレットファイルを確認・作成
+            $this.EnsureGeminiApiKey()
+
             # cognee-network を作成（存在しない場合のみ）
             $this.EnsureDockerNetwork()
 
@@ -129,6 +132,55 @@ class CogneeSkillsHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    <#
+    .SYNOPSIS
+        Gemini API キーのシークレットファイルを確認・作成する
+    .DESCRIPTION
+        OpenClaw の secrets ディレクトリに gemini_api_key ファイルが存在しない場合、
+        1Password (op read) または環境変数から取得して書き出す。
+    #>
+    hidden [void] EnsureGeminiApiKey() {
+        $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        $secretDir = Join-Path $homeDir ".openclaw\secrets"
+        $secretFile = Join-Path $secretDir "gemini_api_key"
+
+        if (Test-Path $secretFile) {
+            $this.Log("gemini_api_key シークレットファイルが存在します", "Gray")
+            return
+        }
+
+        $value = ""
+        # 1. op read で取得
+        $opExe = Get-Command "op" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+        if (-not $opExe) {
+            $opExe = Find-WinGetExe -PackagePattern 'AgileBits.1Password.CLI*' -ExeFilter 'op.exe'
+        }
+        if ($opExe) {
+            try {
+                $result = & $opExe read "op://Personal/Gemini API/credential" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    $value = ($result | Out-String).Trim()
+                }
+            } catch { }
+        }
+
+        # 2. 環境変数フォールバック
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $value = [string][Environment]::GetEnvironmentVariable("GEMINI_API_KEY")
+        }
+
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $this.LogWarning("Gemini API キーが取得できませんでした。CogneeSkills が起動しても LLM 呼び出しが失敗します")
+            return
+        }
+
+        if (-not (Test-Path $secretDir)) {
+            New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+        }
+        Set-ContentNoNewline -Path $secretFile -Value $value
+        $this.Log("gemini_api_key を書き出しました", "Gray")
     }
 
     # ────────────────────────────────────────────────────────

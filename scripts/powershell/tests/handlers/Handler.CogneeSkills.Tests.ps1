@@ -148,6 +148,10 @@ Describe 'CogneeSkillsHandler' {
                 param($Path)
                 return $true
             }
+            # EnsureGeminiApiKey が実際の op を呼ばないよう mock
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should start container successfully' {
@@ -220,6 +224,9 @@ Describe 'CogneeSkillsHandler' {
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should return failure when docker compose up fails' {
@@ -271,6 +278,9 @@ Describe 'CogneeSkillsHandler' {
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should succeed on second compose attempt when first fails' {
@@ -336,6 +346,9 @@ Describe 'CogneeSkillsHandler' {
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should succeed on second attempt' {
@@ -388,6 +401,9 @@ Describe 'CogneeSkillsHandler' {
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
             Mock Test-PathExist { return $true }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should skip creation when network already exists' {
@@ -435,6 +451,9 @@ Describe 'CogneeSkillsHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Start-SleepSafe { }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*gemini_api_key' }
         }
 
         It 'should include SKILLS_PATH with forward slashes' {
