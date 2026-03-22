@@ -36,7 +36,11 @@ class NixRebuildHandler : SetupHandlerBase {
         }
 
         $distroName = $ctx.DistroName
-        $distroExists = $distros | Where-Object { $_.Trim([char]0xFEFF, "`0", " ", "`r", "`n") -ieq $distroName }
+        # wsl -l -q は UTF-16LE で出力するため、文字間にヌルバイトが挿入される
+        # Trim では中間のヌルバイトを除去できないため、Replace で全て除去してから比較
+        $distroExists = $distros | Where-Object {
+            $_ -replace "`0", '' -replace [char]0xFEFF, '' -match "^\s*$([regex]::Escape($distroName))\s*$"
+        }
         if (-not $distroExists) {
             $this.Log("$distroName が見つからないためスキップします")
             return $false

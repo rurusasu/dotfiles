@@ -210,14 +210,12 @@ class WingetHandler : SetupHandlerBase {
             $output = Invoke-Winget -Arguments @("list", "--disable-interactivity")
             if ($LASTEXITCODE -ne 0) { return @() }
             # winget list の出力からパッケージ ID を抽出
-            # 形式: Name  Id  Version  Source
-            # ヘッダー行とセパレーター行をスキップし、ID 列を取得
+            # 形式: Name  Id  Version  Source (固定幅カラム、2+ スペース区切り)
             $ids = @()
             $headerFound = $false
             foreach ($line in $output) {
                 if ($line -match '^-{2,}') { $headerFound = $true; continue }
                 if (-not $headerFound) { continue }
-                # 2つ以上のスペースで分割して ID 列（2列目）を取得
                 $parts = @($line -split '\s{2,}' | Where-Object { $_ })
                 if ($parts.Count -ge 2) {
                     $ids += $parts[1].Trim()

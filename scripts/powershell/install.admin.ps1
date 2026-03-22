@@ -100,6 +100,8 @@ foreach ($handler in $handlers) {
         continue
     }
 
+    # プリフライトチェック: ログをバッファリングして表示しない
+    $handler._bufferLogs = $true
     try {
         if ($handler.CanApply($context)) {
             $adminApplicableCount++
@@ -108,6 +110,8 @@ foreach ($handler in $handlers) {
     catch {
         Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
     }
+    $handler._bufferLogs = $false
+    $handler.ClearLogBuffer()
 }
 
 if ($CheckOnly) {
