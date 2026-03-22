@@ -96,8 +96,8 @@ class VhdManagerHandler : SetupHandlerBase {
             }
 
             try {
-                # WSL をシャットダウン
-                Invoke-Wsl --shutdown
+                # 対象ディストリビューションのみ停止（--shutdown は他ディストリビューションに影響）
+                Invoke-Wsl --terminate $ctx.DistroName
 
                 $result = $this.ManageVhdSize($ctx, $vhdxPath, $currentVirtualSizeBytes, $targetBytes, $targetGB)
                 return $result
@@ -279,7 +279,7 @@ exit
         $targetSizeK = [math]::Floor($targetBytes / 1KB)
         Invoke-Wsl -d $distroName -u root -- sh -lc "resize2fs $dev ${targetSizeK}K" 2>$null
 
-        Invoke-Wsl --shutdown
+        Invoke-Wsl --terminate $distroName
 
         $this.Log("VHDX を縮小しています...")
         Resize-VHD -Path $vhdxPath -SizeBytes $targetBytes

@@ -90,11 +90,11 @@ class NixRebuildHandler : SetupHandlerBase {
         )
         if ($LASTEXITCODE -ne 0 -or -not $pnpmCheck) {
             $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
-            # NixOS では corepack enable が read-only store のため失敗する
-            # npm install -g で直接インストールする
+            # NixOS では npm のグローバルプレフィックスが read-only nix store を指すため
+            # ~/.npm-global に変更してからインストールする
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "npm install -g pnpm"
+                "bash", "-lc", "mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g pnpm && grep -q npm-global ~/.bashrc || echo 'export PATH=~/.npm-global/bin:`$PATH' >> ~/.bashrc"
             )
             if ($LASTEXITCODE -ne 0) {
                 throw "pnpm のインストールに失敗しました (exit code: $LASTEXITCODE)"
