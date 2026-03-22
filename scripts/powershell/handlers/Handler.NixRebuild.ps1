@@ -123,7 +123,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # インストール済みパッケージを取得してフィルタリング
             $installedOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "pnpm ls -g --depth=0 2>/dev/null"
+                "bash", "-lc", "export PATH=~/.npm-global/bin:`$PATH; pnpm ls -g --depth=0 2>/dev/null"
             )
             $toInstall = @()
             $skipped = 0
@@ -146,9 +146,10 @@ class NixRebuildHandler : SetupHandlerBase {
             $quotedPkgs = ($toInstall | ForEach-Object { "'$($_ -replace "'", "'\\''")'" }) -join " "
             $this.Log("pnpm グローバルパッケージをインストールしています: $($toInstall -join ', ')")
 
+            # ~/.npm-global/bin を PATH に追加（EnsurePnpmAvailable でインストールした場合）
             $pnpmOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "pnpm add -g $quotedPkgs"
+                "bash", "-lc", "export PATH=~/.npm-global/bin:`$PATH; pnpm add -g $quotedPkgs"
             )
 
             $pnpmOutput | ForEach-Object {
