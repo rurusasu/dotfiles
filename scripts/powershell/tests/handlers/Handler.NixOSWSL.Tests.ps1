@@ -35,8 +35,12 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'CanApply' {
+        BeforeEach {
+            # TestWslExecutable が実際の wsl.exe を呼ばないようにモック
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 0; return "Default Version: 2" }
+        }
+
         It 'should return true when distro does not exist' {
-            # DistroExists が $false を返すようにモック
             $handler | Add-Member -MemberType ScriptMethod -Name DistroExists -Value { return $false } -Force
             Mock Write-Host { }
 
@@ -46,7 +50,6 @@ Describe 'NixOSWSLHandler' {
         }
 
         It 'should return false when distro already exists' {
-            # DistroExists が $true を返すようにモック
             $handler | Add-Member -MemberType ScriptMethod -Name DistroExists -Value { return $true } -Force
             Mock Write-Host { }
 
@@ -262,6 +265,19 @@ Describe 'NixOSWSLHandler' {
             $handler.InstallDistro($ctx, $asset, "C:\Temp\nixos.wsl")
 
             $script:callCount | Should -Be 1
+        }
+
+        It 'should use ImportDistro directly for .tar.gz asset even with new WSL' {
+            $tarAsset = @{ name = "nixos-wsl.tar.gz" }
+            $script:importCalled = $false
+            $script:installFromFileCalled = $false
+            $handler | Add-Member -MemberType ScriptMethod -Name ImportDistro -Value { $script:importCalled = $true } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value { $script:installFromFileCalled = $true } -Force
+
+            $handler.InstallDistro($ctx, $tarAsset, "C:\Temp\nixos-wsl.tar.gz")
+
+            $script:importCalled | Should -Be $true
+            $script:installFromFileCalled | Should -Be $false
         }
 
         It 'should fallback to ImportDistro when InstallFromFile fails' {

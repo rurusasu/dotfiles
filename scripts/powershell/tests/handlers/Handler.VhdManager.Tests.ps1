@@ -295,12 +295,12 @@ Describe 'VhdManagerHandler' {
             Mock Invoke-Diskpart { }
         }
 
-        It 'should warn when AllowVhdShrink is not set' {
+        It 'should warn when AllowVhdShrink is not set and current > target' {
             $script:warningLogged = $false
             Mock Get-FileContentSafe { return "defaultVhdSize = 32GB" }
-            # Simulate current size > target (need shrink)
+            # current size (64GB) > target (32GB) → shrink path
             Mock Get-Command { return $true } -ParameterFilter { $Name -eq "Get-VHD" }
-            # Note: Actually testing shrink requires more complex mocking
+            Mock Get-VHD { return [PSCustomObject]@{ Size = 64 * 1GB } }
             Mock Write-Host {
                 param($Object)
                 if ($Object -match "AllowVhdShrink") {
@@ -308,9 +308,10 @@ Describe 'VhdManagerHandler' {
                 }
             }
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
-            # Shrink is only triggered if current > target, which requires Get-VHD mock
+            $result.Success | Should -Be $true
+            $script:warningLogged | Should -Be $true
         }
     }
 
@@ -369,7 +370,7 @@ Describe 'VhdManagerHandler' {
 
             $handler.Apply($ctx)
 
-            # Fallback is attempted
+            $script:fallbackTried | Should -Be $true
         }
     }
 

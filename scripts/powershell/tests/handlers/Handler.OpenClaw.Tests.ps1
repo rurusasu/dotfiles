@@ -38,6 +38,9 @@ Describe 'OpenClawHandler' {
 
     Context 'CanApply' {
         It 'should return false when docker command is not found' {
+            # Layer 1 をバイパス: ReadOpenClawEnabled が $true を返すようにする
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
             Mock Get-ExternalCommand { return $null }
             Mock Write-Host { }
 

@@ -408,11 +408,11 @@ Describe 'ChezmoiHandler' {
             }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
             # 例外が発生した場合、CreateFailureResult でメッセージが設定される
-            # Write-Host での検証は難しいので、スキップ
-            $true | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "chezmoi エラー"
         }
 
         It 'should fail when exception is thrown' {

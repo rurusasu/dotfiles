@@ -38,6 +38,22 @@ Describe 'NpmHandler' {
         }
     }
 
+    Context 'CanApply - npm not executable' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\npm.cmd" } }
+            Mock Invoke-Npm {
+                $global:LASTEXITCODE = 1
+                return ""
+            }
+            Mock Write-Host { }
+        }
+
+        It 'should return false' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $false
+        }
+    }
+
     Context 'CanApply - import mode without package file' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\npm.cmd" } }

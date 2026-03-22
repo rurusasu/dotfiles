@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -253,6 +253,54 @@ Describe 'PnpmHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "空"
+        }
+    }
+
+    Context 'Apply - partial install failure' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @("good-pkg", "bad-pkg")
+                }
+            }
+            $script:installCount = 0
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($Arguments -contains "add") {
+                    $script:installCount++
+                    if ($Arguments -contains "bad-pkg") {
+                        $global:LASTEXITCODE = 1
+                        return ""
+                    }
+                    $global:LASTEXITCODE = 0
+                    return "installed"
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return "" }
+            Mock Set-UserEnvironmentPath { }
+        }
+
+        It 'should report mixed success/failure counts' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個成功"
+            $result.Message | Should -Match "1 個失敗"
         }
     }
 

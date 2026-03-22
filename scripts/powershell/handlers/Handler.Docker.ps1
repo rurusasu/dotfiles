@@ -478,11 +478,11 @@ class DockerHandler : SetupHandlerBase {
             $this.LogWarning("Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します")
 
             if (-not $restarted) {
+                Invoke-Wsl --shutdown
                 $this.RestartDockerDesktop()
                 $restarted = $true
             }
 
-            Invoke-Wsl --shutdown
             Start-SleepSafe -Seconds $this.RetryDelaySeconds
         }
 

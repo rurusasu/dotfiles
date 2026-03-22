@@ -36,7 +36,7 @@ class NixRebuildHandler : SetupHandlerBase {
         }
 
         $distroName = $ctx.DistroName
-        $distroExists = $distros | Where-Object { $_ -eq $distroName }
+        $distroExists = $distros | Where-Object { $_.Trim("`0", " ", "`r", "`n") -ieq $distroName }
         if (-not $distroExists) {
             $this.Log("$distroName が見つからないためスキップします")
             return $false

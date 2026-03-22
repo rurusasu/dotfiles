@@ -102,6 +102,23 @@ Describe 'CodexHandler' {
         }
     }
 
+    Context 'Apply - executable not found' {
+        BeforeEach {
+            # Mock: Codex パッケージが存在しない → GetCodexExecutablePath が null を返す
+            Mock Get-ChildItem { return $null } -ParameterFilter {
+                $Path -like "*WinGet\Packages" -and $Filter -like "OpenAI.Codex_*"
+            }
+            Mock Test-Path { return $false }
+            Mock Write-Host { }
+        }
+
+        It 'should return failure when executable path is null' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "実行ファイルが見つかりません"
+        }
+    }
+
     Context 'Apply - creates link successfully' {
         BeforeEach {
             # Mock: Codex パッケージが存在

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CogneeSkills Docker コンテナを管理するハンドラー（対話確認 + インフラチェックの 2 層ゲート）
 
@@ -284,7 +284,9 @@ SKILL_CORRECTION_PENALTY=0.05
                 $this.Log("コンテナが起動しました", "Green")
                 return $true
             }
-            Start-SleepSafe -Seconds $this.StartupRetryDelaySeconds
+            if ($i -lt $this.StartupRetries) {
+                Start-SleepSafe -Seconds $this.StartupRetryDelaySeconds
+            }
         }
         return $false
     }

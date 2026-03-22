@@ -30,6 +30,7 @@ Describe 'WingetHandler' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $true }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
         }
 
         It 'should return false' {
@@ -41,6 +42,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import mode without package file' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
             Mock Test-PathExist { return $false }
         }
 
@@ -54,6 +56,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import mode with all conditions met' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
             Mock Test-PathExist { return $true }
         }
 
@@ -67,6 +70,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - export mode with winget available' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
         }
 
         It 'should return true even without package file' {
