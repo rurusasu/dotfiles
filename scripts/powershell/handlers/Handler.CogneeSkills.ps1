@@ -159,7 +159,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
         }
         if ($opExe) {
             try {
-                $result = & $opExe read "op://Personal/Gemini API/credential" 2>&1
+                $result = & $opExe read "op://Personal/OpenClawGeminiAPI/credential" 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     $value = ($result | Out-String).Trim()
                 }
