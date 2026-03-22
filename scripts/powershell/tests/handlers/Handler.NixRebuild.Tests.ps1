@@ -101,6 +101,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return @("pre-commit installed") }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -117,6 +120,9 @@ Describe 'NixRebuildHandler' {
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -143,6 +149,9 @@ Describe 'NixRebuildHandler' {
                 }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -172,6 +181,9 @@ Describe 'NixRebuildHandler' {
                 }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -192,6 +204,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -214,6 +229,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -239,6 +257,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -272,6 +293,9 @@ Describe 'NixRebuildHandler' {
                     $global:LASTEXITCODE = 0
                     return @("pre-commit installed at .git/hooks/pre-commit")
                 }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -297,6 +321,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 1; return @("error") }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -323,6 +350,9 @@ Describe 'NixRebuildHandler' {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -348,6 +378,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -370,6 +403,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -389,6 +425,9 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "npm install -g pnpm") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -397,6 +436,58 @@ Describe 'NixRebuildHandler' {
 
             # corepack 失敗 → EnsurePnpmAvailable が throw → InstallPnpmGlobalPackages の catch で握りつぶし
             $result.Success | Should -Be $true
+        }
+
+        It 'should setup PNPM_HOME when directory does not exist' {
+            $script:pnpmSetupCalled = $false
+            $script:bashrcUpdated = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $script:bashrcUpdated = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:pnpmSetupCalled | Should -Be $true
+            $script:bashrcUpdated | Should -Be $true
+        }
+
+        It 'should skip PNPM_HOME setup when directory already exists' {
+            $script:pnpmSetupCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                return ""
+            }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:pnpmSetupCalled | Should -Be $false
         }
 
         It 'should unset core.hooksPath before pre-commit install' {
@@ -420,6 +511,9 @@ Describe 'NixRebuildHandler' {
                     $script:unsetBeforePreCommit = $script:hooksPathUnset
                     $global:LASTEXITCODE = 0; return ""
                 }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 return ""
             }
             $handler.CanApply($ctx)
@@ -440,6 +534,9 @@ Describe 'NixRebuildHandler' {
                     $global:LASTEXITCODE = 0
                     return @("NixOS")
                 }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 throw "WSL error"
             }
             $handler.CanApply($ctx)
