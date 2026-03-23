@@ -81,10 +81,13 @@ if [ -f "$_codex_auth" ] && [ -s "$_codex_auth" ]; then
       expires: Date.now() + 864000000,
       accountId: src.tokens.account_id || ''
     };
-    const agents = ['main','claude','gemini'];
+    const baseDir = '/home/app/.openclaw/agents';
+    const agents = fs.existsSync(baseDir)
+      ? fs.readdirSync(baseDir).filter(d => fs.statSync(baseDir + '/' + d).isDirectory())
+      : ['main','claude','gemini'];
     let updated = 0;
     for (const agent of agents) {
-      const f = '/home/app/.openclaw/agents/' + agent + '/agent/auth-profiles.json';
+      const f = baseDir + '/' + agent + '/agent/auth-profiles.json';
       try {
         const d = JSON.parse(fs.readFileSync(f, 'utf8'));
         const existing = d.profiles['openai-codex:default'];
