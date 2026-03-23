@@ -65,44 +65,122 @@ if [ -f /app/acpx.config.json ]; then
   mv "$tmp" /home/app/.acpx/config.json
 fi
 
+# --- Pre-create agent directories from rendered config ---
+# Slack agent dirs are created dynamically on first message, but auth seeding
+# runs at startup. Pre-create dirs so auth tokens are ready before first use.
+if [ -f "$_config_out" ]; then
+  CONFIG_PATH="$_config_out" node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const cfg = JSON.parse(fs.readFileSync(process.env.CONFIG_PATH, 'utf8'));
+    const agents = (cfg.agents && cfg.agents.list) || [];
+    const baseDir = '/home/app/.openclaw/agents';
+    let created = 0;
+    for (const a of agents) {
+      const agentDir = path.join(baseDir, a.id, 'agent');
+      const authFile = path.join(agentDir, 'auth-profiles.json');
+      if (!fs.existsSync(agentDir)) {
+        fs.mkdirSync(agentDir, { recursive: true });
+      }
+      if (!fs.existsSync(authFile)) {
+        fs.writeFileSync(authFile, JSON.stringify({ profiles: {}, usageStats: {} }, null, 2), { mode: 0o600 });
+        created++;
+      }
+    }
+    if (created > 0) console.log('[entrypoint] pre-created auth-profiles for ' + created + ' agent(s)');
+  " || echo "[entrypoint] WARNING: agent dir pre-creation failed" >&2
+fi
+
+# --- Auth seeding helper: inject a provider profile into all agent auth-profiles ---
+# Shared by Codex and Anthropic seeding below.
+# Inputs are passed via env vars (not shell interpolation) to prevent injection.
+_seed_auth_profile() {
+  SEED_PROVIDER="$1" SEED_PROFILE="$2" SEED_LABEL="$3" node -e "
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const provider = process.env.SEED_PROVIDER;
+    const label = process.env.SEED_LABEL;
+    const profile = JSON.parse(process.env.SEED_PROFILE);
+    const baseDir = '/home/app/.openclaw/agents';
+    let agents;
+    try {
+      agents = fs.existsSync(baseDir)
+        ? fs.readdirSync(baseDir).filter(d => {
+            try { return fs.statSync(path.join(baseDir, d)).isDirectory(); }
+            catch(e) { return false; }
+          })
+        : [];
+    } catch(e) { console.error('[entrypoint] ' + label + ': failed to scan agent dirs:', e.message); process.exit(1); }
+    let updated = 0;
+    for (const agent of agents) {
+      const f = path.join(baseDir, agent, 'agent', 'auth-profiles.json');
+      try {
+        const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const key = provider + ':default';
+        const existing = d.profiles[key];
+        if (existing
+            && existing.access === profile.access
+            && (existing.refresh || null) === (profile.refresh || null)) continue;
+        d.profiles[key] = profile;
+        if (d.usageStats) delete d.usageStats[key];
+        // Atomic write: temp file + rename to prevent corruption on crash.
+        const tmp = f + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(d, null, 2), { mode: 0o600 });
+        fs.renameSync(tmp, f);
+        updated++;
+      } catch(e) {
+        console.error('[entrypoint] ' + label + ': failed for agent ' + agent + ':', e.message);
+      }
+    }
+    if (updated > 0) console.log('[entrypoint] ' + label + ': injected into ' + updated + ' agent(s)');
+    else console.log('[entrypoint] ' + label + ': tokens already current (or no agent dirs)');
+  " || echo "[entrypoint] $3: injection skipped" >&2
+}
+
 # Codex OAuth: seed auth-profiles.json from host's ~/.codex/auth.json (ro mount).
 # OpenClaw manages its own refresh cycle; we only inject the initial token.
 _codex_auth="/app/codex-auth.json"
 if [ -f "$_codex_auth" ] && [ -s "$_codex_auth" ]; then
-  node -e "
+  _codex_profile=$(CODEX_AUTH_PATH="$_codex_auth" node -e "
     const fs = require('fs');
-    const src = JSON.parse(fs.readFileSync('$_codex_auth', 'utf8'));
-    if (!src.tokens || !src.tokens.access_token) { console.log('[entrypoint] codex-auth: no tokens found, skipping'); process.exit(0); }
-    const profile = {
+    const src = JSON.parse(fs.readFileSync(process.env.CODEX_AUTH_PATH, 'utf8'));
+    if (!src.tokens || !src.tokens.access_token) process.exit(1);
+    console.log(JSON.stringify({
       type: 'oauth',
       provider: 'openai-codex',
       access: src.tokens.access_token,
-      refresh: src.tokens.refresh_token,
-      expires: Date.now() + 864000000,
+      refresh: src.tokens.refresh_token || null,
+      expires: src.tokens.expires_at || (Date.now() + 864000000),
       accountId: src.tokens.account_id || ''
-    };
-    const baseDir = '/home/app/.openclaw/agents';
-    const agents = fs.existsSync(baseDir)
-      ? fs.readdirSync(baseDir).filter(d => fs.statSync(baseDir + '/' + d).isDirectory())
-      : ['main','claude','gemini'];
-    let updated = 0;
-    for (const agent of agents) {
-      const f = baseDir + '/' + agent + '/agent/auth-profiles.json';
-      try {
-        const d = JSON.parse(fs.readFileSync(f, 'utf8'));
-        const existing = d.profiles['openai-codex:default'];
-        if (existing && existing.refresh === profile.refresh) continue;
-        d.profiles['openai-codex:default'] = profile;
-        if (d.usageStats) delete d.usageStats['openai-codex:default'];
-        fs.writeFileSync(f, JSON.stringify(d, null, 2));
-        updated++;
-      } catch(e) {}
-    }
-    if (updated > 0) console.log('[entrypoint] codex-auth: injected tokens into ' + updated + ' agent(s)');
-    else console.log('[entrypoint] codex-auth: tokens already current');
-  " 2>/dev/null || echo "[entrypoint] codex-auth: injection skipped (agent dirs may not exist yet)"
+    }));
+  " 2>/dev/null) && _seed_auth_profile "openai-codex" "$_codex_profile" "codex-auth" \
+    || echo "[entrypoint] codex-auth: no valid tokens found, skipping"
 else
   echo "[entrypoint] codex-auth: no host auth file mounted, skipping"
+fi
+
+# Anthropic OAuth: seed auth-profiles.json from Claude Code's .credentials.json.
+# Claude Code stores OAuth tokens at ~/.claude/.credentials.json (mounted from host).
+_claude_creds="/home/app/.claude/.credentials.json"
+if [ -f "$_claude_creds" ] && [ -s "$_claude_creds" ]; then
+  _anthropic_profile=$(CLAUDE_CREDS_PATH="$_claude_creds" node -e "
+    const fs = require('fs');
+    const src = JSON.parse(fs.readFileSync(process.env.CLAUDE_CREDS_PATH, 'utf8'));
+    const oauth = src.claudeAiOauth;
+    if (!oauth || !oauth.accessToken) process.exit(1);
+    console.log(JSON.stringify({
+      type: 'oauth',
+      provider: 'anthropic',
+      access: oauth.accessToken,
+      refresh: oauth.refreshToken || null,
+      expires: oauth.expiresAt || (Date.now() + 864000000),
+      accountId: ''
+    }));
+  " 2>/dev/null) && _seed_auth_profile "anthropic" "$_anthropic_profile" "anthropic-auth" \
+    || echo "[entrypoint] anthropic-auth: no valid tokens found, skipping"
+else
+  echo "[entrypoint] anthropic-auth: no Claude credentials file found, skipping"
 fi
 
 # Claude Code: ensure credentials dir exists and set container-safe defaults.
@@ -257,7 +335,7 @@ if [ -f "$_claude_settings" ]; then
       const s = JSON.parse(fs.readFileSync('$_claude_settings', 'utf8'));
       s.hooks = s.hooks || {};
       s.hooks.PostToolUse = s.hooks.PostToolUse || [];
-      s.hooks.PostToolUse.push({ hook: 'node /app/data/hooks/log-skill-execution.js' });
+      s.hooks.PostToolUse.push({ matcher: '', hooks: [{ type: 'command', command: 'node /app/data/hooks/log-skill-execution.js' }] });
       fs.writeFileSync('$_tmp', JSON.stringify(s, null, 2));
     " && mv "$_tmp" "$_claude_settings"; then
       echo "[entrypoint] PostToolUse hook wired into Claude Code settings"
@@ -273,7 +351,13 @@ else
   "hooks": {
     "PostToolUse": [
       {
-        "hook": "node /app/data/hooks/log-skill-execution.js"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /app/data/hooks/log-skill-execution.js"
+          }
+        ]
       }
     ]
   }

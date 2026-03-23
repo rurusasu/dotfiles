@@ -674,7 +674,7 @@ if [ -f "$_claude_settings" ]; then
       const s = JSON.parse(fs.readFileSync('$_claude_settings', 'utf8'));
       s.hooks = s.hooks || {};
       s.hooks.PostToolUse = s.hooks.PostToolUse || [];
-      s.hooks.PostToolUse.push({ hook: 'node /app/data/hooks/log-skill-execution.js' });
+      s.hooks.PostToolUse.push({ matcher: '', hooks: [{ type: 'command', command: 'node /app/data/hooks/log-skill-execution.js' }] });
       fs.writeFileSync('$_tmp', JSON.stringify(s, null, 2));
     " && mv "$_tmp" "$_claude_settings"
     echo "[entrypoint] PostToolUse hook wired into Claude Code settings"
@@ -686,7 +686,13 @@ else
   "hooks": {
     "PostToolUse": [
       {
-        "hook": "node /app/data/hooks/log-skill-execution.js"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /app/data/hooks/log-skill-execution.js"
+          }
+        ]
       }
     ]
   }

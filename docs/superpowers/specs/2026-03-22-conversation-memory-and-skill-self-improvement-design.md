@@ -143,7 +143,13 @@ limit: int = 10
   "hooks": {
     "PostToolUse": [
       {
-        "hook": "node /app/data/hooks/log-skill-execution.js",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /app/data/hooks/log-skill-execution.js",
+          },
+        ],
       },
     ],
   },
