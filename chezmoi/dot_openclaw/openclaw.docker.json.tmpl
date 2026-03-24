@@ -125,13 +125,15 @@
      「1エージェント = 1チャンネル」設計。各チャンネルに専用エージェントを割り当て、
      コンテキスト混入を防止する。ACP 経由が必須（Claude Max の直接モデル指定は ToS 違反）。
      チャンネルリストは .chezmoidata/openclaw.yaml の slackAgents で一元管理。
-     binding にマッチしない Slack DM / Telegram は main にフォールバック。 */ -}}
+     binding にマッチしない Slack DM / Telegram は main にフォールバック。
+     workspace は defaults を継承（ホスト側パス）。サンドボックスがバインドマウントで
+     ホスト上のパスを解決するため、ボリューム内パスは使えない。
+     コンテキスト分離は session レベルで担保される。 */ -}}
 {{- $lastSlack := sub (len .openclaw.slackAgents) 1 -}}
 {{- range $i, $agent := .openclaw.slackAgents }}
       {
         "id": "{{ $agent.id }}",
         "model": "{{ $.openclaw.agentModels.claude.primary }}",
-        "workspace": "/home/app/.openclaw/workspace-{{ $agent.id }}",
         "runtime": {
           "type": "acp",
           "acp": {

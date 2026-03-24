@@ -36,14 +36,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -s /usr/sbin/nologin app
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/cognee/cognee-mcp/src /app/src
-COPY entrypoint.sh /app/entrypoint.sh
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app/cognee/cognee-mcp/src /app/src
+COPY --chown=app:app entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh \
-    && sed -i 's/\r$//' /app/entrypoint.sh
+    && sed -i 's/\r$//' /app/entrypoint.sh \
+    && mkdir -p /app/data && chown app:app /app/data
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SYSTEM_ROOT_DIRECTORY=/app/data/.cognee_system \
+    DATA_ROOT_DIRECTORY=/app/data/.data_storage
 
 USER app
 WORKDIR /app

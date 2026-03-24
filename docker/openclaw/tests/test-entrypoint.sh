@@ -506,6 +506,167 @@ else
 fi
 
 # ============================================================
+# Test Suite 6: Auth seeding (requires node)
+# ============================================================
+if ! command -v node >/dev/null 2>&1; then
+  printf "\n=== Auth seeding === (SKIPPED: node not available)\n"
+elif [ "$(uname -o 2>/dev/null)" = "Msys" ] || [ "$(uname -o 2>/dev/null)" = "Cygwin" ]; then
+  printf "\n=== Auth seeding === (SKIPPED: run in container — Windows path translation breaks node fs)\n"
+else
+  printf "\n=== Auth seeding ===\n"
+
+  # --- Setup: mock agent dirs and config ---
+  auth_base="$WORK/auth_test"
+  mkdir -p "$auth_base/agents/main/agent"
+  mkdir -p "$auth_base/agents/slack-test/agent"
+  # Create initial auth-profiles.json
+  for _agent in main slack-test; do
+    printf '{"profiles":{},"usageStats":{}}' >"$auth_base/agents/$_agent/agent/auth-profiles.json"
+  done
+
+  # --- Test: _seed_auth_profile injects tokens ---
+  _test_profile='{"type":"oauth","provider":"anthropic","access":"sk-test-access","refresh":"sk-test-refresh","expires":9999999999999,"accountId":""}'
+  SEED_PROVIDER="anthropic" SEED_PROFILE="$_test_profile" SEED_LABEL="test-auth" SEED_BASE_DIR="$auth_base/agents" node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const provider = process.env.SEED_PROVIDER;
+    const profile = JSON.parse(process.env.SEED_PROFILE);
+    const baseDir = process.env.SEED_BASE_DIR;
+    const agents = fs.readdirSync(baseDir).filter(d => {
+      try { return fs.statSync(path.join(baseDir, d)).isDirectory(); }
+      catch(e) { return false; }
+    });
+    for (const agent of agents) {
+      const f = path.join(baseDir, agent, 'agent', 'auth-profiles.json');
+      try {
+        const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const key = provider + ':default';
+        const existing = d.profiles[key];
+        if (existing
+            && existing.access === profile.access
+            && (existing.refresh || null) === (profile.refresh || null)) continue;
+        d.profiles[key] = profile;
+        if (d.usageStats) delete d.usageStats[key];
+        const tmp = f + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(d, null, 2), { mode: 0o600 });
+        fs.renameSync(tmp, f);
+      } catch(e) {
+        console.error('failed for ' + agent + ': ' + e.message);
+      }
+    }
+  "
+
+  # Verify injection
+  assert "auth-profiles contains anthropic:default for main" \
+    'grep -q "anthropic:default" "$auth_base/agents/main/agent/auth-profiles.json"'
+
+  assert "auth-profiles contains anthropic:default for slack-test" \
+    'grep -q "anthropic:default" "$auth_base/agents/slack-test/agent/auth-profiles.json"'
+
+  assert "auth-profiles contains access token" \
+    'grep -q "sk-test-access" "$auth_base/agents/main/agent/auth-profiles.json"'
+
+  # --- Test: no .tmp files left behind (atomic write) ---
+  _tmp_count=$(find "$auth_base" -name "*.tmp.*" -type f 2>/dev/null | wc -l | tr -d ' ')
+  assert "no .tmp files left after seeding ($_tmp_count)" \
+    '[ "$_tmp_count" = "0" ]'
+
+  # --- Test: idempotency (re-run with same tokens = no update) ---
+  _mtime_before=$(stat -c %Y "$auth_base/agents/main/agent/auth-profiles.json" 2>/dev/null || stat -f %m "$auth_base/agents/main/agent/auth-profiles.json" 2>/dev/null)
+  sleep 1
+  SEED_PROVIDER="anthropic" SEED_PROFILE="$_test_profile" SEED_BASE_DIR="$auth_base/agents" node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const provider = process.env.SEED_PROVIDER;
+    const profile = JSON.parse(process.env.SEED_PROFILE);
+    const baseDir = process.env.SEED_BASE_DIR;
+    const agents = fs.readdirSync(baseDir).filter(d => {
+      try { return fs.statSync(path.join(baseDir, d)).isDirectory(); }
+      catch(e) { return false; }
+    });
+    for (const agent of agents) {
+      const f = path.join(baseDir, agent, 'agent', 'auth-profiles.json');
+      try {
+        const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const key = provider + ':default';
+        const existing = d.profiles[key];
+        if (existing
+            && existing.access === profile.access
+            && (existing.refresh || null) === (profile.refresh || null)) continue;
+        d.profiles[key] = profile;
+        const tmp = f + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(d, null, 2), { mode: 0o600 });
+        fs.renameSync(tmp, f);
+      } catch(e) {}
+    }
+  "
+  _mtime_after=$(stat -c %Y "$auth_base/agents/main/agent/auth-profiles.json" 2>/dev/null || stat -f %m "$auth_base/agents/main/agent/auth-profiles.json" 2>/dev/null)
+
+  assert "idempotent: file not rewritten when tokens unchanged" \
+    '[ "$_mtime_before" = "$_mtime_after" ]'
+
+  # --- Test: pre-creation from mock config ---
+  precreate_base="$WORK/precreate_test"
+  mkdir -p "$precreate_base"
+  printf '{"agents":{"list":[{"id":"main"},{"id":"slack-abc123"}]}}' >"$precreate_base/config.json"
+
+  CONFIG_PATH="$precreate_base/config.json" PRECREATE_BASE="$precreate_base/agents" node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const cfg = JSON.parse(fs.readFileSync(process.env.CONFIG_PATH, 'utf8'));
+    const agents = (cfg.agents && cfg.agents.list) || [];
+    const baseDir = process.env.PRECREATE_BASE;
+    for (const a of agents) {
+      const agentDir = path.join(baseDir, a.id, 'agent');
+      const authFile = path.join(agentDir, 'auth-profiles.json');
+      if (!fs.existsSync(agentDir)) {
+        fs.mkdirSync(agentDir, { recursive: true, mode: 0o700 });
+      }
+      if (!fs.existsSync(authFile)) {
+        fs.writeFileSync(authFile, JSON.stringify({ profiles: {}, usageStats: {} }, null, 2), { mode: 0o600 });
+      }
+    }
+  "
+
+  assert "pre-creation: main/agent dir exists" \
+    '[ -d "$precreate_base/agents/main/agent" ]'
+
+  assert "pre-creation: slack-abc123/agent dir exists" \
+    '[ -d "$precreate_base/agents/slack-abc123/agent" ]'
+
+  assert "pre-creation: auth-profiles.json exists for main" \
+    '[ -f "$precreate_base/agents/main/agent/auth-profiles.json" ]'
+
+  assert "pre-creation: auth-profiles.json is valid JSON" \
+    'node -e "JSON.parse(require(\"fs\").readFileSync(\"$precreate_base/agents/main/agent/auth-profiles.json\",\"utf8\"))" 2>/dev/null'
+
+  # --- Test: sessions.json invalidation (atomic) ---
+  _sessions_file="$WORK/sessions_test/agent1/sessions.json"
+  mkdir -p "$(dirname "$_sessions_file")"
+  printf '{"s1":{"skillsSnapshot":{"foo":"bar"}},"s2":{"data":"keep"}}' >"$_sessions_file"
+
+  SESSIONS_FILE="$_sessions_file" node -e "
+    const fs = require('fs');
+    const f = process.env.SESSIONS_FILE;
+    const d = JSON.parse(fs.readFileSync(f,'utf-8'));
+    let n = 0;
+    for (const k of Object.keys(d)) { if (d[k].skillsSnapshot) { delete d[k].skillsSnapshot; n++; } }
+    if (n > 0) { const tmp = f + '.tmp.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(d, null, 2)); fs.renameSync(tmp, f); }
+  "
+
+  assert "sessions: skillsSnapshot removed" \
+    '! grep -q "skillsSnapshot" "$_sessions_file"'
+
+  assert "sessions: non-snapshot data preserved" \
+    'grep -q "keep" "$_sessions_file"'
+
+  _sessions_tmp=$(find "$WORK/sessions_test" -name "*.tmp.*" -type f 2>/dev/null | wc -l | tr -d ' ')
+  assert "sessions: no .tmp files left ($_sessions_tmp)" \
+    '[ "$_sessions_tmp" = "0" ]'
+
+fi
+
+# ============================================================
 # Summary
 # ============================================================
 printf "\n=======================================\n"

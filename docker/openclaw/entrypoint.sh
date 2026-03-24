@@ -38,7 +38,9 @@ echo "[entrypoint] secrets: GITHUB_TOKEN=${_gh_len} chars, XAI_API_KEY=${_xai_st
 _config_tmpl="/app/openclaw.json.tmpl"
 _config_out="/home/app/.openclaw/openclaw.json"
 if [ -f "$_config_tmpl" ]; then
-  sed -e "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" -e "s|@@XAI_API_KEY@@|${XAI_API_KEY:-}|g" "$_config_tmpl" >"$_config_out"
+  _config_tmp="${_config_out}.tmp.$$"
+  sed -e "s|@@GITHUB_TOKEN@@|${GITHUB_TOKEN}|g" -e "s|@@XAI_API_KEY@@|${XAI_API_KEY:-}|g" "$_config_tmpl" >"$_config_tmp"
+  mv "$_config_tmp" "$_config_out"
   echo "[entrypoint] config rendered to $_config_out"
 fi
 
@@ -80,7 +82,7 @@ if [ -f "$_config_out" ]; then
       const agentDir = path.join(baseDir, a.id, 'agent');
       const authFile = path.join(agentDir, 'auth-profiles.json');
       if (!fs.existsSync(agentDir)) {
-        fs.mkdirSync(agentDir, { recursive: true });
+        fs.mkdirSync(agentDir, { recursive: true, mode: 0o700 });
       }
       if (!fs.existsSync(authFile)) {
         fs.writeFileSync(authFile, JSON.stringify({ profiles: {}, usageStats: {} }, null, 2), { mode: 0o600 });
@@ -444,7 +446,7 @@ if [ -d "$_sessions_dir" ]; then
         const d = JSON.parse(fs.readFileSync('$_sf','utf-8'));
         let n = 0;
         for (const k of Object.keys(d)) { if (d[k].skillsSnapshot) { delete d[k].skillsSnapshot; n++; } }
-        if (n > 0) { fs.writeFileSync('$_sf', JSON.stringify(d, null, 2)); console.log('[entrypoint] invalidated', n, 'stale skill snapshots in', '$_sf'); }
+        if (n > 0) { const tmp = '$_sf' + '.tmp.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(d, null, 2)); fs.renameSync(tmp, '$_sf'); console.log('[entrypoint] invalidated', n, 'stale skill snapshots in', '$_sf'); }
       " 2>/dev/null || true
     fi
   done

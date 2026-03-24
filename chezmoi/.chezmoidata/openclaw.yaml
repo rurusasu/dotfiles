@@ -111,13 +111,13 @@ openclaw:
   # id:        エージェントID（agents.list + bindings で使用）
   # channelId: Slack チャンネル ID（bindings.match.peer.id + channels.slack.channels で使用）
   slackAgents:
-    - id: "slack-C0AK3SQKFV2"
+    - id: "slack-c0ak3sqkfv2"
       channelId: "C0AK3SQKFV2"
-    - id: "slack-C0AK70NLE6S"
+    - id: "slack-c0ak70nle6s"
       channelId: "C0AK70NLE6S"
-    - id: "slack-C0AK64UPVNW"
+    - id: "slack-c0ak64upvnw"
       channelId: "C0AK64UPVNW"
-    - id: "slack-C0AJVDKGN6A"
+    - id: "slack-c0ajvdkgn6a"
       channelId: "C0AJVDKGN6A"
-    - id: "slack-C0AJZSPV84S"
+    - id: "slack-c0ajzspv84s"
       channelId: "C0AJZSPV84S"

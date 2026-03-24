@@ -185,6 +185,8 @@ class OpenClawHandler : SetupHandlerBase {
         $claudeCredentialsDir = ((Join-Path $homeDir ".claude") -replace '\\', '/')
         $claudeConfigJson = ((Join-Path $homeDir ".claude.json") -replace '\\', '/')
         $secretDir = ($this.GetSecretDir() -replace '\\', '/')
+        $codexAuthFile = ((Join-Path $homeDir ".codex" "auth.json") -replace '\\', '/')
+        $skillsPath = (((Join-Path $ctx.DotfilesPath "chezmoi" "dot_claude" "skills") -replace '\\', '/'))
         $workspaceHostDir = ((Join-Path $homeDir "openclaw-workspace") -replace '\\', '/')
         # Convert Windows path to Docker Desktop POSIX path: C:/Users/x -> /c/Users/x
         $workspacePosixDir = $workspaceHostDir -replace '^([A-Z]):', { '/' + $_.Groups[1].Value.ToLower() }
@@ -201,6 +203,9 @@ OPENCLAW_WORKSPACE_DIR=$workspaceHostDir
 OPENCLAW_WORKSPACE_POSIX=$workspacePosixDir
 OPENCLAW_GITHUB_TOKEN_FILE=$secretDir/github_token
 OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
+OPENCLAW_GEMINI_API_KEY_FILE=$secretDir/gemini_api_key
+CODEX_AUTH_FILE=$codexAuthFile
+SKILLS_PATH=$skillsPath
 "@
         $this.Log(".env ファイルを生成します: $envFile")
         Set-ContentNoNewline -Path $envFile -Value $envContent
@@ -221,11 +226,23 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
         $workspaceHostDir = ((Join-Path $homeDir "openclaw-workspace") -replace '\\', '/')
         $workspacePosixDir = $workspaceHostDir -replace '^([A-Z]):', { '/' + $_.Groups[1].Value.ToLower() }
 
-        $requiredVars = @{
-            "OPENCLAW_GITHUB_TOKEN_FILE" = "$secretDir/github_token"
-            "OPENCLAW_XAI_API_KEY_FILE"  = "$secretDir/xai_api_key"
-            "OPENCLAW_WORKSPACE_DIR"     = $workspaceHostDir
-            "OPENCLAW_WORKSPACE_POSIX"   = $workspacePosixDir
+        $geminiCredentialsDir = ((Join-Path $homeDir ".gemini") -replace '\\', '/')
+        $claudeCredentialsDir = ((Join-Path $homeDir ".claude") -replace '\\', '/')
+        $claudeConfigJson = ((Join-Path $homeDir ".claude.json") -replace '\\', '/')
+        $codexAuthFile = ((Join-Path $homeDir ".codex" "auth.json") -replace '\\', '/')
+        $skillsPath = (((Join-Path $ctx.DotfilesPath "chezmoi" "dot_claude" "skills") -replace '\\', '/'))
+
+        $requiredVars = [ordered]@{
+            "GEMINI_CREDENTIALS_DIR"       = $geminiCredentialsDir
+            "CLAUDE_CREDENTIALS_DIR"       = $claudeCredentialsDir
+            "CLAUDE_CONFIG_JSON"           = $claudeConfigJson
+            "CODEX_AUTH_FILE"              = $codexAuthFile
+            "OPENCLAW_GITHUB_TOKEN_FILE"   = "$secretDir/github_token"
+            "OPENCLAW_XAI_API_KEY_FILE"    = "$secretDir/xai_api_key"
+            "OPENCLAW_GEMINI_API_KEY_FILE" = "$secretDir/gemini_api_key"
+            "OPENCLAW_WORKSPACE_DIR"       = $workspaceHostDir
+            "OPENCLAW_WORKSPACE_POSIX"     = $workspacePosixDir
+            "SKILLS_PATH"                  = $skillsPath
         }
 
         $appended = @()
@@ -316,7 +333,14 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
         $seedFile = Join-Path $homeDir ".openclaw\cron\jobs.seed.json"
 
         if (-not (Test-PathExist -Path $seedFile)) {
-            $this.Log("cron seed ファイルが見つかりません: $seedFile", "Gray")
+            $this.LogWarning("cron seed ファイルが見つかりません: $seedFile (chezmoi apply を実行してください)")
+            return
+        }
+
+        # コンテナが起動中か確認
+        $running = Invoke-Docker "ps" "--filter" "name=openclaw" "--filter" "status=running" "--format" "{{.Names}}"
+        if ($running -notmatch "openclaw") {
+            $this.LogWarning("cron seed: コンテナが起動していません。シードをスキップします")
             return
         }
 
@@ -329,6 +353,10 @@ OPENCLAW_XAI_API_KEY_FILE=$secretDir/xai_api_key
 
         $this.Log("cron/jobs.json が存在しません。シードファイルをコピーします")
         Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/app/.openclaw/cron"
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("cron seed: コンテナ内ディレクトリの作成に失敗しました")
+            return
+        }
         Invoke-Docker "cp" ($seedFile -replace '\\', '/') "openclaw:/home/app/.openclaw/cron/jobs.json"
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("cron seed のコピーに失敗しました")

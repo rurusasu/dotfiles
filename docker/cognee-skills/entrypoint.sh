@@ -16,4 +16,4 @@ fi
 export COGNEE_FALKORDB_AUTO_REGISTER=1
 
 echo "[entrypoint] starting cognee-mcp-skills (transport=${TRANSPORT_MODE:-http})"
-exec python src/server.py --transport "${TRANSPORT_MODE:-http}" --host 0.0.0.0 --port 8000
+exec python /app/src/server.py --transport "${TRANSPORT_MODE:-http}" --host 0.0.0.0 --port 8000
