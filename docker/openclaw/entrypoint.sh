@@ -238,9 +238,23 @@ elif [ -d "$_lifelog_src/.git" ]; then
   fi
 fi
 
-# Pull latest workspace from remote (if it's a git repo with a remote).
+# Clone or pull workspace from remote.
 # Runs before AGENTS.md creation guard so that pulled AGENTS.md is preserved.
-if [ -d "$workspace_dir/.git" ] && git -C "$workspace_dir" remote get-url origin >/dev/null 2>&1; then
+_workspace_remote="https://github.com/rurusasu/openclaw-workspace.git"
+if [ ! -d "$workspace_dir/.git" ]; then
+  # No .git — attempt initial clone into existing (possibly non-empty) directory.
+  echo "[entrypoint] workspace: .git not found, cloning from $_workspace_remote"
+  _tmp_clone="$(mktemp -d)"
+  if git clone --depth 1 "$_workspace_remote" "$_tmp_clone" 2>&1; then
+    # Move .git into workspace dir, then checkout to merge with existing files.
+    mv "$_tmp_clone/.git" "$workspace_dir/.git"
+    git -C "$workspace_dir" checkout -- . 2>&1 || true
+    echo "[entrypoint] workspace: cloned ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"
+  else
+    echo "[entrypoint] WARNING: workspace clone failed — continuing without git" >&2
+  fi
+  rm -rf "$_tmp_clone"
+elif git -C "$workspace_dir" remote get-url origin >/dev/null 2>&1; then
   if git -C "$workspace_dir" pull --ff-only 2>&1; then
     echo "[entrypoint] workspace: git pull ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"
   else
