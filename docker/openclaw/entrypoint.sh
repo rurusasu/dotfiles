@@ -239,21 +239,27 @@ elif [ -d "$_lifelog_src/.git" ]; then
 fi
 
 # Clone or pull workspace from remote.
-# Runs before AGENTS.md creation guard so that pulled AGENTS.md is preserved.
-_workspace_remote="https://github.com/rurusasu/openclaw-workspace.git"
+# Runs before AGENTS.md creation guard so that cloned/pulled AGENTS.md is preserved.
+# On clone: remote files overwrite any pre-existing files with the same name.
+_workspace_remote="${OPENCLAW_WORKSPACE_REMOTE:-https://github.com/rurusasu/openclaw-workspace.git}"
 if [ ! -d "$workspace_dir/.git" ]; then
   # No .git — attempt initial clone into existing (possibly non-empty) directory.
   echo "[entrypoint] workspace: .git not found, cloning from $_workspace_remote"
   _tmp_clone="$(mktemp -d)"
+  trap 'rm -rf "$_tmp_clone"' EXIT
   if git clone --depth 1 "$_workspace_remote" "$_tmp_clone" 2>&1; then
-    # Move .git into workspace dir, then checkout to merge with existing files.
+    # Move .git into workspace dir, then checkout to apply remote files.
     mv "$_tmp_clone/.git" "$workspace_dir/.git"
-    git -C "$workspace_dir" checkout -- . 2>&1 || true
-    echo "[entrypoint] workspace: cloned ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"
+    if git -C "$workspace_dir" checkout -- . 2>&1; then
+      echo "[entrypoint] workspace: cloned ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"
+    else
+      echo "[entrypoint] WARNING: workspace checkout failed after clone — .git exists but working tree may be incomplete" >&2
+    fi
   else
     echo "[entrypoint] WARNING: workspace clone failed — continuing without git" >&2
   fi
   rm -rf "$_tmp_clone"
+  trap - EXIT
 elif git -C "$workspace_dir" remote get-url origin >/dev/null 2>&1; then
   if git -C "$workspace_dir" pull --ff-only 2>&1; then
     echo "[entrypoint] workspace: git pull ok ($(git -C "$workspace_dir" rev-parse --short HEAD))"

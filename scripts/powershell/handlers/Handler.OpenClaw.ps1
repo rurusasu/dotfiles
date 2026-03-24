@@ -326,7 +326,10 @@ SKILLS_PATH=$skillsPath
     .DESCRIPTION
         新規セットアップや volume 再作成後、chezmoi が展開した
         ~/.openclaw/cron/jobs.seed.json をコンテナ内に投入してリスタートする。
-        jobs.json がすでに存在する場合は何もしない。
+        以下の場合はスキップする:
+        - ホスト上にシードファイルが存在しない（chezmoi apply 未実行）
+        - コンテナが起動していない
+        - コンテナ内に jobs.json がすでに存在する
     #>
     hidden [void] SeedCronJobs() {
         $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }

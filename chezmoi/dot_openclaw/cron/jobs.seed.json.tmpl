@@ -73,10 +73,14 @@
         "message": "In {{ $ws }}, run:\n1) Check if another sync is running: if `{{ $ws }}/.git/sync.lock` exists AND its PID (first line) is still alive, exit silently.\n2) Create lock: `echo $$ > {{ $ws }}/.git/sync.lock`\n3) `git pull --ff-only origin main` to pick up remote changes first.\n4) `git add -A`\n5) If there are no staged changes: remove lock and exit silently.\n6) If there are staged changes: commit with message `chore(workspace): auto-sync $(date +%F_%H%M)` and push to `origin main`.\n7) Remove lock: `rm -f {{ $ws }}/.git/sync.lock`\n8) On any failure, remove lock and report briefly."
       },
       "delivery": {
+{{- if lookPath "op" }}
         "mode": "announce",
         "to": "{{ $telegramUserId }}",
         "channel": "telegram",
         "bestEffort": true
+{{- else }}
+        "mode": "silent"
+{{- end }}
       }
     },
     {
