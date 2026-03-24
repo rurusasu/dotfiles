@@ -1,0 +1,47 @@
+version: "3"
+
+vars:
+  DISTRO: NixOS
+  DOTFILES_PATH: ~/.dotfiles
+
+tasks:
+  default:
+    desc: Show available symlinks commands
+    silent: true
+    cmds:
+      - |
+        pwsh -NoProfile -Command "
+        Write-Host ''
+        Write-Host 'Available commands:'
+        Write-Host '  task symlinks:create         - Create CLAUDE.md symlinks (Windows)'
+        Write-Host '  task symlinks:create:wsl     - Create CLAUDE.md symlinks (via WSL)'
+        Write-Host '  task symlinks:dry-run        - Preview what would be created (Windows)'
+        Write-Host '  task symlinks:dry-run:wsl    - Preview what would be created (via WSL)'
+        Write-Host ''
+        "
+
+  create:
+    desc: Create CLAUDE.md symlinks (Windows)
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File ./New-ClaudeMdSymlinks.ps1
+
+  dry-run:
+    desc: Show what symlinks would be created (Windows)
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File ./New-ClaudeMdSymlinks.ps1 -DryRun
+
+  create:wsl:
+    desc: Create CLAUDE.md symlinks (via WSL)
+    cmds:
+      - >
+        wsl -d {{.DISTRO}} -- bash -lc
+        "cd {{.DOTFILES_PATH}}/taskfiles/new_claude_md_symlinks &&
+        ./new-claude-md-symlinks.sh"
+
+  dry-run:wsl:
+    desc: Show what symlinks would be created (via WSL)
+    cmds:
+      - >
+        wsl -d {{.DISTRO}} -- bash -lc
+        "cd {{.DOTFILES_PATH}}/taskfiles/new_claude_md_symlinks &&
+        ./new-claude-md-symlinks.sh --dry-run"

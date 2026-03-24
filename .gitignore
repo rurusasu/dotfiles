@@ -5,6 +5,10 @@
 *.swo
 extensions-backup-*.txt
 
+# CLAUDE.md symlinks (generated from AGENTS.md)
+CLAUDE.md
+!chezmoi/dot_claude/CLAUDE.md
+
 # OS files
 .DS_Store
 Thumbs.db
