@@ -3,8 +3,10 @@
     Admin/non-winget setup phase.
 
 .DESCRIPTION
-    Runs all handlers except Winget.
-    -CheckOnly returns true when any admin-required handler can apply.
+    Runs Phase 2 handlers.
+    -AdminOnly: $true = admin-required handlers only, $false = non-admin handlers only.
+    If omitted, runs all Phase 2 handlers (backward compatibility).
+    -CheckOnly returns true when any matching handler can apply.
 #>
 
 [CmdletBinding()]
@@ -20,7 +22,8 @@ param(
     [ValidateSet("repo", "lock", "none")]
     [string]$SyncBack = "lock",
     [switch]$CheckOnly,
-    [string]$LogFile = ""
+    [string]$LogFile = "",
+    [Nullable[bool]]$AdminOnly = $null
 )
 
 Set-StrictMode -Version Latest
@@ -100,13 +103,22 @@ $handlers = Select-SetupHandler -Handlers $handlers
 # Phase 2: Phase = 2 のハンドラー（デフォルト）を実行
 $handlers = @($handlers | Where-Object { $_.Phase -eq 2 })
 
+# AdminOnly フィルタ: RequiresAdmin でハンドラーを分離
+# $true = 管理者必須のみ（UAC 昇格プロセス用）
+# $false = 管理者不要のみ（非昇格プロセス用、1Password 連携などが動作する）
+# $null = 全て（後方互換）
+if ($null -ne $AdminOnly) {
+    $handlers = @($handlers | Where-Object { $_.RequiresAdmin -eq $AdminOnly })
+}
+
 # standalone 実行時にも同意プロンプトが走るようにする
 # （通常は install.user.ps1 で実行済みだが、admin 単独実行時に未設定のサービスを検出）
 Invoke-ConsentPrompt -Handlers $handlers
 
-$adminApplicableCount = 0
+$applicableCount = 0
 foreach ($handler in $handlers) {
-    if (-not $handler.RequiresAdmin) {
+    # AdminOnly フィルタ未使用時（後方互換）: 管理者必須のみカウント
+    if ($null -eq $AdminOnly -and -not $handler.RequiresAdmin) {
         continue
     }
 
@@ -114,7 +126,7 @@ foreach ($handler in $handlers) {
     $handler._bufferLogs = $true
     try {
         if ($handler.CanApply($context)) {
-            $adminApplicableCount++
+            $applicableCount++
         }
     }
     catch {
@@ -125,12 +137,12 @@ foreach ($handler in $handlers) {
 }
 
 if ($CheckOnly) {
-    return ($adminApplicableCount -gt 0)
+    return ($applicableCount -gt 0)
 }
 
 $results = Invoke-SetupHandler -Handlers $handlers -Context $context
 
-if ($adminApplicableCount -gt 0 -and (Test-IsAdminCurrent)) {
+if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "Phase 2: Final Processing" -ForegroundColor Cyan

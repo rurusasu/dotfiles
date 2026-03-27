@@ -246,9 +246,10 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        # サインイン済みか確認（デスクトップアプリ連携が有効なら即通過）
-        $result = Invoke-OpAccountList -OpExe $opExe
-        if ($result.ExitCode -eq 0 -and $result.Output) {
+        # サインイン済みか確認（op whoami で実際の認証状態をチェック）
+        # op account list はアカウント情報を返すだけで認証状態を確認できないため使わない
+        $result = Invoke-OpWhoAmI -OpExe $opExe
+        if ($result.ExitCode -eq 0) {
             $this.Log("1Password CLI: サインイン済み", "Gray")
             return
         }
@@ -259,31 +260,33 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        # 未設定 - デスクトップアプリ連携を案内して最大3回リトライ
+        # UAC 昇格プロセスではデスクトップアプリ連携が使えないため op signin を試みる
         Write-Host ""
         Write-Host "========================================"  -ForegroundColor Yellow
-        Write-Host "[Chezmoi] 1Password CLI のセットアップが必要です" -ForegroundColor Yellow
+        Write-Host "[Chezmoi] 1Password CLI の認証が必要です" -ForegroundColor Yellow
         Write-Host "========================================"  -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "  1. 1Password デスクトップアプリを開く"           -ForegroundColor Cyan
-        Write-Host "  2. 設定 → 開発者"                               -ForegroundColor Cyan
-        Write-Host "  3. 「1Password CLI と統合する」をオンにする"     -ForegroundColor Cyan
+        Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
+        Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
         Write-Host ""
 
         $maxRetries = 3
         for ($i = 1; $i -le $maxRetries; $i++) {
-            Write-Host "  設定が完了したら Enter を押してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
-            Read-Host | Out-Null
+            $this.Log("1Password CLI: サインインを試行中 ($i/$maxRetries)...")
+            $signinResult = Invoke-OpSignIn -OpExe $opExe
 
-            $result = Invoke-OpAccountList -OpExe $opExe
-            if ($result.ExitCode -eq 0 -and $result.Output) {
-                # デスクトップアプリ連携が有効 - chezmoi テンプレートは直接 op read を使用できる
+            # signin 後に whoami で確認
+            $result = Invoke-OpWhoAmI -OpExe $opExe
+            if ($result.ExitCode -eq 0) {
                 $this.Log("1Password CLI: サインイン完了", "Green")
                 return
             }
 
             if ($i -lt $maxRetries) {
                 $this.LogWarning("1Password CLI のサインインを確認できませんでした。再試行します")
+                Write-Host ""
+                Write-Host "  Enter を押して再試行してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
+                Read-Host | Out-Null
             }
         }
 

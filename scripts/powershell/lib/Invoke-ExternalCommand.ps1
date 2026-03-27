@@ -613,6 +613,52 @@ function Invoke-OpAccountList {
 
 <#
 .SYNOPSIS
+    1Password CLI の whoami を実行する
+.DESCRIPTION
+    op account list はアカウント情報を返すだけで認証状態を確認できない。
+    op whoami は実際にサインイン済みかを確認でき、UAC 昇格プロセスで
+    デスクトップアプリ連携が切れている場合も正しく検出できる。
+.PARAMETER OpExe
+    op.exe のパス
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
+.EXAMPLE
+    $result = Invoke-OpWhoAmI -OpExe "C:\op.exe"
+    if ($result.ExitCode -eq 0) { "authenticated" }
+#>
+function Invoke-OpWhoAmI {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OpExe
+    )
+    $output = & $OpExe whoami 2>&1
+    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+<#
+.SYNOPSIS
+    1Password CLI の signin を実行する
+.DESCRIPTION
+    UAC 昇格プロセスなどデスクトップアプリ連携が使えない環境で
+    対話的にサインインするためのラッパー。
+.PARAMETER OpExe
+    op.exe のパス
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
+#>
+function Invoke-OpSignIn {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OpExe
+    )
+    $output = & $OpExe signin 2>&1
+    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+<#
+.SYNOPSIS
     ユーザー環境変数 PATH の現在値を返す
 .DESCRIPTION
     Pester でモック可能にするため [System.Environment] を直接呼ばずにラップする
