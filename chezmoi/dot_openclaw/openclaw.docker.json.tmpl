@@ -298,9 +298,9 @@
     }
   },
   "gateway": {
-    "port": 18789,
+    "port": {{ .openclaw.gateway.port }},
     "mode": "local",
-    "bind": "lan",
+    "bind": "loopback",
     "reload": {
       "mode": "hybrid"
     },
@@ -319,8 +319,8 @@
     "controlUi": {
       "enabled": true,
       "allowedOrigins": [
-        "http://localhost:18789",
-        "http://127.0.0.1:18789"
+        "http://localhost:{{ .openclaw.gateway.port }}",
+        "http://127.0.0.1:{{ .openclaw.gateway.port }}"
       ]
     }
   },
@@ -358,7 +358,7 @@
           "servers": {
             "cognee-skills": {
               "transport": "streamable-http",
-              "url": "http://cognee-mcp-skills:8000/mcp",
+              "url": "http://127.0.0.1:8000/mcp",
               "description": "Cognee MCP skills"
             }
           }

@@ -195,7 +195,7 @@ class OpenClawHandler : SetupHandlerBase {
         # Convert Windows path to Docker Desktop POSIX path: C:/Users/x -> /c/Users/x
         $workspacePosixDir = $workspaceHostDir -replace '^([A-Z]):', { '/' + $_.Groups[1].Value.ToLower() }
         $envContent = @"
-OPENCLAW_PORT=18789
+OPENCLAW_PORT=41789
 OPENCLAW_UID=1000
 OPENCLAW_GID=1000
 OPENCLAW_CONFIG_FILE=$configPath

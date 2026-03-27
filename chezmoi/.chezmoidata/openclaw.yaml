@@ -21,6 +21,10 @@ openclaw:
     gemini:
       primary: "google/gemini-3.1-flash-lite"
 
+  # --- Gateway ---
+  gateway:
+    port: 41789
+
   # --- Agent defaults ---
   agent:
     maxConcurrent: 4

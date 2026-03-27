@@ -72,7 +72,7 @@ Get-Content "$env:USERPROFILE\.openclaw\openclaw.docker.json"
 手動で作成する場合は以下の変数を設定:
 
 ```env
-OPENCLAW_PORT=18789
+OPENCLAW_PORT=41789
 OPENCLAW_UID=1000
 OPENCLAW_GID=1000
 OPENCLAW_CONFIG_FILE=C:/Users/<USER>/.openclaw/openclaw.docker.json

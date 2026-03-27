@@ -7,7 +7,7 @@ services:
     container_name: openclaw
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:18789/health"]
+      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:${OPENCLAW_PORT:-41789}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -18,9 +18,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-    ports:
-      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
-      - "127.0.0.1:${OPENCLAW_OAUTH_PORT:-1456}:1455" # OAuth callback port (default 1456 to avoid conflict with local codex login on 1455)
+    # host ネットワークモードにより、ブラウザからの接続が loopback 扱いとなり
+    # Control UI のデバイスペアリングが自動承認される。
+    # ポートは gateway config (openclaw.docker.json) で制御。
+    # 注意: OAuth callback ポート (1455) もホストに直接バインドされる。
+    network_mode: host
 
     read_only: true
     tmpfs:
@@ -97,9 +99,6 @@ services:
     secrets:
       - github_token
       - xai_api_key
-    networks:
-      - default
-      - cognee-network
 
 volumes:
   openclaw-data:
@@ -114,12 +113,6 @@ volumes:
   # Fallback empty volume when CLAUDE_CREDENTIALS_DIR is not set in .env
   claude-credentials:
     driver: local
-
-networks:
-  default:
-  cognee-network:
-    external: true
-    name: cognee-skills_cognee-network
 
 secrets:
   github_token:

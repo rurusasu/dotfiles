@@ -58,7 +58,8 @@ docker restart openclaw
 - `user: "1000:1000"`
 - `pids_limit: 256`
 - `mem_limit: 2g`
-- ポートは `127.0.0.1` にバインド（外部公開しない）
+- `network_mode: host`（ペアリング自動承認のため loopback 接続が必要）
+- `gateway.bind: "loopback"`（外部公開しない）
 
 ビルトイン sandbox コンテナは OpenClaw が Docker Engine 経由で自動生成するため、
 上記の hardened ルールは Gateway コンテナ自体に適用される。
