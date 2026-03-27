@@ -167,9 +167,10 @@ class DockerHandler : SetupHandlerBase {
     .SYNOPSIS
         WSL が書き込み可能になるまでバックオフ付きリトライする
     .DESCRIPTION
-        Docker プロセスの強制終了後、WSL のファイルシステムが一時的に
-        書き込み不可になることがある。段階的に待機時間を増やしながら
-        最大 maxAttempts 回まで再試行する。
+        以下のケースで WSL のファイルシステムが一時的に書き込み不可になることがある:
+        - Docker プロセスの強制終了後
+        - WslConfig による wsl --terminate 後 (NixOS-WSL は systemd 再起動に 20-60 秒かかる)
+        段階的に待機時間を増やしながら最大 WslWritableMaxAttempts 回まで再試行する。
     #>
     hidden [bool] WaitForWslWritable([string]$distroName) {
         $maxAttempts = $this.WslWritableMaxAttempts
