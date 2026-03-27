@@ -38,12 +38,6 @@ Describe 'DockerHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
-            # デフォルト: NixOS が WSL に登録されている状態
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $global:LASTEXITCODE = 0
-                return @("NixOS")
-            }
         }
 
         It 'should return false when Retries is 0' {
@@ -62,32 +56,10 @@ Describe 'DockerHandler' {
             $result | Should -Be $false
         }
 
-        It 'should return true when Docker Desktop is installed and NixOS registered' {
+        It 'should return true when Docker Desktop is installed' {
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
-        }
-
-        It 'should return false when NixOS distro is not registered in WSL' {
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 0
-                return @("docker-desktop", "docker-desktop-data")
-            }
-
-            $result = $handler.CanApply($ctx)
-
-            $result | Should -Be $false
-        }
-
-        It 'should return false when WSL is not available' {
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 1
-                return @()
-            }
-
-            $result = $handler.CanApply($ctx)
-
-            $result | Should -Be $false
         }
 
         It 'should read Retries from Options' {
@@ -140,6 +112,10 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
                 if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     $global:LASTEXITCODE = 1
@@ -263,6 +239,10 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
                 if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     $global:LASTEXITCODE = 1
@@ -353,16 +333,18 @@ Describe 'DockerHandler' {
         }
 
         It 'should skip when WSL disk space is insufficient' {
-            $script:wslCallCount = 0
             Mock Invoke-Wsl {
-                $script:wslCallCount++
-                if ($script:wslCallCount -eq 1) {
-                    # 書き込みテスト - 成功
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
-                if ($script:wslCallCount -eq 2) {
-                    # 空き容量チェック - 不足
+                if ($argStr -match "df -Pk") {
                     return "5000"  # 10240 未満
                 }
                 return ""
@@ -372,6 +354,76 @@ Describe 'DockerHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "空き容量不足"
+        }
+    }
+
+    Context 'Apply - NixOS not registered' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Test-PathExist { return $true }
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
+            Mock Start-SleepSafe { }
+            Mock New-DirectorySafe { }
+            Mock Copy-FileSafe { }
+        }
+
+        It 'should succeed and start Docker Desktop when NixOS is not registered' {
+            $script:startCalled = $false
+            Mock Start-ProcessSafe { $script:startCalled = $true }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "Docker Desktop"
+            $script:startCalled | Should -Be $true
+        }
+
+        It 'should not run WSL write check when NixOS is not registered' {
+            $script:writeCheckCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                if ($argStr -match "wsl-write-test") {
+                    $script:writeCheckCalled = $true
+                }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:writeCheckCalled | Should -Be $false
+        }
+
+        It 'should succeed when WSL is not available' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 1
+                    return @()
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
         }
     }
 

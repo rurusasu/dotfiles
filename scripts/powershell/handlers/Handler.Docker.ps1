@@ -69,22 +69,6 @@ class DockerHandler : SetupHandlerBase {
             return $false
         }
 
-        # NixOS ディストリビューションの存在確認
-        # 未登録の場合、WSL 連携処理全体をスキップする
-        $distroName = $ctx.DistroName
-        $distros = Invoke-Wsl "-l" "-q" 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $distros) {
-            $this.Log("WSL が利用できません。Docker 連携をスキップします", "Gray")
-            return $false
-        }
-        $distroExists = $distros | Where-Object {
-            $_ -replace "`0", '' -replace [char]0xFEFF, '' -match "^\s*$([regex]::Escape($distroName))\s*$"
-        }
-        if (-not $distroExists) {
-            $this.Log("$distroName が WSL に登録されていません。Docker 連携をスキップします", "Gray")
-            return $false
-        }
-
         return $true
     }
 
@@ -136,24 +120,33 @@ class DockerHandler : SetupHandlerBase {
                 Start-SleepSafe -Seconds 30
             }
 
-            # NixOS への操作は Docker Desktop 起動より先に行う。
-            # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
-            # その後に書き込みチェックをすると NixOS 再起動待ちになるため。
-            if (-not $this.WaitForWslWritable($distroName)) {
-                $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
-                return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
+            # NixOS が WSL に登録されているか確認
+            $nixosRegistered = $this.TestWslDistroExists($distroName)
+
+            if ($nixosRegistered) {
+                # NixOS への操作は Docker Desktop 起動より先に行う。
+                # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
+                # その後に書き込みチェックをすると NixOS 再起動待ちになるため。
+                if (-not $this.WaitForWslWritable($distroName)) {
+                    $this.LogWarning("WSL が書き込み不可のため、NixOS 連携をスキップします")
+                    $this.StartDockerDesktopIfNeeded()
+                    return $this.CreateSuccessResult("WSL が書き込み不可のため NixOS 連携をスキップしました")
+                }
+
+                # 空き容量チェック
+                if (-not $this.TestWslFreeSpace($distroName)) {
+                    $this.LogWarning("WSL の空き容量が不足しているため、NixOS 連携をスキップします")
+                    $this.StartDockerDesktopIfNeeded()
+                    return $this.CreateSuccessResult("WSL の空き容量不足のため NixOS 連携をスキップしました")
+                }
+
+                # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
+                $this.EnsureDockerGroup($distroName)
+            } else {
+                $this.Log("$distroName が WSL に登録されていません。NixOS 連携をスキップします", "Gray")
             }
 
-            # 空き容量チェック
-            if (-not $this.TestWslFreeSpace($distroName)) {
-                $this.LogWarning("WSL の空き容量が不足しているため、Docker Desktop 連携をスキップします")
-                return $this.CreateSuccessResult("WSL の空き容量不足のためスキップしました")
-            }
-
-            # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
-            $this.EnsureDockerGroup($distroName)
-
-            # Docker Desktop を起動
+            # NixOS の有無に関わらず Docker Desktop を起動する
             $this.StartDockerDesktopIfNeeded()
 
             # Docker Desktop のディストリビューション確認・作成
@@ -161,6 +154,10 @@ class DockerHandler : SetupHandlerBase {
 
             # Docker Desktop を起動（必要に応じて）
             $this.StartDockerDesktopIfNeeded()
+
+            if (-not $nixosRegistered) {
+                return $this.CreateSuccessResult("Docker Desktop を起動しました（NixOS 連携なし）")
+            }
 
             # Docker Desktop の健全性チェック
             if (-not $this.TestDockerDesktopHealth()) {
@@ -178,6 +175,22 @@ class DockerHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    <#
+    .SYNOPSIS
+        指定された WSL ディストリビューションが登録されているか確認する
+    .DESCRIPTION
+        wsl -l -q の出力を解析する。
+        Windows WSL の出力は null バイトを含む場合があるため除去する。
+    #>
+    hidden [bool] TestWslDistroExists([string]$distroName) {
+        $distros = Invoke-Wsl "-l" "-q" 2>$null
+        if (-not $distros) { return $false }
+        $distroExists = $distros | Where-Object {
+            ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq $distroName
+        }
+        return [bool]$distroExists
     }
 
     <#
