@@ -3,9 +3,13 @@
     Dotfiles setup orchestrator.
 
 .DESCRIPTION
-    Runs setup in two phases:
-    1. User phase (no elevation): install.user.ps1
-    2. Admin phase (elevate only when required): install.admin.ps1
+    Runs setup in three steps:
+    1. User phase (no elevation): install.user.ps1 — Phase 1 handlers (winget etc.)
+    2. Non-admin Phase 2 (no elevation): install.admin.ps1 -AdminOnly:$false
+       — Phase 2 handlers that don't require admin (chezmoi etc.)
+       — Runs without UAC so 1Password desktop app integration works
+    3. Admin phase (elevate when required): install.admin.ps1 -AdminOnly
+       — Phase 2 handlers that require admin (WSL, Docker, etc.)
 
 #>
 
@@ -74,20 +78,32 @@ Write-Host ""
 & $userScriptPath @phaseParams
 
 
+# Phase 2a: 管理者不要の Phase 2 ハンドラーを非昇格で実行
+# 1Password デスクトップアプリ連携など、UAC 昇格で動かなくなる機能に対応
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 2: Admin Setup Check" -ForegroundColor Cyan
+Write-Host "Phase 2a: Non-Admin Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$adminRequired = [bool](& $adminScriptPath @phaseParams -CheckOnly)
+& $adminScriptPath @phaseParams -AdminOnly:$false
+
+
+# Phase 2b: 管理者必須ハンドラーの実行
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Phase 2b: Admin Setup Check" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$adminRequired = [bool](& $adminScriptPath @phaseParams -CheckOnly -AdminOnly)
 
 if ($adminRequired) {
     Write-Host "Admin-required tasks detected." -ForegroundColor Yellow
 
     if (Test-IsAdminCurrent) {
         Write-Host "Already running as administrator. Executing admin phase in-process." -ForegroundColor Cyan
-        & $adminScriptPath @phaseParams
+        & $adminScriptPath @phaseParams -AdminOnly
     }
     else {
         Write-Host "Starting admin phase with UAC prompt..." -ForegroundColor Yellow
@@ -121,7 +137,8 @@ if ($adminRequired) {
             "-SyncMode",
             $SyncMode,
             "-SyncBack",
-            $SyncBack
+            $SyncBack,
+            "-AdminOnly"
         )
 
         if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
@@ -158,7 +175,7 @@ if ($adminRequired) {
 }
 else {
     Write-Host "No admin-required tasks detected. Running admin phase without elevation." -ForegroundColor Green
-    & $adminScriptPath @phaseParams
+    & $adminScriptPath @phaseParams -AdminOnly
 }
 
 Write-Host ""

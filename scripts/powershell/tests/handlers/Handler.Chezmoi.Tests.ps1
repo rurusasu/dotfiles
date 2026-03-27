@@ -638,9 +638,9 @@ Describe 'ChezmoiHandler' {
             $result.Success | Should -Be $true
         }
 
-        It 'should proceed silently when op is already signed in' {
+        It 'should proceed silently when op whoami succeeds' {
             Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpAccountList {
+            Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
             Mock Read-Host { return '' }
@@ -649,7 +649,7 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host {
                 param($Object)
                 if ($Object -match 'サインイン済み') { $script:signedInLogged = $true }
-                if ($Object -match 'CLI と統合する') { $script:instructionsShown = $true }
+                if ($Object -match '認証が必要') { $script:instructionsShown = $true }
             }
             $handler.CanApply($ctx)
 
@@ -661,35 +661,42 @@ Describe 'ChezmoiHandler' {
             Should -Invoke Read-Host -Times 0
         }
 
-        It 'should show setup instructions when op is not signed in' {
+        It 'should attempt op signin when op whoami fails' {
             Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpAccountList {
+            Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 0 }
             }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
             $script:instructionsShown = $false
             Mock Write-Host {
                 param($Object)
-                if ($Object -match '1Password CLI と統合する') { $script:instructionsShown = $true }
+                if ($Object -match '認証が必要') { $script:instructionsShown = $true }
             }
             $handler.CanApply($ctx)
 
             $handler.Apply($ctx)
 
             $script:instructionsShown | Should -Be $true
+            Should -Invoke Invoke-OpSignIn -Times 3
         }
 
-        It 'should sign in and log success after user enables integration on retry' {
+        It 'should sign in and log success after op signin succeeds' {
             Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            $script:callCount = 0
-            Mock Invoke-OpAccountList {
-                $script:callCount++
-                # 2回目で成功（ユーザーが連携を有効にした）
-                if ($script:callCount -ge 2) {
+            $script:whoamiCallCount = 0
+            Mock Invoke-OpWhoAmI {
+                $script:whoamiCallCount++
+                # 2回目で成功（op signin 後）
+                if ($script:whoamiCallCount -ge 2) {
                     return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 0 }
             }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
@@ -707,7 +714,10 @@ Describe 'ChezmoiHandler' {
 
         It 'should log warning after max retries exhausted' {
             Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpAccountList {
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Read-Host { return '' }
@@ -722,7 +732,7 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             $script:failureWarningLogged | Should -Be $true
-            Should -Invoke Read-Host -Times 3
+            Should -Invoke Read-Host -Times 2
         }
     }
 
@@ -738,7 +748,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Invoke-OpAccountList {
+            Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
             # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
@@ -753,7 +763,7 @@ Describe 'ChezmoiHandler' {
             $handler.CanApply($ctx)
             $handler.Apply($ctx)
 
-            Should -Invoke Invoke-OpAccountList -ParameterFilter {
+            Should -Invoke Invoke-OpWhoAmI -ParameterFilter {
                 $OpExe -eq 'C:\tools\op.exe'
             } -Times 1
         }
@@ -769,7 +779,7 @@ Describe 'ChezmoiHandler' {
             $handler.CanApply($ctx)
             $handler.Apply($ctx)
 
-            Should -Invoke Invoke-OpAccountList -ParameterFilter {
+            Should -Invoke Invoke-OpWhoAmI -ParameterFilter {
                 $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
             } -Times 1
         }
@@ -787,7 +797,7 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             $script:notFoundWarned | Should -Be $true
-            Should -Invoke Invoke-OpAccountList -Times 0
+            Should -Invoke Invoke-OpWhoAmI -Times 0
         }
     }
 
