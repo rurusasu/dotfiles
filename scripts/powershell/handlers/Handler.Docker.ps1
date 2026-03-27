@@ -109,7 +109,12 @@ class DockerHandler : SetupHandlerBase {
         try {
             $distroName = $ctx.DistroName
 
-            # 最初に残留プロセスをクリーンアップ（Lingering processes対策）
+            # Docker プロセス停止前に WSL が安定している状態で確認する。
+            # StopLingeringDockerProcesses の後では WSL が一時的に不安定になり
+            # wsl -l -q が空を返してディストリビューションを見逃すことがある。
+            $nixosRegistered = $this.TestWslDistroExists($distroName)
+
+            # 残留プロセスをクリーンアップ（Lingering processes対策）
             $hadLingering = $this.StopLingeringDockerProcesses()
 
             if ($hadLingering) {
@@ -119,9 +124,6 @@ class DockerHandler : SetupHandlerBase {
                 $this.Log("Docker プロセス終了後、WSL が安定するまで待機します...", "Gray")
                 Start-SleepSafe -Seconds 30
             }
-
-            # NixOS が WSL に登録されているか確認
-            $nixosRegistered = $this.TestWslDistroExists($distroName)
 
             if ($nixosRegistered) {
                 # NixOS への操作は Docker Desktop 起動より先に行う。

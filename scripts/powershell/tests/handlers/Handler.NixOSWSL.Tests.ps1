@@ -77,6 +77,7 @@ Describe 'NixOSWSLHandler' {
             $handler | Add-Member -MemberType ScriptMethod -Name ExecutePostInstall -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWhoamiShim -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslWritable -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value { } -Force
             Mock Write-Host { }
         }
 
@@ -85,6 +86,17 @@ Describe 'NixOSWSLHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "NixOS-WSL のインストールが完了しました"
+        }
+
+        It 'should call EnsureDockerGroup after installation' {
+            $script:dockerGroupCalled = $false
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value {
+                $script:dockerGroupCalled = $true
+            } -Force
+
+            $handler.Apply($ctx)
+
+            $script:dockerGroupCalled | Should -Be $true
         }
     }
 
@@ -402,6 +414,60 @@ Describe 'NixOSWSLHandler' {
             $handler.ExecutePostInstall($ctx)
 
             $script:execCmd | Should -Match '/mnt/[a-z]/'
+        }
+    }
+
+    Context 'EnsureDockerGroup' {
+        BeforeEach {
+            Mock Write-Host { }
+        }
+
+        It 'should add user to docker group' {
+            $script:wslCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "whoami") {
+                    $global:LASTEXITCODE = 0
+                    return "nixos"
+                }
+                $script:wslCmd = $argStr
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.EnsureDockerGroup("NixOS")
+
+            $script:wslCmd | Should -Match "groupadd docker"
+            $script:wslCmd | Should -Match "usermod -aG docker nixos"
+        }
+
+        It 'should fall back to nixos user when whoami fails' {
+            $script:wslCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "whoami") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                $script:wslCmd = $argStr
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.EnsureDockerGroup("NixOS")
+
+            $script:wslCmd | Should -Match "usermod -aG docker nixos"
+        }
+
+        It 'should not throw when docker group command fails' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return ""
+            }
+
+            { $handler.EnsureDockerGroup("NixOS") } | Should -Not -Throw
         }
     }
 }

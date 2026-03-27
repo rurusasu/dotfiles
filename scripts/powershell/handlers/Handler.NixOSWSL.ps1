@@ -106,6 +106,12 @@ class NixOSWSLHandler : SetupHandlerBase {
             # 書き込み可能チェック
             $this.EnsureWslWritable($ctx.DistroName)
 
+            # Docker グループへのユーザー追加
+            # DockerHandler は NixOS インストール前（Phase 2a, Order=18）に実行されるため、
+            # 初回インストール時には NixOS が存在せず Docker 連携をスキップする。
+            # ここで docker グループ設定を行うことで初回インストール後も docker コマンドが使用可能になる。
+            $this.EnsureDockerGroup($ctx.DistroName)
+
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
@@ -416,6 +422,30 @@ class NixOSWSLHandler : SetupHandlerBase {
         Invoke-Wsl -d $distroName -u root -- sh -lc $writableCheck
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("WSL が読み取り専用です。VHD 拡張は WslConfig ハンドラーで処理されます。")
+        }
+    }
+
+    <#
+    .SYNOPSIS
+        Docker グループにデフォルトユーザーを追加する
+    .DESCRIPTION
+        DockerHandler は NixOS インストール前に実行されるため、初回インストール時は
+        NixOS が存在せず Docker 連携をスキップする。
+        NixOS インストール直後にここで docker グループ設定を行う。
+    #>
+    hidden [void] EnsureDockerGroup([string]$distroName) {
+        $this.Log("Docker グループにユーザーを追加します...")
+        $user = Invoke-Wsl "-d" $distroName "--" "sh" "-lc" "whoami" | Select-Object -First 1
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
+            $user = "nixos"
+        }
+        $user = $user.Trim()
+        $cmd = "( groupadd docker 2>/dev/null || true ) && usermod -aG docker $user"
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cmd
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("docker グループに '$user' を追加しました", "Green")
+        } else {
+            $this.LogWarning("docker グループへのユーザー追加に失敗しました (exit code: $LASTEXITCODE)")
         }
     }
 }
