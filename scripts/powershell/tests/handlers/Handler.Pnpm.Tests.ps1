@@ -234,6 +234,41 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'EnsurePnpmSetup - bin path fails after setup, PNPM_HOME fallback' {
+        BeforeEach {
+            $script:origPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = Join-Path $TestDrive "pnpm-home-fallback"
+            $script:setupCalled = $false
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($Arguments -contains "setup") {
+                    $script:setupCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:PNPM_HOME = $script:origPnpmHome
+        }
+
+        It 'should return PNPM_HOME as fallback when pnpm bin still fails after setup' {
+            $result = $handler.EnsurePnpmSetup()
+            $result | Should -Be $env:PNPM_HOME
+        }
+
+        It 'should not throw' {
+            { $handler.EnsurePnpmSetup() } | Should -Not -Throw
+        }
+    }
+
     Context 'AddPnpmBinToPath - empty bin path' {
         BeforeEach {
             Mock Set-UserEnvironmentPath { }

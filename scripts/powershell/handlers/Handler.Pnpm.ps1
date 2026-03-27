@@ -181,8 +181,13 @@ class PnpmHandler : SetupHandlerBase {
         }
         $this.Log("pnpm setup が完了しました", "Green")
         # 現プロセスに PNPM_HOME を反映（pnpm setup は新規シェルにしか反映されないため）
-        if (-not $env:PNPM_HOME -and $env:LOCALAPPDATA) {
-            $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
+        if (-not $env:PNPM_HOME) {
+            $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
+            if ($registryPnpmHome) {
+                $env:PNPM_HOME = $registryPnpmHome
+            } elseif ($env:LOCALAPPDATA) {
+                $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
+            }
         }
         $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
         if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {

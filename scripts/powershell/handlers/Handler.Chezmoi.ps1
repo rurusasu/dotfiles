@@ -76,7 +76,7 @@ class ChezmoiHandler : SetupHandlerBase {
             # レジストリから最新の PATH を読み直す
             $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
             $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-            $env:PATH    = "$machinePath;$userPath"
+            $env:PATH    = (@($machinePath, $userPath) | Where-Object { $_ }) -join ";"
 
             # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
             $this.EnsureOnePasswordAvailable()
