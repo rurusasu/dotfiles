@@ -63,6 +63,37 @@ Describe 'DockerHandler' {
             $result | Should -Be $true
         }
 
+        It 'should return true when componentsVersion.json is absent but exe is large' {
+            Mock Test-PathExist {
+                param($Path)
+                # componentsVersion.json なし、exe あり
+                if ($Path -like "*componentsVersion.json") { return $false }
+                return $true
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ Length = 200MB }
+            }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $true
+        }
+
+        It 'should return false when Docker Desktop exe is too small (corrupted install)' {
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -like "*componentsVersion.json") { return $false }
+                return $true
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ Length = 100 }  # 1MB 未満
+            }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
         It 'should read Retries from Options' {
             $ctx.Options["DockerIntegrationRetries"] = 10
 
