@@ -35,8 +35,18 @@ Describe 'DockerHandler' {
     }
 
     Context 'CanApply' {
-        It 'should return false when Retries is 0' {
+        BeforeEach {
             Mock Write-Host { }
+            Mock Test-PathExist { return $true }
+            # デフォルト: NixOS が WSL に登録されている状態
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                return @("NixOS")
+            }
+        }
+
+        It 'should return false when Retries is 0' {
             $ctx.Options["DockerIntegrationRetries"] = 0
 
             $result = $handler.CanApply($ctx)
@@ -46,23 +56,41 @@ Describe 'DockerHandler' {
 
         It 'should return false when Docker Desktop is not installed' {
             Mock Test-PathExist { return $false }
-            Mock Write-Host { }
 
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $false
         }
 
-        It 'should return true when Docker Desktop is installed' {
-            Mock Test-PathExist { return $true }
-
+        It 'should return true when Docker Desktop is installed and NixOS registered' {
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
         }
 
+        It 'should return false when NixOS distro is not registered in WSL' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return @("docker-desktop", "docker-desktop-data")
+            }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
+        It 'should return false when WSL is not available' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
         It 'should read Retries from Options' {
-            Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetries"] = 10
 
             $handler.CanApply($ctx)
@@ -71,7 +99,6 @@ Describe 'DockerHandler' {
         }
 
         It 'should read RetryDelaySeconds from Options' {
-            Mock Test-PathExist { return $true }
             $ctx.Options["DockerIntegrationRetryDelaySeconds"] = 15
 
             $handler.CanApply($ctx)
@@ -80,7 +107,6 @@ Describe 'DockerHandler' {
         }
 
         It 'should read WslWritableMaxAttempts from Options' {
-            Mock Test-PathExist { return $true }
             $ctx.Options["WslWritableMaxAttempts"] = 12
 
             $handler.CanApply($ctx)
@@ -89,8 +115,6 @@ Describe 'DockerHandler' {
         }
 
         It 'should default WslWritableMaxAttempts to 15' {
-            Mock Test-PathExist { return $true }
-
             $handler.CanApply($ctx)
 
             $handler.WslWritableMaxAttempts | Should -Be 15

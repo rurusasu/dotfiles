@@ -69,6 +69,22 @@ class DockerHandler : SetupHandlerBase {
             return $false
         }
 
+        # NixOS ディストリビューションの存在確認
+        # 未登録の場合、WSL 連携処理全体をスキップする
+        $distroName = $ctx.DistroName
+        $distros = Invoke-Wsl "-l" "-q" 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $distros) {
+            $this.Log("WSL が利用できません。Docker 連携をスキップします", "Gray")
+            return $false
+        }
+        $distroExists = $distros | Where-Object {
+            $_ -replace "`0", '' -replace [char]0xFEFF, '' -match "^\s*$([regex]::Escape($distroName))\s*$"
+        }
+        if (-not $distroExists) {
+            $this.Log("$distroName が WSL に登録されていません。Docker 連携をスキップします", "Gray")
+            return $false
+        }
+
         return $true
     }
 
