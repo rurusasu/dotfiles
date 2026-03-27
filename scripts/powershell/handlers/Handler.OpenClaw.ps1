@@ -4,16 +4,14 @@
 
 .DESCRIPTION
     install.cmd 実行時の 2 層ゲート:
-      1. 対話確認 — 初回実行時にユーザーへ [y/N] で確認し、
-         結果を ~/.config/chezmoi/chezmoi.toml [data].openclaw_enabled に永続化。
+      1. 対話確認 — 初回実行時にユーザーへ選択を求め、
+         結果を ~/.config/dotfiles/consent.json に永続化。
          承認済みならプロンプトをスキップ、拒否済みならサイレントスキップ。
-         承認時は chezmoi apply を自動実行して .openclaw/ 設定を展開する。
       2. インフラチェック — docker コマンド / docker-compose.yml / 設定ファイルの存在確認。
     両方をパスした場合のみセットアップを実行する。
 
-    chezmoi apply 側は .chezmoidata/personal.yaml の openclaw_enabled (default: false) と
-    .chezmoiignore.tmpl で制御されるため、フラグが true でない PC には
-    .openclaw/ ディレクトリ自体が展開されない。
+    chezmoi apply 側は .chezmoidata/personal.yaml の openclaw_enabled と
+    .chezmoiignore.tmpl で制御される（テンプレート展開用、consent とは独立）。
 
     処理内容:
     - .env ファイルの自動生成（存在しない場合）
@@ -52,7 +50,7 @@ class OpenClawHandler : SetupHandlerBase {
         実行可否を判定する（2 層ゲート）
     .DESCRIPTION
         以下を順にチェックし、すべてパスした場合のみ $true を返す:
-        1. 対話確認 — chezmoi.toml のフラグを確認。未設定なら対話的に問い、結果を永続化。
+        1. 対話確認 — consent.json のフラグを確認。未設定ならスキップ。
         2. インフラチェック — 設定ファイル / docker / docker-compose.yml の存在。
     #>
     [bool] CanApply([SetupContext]$ctx) {
@@ -68,7 +66,7 @@ class OpenClawHandler : SetupHandlerBase {
             if ($null -eq $enabled) {
                 $this.Log("未設定のためスキップします (install.cmd の同意プロンプトで有効化してください)", "Gray")
             } else {
-                $this.Log("OpenClaw は無効です (chezmoi.toml)", "Gray")
+                $this.Log("OpenClaw は無効です (consent.json)", "Gray")
             }
             return $false
         }

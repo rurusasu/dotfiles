@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     install.cmd 実行時の 2 層ゲート:
-      1. 対話確認 — 初回実行時にユーザーへ [y/N] で確認し、
-         結果を ~/.config/chezmoi/chezmoi.toml [data].cognee_skills_enabled に永続化。
+      1. 対話確認 — 初回実行時にユーザーへ選択を求め、
+         結果を ~/.config/dotfiles/consent.json に永続化。
          承認済みならプロンプトをスキップ、拒否済みならサイレントスキップ。
       2. インフラチェック — docker コマンド / docker-compose.yml の存在確認。
     両方をパスした場合のみセットアップを実行する。
@@ -48,7 +48,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
         実行可否を判定する（2 層ゲート）
     .DESCRIPTION
         以下を順にチェックし、すべてパスした場合のみ $true を返す:
-        1. 対話確認 — chezmoi.toml のフラグを確認。未設定なら対話的に問い、結果を永続化。
+        1. 対話確認 — consent.json のフラグを確認。未設定ならスキップ。
         2. インフラチェック — docker / docker-compose.yml の存在。
     #>
     [bool] CanApply([SetupContext]$ctx) {
@@ -64,7 +64,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
             if ($null -eq $enabled) {
                 $this.Log("未設定のためスキップします (install.cmd の同意プロンプトで有効化してください)", "Gray")
             } else {
-                $this.Log("CogneeSkills は無効です (chezmoi.toml)", "Gray")
+                $this.Log("CogneeSkills は無効です (consent.json)", "Gray")
             }
             return $false
         }

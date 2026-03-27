@@ -199,7 +199,7 @@ class SetupHandlerBase {
     [int]$Phase = 2
 
     # オプショナルサービスの同意設定（設定されている場合、一括同意プロンプトの対象になる）
-    # ConsentKey: chezmoi.toml の [data] セクションに保存するキー名 (例: "openclaw_enabled")
+    # ConsentKey: consent.json に保存するキー名 (例: "openclaw_enabled")
     # ConsentLabel: 一括同意プロンプトに表示する説明文
     [string]$ConsentKey = ""
     [string]$ConsentLabel = ""
@@ -333,56 +333,65 @@ class SetupHandlerBase {
         return -not [string]::IsNullOrEmpty($this.ConsentKey)
     }
 
-    # chezmoi.toml から同意フラグを読み取る ($true / $false / $null)
+    # consent.json から同意フラグを読み取る ($true / $false / $null)
     [object] ReadConsentFlag() {
         if (-not $this.NeedsConsent()) { return $null }
-        $tomlPath = $this.GetChezmoiTomlPath()
-        if (-not (Test-Path $tomlPath)) { return $null }
-        $content = Get-Content $tomlPath -Raw -ErrorAction SilentlyContinue
+        $jsonPath = $this.GetConsentFilePath()
+        if (-not (Test-Path $jsonPath)) { return $null }
+        $content = Get-Content $jsonPath -Raw -ErrorAction SilentlyContinue
         if (-not $content) { return $null }
-        if ($content -match "$([regex]::Escape($this.ConsentKey))\s*=\s*(true|false)") {
-            return ($Matches[1] -eq 'true')
+        $json = $null
+        try {
+            $json = $content | ConvertFrom-Json
+        } catch {
+            Write-Verbose "consent.json の解析に失敗しました: $_"
+            return $null
+        }
+        $key = $this.ConsentKey
+        if ($null -ne $json.$key) {
+            return [bool]$json.$key
         }
         return $null
     }
 
-    # chezmoi.toml に同意フラグを永続化する
+    # consent.json に同意フラグを永続化する
     [void] WriteConsentFlag([bool]$enabled) {
         if (-not $this.NeedsConsent()) { return }
-        $tomlPath = $this.GetChezmoiTomlPath()
-        $value = if ($enabled) { "true" } else { "false" }
-        $nl = [Environment]::NewLine
+        $jsonPath = $this.GetConsentFilePath()
 
-        $dir = Split-Path $tomlPath
+        $dir = Split-Path $jsonPath
         if (-not (Test-Path $dir)) {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
         }
 
-        if (-not (Test-Path $tomlPath)) {
-            [System.IO.File]::WriteAllText($tomlPath, "[data]${nl}$($this.ConsentKey) = ${value}${nl}")
-            return
+        $json = [ordered]@{}
+        if (Test-Path $jsonPath) {
+            $content = Get-Content $jsonPath -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                try {
+                    $existing = $content | ConvertFrom-Json
+                    foreach ($prop in $existing.PSObject.Properties) {
+                        $json[$prop.Name] = $prop.Value
+                    }
+                } catch {
+                    Write-Verbose "consent.json の解析に失敗しました。新規作成します: $_"
+                }
+            }
         }
 
-        $content = Get-Content $tomlPath -Raw
-        if ($content -match "$([regex]::Escape($this.ConsentKey))\s*=") {
-            $content = $content -replace "($([regex]::Escape($this.ConsentKey))\s*=\s*)\w+", "`${1}${value}"
-        } elseif ($content -match '\[data\]') {
-            $content = $content -replace '(\[data\]\s*\r?\n)', "`$1$($this.ConsentKey) = ${value}${nl}"
-        } else {
-            $content = "${content}${nl}[data]${nl}$($this.ConsentKey) = ${value}${nl}"
-        }
-        [System.IO.File]::WriteAllText($tomlPath, $content)
+        $json[$this.ConsentKey] = $enabled
+        [PSCustomObject]$json | ConvertTo-Json | Set-Content -Path $jsonPath -Encoding UTF8
     }
 
-    hidden [string] GetChezmoiTomlPath() {
+    hidden [string] GetConsentFilePath() {
         # 管理者昇格セッションでは $env:USERPROFILE が別ユーザーを指すため、
-        # 全ユーザーのホームから chezmoi.toml を検索する
+        # 全ユーザーのホームから consent.json を検索する
         $candidates = @(
-            Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
+            Join-Path $env:USERPROFILE ".config\dotfiles\consent.json"
         )
         $usersDir = Split-Path $env:USERPROFILE
         foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
-            $candidate = Join-Path $userDir.FullName ".config\chezmoi\chezmoi.toml"
+            $candidate = Join-Path $userDir.FullName ".config\dotfiles\consent.json"
             if ($candidate -notin $candidates) {
                 $candidates += $candidate
             }
@@ -400,8 +409,8 @@ class SetupHandlerBase {
 .SYNOPSIS
     オプショナルサービスの一括同意プロンプトを表示する
 .DESCRIPTION
-    ConsentKey が設定されていて、chezmoi.toml にフラグが未設定のハンドラーを
-    一覧表示し、ユーザーに一括で選択させる。結果は chezmoi.toml に永続化する。
+    ConsentKey が設定されていて、consent.json にフラグが未設定のハンドラーを
+    一覧表示し、ユーザーに一括で選択させる。結果は ~/.config/dotfiles/consent.json に永続化する。
     非対話環境ではスキップする。
 .PARAMETER Handlers
     全ハンドラーの配列

@@ -39,8 +39,8 @@ Describe 'OpenClawHandler' {
     Context 'CanApply' {
         It 'should return false when docker command is not found' {
             # Layer 1 をバイパス: ReadConsentFlag が $true を返すようにする
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return $null }
             Mock Write-Host { }
 
@@ -63,9 +63,9 @@ Describe 'OpenClawHandler' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
-            # ReadConsentFlag が $true を返すよう chezmoi.toml を模倣
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            # ReadConsentFlag が $true を返すよう consent.json を模倣
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
 
             $result = $handler.CanApply($ctx)
 
@@ -124,8 +124,8 @@ Describe 'OpenClawHandler' {
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             # CanApply の Layer 1 で Read-Host ハングを防ぐ
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
             # WriteSecretFile が token 未取得で throw しないよう環境変数を設定
@@ -244,8 +244,8 @@ Describe 'OpenClawHandler' {
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_failure"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -332,8 +332,8 @@ Describe 'OpenClawHandler' {
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_compose_retry"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -412,8 +412,8 @@ Describe 'OpenClawHandler' {
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_env_content"
             $env:OPENCLAW_XAI_API_KEY = ""
         }
@@ -548,8 +548,8 @@ Describe 'OpenClawHandler' {
             Mock Set-ContentNoNewline { }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`nopenclaw_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_wait"
             $env:OPENCLAW_XAI_API_KEY = ""
         }

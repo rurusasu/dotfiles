@@ -227,6 +227,151 @@ Describe 'SetupHandlerBase' {
         }
     }
 
+    Context 'NeedsConsent' {
+        It 'should return false when ConsentKey is empty' {
+            $handler = [SetupHandlerBase]::new()
+            $handler.NeedsConsent() | Should -Be $false
+        }
+
+        It 'should return true when ConsentKey is set' {
+            $handler = [SetupHandlerBase]::new()
+            $handler.ConsentKey = "test_enabled"
+            $handler.NeedsConsent() | Should -Be $true
+        }
+    }
+
+    Context 'GetConsentFilePath' {
+        It 'should return path under .config/dotfiles' {
+            $handler = [SetupHandlerBase]::new()
+            $path = $handler.GetConsentFilePath()
+            $path | Should -BeLike "*\.config\dotfiles\consent.json"
+        }
+    }
+
+    Context 'ReadConsentFlag' {
+        BeforeEach {
+            $script:handler = [SetupHandlerBase]::new()
+            $script:handler.ConsentKey = "test_enabled"
+            $script:tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "consent-test-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            New-Item -ItemType Directory -Path $script:tempDir -Force | Out-Null
+            $script:tempFile = Join-Path $script:tempDir "consent.json"
+            # GetConsentFilePath をオーバーライドするため、テスト用パスを返すようモック
+            $script:handler | Add-Member -MemberType ScriptMethod -Name GetConsentFilePath -Value {
+                return $script:tempFile
+            } -Force
+        }
+
+        AfterEach {
+            if (Test-Path $script:tempDir) {
+                Remove-Item -Path $script:tempDir -Recurse -Force
+            }
+        }
+
+        It 'should return null when ConsentKey is empty' {
+            $handler2 = [SetupHandlerBase]::new()
+            $handler2.ReadConsentFlag() | Should -BeNullOrEmpty
+        }
+
+        It 'should return null when consent.json does not exist' {
+            $script:handler.ReadConsentFlag() | Should -BeNullOrEmpty
+        }
+
+        It 'should return true when key is true' {
+            @{ test_enabled = $true } | ConvertTo-Json | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.ReadConsentFlag() | Should -Be $true
+        }
+
+        It 'should return false when key is false' {
+            @{ test_enabled = $false } | ConvertTo-Json | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.ReadConsentFlag() | Should -Be $false
+        }
+
+        It 'should return null when key does not exist in JSON' {
+            @{ other_key = $true } | ConvertTo-Json | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.ReadConsentFlag() | Should -BeNullOrEmpty
+        }
+
+        It 'should return null when JSON is corrupt' {
+            "not valid json {{{" | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.ReadConsentFlag() | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'WriteConsentFlag' {
+        BeforeEach {
+            $script:handler = [SetupHandlerBase]::new()
+            $script:handler.ConsentKey = "test_enabled"
+            $script:tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "consent-test-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            New-Item -ItemType Directory -Path $script:tempDir -Force | Out-Null
+            $script:tempFile = Join-Path $script:tempDir "consent.json"
+            $script:handler | Add-Member -MemberType ScriptMethod -Name GetConsentFilePath -Value {
+                return $script:tempFile
+            } -Force
+        }
+
+        AfterEach {
+            if (Test-Path $script:tempDir) {
+                Remove-Item -Path $script:tempDir -Recurse -Force
+            }
+        }
+
+        It 'should create consent.json with true value' {
+            $script:handler.WriteConsentFlag($true)
+            $json = Get-Content $script:tempFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $true
+        }
+
+        It 'should create consent.json with false value' {
+            $script:handler.WriteConsentFlag($false)
+            $json = Get-Content $script:tempFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $false
+        }
+
+        It 'should preserve existing keys when writing' {
+            @{ other_key = $true } | ConvertTo-Json | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.WriteConsentFlag($true)
+            $json = Get-Content $script:tempFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $true
+            $json.other_key | Should -Be $true
+        }
+
+        It 'should update existing key value' {
+            @{ test_enabled = $true } | ConvertTo-Json | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.WriteConsentFlag($false)
+            $json = Get-Content $script:tempFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $false
+        }
+
+        It 'should create directory if it does not exist' {
+            $nestedDir = Join-Path $script:tempDir "nested\dir"
+            $nestedFile = Join-Path $nestedDir "consent.json"
+            $script:handler | Add-Member -MemberType ScriptMethod -Name GetConsentFilePath -Value {
+                return $nestedFile
+            } -Force
+
+            $script:handler.WriteConsentFlag($true)
+            Test-Path $nestedFile | Should -Be $true
+            $json = Get-Content $nestedFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $true
+        }
+
+        It 'should handle corrupt JSON gracefully and overwrite' {
+            "broken json {{" | Set-Content -Path $script:tempFile -Encoding UTF8
+            $script:handler.WriteConsentFlag($true)
+            $json = Get-Content $script:tempFile -Raw | ConvertFrom-Json
+            $json.test_enabled | Should -Be $true
+        }
+
+        It 'should do nothing when ConsentKey is empty' {
+            $handler2 = [SetupHandlerBase]::new()
+            $handler2 | Add-Member -MemberType ScriptMethod -Name GetConsentFilePath -Value {
+                return $script:tempFile
+            } -Force
+            $handler2.WriteConsentFlag($true)
+            Test-Path $script:tempFile | Should -Be $false
+        }
+    }
+
     Context 'Log メソッド' {
         BeforeEach {
             Mock Write-Host { }

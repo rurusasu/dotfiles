@@ -39,7 +39,7 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - consent flag is null (not yet decided)' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like '*consent.json' }
         }
 
         It 'should return false' {
@@ -51,8 +51,8 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - consent flag is false' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`ncognee_skills_enabled = false" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":false}' } -ParameterFilter { $Path -like '*consent.json' }
         }
 
         It 'should return false' {
@@ -64,8 +64,8 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - consent flag is true, proceeds to Layer 2' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`ncognee_skills_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $true }
         }
@@ -79,8 +79,8 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - Layer 2: docker not found' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`ncognee_skills_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return $null }
         }
 
@@ -93,8 +93,8 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - Layer 2: compose file missing' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`ncognee_skills_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $false }
         }
@@ -108,8 +108,8 @@ Describe 'CogneeSkillsHandler' {
     Context 'CanApply - option reading' {
         BeforeEach {
             Mock Write-Host { }
-            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*chezmoi.toml' }
-            Mock Get-Content { return "[data]`ncognee_skills_enabled = true" } -ParameterFilter { $Path -like '*chezmoi.toml' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
             Mock Test-PathExist { return $true }
         }
