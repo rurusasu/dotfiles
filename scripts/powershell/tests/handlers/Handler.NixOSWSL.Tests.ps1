@@ -360,5 +360,48 @@ Describe 'NixOSWSLHandler' {
 
             { $handler.ExecutePostInstall($ctx) } | Should -Not -Throw
         }
+
+        It 'should use wslpath output when wslpath call succeeds' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                # 実行呼び出し: sh -lc cmd
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match '/mnt/c/test/postinstall\.sh'
+        }
+
+        It 'should fall back to /mnt/ path when wslpath call fails' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match '/mnt/[a-z]/'
+        }
     }
 }
