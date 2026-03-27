@@ -377,7 +377,7 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $this.Log("Post-install セットアップを実行します...")
         $resolved = (Resolve-Path -LiteralPath $scriptPath).Path
-        $wslPath = Invoke-Wsl wslpath -a $resolved 2>$null
+        $wslPath = Invoke-Wsl -Arguments @("wslpath", "-a", $resolved) 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
             $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
             $rest = $resolved.Substring(2) -replace "\\", "/"
