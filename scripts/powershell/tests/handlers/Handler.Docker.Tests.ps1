@@ -262,6 +262,32 @@ Describe 'DockerHandler' {
             $script:logMessages[2] | Should -Match "3/4"
         }
 
+        It 'should call EnsureDockerGroup before StartDockerDesktopIfNeeded' {
+            # Docker Desktop 起動が wsl --shutdown を呼ぶ場合があるため
+            # NixOS への groupadd は Docker 起動前に完了させる必要がある
+            $script:callOrder = [System.Collections.Generic.List[string]]::new()
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "groupadd") { $script:callOrder.Add("groupadd"); $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "whoami") { $global:LASTEXITCODE = 0; return "nixos" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "componentsVersion.json|docker-desktop-user-distro|proxy") { $global:LASTEXITCODE = 0 }
+                return ""
+            }
+            Mock Start-ProcessSafe { $script:callOrder.Add("startDocker") }
+
+            $handler.Apply($ctx)
+
+            $groupaddIndex = $script:callOrder.IndexOf("groupadd")
+            $startIndex = $script:callOrder.IndexOf("startDocker")
+            $groupaddIndex | Should -BeGreaterOrEqual 0
+            $startIndex | Should -BeGreaterOrEqual 0
+            $groupaddIndex | Should -BeLessThan $startIndex
+        }
+
         It 'should use sh -c (not sh -lc) for write test to avoid NixOS /etc/profile failure' {
             # NixOS 早期 boot 時に sh -lc が /etc/profile sourcing に失敗するため
             # sh -c を使うことをリグレッションテストで保証する
