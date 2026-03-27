@@ -140,12 +140,14 @@ Describe 'DockerHandler' {
         It 'should skip when WSL is not writable after all 4 retries' {
             $handler.WslWritableMaxAttempts = 4
             $script:writableCallCount = 0
+            $script:lqCallCount = 0
             $script:sleepDelays = @()
             $script:startCalled = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") {
+                    $script:lqCallCount++
                     $global:LASTEXITCODE = 0
                     return @("docker-desktop", "docker-desktop-data", "NixOS")
                 }
@@ -174,6 +176,8 @@ Describe 'DockerHandler' {
             $script:sleepDelays | Should -Contain 9
             # 書き込み不可でスキップしても Docker Desktop は起動する
             $script:startCalled | Should -Be $true
+            # EnsureDockerDesktopDistros が呼ばれる（TestWslDistroExists + EnsureDockerDesktopDistros で 2 回）
+            $script:lqCallCount | Should -BeGreaterOrEqual 2
         }
 
         It 'should succeed when WSL becomes writable on 3rd attempt' {
@@ -370,10 +374,12 @@ Describe 'DockerHandler' {
 
         It 'should skip when WSL disk space is insufficient' {
             $script:startCalled = $false
+            $script:lqCallCount = 0
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "-l -q") {
+                    $script:lqCallCount++
                     $global:LASTEXITCODE = 0
                     return @("docker-desktop", "docker-desktop-data", "NixOS")
                 }
@@ -394,6 +400,8 @@ Describe 'DockerHandler' {
             $result.Message | Should -Match "空き容量不足"
             # 空き容量不足でスキップしても Docker Desktop は起動する
             $script:startCalled | Should -Be $true
+            # EnsureDockerDesktopDistros が呼ばれる（TestWslDistroExists + EnsureDockerDesktopDistros で 2 回）
+            $script:lqCallCount | Should -BeGreaterOrEqual 2
         }
     }
 

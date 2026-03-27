@@ -130,12 +130,16 @@ class DockerHandler : SetupHandlerBase {
                 if (-not $this.WaitForWslWritable($distroName)) {
                     $this.LogWarning("WSL が書き込み不可のため、NixOS 連携をスキップします")
                     $this.StartDockerDesktopIfNeeded()
+                    $this.EnsureDockerDesktopDistros()
+                    $this.StartDockerDesktopIfNeeded()
                     return $this.CreateSuccessResult("WSL が書き込み不可のため NixOS 連携をスキップしました")
                 }
 
                 # 空き容量チェック
                 if (-not $this.TestWslFreeSpace($distroName)) {
                     $this.LogWarning("WSL の空き容量が不足しているため、NixOS 連携をスキップします")
+                    $this.StartDockerDesktopIfNeeded()
+                    $this.EnsureDockerDesktopDistros()
                     $this.StartDockerDesktopIfNeeded()
                     return $this.CreateSuccessResult("WSL の空き容量不足のため NixOS 連携をスキップしました")
                 }
