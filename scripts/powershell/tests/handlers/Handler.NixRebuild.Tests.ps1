@@ -30,8 +30,8 @@ Describe 'NixRebuildHandler' {
             $handler.Description | Should -Be "nixos-rebuild switch の実行"
         }
 
-        It 'should set Order to 15' {
-            $handler.Order | Should -Be 15
+        It 'should set Order to 55' {
+            $handler.Order | Should -Be 55
         }
 
         It 'should set RequiresAdmin to False' {
@@ -534,6 +534,7 @@ Describe 'NixRebuildHandler' {
                     $global:LASTEXITCODE = 0
                     return @("NixOS")
                 }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
@@ -545,6 +546,76 @@ Describe 'NixRebuildHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "WSL error"
+        }
+    }
+
+    Context 'EnsureDotfilesAvailable' {
+        BeforeEach {
+            Mock Write-Host { }
+        }
+
+        It 'should return early when dotfiles already exist' {
+            $script:linkCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ln -sf") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
+
+            $script:linkCalled | Should -Be $false
+        }
+
+        It 'should create symlink when dotfiles missing but WSL mount accessible' {
+            $script:linkArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "test -d") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ln -sf") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
+
+            $script:linkArgs | Should -Match "ln -sf"
+            $script:linkArgs | Should -Match "/mnt/d/ruru/dotfiles"
+            $script:linkArgs | Should -Match "/home/nixos/.dotfiles"
+        }
+
+        It 'should throw when dotfiles missing and WSL mount inaccessible' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "test -d") { $global:LASTEXITCODE = 1; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            { $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles") } | Should -Throw
+        }
+
+        It 'should convert Windows path to WSL mount path correctly' {
+            $script:mountPath = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "test -d") {
+                    # argStr から /mnt/... パスを抽出
+                    if ($argStr -match '(/mnt/[^\s"]+)') { $script:mountPath = $Matches[1] }
+                    $global:LASTEXITCODE = 1; return ""
+                }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            try { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } catch { }
+
+            $script:mountPath | Should -Be "/mnt/c/Users/foo/dotfiles"
         }
     }
 }

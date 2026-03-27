@@ -8,7 +8,7 @@
     - pnpm グローバルパッケージのインストール (nix/pnpm/packages.json)
 
 .NOTES
-    Order = 15 (Chezmoi の後、WslConfig の前)
+    Order = 55 (NixOSWSL=50 の後に実行)
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot
@@ -20,7 +20,7 @@ class NixRebuildHandler : SetupHandlerBase {
     NixRebuildHandler() {
         $this.Name = "NixRebuild"
         $this.Description = "nixos-rebuild switch の実行"
-        $this.Order = 15
+        $this.Order = 55
         $this.RequiresAdmin = $false
     }
 
@@ -190,9 +190,38 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
+    hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {
+        # Windows パス (D:\ruru\dotfiles) を WSL マウントパス (/mnt/d/ruru/dotfiles) に変換
+        $driveLetter = $dotfilesPath.Substring(0, 1).ToLower()
+        $wslMountPath = '/mnt/' + $driveLetter + ($dotfilesPath.Substring(2) -replace '\\', '/')
+
+        # /home/nixos/.dotfiles が存在するか確認
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "test -e /home/nixos/.dotfiles") | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+
+        # Windows dotfiles が WSL からアクセスできるか確認
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "test -d `"$wslMountPath`"") | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("dotfiles を WSL マウント経由でリンクします: $wslMountPath")
+            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "ln -sf `"$wslMountPath`" /home/nixos/.dotfiles")
+            if ($LASTEXITCODE -ne 0) {
+                throw "dotfiles のシンボリックリンク作成に失敗しました"
+            }
+            $this.Log("dotfiles リンク完了: /home/nixos/.dotfiles -> $wslMountPath", "Green")
+        } else {
+            throw "dotfiles が見つかりません。Windows パス '$dotfilesPath' が WSL から '$wslMountPath' としてアクセスできません"
+        }
+    }
+
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $distroName = $ctx.DistroName
+
+            # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
+            $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
+
             $this.Log("nixos-rebuild switch を実行しています...")
 
             # root で nixos-rebuild switch を実行（nixos ユーザーの dotfiles を使用）
