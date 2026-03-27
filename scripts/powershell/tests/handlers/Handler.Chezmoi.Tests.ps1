@@ -169,7 +169,11 @@ Describe 'ChezmoiHandler' {
             # op が見つからない想定（EnsureOnePasswordAvailable は警告のみ出して続行）
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
-            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
+            Mock Find-WinGetExe { return $null }
+            # 管理者セッションとしてモック（DeployProfileToOtherUsers が実行されるケースを検証）
+            Mock Test-IsAdminSession { return $true }
+            # DeployProfileToOtherUsers でプロファイルが存在しないケース（早期リターン）
             Mock Test-Path { return $false }
         }
 
@@ -249,8 +253,33 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
-            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
-            Mock Test-Path { return $false }
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
+            Mock Find-WinGetExe { return $null }
+            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
+            Mock Test-IsAdminSession { return $false }
+        }
+
+        It 'should not call DeployProfileToOtherUsers when not running as admin' {
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return "chezmoi version 2.45.0"
+                }
+            }
+            $script:getChildItemDeployCallCount = 0
+            # DeployProfileToOtherUsers が呼ばれると $usersDir の Get-ChildItem が実行される
+            # 非管理者では Test-IsAdminSession が false を返すのでここには到達しない
+            Mock Get-ChildItem {
+                # USERPROFILE の親ディレクトリへのアクセスを検出
+                $script:getChildItemDeployCallCount++
+                return @()
+            }
+
+            $handler.CanApply($ctx) | Should -Be $true
+            $handler.Apply($ctx) | Out-Null
+
+            # 非管理者では DeployProfileToOtherUsers が呼ばれないため Get-ChildItem も呼ばれない
+            $script:getChildItemDeployCallCount | Should -Be 0
         }
 
         It 'should invoke chezmoi init to regenerate config before apply' {
@@ -367,8 +396,10 @@ Describe 'ChezmoiHandler' {
             Mock Write-Host { }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
-            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
-            Mock Test-Path { return $false }
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
+            Mock Find-WinGetExe { return $null }
+            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
+            Mock Test-IsAdminSession { return $false }
         }
 
         It 'should fail when chezmoi apply fails with non-zero exit code' {
@@ -618,13 +649,17 @@ Describe 'ChezmoiHandler' {
             Mock Invoke-Chezmoi {
                 $global:LASTEXITCODE = 0
             }
-            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
-            Mock Test-Path { return $false }
+            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
+            Mock Test-IsAdminSession { return $false }
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
+            Mock Find-WinGetExe { return $null }
         }
 
         It 'should log warning and continue when op is not found' {
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             $script:warningLogged = $false
             Mock Write-Host {
                 param($Object)
@@ -751,8 +786,10 @@ Describe 'ChezmoiHandler' {
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
-            # DeployProfileToOtherUsers が実ファイルシステムにアクセスしないよう早期 return させる
-            Mock Test-Path { return $false }
+            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
+            Mock Test-IsAdminSession { return $false }
+            # Find-WinGetExe が実ファイルシステムにアクセスしないようデフォルトモック
+            Mock Find-WinGetExe { return $null }
         }
 
         It 'should find op from PATH' {
@@ -853,6 +890,105 @@ Describe 'ChezmoiHandler' {
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
+        }
+    }
+
+    Context 'DeployProfileToOtherUsers - admin session' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
+            }
+            Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
+            Mock Write-Host { }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
+            Mock Find-WinGetExe { return $null }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                return "chezmoi version 2.45.0"
+            }
+            Mock Test-IsAdminSession { return $true }
+        }
+
+        It 'should skip deploy when profile source does not exist' {
+            Mock Test-Path { return $false }
+            $script:copyItemCalled = $false
+            Mock Copy-Item { $script:copyItemCalled = $true }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            $script:copyItemCalled | Should -Be $false
+        }
+
+        It 'should deploy profile to other users when admin' {
+            Mock Test-Path { return $true }
+            Mock Get-ChildItem {
+                return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
+            }
+            $script:copyItemCalled = $false
+            Mock Copy-Item { $script:copyItemCalled = $true }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            $script:copyItemCalled | Should -Be $true
+        }
+
+        It 'should skip inaccessible user directories without failing' {
+            Mock Test-Path { return $true }
+            Mock Get-ChildItem {
+                return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
+            }
+            Mock Copy-Item { throw [System.UnauthorizedAccessException]"Access to the path is denied." }
+
+            $handler.CanApply($ctx)
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+        }
+    }
+
+    Context 'DeployProfileToOtherUsers - non-admin session' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
+            }
+            Mock Test-PathExist { return $true }
+            Mock New-DirectorySafe { }
+            Mock Write-Host { }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ChildItemSafe { return @() }
+            Mock Find-WinGetExe { return $null }
+            Mock Invoke-Chezmoi {
+                $global:LASTEXITCODE = 0
+                return "chezmoi version 2.45.0"
+            }
+            Mock Test-IsAdminSession { return $false }
+        }
+
+        It 'should not call Copy-Item even when profile source exists' {
+            Mock Test-Path { return $true }
+            Mock Copy-Item { }
+
+            $handler.CanApply($ctx)
+            $handler.Apply($ctx)
+
+            Should -Invoke Copy-Item -Times 0
+        }
+    }
+
+    Context 'Test-IsAdminSession' {
+        It 'should return a bool value' {
+            $result = Test-IsAdminSession
+            $result | Should -BeOfType [bool]
+        }
+
+        It 'should return false in non-elevated test environment' {
+            # テスト環境は通常管理者で実行しないため false が期待値
+            $result = Test-IsAdminSession
+            $result | Should -Be $false
         }
     }
 }

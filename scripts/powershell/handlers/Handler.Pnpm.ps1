@@ -101,7 +101,8 @@ class PnpmHandler : SetupHandlerBase {
 
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
-            $this.AddPnpmBinToPath()
+            $pnpmBinPath = $this.EnsurePnpmSetup()
+            $this.AddPnpmBinToPath($pnpmBinPath)
 
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("pnpm グローバルパッケージをインストールしています...")
@@ -167,10 +168,32 @@ class PnpmHandler : SetupHandlerBase {
         }
     }
 
-    hidden [void] AddPnpmBinToPath() {
+    hidden [string] EnsurePnpmSetup() {
+        $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
+        if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
+            return $rawBinPath.Trim()
+        }
+        $this.Log("PNPM_HOME が未設定です。pnpm setup を実行します...")
+        Invoke-Pnpm -Arguments @("setup") | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("pnpm setup に失敗しました")
+            return $null
+        }
+        $this.Log("pnpm setup が完了しました", "Green")
+        # 現プロセスに PNPM_HOME を反映（pnpm setup は新規シェルにしか反映されないため）
+        if (-not $env:PNPM_HOME -and $env:LOCALAPPDATA) {
+            $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
+        }
+        $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
+        if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
+            return $rawBinPath.Trim()
+        }
+        return $env:PNPM_HOME
+    }
+
+    hidden [void] AddPnpmBinToPath([string]$pnpmBinPath) {
         try {
-            $pnpmBinPath = (Invoke-Pnpm -Arguments @("bin", "-g")).Trim()
-            if ($LASTEXITCODE -ne 0 -or -not $pnpmBinPath) {
+            if (-not $pnpmBinPath) {
                 $this.Log("pnpm グローバル bin パスを取得できません", "Gray")
                 return
             }
@@ -182,15 +205,21 @@ class PnpmHandler : SetupHandlerBase {
             $userPath = Get-UserEnvironmentPath
             $pathItems = if ($userPath) { $userPath -split ";" } else { @() }
 
-            if ($pathItems -contains $pnpmBinPath) {
+            if ($pathItems -notcontains $pnpmBinPath) {
+                $newPath = ($pnpmBinPath, $userPath | Where-Object { $_ }) -join ";"
+                Set-UserEnvironmentPath -Path $newPath
+                $this.Log("pnpm bin を USER PATH に追加しました: $pnpmBinPath", "Green")
+            }
+            else {
                 $this.Log("pnpm bin は既に PATH に含まれています", "Gray")
-                return
             }
 
-            $newPath = ($pnpmBinPath, $userPath | Where-Object { $_ }) -join ";"
-            Set-UserEnvironmentPath -Path $newPath
-            $this.Log("pnpm bin を USER PATH に追加しました: $pnpmBinPath", "Green")
-            $this.Log("ターミナルを再起動すると claude / gemini コマンドが使えます", "Gray")
+            # 現プロセスの PATH にも追加（pnpm add -g が同一セッションで動作するよう）
+            $processItems = if ($env:PATH) { $env:PATH -split ";" } else { @() }
+            if ($processItems -notcontains $pnpmBinPath) {
+                $env:PATH = "$pnpmBinPath;$env:PATH"
+                $this.Log("pnpm bin を現プロセス PATH に追加しました", "Gray")
+            }
         }
         catch {
             $this.Log("pnpm bin パスの追加に失敗しました: $($_.Exception.Message)", "Yellow")

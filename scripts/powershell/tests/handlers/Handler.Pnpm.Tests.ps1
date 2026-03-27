@@ -136,55 +136,167 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'AddPnpmBinToPath - bin path retrieval fails' {
+    Context 'EnsurePnpmSetup - bin path already available' {
         BeforeEach {
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
             Mock Invoke-Pnpm {
-                $global:LASTEXITCODE = 1
+                param($Arguments)
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                $global:LASTEXITCODE = 0
                 return ""
             }
             Mock Write-Host { }
         }
 
-        It 'should do nothing without throwing' {
-            { $handler.AddPnpmBinToPath() } | Should -Not -Throw
+        It 'should return the bin path' {
+            $result = $handler.EnsurePnpmSetup()
+            $result | Should -Be $script:pnpmBin
+        }
+
+        It 'should not call pnpm setup' {
+            $handler.EnsurePnpmSetup()
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "setup" } -Times 0
         }
     }
 
-    Context 'AddPnpmBinToPath - already in PATH' {
+    Context 'EnsurePnpmSetup - bin path fails, setup succeeds' {
         BeforeEach {
-            $script:pnpmBin = Join-Path $TestDrive "pnpm-global-bin"
-            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            $script:origPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = ""
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin-after-setup"
+            $script:setupCalled = $false
             Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "bin") {
+                    if ($script:setupCalled) {
+                        $global:LASTEXITCODE = 0
+                        return $script:pnpmBin
+                    }
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($Arguments -contains "setup") {
+                    $script:setupCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
                 $global:LASTEXITCODE = 0
-                return $script:pnpmBin
+                return ""
             }
-            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:PNPM_HOME = $script:origPnpmHome
+        }
+
+        It 'should call pnpm setup' {
+            $handler.EnsurePnpmSetup()
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "setup" } -Times 1
+        }
+
+        It 'should return the bin path obtained after setup' {
+            $result = $handler.EnsurePnpmSetup()
+            $result | Should -Be $script:pnpmBin
+        }
+
+        It 'should set PNPM_HOME for current process when unset' {
+            $env:PNPM_HOME = ""
+            $handler.EnsurePnpmSetup()
+            $env:PNPM_HOME | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'EnsurePnpmSetup - bin path fails, setup fails' {
+        BeforeEach {
+            # bin コマンドが失敗（PNPM_HOME 未設定を示す）
+            Mock Invoke-Pnpm {
+                $global:LASTEXITCODE = 1
+                return ""
+            } -ParameterFilter { $Arguments -contains "bin" }
+            # setup コマンドも失敗
+            Mock Invoke-Pnpm {
+                $global:LASTEXITCODE = 1
+                return ""
+            } -ParameterFilter { $Arguments -contains "setup" }
+            Mock Write-Host { }
+        }
+
+        It 'should return null' {
+            $result = $handler.EnsurePnpmSetup()
+            $result | Should -BeNullOrEmpty
+        }
+
+        It 'should not throw' {
+            { $handler.EnsurePnpmSetup() } | Should -Not -Throw
+        }
+    }
+
+    Context 'AddPnpmBinToPath - empty bin path' {
+        BeforeEach {
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should skip and not call Set-UserEnvironmentPath' {
-            $handler.AddPnpmBinToPath()
+        It 'should do nothing without throwing' {
+            { $handler.AddPnpmBinToPath("") } | Should -Not -Throw
+        }
+
+        It 'should not call Set-UserEnvironmentPath' {
+            $handler.AddPnpmBinToPath("")
             Should -Invoke Set-UserEnvironmentPath -Times 0
         }
     }
 
-    Context 'AddPnpmBinToPath - not yet in PATH' {
+    Context 'AddPnpmBinToPath - already in user PATH' {
         BeforeEach {
             $script:pnpmBin = Join-Path $TestDrive "pnpm-global-bin"
             New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
-            Mock Invoke-Pnpm {
-                $global:LASTEXITCODE = 0
-                return $script:pnpmBin
-            }
+            $script:origPath = $env:PATH
+            $env:PATH = "C:\Windows\System32"
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
+        }
+
+        It 'should not call Set-UserEnvironmentPath' {
+            $handler.AddPnpmBinToPath($script:pnpmBin)
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+
+        It 'should add bin path to current process PATH' {
+            $handler.AddPnpmBinToPath($script:pnpmBin)
+            $env:PATH -split ";" | Should -Contain $script:pnpmBin
+        }
+    }
+
+    Context 'AddPnpmBinToPath - not yet in user PATH or process PATH' {
+        BeforeEach {
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-global-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            $script:origPath = $env:PATH
+            $env:PATH = "C:\Windows\System32"
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
+        AfterEach {
+            $env:PATH = $script:origPath
+        }
 
-        It 'should call Set-UserEnvironmentPath with pnpm bin prepended' {
-            $handler.AddPnpmBinToPath()
+        It 'should call Set-UserEnvironmentPath once' {
+            $handler.AddPnpmBinToPath($script:pnpmBin)
             Should -Invoke Set-UserEnvironmentPath -Times 1
+        }
+
+        It 'should add bin path to current process PATH' {
+            $handler.AddPnpmBinToPath($script:pnpmBin)
+            $env:PATH -split ";" | Should -Contain $script:pnpmBin
         }
     }
 
@@ -232,6 +344,9 @@ Describe 'PnpmHandler' {
 
     Context 'Apply - all new packages' {
         BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -246,8 +361,8 @@ Describe 'PnpmHandler' {
                     return (Join-Path $TestDrive "nonexistent-root")
                 }
                 if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 1
-                    return ""
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
                 }
                 $global:LASTEXITCODE = 0
                 return "installed"
@@ -256,8 +371,11 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Write-Host { }
-            Mock Get-UserEnvironmentPath { return "" }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
         }
 
         It 'should return success result' {
@@ -269,6 +387,9 @@ Describe 'PnpmHandler' {
 
     Context 'Apply - empty package list' {
         BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -279,13 +400,18 @@ Describe 'PnpmHandler' {
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 1
-                    return ""
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
                 }
                 $global:LASTEXITCODE = 0
                 return ""
             }
             Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
         }
 
         It 'should return success with empty message' {
@@ -297,6 +423,9 @@ Describe 'PnpmHandler' {
 
     Context 'Apply - partial install failure' {
         BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -312,8 +441,8 @@ Describe 'PnpmHandler' {
                     return (Join-Path $TestDrive "nonexistent-root")
                 }
                 if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 1
-                    return ""
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
                 }
                 if ($Arguments -contains "add") {
                     $script:installCount++
@@ -331,8 +460,11 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Write-Host { }
-            Mock Get-UserEnvironmentPath { return "" }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
         }
 
         It 'should report mixed success/failure counts' {
@@ -345,19 +477,27 @@ Describe 'PnpmHandler' {
 
     Context 'Apply - exception thrown' {
         BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent { throw "pnpm error" }
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 1
-                    return ""
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
                 }
                 $global:LASTEXITCODE = 0
                 return ""
             }
             Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
         }
 
         It 'should return failure result' {

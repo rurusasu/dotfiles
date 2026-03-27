@@ -693,3 +693,23 @@ function Test-InteractiveEnvironment {
     return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
 }
 
+function Test-IsAdminSession {
+    <#
+    .SYNOPSIS
+        現在のセッションが管理者権限で実行されているか確認する
+    .DESCRIPTION
+        Windows Principal を使って管理者ロールを確認する。
+        権限確認で例外が発生した場合は安全側に倒して $false を返す。
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    try {
+        $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+        return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+

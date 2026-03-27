@@ -110,8 +110,10 @@ class ChezmoiHandler : SetupHandlerBase {
 
             # 管理者昇格セッション対応: Windows Terminal の elevate: true により
             # 別ユーザーのプロファイルが読まれるケースがある。
-            # admin フェーズ (管理者権限) なので他ユーザーの Documents にもデプロイ可能。
-            $this.DeployProfileToOtherUsers($sourcePath)
+            # 管理者権限がある場合のみ実行（非管理者では他ユーザーの Documents にアクセス不可）
+            if (Test-IsAdminSession) {
+                $this.DeployProfileToOtherUsers($sourcePath)
+            }
 
             if ($chezmoiExitCode -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
@@ -325,17 +327,22 @@ class ChezmoiHandler : SetupHandlerBase {
         Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -notin @("Public", "Default", "Default User", "All Users", $env:USERNAME) } |
             ForEach-Object {
-                $docs = Join-Path $_.FullName "Documents"
-                if (Test-Path $docs) {
-                    foreach ($subDir in @("PowerShell", "WindowsPowerShell")) {
-                        $dest = Join-Path $docs "$subDir\Microsoft.PowerShell_profile.ps1"
-                        $destDir = Split-Path -Parent $dest
-                        if (-not (Test-Path $destDir)) {
-                            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                $userDir = $_
+                try {
+                    $docs = Join-Path $userDir.FullName "Documents"
+                    if (Test-Path $docs) {
+                        foreach ($subDir in @("PowerShell", "WindowsPowerShell")) {
+                            $dest = Join-Path $docs "$subDir\Microsoft.PowerShell_profile.ps1"
+                            $destDir = Split-Path -Parent $dest
+                            if (-not (Test-Path $destDir)) {
+                                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                            }
+                            Copy-Item -LiteralPath $profileSource -Destination $dest -Force
+                            $this.Log("プロファイルをデプロイ: $dest", "Green")
                         }
-                        Copy-Item -LiteralPath $profileSource -Destination $dest -Force
-                        $this.Log("プロファイルをデプロイ: $dest", "Green")
                     }
+                } catch {
+                    $this.Log("スキップ: $($userDir.FullName) ($($_.Exception.Message))", "Gray")
                 }
             }
     }
