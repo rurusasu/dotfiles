@@ -116,7 +116,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     $global:LASTEXITCODE = 1
                     return ""
@@ -147,7 +147,7 @@ Describe 'DockerHandler' {
                 param($Arguments)
                 $argStr = $Arguments -join " "
 
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     if ($script:writableCallCount -le 2) {
                         $global:LASTEXITCODE = 1
@@ -199,7 +199,7 @@ Describe 'DockerHandler' {
                 param($Arguments)
                 $argStr = $Arguments -join " "
 
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     $global:LASTEXITCODE = 0
                     return ""
@@ -239,7 +239,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $script:writableCallCount++
                     $global:LASTEXITCODE = 1
                     return ""
@@ -318,7 +318,7 @@ Describe 'DockerHandler' {
                 $argStr = $Arguments -join " "
 
                 # 書き込みテスト
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -369,7 +369,7 @@ Describe 'DockerHandler' {
                 $script:wslCallCount++
                 $argStr = $Arguments -join " "
 
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -437,7 +437,7 @@ Describe 'DockerHandler' {
                 param($Arguments)
                 $argStr = $Arguments -join " "
 
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -489,7 +489,7 @@ Describe 'DockerHandler' {
                 param($Arguments)
                 $argStr = $Arguments -join " "
 
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -543,7 +543,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -614,7 +614,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "df -Pk") { return "50000" }
                 if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
                 if ($argStr -match "whoami") { $global:LASTEXITCODE = 0; return "testuser" }
@@ -635,7 +635,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "df -Pk") { return "50000" }
                 if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
                 if ($argStr -match "whoami") { $global:LASTEXITCODE = 1; return "" }
@@ -678,7 +678,7 @@ Describe 'DockerHandler' {
                 if ($argStr -match "componentsVersion.json") {
                     $global:LASTEXITCODE = 0
                 }
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                 }
                 if ($argStr -match "df -Pk") {
@@ -709,7 +709,7 @@ Describe 'DockerHandler' {
                 if ($argStr -match "componentsVersion.json") {
                     $global:LASTEXITCODE = 1  # 存在しない
                 }
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                 }
                 if ($argStr -match "df -Pk") {
@@ -786,7 +786,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -840,7 +840,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -897,7 +897,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -952,7 +952,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -1008,7 +1008,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -1051,7 +1051,7 @@ Describe 'DockerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "touch.*wsl-write-test") {
+                if ($argStr -match "wsl-write-test") {
                     $global:LASTEXITCODE = 0
                     return ""
                 }

@@ -158,8 +158,11 @@ class DockerHandler : SetupHandlerBase {
         WSL が書き込み可能かテストする
     #>
     hidden [bool] TestWslWritable([string]$distroName) {
-        $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
-        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $writableCheck
+        # sh -c を使い NixOS の /etc/profile sourcing を避ける（Nix 環境初期化失敗対策）
+        # `: > file` はシェルビルトインのみ使用、PATH 依存なし（NixOS-WSL 早期 boot 対応）
+        # rm は PATH に無くても true でフォールバックするため cleanup 失敗でも exit 0 を維持
+        $writableCheck = ': > /tmp/.wsl-write-test 2>/dev/null && { rm -f /tmp/.wsl-write-test 2>/dev/null; true; }'
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-c" $writableCheck
         return $LASTEXITCODE -eq 0
     }
 
