@@ -55,12 +55,14 @@ if (-not (Test-Path $vhdxPath)) {
 
 # Get current virtual size (physical file size != virtual size for dynamic VHDX)
 $currentSizeGB = 0
+$hyperVAvailable = $false
 try {
     $vhd = Get-VHD -Path $vhdxPath -ErrorAction Stop
     $currentSizeGB = [math]::Round($vhd.Size / 1GB, 2)
+    $hyperVAvailable = $true
 } catch {
     # Hyper-V module unavailable - fall back to file size (may underestimate)
-    # Resize-VHD will also fail; diskpart will be used as fallback for expansion.
+    # Resize-VHD will also fail; diskpart will be used directly for expansion.
     $currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
     Write-Host "Note: Hyper-V module unavailable. Size shown may be underestimated; diskpart will be used for expansion."
 }
@@ -115,14 +117,21 @@ Write-Host "Shutting down WSL..."
 Start-Sleep -Seconds 3
 
 # Expand VHDX using Resize-VHD (more reliable than diskpart for dynamic VHDX)
+# Fall back to diskpart when Hyper-V module is unavailable.
 Write-Host "Expanding VHDX to ${TargetSizeGB}GB..."
-try {
-    Resize-VHD -Path $vhdxPath -SizeBytes $targetSizeBytes -ErrorAction Stop
-    Write-Host "Resize-VHD succeeded."
-} catch {
-    Write-Host "Resize-VHD failed: $($_.Exception.Message)"
-    Write-Host "Falling back to diskpart..."
+$resizeVhdSucceeded = $false
+if ($hyperVAvailable) {
+    try {
+        Resize-VHD -Path $vhdxPath -SizeBytes $targetSizeBytes -ErrorAction Stop
+        Write-Host "Resize-VHD succeeded."
+        $resizeVhdSucceeded = $true
+    } catch {
+        Write-Host "Resize-VHD failed: $($_.Exception.Message)"
+        Write-Host "Falling back to diskpart..."
+    }
+}
 
+if (-not $resizeVhdSucceeded) {
     $diskpartScript = @"
 select vdisk file="$vhdxPath"
 expand vdisk maximum=$([long]$TargetSizeGB * 1024)
