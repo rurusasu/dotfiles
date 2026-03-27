@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -92,16 +92,155 @@ Describe 'DockerHandler' {
             Mock Start-SleepSafe { }
         }
 
-        It 'should skip when WSL is not writable' {
+        It 'should skip when WSL is not writable after all 4 retries' {
+            $script:writableCallCount = 0
+            $script:sleepDelays = @()
             Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 1
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $script:writableCallCount++
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
                 return ""
+            }
+            Mock Start-SleepSafe {
+                param($Seconds)
+                $script:sleepDelays += $Seconds
             }
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "書き込み不可"
+            # WaitForWslWritable は maxAttempts=4 回 TestWslWritable を呼ぶ
+            $script:writableCallCount | Should -Be 4
+            # 試行間のバックオフ: 3秒, 6秒, 9秒（最後の試行後は sleep しない）
+            $script:sleepDelays | Should -Contain 3
+            $script:sleepDelays | Should -Contain 6
+            $script:sleepDelays | Should -Contain 9
+        }
+
+        It 'should succeed when WSL becomes writable on 3rd attempt' {
+            $script:writableCallCount = 0
+            $script:sleepDelays = @()
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $script:writableCallCount++
+                    if ($script:writableCallCount -le 2) {
+                        $global:LASTEXITCODE = 1
+                    } else {
+                        $global:LASTEXITCODE = 0
+                    }
+                    return ""
+                }
+                if ($argStr -match "df -Pk") {
+                    return "50000"
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "groupadd|whoami") {
+                    return "nixos"
+                }
+                if ($argStr -match "componentsVersion.json") {
+                    $global:LASTEXITCODE = 0
+                }
+                if ($argStr -match "docker-desktop-user-distro") {
+                    $global:LASTEXITCODE = 0
+                }
+                if ($argStr -match "proxy") {
+                    $global:LASTEXITCODE = 0
+                }
+                return ""
+            }
+            Mock Start-SleepSafe {
+                param($Seconds)
+                $script:sleepDelays += $Seconds
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "連携を確認しました"
+            # 3回目で成功するので TestWslWritable は正確に3回呼ばれる
+            $script:writableCallCount | Should -Be 3
+            # 試行間のバックオフ: 3秒, 6秒（3回目で成功するので9秒の sleep はない）
+            $script:sleepDelays | Should -Contain 3
+            $script:sleepDelays | Should -Contain 6
+            $script:sleepDelays | Should -Not -Contain 9
+        }
+
+        It 'should succeed immediately when WSL is writable on first attempt' {
+            $script:writableCallCount = 0
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $script:writableCallCount++
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "df -Pk") {
+                    return "50000"
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "groupadd|whoami") {
+                    return "nixos"
+                }
+                if ($argStr -match "componentsVersion.json") {
+                    $global:LASTEXITCODE = 0
+                }
+                if ($argStr -match "docker-desktop-user-distro") {
+                    $global:LASTEXITCODE = 0
+                }
+                if ($argStr -match "proxy") {
+                    $global:LASTEXITCODE = 0
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            # 1回目で成功するので TestWslWritable は1回だけ
+            $script:writableCallCount | Should -Be 1
+        }
+
+        It 'should log retry messages with attempt count' {
+            $script:writableCallCount = 0
+            $script:logMessages = @()
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") {
+                    $script:writableCallCount++
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                return ""
+            }
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match "再試行します") {
+                    $script:logMessages += $Object
+                }
+            }
+
+            $handler.Apply($ctx)
+
+            # 4回試行、最後の試行後はログなし → 3回ログが出る
+            $script:logMessages.Count | Should -Be 3
+            $script:logMessages[0] | Should -Match "1/4"
+            $script:logMessages[1] | Should -Match "2/4"
+            $script:logMessages[2] | Should -Match "3/4"
         }
     }
 
@@ -248,7 +387,6 @@ Describe 'DockerHandler' {
                 return ""
             }
             Mock Test-PathExist {
-                param($Path)
                 # Docker リソースが存在する
                 return $true
             }
@@ -441,37 +579,57 @@ Describe 'DockerHandler' {
     }
 
     Context 'GetWslDefaultUser' {
-        It 'should return username when whoami succeeds' {
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 0
-                return "testuser"
-            }
+        BeforeEach {
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
-            Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
             Mock Start-SleepSafe { }
             Mock New-DirectorySafe { }
             Mock Copy-FileSafe { }
-
-            # whoami の結果を確認するために Apply を呼ぶ
-            # 実際にはハンドラー内部でユーザー名が使われる
+            Mock Stop-ProcessSafe { }
+            Mock Stop-Process { }
+            Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
         }
 
-        It 'should return nixos when whoami fails' {
+        It 'should use whoami result as user in docker group setup' {
+            $script:usermodCmd = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "whoami") {
-                    $global:LASTEXITCODE = 1
-                    return ""
-                }
-                $global:LASTEXITCODE = 0
+                if ($argStr -match "touch.*wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "whoami") { $global:LASTEXITCODE = 0; return "testuser" }
+                if ($argStr -match "groupadd") { $script:usermodCmd = $argStr }
+                if ($argStr -match "componentsVersion.json") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "proxy") { $global:LASTEXITCODE = 0 }
                 return ""
             }
-            Mock Test-PathExist { return $true }
-            Mock Write-Host { }
-            Mock Get-ProcessSafe { return [PSCustomObject]@{ Name = "Docker Desktop" } }
-            Mock Start-SleepSafe { }
+
+            $handler.Apply($ctx)
+
+            $script:usermodCmd | Should -Match "testuser"
+        }
+
+        It 'should fall back to nixos when whoami fails' {
+            $script:usermodCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "touch.*wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "whoami") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "groupadd") { $script:usermodCmd = $argStr }
+                if ($argStr -match "componentsVersion.json") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "proxy") { $global:LASTEXITCODE = 0 }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:usermodCmd | Should -Match "nixos"
         }
     }
 

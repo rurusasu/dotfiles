@@ -135,13 +135,13 @@ class NixOSWSLHandler : SetupHandlerBase {
         $skipWslBaseInstall = $ctx.GetOption("SkipWslBaseInstall", $false)
 
         $this.Log("WSL の状態を確認しています...")
-        $statusOutput = & wsl --status 2>&1
+        $statusOutput = Invoke-Wsl --status 2>&1
         if ($LASTEXITCODE -eq 0) {
             return
         }
 
         if ($statusOutput -match "Unrecognized option" -or $statusOutput -match "invalid command line option") {
-            & wsl -l -q 2>$null | Out-Null
+            Invoke-Wsl -l -q 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 return
             }
@@ -152,7 +152,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         }
 
         $this.Log("WSL 基盤をインストールします (再起動が必要になる場合があります)...")
-        & wsl --install --no-distribution
+        Invoke-Wsl --install --no-distribution
         throw "WSL の有効化を完了するため、Windows を再起動してから再度このスクリプトを実行してください。"
     }
 
@@ -161,7 +161,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         WSL のバージョン番号を取得
     #>
     hidden [version] GetWslVersion() {
-        $output = & wsl --version 2>&1
+        $output = Invoke-Wsl --version 2>&1
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
@@ -185,7 +185,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             return $true
         }
         # Fallback: ヘルプテキストを確認
-        $help = & wsl --help 2>&1
+        $help = Invoke-Wsl --help 2>&1
         return ($help -match "--install --from-file")
     }
 
@@ -247,7 +247,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         WslConfig ハンドラーによる terminate 直後に import を実行すると
         WSL サービスが過渡状態のため失敗することがある。
     #>
-    hidden [void] WaitForWslReady([int]$maxAttempts = 10, [int]$intervalSeconds = 2) {
+    hidden [void] WaitForWslReady() { $this.WaitForWslReady(10, 2) }
+    hidden [void] WaitForWslReady([int]$maxAttempts, [int]$intervalSeconds) {
         for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
                 Invoke-Wsl --status 2>&1 | Out-Null
@@ -275,7 +276,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         WSL ディストリビューションが存在するか確認
     #>
     hidden [bool] DistroExists([string]$name) {
-        $list = & wsl --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $list = Invoke-Wsl --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ }
         return $list -contains $name
     }
 
@@ -324,7 +325,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $this.Log("WSL ディストリビューションをインポートします: $name -> $dir")
         $this.WaitForWslReady()
         $this.EnsureInstallDir($dir)
-        & wsl --import $name $dir $archive --version 2
+        Invoke-Wsl --import $name $dir $archive --version 2
         if ($LASTEXITCODE -ne 0) {
             throw "wsl --import が失敗しました (exit code: $LASTEXITCODE)"
         }
@@ -342,7 +343,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.EnsureInstallDir($location)
             $wslArgs += @("--location", $location)
         }
-        & wsl @wslArgs
+        Invoke-Wsl @wslArgs
         if ($LASTEXITCODE -ne 0) {
             throw "wsl --install --from-file が失敗しました (exit code: $LASTEXITCODE)"
         }
@@ -376,7 +377,7 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $this.Log("Post-install セットアップを実行します...")
         $resolved = (Resolve-Path -LiteralPath $scriptPath).Path
-        $wslPath = & wsl wslpath -a $resolved 2>$null
+        $wslPath = Invoke-Wsl wslpath -a $resolved 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
             $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
             $rest = $resolved.Substring(2) -replace "\\", "/"
@@ -387,7 +388,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $syncMode = $ctx.GetOption("SyncMode", "link")
         $syncBack = $ctx.GetOption("SyncBack", "lock")
         $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
-        & wsl -d $ctx.DistroName -u root -- sh -lc $cmd
+        Invoke-Wsl -d $ctx.DistroName -u root -- sh -lc $cmd
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("Post-install スクリプトが非ゼロで終了しました (exit code: $LASTEXITCODE)")
         }
@@ -402,7 +403,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $cmd = "if [ -x /run/current-system/sw/bin/whoami ]; then " +
                "ln -sf /run/current-system/sw/bin/whoami /bin/whoami; " +
                "ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami; fi"
-        & wsl -d $distroName -u root -- sh -lc $cmd
+        Invoke-Wsl -d $distroName -u root -- sh -lc $cmd
     }
 
     <#
@@ -412,7 +413,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] EnsureWslWritable([string]$distroName) {
         $this.Log("WSL 書き込み可能チェック...")
         $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
-        & wsl -d $distroName -u root -- sh -lc $writableCheck
+        Invoke-Wsl -d $distroName -u root -- sh -lc $writableCheck
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("WSL が読み取り専用です。VHD 拡張は WslConfig ハンドラーで処理されます。")
         }

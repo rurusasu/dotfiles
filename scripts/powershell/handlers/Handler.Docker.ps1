@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Docker Desktop と WSL の連携を管理するハンドラー
 
@@ -109,15 +109,10 @@ class DockerHandler : SetupHandlerBase {
             # Docker Desktop を起動（WSL を正しく起動するために必要）
             $this.StartDockerDesktopIfNeeded()
 
-            # WSL が書き込み可能かチェック
-            if (-not $this.TestWslWritable($distroName)) {
-                # Docker Desktop 起動後に再試行
-                $this.Log("WSL が書き込み不可。Docker Desktop を起動して再試行します")
-                Start-SleepSafe -Seconds 5
-                if (-not $this.TestWslWritable($distroName)) {
-                    $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
-                    return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
-                }
+            # WSL が書き込み可能になるまでリトライ
+            if (-not $this.WaitForWslWritable($distroName)) {
+                $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
+                return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
             }
 
             # 空き容量チェック
@@ -161,6 +156,33 @@ class DockerHandler : SetupHandlerBase {
         $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $writableCheck
         return $LASTEXITCODE -eq 0
+    }
+
+    <#
+    .SYNOPSIS
+        WSL が書き込み可能になるまでバックオフ付きリトライする
+    .DESCRIPTION
+        Docker プロセスの強制終了後、WSL のファイルシステムが一時的に
+        書き込み不可になることがある。段階的に待機時間を増やしながら
+        最大 maxAttempts 回まで再試行する。
+    #>
+    hidden [bool] WaitForWslWritable([string]$distroName) {
+        $maxAttempts = 4
+        $baseDelay = 3
+
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+            if ($this.TestWslWritable($distroName)) {
+                return $true
+            }
+
+            if ($i -lt $maxAttempts) {
+                $delay = $baseDelay * $i
+                $this.Log("WSL が書き込み不可。${delay} 秒後に再試行します ($i/$maxAttempts)")
+                Start-SleepSafe -Seconds $delay
+            }
+        }
+
+        return $false
     }
 
     <#

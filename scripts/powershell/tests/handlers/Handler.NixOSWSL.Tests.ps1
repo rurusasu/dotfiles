@@ -164,7 +164,7 @@ Describe 'NixOSWSLHandler' {
             }
             Mock Write-Host { }
 
-            $result = $handler.GetRelease("v24.5.0")
+            $null = $handler.GetRelease("v24.5.0")
 
             Should -Invoke Invoke-RestMethod -ParameterFilter {
                 $Uri -match "/releases/tags/v24.5.0"
@@ -254,7 +254,7 @@ Describe 'NixOSWSLHandler' {
 
     Context 'InstallDistro' {
         BeforeEach {
-            $asset = @{ name = "nixos.wsl" }
+            $script:asset = @{ name = "nixos.wsl" }
             $handler | Add-Member -MemberType ScriptMethod -Name SupportsFromFileInstall -Value { return $true } -Force
         }
 
@@ -262,7 +262,7 @@ Describe 'NixOSWSLHandler' {
             $script:callCount = 0
             $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value { $script:callCount++ } -Force
 
-            $handler.InstallDistro($ctx, $asset, "C:\Temp\nixos.wsl")
+            $handler.InstallDistro($ctx, $script:asset, "C:\Temp\nixos.wsl")
 
             $script:callCount | Should -Be 1
         }
@@ -288,13 +288,23 @@ Describe 'NixOSWSLHandler' {
             $handler | Add-Member -MemberType ScriptMethod -Name ImportDistro -Value { $script:callCount++ } -Force
             Mock Write-Host { }
 
-            $handler.InstallDistro($ctx, $asset, "C:\Temp\nixos.wsl")
+            $handler.InstallDistro($ctx, $script:asset, "C:\Temp\nixos.wsl")
 
             $script:callCount | Should -Be 1
         }
     }
 
     Context 'WaitForWslReady' {
+        It 'should work when called with no arguments' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+            Mock Start-SleepSafe { }
+            Mock Write-Host { }
+
+            { $handler.WaitForWslReady() } | Should -Not -Throw
+
+            Should -Not -Invoke Start-SleepSafe
+        }
+
         It 'should return immediately when WSL is ready' {
             Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
             Mock Start-SleepSafe { }
