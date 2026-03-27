@@ -36,9 +36,11 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'CanApply - pnpm not found' {
+    Context 'CanApply - pnpm not found, bootstrap fails' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null }
+            Mock Invoke-Corepack { $global:LASTEXITCODE = 1 }
+            Mock Invoke-Npm { $global:LASTEXITCODE = 1 }
             Mock Write-Host { }
         }
 
@@ -48,19 +50,56 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'CanApply - pnpm not executable' {
+    Context 'CanApply - pnpm not found, corepack bootstrap succeeds' {
         BeforeEach {
-            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
-            Mock Invoke-Pnpm {
-                $global:LASTEXITCODE = 1
-                return ""
+            $script:callCount = 0
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") {
+                    # 初回は null、bootstrap 後は見つかる
+                    $script:callCount++
+                    if ($script:callCount -le 1) { return $null }
+                    return @{ Source = "C:\pnpm.cmd" }
+                }
+                if ($Name -eq "corepack") { return @{ Source = "C:\corepack.cmd" } }
+                return $null
             }
+            Mock Invoke-Corepack { $global:LASTEXITCODE = 0 }
+            Mock Invoke-Pnpm {
+                $global:LASTEXITCODE = 0
+                return "9.15.0"
+            }
+            Mock Test-PathExist { return $true }
             Mock Write-Host { }
         }
 
-        It 'should return false' {
+        It 'should return true' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
+            $result | Should -Be $true
+        }
+    }
+
+    Context 'CanApply - pnpm not found, npm bootstrap succeeds' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return $null }
+                if ($Name -eq "corepack") { return $null }
+                if ($Name -eq "npm") { return @{ Source = "C:\npm.cmd" } }
+                return $null
+            }
+            Mock Invoke-Npm { $global:LASTEXITCODE = 0 }
+            Mock Invoke-Pnpm {
+                $global:LASTEXITCODE = 0
+                return "9.15.0"
+            }
+            Mock Test-PathExist { return $true }
+            Mock Write-Host { }
+        }
+
+        It 'should return true' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
         }
     }
 

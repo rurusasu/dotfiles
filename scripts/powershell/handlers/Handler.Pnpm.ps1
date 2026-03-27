@@ -25,15 +25,11 @@ class PnpmHandler : SetupHandlerBase {
 
     [bool] CanApply([SetupContext]$ctx) {
         $pnpmCmd = Get-ExternalCommand -Name "pnpm"
-        if (-not $pnpmCmd) {
-            $this.LogWarning("pnpm が見つかりません")
-            $this.Log("インストール方法: corepack enable && corepack prepare pnpm@latest --activate", "Yellow")
-            return $false
-        }
-
-        if (-not $this.TestPnpmExecutable()) {
-            $this.LogWarning("pnpm が正常に動作しません")
-            return $false
+        if (-not $pnpmCmd -or -not $this.TestPnpmExecutable()) {
+            # pnpm がなければ自動セットアップを試行
+            if (-not $this.TryBootstrapPnpm()) {
+                return $false
+            }
         }
 
         $packagesPath = $this.GetPackagesPath($ctx)
@@ -43,6 +39,51 @@ class PnpmHandler : SetupHandlerBase {
         }
 
         return $true
+    }
+
+    <#
+    .SYNOPSIS
+        pnpm がない場合に corepack または npm 経由で自動セットアップする
+    .OUTPUTS
+        セットアップ成功時は $true、失敗時は $false
+    #>
+    hidden [bool] TryBootstrapPnpm() {
+        # 方法1: corepack enable で pnpm を有効化
+        $corepackCmd = Get-ExternalCommand -Name "corepack"
+        if ($corepackCmd) {
+            $this.Log("pnpm が見つかりません。corepack で有効化を試みます...")
+            try {
+                Invoke-Corepack -Arguments @("enable")
+                if ($LASTEXITCODE -eq 0) {
+                    Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate")
+                    if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
+                        $this.Log("corepack で pnpm を有効化しました", "Green")
+                        return $true
+                    }
+                }
+            } catch {
+                $this.Log("corepack での有効化に失敗: $($_.Exception.Message)", "Yellow")
+            }
+        }
+
+        # 方法2: npm install -g pnpm
+        $npmCmd = Get-ExternalCommand -Name "npm"
+        if ($npmCmd) {
+            $this.Log("npm 経由で pnpm をインストールします...")
+            try {
+                Invoke-Npm -Arguments @("install", "-g", "pnpm")
+                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
+                    $this.Log("npm で pnpm をインストールしました", "Green")
+                    return $true
+                }
+            } catch {
+                $this.Log("npm での pnpm インストールに失敗: $($_.Exception.Message)", "Yellow")
+            }
+        }
+
+        $this.LogWarning("pnpm をセットアップできませんでした。Node.js がインストールされているか確認してください")
+        $this.Log("手動インストール: winget install OpenJS.NodeJS.LTS && corepack enable && corepack prepare pnpm@latest --activate", "Yellow")
+        return $false
     }
 
     hidden [bool] TestPnpmExecutable() {

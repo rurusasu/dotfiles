@@ -549,6 +549,26 @@ function Invoke-Pnpm {
 
 <#
 .SYNOPSIS
+    corepack コマンドを実行する
+.PARAMETER Arguments
+    corepack に渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-Corepack -Arguments @("enable")
+    Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate")
+#>
+function Invoke-Corepack {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+    & corepack @Arguments
+}
+
+<#
+.SYNOPSIS
     docker コマンドを実行する
 .PARAMETER Arguments
     docker に渡す引数

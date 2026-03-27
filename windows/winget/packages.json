@@ -59,6 +59,9 @@
           "PackageIdentifier": "Neovim.Neovim"
         },
         {
+          "PackageIdentifier": "OpenJS.NodeJS.LTS"
+        },
+        {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
         },
         {
