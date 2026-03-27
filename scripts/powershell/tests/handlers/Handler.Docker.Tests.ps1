@@ -306,6 +306,34 @@ Describe 'DockerHandler' {
             $script:logMessages[2] | Should -Match "3/4"
         }
 
+        It 'should log diagnostic message after all retries exhausted' {
+            $handler.WslWritableMaxAttempts = 2
+            $script:diagLogged = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    $global:LASTEXITCODE = 0
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "wsl-write-test") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                # 診断コマンド (wsl -d ... true) - 起動失敗を返す
+                $global:LASTEXITCODE = 1
+                return ""
+            }
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match "診断") { $script:diagLogged = $true }
+            }
+
+            $handler.Apply($ctx)
+
+            $script:diagLogged | Should -Be $true
+        }
+
         It 'should call EnsureDockerGroup before StartDockerDesktopIfNeeded' {
             # Docker Desktop 起動が wsl --shutdown を呼ぶ場合があるため
             # NixOS への groupadd は Docker 起動前に完了させる必要がある
@@ -1306,6 +1334,28 @@ Describe 'DockerHandler' {
 
             # プロキシテスト失敗により失敗結果
             $result.Success | Should -Be $false
+        }
+
+        It 'should treat proxy timeout (exit 124) as success' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "componentsVersion") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "\[ -x.*docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                # プロキシコマンドがタイムアウト (exit 124)
+                if ($argStr -match "proxy --distro-name") { $global:LASTEXITCODE = 124 }
+                return ""
+            }
+            $handler.Retries = 1
+            $handler.RetryDelaySeconds = 0
+
+            $result = $handler.Apply($ctx)
+
+            # タイムアウトは成功扱い
+            $result.Success | Should -Be $true
         }
     }
 }
