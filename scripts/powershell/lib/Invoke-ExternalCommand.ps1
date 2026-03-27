@@ -397,7 +397,8 @@ function Get-ChildItemSafe {
         [string]$Path,
         [string]$Filter,
         [switch]$Recurse,
-        [switch]$Directory
+        [switch]$Directory,
+        [switch]$Force
     )
     $params = @{
         LiteralPath = $Path
@@ -406,6 +407,7 @@ function Get-ChildItemSafe {
     if ($Filter) { $params['Filter'] = $Filter }
     if ($Recurse) { $params['Recurse'] = $true }
     if ($Directory) { $params['Directory'] = $true }
+    if ($Force) { $params['Force'] = $true }
     Get-ChildItem @params
 }
 
@@ -727,5 +729,21 @@ function Test-IsAdminSession {
     } catch {
         return $false
     }
+}
+
+<#
+.SYNOPSIS
+    gemini コマンドを実行する
+.PARAMETER Arguments
+    gemini に渡す引数
+.OUTPUTS
+    コマンドの出力
+#>
+function Invoke-Gemini {
+    param(
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$Arguments
+    )
+    & gemini @Arguments
 }
 

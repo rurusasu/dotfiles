@@ -277,7 +277,7 @@ class PnpmHandler : SetupHandlerBase {
 
     hidden [bool] TestGeminiCommand() {
         try {
-            $output = & gemini --version 2>&1
+            $output = Invoke-Gemini --version 2>&1
             return ($LASTEXITCODE -eq 0 -and ($output -match '\d+\.\d+'))
         }
         catch {

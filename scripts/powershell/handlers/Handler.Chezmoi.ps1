@@ -324,7 +324,7 @@ class ChezmoiHandler : SetupHandlerBase {
         if (-not (Test-Path -LiteralPath $profileSource -PathType Leaf)) { return }
 
         $usersDir = Split-Path $env:USERPROFILE
-        Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue |
+        Get-ChildItemSafe -Path $usersDir -Directory |
             Where-Object { $_.Name -notin @("Public", "Default", "Default User", "All Users", $env:USERNAME) } |
             ForEach-Object {
                 $userDir = $_

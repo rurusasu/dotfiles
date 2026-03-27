@@ -36,7 +36,7 @@ Describe 'ChezmoiHandler' {
         BeforeEach {
             # TestChezmoiExecutable() のために Invoke-Chezmoi をモック（成功）
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
                 return "chezmoi version 2.45.0"
             }
         }
@@ -135,7 +135,7 @@ Describe 'ChezmoiHandler' {
             }
             # TestChezmoiExecutable() のモック
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
                 return "chezmoi version 2.45.0"
             }
             Mock Test-PathExist {
@@ -521,7 +521,7 @@ Describe 'ChezmoiHandler' {
         BeforeEach {
             # TestChezmoiExecutable() のモック
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
                 return "chezmoi version 2.45.0"
             }
         }
@@ -576,7 +576,7 @@ Describe 'ChezmoiHandler' {
         BeforeEach {
             # TestChezmoiExecutable() のモック
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
                 return "chezmoi version 2.45.0"
             }
         }
@@ -867,7 +867,7 @@ Describe 'ChezmoiHandler' {
             }
             Mock Test-PathExist { return $true }
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 1
+                $global:LASTEXITCODE = 1
                 return ""
             }
             Mock Write-Host { }
@@ -883,7 +883,7 @@ Describe 'ChezmoiHandler' {
             }
             Mock Test-PathExist { return $true }
             Mock Invoke-Chezmoi {
-                $script:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
                 return "chezmoi version 2.45.0"
             }
 
@@ -924,7 +924,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should deploy profile to other users when admin' {
             Mock Test-Path { return $true }
-            Mock Get-ChildItem {
+            Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
             }
             $script:copyItemCalled = $false
@@ -938,7 +938,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should skip inaccessible user directories without failing' {
             Mock Test-Path { return $true }
-            Mock Get-ChildItem {
+            Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
             }
             Mock Copy-Item { throw [System.UnauthorizedAccessException]"Access to the path is denied." }

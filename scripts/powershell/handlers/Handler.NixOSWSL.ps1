@@ -135,17 +135,6 @@ class NixOSWSLHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
-        管理者権限をチェック
-    #>
-    hidden [void] AssertAdmin() {
-        $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-        if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-            throw "このハンドラーは管理者権限が必要です"
-        }
-    }
-
-    <#
-    .SYNOPSIS
         WSL が有効化されているか確認し、必要に応じてインストール
     #>
     hidden [void] EnsureWslReady([SetupContext]$ctx) {
@@ -222,7 +211,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         } else {
             "$base/tags/$tag"
         }
-        return Invoke-RestMethod -Uri $uri -Headers @{ "User-Agent" = "nixos-wsl-installer" }
+        return Invoke-RestMethodSafe -Uri $uri -Headers @{ "User-Agent" = "nixos-wsl-installer" }
     }
 
     <#
@@ -248,7 +237,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [string] DownloadAsset([object]$asset) {
         $destination = Join-Path $env:TEMP $asset.name
         $this.Log("アーカイブをダウンロードします: $($asset.name)")
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $destination -UseBasicParsing
+        Invoke-WebRequestSafe -Uri $asset.browser_download_url -OutFile $destination
         return $destination
     }
 
@@ -313,7 +302,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         if (-not (Test-Path -LiteralPath $path -PathType Container)) {
             throw "指定したインストール先 $path はディレクトリではありません。"
         }
-        if ((Get-ChildItem -LiteralPath $path -Force | Measure-Object).Count -gt 0) {
+        if ((Get-ChildItemSafe -Path $path -Force | Measure-Object).Count -gt 0) {
             throw "インストール先 $path が空ではありません。空のディレクトリを指定するか、既存の内容を移動してください。"
         }
     }

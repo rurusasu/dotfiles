@@ -130,7 +130,7 @@ class NixRebuildHandler : SetupHandlerBase {
                 return
             }
 
-            $json = Get-Content -LiteralPath $packagesJsonPath -Raw | ConvertFrom-Json
+            $json = Get-JsonContent -Path $packagesJsonPath
             $packages = $json.globalPackages
             if (-not $packages -or $packages.Count -eq 0) {
                 $this.Log("インストールする pnpm パッケージがありません", "Gray")
