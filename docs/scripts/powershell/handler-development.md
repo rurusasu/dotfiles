@@ -143,6 +143,20 @@ cd tests
 
 **不要**: install.ps1 は動的にハンドラーをロードするため、`Handler.*.ps1` パターンに一致すれば自動的に実行されます
 
+### 実行フェーズ
+
+install.ps1 は 3 ステップでハンドラーを実行します:
+
+1. **Phase 1**（非昇格）: winget, codex, npm, pnpm 等のユーザースコープハンドラー
+2. **Phase 2a**（非昇格）: `RequiresAdmin = $false` の Phase 2 ハンドラー（chezmoi 等）
+   - UAC 昇格なしで実行されるため、1Password デスクトップアプリ連携等が動作する
+3. **Phase 2b**（UAC 昇格）: `RequiresAdmin = $true` の Phase 2 ハンドラー（WSL, Docker 等）
+
+`install.admin.ps1` の `-AdminOnly` パラメータで制御:
+- `-AdminOnly:$true`: 管理者必須ハンドラーのみ実行
+- `-AdminOnly:$false`: 管理者不要ハンドラーのみ実行
+- 省略時: 全 Phase 2 ハンドラーを実行（後方互換）
+
 ## ハンドラー開発のチェックリスト
 
 ### 必須要件
