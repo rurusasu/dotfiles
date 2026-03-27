@@ -275,7 +275,7 @@ class ChezmoiHandler : SetupHandlerBase {
         $maxRetries = 3
         for ($i = 1; $i -le $maxRetries; $i++) {
             $this.Log("1Password CLI: サインインを試行中 ($i/$maxRetries)...")
-            $signinResult = Invoke-OpSignIn -OpExe $opExe
+            Invoke-OpSignIn -OpExe $opExe | Out-Null
 
             # signin 後に whoami で確認
             $result = Invoke-OpWhoAmI -OpExe $opExe
