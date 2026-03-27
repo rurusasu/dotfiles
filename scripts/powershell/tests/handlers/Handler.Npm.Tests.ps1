@@ -2,7 +2,7 @@
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Npm.ps1
-    $script:projectRoot = git -C $PSScriptRoot rev-parse --show-toplevel
+    $script:projectRoot = (Resolve-Path -LiteralPath "$PSScriptRoot/../../../..").Path
 }
 
 Describe 'NpmHandler' {

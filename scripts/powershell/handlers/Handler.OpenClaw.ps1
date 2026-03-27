@@ -134,6 +134,7 @@ class OpenClawHandler : SetupHandlerBase {
                     Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
                 } catch {
                     # NativeCommandError (docker compose build progress → stderr) は無視
+                    $null = $_.Exception
                 }
                 if ($LASTEXITCODE -eq 0) { break }
                 if ($attempt -lt $this.ComposeRetries) {

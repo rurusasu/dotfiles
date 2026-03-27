@@ -300,6 +300,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-FileContentSafe { return "defaultVhdSize = 32GB" }
             # current size (64GB) > target (32GB) → shrink path
             Mock Get-Command { return $true } -ParameterFilter { $Name -eq "Get-VHD" }
+            Mock Get-Command { return $true } -ParameterFilter { $Name -eq "Resize-VHD" }
             Mock Get-VHD { return [PSCustomObject]@{ Size = 64 * 1GB } }
             Mock Write-Host {
                 param($Object)

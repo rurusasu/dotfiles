@@ -21,8 +21,8 @@ Describe 'install.user.ps1' {
         $result | Should -BeOfType [bool]
     }
 
-    It 'should target Winget, Codex and OpenClaw handlers' {
+    It 'should filter handlers by Phase 1' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\$_.Name -in @\("Winget", "Codex", "OpenClaw"\)'
+        $content | Should -Match '\$_\.Phase -eq 1'
     }
 }

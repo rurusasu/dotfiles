@@ -12,7 +12,7 @@ BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.NixRebuild.ps1
-    $script:projectRoot = git -C $PSScriptRoot rev-parse --show-toplevel
+    $script:projectRoot = (Resolve-Path -LiteralPath "$PSScriptRoot/../../../..").Path
 }
 
 Describe 'NixRebuildHandler' {

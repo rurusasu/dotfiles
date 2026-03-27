@@ -294,6 +294,47 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
+    Context 'WaitForWslReady' {
+        It 'should return immediately when WSL is ready' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+            Mock Start-SleepSafe { }
+            Mock Write-Host { }
+
+            { $handler.WaitForWslReady(3, 1) } | Should -Not -Throw
+
+            Should -Not -Invoke Start-SleepSafe
+        }
+
+        It 'should retry when WSL is not ready initially' {
+            $script:wslCallCount = 0
+            Mock Invoke-Wsl {
+                $script:wslCallCount++
+                if ($script:wslCallCount -le 2) {
+                    $global:LASTEXITCODE = 1
+                    return "error"
+                }
+                $global:LASTEXITCODE = 0
+                return "ok"
+            }
+            Mock Start-SleepSafe { }
+            Mock Write-Host { }
+
+            { $handler.WaitForWslReady(5, 1) } | Should -Not -Throw
+
+            Should -Invoke Start-SleepSafe -Times 2
+        }
+
+        It 'should warn but not throw when max attempts exhausted' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+            Mock Start-SleepSafe { }
+            Mock Write-Host { }
+
+            { $handler.WaitForWslReady(3, 1) } | Should -Not -Throw
+
+            Should -Invoke Start-SleepSafe -Times 2
+        }
+    }
+
     Context 'ExecutePostInstall' {
         It 'should skip when SkipPostInstallSetup is true' {
             $ctx.Options["SkipPostInstallSetup"] = $true

@@ -236,6 +236,37 @@ class NixOSWSLHandler : SetupHandlerBase {
     }
 
     # ========================================
+    # WSL Readiness
+    # ========================================
+
+    <#
+    .SYNOPSIS
+        WSL サービスが操作可能になるまで待機する
+    .DESCRIPTION
+        wsl --status が成功するまでリトライする。
+        WslConfig ハンドラーによる terminate 直後に import を実行すると
+        WSL サービスが過渡状態のため失敗することがある。
+    #>
+    hidden [void] WaitForWslReady([int]$maxAttempts = 10, [int]$intervalSeconds = 2) {
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+                Invoke-Wsl --status 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    return
+                }
+            } catch {
+                # WSL が過渡状態の場合、例外を無視してリトライする
+                $null = $_.Exception
+            }
+            if ($i -lt $maxAttempts) {
+                $this.Log("WSL の準備を待機しています... ($i/$maxAttempts)")
+                Start-SleepSafe -Seconds $intervalSeconds
+            }
+        }
+        $this.LogWarning("WSL の準備完了を確認できませんでした。インポートを試行します。")
+    }
+
+    # ========================================
     # Distro Installation
     # ========================================
 
@@ -291,6 +322,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     hidden [void] ImportDistro([string]$name, [string]$dir, [string]$archive) {
         $this.Log("WSL ディストリビューションをインポートします: $name -> $dir")
+        $this.WaitForWslReady()
         $this.EnsureInstallDir($dir)
         & wsl --import $name $dir $archive --version 2
         if ($LASTEXITCODE -ne 0) {
@@ -304,12 +336,13 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     hidden [void] InstallFromFile([string]$name, [string]$archive, [string]$location) {
         $this.Log("WSL 2.4.4+ の手順で登録します: wsl --install --from-file")
-        $args = @("--install", "--from-file", $archive, "--name", $name)
+        $this.WaitForWslReady()
+        $wslArgs = @("--install", "--from-file", $archive, "--name", $name)
         if ($location) {
             $this.EnsureInstallDir($location)
-            $args += @("--location", $location)
+            $wslArgs += @("--location", $location)
         }
-        & wsl @args
+        & wsl @wslArgs
         if ($LASTEXITCODE -ne 0) {
             throw "wsl --install --from-file が失敗しました (exit code: $LASTEXITCODE)"
         }

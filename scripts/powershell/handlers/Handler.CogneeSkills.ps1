@@ -112,6 +112,7 @@ class CogneeSkillsHandler : SetupHandlerBase {
                     Invoke-Docker "compose" "-f" $composeFile "up" "-d" "--build"
                 } catch {
                     # NativeCommandError (docker compose build progress → stderr) は無視
+                    $null = $_.Exception
                 }
                 if ($LASTEXITCODE -eq 0) { break }
                 if ($attempt -lt $this.ComposeRetries) {
@@ -163,7 +164,10 @@ class CogneeSkillsHandler : SetupHandlerBase {
                 if ($LASTEXITCODE -eq 0) {
                     $value = ($result | Out-String).Trim()
                 }
-            } catch { }
+            } catch {
+                # 1Password CLI が利用不可の場合は無視
+                $null = $_.Exception
+            }
         }
 
         # 2. 環境変数フォールバック

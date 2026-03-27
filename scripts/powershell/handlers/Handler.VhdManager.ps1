@@ -186,6 +186,7 @@ exit
             }
         } catch {
             # Get-VHD が失敗した場合は次の方法を試す
+            $null = $_.Exception
         }
 
         # 方法2: diskpart で detail vdisk を使用

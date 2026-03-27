@@ -2,23 +2,23 @@
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
-    # PSScriptAnalyzer モジュールの確認
+    # PSScriptAnalyzer モジュールの確認と自動インストール
     if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-        throw "PSScriptAnalyzer がインストールされていません。手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
+        Write-Host "PSScriptAnalyzer をインストールしています..." -ForegroundColor Yellow
+        try {
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+        } catch {
+            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
+        }
     }
 
     Import-Module PSScriptAnalyzer -Force
 
-    # テスト対象ファイルの収集
+    # テスト対象ファイルの収集（動的に検出）
     $sourceFiles = @(
-        "$projectRoot\lib\SetupHandler.ps1",
-        "$projectRoot\lib\Invoke-ExternalCommand.ps1",
-        "$projectRoot\handlers\Handler.WslConfig.ps1",
-        "$projectRoot\handlers\Handler.Docker.ps1",
-        "$projectRoot\handlers\Handler.VscodeServer.ps1",
-        "$projectRoot\handlers\Handler.Chezmoi.ps1",
-        "$projectRoot\handlers\Handler.Winget.ps1"
-    ) | Where-Object { Test-Path $_ }
+        Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
+        Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+    ) | Select-Object -ExpandProperty FullName
 }
 
 Describe 'PSScriptAnalyzer - 静的解析' {
@@ -34,11 +34,8 @@ Describe 'PSScriptAnalyzer - 静的解析' {
 
     Context 'ハンドラーファイル' {
         It 'should have no Error/Warning in <_>' -ForEach @(
-            "handlers\Handler.WslConfig.ps1",
-            "handlers\Handler.Docker.ps1",
-            "handlers\Handler.VscodeServer.ps1",
-            "handlers\Handler.Chezmoi.ps1",
-            "handlers\Handler.Winget.ps1"
+            (Get-ChildItem -Path "$((Split-Path -Parent $PSScriptRoot))\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue |
+                ForEach-Object { "handlers\$($_.Name)" })
         ) {
             $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error,Warning
             # TypeNotFound を除外（using module の制限）

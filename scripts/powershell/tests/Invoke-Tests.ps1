@@ -76,9 +76,19 @@ if (Get-Module -Name Pester) {
 $pesterV5 = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" } | Select-Object -First 1
 
 if (-not $pesterV5) {
-    Write-Error "Pester v5 がインストールされていません。手動でインストールしてください:"
-    Write-Error "  Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force"
-    exit 1
+    Write-Host "Pester v5 がインストールされていません。自動インストールします..." -ForegroundColor Yellow
+    try {
+        Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck
+        $pesterV5 = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" } | Select-Object -First 1
+        if (-not $pesterV5) {
+            throw "インストール後もモジュールが見つかりません"
+        }
+        Write-Host "Pester v$($pesterV5.Version) をインストールしました" -ForegroundColor Green
+    } catch {
+        Write-Error "Pester v5 の自動インストールに失敗しました: $($_.Exception.Message)"
+        Write-Error "手動でインストールしてください: Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force"
+        exit 1
+    }
 }
 
 # Pester v5 を強制ロード
