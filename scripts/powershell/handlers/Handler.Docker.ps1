@@ -271,10 +271,11 @@ class DockerHandler : SetupHandlerBase {
         }
 
         # 既存のディストリビューションを確認
+        # WSL の出力は null バイトを含む場合があるため TestWslDistroExists と同様に除去する
         $list = Invoke-Wsl -l -q 2>$null
         $names = @()
         if ($list) {
-            $names = $list | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+            $names = $list | ForEach-Object { ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() } | Where-Object { $_ }
         }
 
         if ($names -contains "docker-desktop" -and $names -contains "docker-desktop-data") {

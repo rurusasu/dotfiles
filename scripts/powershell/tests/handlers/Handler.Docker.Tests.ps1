@@ -29,6 +29,7 @@ Describe 'DockerHandler' {
             @{ property = "RequiresAdmin"; expected = $false }
             @{ property = "Retries"; expected = 5 }
             @{ property = "RetryDelaySeconds"; expected = 5 }
+            @{ property = "WslWritableMaxAttempts"; expected = 15 }
         ) {
             $handler.$property | Should -Be $expected
         }
@@ -109,6 +110,7 @@ Describe 'DockerHandler' {
             $handler.WslWritableMaxAttempts = 4
             $script:writableCallCount = 0
             $script:sleepDelays = @()
+            $script:startCalled = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -127,6 +129,7 @@ Describe 'DockerHandler' {
                 param($Seconds)
                 $script:sleepDelays += $Seconds
             }
+            Mock Start-ProcessSafe { $script:startCalled = $true }
 
             $result = $handler.Apply($ctx)
 
@@ -138,6 +141,8 @@ Describe 'DockerHandler' {
             $script:sleepDelays | Should -Contain 3
             $script:sleepDelays | Should -Contain 6
             $script:sleepDelays | Should -Contain 9
+            # 書き込み不可でスキップしても Docker Desktop は起動する
+            $script:startCalled | Should -Be $true
         }
 
         It 'should succeed when WSL becomes writable on 3rd attempt' {
@@ -333,6 +338,7 @@ Describe 'DockerHandler' {
         }
 
         It 'should skip when WSL disk space is insufficient' {
+            $script:startCalled = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -349,11 +355,14 @@ Describe 'DockerHandler' {
                 }
                 return ""
             }
+            Mock Start-ProcessSafe { $script:startCalled = $true }
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "空き容量不足"
+            # 空き容量不足でスキップしても Docker Desktop は起動する
+            $script:startCalled | Should -Be $true
         }
     }
 
