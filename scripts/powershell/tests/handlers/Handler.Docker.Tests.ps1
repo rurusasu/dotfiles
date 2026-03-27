@@ -78,6 +78,23 @@ Describe 'DockerHandler' {
 
             $handler.RetryDelaySeconds | Should -Be 15
         }
+
+        It 'should read WslWritableMaxAttempts from Options' {
+            Mock Test-PathExist { return $true }
+            $ctx.Options["WslWritableMaxAttempts"] = 12
+
+            $handler.CanApply($ctx)
+
+            $handler.WslWritableMaxAttempts | Should -Be 12
+        }
+
+        It 'should default WslWritableMaxAttempts to 8' {
+            Mock Test-PathExist { return $true }
+
+            $handler.CanApply($ctx)
+
+            $handler.WslWritableMaxAttempts | Should -Be 8
+        }
     }
 
     Context 'Apply - WSL write permission' {
@@ -93,6 +110,7 @@ Describe 'DockerHandler' {
         }
 
         It 'should skip when WSL is not writable after all 4 retries' {
+            $handler.WslWritableMaxAttempts = 4
             $script:writableCallCount = 0
             $script:sleepDelays = @()
             Mock Invoke-Wsl {
@@ -215,6 +233,7 @@ Describe 'DockerHandler' {
         }
 
         It 'should log retry messages with attempt count' {
+            $handler.WslWritableMaxAttempts = 4
             $script:writableCallCount = 0
             $script:logMessages = @()
             Mock Invoke-Wsl {

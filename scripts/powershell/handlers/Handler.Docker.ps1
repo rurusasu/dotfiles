@@ -23,6 +23,10 @@ class DockerHandler : SetupHandlerBase {
     # リトライ設定
     [int]$Retries = 5
     [int]$RetryDelaySeconds = 5
+    # WSL 書き込み可否チェックのリトライ設定
+    # NixOS-WSL (systemd) は wsl --terminate 後の再起動に 20-60 秒かかるため
+    # デフォルト 8 回 (最大待機: 3+6+9+12+15+18+21 = 84 秒)
+    [int]$WslWritableMaxAttempts = 8
 
     DockerHandler() {
         $this.Name = "Docker"
@@ -43,6 +47,7 @@ class DockerHandler : SetupHandlerBase {
         # リトライ回数の取得
         $this.Retries = $ctx.GetOption("DockerIntegrationRetries", 5)
         $this.RetryDelaySeconds = $ctx.GetOption("DockerIntegrationRetryDelaySeconds", 5)
+        $this.WslWritableMaxAttempts = $ctx.GetOption("WslWritableMaxAttempts", 8)
 
         if ($this.Retries -le 0) {
             $this.Log("リトライ回数が 0 のためスキップします", "Gray")
@@ -167,7 +172,7 @@ class DockerHandler : SetupHandlerBase {
         最大 maxAttempts 回まで再試行する。
     #>
     hidden [bool] WaitForWslWritable([string]$distroName) {
-        $maxAttempts = 4
+        $maxAttempts = $this.WslWritableMaxAttempts
         $baseDelay = 3
 
         for ($i = 1; $i -le $maxAttempts; $i++) {
