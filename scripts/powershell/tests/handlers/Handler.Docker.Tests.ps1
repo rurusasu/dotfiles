@@ -1336,6 +1336,33 @@ Describe 'DockerHandler' {
             $result.Success | Should -Be $false
         }
 
+        It 'should pass distroName (not hardcoded nixos) to proxy command' {
+            $script:proxyCmdArgs = $null
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "componentsVersion") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "\[ -x.*docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "proxy --distro-name") {
+                    $script:proxyCmdArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                }
+                return ""
+            }
+            $handler.Retries = 1
+            $handler.RetryDelaySeconds = 0
+
+            $handler.Apply($ctx)
+
+            # DistroName (NixOS) が proxy コマンドに渡されること（"nixos" ハードコードの回帰防止）
+            # -cmatch で大文字小文字を区別して検証
+            ($script:proxyCmdArgs -cmatch "distro-name NixOS") | Should -Be $true
+            ($script:proxyCmdArgs -cmatch "distro-name nixos[^O]") | Should -Be $false
+        }
+
         It 'should treat proxy timeout (exit 124) as success' {
             Mock Invoke-Wsl {
                 param($Arguments)

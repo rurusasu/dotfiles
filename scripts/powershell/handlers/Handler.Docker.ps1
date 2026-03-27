@@ -536,7 +536,7 @@ class DockerHandler : SetupHandlerBase {
             return $false
         }
 
-        $proxyCmd = "timeout 3 /mnt/wsl/docker-desktop/docker-desktop-user-distro proxy --distro-name nixos --docker-desktop-root /mnt/wsl/docker-desktop 'C:\Program Files\Docker\Docker\resources'"
+        $proxyCmd = "timeout 3 /mnt/wsl/docker-desktop/docker-desktop-user-distro proxy --distro-name $distroName --docker-desktop-root /mnt/wsl/docker-desktop 'C:\Program Files\Docker\Docker\resources'"
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $proxyCmd
 
         # exit code 0 (成功) または 124 (timeout) は OK
