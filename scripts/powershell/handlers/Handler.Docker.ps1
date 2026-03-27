@@ -112,10 +112,9 @@ class DockerHandler : SetupHandlerBase {
             # 最初に残留プロセスをクリーンアップ（Lingering processes対策）
             $this.StopLingeringDockerProcesses()
 
-            # Docker Desktop を起動（WSL を正しく起動するために必要）
-            $this.StartDockerDesktopIfNeeded()
-
-            # WSL が書き込み可能になるまでリトライ
+            # NixOS への操作は Docker Desktop 起動より先に行う。
+            # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
+            # その後に書き込みチェックをすると NixOS 再起動待ちになるため。
             if (-not $this.WaitForWslWritable($distroName)) {
                 $this.LogWarning("WSL が書き込み不可のため、Docker Desktop 連携をスキップします")
                 return $this.CreateSuccessResult("WSL が書き込み不可のためスキップしました")
@@ -127,11 +126,14 @@ class DockerHandler : SetupHandlerBase {
                 return $this.CreateSuccessResult("WSL の空き容量不足のためスキップしました")
             }
 
+            # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
+            $this.EnsureDockerGroup($distroName)
+
+            # Docker Desktop を起動
+            $this.StartDockerDesktopIfNeeded()
+
             # Docker Desktop のディストリビューション確認・作成
             $this.EnsureDockerDesktopDistros()
-
-            # docker グループにユーザーを追加
-            $this.EnsureDockerGroup($distroName)
 
             # Docker Desktop を起動（必要に応じて）
             $this.StartDockerDesktopIfNeeded()
