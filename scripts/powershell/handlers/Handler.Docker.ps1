@@ -25,9 +25,9 @@ class DockerHandler : SetupHandlerBase {
     [int]$Retries = 5
     [int]$RetryDelaySeconds = 5
     # WSL 書き込み可否チェックのリトライ設定
-    # NixOS-WSL (systemd) は wsl --terminate 後の再起動に 20-60 秒かかるため
-    # デフォルト 8 回 (最大待機: 3+6+9+12+15+18+21 = 84 秒)
-    [int]$WslWritableMaxAttempts = 8
+    # NixOS-WSL (systemd) は wsl --terminate 後の再起動に 20-120 秒かかるため
+    # デフォルト 15 回 (最大待機: 3+6+9+...+42 = 315 秒)
+    [int]$WslWritableMaxAttempts = 15
 
     DockerHandler() {
         $this.Name = "Docker"
@@ -48,7 +48,7 @@ class DockerHandler : SetupHandlerBase {
         # リトライ回数の取得
         $this.Retries = $ctx.GetOption("DockerIntegrationRetries", 5)
         $this.RetryDelaySeconds = $ctx.GetOption("DockerIntegrationRetryDelaySeconds", 5)
-        $this.WslWritableMaxAttempts = $ctx.GetOption("WslWritableMaxAttempts", 8)
+        $this.WslWritableMaxAttempts = $ctx.GetOption("WslWritableMaxAttempts", 15)
 
         if ($this.Retries -le 0) {
             $this.Log("リトライ回数が 0 のためスキップします", "Gray")
@@ -110,7 +110,15 @@ class DockerHandler : SetupHandlerBase {
             $distroName = $ctx.DistroName
 
             # 最初に残留プロセスをクリーンアップ（Lingering processes対策）
-            $this.StopLingeringDockerProcesses()
+            $hadLingering = $this.StopLingeringDockerProcesses()
+
+            if ($hadLingering) {
+                # Docker プロセス強制終了後、WSL の接続が安定するまで待機する。
+                # Docker backend が WSL との接続を保持していた場合、
+                # 強制終了直後は WSL が不安定な状態になる可能性がある。
+                $this.Log("Docker プロセス終了後、WSL が安定するまで待機します...", "Gray")
+                Start-SleepSafe -Seconds 30
+            }
 
             # NixOS への操作は Docker Desktop 起動より先に行う。
             # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
@@ -192,6 +200,14 @@ class DockerHandler : SetupHandlerBase {
                 $this.Log("WSL が書き込み不可。${delay} 秒後に再試行します ($i/$maxAttempts)")
                 Start-SleepSafe -Seconds $delay
             }
+        }
+
+        # 全試行失敗後の診断: ディストリビューションが起動しているか確認
+        Invoke-Wsl "-d" $distroName "-u" "root" "--" "true" | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("診断: '$distroName' は起動していますが /tmp が書き込み不可です。NixOS の systemd 設定を確認してください", "Yellow")
+        } else {
+            $this.Log("診断: '$distroName' が起動しないか、コマンドを受け付けません (終了コード: $LASTEXITCODE)", "Yellow")
         }
 
         return $false
@@ -369,7 +385,7 @@ class DockerHandler : SetupHandlerBase {
         「Lingering processes detected」エラーを防ぐため、残留プロセスだけでなく
         Docker Desktop本体も終了させて完全にリセットする。
     #>
-    hidden [void] StopLingeringDockerProcesses() {
+    hidden [bool] StopLingeringDockerProcesses() {
         # 残留プロセス（Docker Desktop本体なしで動いているプロセス）をチェック
         $lingeringProcessNames = @(
             "com.docker.build",
@@ -389,7 +405,7 @@ class DockerHandler : SetupHandlerBase {
         }
 
         if (-not $hasLingering) {
-            return
+            return $false
         }
 
         $this.Log("残留Dockerプロセスを検出しました。クリーンアップを実行します", "Yellow")
@@ -427,6 +443,7 @@ class DockerHandler : SetupHandlerBase {
 
         Start-SleepSafe -Seconds 2
         $this.Log("Dockerプロセスのクリーンアップが完了しました", "Green")
+        return $true
     }
 
     <#

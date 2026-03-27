@@ -88,12 +88,12 @@ Describe 'DockerHandler' {
             $handler.WslWritableMaxAttempts | Should -Be 12
         }
 
-        It 'should default WslWritableMaxAttempts to 8' {
+        It 'should default WslWritableMaxAttempts to 15' {
             Mock Test-PathExist { return $true }
 
             $handler.CanApply($ctx)
 
-            $handler.WslWritableMaxAttempts | Should -Be 8
+            $handler.WslWritableMaxAttempts | Should -Be 15
         }
     }
 
@@ -1085,6 +1085,58 @@ Describe 'DockerHandler' {
             # 残留プロセスが終了されてからDocker Desktopが起動されることを確認
             $script:lingeringProcessKilled | Should -Be $true
             $script:dockerDesktopStarted | Should -Be $true
+        }
+
+        It 'should wait 30 seconds after killing lingering processes' {
+            $script:sleepCalledWith30 = $false
+            Mock Get-ProcessSafe {
+                param($Name)
+                if ($Name -eq "com.docker.build") { return [PSCustomObject]@{ Name = $Name } }
+                return $null
+            }
+            Mock Stop-Process { }
+            Mock Start-SleepSafe {
+                param($Seconds)
+                if ($Seconds -eq 30) { $script:sleepCalledWith30 = $true }
+            }
+            Mock Start-ProcessSafe { }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "docker-desktop-user-distro|proxy") { $global:LASTEXITCODE = 0 }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:sleepCalledWith30 | Should -Be $true
+        }
+
+        It 'should not wait 30 seconds when no lingering processes found' {
+            $script:sleepCalledWith30 = $false
+            Mock Get-ProcessSafe { return $null }
+            Mock Stop-Process { }
+            Mock Start-SleepSafe {
+                param($Seconds)
+                if ($Seconds -eq 30) { $script:sleepCalledWith30 = $true }
+            }
+            Mock Start-ProcessSafe { }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "docker-desktop-user-distro|proxy") { $global:LASTEXITCODE = 0 }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:sleepCalledWith30 | Should -Be $false
         }
     }
 
