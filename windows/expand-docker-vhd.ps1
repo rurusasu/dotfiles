@@ -53,9 +53,17 @@ if (-not (Test-Path $vhdxPath)) {
     exit 0
 }
 
-# Get current size
-$currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
-$targetSizeMB = $TargetSizeGB * 1024
+# Get current virtual size (physical file size != virtual size for dynamic VHDX)
+$currentSizeGB = 0
+try {
+    $vhd = Get-VHD -Path $vhdxPath -ErrorAction Stop
+    $currentSizeGB = [math]::Round($vhd.Size / 1GB, 2)
+} catch {
+    # Hyper-V module unavailable - fall back to file size (may underestimate)
+    $currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
+    Write-Host "Note: Get-VHD unavailable, using file size as approximation."
+}
+$targetSizeBytes = [long]$TargetSizeGB * 1GB
 
 Write-Host "Docker VHDX: $vhdxPath"
 Write-Host "Current size: ${currentSizeGB}GB"
@@ -105,26 +113,39 @@ Write-Host "Shutting down WSL..."
 & wsl --shutdown
 Start-Sleep -Seconds 3
 
-# Expand VHDX using diskpart
+# Expand VHDX using Resize-VHD (more reliable than diskpart for dynamic VHDX)
 Write-Host "Expanding VHDX to ${TargetSizeGB}GB..."
-$diskpartScript = @"
+try {
+    Resize-VHD -Path $vhdxPath -SizeBytes $targetSizeBytes -ErrorAction Stop
+    Write-Host "Resize-VHD succeeded."
+} catch {
+    Write-Host "Resize-VHD failed: $($_.Exception.Message)"
+    Write-Host "Falling back to diskpart..."
+
+    $diskpartScript = @"
 select vdisk file="$vhdxPath"
-expand vdisk maximum=$targetSizeMB
+expand vdisk maximum=$([long]$TargetSizeGB * 1024)
 exit
 "@
-
-$tempFile = New-TemporaryFile
-Set-Content -Path $tempFile -Value $diskpartScript -Encoding ASCII
-
-try {
-    $result = & diskpart /s $tempFile.FullName 2>&1
-    Write-Host $result
-} finally {
-    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    $tempFile = New-TemporaryFile
+    Set-Content -Path $tempFile -Value $diskpartScript -Encoding ASCII
+    try {
+        $result = & diskpart /s $tempFile.FullName 2>&1
+        Write-Host $result
+    } catch {
+        Write-Warning "diskpart also failed: $($_.Exception.Message)"
+    } finally {
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # Verify new size
-$newSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
+$newSizeGB = 0
+try {
+    $newSizeGB = [math]::Round((Get-VHD -Path $vhdxPath -ErrorAction Stop).Size / 1GB, 2)
+} catch {
+    $newSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
+}
 Write-Host "New VHDX size: ${newSizeGB}GB"
 
 if ($newSizeGB -ge $TargetSizeGB) {

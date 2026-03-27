@@ -9,8 +9,9 @@
     - docker グループへのユーザー追加
 
 .NOTES
-    Order = 30 (WSL 依存処理)
-    WslConfig の後、VscodeServer の前に実行
+    Order = 18 (WslConfig の前に実行)
+    WslConfig (Order=20) が wsl --terminate NixOS を実行するため、
+    Docker の NixOS 接続チェックは WslConfig の前に行う必要がある。
 #>
 
 # 依存ファイルの読み込み
@@ -31,7 +32,7 @@ class DockerHandler : SetupHandlerBase {
     DockerHandler() {
         $this.Name = "Docker"
         $this.Description = "Docker Desktop との WSL 連携"
-        $this.Order = 30
+        $this.Order = 18
         $this.RequiresAdmin = $false
     }
 
