@@ -24,7 +24,10 @@ class NixOSWSLHandler : SetupHandlerBase {
         $this.Name = "NixOSWSL"
         $this.Description = "NixOS-WSL のダウンロードとインストール"
         $this.Order = 50
-        $this.RequiresAdmin = $true
+        # WSL ディストリビューション登録は per-user 操作であり Windows admin 権限は不要。
+        # AzureAD アカウントでは UAC 昇格すると別の HKCU が使われるため、
+        # 管理者フェーズで実行すると登録が正規ユーザーの WSL に反映されない。
+        $this.RequiresAdmin = $false
     }
 
     <#
@@ -56,21 +59,27 @@ class NixOSWSLHandler : SetupHandlerBase {
     .SYNOPSIS
         WSL が実際に動作するか確認する
     .DESCRIPTION
-        wsl --status を実行して、WSL が有効化されているか確認
+        wsl --status を実行して、WSL が有効化されているか確認。
+        管理者昇格プロセスでは WSL 出力に null バイトが含まれるため除去してから確認する。
     #>
     hidden [bool] TestWslExecutable() {
         try {
-            $output = Invoke-Wsl --status 2>&1
-            # wsl --status は WSL が無効でもエラーを返さないことがあるので、
-            # 出力に "Default Version" や "カーネル" が含まれているか確認
-            if ($output -match 'Default|既定|Version|バージョン|Kernel|カーネル') {
-                return $true
-            }
-            # 出力がなくても LASTEXITCODE が 0 なら動作している
+            # wsl --version はディストリビューション未登録でも exit 0 を返す最も確実な確認方法
+            # 管理者昇格プロセスでも動作する
+            Invoke-Wsl --version 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
-            return $false
+            # --version に対応していない古い WSL では --status を試す
+            $output = Invoke-Wsl --status 2>&1
+            # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
+            $cleanOutput = ($output | ForEach-Object {
+                ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
+            }) -join " "
+            if ($cleanOutput -match 'Default|既定|Version|バージョン|Kernel|カーネル') {
+                return $true
+            }
+            return ($LASTEXITCODE -eq 0)
         } catch {
             return $false
         }
@@ -82,20 +91,22 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
-            # 管理者権限チェック
-            $this.AssertAdmin()
-
             # WSL 基盤の有効化
             $this.EnsureWslReady($ctx)
 
-            # NixOS-WSL のダウンロード
-            $releaseTag = $ctx.GetOption("ReleaseTag", "")
-            $release = $this.GetRelease($releaseTag)
-            $asset = $this.SelectAsset($release)
-            $archivePath = $this.DownloadAsset($asset)
-
-            # インストール
-            $this.InstallDistro($ctx, $asset, $archivePath)
+            # VHD が既に存在する場合は再インポート（ダウンロード不要）
+            $vhdPath = Join-Path $ctx.InstallDir "ext4.vhdx"
+            if (Test-Path -LiteralPath $vhdPath) {
+                $this.Log("既存の VHD を検出しました。wsl --import-in-place で再登録します...")
+                $this.ReimportExistingVhd($ctx)
+            } else {
+                # 通常インストール: GitHub からダウンロードしてインポート
+                $releaseTag = $ctx.GetOption("ReleaseTag", "")
+                $release = $this.GetRelease($releaseTag)
+                $asset = $this.SelectAsset($release)
+                $archivePath = $this.DownloadAsset($asset)
+                $this.InstallDistro($ctx, $asset, $archivePath)
+            }
 
             # Post-install セットアップ
             $this.ExecutePostInstall($ctx)
@@ -280,9 +291,13 @@ class NixOSWSLHandler : SetupHandlerBase {
     <#
     .SYNOPSIS
         WSL ディストリビューションが存在するか確認
+    .DESCRIPTION
+        wsl --list --quiet の出力は null バイトを含む場合があるため除去してから比較する。
     #>
     hidden [bool] DistroExists([string]$name) {
-        $list = Invoke-Wsl --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $list = Invoke-Wsl --list --quiet 2>$null | ForEach-Object {
+            ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
+        } | Where-Object { $_ }
         return $list -contains $name
     }
 
@@ -321,6 +336,52 @@ class NixOSWSLHandler : SetupHandlerBase {
         } else {
             $this.ImportDistro($ctx.DistroName, $ctx.InstallDir, $archivePath)
         }
+    }
+
+    <#
+    .SYNOPSIS
+        既存の VHD を wsl --import-in-place で再登録する
+    .DESCRIPTION
+        VHD ファイルが InstallDir に存在するが WSL に未登録の場合（再インストール・登録消失）に使用する。
+        ダウンロードが不要なため高速に復元できる。
+    #>
+    hidden [void] ReimportExistingVhd([SetupContext]$ctx) {
+        $this.WaitForWslReady()
+        $vhdPath = Join-Path $ctx.InstallDir "ext4.vhdx"
+
+        # まず --import-in-place を試みる（WSL 2.4.4+ の新形式 VHD 用、コピー不要で高速）
+        $this.Log("wsl --import-in-place $($ctx.DistroName) $($ctx.InstallDir)")
+        Invoke-Wsl --import-in-place $ctx.DistroName $ctx.InstallDir
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("VHD からの再登録が完了しました", "Green")
+            return
+        }
+
+        # フォールバック: VHD を一時的にリネームして --import --vhd
+        # --import --vhd は InstallDir に新たな ext4.vhdx を作成するため、
+        # 既存ファイルとの競合を避けるために元の VHD を .bak にリネームする。
+        $this.LogWarning("--import-in-place に失敗しました。VHD をリネームして --import --vhd を試みます。")
+        $vhdBak = $vhdPath + ".bak"
+        try {
+            Rename-Item -LiteralPath $vhdPath -NewName ([System.IO.Path]::GetFileName($vhdBak)) -Force
+            Invoke-Wsl --import --vhd $ctx.DistroName $ctx.InstallDir $vhdBak
+            if ($LASTEXITCODE -eq 0) {
+                Remove-Item -LiteralPath $vhdBak -Force -ErrorAction SilentlyContinue
+                $this.Log("VHD からの再登録が完了しました (--import --vhd)", "Green")
+                return
+            }
+            # --import --vhd も失敗した場合は元の VHD を復元
+            if (Test-Path -LiteralPath $vhdBak) {
+                Rename-Item -LiteralPath $vhdBak -NewName "ext4.vhdx" -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+            if (Test-Path -LiteralPath $vhdBak) {
+                Rename-Item -LiteralPath $vhdBak -NewName "ext4.vhdx" -Force -ErrorAction SilentlyContinue
+            }
+            throw
+        }
+
+        throw "VHD からの再登録に失敗しました。VHD が別プロセスに使用されている可能性があります。再起動後に再試行してください。(exit code: $LASTEXITCODE)"
     }
 
     <#

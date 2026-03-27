@@ -28,7 +28,7 @@ Describe 'NixOSWSLHandler' {
             @{ property = "Name"; expected = "NixOSWSL" }
             @{ property = "Description"; expected = "NixOS-WSL のダウンロードとインストール" }
             @{ property = "Order"; expected = 50 }
-            @{ property = "RequiresAdmin"; expected = $true }
+            @{ property = "RequiresAdmin"; expected = $false }
         ) {
             $handler.$property | Should -Be $expected
         }
@@ -59,10 +59,9 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
-    Context 'Apply - success path' {
+    Context 'Apply - success path (fresh install)' {
         BeforeEach {
-            # すべての依存関数をモック
-            $handler | Add-Member -MemberType ScriptMethod -Name AssertAdmin -Value { } -Force
+            # すべての依存関数をモック（AssertAdmin は削除済み - RequiresAdmin = $false）
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name GetRelease -Value {
                 return @{ tag_name = "v24.5.1"; assets = @() }
@@ -78,6 +77,8 @@ Describe 'NixOSWSLHandler' {
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWhoamiShim -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslWritable -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value { } -Force
+            # VHD が存在しない場合（通常インストール）
+            Mock Test-Path { return $false }
             Mock Write-Host { }
         }
 
@@ -100,29 +101,62 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
+    Context 'Apply - VHD exists (reimport path)' {
+        BeforeEach {
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name ReimportExistingVhd -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name ExecutePostInstall -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWhoamiShim -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslWritable -Value { } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value { } -Force
+            # VHD が存在するケース
+            Mock Test-Path { return $true }
+            Mock Write-Host { }
+        }
+
+        It 'should call ReimportExistingVhd when VHD exists' {
+            $script:reimportCalled = $false
+            $handler | Add-Member -MemberType ScriptMethod -Name ReimportExistingVhd -Value {
+                $script:reimportCalled = $true
+            } -Force
+
+            $handler.Apply($ctx)
+
+            $script:reimportCalled | Should -Be $true
+        }
+
+        It 'should not call GetRelease when VHD exists' {
+            $script:getReleaseCalled = $false
+            $handler | Add-Member -MemberType ScriptMethod -Name GetRelease -Value {
+                $script:getReleaseCalled = $true
+                return @{ tag_name = "v24.5.1"; assets = @() }
+            } -Force
+
+            $handler.Apply($ctx)
+
+            $script:getReleaseCalled | Should -Be $false
+        }
+
+        It 'should return success result after reimport' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "NixOS-WSL のインストールが完了しました"
+        }
+    }
+
     Context 'Apply - error handling' {
         It 'should return failure result when exception occurs' {
-            $handler | Add-Member -MemberType ScriptMethod -Name AssertAdmin -Value {
-                throw "管理者権限がありません"
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value {
+                throw "WSL が有効化されていません"
             } -Force
             Mock Write-Host { }
+            Mock Test-Path { return $false }
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match "管理者権限がありません"
-        }
-    }
-
-    Context 'AssertAdmin' {
-        It 'should throw exception when not running as administrator' {
-            Mock New-Object {
-                $principal = [PSCustomObject]@{}
-                $principal | Add-Member -MemberType ScriptMethod -Name IsInRole -Value { return $false }
-                return $principal
-            } -ParameterFilter { $TypeName -eq 'Security.Principal.WindowsPrincipal' }
-
-            { $handler.AssertAdmin() } | Should -Throw "このハンドラーは管理者権限が必要です"
+            $result.Message | Should -Match "WSL が有効化されていません"
         }
     }
 
@@ -238,6 +272,81 @@ Describe 'NixOSWSLHandler' {
             Should -Invoke Invoke-WebRequest -ParameterFilter {
                 $Uri -eq "http://example.com/nixos.wsl"
             }
+        }
+    }
+
+    Context 'DistroExists - null byte handling' {
+        It 'should return false when WSL output contains null-byte-padded names that do not match' {
+            Mock Invoke-Wsl {
+                # WSL UTF-16 LE 出力をシミュレート: "docker-desktop" に null バイトが挟まれた形
+                $global:LASTEXITCODE = 0
+                return @("d`0o`0c`0k`0e`0r`0-`0d`0e`0s`0k`0t`0o`0p`0")
+            }
+
+            $result = $handler.DistroExists("NixOS")
+
+            $result | Should -Be $false
+        }
+
+        It 'should return true when WSL output contains matching name with null bytes stripped' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return @("N`0i`0x`0O`0S`0")
+            }
+
+            $result = $handler.DistroExists("NixOS")
+
+            $result | Should -Be $true
+        }
+    }
+
+    Context 'ReimportExistingVhd' {
+        It 'should call wsl --import-in-place as primary method' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+            $handler | Add-Member -MemberType ScriptMethod -Name WaitForWslReady -Value { } -Force
+            Mock Write-Host { }
+
+            { $handler.ReimportExistingVhd($ctx) } | Should -Not -Throw
+
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                $Arguments -contains "--import-in-place" -and
+                $Arguments -contains "NixOS" -and
+                $Arguments -contains "D:\WSL\NixOS"
+            }
+        }
+
+        It 'should fallback to --import --vhd when --import-in-place fails' {
+            $script:callCount = 0
+            Mock Invoke-Wsl {
+                $script:callCount++
+                if ($script:callCount -eq 1) {
+                    $global:LASTEXITCODE = 1  # --import-in-place fails
+                } else {
+                    $global:LASTEXITCODE = 0  # --import --vhd succeeds
+                }
+            }
+            $handler | Add-Member -MemberType ScriptMethod -Name WaitForWslReady -Value { } -Force
+            Mock Rename-Item { }
+            Mock Remove-Item { }
+            Mock Test-Path { return $false }
+            Mock Write-Host { }
+
+            { $handler.ReimportExistingVhd($ctx) } | Should -Not -Throw
+
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                $Arguments -contains "--import" -and $Arguments -contains "--vhd"
+            }
+        }
+
+        It 'should throw when both --import-in-place and --import --vhd fail' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+            $handler | Add-Member -MemberType ScriptMethod -Name WaitForWslReady -Value { } -Force
+            Mock Rename-Item { }
+            Mock Remove-Item { }
+            Mock Test-Path { return $false }
+            Mock Write-Host { }
+
+            { $handler.ReimportExistingVhd($ctx) } | Should -Throw "*再登録に失敗*"
         }
     }
 
