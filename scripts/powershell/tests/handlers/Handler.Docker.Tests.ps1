@@ -261,6 +261,33 @@ Describe 'DockerHandler' {
             $script:logMessages[1] | Should -Match "2/4"
             $script:logMessages[2] | Should -Match "3/4"
         }
+
+        It 'should use sh -c (not sh -lc) for write test to avoid NixOS /etc/profile failure' {
+            # NixOS 早期 boot 時に sh -lc が /etc/profile sourcing に失敗するため
+            # sh -c を使うことをリグレッションテストで保証する
+            $script:writeCmdArgs = $null
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") {
+                    $script:writeCmdArgs = $Arguments
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "groupadd|whoami") { $global:LASTEXITCODE = 0; return "nixos" }
+                if ($argStr -match "componentsVersion.json|docker-desktop-user-distro|proxy") { $global:LASTEXITCODE = 0 }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:writeCmdArgs | Should -Not -BeNullOrEmpty
+            $script:writeCmdArgs | Should -Contain "sh"
+            $script:writeCmdArgs | Should -Contain "-c"
+            $script:writeCmdArgs | Should -Not -Contain "-lc"
+        }
     }
 
     Context 'Apply - disk space' {

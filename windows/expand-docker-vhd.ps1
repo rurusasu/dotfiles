@@ -60,8 +60,9 @@ try {
     $currentSizeGB = [math]::Round($vhd.Size / 1GB, 2)
 } catch {
     # Hyper-V module unavailable - fall back to file size (may underestimate)
+    # Resize-VHD will also fail; diskpart will be used as fallback for expansion.
     $currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
-    Write-Host "Note: Get-VHD unavailable, using file size as approximation."
+    Write-Host "Note: Hyper-V module unavailable. Size shown may be underestimated; diskpart will be used for expansion."
 }
 $targetSizeBytes = [long]$TargetSizeGB * 1GB
 
