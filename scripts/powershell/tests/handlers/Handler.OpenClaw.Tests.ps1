@@ -37,6 +37,11 @@ Describe 'OpenClawHandler' {
     }
 
     Context 'CanApply' {
+        BeforeEach {
+            # Test-DockerDaemon のデフォルトモック（docker info を実行しないよう保護）
+            Mock Test-DockerDaemon { return $true }
+        }
+
         It 'should return false when docker command is not found' {
             # Layer 1 をバイパス: ReadConsentFlag が $true を返すようにする
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
@@ -61,6 +66,7 @@ Describe 'OpenClawHandler' {
 
         It 'should return true when docker is available and docker-compose.yml exists' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $true }
             Mock Test-PathExist { return $true }
             Mock Write-Host { }
             # ReadConsentFlag が $true を返すよう consent.json を模倣
@@ -70,6 +76,19 @@ Describe 'OpenClawHandler' {
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
+        }
+
+        It 'should return false when Docker daemon is not reachable' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $false }
+            Mock Test-PathExist { return $true }
+            Mock Write-Host { }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
         }
 
         It 'should read StartupRetries from Options' {
@@ -588,6 +607,7 @@ Describe 'OpenClawHandler' {
     Context 'GetComposeFilePath' {
         It 'should return correct path relative to DotfilesPath' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $true }
             Mock Test-PathExist { return $true }
 
             $handler.CanApply($ctx)

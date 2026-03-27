@@ -67,12 +67,28 @@ Describe 'CogneeSkillsHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $true }
             Mock Test-PathExist { return $true }
         }
 
         It 'should return true' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+        }
+    }
+
+    Context 'CanApply - Layer 2: Docker daemon not reachable' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $false }
+        }
+
+        It 'should return false' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $false
         }
     }
 
@@ -96,6 +112,7 @@ Describe 'CogneeSkillsHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $true }
             Mock Test-PathExist { return $false }
         }
 
@@ -111,6 +128,7 @@ Describe 'CogneeSkillsHandler' {
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-Content { return '{"cognee_skills_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Name = "docker" } }
+            Mock Test-DockerDaemon { return $true }
             Mock Test-PathExist { return $true }
         }
 

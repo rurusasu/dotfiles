@@ -84,6 +84,11 @@ class OpenClawHandler : SetupHandlerBase {
             return $false
         }
 
+        if (-not (Test-DockerDaemon)) {
+            $this.Log("Docker デーモンに接続できません", "Yellow")
+            return $false
+        }
+
         $composeFile = $this.GetComposeFilePath($ctx)
         if (-not (Test-PathExist -Path $composeFile)) {
             $this.Log("docker-compose.yml が見つかりません: $composeFile", "Yellow")

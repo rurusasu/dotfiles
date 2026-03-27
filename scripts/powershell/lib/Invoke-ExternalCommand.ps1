@@ -589,6 +589,22 @@ function Invoke-Docker {
 
 <#
 .SYNOPSIS
+    Docker デーモンへの接続性を確認する
+.DESCRIPTION
+    docker info を実行してデーモンが応答するかチェックする。
+    Pester でモック可能にするためラッパーとして提供。
+.OUTPUTS
+    [bool] デーモン接続可能なら $true
+#>
+function Test-DockerDaemon {
+    [CmdletBinding()]
+    param()
+    $null = Invoke-Docker info 2>&1
+    return $global:LASTEXITCODE -eq 0
+}
+
+<#
+.SYNOPSIS
     1Password CLI の account list を実行する
 .DESCRIPTION
     Pester でモック可能にするため直接呼び出しを避けてラップする。

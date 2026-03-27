@@ -398,3 +398,24 @@ Describe 'Start-SleepSafe' {
         }
     }
 }
+
+Describe 'Test-DockerDaemon' {
+    It 'should return true when docker info succeeds' {
+        Mock Invoke-Docker { $global:LASTEXITCODE = 0 }
+
+        $result = Test-DockerDaemon
+
+        $result | Should -Be $true
+        Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
+            "$Arguments" -match 'info'
+        }
+    }
+
+    It 'should return false when docker info fails' {
+        Mock Invoke-Docker { $global:LASTEXITCODE = 1 }
+
+        $result = Test-DockerDaemon
+
+        $result | Should -Be $false
+    }
+}
