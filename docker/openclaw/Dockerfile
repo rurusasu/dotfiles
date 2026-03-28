@@ -2,7 +2,7 @@
 
 FROM node:22-bookworm-slim
 
-ARG OPENCLAW_VERSION=2026.3.13
+ARG OPENCLAW_VERSION=2026.3.24
 ARG GEMINI_CLI_VERSION=0.31.0
 
 WORKDIR /app
@@ -42,8 +42,8 @@ ENV NODE_ENV=production \
     PATH=/usr/local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
-    && npm --prefix /usr/local/lib/node_modules/openclaw/extensions/acpx install --omit=dev \
-    && ln -sf /usr/local/lib/node_modules/openclaw/extensions/acpx/node_modules/.bin/acpx /usr/local/bin/acpx \
+    && npm --prefix /usr/local/lib/node_modules/openclaw/dist/extensions/acpx install --omit=dev \
+    && ln -sf /usr/local/lib/node_modules/openclaw/dist/extensions/acpx/node_modules/.bin/acpx /usr/local/bin/acpx \
     && npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} \
     && npm install -g @anthropic-ai/claude-code \
     && npm install -g @zed-industries/claude-agent-acp \
@@ -53,8 +53,8 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} \
 RUN cd /tmp \
     && npm pack @aiwerk/openclaw-mcp-bridge 2>/dev/null \
     && tar xzf aiwerk-openclaw-mcp-bridge-*.tgz \
-    && mv package /usr/local/lib/node_modules/openclaw/extensions/openclaw-mcp-bridge \
-    && cd /usr/local/lib/node_modules/openclaw/extensions/openclaw-mcp-bridge \
+    && mv package /usr/local/lib/node_modules/openclaw/dist/extensions/openclaw-mcp-bridge \
+    && cd /usr/local/lib/node_modules/openclaw/dist/extensions/openclaw-mcp-bridge \
     && npm install --omit=dev \
     && rm -rf /tmp/aiwerk-openclaw-mcp-bridge-*.tgz
 
