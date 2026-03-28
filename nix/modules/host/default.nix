@@ -116,6 +116,9 @@ in
         serviceConfig = {
           Type = "oneshot";
           ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
+          # /mnt/wsl が既に exec でマウント済みの場合 mount は exit 32 を返す。
+          # これは正常な冪等ケースのため成功として扱う。
+          SuccessExitStatus = "0 32";
         };
       };
     })
