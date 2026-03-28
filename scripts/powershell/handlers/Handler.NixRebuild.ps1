@@ -226,9 +226,11 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # /mnt/ 配下の dotfiles は Windows 側オーナーのため CVE-2022-24765 の ownership チェックで
             # nix (libgit2) がフレークの読み込みを拒否する。root の gitconfig で回避する。
+            # git が利用できない場合は直接 gitconfig を書き込む。
+            # 既存エントリがなければ追記（>> で上書き回避, 冪等）。
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "root", "--",
-                "bash", "-lc", "git config --global safe.directory '*' 2>/dev/null || printf '[safe]\n\tdirectory = *\n' > /root/.gitconfig"
+                "bash", "-lc", "grep -qs 'directory = \*' /root/.gitconfig 2>/dev/null || printf '[safe]\n\tdirectory = *\n' >> /root/.gitconfig"
             ) | Out-Null
 
             # root で nixos-rebuild switch を実行（nixos ユーザーの dotfiles を使用）

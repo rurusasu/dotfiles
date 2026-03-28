@@ -236,6 +236,35 @@ if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXI
             $script:wslArgs | Should -Match "nixos-rebuild switch --flake"
         }
 
+        It 'should set git safe.directory before nixos-rebuild as root' {
+            $script:gitConfigCalled = $false
+            $script:rebuildCalled = $false
+            $script:gitCalledFirst = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "safe\.directory|gitconfig") {
+                    $script:gitConfigCalled = $true
+                    if (-not $script:rebuildCalled) { $script:gitCalledFirst = $true }
+                    $global:LASTEXITCODE = 0; return ""
+                }
+                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            $handler.Apply($ctx)
+
+            $script:gitConfigCalled | Should -Be $true
+            $script:gitCalledFirst | Should -Be $true
+        }
+
         It 'should use custom distro name from context' {
             $ctx.DistroName = "CustomNixOS"
             $script:wslArgs = ""

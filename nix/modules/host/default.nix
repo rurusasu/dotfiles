@@ -96,22 +96,22 @@ in
 
     # Docker Desktop WSL integration: /mnt/wsl は noexec でマウントされるため
     # Docker Desktop のプロキシバイナリが実行できない。exec で再マウントする。
-    # /mnt/wsl は Docker Desktop 接続時に非同期でマウントされるため、
-    # path unit で監視し、mountpoint になった時点でサービスを起動する。
+    # /mnt/wsl は Docker Desktop 接続時に非同期でマウントされる。
+    # procfs は inotify イベントを発行しないため path unit は使用できない。
+    # timer で定期的にチェックし、mountpoint になったときだけ remount する。
     (mkIf config.mySettings.wsl.dockerDesktopIntegration {
-      # /proc/mounts の変更を監視し、/mnt/wsl がマウントされたタイミングでサービスを起動する。
-      # PathModified は inotify IN_CLOSE_WRITE を使うため PathChanged より確実に検出できる。
-      systemd.paths."docker-desktop-mnt-wsl-exec" = {
-        description = "Watch /proc/mounts for Docker Desktop WSL integration";
+      systemd.timers."docker-desktop-mnt-wsl-exec" = {
+        description = "Periodically remount /mnt/wsl with exec for Docker Desktop WSL integration";
         wantedBy = [ "multi-user.target" ];
-        pathConfig.PathModified = "/proc/mounts";
+        timerConfig = {
+          OnBootSec = "10s";
+          OnUnitActiveSec = "30s";
+        };
       };
 
       systemd.services."docker-desktop-mnt-wsl-exec" = {
         description = "Remount /mnt/wsl with exec for Docker Desktop WSL integration";
-        # /mnt/wsl が未マウントのときはスキップする（/proc/mounts 変更の都度トリガーされるため）
-        # RemainAfterExit は使わない: Docker Desktop 再起動時に /mnt/wsl が再マウントされるため
-        # oneshot が inactive に戻り path unit が再トリガーできるようにする。
+        # /mnt/wsl が mountpoint でない場合はスキップ（timer が定期的にトリガーするため）
         unitConfig.ConditionPathIsMountPoint = "/mnt/wsl";
         serviceConfig = {
           Type = "oneshot";
