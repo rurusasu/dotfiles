@@ -107,13 +107,13 @@ class NixRebuildHandler : SetupHandlerBase {
         # PNPM_HOME が未設定なら pnpm setup を実行してグローバル bin ディレクトリを作成
         $pnpmHomeCheck = Invoke-Wsl -Arguments @(
             "-d", $distroName, "-u", "nixos", "--",
-            "bash", "-lc", "export PATH=`"~/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); [ -d `$PNPM_HOME ] && echo exists"
+            "bash", "-lc", "export PATH=`"~/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); [ -d `"`$PNPM_HOME`" ] && echo exists"
         )
         if (-not $pnpmHomeCheck -or $pnpmHomeCheck -notmatch 'exists') {
             $this.Log("PNPM_HOME を設定しています...")
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PATH=`"~/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); mkdir -p `$PNPM_HOME; pnpm setup 2>/dev/null || true"
+                "bash", "-lc", "export PATH=`"~/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); mkdir -p `"`$PNPM_HOME`"; pnpm setup 2>/dev/null || true"
             )
             # .bashrc に PNPM_HOME が無ければ追加
             Invoke-Wsl -Arguments @(
@@ -196,16 +196,16 @@ class NixRebuildHandler : SetupHandlerBase {
         $wslMountPath = '/mnt/' + $driveLetter + ($dotfilesPath.Substring(2) -replace '\\', '/')
 
         # /home/nixos/.dotfiles が存在するか確認
-        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "test -e /home/nixos/.dotfiles") | Out-Null
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "test -e /home/nixos/.dotfiles") | Out-Null
         if ($LASTEXITCODE -eq 0) {
             return
         }
 
         # Windows dotfiles が WSL からアクセスできるか確認
-        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "test -d `"$wslMountPath`"") | Out-Null
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "test -d `"$wslMountPath`"") | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("dotfiles を WSL マウント経由でリンクします: $wslMountPath")
-            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-c", "ln -sf `"$wslMountPath`" /home/nixos/.dotfiles")
+            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "ln -sf `"$wslMountPath`" /home/nixos/.dotfiles")
             if ($LASTEXITCODE -ne 0) {
                 throw "dotfiles のシンボリックリンク作成に失敗しました"
             }

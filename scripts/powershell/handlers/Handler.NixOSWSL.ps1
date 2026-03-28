@@ -66,12 +66,12 @@ class NixOSWSLHandler : SetupHandlerBase {
         try {
             # wsl --version はディストリビューション未登録でも exit 0 を返す最も確実な確認方法
             # 管理者昇格プロセスでも動作する
-            Invoke-Wsl -Arguments @("--version") 2>$null | Out-Null
+            Invoke-Wsl -Arguments @("--version") | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
             # --version に対応していない古い WSL では --status を試す
-            $output = Invoke-Wsl -Arguments @("--status") 2>&1
+            $output = Invoke-Wsl -Arguments @("--status")
             # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
             $cleanOutput = ($output | ForEach-Object {
                 ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
@@ -141,16 +141,15 @@ class NixOSWSLHandler : SetupHandlerBase {
         $skipWslBaseInstall = $ctx.GetOption("SkipWslBaseInstall", $false)
 
         $this.Log("WSL の状態を確認しています...")
-        $statusOutput = Invoke-Wsl --status 2>&1
+        Invoke-Wsl -Arguments @("--status") | Out-Null
         if ($LASTEXITCODE -eq 0) {
             return
         }
 
-        if ($statusOutput -match "Unrecognized option" -or $statusOutput -match "invalid command line option") {
-            Invoke-Wsl -l -q 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                return
-            }
+        # --status が失敗した場合は -l -q を試す（--status 非対応の古い WSL 向け）
+        Invoke-Wsl -Arguments @("-l", "-q") | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return
         }
 
         if ($skipWslBaseInstall) {
@@ -158,7 +157,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         }
 
         $this.Log("WSL 基盤をインストールします (再起動が必要になる場合があります)...")
-        Invoke-Wsl --install --no-distribution
+        Invoke-Wsl -Arguments @("--install", "--no-distribution")
         throw "WSL の有効化を完了するため、Windows を再起動してから再度このスクリプトを実行してください。"
     }
 
@@ -167,7 +166,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         WSL のバージョン番号を取得
     #>
     hidden [version] GetWslVersion() {
-        $output = Invoke-Wsl --version 2>&1
+        $output = Invoke-Wsl -Arguments @("--version")
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
@@ -191,7 +190,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             return $true
         }
         # Fallback: ヘルプテキストを確認
-        $help = Invoke-Wsl --help 2>&1
+        $help = Invoke-Wsl -Arguments @("--help")
         return ($help -match "--install --from-file")
     }
 
@@ -257,7 +256,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] WaitForWslReady([int]$maxAttempts, [int]$intervalSeconds) {
         for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-                Invoke-Wsl --status 2>&1 | Out-Null
+                Invoke-Wsl -Arguments @("--status") | Out-Null
                 if ($LASTEXITCODE -eq 0) {
                     return
                 }
@@ -284,7 +283,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         wsl --list --quiet の出力は null バイトを含む場合があるため除去してから比較する。
     #>
     hidden [bool] DistroExists([string]$name) {
-        $list = Invoke-Wsl --list --quiet 2>$null | ForEach-Object {
+        $list = Invoke-Wsl -Arguments @("--list", "--quiet") | ForEach-Object {
             ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
         } | Where-Object { $_ }
         return $list -contains $name
@@ -340,7 +339,7 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         # まず --import-in-place を試みる（WSL 2.4.4+ の新形式 VHD 用、コピー不要で高速）
         $this.Log("wsl --import-in-place $($ctx.DistroName) $($ctx.InstallDir)")
-        Invoke-Wsl --import-in-place $ctx.DistroName $ctx.InstallDir
+        Invoke-Wsl -Arguments @("--import-in-place", $ctx.DistroName, $ctx.InstallDir)
         if ($LASTEXITCODE -eq 0) {
             $this.Log("VHD からの再登録が完了しました", "Green")
             return
@@ -353,7 +352,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $vhdBak = $vhdPath + ".bak"
         try {
             Rename-Item -LiteralPath $vhdPath -NewName ([System.IO.Path]::GetFileName($vhdBak)) -Force
-            Invoke-Wsl --import --vhd $ctx.DistroName $ctx.InstallDir $vhdBak
+            Invoke-Wsl -Arguments @("--import", "--vhd", $ctx.DistroName, $ctx.InstallDir, $vhdBak)
             if ($LASTEXITCODE -eq 0) {
                 Remove-Item -LiteralPath $vhdBak -Force -ErrorAction SilentlyContinue
                 $this.Log("VHD からの再登録が完了しました (--import --vhd)", "Green")
@@ -381,7 +380,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $this.Log("WSL ディストリビューションをインポートします: $name -> $dir")
         $this.WaitForWslReady()
         $this.EnsureInstallDir($dir)
-        Invoke-Wsl --import $name $dir $archive --version 2
+        Invoke-Wsl -Arguments @("--import", $name, $dir, $archive, "--version", "2")
         if ($LASTEXITCODE -ne 0) {
             throw "wsl --import が失敗しました (exit code: $LASTEXITCODE)"
         }
@@ -399,7 +398,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.EnsureInstallDir($location)
             $wslArgs += @("--location", $location)
         }
-        Invoke-Wsl @wslArgs
+        Invoke-Wsl -Arguments $wslArgs
         if ($LASTEXITCODE -ne 0) {
             throw "wsl --install --from-file が失敗しました (exit code: $LASTEXITCODE)"
         }
@@ -433,7 +432,7 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $this.Log("Post-install セットアップを実行します...")
         $resolved = (Resolve-Path -LiteralPath $scriptPath).Path
-        $wslPath = Invoke-Wsl -Arguments @("wslpath", "-a", $resolved) 2>$null
+        $wslPath = Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "--", "wslpath", "-a", $resolved)
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
             $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
             $rest = $resolved.Substring(2) -replace "\\", "/"
@@ -444,7 +443,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $syncMode = $ctx.GetOption("SyncMode", "link")
         $syncBack = $ctx.GetOption("SyncBack", "lock")
         $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
-        Invoke-Wsl -d $ctx.DistroName -u root -- sh -lc $cmd
+        Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("Post-install スクリプトが非ゼロで終了しました (exit code: $LASTEXITCODE)")
         }
@@ -459,7 +458,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $cmd = "if [ -x /run/current-system/sw/bin/whoami ]; then " +
                "ln -sf /run/current-system/sw/bin/whoami /bin/whoami; " +
                "ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami; fi"
-        Invoke-Wsl -d $distroName -u root -- sh -lc $cmd
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $cmd)
     }
 
     <#
@@ -469,7 +468,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] EnsureWslWritable([string]$distroName) {
         $this.Log("WSL 書き込み可能チェック...")
         $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
-        Invoke-Wsl -d $distroName -u root -- sh -lc $writableCheck
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $writableCheck)
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("WSL が読み取り専用です。VHD 拡張は WslConfig ハンドラーで処理されます。")
         }
@@ -485,13 +484,13 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     hidden [void] EnsureDockerGroup([string]$distroName) {
         $this.Log("Docker グループにユーザーを追加します...")
-        $user = Invoke-Wsl "-d" $distroName "--" "sh" "-lc" "whoami" | Select-Object -First 1
+        $user = Invoke-Wsl -Arguments @("-d", $distroName, "--", "sh", "-lc", "whoami") | Select-Object -First 1
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
             $user = "nixos"
         }
         $user = $user.Trim()
         $cmd = "( groupadd docker 2>/dev/null || true ) && usermod -aG docker $user"
-        Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cmd
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $cmd)
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker グループに '$user' を追加しました", "Green")
         } else {

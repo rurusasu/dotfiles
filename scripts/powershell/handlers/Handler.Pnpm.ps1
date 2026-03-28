@@ -203,7 +203,7 @@ class PnpmHandler : SetupHandlerBase {
                 return
             }
 
-            if (-not (Test-Path $pnpmBinPath)) {
+            if (-not (Test-Path -LiteralPath $pnpmBinPath)) {
                 New-Item -ItemType Directory -Path $pnpmBinPath -Force | Out-Null
             }
 
@@ -278,7 +278,7 @@ class PnpmHandler : SetupHandlerBase {
 
     hidden [bool] TestGeminiCommand() {
         try {
-            $output = Invoke-Gemini --version 2>&1
+            $output = Invoke-Gemini -Arguments @("--version")
             return ($LASTEXITCODE -eq 0 -and ($output -match '\d+\.\d+'))
         }
         catch {

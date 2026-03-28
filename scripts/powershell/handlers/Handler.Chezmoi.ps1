@@ -183,7 +183,7 @@ class ChezmoiHandler : SetupHandlerBase {
     #>
     hidden [bool] TestChezmoiExecutable() {
         try {
-            $output = Invoke-Chezmoi -ExePath $this.ChezmoiExePath --version
+            $output = Invoke-Chezmoi -ExePath $this.ChezmoiExePath -Arguments @("--version")
             # exit code 0 かつ出力にバージョン情報が含まれているか確認
             if ($LASTEXITCODE -eq 0 -and $output -match '\d+\.\d+') {
                 return $true
@@ -330,11 +330,11 @@ class ChezmoiHandler : SetupHandlerBase {
                 $userDir = $_
                 try {
                     $docs = Join-Path $userDir.FullName "Documents"
-                    if (Test-Path $docs) {
+                    if (Test-Path -LiteralPath $docs) {
                         foreach ($subDir in @("PowerShell", "WindowsPowerShell")) {
                             $dest = Join-Path $docs "$subDir\Microsoft.PowerShell_profile.ps1"
                             $destDir = Split-Path -Parent $dest
-                            if (-not (Test-Path $destDir)) {
+                            if (-not (Test-Path -LiteralPath $destDir)) {
                                 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
                             }
                             Copy-Item -LiteralPath $profileSource -Destination $dest -Force

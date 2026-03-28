@@ -78,6 +78,7 @@ Describe 'NixRebuildHandler' {
                 $global:LASTEXITCODE = 0
                 return @("NixOS", "Ubuntu")
             }
+            Mock Write-Host { }
 
             $result = $handler.CanApply($ctx)
 
@@ -94,8 +95,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
@@ -107,8 +107,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -119,16 +117,13 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
@@ -137,17 +132,19 @@ Describe 'NixRebuildHandler' {
 
         It 'should install pnpm global packages after nixos-rebuild' {
             $script:pnpmArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @("@google/gemini-cli", "@anthropic-ai/claude-code") }
+            }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") {
                     $script:pnpmArgs = $argStr
                     $global:LASTEXITCODE = 0
-                    return @("installed opencode-ai")
+                    return @("installed")
                 }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
@@ -157,8 +154,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:pnpmArgs | Should -Match "pnpm add -g"
@@ -170,8 +165,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
@@ -190,8 +184,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:pnpmAddCalled | Should -Be $false
@@ -201,8 +193,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 1; return @("error") }
@@ -214,8 +205,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             # pnpm add 失敗でも Apply 自体は成功とみなす
@@ -227,8 +216,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -240,8 +228,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:wslArgs | Should -Match "-d NixOS"
@@ -256,8 +242,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("CustomNixOS") }
-                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -269,8 +254,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:wslArgs | Should -Match "-d CustomNixOS"
@@ -281,8 +264,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") {
@@ -306,8 +288,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -322,8 +302,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -335,8 +314,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             # pre-commit install 失敗でも Apply 自体は成功とみなす
@@ -348,8 +325,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -365,8 +341,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:preCommitArgs | Should -Match "-d NixOS"
@@ -380,8 +354,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
@@ -394,8 +367,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:corepakCalled | Should -Be $false
@@ -406,8 +377,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
                 if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
@@ -420,8 +390,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:corepakCalled | Should -Be $true
@@ -431,8 +399,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
                 if ($argStr -match "npm install -g pnpm") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
@@ -443,8 +410,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             # corepack 失敗 → EnsurePnpmAvailable が throw → InstallPnpmGlobalPackages の catch で握りつぶし
@@ -457,8 +422,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
@@ -470,8 +434,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -484,8 +446,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
@@ -497,8 +458,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -512,8 +471,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") { $global:LASTEXITCODE = 0; return @("NixOS") }
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -532,8 +490,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
-            $handler.CanApply($ctx)
-
             $handler.Apply($ctx)
 
             $script:hooksPathUnset | Should -Be $true
@@ -556,8 +512,6 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
                 throw "WSL error"
             }
-            $handler.CanApply($ctx)
-
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false

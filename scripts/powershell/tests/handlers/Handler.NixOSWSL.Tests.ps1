@@ -175,11 +175,83 @@ Describe 'NixOSWSLHandler' {
             $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
                 return [version]"2.0.0.0"
             } -Force
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return "--install --from-file"
+            }
 
             $result = $handler.SupportsFromFileInstall()
 
-            # 実際の環境依存のため、結果は bool であることのみを確認
-            $result | Should -BeOfType [bool]
+            $result | Should -Be $true
+        }
+
+        It 'should return false when help text does not contain --from-file' {
+            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
+                return [version]"2.0.0.0"
+            } -Force
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return "Usage: wsl [Argument]"
+            }
+
+            $result = $handler.SupportsFromFileInstall()
+
+            $result | Should -Be $false
+        }
+    }
+
+    Context 'EnsureWslReady' {
+        BeforeEach {
+            Mock Write-Host { }
+        }
+
+        It 'should return when wsl --status succeeds' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            { $handler.EnsureWslReady($ctx) } | Should -Not -Throw
+
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                $Arguments -contains "--status"
+            } -Times 1
+        }
+
+        It 'should fall back to -l -q when --status fails' {
+            $script:callCount = 0
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $script:callCount++
+                if ($Arguments -contains "--status") {
+                    $global:LASTEXITCODE = 1
+                } else {
+                    $global:LASTEXITCODE = 0
+                }
+            }
+
+            { $handler.EnsureWslReady($ctx) } | Should -Not -Throw
+
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                $Arguments -contains "-l" -and $Arguments -contains "-q"
+            } -Times 1
+        }
+
+        It 'should throw when SkipWslBaseInstall is true and WSL is not ready' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+            $ctx.Options["SkipWslBaseInstall"] = $true
+
+            { $handler.EnsureWslReady($ctx) } | Should -Throw "*SkipWslBaseInstall*"
+        }
+
+        It 'should call wsl --install and throw restart message when WSL is not ready' {
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+
+            { $handler.EnsureWslReady($ctx) } | Should -Throw "*再起動*"
+
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                $Arguments -contains "--install" -and $Arguments -contains "--no-distribution"
+            } -Times 1
         }
     }
 
@@ -424,6 +496,7 @@ Describe 'NixOSWSLHandler' {
             { $handler.WaitForWslReady() } | Should -Not -Throw
 
             Should -Not -Invoke Start-SleepSafe
+            Should -Invoke Invoke-Wsl -ParameterFilter { $Arguments -contains "--status" }
         }
 
         It 'should return immediately when WSL is ready' {
