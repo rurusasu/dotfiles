@@ -602,7 +602,7 @@ function Test-DockerDaemon {
     [CmdletBinding()]
     param()
     Invoke-Docker -Arguments @("info") | Out-Null
-    return $global:LASTEXITCODE -eq 0
+    return $LASTEXITCODE -eq 0
 }
 
 <#

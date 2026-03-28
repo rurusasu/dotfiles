@@ -377,6 +377,56 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'IsPackageInstalled - 2-arg overload with pre-computed root' {
+        BeforeEach {
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            New-Item (Join-Path $script:globalRoot "typescript") -ItemType Directory -Force | Out-Null
+            Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
+        }
+
+        It 'should return true when package directory exists under given root' {
+            $result = $handler.IsPackageInstalled("typescript", $script:globalRoot)
+            $result | Should -Be $true
+        }
+
+        It 'should return false when package directory does not exist' {
+            $result = $handler.IsPackageInstalled("nonexistent-pkg", $script:globalRoot)
+            $result | Should -Be $false
+        }
+
+        It 'should return false when root is empty' {
+            $result = $handler.IsPackageInstalled("typescript", "")
+            $result | Should -Be $false
+        }
+
+        It 'should not call pnpm when root is provided' {
+            $handler.IsPackageInstalled("typescript", $script:globalRoot)
+            Should -Invoke Invoke-Pnpm -Times 0
+        }
+    }
+
+    Context 'pkgName version stripping regex' {
+        It 'should strip simple version suffix' {
+            $pkgName = "typescript@5.0.0" -replace '@\d[^\s@]*$', ''
+            $pkgName | Should -Be "typescript"
+        }
+
+        It 'should strip pre-release version suffix' {
+            $pkgName = "typescript@5.0.0-beta.1" -replace '@\d[^\s@]*$', ''
+            $pkgName | Should -Be "typescript"
+        }
+
+        It 'should preserve scoped package name without version' {
+            $pkgName = "@google/gemini-cli" -replace '@\d[^\s@]*$', ''
+            $pkgName | Should -Be "@google/gemini-cli"
+        }
+
+        It 'should strip version from scoped package' {
+            $pkgName = "@google/gemini-cli@1.0.0" -replace '@\d[^\s@]*$', ''
+            $pkgName | Should -Be "@google/gemini-cli"
+        }
+    }
+
     Context 'Apply - all new packages' {
         BeforeEach {
             $script:origPath = $env:PATH

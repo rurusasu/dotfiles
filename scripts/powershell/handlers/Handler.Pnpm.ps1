@@ -120,9 +120,18 @@ class PnpmHandler : SetupHandlerBase {
             $succeeded = @()
             $skipped = 0
 
+            # グローバルルートを一度だけ取得（ループ内で毎回 pnpm root -g を実行しないよう）
+            $globalRootForCheck = ""
+            try {
+                $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
+                if ($LASTEXITCODE -eq 0 -and $rawRoot) { $globalRootForCheck = $rawRoot.Trim() }
+            } catch {
+                $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
+            }
+
             foreach ($pkg in $packages) {
-                $pkgName = $pkg -replace '@[\d\.]+$', ''
-                if ($this.IsPackageInstalled($pkgName)) {
+                $pkgName = $pkg -replace '@\d[^\s@]*$', ''
+                if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     $this.Log("スキップ (インストール済み): $pkgName", "Gray")
                     $skipped++
                     continue
@@ -157,15 +166,19 @@ class PnpmHandler : SetupHandlerBase {
 
     hidden [bool] IsPackageInstalled([string]$pkgName) {
         try {
-            $globalRoot = Invoke-Pnpm -Arguments @("root", "-g")
-            if ($LASTEXITCODE -ne 0 -or -not $globalRoot) { return $false }
-            $globalRoot = $globalRoot.Trim()
-            $pkgPath = Join-Path $globalRoot $pkgName
-            return (Test-Path -LiteralPath $pkgPath -PathType Container)
+            $root = Invoke-Pnpm -Arguments @("root", "-g")
+            if ($LASTEXITCODE -ne 0 -or -not $root) { return $false }
+            return $this.IsPackageInstalled($pkgName, $root.Trim())
         }
         catch {
             return $false
         }
+    }
+
+    hidden [bool] IsPackageInstalled([string]$pkgName, [string]$globalRoot) {
+        if (-not $globalRoot) { return $false }
+        $pkgPath = Join-Path $globalRoot $pkgName
+        return (Test-Path -LiteralPath $pkgPath -PathType Container)
     }
 
     hidden [string] EnsurePnpmSetup() {
@@ -232,14 +245,16 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsureGeminiCommandShim() {
+        $globalRoot = ""
         try {
             $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
-            $globalRoot = if ($rawRoot) { $rawRoot.Trim() } else { "" }
+            if ($LASTEXITCODE -ne 0 -or -not $rawRoot) { return }
+            $globalRoot = $rawRoot.Trim()
         }
         catch {
             return
         }
-        if ($LASTEXITCODE -ne 0 -or -not $globalRoot) { return }
+        if (-not $globalRoot) { return }
 
         $entrypoint = Join-Path $globalRoot "@google\gemini-cli\dist\index.js"
         if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
