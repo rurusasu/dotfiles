@@ -66,6 +66,7 @@ class NixRebuildHandler : SetupHandlerBase {
                 "-d", $distroName, "-u", "nixos", "--",
                 "bash", "-lc", "cd ~/.dotfiles && pre-commit install --install-hooks"
             )
+            $preCommitExitCode = $LASTEXITCODE
 
             $output | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
@@ -73,8 +74,8 @@ class NixRebuildHandler : SetupHandlerBase {
                 }
             }
 
-            if ($LASTEXITCODE -ne 0) {
-                $this.LogWarning("pre-commit hooks のインストールが失敗しました (exit code: $LASTEXITCODE)")
+            if ($preCommitExitCode -ne 0) {
+                $this.LogWarning("pre-commit hooks のインストールが失敗しました (exit code: $preCommitExitCode)")
             }
             else {
                 $this.Log("pre-commit hooks のインストール完了", "Green")
@@ -171,6 +172,7 @@ class NixRebuildHandler : SetupHandlerBase {
                 "-d", $distroName, "-u", "nixos", "--",
                 "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g $quotedPkgs"
             )
+            $pnpmExitCode = $LASTEXITCODE
 
             $pnpmOutput | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
@@ -178,8 +180,8 @@ class NixRebuildHandler : SetupHandlerBase {
                 }
             }
 
-            if ($LASTEXITCODE -ne 0) {
-                $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $LASTEXITCODE)")
+            if ($pnpmExitCode -ne 0) {
+                $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
             }
             else {
                 $this.Log("pnpm グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
