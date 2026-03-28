@@ -1385,4 +1385,92 @@ Describe 'DockerHandler' {
             $result.Success | Should -Be $true
         }
     }
+
+    Context 'RepairWslProxyBinary' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist { return $true }
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+        }
+
+        It 'should repair 0-byte proxy binary' {
+            $script:copyCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "stat -c") {
+                    $global:LASTEXITCODE = 0
+                    return "0"
+                }
+                if ($argStr -match "cp /docker-desktop-user-distro") {
+                    $script:copyCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "chmod") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:copyCalled | Should -Be $true
+        }
+
+        It 'should skip repair when proxy binary has valid size' {
+            $script:copyCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "stat -c") {
+                    $global:LASTEXITCODE = 0
+                    return "23385952"
+                }
+                if ($argStr -match "cp /docker-desktop-user-distro") {
+                    $script:copyCalled = $true
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:copyCalled | Should -Be $false
+        }
+
+        It 'should skip repair when docker-desktop distro is not available' {
+            $script:copyCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "stat -c") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($argStr -match "cp /docker-desktop-user-distro") {
+                    $script:copyCalled = $true
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:copyCalled | Should -Be $false
+        }
+    }
 }

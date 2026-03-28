@@ -363,6 +363,40 @@ class DockerHandler : SetupHandlerBase {
         $this.Log("Docker Desktop を起動します")
         Start-ProcessSafe -FilePath $dockerExe
         Start-SleepSafe -Seconds 5
+
+        # StopLingeringDockerProcesses による強制終了後、Docker Desktop が
+        # WSL cross-distro 共有の docker-desktop-user-distro を 0 バイトで
+        # 残すことがある。修復しないと NixOS WSL integration が永続的に失敗する。
+        $this.RepairWslProxyBinary()
+    }
+
+    <#
+    .SYNOPSIS
+        WSL cross-distro 共有の docker-desktop-user-distro バイナリを修復する
+    .DESCRIPTION
+        /mnt/wsl/docker-desktop/docker-desktop-user-distro が 0 バイトの場合、
+        docker-desktop distro 内のオリジナルバイナリからコピーして修復する。
+    #>
+    hidden [void] RepairWslProxyBinary() {
+        $proxyPath = "/mnt/wsl/docker-desktop/docker-desktop-user-distro"
+        $checkResult = Invoke-Wsl -d "docker-desktop" "--" "stat" "-c" "%s" $proxyPath 2>$null
+        if ($LASTEXITCODE -ne 0) { return }
+
+        $size = 0
+        if ($checkResult -and [int]::TryParse($checkResult.Trim(), [ref]$size) -and $size -gt 0) {
+            return
+        }
+
+        $this.LogWarning("docker-desktop-user-distro が 0 バイトです。修復します")
+        $sharedPath = "/mnt/host/wsl/docker-desktop/docker-desktop-user-distro"
+        Invoke-Wsl -d "docker-desktop" "--" "cp" "/docker-desktop-user-distro" $sharedPath 2>$null
+        Invoke-Wsl -d "docker-desktop" "--" "chmod" "+x" $sharedPath 2>$null
+
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("docker-desktop-user-distro を修復しました", "Green")
+        } else {
+            $this.LogWarning("docker-desktop-user-distro の修復に失敗しました")
+        }
     }
 
     <#
