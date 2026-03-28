@@ -111,6 +111,9 @@ in
     # procfs は inotify イベントを発行しないため path unit は使用できない。
     # timer で定期的にチェックし、mountpoint になったときだけ remount する。
     (mkIf config.mySettings.wsl.dockerDesktopIntegration {
+      # Docker CLI（デーモンなし）- Docker Desktop のソケットに接続するため
+      environment.systemPackages = with pkgs; [ docker-client ];
+
       systemd.timers."docker-desktop-mnt-wsl-exec" = {
         description = "Periodically remount /mnt/wsl with exec for Docker Desktop WSL integration";
         wantedBy = [ "multi-user.target" ];
@@ -129,6 +132,14 @@ in
           ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
         };
       };
+
+      # Docker Desktop は NixOS の /var/run/docker.sock へ bind mount を試みるが、
+      # systemd 管理の tmpfs のため失敗する。
+      # 実ソケットは /mnt/wsl/docker-desktop-bind-mounts/NixOS/docker.sock に存在するので
+      # シンボリックリンクで proxy が接続できるようにする。
+      systemd.tmpfiles.rules = [
+        "L+ /var/run/docker.sock - - - - /mnt/wsl/docker-desktop-bind-mounts/NixOS/docker.sock"
+      ];
     })
   ];
 }
