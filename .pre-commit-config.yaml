@@ -8,13 +8,13 @@ repos:
         pass_filenames: false
       - id: powershell-tests
         name: powershell tests
-        entry: pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
+        entry: bash -c '[ "$(uname)" = "Linux" ] && exit 0; pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"'
         language: system
         pass_filenames: false
         types: [powershell]
       - id: chezmoi-template-lint
         name: chezmoi template lint
-        entry: pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -Path ./scripts/powershell/tests/chezmoi -MinimumCoverage 0"
+        entry: bash -c '[ "$(uname)" = "Linux" ] && exit 0; pwsh.exe -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -Path ./scripts/powershell/tests/chezmoi -MinimumCoverage 0"'
         language: system
         pass_filenames: false
         files: '\.tmpl$'

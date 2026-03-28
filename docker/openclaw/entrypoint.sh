@@ -156,8 +156,8 @@ if [ -f "$_codex_auth" ] && [ -s "$_codex_auth" ]; then
       expires: src.tokens.expires_at || (Date.now() + 864000000),
       accountId: src.tokens.account_id || ''
     }));
-  " 2>/dev/null) && _seed_auth_profile "openai-codex" "$_codex_profile" "codex-auth" \
-    || echo "[entrypoint] codex-auth: no valid tokens found, skipping"
+  " 2>/dev/null) && _seed_auth_profile "openai-codex" "$_codex_profile" "codex-auth" ||
+    echo "[entrypoint] codex-auth: no valid tokens found, skipping"
 else
   echo "[entrypoint] codex-auth: no host auth file mounted, skipping"
 fi
@@ -179,8 +179,8 @@ if [ -f "$_claude_creds" ] && [ -s "$_claude_creds" ]; then
       expires: oauth.expiresAt || (Date.now() + 864000000),
       accountId: ''
     }));
-  " 2>/dev/null) && _seed_auth_profile "anthropic" "$_anthropic_profile" "anthropic-auth" \
-    || echo "[entrypoint] anthropic-auth: no valid tokens found, skipping"
+  " 2>/dev/null) && _seed_auth_profile "anthropic" "$_anthropic_profile" "anthropic-auth" ||
+    echo "[entrypoint] anthropic-auth: no valid tokens found, skipping"
 else
   echo "[entrypoint] anthropic-auth: no Claude credentials file found, skipping"
 fi

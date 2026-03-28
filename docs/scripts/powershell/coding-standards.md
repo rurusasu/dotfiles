@@ -219,11 +219,11 @@ function Invoke-YourCommand {
 
 ### 1Password CLI ラッパー
 
-| 関数 | 用途 |
-|------|------|
+| 関数                   | 用途                                       |
+| ---------------------- | ------------------------------------------ |
 | `Invoke-OpAccountList` | アカウント一覧の取得（認証状態は確認不可） |
-| `Invoke-OpWhoAmI` | 認証状態の確認（サインイン済みか判定） |
-| `Invoke-OpSignIn` | 対話的サインイン |
+| `Invoke-OpWhoAmI`      | 認証状態の確認（サインイン済みか判定）     |
+| `Invoke-OpSignIn`      | 対話的サインイン                           |
 
 ## パス操作
 

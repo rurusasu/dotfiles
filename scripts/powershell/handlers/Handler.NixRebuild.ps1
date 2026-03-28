@@ -87,11 +87,13 @@ class NixRebuildHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePnpmAvailable([string]$distroName) {
-        $pnpmCheck = Invoke-Wsl -Arguments @(
+        # WSL interop 経由で Windows 版 pnpm が /mnt/ 配下に見えることがある。
+        # Linux ネイティブの pnpm のみを有効とみなすため /mnt/ 配下を除外して確認する。
+        Invoke-Wsl -Arguments @(
             "-d", $distroName, "-u", "nixos", "--",
-            "bash", "-lc", "export PATH=`"`$HOME/.npm-global/bin:`$PATH`"; command -v pnpm"
-        )
-        if ($LASTEXITCODE -ne 0 -or -not $pnpmCheck) {
+            "bash", "-lc", "export PATH=`"`$HOME/.npm-global/bin:`$PATH`"; command -v pnpm 2>/dev/null | grep -qv '^/mnt/'"
+        ) | Out-Null
+        if ($LASTEXITCODE -ne 0) {
             $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
             # NixOS では npm のグローバルプレフィックスが read-only nix store を指すため
             # ~/.npm-global に変更してからインストールする

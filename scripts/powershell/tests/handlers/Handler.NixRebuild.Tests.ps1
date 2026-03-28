@@ -401,6 +401,30 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:corepakCalled | Should -Be $false
         }
 
+        It 'should install native pnpm when only Windows interop pnpm is found via /mnt/' {
+            $script:npmInstallCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                # grep -qv '^/mnt/' で /mnt/ パスを弾く → exit 1 を返す
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "npm install -g pnpm") { $script:npmInstallCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            $handler.Apply($ctx)
+
+            $script:npmInstallCalled | Should -Be $true
+        }
+
         It 'should enable pnpm via corepack when pnpm is not found' {
             $script:corepakCalled = $false
             Mock Invoke-Wsl {

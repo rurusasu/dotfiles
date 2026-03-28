@@ -1,6 +1,16 @@
-{ lib, pkgs, config, ... }:
+{
+  lib,
+  pkgs,
+  config,
+  ...
+}:
 let
-  inherit (lib) mkOption mkIf mkMerge types;
+  inherit (lib)
+    mkOption
+    mkIf
+    mkMerge
+    types
+    ;
 in
 {
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {
@@ -71,8 +81,9 @@ in
         # Python toolchain
         uv
 
-        # JavaScript runtime (for claude-code, gemini-cli, openclaw — pnpm via corepack)
+        # JavaScript runtime (for claude-code, gemini-cli, openclaw)
         nodejs_22 # openclaw requires Node.js 22+
+        pnpm # WSL interop 経由で Windows 版が見えるため Linux ネイティブ版を明示的に提供
 
         # Secret management
         _1password-cli

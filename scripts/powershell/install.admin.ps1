@@ -151,7 +151,7 @@ if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
 
     if ($effectiveOptions["SkipSetDefaultDistro"] -ne $true) {
         Write-Host "Setting default distro: $DistroName"
-        & wsl --set-default $DistroName
+        Invoke-Wsl --set-default $DistroName | Out-Null
     }
 
     $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"

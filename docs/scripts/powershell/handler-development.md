@@ -153,6 +153,7 @@ install.ps1 は 3 ステップでハンドラーを実行します:
 3. **Phase 2b**（UAC 昇格）: `RequiresAdmin = $true` の Phase 2 ハンドラー（WSL, Docker 等）
 
 `install.admin.ps1` の `-AdminOnly` パラメータで制御:
+
 - `-AdminOnly:$true`: 管理者必須ハンドラーのみ実行
 - `-AdminOnly:$false`: 管理者不要ハンドラーのみ実行
 - 省略時: 全 Phase 2 ハンドラーを実行（後方互換）

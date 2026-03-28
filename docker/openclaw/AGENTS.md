@@ -389,13 +389,13 @@ docker restart openclaw
 
 ### 登録済みジョブ一覧
 
-| ジョブ名                 | スケジュール            | 内容                                                   |
-| ------------------------ | ----------------------- | ------------------------------------------------------ |
-| `lifelog-daily-scaffold` | 毎日 23:55 JST          | lifelog の日次/週次/月次/年次テンプレートを生成         |
-| `lifelog-daily-git-sync` | 毎日 23:58 JST          | lifelog の変更を commit & push                         |
-| `workspace-git-sync`     | **10分ごと**（everyMs） | workspace を pull → git add → commit → push（pull-first） |
+| ジョブ名                 | スケジュール            | 内容                                                                       |
+| ------------------------ | ----------------------- | -------------------------------------------------------------------------- |
+| `lifelog-daily-scaffold` | 毎日 23:55 JST          | lifelog の日次/週次/月次/年次テンプレートを生成                            |
+| `lifelog-daily-git-sync` | 毎日 23:58 JST          | lifelog の変更を commit & push                                             |
+| `workspace-git-sync`     | **10分ごと**（everyMs） | workspace を pull → git add → commit → push（pull-first）                  |
 | `sandbox-gc`             | 毎時 0分 JST            | 終了済み sandbox コンテナ（`openclaw-sandbox-common:bookworm-slim`）を削除 |
-| `cognee-daily-ingest`    | 毎日 23:50 JST          | セッション履歴を cognee に取り込み、スキルを自動改善   |
+| `cognee-daily-ingest`    | 毎日 23:50 JST          | セッション履歴を cognee に取り込み、スキルを自動改善                       |
 
 ### workspace-git-sync の詳細
 
