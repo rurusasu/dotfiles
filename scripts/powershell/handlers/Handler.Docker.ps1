@@ -523,10 +523,20 @@ class DockerHandler : SetupHandlerBase {
         Docker Desktop の健全性をチェックする
     #>
     hidden [bool] TestDockerDesktopHealth() {
+        if (-not $this.TestWslDistroExists("docker-desktop")) {
+            return $false
+        }
         # Docker Desktop のリソースは Windows 側にマウントされている
-        # /tmp/docker-desktop-root/mnt/host/c/Program Files/Docker/Docker/resources/
-        $checkCmd = "test -f '/tmp/docker-desktop-root/mnt/host/c/Program Files/Docker/Docker/resources/componentsVersion.json'"
-        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-lc" $checkCmd
+        # docker-desktop distro では Windows C: ドライブが
+        # /tmp/docker-desktop-root/mnt/host/<drive>/ にマウントされている（実機確認済み）
+        $dockerPath = $this.GetDockerDesktopPath()
+        $driveLetter = $dockerPath.Substring(0, 1).ToLower()
+        if (-not [char]::IsLetter($driveLetter)) {
+            $this.Log("Docker Desktop パスからドライブレターを取得できません: $dockerPath", "Gray")
+            return $false
+        }
+        $checkCmd = "test -f '/tmp/docker-desktop-root/mnt/host/$driveLetter/Program Files/Docker/Docker/resources/componentsVersion.json'"
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $checkCmd
         return $LASTEXITCODE -eq 0
     }
 
@@ -540,14 +550,15 @@ class DockerHandler : SetupHandlerBase {
         shared:1 peer group なので、docker-desktop 側で bind mount すると NixOS に伝播する。
     #>
     hidden [void] SetupDockerBindMounts() {
-        $distroExists = $this.TestWslDistroExists("docker-desktop")
-        if (-not $distroExists) {
+        if (-not $this.TestWslDistroExists("docker-desktop")) {
             $this.Log("docker-desktop distro が見つからないため bind mount をスキップします", "Gray")
             return
         }
 
-        # バイナリが既に正しく設定されているか確認
-        $checkCmd = "[ -x /mnt/host/wsl/docker-desktop/docker-desktop-user-distro ]"
+        # バイナリが実行可能かつソケットディレクトリが bind mount 済みか確認
+        # ソケットファイル自体は Docker Desktop 初期化タイミングで現れるため、
+        # ディレクトリが mountpoint かどうかで判定する
+        $checkCmd = "[ -x /mnt/host/wsl/docker-desktop/docker-desktop-user-distro ] && mountpoint -q /mnt/host/wsl/docker-desktop/shared-sockets/guest-services"
         Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $checkCmd 2>$null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker-desktop bind mount は既に設定済みです", "Gray")
@@ -555,12 +566,19 @@ class DockerHandler : SetupHandlerBase {
         }
 
         $this.Log("docker-desktop bind mount を設定します...")
+        # マウント先ディレクトリが存在しない場合に備えて mkdir -p を先行実行する
+        # docker-desktop-user-distro はファイルの bind mount なので touch でマウント先を確保する
         $mountCmd = @(
+            "mkdir -p /mnt/host/wsl/docker-desktop/shared-sockets/guest-services",
+            "touch /mnt/host/wsl/docker-desktop/docker-desktop-user-distro 2>/dev/null",
             "mount --bind /docker-desktop-user-distro /mnt/host/wsl/docker-desktop/docker-desktop-user-distro 2>/dev/null",
-            "mount --bind /run/guest-services /mnt/host/wsl/docker-desktop/shared-sockets/guest-services 2>/dev/null",
-            "true"
-        ) -join " && "
+            "mount --bind /run/guest-services /mnt/host/wsl/docker-desktop/shared-sockets/guest-services 2>/dev/null"
+        ) -join " ; "
         Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $mountCmd 2>$null
+
+        # ソースファイルの実行ビット有無に依らず bind mount の有無で成否を判定する
+        $verifyCmd = "mountpoint -q /mnt/host/wsl/docker-desktop/docker-desktop-user-distro"
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $verifyCmd 2>$null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker-desktop bind mount を設定しました", "Green")
         }
@@ -601,6 +619,8 @@ class DockerHandler : SetupHandlerBase {
 
             # docker-desktop distro の bind mount を確認・設定する
             # Docker Desktop の Windows backend が NixOS に bind mount できない場合の workaround
+            # 初回・再起動後ともに Docker Desktop の初期化と競合しないよう RetryDelaySeconds 待機する
+            Start-SleepSafe -Seconds $this.RetryDelaySeconds
             $this.SetupDockerBindMounts()
 
             if ($this.TestDockerDesktopProxy($distroName)) {
@@ -608,17 +628,19 @@ class DockerHandler : SetupHandlerBase {
                 return $true
             }
 
-            $this.LogWarning("Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します")
-
-            if (-not $restarted) {
+            if (-not $restarted -and $i -lt $this.Retries) {
+                $this.LogWarning("Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します")
                 # wsl --shutdown は Docker Desktop 以外のディストリビューション（NixOS 等）を
                 # 破壊する可能性があるため、docker-desktop のみ terminate する
                 Invoke-Wsl --terminate docker-desktop 2>$null
                 $this.RestartDockerDesktop()
                 $restarted = $true
+                # RestartDockerDesktop 内の sleep 後、次のループ先頭で RetryDelaySeconds 待機する
             }
-
-            Start-SleepSafe -Seconds $this.RetryDelaySeconds
+            elseif ($i -lt $this.Retries) {
+                # 再起動後の再試行: ループ先頭の sleep 前にログのみ出力
+                $this.LogWarning("Docker Desktop 連携の確認に失敗しました。再試行します")
+            }
         }
 
         return $false

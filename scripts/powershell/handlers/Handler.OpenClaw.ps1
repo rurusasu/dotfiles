@@ -126,6 +126,12 @@ class OpenClawHandler : SetupHandlerBase {
                 "xai_api_key",
                 $false
             )
+            # サンドボックスイメージの確認・ビルド（未ビルドの場合のみ）
+            if (-not $this.IsSandboxImagePresent()) {
+                $this.Log("サンドボックスイメージが見つかりません。ビルドします (初回のみ、数分かかります)...")
+                $this.BuildSandboxImages($ctx)
+            }
+
             # コンテナを起動（--build で最新イメージを使用）
             # docker compose はビルド進捗を stderr に出力するため NativeCommandError が発生するが
             # 終了コードが 0 であれば成功として扱う
@@ -161,6 +167,79 @@ class OpenClawHandler : SetupHandlerBase {
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    # ────────────────────────────────────────────────────────
+    # サンドボックスイメージ管理
+    # ────────────────────────────────────────────────────────
+
+    <#
+    .SYNOPSIS
+        サンドボックスイメージが存在するか確認する
+    #>
+    hidden [bool] IsSandboxImagePresent() {
+        Invoke-Docker -Arguments @("image", "inspect", "openclaw-sandbox-common:bookworm-slim") | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+
+    <#
+    .SYNOPSIS
+        サンドボックスイメージをビルドする
+    .DESCRIPTION
+        OpenClaw upstream の Dockerfile.sandbox / Dockerfile.sandbox-common を取得し、
+        ローカルの Dockerfile.sandbox-custom と組み合わせて3段階ビルドを実行する。
+        task sandbox:build と同等の処理。初回セットアップ時のみ実行される。
+    #>
+    hidden [void] BuildSandboxImages([SetupContext]$ctx) {
+        $sbxRepo  = "https://raw.githubusercontent.com/openclaw/openclaw/main"
+        $buildDir = Join-Path ([System.IO.Path]::GetTempPath()) "openclaw-sandbox-build"
+        New-DirectorySafe -Path $buildDir
+
+        $this.Log("Sandbox Dockerfile をダウンロードしています...")
+        Invoke-WebRequestSafe -Uri "$sbxRepo/Dockerfile.sandbox" `
+            -OutFile (Join-Path $buildDir "Dockerfile.sandbox")
+        Invoke-WebRequestSafe -Uri "$sbxRepo/Dockerfile.sandbox-common" `
+            -OutFile (Join-Path $buildDir "Dockerfile.sandbox-common")
+
+        $this.Log("openclaw-sandbox:bookworm-slim をビルドしています (1/3)...")
+        Invoke-Docker -Arguments @(
+            "build", "-t", "openclaw-sandbox:bookworm-slim",
+            "-f", (Join-Path $buildDir "Dockerfile.sandbox"),
+            "$buildDir/"
+        )
+        if ($LASTEXITCODE -ne 0) {
+            throw "openclaw-sandbox:bookworm-slim のビルドに失敗しました (exit: $LASTEXITCODE)"
+        }
+
+        $this.Log("openclaw-sandbox-common:bookworm-slim-base をビルドしています (2/3)...")
+        Invoke-Docker -Arguments @(
+            "build", "-t", "openclaw-sandbox-common:bookworm-slim-base",
+            "--build-arg", "BASE_IMAGE=openclaw-sandbox:bookworm-slim",
+            "--build-arg", "PACKAGES=curl wget jq coreutils grep nodejs npm python3 git ca-certificates unzip",
+            "--build-arg", "INSTALL_PNPM=1",
+            "--build-arg", "INSTALL_BUN=0",
+            "--build-arg", "INSTALL_BREW=0",
+            "--build-arg", "FINAL_USER=root",
+            "-f", (Join-Path $buildDir "Dockerfile.sandbox-common"),
+            "$buildDir/"
+        )
+        if ($LASTEXITCODE -ne 0) {
+            throw "openclaw-sandbox-common:bookworm-slim-base のビルドに失敗しました (exit: $LASTEXITCODE)"
+        }
+
+        $composeDir = $this.GetComposeDir($ctx)
+        $this.Log("openclaw-sandbox-common:bookworm-slim をビルドしています (3/3)...")
+        Invoke-Docker -Arguments @(
+            "build", "-t", "openclaw-sandbox-common:bookworm-slim",
+            "--build-arg", "SBX_COMMON_BASE=openclaw-sandbox-common:bookworm-slim-base",
+            "-f", (Join-Path $composeDir "Dockerfile.sandbox-custom"),
+            $composeDir
+        )
+        if ($LASTEXITCODE -ne 0) {
+            throw "openclaw-sandbox-common:bookworm-slim のビルドに失敗しました (exit: $LASTEXITCODE)"
+        }
+
+        $this.Log("サンドボックスイメージのビルドが完了しました", "Green")
     }
 
     # ────────────────────────────────────────────────────────

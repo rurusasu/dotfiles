@@ -13,6 +13,9 @@ BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.OpenClaw.ps1
+    # BuildSandboxImages 内の外部アクセスをデフォルトで無効化
+    Mock Invoke-WebRequestSafe { }
+    Mock New-DirectorySafe { }
 }
 
 Describe 'OpenClawHandler' {
@@ -134,6 +137,7 @@ Describe 'OpenClawHandler' {
 
     Context 'Apply - success' {
         BeforeEach {
+            $global:LASTEXITCODE = 0
             Mock Write-Host { }
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
@@ -254,6 +258,7 @@ Describe 'OpenClawHandler' {
 
     Context 'Apply - failure cases' {
         BeforeEach {
+            $global:LASTEXITCODE = 0
             Mock Write-Host { }
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
@@ -338,6 +343,7 @@ Describe 'OpenClawHandler' {
 
     Context 'Apply - compose retry behavior' {
         BeforeEach {
+            $global:LASTEXITCODE = 0
             Mock Write-Host { }
             Mock Start-SleepSafe { }
             Mock Set-ContentNoNewline { }
@@ -425,6 +431,7 @@ Describe 'OpenClawHandler' {
 
     Context 'Apply - .env content' {
         BeforeEach {
+            $global:LASTEXITCODE = 0
             # op CLI は存在しない前提
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
@@ -561,6 +568,7 @@ Describe 'OpenClawHandler' {
 
     Context 'WaitForContainer - retry behavior' {
         BeforeEach {
+            $global:LASTEXITCODE = 0
             Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
@@ -601,6 +609,112 @@ Describe 'OpenClawHandler' {
 
             $result.Success | Should -Be $true
             $script:psCallCount | Should -BeGreaterOrEqual 2
+        }
+    }
+
+    Context 'BuildSandboxImages' {
+        BeforeEach {
+            $global:LASTEXITCODE = 0
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Set-ContentNoNewline { }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "jobs\.seed\.json$") { return $false }
+                return $true
+            }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -match "secrets" }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*consent.json' }
+            Mock Get-Content { return '{"openclaw_enabled":true}' } -ParameterFilter { $Path -like '*consent.json' }
+            $env:OPENCLAW_GITHUB_TOKEN = "ghp_test_sandbox"
+            $env:OPENCLAW_XAI_API_KEY = ""
+        }
+
+        AfterEach {
+            Remove-Item -Path Env:\OPENCLAW_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\OPENCLAW_XAI_API_KEY -ErrorAction SilentlyContinue
+        }
+
+        It 'should skip sandbox build when image is already present' {
+            $script:buildCalled = $false
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "image inspect") { $global:LASTEXITCODE = 0; return "[]" }
+                # "^build " で docker build を compose up --build と区別する
+                if ($argStr -match "^build ") { $script:buildCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:buildCalled | Should -Be $false
+        }
+
+        It 'should build sandbox images when image is not present' {
+            $script:buildCallArgs = @()
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "image inspect") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "^build ") {
+                    $script:buildCallArgs += $argStr
+                    $global:LASTEXITCODE = 0; return ""
+                }
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:buildCallArgs | Should -Not -BeNullOrEmpty
+            $script:buildCallArgs | Should -Contain ($script:buildCallArgs | Where-Object { $_ -match "openclaw-sandbox:bookworm-slim" } | Select-Object -First 1)
+            $script:buildCallArgs | Should -Contain ($script:buildCallArgs | Where-Object { $_ -match "bookworm-slim-base" } | Select-Object -First 1)
+            ($script:buildCallArgs | Where-Object { $_ -match "openclaw-sandbox-common:bookworm-slim\b" }).Count | Should -BeGreaterOrEqual 1
+        }
+
+        It 'should return failure when sandbox base build fails' {
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "image inspect") { $global:LASTEXITCODE = 1; return "" }
+                # 最初の docker build (base) が失敗
+                if ($argStr -match "^build ") { $global:LASTEXITCODE = 1; return "" }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "bookworm-slim"
+        }
+
+        It 'should return failure when sandbox custom build fails' {
+            $script:buildCount = 0
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "image inspect") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "^build ") {
+                    $script:buildCount++
+                    # 3回目（openclaw-sandbox-common:bookworm-slim カスタムレイヤー）が失敗
+                    if ($script:buildCount -ge 3) { $global:LASTEXITCODE = 1; return "" }
+                    $global:LASTEXITCODE = 0; return ""
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "bookworm-slim"
         }
     }
 
