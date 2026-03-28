@@ -564,6 +564,34 @@ Describe 'OpenClawHandler' {
             $script:envContent | Should -Not -Match "GEMINI_CREDENTIALS_DIR=.*\\"
         }
 
+        It 'should include OPENCLAW_PORT=41789 in .env' {
+            $script:envContent = ""
+            Mock Write-Host { }
+            Mock Start-SleepSafe { }
+            Mock Test-PathExist {
+                param($Path)
+                if ($Path -match "\.env$") { return $false }
+                return $true
+            }
+            Mock Set-ContentNoNewline {
+                param($Path, $Value)
+                if ($Path -match "\.env$") {
+                    $script:envContent = $Value
+                }
+            }
+            Mock Invoke-Docker {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "up") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ps") { return "openclaw" }
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:envContent | Should -Match "OPENCLAW_PORT=41789"
+        }
+
     }
 
     Context 'WaitForContainer - retry behavior' {

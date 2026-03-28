@@ -132,14 +132,15 @@
      コンテキスト混入を防止する。ACP 経由が必須（Claude Max の直接モデル指定は ToS 違反）。
      チャンネルリストは .chezmoidata/openclaw.yaml の slackAgents で一元管理。
      binding にマッチしない Slack DM / Telegram は main にフォールバック。
-     workspace は defaults を継承（ホスト側パス）。サンドボックスがバインドマウントで
-     ホスト上のパスを解決するため、ボリューム内パスは使えない。
-     コンテキスト分離は session レベルで担保される。 */ -}}
+     workspace は明示的にホスト側 POSIX パスを指定する。ACP runtime エージェントは
+     defaults.workspace を継承せずエージェント固有パスにフォールバックするため、
+     明示指定が必須。コンテキスト分離は session レベルで担保される。 */ -}}
 {{- $lastSlack := sub (len .openclaw.slackAgents) 1 -}}
 {{- range $i, $agent := .openclaw.slackAgents }}
       {
         "id": "{{ $agent.id }}",
         "model": "{{ $.openclaw.agentModels.claude.primary }}",
+        "workspace": "{{ $.openclaw.workspace.sandboxPath }}",
         "runtime": {
           "type": "acp",
           "acp": {
@@ -312,7 +313,6 @@
       "token": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
 {{- end }}
     },
-    "trustedProxies": ["172.16.0.0/12", "192.168.65.0/24"],
     "tailscale": {
       "mode": "off",
       "resetOnExit": false

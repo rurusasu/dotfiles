@@ -59,7 +59,7 @@ docker restart openclaw
 - `pids_limit: 256`
 - `mem_limit: 2g`
 - ポートは `127.0.0.1` にバインド（外部公開しない）
-- `gateway.trustedProxies` で Docker bridge サブネットを信頼（ペアリング自動承認）
+- `gateway.controlUi.dangerouslyDisableDeviceAuth` でペアリングをスキップ（Docker Desktop WSL2 では Docker NAT により loopback 判定されないため）
 
 ビルトイン sandbox コンテナは OpenClaw が Docker Engine 経由で自動生成するため、
 上記の hardened ルールは Gateway コンテナ自体に適用される。
@@ -92,7 +92,7 @@ docker restart openclaw
 
 ### Gateway
 
-- `gateway.mode: "local"` + `gateway.bind: "lan"` + `gateway.auth.mode: "token"` + `trustedProxies` で保護
+- `gateway.mode: "local"` + `gateway.bind: "lan"` + `gateway.auth.mode: "token"` で保護
 - gateway token は 1Password から取得
 
 ## 必須ボリューム
