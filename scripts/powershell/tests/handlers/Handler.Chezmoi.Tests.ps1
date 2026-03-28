@@ -402,23 +402,25 @@ Describe 'ChezmoiHandler' {
             Mock Test-IsAdminSession { return $false }
         }
 
-        It 'should fail when chezmoi apply fails with non-zero exit code' {
-            # exitcode の問題を回避: 例外でシミュレート
-            # 実際のコマンド失敗は LASTEXITCODE で判定されるが、
-            # テストでは例外を使ってエラーケースを検証
+        It 'should fail when chezmoi apply returns non-zero exit code' {
             Mock Invoke-Chezmoi {
                 if ($Arguments -contains '--version') {
                     $global:LASTEXITCODE = 0
                     return "chezmoi version 2.45.0"
                 }
-                # Apply 呼び出し - 例外で失敗をシミュレート
-                throw "chezmoi apply failed with exit code 1"
+                if ($Arguments -contains 'apply') {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                $global:LASTEXITCODE = 0
+                return ""
             }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
+            $result.Message | Should -Match "chezmoi apply が失敗しました"
         }
 
         It 'should show manual execution command on failure' {

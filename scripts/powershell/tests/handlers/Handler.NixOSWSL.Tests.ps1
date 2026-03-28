@@ -185,7 +185,7 @@ Describe 'NixOSWSLHandler' {
 
     Context 'GetRelease' {
         It 'should fetch latest release from GitHub API' {
-            Mock Invoke-RestMethod {
+            Mock Invoke-RestMethodSafe {
                 return @{
                     tag_name = "v24.5.1"
                     assets = @()
@@ -196,13 +196,13 @@ Describe 'NixOSWSLHandler' {
             $result = $handler.GetRelease("")
 
             $result.tag_name | Should -Be "v24.5.1"
-            Should -Invoke Invoke-RestMethod -ParameterFilter {
+            Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
                 $Uri -match "/releases/latest"
             }
         }
 
         It 'should fetch specific tag when specified' {
-            Mock Invoke-RestMethod {
+            Mock Invoke-RestMethodSafe {
                 return @{
                     tag_name = "v24.5.0"
                     assets = @()
@@ -212,7 +212,7 @@ Describe 'NixOSWSLHandler' {
 
             $null = $handler.GetRelease("v24.5.0")
 
-            Should -Invoke Invoke-RestMethod -ParameterFilter {
+            Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
                 $Uri -match "/releases/tags/v24.5.0"
             }
         }
@@ -263,13 +263,13 @@ Describe 'NixOSWSLHandler' {
                 name = "nixos.wsl"
                 browser_download_url = "http://example.com/nixos.wsl"
             }
-            Mock Invoke-WebRequest { }
+            Mock Invoke-WebRequestSafe { }
             Mock Write-Host { }
 
             $result = $handler.DownloadAsset($asset)
 
             $result | Should -Match "nixos.wsl"
-            Should -Invoke Invoke-WebRequest -ParameterFilter {
+            Should -Invoke Invoke-WebRequestSafe -ParameterFilter {
                 $Uri -eq "http://example.com/nixos.wsl"
             }
         }
@@ -365,7 +365,7 @@ Describe 'NixOSWSLHandler' {
         It 'should throw exception when directory is not empty' {
             Mock Test-Path { return $true } -ParameterFilter { $PathType -eq 'Container' }
             Mock Test-Path { return $true } -ParameterFilter { -not $PSBoundParameters.ContainsKey('PathType') }
-            Mock Get-ChildItem {
+            Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{ Name = "file.txt" })
             }
 

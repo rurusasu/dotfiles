@@ -201,7 +201,7 @@ function Find-WinGetExe {
     )
     $searchRoots = @($env:LOCALAPPDATA)
     $usersDir = Split-Path $env:USERPROFILE
-    foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+    foreach ($userDir in (Get-ChildItemSafe -Path $usersDir -Directory)) {
         $otherAppData = Join-Path $userDir.FullName "AppData\Local"
         if ($otherAppData -ne $env:LOCALAPPDATA -and (Test-Path $otherAppData -ErrorAction SilentlyContinue)) {
             $searchRoots += $otherAppData
@@ -211,11 +211,11 @@ function Find-WinGetExe {
     foreach ($appData in $searchRoots) {
         $packagesRoot = Join-Path $appData "Microsoft\WinGet\Packages"
         if (-not (Test-Path $packagesRoot -ErrorAction SilentlyContinue)) { continue }
-        $pkgDir = Get-ChildItem -Path $packagesRoot -Directory -ErrorAction SilentlyContinue |
+        $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
             Where-Object { $_.Name -like $PackagePattern } |
             Select-Object -First 1
         if ($pkgDir) {
-            $exe = Get-ChildItem -Path $pkgDir.FullName -Filter $ExeFilter -Recurse -ErrorAction SilentlyContinue |
+            $exe = Get-ChildItemSafe -Path $pkgDir.FullName -Filter $ExeFilter -Recurse |
                 Select-Object -First 1
             if ($exe) { return $exe.FullName }
         }
