@@ -260,8 +260,9 @@ Describe 'PnpmHandler' {
         }
 
         It 'should return PNPM_HOME as fallback when pnpm bin still fails after setup' {
+            $expected = $env:PNPM_HOME
             $result = $handler.EnsurePnpmSetup()
-            $result | Should -Be $env:PNPM_HOME
+            $result | Should -Be $expected
         }
 
         It 'should not throw' {
@@ -407,23 +408,137 @@ Describe 'PnpmHandler' {
 
     Context 'pkgName version stripping regex' {
         It 'should strip simple version suffix' {
-            $pkgName = "typescript@5.0.0" -replace '@\d[^\s@]*$', ''
+            $pkgName = "typescript@5.0.0" -replace '(?<=.)@[^\s@]+$', ''
             $pkgName | Should -Be "typescript"
         }
 
         It 'should strip pre-release version suffix' {
-            $pkgName = "typescript@5.0.0-beta.1" -replace '@\d[^\s@]*$', ''
+            $pkgName = "typescript@5.0.0-beta.1" -replace '(?<=.)@[^\s@]+$', ''
+            $pkgName | Should -Be "typescript"
+        }
+
+        It 'should strip dist-tag specifier (@latest, @next)' {
+            $pkgName = "typescript@latest" -replace '(?<=.)@[^\s@]+$', ''
             $pkgName | Should -Be "typescript"
         }
 
         It 'should preserve scoped package name without version' {
-            $pkgName = "@google/gemini-cli" -replace '@\d[^\s@]*$', ''
+            $pkgName = "@google/gemini-cli" -replace '(?<=.)@[^\s@]+$', ''
             $pkgName | Should -Be "@google/gemini-cli"
         }
 
         It 'should strip version from scoped package' {
-            $pkgName = "@google/gemini-cli@1.0.0" -replace '@\d[^\s@]*$', ''
+            $pkgName = "@google/gemini-cli@1.0.0" -replace '(?<=.)@[^\s@]+$', ''
             $pkgName | Should -Be "@google/gemini-cli"
+        }
+
+        It 'should strip dist-tag from scoped package' {
+            $pkgName = "@google/gemini-cli@latest" -replace '(?<=.)@[^\s@]+$', ''
+            $pkgName | Should -Be "@google/gemini-cli"
+        }
+
+        It 'should leave bare package name unchanged' {
+            $pkgName = "typescript" -replace '(?<=.)@[^\s@]+$', ''
+            $pkgName | Should -Be "typescript"
+        }
+    }
+
+    Context 'IsPackageInstalled - scoped package path resolution' {
+        BeforeEach {
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            # pnpm は Windows でスコープ付きパッケージを @org\pkg として配置する
+            New-Item (Join-Path $script:globalRoot "@google\gemini-cli") -ItemType Directory -Force | Out-Null
+            Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
+        }
+
+        It 'should find scoped package when directory exists (Join-Path normalizes forward slash)' {
+            # pkgName は "@google/gemini-cli" (forward slash)
+            # Join-Path が Windows で \ に正規化するため正しく検出される
+            $result = $handler.IsPackageInstalled("@google/gemini-cli", $script:globalRoot)
+            $result | Should -Be $true
+        }
+
+        It 'should return false for missing scoped package' {
+            $result = $handler.IsPackageInstalled("@google/missing-pkg", $script:globalRoot)
+            $result | Should -Be $false
+        }
+    }
+
+    Context 'Apply - packages already installed (skip via 2-arg root check)' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            New-Item (Join-Path $script:globalRoot "@google\gemini-cli") -ItemType Directory -Force | Out-Null
+            New-Item (Join-Path $script:globalRoot "typescript") -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{ globalPackages = @("@google/gemini-cli", "typescript") }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") { $global:LASTEXITCODE = 0; return $script:globalRoot }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should skip all already-installed packages' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "2 個スキップ"
+        }
+
+        It 'should not call pnpm add for installed packages' {
+            $handler.Apply($ctx)
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 0
+        }
+    }
+
+    Context 'Apply - pnpm root fails (installs all packages)' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{ globalPackages = @("pkg-a", "pkg-b") }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") { $global:LASTEXITCODE = 1; return "" }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            # root 失敗 → EnsureGeminiCommandShim 0-arg でリトライするが root も失敗して早期 return
+            # TestGeminiCommand (Invoke-Gemini) には到達しないが明示的にモックして安全に
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should attempt to install all packages when root check fails' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 2
+        }
+
+        It 'should call pnpm root a second time inside 0-arg EnsureGeminiCommandShim when root was empty' {
+            # root 事前取得失敗 → Apply が 0-arg EnsureGeminiCommandShim にフォールバック
+            # → 内部で再度 pnpm root -g を呼ぶ（合計2回）
+            # 2回目も失敗するため shim 作成はスキップされる（動作として正常）
+            $handler.Apply($ctx)
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "root" } -Times 2
         }
     }
 
@@ -666,6 +781,43 @@ Describe 'PnpmHandler' {
             $content | Should -Match 'pnpm root -g'
             $content | Should -Match 'node "%GEMINI_JS%" %\*'
             Should -Invoke Set-UserEnvironmentPath -Times 1
+        }
+    }
+
+    Context 'EnsureGeminiCommandShim([string]) - 1-arg overload with pre-computed root' {
+        BeforeEach {
+            $script:origProfile = $env:USERPROFILE
+            $env:USERPROFILE = $TestDrive
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            New-Item $entryDir -ItemType Directory -Force | Out-Null
+            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "broken" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:USERPROFILE = $script:origProfile
+        }
+
+        It 'should create shim when called with explicit root and gemini is broken' {
+            $handler.EnsureGeminiCommandShim($script:globalRoot)
+            $shimPath = Join-Path $TestDrive ".local\bin\gemini.cmd"
+            $shimPath | Should -Exist
+        }
+
+        It 'should not call pnpm root -g when root is provided' {
+            $handler.EnsureGeminiCommandShim($script:globalRoot)
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "root" } -Times 0
+        }
+
+        It 'should return immediately when root is empty string' {
+            $handler.EnsureGeminiCommandShim("")
+            # 空ルートでは Set-UserEnvironmentPath も Invoke-Gemini も呼ばれない
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+            Should -Invoke Invoke-Gemini -Times 0
         }
     }
 }

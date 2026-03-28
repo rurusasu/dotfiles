@@ -130,7 +130,7 @@ class PnpmHandler : SetupHandlerBase {
             }
 
             foreach ($pkg in $packages) {
-                $pkgName = $pkg -replace '@\d[^\s@]*$', ''
+                $pkgName = $pkg -replace '(?<=.)@[^\s@]+$', ''
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     $this.Log("スキップ (インストール済み): $pkgName", "Gray")
                     $skipped++
@@ -138,7 +138,7 @@ class PnpmHandler : SetupHandlerBase {
                 }
 
                 $this.Log("インストール中: $pkg")
-                Invoke-Pnpm -Arguments @("add", "-g", $pkg) | Out-Null
+                $null = Invoke-Pnpm -Arguments @("add", "-g", $pkg)
 
                 if ($LASTEXITCODE -eq 0) {
                     $succeeded += $pkg
@@ -150,7 +150,12 @@ class PnpmHandler : SetupHandlerBase {
                 }
             }
 
-            $this.EnsureGeminiCommandShim()
+            # ルート取得済みなら再利用、失敗時は 0-arg 版でリトライ
+            if ($globalRootForCheck) {
+                $this.EnsureGeminiCommandShim($globalRootForCheck)
+            } else {
+                $this.EnsureGeminiCommandShim()
+            }
 
             if ($failed.Count -eq 0) {
                 return $this.CreateSuccessResult("$($succeeded.Count) 個インストール, $skipped 個スキップ")
@@ -187,7 +192,7 @@ class PnpmHandler : SetupHandlerBase {
             return $rawBinPath.Trim()
         }
         $this.Log("PNPM_HOME が未設定です。pnpm setup を実行します...")
-        Invoke-Pnpm -Arguments @("setup") | Out-Null
+        $null = Invoke-Pnpm -Arguments @("setup")
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("pnpm setup に失敗しました")
             return $null
@@ -199,6 +204,7 @@ class PnpmHandler : SetupHandlerBase {
             if ($registryPnpmHome) {
                 $env:PNPM_HOME = $registryPnpmHome
             } elseif ($env:LOCALAPPDATA) {
+                # pnpm >= 9 では PNPM_HOME がグローバル bin を兼ねる前提
                 $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
             }
         }
@@ -254,6 +260,10 @@ class PnpmHandler : SetupHandlerBase {
         catch {
             return
         }
+        $this.EnsureGeminiCommandShim($globalRoot)
+    }
+
+    hidden [void] EnsureGeminiCommandShim([string]$globalRoot) {
         if (-not $globalRoot) { return }
 
         $entrypoint = Join-Path $globalRoot "@google\gemini-cli\dist\index.js"
