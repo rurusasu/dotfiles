@@ -243,7 +243,7 @@ if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXI
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "safe\.directory|gitconfig") {
+                if ($argStr -match "grep.*directory.*gitconfig|printf.*\[safe\]") {
                     $script:gitConfigCalled = $true
                     if (-not $script:rebuildCalled) { $script:gitCalledFirst = $true }
                     $global:LASTEXITCODE = 0; return ""
