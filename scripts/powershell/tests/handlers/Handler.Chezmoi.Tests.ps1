@@ -267,9 +267,9 @@ Describe 'ChezmoiHandler' {
                 }
             }
             $script:getChildItemDeployCallCount = 0
-            # DeployProfileToOtherUsers が呼ばれると $usersDir の Get-ChildItem が実行される
+            # DeployProfileToOtherUsers が呼ばれると $usersDir の Get-ChildItemSafe が実行される
             # 非管理者では Test-IsAdminSession が false を返すのでここには到達しない
-            Mock Get-ChildItem {
+            Mock Get-ChildItemSafe {
                 # USERPROFILE の親ディレクトリへのアクセスを検出
                 $script:getChildItemDeployCallCount++
                 return @()
@@ -278,7 +278,7 @@ Describe 'ChezmoiHandler' {
             $handler.CanApply($ctx) | Should -Be $true
             $handler.Apply($ctx) | Out-Null
 
-            # 非管理者では DeployProfileToOtherUsers が呼ばれないため Get-ChildItem も呼ばれない
+            # 非管理者では DeployProfileToOtherUsers が呼ばれないため Get-ChildItemSafe も呼ばれない
             $script:getChildItemDeployCallCount | Should -Be 0
         }
 

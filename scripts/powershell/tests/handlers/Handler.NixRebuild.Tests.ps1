@@ -104,7 +104,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -123,7 +124,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -152,7 +154,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -184,7 +187,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -207,7 +211,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -232,7 +237,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -260,7 +266,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -296,7 +303,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -324,7 +332,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -353,7 +362,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -381,7 +391,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -406,7 +417,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -428,7 +440,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -454,7 +467,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -480,7 +494,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 
@@ -514,7 +529,8 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                return ""
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
             }
             $handler.CanApply($ctx)
 

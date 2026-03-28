@@ -559,8 +559,7 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0
                 return ""
             }
-            function gemini { }
-            Mock gemini {
+            Mock Invoke-Gemini {
                 $global:LASTEXITCODE = 0
                 return "0.32.0"
             }
@@ -596,8 +595,7 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0
                 return ""
             }
-            function gemini { }
-            Mock gemini {
+            Mock Invoke-Gemini {
                 $global:LASTEXITCODE = 1
                 throw "broken"
             }
