@@ -1,6 +1,6 @@
-{ lib, pkgs, ... }:
+{ lib, pkgs, config, ... }:
 let
-  inherit (lib) mkOption types;
+  inherit (lib) mkOption mkIf mkMerge types;
 in
 {
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {
@@ -9,84 +9,101 @@ in
     description = "Enable Docker Desktop WSL2 integration (required for kind to use Docker as container runtime)";
   };
 
-  config = {
-    nix = {
-      settings = {
-        experimental-features = [
-          "nix-command"
-          "flakes"
-        ];
-        auto-optimise-store = true;
+  config = mkMerge [
+    {
+      nix = {
+        settings = {
+          experimental-features = [
+            "nix-command"
+            "flakes"
+          ];
+          auto-optimise-store = true;
+        };
+        gc = {
+          automatic = true;
+          dates = "weekly";
+          options = "--delete-older-than 7d";
+        };
       };
-      gc = {
-        automatic = true;
-        dates = "weekly";
-        options = "--delete-older-than 7d";
+
+      nixpkgs.config.allowUnfree = true;
+      programs.zsh.enable = true;
+
+      programs.git = {
+        enable = true;
+        config = {
+          safe.directory = "*";
+        };
       };
-    };
 
-    nixpkgs.config.allowUnfree = true;
-    programs.zsh.enable = true;
+      environment.systemPackages = with pkgs; [
+        # Dotfiles manager
+        chezmoi
 
-    programs.git = {
-      enable = true;
-      config = {
-        safe.directory = "*";
+        # Version control
+        git
+        gh
+
+        # Modern CLI replacements
+        fd # find alternative
+        ripgrep # grep alternative
+        bat # cat alternative
+        eza # ls alternative
+        zoxide # cd alternative
+        fzf # fuzzy finder
+
+        # Shell prompt
+        starship
+
+        # Editor
+        neovim
+
+        # Task runner
+        go-task
+
+        # Archive tools
+        unzip
+        p7zip
+
+        # Python toolchain
+        uv
+
+        # JavaScript runtime (for claude-code, gemini-cli, openclaw — pnpm via corepack)
+        nodejs_22 # openclaw requires Node.js 22+
+
+        # Secret management
+        _1password-cli
+
+        # Formatter & lint runner (for git pre-commit hooks)
+        treefmt
+        pre-commit
+        powershell # provides pwsh for PowerShell test hook
+
+        # AI coding agents
+        opencode
+
+        # Kubernetes tools (kind-based local cluster)
+        kind # Local Kubernetes clusters using Docker
+        kubectl # Kubernetes CLI
+        kubernetes-helm # Kubernetes package manager
+        k9s # Kubernetes TUI
+        kubectx # Fast cluster switching
+      ];
+    }
+
+    # Docker Desktop WSL integration: /mnt/wsl は noexec でマウントされるため
+    # Docker Desktop のプロキシバイナリが実行できない。exec で再マウントする。
+    (mkIf config.mySettings.wsl.dockerDesktopIntegration {
+      systemd.services."docker-desktop-mnt-wsl-exec" = {
+        description = "Remount /mnt/wsl with exec for Docker Desktop WSL integration";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "local-fs.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
+        };
       };
-    };
-
-    environment.systemPackages = with pkgs; [
-      # Dotfiles manager
-      chezmoi
-
-      # Version control
-      git
-      gh
-
-      # Modern CLI replacements
-      fd # find alternative
-      ripgrep # grep alternative
-      bat # cat alternative
-      eza # ls alternative
-      zoxide # cd alternative
-      fzf # fuzzy finder
-
-      # Shell prompt
-      starship
-
-      # Editor
-      neovim
-
-      # Task runner
-      go-task
-
-      # Archive tools
-      unzip
-      p7zip
-
-      # Python toolchain
-      uv
-
-      # JavaScript runtime (for claude-code, gemini-cli, openclaw — pnpm via corepack)
-      nodejs_22 # openclaw requires Node.js 22+
-
-      # Secret management
-      _1password-cli
-
-      # Formatter & lint runner (for git pre-commit hooks)
-      treefmt
-      pre-commit
-      powershell # provides pwsh for PowerShell test hook
-
-      # AI coding agents
-      opencode
-
-      # Kubernetes tools (kind-based local cluster)
-      kind # Local Kubernetes clusters using Docker
-      kubectl # Kubernetes CLI
-      kubernetes-helm # Kubernetes package manager
-      k9s # Kubernetes TUI
-      kubectx # Fast cluster switching
-    ];
-  };
+    })
+  ];
 }
