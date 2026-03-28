@@ -66,12 +66,12 @@ class NixOSWSLHandler : SetupHandlerBase {
         try {
             # wsl --version はディストリビューション未登録でも exit 0 を返す最も確実な確認方法
             # 管理者昇格プロセスでも動作する
-            Invoke-Wsl --version 2>$null | Out-Null
+            Invoke-Wsl -Arguments @("--version") 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
             # --version に対応していない古い WSL では --status を試す
-            $output = Invoke-Wsl --status 2>&1
+            $output = Invoke-Wsl -Arguments @("--status") 2>&1
             # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
             $cleanOutput = ($output | ForEach-Object {
                 ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()

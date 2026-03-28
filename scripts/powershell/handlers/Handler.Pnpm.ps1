@@ -233,7 +233,8 @@ class PnpmHandler : SetupHandlerBase {
 
     hidden [void] EnsureGeminiCommandShim() {
         try {
-            $globalRoot = (Invoke-Pnpm -Arguments @("root", "-g")).Trim()
+            $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
+            $globalRoot = if ($rawRoot) { $rawRoot.Trim() } else { "" }
         }
         catch {
             return

@@ -301,7 +301,7 @@ class ChezmoiHandler : SetupHandlerBase {
     #>
     hidden [string] FindOpExe() {
         # 1. PATH から検索
-        $cmd = Get-Command "op" -ErrorAction SilentlyContinue
+        $cmd = Get-ExternalCommand -Name "op"
         if ($cmd) {
             return $cmd.Source
         }

@@ -167,7 +167,7 @@ Describe 'ChezmoiHandler' {
             Mock New-DirectorySafe { }
             Mock Write-Host { }
             # op が見つからない想定（EnsureOnePasswordAvailable は警告のみ出して続行）
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
             Mock Find-WinGetExe { return $null }
@@ -251,7 +251,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
             Mock Find-WinGetExe { return $null }
@@ -394,7 +394,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
             Mock Find-WinGetExe { return $null }
@@ -658,7 +658,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should log warning and continue when op is not found' {
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
@@ -676,7 +676,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should proceed silently when op whoami succeeds' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
@@ -699,7 +699,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should attempt op signin when op whoami fails' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
@@ -722,7 +722,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should sign in and log success after op signin succeeds' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             $script:whoamiCallCount = 0
             Mock Invoke-OpWhoAmI {
                 $script:whoamiCallCount++
@@ -750,7 +750,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should log warning after max retries exhausted' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
@@ -795,7 +795,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should find op from PATH' {
-            Mock Get-Command {
+            Mock Get-ExternalCommand {
                 return [PSCustomObject]@{ Source = 'C:\tools\op.exe' }
             } -ParameterFilter { $Name -eq 'op' }
 
@@ -808,7 +808,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should find op from WinGet Packages when not in PATH' {
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             # Find-WinGetExe が全ユーザーの WinGet Packages を検索するため、
             # Get-ChildItem と Test-Path をモックして op.exe を返す
             Mock Find-WinGetExe {
@@ -824,7 +824,7 @@ Describe 'ChezmoiHandler' {
         }
 
         It 'should log warning when op is not found anywhere' {
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
             $script:notFoundWarned = $false
             Mock Write-Host {
@@ -903,7 +903,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             Mock Find-WinGetExe { return $null }
             Mock Invoke-Chezmoi {
@@ -960,7 +960,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'op' }
+            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
             Mock Get-ChildItemSafe { return @() }
             Mock Find-WinGetExe { return $null }
             Mock Invoke-Chezmoi {
