@@ -489,7 +489,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             $user = "nixos"
         }
         $user = $user.Trim()
-        $cmd = "( groupadd docker 2>/dev/null || true ) && usermod -aG docker $user"
+        $cmd = "( groupadd docker 2>/dev/null || true ) && usermod -aG docker '$user'"
         Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $cmd)
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker グループに '$user' を追加しました", "Green")

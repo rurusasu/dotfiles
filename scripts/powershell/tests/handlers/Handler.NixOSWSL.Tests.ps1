@@ -621,7 +621,7 @@ Describe 'NixOSWSLHandler' {
             $handler.EnsureDockerGroup("NixOS")
 
             $script:wslCmd | Should -Match "groupadd docker"
-            $script:wslCmd | Should -Match "usermod -aG docker nixos"
+            $script:wslCmd | Should -Match "usermod -aG docker 'nixos'"
         }
 
         It 'should fall back to nixos user when whoami fails' {
@@ -640,7 +640,7 @@ Describe 'NixOSWSLHandler' {
 
             $handler.EnsureDockerGroup("NixOS")
 
-            $script:wslCmd | Should -Match "usermod -aG docker nixos"
+            $script:wslCmd | Should -Match "usermod -aG docker 'nixos'"
         }
 
         It 'should not throw when docker group command fails' {

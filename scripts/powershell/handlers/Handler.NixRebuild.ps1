@@ -15,7 +15,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
 class NixRebuildHandler : SetupHandlerBase {
-    hidden [string] $PnpmHomePath = '~/.local/share/pnpm'
+    hidden [string] $PnpmHomePath = '$HOME/.local/share/pnpm'
 
     NixRebuildHandler() {
         $this.Name = "NixRebuild"
