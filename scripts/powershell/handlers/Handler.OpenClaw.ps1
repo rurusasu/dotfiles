@@ -430,14 +430,16 @@ SKILLS_PATH=$skillsPath
             return
         }
 
-        # コンテナ内に jobs.json がすでに存在するか確認
-        $existing = Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "test -f //home/app/.openclaw/cron/jobs.json && echo exists"
-        if ($existing -match "exists") {
-            $this.Log("cron/jobs.json はすでに存在します。シードをスキップします", "Gray")
+        # コンテナ内に jobs.json がすでに存在し、ジョブが登録済みか確認
+        # OpenClaw は起動時に空の jobs.json ({"version":1,"jobs":[]}) を自動生成するため、
+        # ファイルの存在だけでなくジョブ配列が空でないことも確認する。
+        $jobCount = Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "node -e `"const d=JSON.parse(require('fs').readFileSync('//home/app/.openclaw/cron/jobs.json','utf8'));console.log((d.jobs||[]).length)`" 2>/dev/null" 2>$null
+        if ($jobCount -match '^\d+$' -and [int]$jobCount -gt 0) {
+            $this.Log("cron/jobs.json にジョブが ${jobCount} 件登録済みです。シードをスキップします", "Gray")
             return
         }
 
-        $this.Log("cron/jobs.json が存在しません。シードファイルをコピーします")
+        $this.Log("cron/jobs.json が未登録または空です。シードファイルをコピーします")
         Invoke-Docker "exec" "openclaw" "//bin/sh" "-c" "mkdir -p //home/app/.openclaw/cron"
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("cron seed: コンテナ内ディレクトリの作成に失敗しました")

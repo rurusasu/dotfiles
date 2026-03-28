@@ -300,7 +300,7 @@
   "gateway": {
     "port": {{ .openclaw.gateway.port }},
     "mode": "local",
-    "bind": "loopback",
+    "bind": "lan",
     "reload": {
       "mode": "hybrid"
     },
@@ -312,12 +312,14 @@
       "token": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
 {{- end }}
     },
+    "trustedProxies": ["172.16.0.0/12", "192.168.65.0/24"],
     "tailscale": {
       "mode": "off",
       "resetOnExit": false
     },
     "controlUi": {
       "enabled": true,
+      "allowInsecureAuth": true,
       "allowedOrigins": [
         "http://localhost:{{ .openclaw.gateway.port }}",
         "http://127.0.0.1:{{ .openclaw.gateway.port }}"

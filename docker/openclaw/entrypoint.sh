@@ -245,7 +245,11 @@ _workspace_remote="${OPENCLAW_WORKSPACE_REMOTE:-https://github.com/rurusasu/open
 if [ ! -d "$workspace_dir/.git" ]; then
   # No .git — attempt initial clone into existing (possibly non-empty) directory.
   echo "[entrypoint] workspace: .git not found, cloning from $_workspace_remote"
-  _tmp_clone="$(mktemp -d)"
+  # /tmp is a small tmpfs (64 MB); use /app/data (named volume) for the temp clone
+  # so that large repos don't hit "No space left on device".
+  _tmp_clone="/app/data/.tmp-workspace-clone.$$"
+  rm -rf "$_tmp_clone"
+  mkdir -p "$_tmp_clone"
   trap 'rm -rf "$_tmp_clone"' EXIT
   if git clone --depth 1 "$_workspace_remote" "$_tmp_clone" 2>&1; then
     # Move .git into workspace dir, then checkout to apply remote files.

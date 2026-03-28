@@ -18,11 +18,9 @@ services:
         max-size: "50m"
         max-file: "3"
 
-    # host ネットワークモードにより、ブラウザからの接続が loopback 扱いとなり
-    # Control UI のデバイスペアリングが自動承認される。
-    # ポートは gateway config (openclaw.docker.json) で制御。
-    # 注意: OAuth callback ポート (1455) もホストに直接バインドされる。
-    network_mode: host
+    ports:
+      - "127.0.0.1:41789:41789"
+      - "127.0.0.1:1456:1455" # OAuth callback port
 
     read_only: true
     tmpfs:
