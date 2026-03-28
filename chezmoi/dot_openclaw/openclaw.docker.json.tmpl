@@ -337,8 +337,10 @@
       "telegram",
       "slack",
       "acpx",
-      "google-gemini-cli-auth",
-      "openclaw-mcp-bridge"
+      "openclaw-mcp-bridge",
+      "exa",
+      "tavily",
+      "firecrawl"
     ],
     "entries": {
       "acpx": {
@@ -346,9 +348,6 @@
         "config": {
           "command": "/usr/local/bin/acpx"
         }
-      },
-      "google-gemini-cli-auth": {
-        "enabled": true
       },
       "openclaw-mcp-bridge": {
         "enabled": true,
@@ -361,6 +360,42 @@
               "url": "http://127.0.0.1:8000/mcp",
               "description": "Cognee MCP skills"
             }
+          }
+        }
+      },
+      "exa": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+{{- if lookPath "op" }}
+            "apiKey": "{{ onepasswordRead "op://Personal/ExaUsedUserPAT/credential" }}"
+{{- else }}
+            "apiKey": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
+{{- end }}
+          }
+        }
+      },
+      "tavily": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+{{- if lookPath "op" }}
+            "apiKey": "{{ onepasswordRead "op://Personal/TavilyUsedOpenclawPAT/credential" }}"
+{{- else }}
+            "apiKey": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
+{{- end }}
+          }
+        }
+      },
+      "firecrawl": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+{{- if lookPath "op" }}
+            "apiKey": "{{ onepasswordRead "op://Personal/FirecrawlUsedUserPAT/credential" }}"
+{{- else }}
+            "apiKey": "PLACEHOLDER_REQUIRES_OP_SIGNIN"
+{{- end }}
           }
         }
       }

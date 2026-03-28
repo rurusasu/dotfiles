@@ -7,7 +7,7 @@ services:
     container_name: openclaw
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:${OPENCLAW_PORT:-41789}/health"]
+      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:41789/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -29,6 +29,7 @@ services:
       - /tmp:size=64m,mode=1777
       - /home/app/.agents:size=1m,mode=0777
       - /home/bun:size=1m,uid=1000,gid=1000,mode=0755
+      - /home/app/.mcp-bridge:size=16m,uid=1000,gid=1000,mode=0755
     cap_drop:
       - ALL
     security_opt:
