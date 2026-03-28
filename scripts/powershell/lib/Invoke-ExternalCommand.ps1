@@ -601,7 +601,7 @@ function Invoke-Docker {
 function Test-DockerDaemon {
     [CmdletBinding()]
     param()
-    $null = Invoke-Docker info 2>&1
+    Invoke-Docker -Arguments @("info") | Out-Null
     return $global:LASTEXITCODE -eq 0
 }
 
