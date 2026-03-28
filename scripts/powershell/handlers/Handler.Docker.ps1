@@ -523,7 +523,10 @@ class DockerHandler : SetupHandlerBase {
         Docker Desktop の健全性をチェックする
     #>
     hidden [bool] TestDockerDesktopHealth() {
-        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-lc" "test -f /opt/docker-desktop/componentsVersion.json"
+        # Docker Desktop のリソースは Windows 側にマウントされている
+        # /tmp/docker-desktop-root/mnt/host/c/Program Files/Docker/Docker/resources/
+        $checkCmd = "test -f '/tmp/docker-desktop-root/mnt/host/c/Program Files/Docker/Docker/resources/componentsVersion.json'"
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-lc" $checkCmd
         return $LASTEXITCODE -eq 0
     }
 
