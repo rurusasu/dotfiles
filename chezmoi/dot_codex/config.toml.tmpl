@@ -167,8 +167,15 @@ startup_timeout_sec = {{ .startup_timeout_sec }}
 {{- end }}
 {{- if hasKey . "env" }}
 [mcp_servers.{{ .name }}.env]
+{{- $hasOp := and (hasKey . "op_env") (lookPath "op") }}
+{{- $opEnv := dict }}
+{{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}
+{{- if and $hasOp (hasKey $opEnv $key) }}
+{{ $key }} = "{{ onepasswordRead (index $opEnv $key) }}"
+{{- else }}
 {{ $key }} = "{{ $value }}"
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

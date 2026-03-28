@@ -35,10 +35,17 @@
 {{- if hasKey . "env" }},
       "env": {
 {{- $envFirst := true }}
+{{- $hasOp := and (hasKey . "op_env") (lookPath "op") }}
+{{- $opEnv := dict }}
+{{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}
 {{- if not $envFirst }},{{ end }}
 {{- $envFirst = false }}
+{{- if and $hasOp (hasKey $opEnv $key) }}
+        "{{ $key }}": "{{ onepasswordRead (index $opEnv $key) }}"
+{{- else }}
         "{{ $key }}": "{{ $value }}"
+{{- end }}
 {{- end }}
       }
 {{- end }}
