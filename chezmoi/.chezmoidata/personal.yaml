@@ -8,4 +8,4 @@ git:
 
 # chezmoi テンプレート展開用フラグ（.chezmoiignore.tmpl で参照）
 # install.cmd の同意状態は ~/.config/dotfiles/consent.json で別管理
-openclaw_enabled: true
+# openclaw_enabled: removed — OpenClaw は openclaw-k8s リポジトリに移行済み
