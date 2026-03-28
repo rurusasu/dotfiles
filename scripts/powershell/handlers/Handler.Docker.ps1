@@ -529,6 +529,45 @@ class DockerHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
+        docker-desktop distro から共有 /mnt/wsl/ へ bind mount を設定する
+    .DESCRIPTION
+        Docker Desktop の Windows backend が NixOS の systemd mount namespace に
+        bind mount できない場合の workaround。
+        docker-desktop distro の /mnt/host/wsl は NixOS の /mnt/wsl と同じ
+        shared:1 peer group なので、docker-desktop 側で bind mount すると NixOS に伝播する。
+    #>
+    hidden [void] SetupDockerBindMounts() {
+        $distroExists = $this.TestWslDistroExists("docker-desktop")
+        if (-not $distroExists) {
+            $this.Log("docker-desktop distro が見つからないため bind mount をスキップします", "Gray")
+            return
+        }
+
+        # バイナリが既に正しく設定されているか確認
+        $checkCmd = "[ -x /mnt/host/wsl/docker-desktop/docker-desktop-user-distro ]"
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $checkCmd 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("docker-desktop bind mount は既に設定済みです", "Gray")
+            return
+        }
+
+        $this.Log("docker-desktop bind mount を設定します...")
+        $mountCmd = @(
+            "mount --bind /docker-desktop-user-distro /mnt/host/wsl/docker-desktop/docker-desktop-user-distro 2>/dev/null",
+            "mount --bind /run/guest-services /mnt/host/wsl/docker-desktop/shared-sockets/guest-services 2>/dev/null",
+            "true"
+        ) -join " && "
+        Invoke-Wsl "-d" "docker-desktop" "-u" "root" "--" "sh" "-c" $mountCmd 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $this.Log("docker-desktop bind mount を設定しました", "Green")
+        }
+        else {
+            $this.Log("docker-desktop bind mount の設定に失敗しました（Docker Desktop が管理する可能性あり）", "Gray")
+        }
+    }
+
+    <#
+    .SYNOPSIS
         Docker Desktop プロキシの接続をテストする
     #>
     hidden [bool] TestDockerDesktopProxy([string]$distroName) {
@@ -556,6 +595,10 @@ class DockerHandler : SetupHandlerBase {
             $this.Log("Docker Desktop 連携の確認を試行します ($i/$($this.Retries))...")
 
             $this.StartDockerDesktopIfNeeded()
+
+            # docker-desktop distro の bind mount を確認・設定する
+            # Docker Desktop の Windows backend が NixOS に bind mount できない場合の workaround
+            $this.SetupDockerBindMounts()
 
             if ($this.TestDockerDesktopProxy($distroName)) {
                 $this.Log("Docker Desktop 連携の確認に成功しました", "Green")

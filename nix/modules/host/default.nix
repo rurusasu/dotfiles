@@ -133,13 +133,10 @@ in
         };
       };
 
-      # Docker Desktop は NixOS の /var/run/docker.sock へ bind mount を試みるが、
-      # systemd 管理の tmpfs のため失敗する。
-      # 実ソケットは /mnt/wsl/docker-desktop-bind-mounts/NixOS/docker.sock に存在するので
-      # シンボリックリンクで proxy が接続できるようにする。
-      systemd.tmpfiles.rules = [
-        "L+ /var/run/docker.sock - - - - /mnt/wsl/docker-desktop-bind-mounts/NixOS/docker.sock"
-      ];
+      # docker グループを作成する（Docker Desktop の bind mount が /var/run/docker.sock を
+      # docker グループ所有で作成するため、nixos ユーザーが接続できるように）
+      users.groups.docker = { };
+      users.users.nixos.extraGroups = [ "docker" ];
     })
   ];
 }
