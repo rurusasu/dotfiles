@@ -250,6 +250,7 @@ if [ ! -d "$workspace_dir/.git" ]; then
   _tmp_clone="/app/data/.tmp-workspace-clone.$$"
   rm -rf "$_tmp_clone"
   mkdir -p "$_tmp_clone"
+  # NOTE: this EXIT trap replaces any prior EXIT trap; do not add other EXIT traps above this point.
   trap 'rm -rf "$_tmp_clone"' EXIT
   if git clone --depth 1 "$_workspace_remote" "$_tmp_clone" 2>&1; then
     # Move .git into workspace dir, then checkout to apply remote files.

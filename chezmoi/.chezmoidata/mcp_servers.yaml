@@ -76,15 +76,57 @@ mcp_servers:
       - cursor
       - gemini
 
-  # Tavily - AI-powered web search and extraction
+  # Tavily - AI-powered web search and extraction (Docker MCP SDK)
   - name: tavily
-    command: pnpm
+    command: docker
     args:
-      - "dlx"
-      - "tavily-mcp@latest"
-    startup_timeout_sec: 30
+      - "run"
+      - "-i"
+      - "--rm"
+      - "-e"
+      - "TAVILY_API_KEY"
+      - "mcp/tavily"
+    startup_timeout_sec: 60
     env:
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Exa - AI-powered web search and crawling (Docker MCP SDK)
+  - name: exa
+    command: docker
+    args:
+      - "run"
+      - "-i"
+      - "--rm"
+      - "-e"
+      - "EXA_API_KEY"
+      - "mcp/exa"
+    startup_timeout_sec: 60
+    env:
+      EXA_API_KEY: "${EXA_API_KEY}"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # Firecrawl - Web scraping and content extraction (Docker MCP SDK)
+  - name: firecrawl
+    command: docker
+    args:
+      - "run"
+      - "-i"
+      - "--rm"
+      - "-e"
+      - "FIRECRAWL_API_KEY"
+      - "mcp/firecrawl"
+    startup_timeout_sec: 60
+    env:
+      FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY}"
     supports:
       - codex
       - claude

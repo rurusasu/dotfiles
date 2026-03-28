@@ -92,7 +92,7 @@ docker restart openclaw
 
 ### Gateway
 
-- `gateway.mode: "local"` + `gateway.bind: "loopback"` + `gateway.auth.mode: "token"` で保護
+- `gateway.mode: "local"` + `gateway.bind: "lan"` + `gateway.auth.mode: "token"` + `trustedProxies` で保護
 - gateway token は 1Password から取得
 
 ## 必須ボリューム
@@ -370,9 +370,9 @@ Handler の `SeedCronJobs()` は以下の条件をすべて満たす場合のみ
 
 1. ホスト上に `~/.openclaw/cron/jobs.seed.json` が存在する（`chezmoi apply` 済み）
 2. openclaw コンテナが起動中である
-3. コンテナ内に `jobs.json` が存在しない
+3. コンテナ内に `jobs.json` が存在しない、または存在するがジョブ配列が空である（OpenClaw は起動時に空の `{"version":1,"jobs":[]}` を自動生成するため）
 
-いずれかの条件を満たさない場合は Warning ログを出力してスキップする。
+いずれかの条件を満たさない場合はスキップする。
 
 テンプレートを更新した後に反映するには:
 
