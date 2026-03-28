@@ -93,14 +93,20 @@ in
 
     # Docker Desktop WSL integration: /mnt/wsl は noexec でマウントされるため
     # Docker Desktop のプロキシバイナリが実行できない。exec で再マウントする。
+    # /mnt/wsl は Docker Desktop 接続時に非同期でマウントされるため、
+    # path unit で監視し、mountpoint になった時点でサービスを起動する。
     (mkIf config.mySettings.wsl.dockerDesktopIntegration {
+      systemd.paths."docker-desktop-mnt-wsl-exec" = {
+        description = "Watch for /mnt/wsl to become a mountpoint (Docker Desktop WSL integration)";
+        wantedBy = [ "multi-user.target" ];
+        pathConfig.PathIsMountPoint = "/mnt/wsl";
+      };
+
       systemd.services."docker-desktop-mnt-wsl-exec" = {
         description = "Remount /mnt/wsl with exec for Docker Desktop WSL integration";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "local-fs.target" ];
+        unitConfig.ConditionPathIsMountPoint = "/mnt/wsl";
         serviceConfig = {
           Type = "oneshot";
-          RemainAfterExit = true;
           ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
         };
       };

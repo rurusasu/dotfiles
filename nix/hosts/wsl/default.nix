@@ -6,7 +6,6 @@
 }:
 {
   imports = [
-    ../../modules/host
     ../../modules/wsl
     ./configuration.nix
     inputs.nixos-vscode-server.nixosModules.default
