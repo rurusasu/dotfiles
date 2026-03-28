@@ -628,7 +628,7 @@ class DockerHandler : SetupHandlerBase {
                 return $true
             }
 
-            if (-not $restarted -and $i -lt $this.Retries) {
+            if (-not $restarted) {
                 $this.LogWarning("Docker Desktop 連携の確認に失敗しました。WSL を再起動して再試行します")
                 # wsl --shutdown は Docker Desktop 以外のディストリビューション（NixOS 等）を
                 # 破壊する可能性があるため、docker-desktop のみ terminate する
