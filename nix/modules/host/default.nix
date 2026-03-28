@@ -32,6 +32,9 @@ in
       programs.git = {
         enable = true;
         config = {
+          # WSL の /mnt/ 配下は Windows 側の所有者 (UID 1000 等) と NixOS の UID が一致しないため
+          # CVE-2022-24765 の ownership チェックを全ディレクトリに対して無効化している。
+          # /mnt/ 以下に悪意のある .git/hooks が存在するリスクは許容する（個人端末のみ）。
           safe.directory = "*";
         };
       };
@@ -97,20 +100,21 @@ in
     # path unit で監視し、mountpoint になった時点でサービスを起動する。
     (mkIf config.mySettings.wsl.dockerDesktopIntegration {
       # /proc/mounts の変更を監視し、/mnt/wsl がマウントされたタイミングでサービスを起動する。
-      # PathIsMountPoint は path unit の有効なディレクティブではないため PathChanged を使用する。
+      # PathModified は inotify IN_CLOSE_WRITE を使うため PathChanged より確実に検出できる。
       systemd.paths."docker-desktop-mnt-wsl-exec" = {
         description = "Watch /proc/mounts for Docker Desktop WSL integration";
         wantedBy = [ "multi-user.target" ];
-        pathConfig.PathChanged = "/proc/mounts";
+        pathConfig.PathModified = "/proc/mounts";
       };
 
       systemd.services."docker-desktop-mnt-wsl-exec" = {
         description = "Remount /mnt/wsl with exec for Docker Desktop WSL integration";
         # /mnt/wsl が未マウントのときはスキップする（/proc/mounts 変更の都度トリガーされるため）
+        # RemainAfterExit は使わない: Docker Desktop 再起動時に /mnt/wsl が再マウントされるため
+        # oneshot が inactive に戻り path unit が再トリガーできるようにする。
         unitConfig.ConditionPathIsMountPoint = "/mnt/wsl";
         serviceConfig = {
           Type = "oneshot";
-          RemainAfterExit = true;
           ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
         };
       };
