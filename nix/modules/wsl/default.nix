@@ -7,7 +7,6 @@
   system.activationScripts.wslWhoami = {
     text = ''
       mkdir -p /usr/bin
-      ln -sf /run/current-system/sw/bin/whoami /bin/whoami
       ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami
     '';
   };

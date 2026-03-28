@@ -96,17 +96,21 @@ in
     # /mnt/wsl は Docker Desktop 接続時に非同期でマウントされるため、
     # path unit で監視し、mountpoint になった時点でサービスを起動する。
     (mkIf config.mySettings.wsl.dockerDesktopIntegration {
+      # /proc/mounts の変更を監視し、/mnt/wsl がマウントされたタイミングでサービスを起動する。
+      # PathIsMountPoint は path unit の有効なディレクティブではないため PathChanged を使用する。
       systemd.paths."docker-desktop-mnt-wsl-exec" = {
-        description = "Watch for /mnt/wsl to become a mountpoint (Docker Desktop WSL integration)";
+        description = "Watch /proc/mounts for Docker Desktop WSL integration";
         wantedBy = [ "multi-user.target" ];
-        pathConfig.PathIsMountPoint = "/mnt/wsl";
+        pathConfig.PathChanged = "/proc/mounts";
       };
 
       systemd.services."docker-desktop-mnt-wsl-exec" = {
         description = "Remount /mnt/wsl with exec for Docker Desktop WSL integration";
+        # /mnt/wsl が未マウントのときはスキップする（/proc/mounts 変更の都度トリガーされるため）
         unitConfig.ConditionPathIsMountPoint = "/mnt/wsl";
         serviceConfig = {
           Type = "oneshot";
+          RemainAfterExit = true;
           ExecStart = "${pkgs.util-linux}/bin/mount -o remount,exec /mnt/wsl";
         };
       };
