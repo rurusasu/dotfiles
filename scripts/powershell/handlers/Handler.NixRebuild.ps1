@@ -224,6 +224,13 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch を実行しています...")
 
+            # /mnt/ 配下の dotfiles は Windows 側オーナーのため CVE-2022-24765 の ownership チェックで
+            # nix (libgit2) がフレークの読み込みを拒否する。root の gitconfig で回避する。
+            Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "root", "--",
+                "bash", "-lc", "git config --global safe.directory '*' 2>/dev/null || printf '[safe]\n\tdirectory = *\n' > /root/.gitconfig"
+            ) | Out-Null
+
             # root で nixos-rebuild switch を実行（nixos ユーザーの dotfiles を使用）
             $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nixos-rebuild switch --flake .#nixos")
 
