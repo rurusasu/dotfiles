@@ -12,13 +12,13 @@ openclaw-k8s の Taskfile タスクが依存するツール (`kind`, `helm`, `ku
 
 ## 対象ツール
 
-| ツール | 用途 | 必須 |
-|--------|------|------|
-| `kind` | K8s クラスタ管理 | setup, cluster:* |
-| `helm` | ESO/1Password Connect インストール | secrets:* |
-| `kubectl` | K8s 操作全般 | ほぼ全タスク |
-| `jq` | JSON パース (secrets:status) | secrets:status |
-| `docker` | イメージビルド | build:*, sandbox:* |
+| ツール    | 用途                               | 必須               |
+| --------- | ---------------------------------- | ------------------ |
+| `kind`    | K8s クラスタ管理                   | setup, cluster:\*  |
+| `helm`    | ESO/1Password Connect インストール | secrets:\*         |
+| `kubectl` | K8s 操作全般                       | ほぼ全タスク       |
+| `jq`      | JSON パース (secrets:status)       | secrets:status     |
+| `docker`  | イメージビルド                     | build:_, sandbox:_ |
 
 ## ディレクトリ構成
 
@@ -63,25 +63,25 @@ tasks/deps/
 
 ### OS 別パッケージマネージャ
 
-| OS | パッケージマネージャ | フォールバック |
-|----|----------------------|----------------|
-| windows | winget | なし (エラー) |
-| wsl2 | apt-get | curl (バイナリ直接) |
-| nixos | nix profile install | なし |
-| linux | apt-get | curl (バイナリ直接) |
-| darwin | brew | curl (バイナリ直接) |
+| OS      | パッケージマネージャ | フォールバック      |
+| ------- | -------------------- | ------------------- |
+| windows | winget               | なし (エラー)       |
+| wsl2    | apt-get              | curl (バイナリ直接) |
+| nixos   | nix profile install  | なし                |
+| linux   | apt-get              | curl (バイナリ直接) |
+| darwin  | brew                 | curl (バイナリ直接) |
 
 ### ツール × OS インストールコマンド
 
-| ツール | windows | wsl2 / linux | nixos | darwin |
-|--------|---------|--------------|-------|--------|
-| kind | `winget install Kubernetes.kind` | `curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && install kind /usr/local/bin/` | `nix profile install nixpkgs#kind` | `brew install kind` |
-| helm | `winget install Helm.Helm` | `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \| bash` | `nix profile install nixpkgs#kubernetes-helm` | `brew install helm` |
-| kubectl | `winget install Kubernetes.kubectl` | `curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install kubectl /usr/local/bin/` | `nix profile install nixpkgs#kubectl` | `brew install kubectl` |
-| jq | `winget install jqlang.jq` | `sudo apt-get install -y jq` | `nix profile install nixpkgs#jq` | `brew install jq` |
-| docker | メッセージ表示のみ (*) | メッセージ表示のみ (*) | メッセージ表示のみ (*) | メッセージ表示のみ (*) |
+| ツール  | windows                             | wsl2 / linux                                                                                                                                       | nixos                                         | darwin                  |
+| ------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------- |
+| kind    | `winget install Kubernetes.kind`    | `curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && install kind /usr/local/bin/`                                              | `nix profile install nixpkgs#kind`            | `brew install kind`     |
+| helm    | `winget install Helm.Helm`          | `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \| bash`                                                                 | `nix profile install nixpkgs#kubernetes-helm` | `brew install helm`     |
+| kubectl | `winget install Kubernetes.kubectl` | `curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install kubectl /usr/local/bin/` | `nix profile install nixpkgs#kubectl`         | `brew install kubectl`  |
+| jq      | `winget install jqlang.jq`          | `sudo apt-get install -y jq`                                                                                                                       | `nix profile install nixpkgs#jq`              | `brew install jq`       |
+| docker  | メッセージ表示のみ (\*)             | メッセージ表示のみ (\*)                                                                                                                            | メッセージ表示のみ (\*)                       | メッセージ表示のみ (\*) |
 
-(*) Docker は Docker Desktop / systemd サービスとして管理されるため、自動インストールせずインストール手順を表示して終了する。
+(\*) Docker は Docker Desktop / systemd サービスとして管理されるため、自動インストールせずインストール手順を表示して終了する。
 
 ### エラーハンドリング
 
@@ -165,17 +165,17 @@ includes:
 
 各タスクファイルに `deps:` を追加:
 
-| タスク | 依存 |
-|--------|------|
-| `cluster:create` | `deps:kind`, `deps:kubectl` |
-| `cluster:delete` | `deps:kind` |
-| `build:*` | `deps:docker` |
-| `deploy:apply` | `deps:kubectl` |
+| タスク                           | 依存                        |
+| -------------------------------- | --------------------------- |
+| `cluster:create`                 | `deps:kind`, `deps:kubectl` |
+| `cluster:delete`                 | `deps:kind`                 |
+| `build:*`                        | `deps:docker`               |
+| `deploy:apply`                   | `deps:kubectl`              |
 | `secrets:eso`, `secrets:connect` | `deps:helm`, `deps:kubectl` |
-| `secrets:connect-creds` | `deps:kubectl` |
-| `secrets:status` | `deps:kubectl`, `deps:jq` |
-| `ops:*` | `deps:kubectl` |
-| `sandbox:*` | `deps:docker` |
+| `secrets:connect-creds`          | `deps:kubectl`              |
+| `secrets:status`                 | `deps:kubectl`, `deps:jq`   |
+| `ops:*`                          | `deps:kubectl`              |
+| `sandbox:*`                      | `deps:docker`               |
 
 ## 制約
 
