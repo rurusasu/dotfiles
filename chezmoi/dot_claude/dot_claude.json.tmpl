@@ -8,8 +8,8 @@
 {{- $first = false }}
     "{{ .name }}": {
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
-      "type": "http",
-      "url": "{{ .url }}"
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "{{ .url }}"]
 {{- else }}
       "command": "{{ .command }}",
       "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]

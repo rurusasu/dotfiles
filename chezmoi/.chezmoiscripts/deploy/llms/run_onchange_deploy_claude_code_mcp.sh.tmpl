@@ -11,7 +11,7 @@ echo "[claude-code-mcp] Syncing MCP servers to ~/.claude.json..."
 {{ range .mcp_servers }}
 {{- if has "claude-code" .supports }}
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
-claude mcp add --transport http "{{ .name }}" "{{ .url }}" -s user 2>/dev/null || true
+claude mcp add "{{ .name }}" -s user -- npx -y mcp-remote "{{ .url }}" 2>/dev/null || true
 {{- else }}
 claude mcp add "{{ .name }}" -s user -- {{ .command }} {{ range .args }}"{{ . }}" {{ end }}2>/dev/null || true
 {{- end }}
