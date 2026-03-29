@@ -1,0 +1,69 @@
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+$settingsPath = Join-Path $env:APPDATA "Zed\settings.json"
+if (-not (Test-Path $settingsPath)) {
+    Write-Host "[zed-mcp] Zed settings.json not found at $settingsPath, skipping"
+    exit 0
+}
+
+Write-Host "[zed-mcp] Updating context_servers in Zed settings..."
+
+# Zed uses JSONC - strip comments before parsing
+$raw = Get-Content $settingsPath -Raw -Encoding UTF8
+# Strip // line comments (not inside strings - simple heuristic)
+$stripped = $raw -replace '(?m)^\s*//.*$', '' -replace '(?<=\S)\s*//.*$', ''
+# Strip trailing commas before } or ]
+$stripped = $stripped -replace ',\s*([}\]])', '$1'
+
+try {
+    $settings = $stripped | ConvertFrom-Json
+} catch {
+    Write-Host "[zed-mcp] Failed to parse Zed settings.json, skipping"
+    exit 0
+}
+
+# Build context_servers
+$servers = [ordered]@{}
+
+{{ range .mcp_servers }}
+{{- if has "zed" .supports }}
+{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+$servers["{{ .name }}"] = [ordered]@{
+    source = "custom"
+    command = "npx"
+    args = @("-y", "mcp-remote", "{{ .url }}")
+}
+{{- else }}
+$servers["{{ .name }}"] = [ordered]@{
+    source = "custom"
+    command = "{{ .command }}"
+    args = @({{ range .args }}"{{ . }}", {{ end }}$null) | Where-Object { $_ }
+}
+{{- if hasKey . "env" }}
+$servers["{{ .name }}"]["env"] = @{
+{{- range $key, $value := .env }}
+    "{{ $key }}" = "{{ $value }}"
+{{- end }}
+}
+{{- end }}
+{{- end }}
+{{- end }}
+{{ end }}
+
+# Merge context_servers into settings
+if (-not ($settings.PSObject.Properties.Name -contains "context_servers")) {
+    $settings | Add-Member -NotePropertyName "context_servers" -NotePropertyValue ([PSCustomObject]@{})
+}
+
+foreach ($name in $servers.Keys) {
+    if ($settings.context_servers.PSObject.Properties.Name -contains $name) {
+        $settings.context_servers.$name = [PSCustomObject]$servers[$name]
+    } else {
+        $settings.context_servers | Add-Member -NotePropertyName $name -NotePropertyValue ([PSCustomObject]$servers[$name])
+    }
+}
+
+# Write back as JSON (comments will be lost - this is a known limitation)
+$settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+Write-Host "[zed-mcp] Updated $($servers.Count) context servers in $settingsPath"
+Write-Host "[zed-mcp] Note: JSONC comments were removed during merge"
