@@ -226,6 +226,53 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'supports ID の整合性' {
+        BeforeAll {
+            $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
+        }
+
+        It 'mcp_servers.yaml で旧 claude ID が残っていないこと' {
+            $lines = Get-Content -Path $script:mcpServersPath
+            $violations = @()
+            foreach ($line in $lines) {
+                # "- claude" exactly (not claude-code, claude-desktop)
+                if ($line -match '^\s+-\s+claude\s*$') {
+                    $violations += $line.Trim()
+                }
+            }
+            $violations | Should -BeNullOrEmpty -Because "旧 claude ID は claude-code に移行済み"
+        }
+
+        It 'claude-code がテンプレートで正しく参照されていること' {
+            $claudeTemplate = Join-Path $script:chezmoiRoot "dot_claude/dot_claude.json.tmpl"
+            $content = Get-Content -Path $claudeTemplate -Raw
+            $content | Should -Match 'has "claude-code"' -Because "Claude Code テンプレートは claude-code ID を使用する"
+            $content | Should -Not -Match 'has "claude"[^-]' -Because "旧 claude ID は使用しない"
+        }
+    }
+
+    Context 'stdio-only テンプレートで HTTP サーバーに mcp-remote が使われていること' {
+        It 'Claude Desktop テンプレートで mcp-remote が含まれていること' {
+            $templatePath = Join-Path $script:chezmoiRoot "AppData/Roaming/Claude/claude_desktop_config.json.tmpl"
+            if (-not (Test-Path $templatePath)) {
+                Set-ItResult -Skipped -Because "Claude Desktop テンプレートが存在しない"
+                return
+            }
+            $content = Get-Content -Path $templatePath -Raw
+            $content | Should -Match 'mcp-remote' -Because "HTTP MCP サーバーは mcp-remote 経由で接続する"
+        }
+
+        It 'Windsurf テンプレートで serverUrl が使われていること' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codeium/windsurf/mcp_config.json.tmpl"
+            if (-not (Test-Path $templatePath)) {
+                Set-ItResult -Skipped -Because "Windsurf テンプレートが存在しない"
+                return
+            }
+            $content = Get-Content -Path $templatePath -Raw
+            $content | Should -Match 'serverUrl' -Because "Windsurf は HTTP サーバーに serverUrl を使用する"
+        }
+    }
+
     Context 'Gemini settings.json テンプレートの必須セクション' {
         BeforeAll {
             $script:geminiTemplate = Join-Path $script:chezmoiRoot "dot_gemini/settings.json.tmpl"
