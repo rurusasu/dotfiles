@@ -33,6 +33,7 @@ chezmoi/private_dot_claude/settings.local.json
 
 # Tool directories
 .playwright/
+.playwright-mcp/
 .task/
 
 # Temporary files
