@@ -195,11 +195,11 @@ class SetupHandlerBase {
 
     # 実行フェーズ (1 = User Scope, 2 = Admin/後半)
     # Phase 1: winget, codex, npm, pnpm
-    # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager, openclaw, cognee-skills
+    # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager
     [int]$Phase = 2
 
     # オプショナルサービスの同意設定（設定されている場合、一括同意プロンプトの対象になる）
-    # ConsentKey: consent.json に保存するキー名 (例: "openclaw_enabled")
+    # ConsentKey: consent.json に保存するキー名 (例: "docker_enabled")
     # ConsentLabel: 一括同意プロンプトに表示する説明文
     [string]$ConsentKey = ""
     [string]$ConsentLabel = ""
