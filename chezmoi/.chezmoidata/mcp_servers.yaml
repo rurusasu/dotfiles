@@ -182,4 +182,20 @@ mcp_servers:
       - cursor
       - gemini
 
-  # cognee-skills は openclaw-k8s リポジトリに移行済み（Kind クラスタ内で動作）
+  # SuperLocalMemory - Kind クラスタ内で動作 (streamable-http via supergateway)
+  - name: superlocalmemory
+    url: "http://localhost:3000/mcp"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
+
+  # QMD - Kind クラスタ内で動作 (streamable-http via supergateway, read-only memory)
+  - name: qmd
+    url: "http://localhost:3001/mcp"
+    supports:
+      - codex
+      - claude
+      - cursor
+      - gemini
