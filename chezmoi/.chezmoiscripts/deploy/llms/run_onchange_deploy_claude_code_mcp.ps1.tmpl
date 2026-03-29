@@ -1,0 +1,22 @@
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    Write-Host "[claude-code-mcp] claude CLI not found, skipping"
+    exit 0
+}
+
+Write-Host "[claude-code-mcp] Syncing MCP servers to ~/.claude.json..."
+
+{{ range .mcp_servers }}
+{{- if has "claude-code" .supports }}
+{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+claude mcp add --transport http "{{ .name }}" "{{ .url }}" -s user 2>$null
+Write-Host "[claude-code-mcp] Added/updated {{ .name }} (http)"
+{{- else }}
+claude mcp add "{{ .name }}" -s user -- {{ .command }} {{ range .args }}"{{ . }}" {{ end }}2>$null
+Write-Host "[claude-code-mcp] Added/updated {{ .name }} (stdio)"
+{{- end }}
+{{- end }}
+{{ end }}
+
+Write-Host "[claude-code-mcp] Done"
