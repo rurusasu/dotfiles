@@ -8,6 +8,7 @@
 {{- $first = false }}
     "{{ .name }}": {
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
+      "type": "http",
       "url": "{{ .url }}"
 {{- else }}
       "command": "{{ .command }}",
