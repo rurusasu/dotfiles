@@ -1,0 +1,58 @@
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+$settingsPath = Join-Path $env:APPDATA "Code\User\settings.json"
+if (-not (Test-Path $settingsPath)) {
+    Write-Host "[vscode-mcp] VS Code settings.json not found at $settingsPath, skipping"
+    exit 0
+}
+
+Write-Host "[vscode-mcp] Updating MCP servers in VS Code settings..."
+
+$content = Get-Content $settingsPath -Raw -Encoding UTF8
+$settings = $content | ConvertFrom-Json
+
+# Build MCP servers hashtable
+$servers = [ordered]@{}
+
+{{ range .mcp_servers }}
+{{- if has "vscode" .supports }}
+{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+$servers["{{ .name }}"] = [ordered]@{
+    type = "http"
+    url = "{{ .url }}"
+}
+{{- else }}
+$servers["{{ .name }}"] = [ordered]@{
+    type = "stdio"
+    command = "{{ .command }}"
+    args = @({{ range .args }}"{{ . }}", {{ end }}$null) | Where-Object { $_ }
+}
+{{- if hasKey . "env" }}
+$servers["{{ .name }}"]["env"] = @{
+{{- range $key, $value := .env }}
+    "{{ $key }}" = "{{ $value }}"
+{{- end }}
+}
+{{- end }}
+{{- end }}
+{{- end }}
+{{ end }}
+
+# Merge mcp.servers into settings
+if (-not ($settings.PSObject.Properties.Name -contains "mcp")) {
+    $settings | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([PSCustomObject]@{})
+}
+if (-not ($settings.mcp.PSObject.Properties.Name -contains "servers")) {
+    $settings.mcp | Add-Member -NotePropertyName "servers" -NotePropertyValue ([PSCustomObject]@{})
+}
+
+foreach ($name in $servers.Keys) {
+    if ($settings.mcp.servers.PSObject.Properties.Name -contains $name) {
+        $settings.mcp.servers.$name = [PSCustomObject]$servers[$name]
+    } else {
+        $settings.mcp.servers | Add-Member -NotePropertyName $name -NotePropertyValue ([PSCustomObject]$servers[$name])
+    }
+}
+
+$settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+Write-Host "[vscode-mcp] Updated $($servers.Count) MCP servers in $settingsPath"

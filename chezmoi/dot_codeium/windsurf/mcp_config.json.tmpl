@@ -3,13 +3,12 @@
 {{- $first := true }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
-{{- if has "claude-code" .supports }}
+{{- if has "windsurf" .supports }}
 {{- if not $first }},{{ end }}
 {{- $first = false }}
     "{{ .name }}": {
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "{{ .url }}"]
+      "serverUrl": "{{ .url }}"
 {{- else }}
       "command": "{{ .command }}",
       "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]

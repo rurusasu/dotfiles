@@ -319,17 +319,17 @@ The ConfigMap currently contains hardcoded secrets (bot tokens, API keys, gatewa
 
 In `base/gateway/configmap.yaml`, replace the following values:
 
-| Current value                                                                                                                  | Replacement             |
-| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `@@GITHUB_TOKEN@@` (in sandbox.docker.env, 3 occurrences)                                                                      | `${GITHUB_TOKEN}`       |
-| `@@XAI_API_KEY@@` (in sandbox.docker.env, 1 occurrence)                                                                        | `${XAI_API_KEY}`        |
-| `<REDACTED>` (gateway.auth.token)              | `${GATEWAY_TOKEN}`      |
-| `<REDACTED>` (channels.telegram.botToken)      | `${TELEGRAM_BOT_TOKEN}` |
-| `<REDACTED>` (channels.slack.botToken)         | `${SLACK_BOT_TOKEN}`    |
-| `<REDACTED>` (channels.slack.appToken)         | `${SLACK_APP_TOKEN}`    |
-| `<REDACTED>` (plugins.entries.exa.config)      | `${EXA_API_KEY}`        |
-| `<REDACTED>` (plugins.entries.tavily.config)   | `${TAVILY_API_KEY}`     |
-| `<REDACTED>` (plugins.entries.firecrawl.config)| `${FIRECRAWL_API_KEY}`  |
+| Current value                                             | Replacement             |
+| --------------------------------------------------------- | ----------------------- |
+| `@@GITHUB_TOKEN@@` (in sandbox.docker.env, 3 occurrences) | `${GITHUB_TOKEN}`       |
+| `@@XAI_API_KEY@@` (in sandbox.docker.env, 1 occurrence)   | `${XAI_API_KEY}`        |
+| `<REDACTED>` (gateway.auth.token)                         | `${GATEWAY_TOKEN}`      |
+| `<REDACTED>` (channels.telegram.botToken)                 | `${TELEGRAM_BOT_TOKEN}` |
+| `<REDACTED>` (channels.slack.botToken)                    | `${SLACK_BOT_TOKEN}`    |
+| `<REDACTED>` (channels.slack.appToken)                    | `${SLACK_APP_TOKEN}`    |
+| `<REDACTED>` (plugins.entries.exa.config)                 | `${EXA_API_KEY}`        |
+| `<REDACTED>` (plugins.entries.tavily.config)              | `${TAVILY_API_KEY}`     |
+| `<REDACTED>` (plugins.entries.firecrawl.config)           | `${FIRECRAWL_API_KEY}`  |
 
 After replacement, the relevant sections look like:
 

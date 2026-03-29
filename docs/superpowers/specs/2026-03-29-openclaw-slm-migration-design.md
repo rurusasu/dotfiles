@@ -81,7 +81,7 @@ Kind クラスタ (openclaw namespace)
 - **リソース:** 2Gi RAM, 1 CPU (CPU のみ、GPU なし)
 - **モデル:** 起動時に自動 pull (init container)
   - 埋め込み: `nomic-embed-text` (~274MB)
-  - LLM 推論 (スキル改善提案): `qwen2.5:3b` (~1.9GB) または類似の軽量モデル
+  - LLM 推論 (スキル改善提案): `qwen3.5:4b` (~1.9GB) または類似の軽量モデル
 - **永続化:** `/root/.ollama` を PVC にマウント
 
 ## OpenClaw Gateway 変更

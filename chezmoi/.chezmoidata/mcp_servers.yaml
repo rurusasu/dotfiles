@@ -11,10 +11,14 @@ mcp_servers:
       - "dlx"
       - "@upstash/context7-mcp@latest"
     startup_timeout_sec: 30
-    # Supported by: codex, claude
+    # Supported by: codex, claude-code
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
 
   # Linear - Project management
   - name: linear
@@ -28,7 +32,7 @@ mcp_servers:
       - "https://mcp.linear.app/mcp"
     supports:
       - codex
-      - claude
+      - claude-code
       - cursor
       - gemini
 
@@ -43,7 +47,11 @@ mcp_servers:
     startup_timeout_sec: 60
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
@@ -58,6 +66,10 @@ mcp_servers:
     supports:
       - cursor
       - gemini
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
 
   # DeepWiki - Wiki and docs search
   - name: deepwiki
@@ -72,7 +84,7 @@ mcp_servers:
     startup_timeout_sec: 30
     supports:
       - codex
-      - claude
+      - claude-code
       - cursor
       - gemini
 
@@ -90,10 +102,14 @@ mcp_servers:
     env:
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
     op_env:
-      TAVILY_API_KEY: "op://Personal/TavilyUsedOpenclawPAT/credential"
+      TAVILY_API_KEY: "op://openclaw/TavilyUsedOpenclawPAT/credential"
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
@@ -111,10 +127,14 @@ mcp_servers:
     env:
       EXA_API_KEY: "${EXA_API_KEY}"
     op_env:
-      EXA_API_KEY: "op://Personal/ExaUsedUserPAT/credential"
+      EXA_API_KEY: "op://openclaw/ExaUsedOpenclawPAT/credential"
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
@@ -132,10 +152,14 @@ mcp_servers:
     env:
       FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY}"
     op_env:
-      FIRECRAWL_API_KEY: "op://Personal/FirecrawlUsedUserPAT/credential"
+      FIRECRAWL_API_KEY: "op://openclaw/FirecrawlUsedOpenclawPAT/credential"
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
@@ -148,7 +172,11 @@ mcp_servers:
     startup_timeout_sec: 30
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
@@ -165,7 +193,7 @@ mcp_servers:
     startup_timeout_sec: 30
     supports:
       - codex
-      - claude
+      - claude-code
       - cursor
       - gemini
 
@@ -178,8 +206,36 @@ mcp_servers:
     startup_timeout_sec: 120
     supports:
       - codex
-      - claude
+      - claude-code
+      - claude-desktop
+      - vscode
+      - windsurf
+      - zed
       - cursor
       - gemini
 
-  # cognee-skills は openclaw-k8s リポジトリに移行済み（Kind クラスタ内で動作）
+  # SuperLocalMemory - Kind クラスタ内で動作 (streamable-http via supergateway)
+  - name: superlocalmemory
+    url: "http://localhost:3000/mcp"
+    supports:
+      - claude-code
+      - claude-desktop
+      - codex
+      - gemini
+      - cursor
+      - vscode
+      - windsurf
+      - zed
+
+  # QMD - Kind クラスタ内で動作 (streamable-http via supergateway, read-only memory)
+  - name: qmd
+    url: "http://localhost:3001/mcp"
+    supports:
+      - claude-code
+      - claude-desktop
+      - codex
+      - gemini
+      - cursor
+      - vscode
+      - windsurf
+      - zed

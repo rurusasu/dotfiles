@@ -3,7 +3,7 @@
 {{- $first := true }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
-{{- if has "claude-code" .supports }}
+{{- if has "claude-desktop" .supports }}
 {{- if not $first }},{{ end }}
 {{- $first = false }}
     "{{ .name }}": {

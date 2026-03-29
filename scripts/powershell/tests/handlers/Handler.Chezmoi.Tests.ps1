@@ -987,10 +987,13 @@ Describe 'ChezmoiHandler' {
             $result | Should -BeOfType [bool]
         }
 
-        It 'should return false in non-elevated test environment' {
-            # テスト環境は通常管理者で実行しないため false が期待値
+        It 'should return consistent result with .NET API' {
+            # .NET の WindowsPrincipal API と一致することを検証
+            $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+            $principal = [Security.Principal.WindowsPrincipal]$identity
+            $expected = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
             $result = Test-IsAdminSession
-            $result | Should -Be $false
+            $result | Should -Be $expected
         }
     }
 }

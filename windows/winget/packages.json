@@ -17,6 +17,9 @@
           "PackageIdentifier": "Anysphere.Cursor"
         },
         {
+          "PackageIdentifier": "TheBrowserCompany.Arc"
+        },
+        {
           "PackageIdentifier": "Docker.DockerDesktop"
         },
         {
