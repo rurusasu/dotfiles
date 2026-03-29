@@ -31,6 +31,10 @@ chezmoi/private_dot_claude/settings.local.json
 .lesshst
 .wget-hsts
 
+# Tool directories
+.playwright/
+.task/
+
 # Temporary files
 *.tmp
 *.log
