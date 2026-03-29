@@ -14,27 +14,28 @@
 
 ## File Structure
 
-| Action | File | Responsibility |
-|--------|------|----------------|
-| Create | `tasks/deps/detect-os.sh` | OS 検出 → stdout に識別子出力 |
-| Create | `tasks/deps/install-tool.sh` | ツール名 + OS → インストール実行 |
-| Create | `tasks/deps/deps.yml` | Taskfile タスク定義 (deps:kind, deps:helm, etc.) |
-| Create | `tasks/deps/test-detect-os.sh` | detect-os.sh のテスト |
-| Create | `tasks/deps/test-install.sh` | install-tool.sh の dry-run テスト |
-| Modify | `Taskfile.yml` | includes に deps 追加 |
-| Modify | `tasks/cluster.yml` | deps: [deps:kind, deps:kubectl] 追加 |
-| Modify | `tasks/build.yml` | deps: [deps:docker] 追加 |
-| Modify | `tasks/deploy.yml` | deps: [deps:kubectl] 追加 |
-| Modify | `tasks/ops.yml` | deps: [deps:kubectl] 追加 |
-| Modify | `tasks/sandbox.yml` | deps: [deps:docker] 追加 |
-| Modify | `tasks/secrets.yml` | deps 追加 (helm, kubectl, jq) |
-| Modify | `tasks/test.yml` | deps:test タスク追加 |
+| Action | File                           | Responsibility                                   |
+| ------ | ------------------------------ | ------------------------------------------------ |
+| Create | `tasks/deps/detect-os.sh`      | OS 検出 → stdout に識別子出力                    |
+| Create | `tasks/deps/install-tool.sh`   | ツール名 + OS → インストール実行                 |
+| Create | `tasks/deps/deps.yml`          | Taskfile タスク定義 (deps:kind, deps:helm, etc.) |
+| Create | `tasks/deps/test-detect-os.sh` | detect-os.sh のテスト                            |
+| Create | `tasks/deps/test-install.sh`   | install-tool.sh の dry-run テスト                |
+| Modify | `Taskfile.yml`                 | includes に deps 追加                            |
+| Modify | `tasks/cluster.yml`            | deps: [deps:kind, deps:kubectl] 追加             |
+| Modify | `tasks/build.yml`              | deps: [deps:docker] 追加                         |
+| Modify | `tasks/deploy.yml`             | deps: [deps:kubectl] 追加                        |
+| Modify | `tasks/ops.yml`                | deps: [deps:kubectl] 追加                        |
+| Modify | `tasks/sandbox.yml`            | deps: [deps:docker] 追加                         |
+| Modify | `tasks/secrets.yml`            | deps 追加 (helm, kubectl, jq)                    |
+| Modify | `tasks/test.yml`               | deps:test タスク追加                             |
 
 ---
 
 ### Task 1: detect-os.sh の作成とテスト
 
 **Files:**
+
 - Create: `tasks/deps/detect-os.sh`
 - Create: `tasks/deps/test-detect-os.sh`
 
@@ -166,6 +167,7 @@ git commit -m "feat: add OS detection script with tests"
 ### Task 2: install-tool.sh の作成とテスト
 
 **Files:**
+
 - Create: `tasks/deps/install-tool.sh`
 - Create: `tasks/deps/test-install.sh`
 
@@ -385,6 +387,7 @@ git commit -m "feat: add cross-platform tool installer with tests"
 ### Task 3: deps.yml の作成
 
 **Files:**
+
 - Create: `tasks/deps/deps.yml`
 - Modify: `Taskfile.yml`
 
@@ -477,6 +480,7 @@ git commit -m "feat: add deps.yml Taskfile integration"
 ### Task 4: 既存タスクに deps 依存を追加
 
 **Files:**
+
 - Modify: `tasks/cluster.yml`
 - Modify: `tasks/build.yml`
 - Modify: `tasks/deploy.yml`
@@ -712,6 +716,7 @@ git commit -m "feat: add deps dependency to all task files"
 ### Task 5: テスト統合と最終検証
 
 **Files:**
+
 - Modify: `tasks/test.yml`
 
 - [ ] **Step 1: Update test.yml to include deps tests**

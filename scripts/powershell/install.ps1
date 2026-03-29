@@ -96,14 +96,14 @@ Write-Host "Phase 2b: Admin Setup Check" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$adminRequired = [bool](& $adminScriptPath @phaseParams -CheckOnly -AdminOnly:$true)
+$adminRequired = [bool](& $adminScriptPath @phaseParams -CheckOnly -AdminOnly)
 
 if ($adminRequired) {
     Write-Host "Admin-required tasks detected." -ForegroundColor Yellow
 
     if (Test-IsAdminCurrent) {
         Write-Host "Already running as administrator. Executing admin phase in-process." -ForegroundColor Cyan
-        & $adminScriptPath @phaseParams -AdminOnly:$true
+        & $adminScriptPath @phaseParams -AdminOnly
     }
     else {
         Write-Host "Starting admin phase with UAC prompt..." -ForegroundColor Yellow
@@ -138,7 +138,7 @@ if ($adminRequired) {
             $SyncMode,
             "-SyncBack",
             $SyncBack,
-            "-AdminOnly:$true"
+            "-AdminOnly"
         )
 
         if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
@@ -175,7 +175,7 @@ if ($adminRequired) {
 }
 else {
     Write-Host "No admin-required tasks detected. Running admin phase without elevation." -ForegroundColor Green
-    & $adminScriptPath @phaseParams -AdminOnly:$true
+    & $adminScriptPath @phaseParams -AdminOnly
 }
 
 Write-Host ""
