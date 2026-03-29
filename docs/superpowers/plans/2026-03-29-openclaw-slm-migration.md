@@ -131,7 +131,7 @@ spec:
               ollama serve &
               sleep 5
               ollama pull nomic-embed-text
-              ollama pull qwen2.5:3b
+              ollama pull qwen3.5:4b
               kill %1
           volumeMounts:
             - name: ollama-data
@@ -215,7 +215,7 @@ Expected: ollama pod starts, init container pulls models (may take 5-10 min firs
 kubectl exec -n openclaw deploy/openclaw-gateway -- curl -sf http://ollama:11434/api/tags
 ```
 
-Expected: JSON response listing `nomic-embed-text` and `qwen2.5:3b` models.
+Expected: JSON response listing `nomic-embed-text` and `qwen3.5:4b` models.
 
 - [ ] **Step 4: Commit**
 
@@ -360,7 +360,7 @@ import os
 import requests
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:4b")
 
 
 def generate_improvement(
@@ -582,7 +582,7 @@ spec:
             - name: SKILL_CORRECTION_PENALTY
               value: "0.05"
             - name: OLLAMA_MODEL
-              value: "qwen2.5:3b"
+              value: "qwen3.5:4b"
           volumeMounts:
             - name: slm-data
               mountPath: /data
@@ -907,10 +907,10 @@ if echo "$MODELS" | grep -q "nomic-embed-text"; then
 else
   echo "WARN: nomic-embed-text model not yet pulled"
 fi
-if echo "$MODELS" | grep -q "qwen2.5:3b"; then
-  echo "PASS: qwen2.5:3b model available"
+if echo "$MODELS" | grep -q "qwen3.5:4b"; then
+  echo "PASS: qwen3.5:4b model available"
 else
-  echo "WARN: qwen2.5:3b model not yet pulled"
+  echo "WARN: qwen3.5:4b model not yet pulled"
 fi
 ```
 
