@@ -1,0 +1,61 @@
+# Claude Code プラグイン設定
+# type: plugins (マーケットプレイス内蔵) / external_plugins (外部リポジトリ)
+claude_plugins:
+  # claude-plugins-official: 内蔵プラグイン
+  - name: code-simplifier
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: code-review
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: commit-commands
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: pr-review-toolkit
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: pyright-lsp
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: ralph-loop
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: security-guidance
+    marketplace: claude-plugins-official
+    type: plugins
+  - name: superpowers
+    marketplace: claude-plugins-official
+    type: plugins
+  # claude-plugins-official: 外部プラグイン
+  - name: context7
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: github
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: linear
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: playwright
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: serena
+    marketplace: claude-plugins-official
+    type: external_plugins
+  # claude-plugins-official: 外部プラグイン (MCP サーバー付き)
+  - name: chrome-devtools-mcp
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: coderabbit
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: notion
+    marketplace: claude-plugins-official
+    type: external_plugins
+  - name: sentry
+    marketplace: claude-plugins-official
+    type: external_plugins
+  # openai-codex
+  - name: codex
+    marketplace: openai-codex
+    type: plugins
