@@ -1,0 +1,22 @@
+{{- $sep := "/" -}}
+{{- if eq .chezmoi.os "windows" -}}{{- $sep = "\\\\" -}}{{- end -}}
+{{- $home := .chezmoi.homeDir | replace "/" $sep -}}
+{
+  "version": 2,
+  "plugins": {
+{{- $first := true }}
+{{- range .claude_plugins }}
+{{- if not $first }},{{ end }}
+{{- $first = false }}
+    "{{ .name }}@{{ .marketplace }}": [
+      {
+        "scope": "user",
+        "installPath": "{{ $home }}{{ $sep }}.claude{{ $sep }}plugins{{ $sep }}cache{{ $sep }}{{ .marketplace }}{{ $sep }}{{ .name }}{{ $sep }}unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-01T00:00:00.000Z",
+        "lastUpdated": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+{{- end }}
+  }
+}
