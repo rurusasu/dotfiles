@@ -17,24 +17,26 @@
 ## File Structure
 
 ### New files
-| Path | Responsibility |
-|------|---------------|
-| `chezmoi/AppData/Claude/claude_desktop_config.json.tmpl` | Claude Desktop MCP config |
-| `chezmoi/dot_codeium/windsurf/mcp_config.json.tmpl` | Windsurf MCP config |
+
+| Path                                                                               | Responsibility                   |
+| ---------------------------------------------------------------------------------- | -------------------------------- |
+| `chezmoi/AppData/Claude/claude_desktop_config.json.tmpl`                           | Claude Desktop MCP config        |
+| `chezmoi/dot_codeium/windsurf/mcp_config.json.tmpl`                                | Windsurf MCP config              |
 | `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.ps1.tmpl` | Claude Code MCP deploy (Windows) |
-| `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.sh.tmpl` | Claude Code MCP deploy (Unix) |
+| `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.sh.tmpl`  | Claude Code MCP deploy (Unix)    |
 
 ### Modified files
-| Path | Change |
-|------|--------|
-| `chezmoi/.chezmoidata/mcp_servers.yaml` | Add `transport` field, rename `claude` → `claude-code`, add new tool IDs |
-| `chezmoi/dot_claude/dot_claude.json.tmpl` | `has "claude"` → `has "claude-code"` |
-| `chezmoi/dot_codex/config.toml.tmpl` | No change (ID `codex` unchanged) |
-| `chezmoi/dot_cursor/cli-config.json.tmpl` | No change (ID `cursor` unchanged) |
-| `chezmoi/dot_gemini/settings.json.tmpl` | No change (ID `gemini` unchanged) |
-| `chezmoi/editors/vscode/settings.json` | Add `mcp` section at end (or convert to .tmpl) |
-| `chezmoi/editors/zed/settings.json` | Add `context_servers` section (or convert to .tmpl) |
-| `scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1` | Add tests for new templates |
+
+| Path                                                         | Change                                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `chezmoi/.chezmoidata/mcp_servers.yaml`                      | Add `transport` field, rename `claude` → `claude-code`, add new tool IDs |
+| `chezmoi/dot_claude/dot_claude.json.tmpl`                    | `has "claude"` → `has "claude-code"`                                     |
+| `chezmoi/dot_codex/config.toml.tmpl`                         | No change (ID `codex` unchanged)                                         |
+| `chezmoi/dot_cursor/cli-config.json.tmpl`                    | No change (ID `cursor` unchanged)                                        |
+| `chezmoi/dot_gemini/settings.json.tmpl`                      | No change (ID `gemini` unchanged)                                        |
+| `chezmoi/editors/vscode/settings.json`                       | Add `mcp` section at end (or convert to .tmpl)                           |
+| `chezmoi/editors/zed/settings.json`                          | Add `context_servers` section (or convert to .tmpl)                      |
+| `scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1` | Add tests for new templates                                              |
 
 ---
 
@@ -43,6 +45,7 @@
 ### Task 1: Add transport field and new tool IDs to mcp_servers.yaml
 
 **Files:**
+
 - Modify: `chezmoi/.chezmoidata/mcp_servers.yaml`
 - Modify: `chezmoi/dot_claude/dot_claude.json.tmpl`
 
@@ -51,48 +54,51 @@
 In `chezmoi/.chezmoidata/mcp_servers.yaml`, change all `- claude` entries to `- claude-code`. Add new tool IDs to servers that should be available everywhere.
 
 For `context7` (currently claude + codex only), keep as-is:
+
 ```yaml
-  - name: context7
-    command: pnpm
-    args:
-      - "dlx"
-      - "@upstash/context7-mcp@latest"
-    startup_timeout_sec: 30
-    supports:
-      - codex
-      - claude-code
+- name: context7
+  command: pnpm
+  args:
+    - "dlx"
+    - "@upstash/context7-mcp@latest"
+  startup_timeout_sec: 30
+  supports:
+    - codex
+    - claude-code
 ```
 
 For `superlocalmemory`, add all tool IDs and transport:
+
 ```yaml
-  - name: superlocalmemory
-    url: "http://localhost:3000/mcp"
-    transport: http
-    supports:
-      - claude-code
-      - claude-desktop
-      - codex
-      - gemini
-      - cursor
-      - vscode
-      - windsurf
-      - zed
+- name: superlocalmemory
+  url: "http://localhost:3000/mcp"
+  transport: http
+  supports:
+    - claude-code
+    - claude-desktop
+    - codex
+    - gemini
+    - cursor
+    - vscode
+    - windsurf
+    - zed
 ```
 
 For `qmd`, same pattern:
+
 ```yaml
-  - name: qmd
-    url: "http://localhost:3001/mcp"
-    transport: http
-    supports:
-      - claude-code
-      - claude-desktop
-      - codex
-      - gemini
-      - cursor
-      - vscode
-      - windsurf
-      - zed
+- name: qmd
+  url: "http://localhost:3001/mcp"
+  transport: http
+  supports:
+    - claude-code
+    - claude-desktop
+    - codex
+    - gemini
+    - cursor
+    - vscode
+    - windsurf
+    - zed
 ```
 
 For all other servers (linear, serena, github, deepwiki, tavily, exa, firecrawl, drawio, sentry, cloud-run), replace `- claude` with `- claude-code` in their supports list. Optionally add `- claude-desktop`, `- vscode`, `- windsurf`, `- zed` where appropriate (servers using `command` are stdio and work everywhere).
@@ -118,6 +124,7 @@ to:
 - [ ] **Step 3: Verify templates still work**
 
 Run:
+
 ```bash
 chezmoi execute-template < chezmoi/dot_claude/dot_claude.json.tmpl 2>&1 | head -5
 chezmoi execute-template < chezmoi/dot_codex/config.toml.tmpl 2>&1 | grep -c 'mcp_servers'
@@ -141,6 +148,7 @@ git commit -m "feat: add transport field and new tool IDs to mcp_servers.yaml"
 ### Task 2: Claude Desktop template
 
 **Files:**
+
 - Create: `chezmoi/AppData/Claude/claude_desktop_config.json.tmpl`
 
 Note: chezmoi maps `AppData` → `%APPDATA%` on Windows via `create_` prefix or symlink. Check how `chezmoi` handles `%APPDATA%` paths. The target is `%APPDATA%/Claude/claude_desktop_config.json`. In chezmoi source, this maps to a path under the home directory. On Windows, `%APPDATA%` = `C:\Users\<user>\AppData\Roaming`. chezmoi's target is `~` = `C:\Users\<user>`, so the relative path is `AppData/Roaming/Claude/claude_desktop_config.json`.
@@ -219,6 +227,7 @@ git commit -m "feat: add Claude Desktop MCP template with mcp-remote for HTTP se
 ### Task 3: Windsurf template
 
 **Files:**
+
 - Create: `chezmoi/dot_codeium/windsurf/mcp_config.json.tmpl`
 
 - [ ] **Step 1: Create the template**
@@ -290,6 +299,7 @@ git commit -m "feat: add Windsurf MCP template"
 ### Task 4: VS Code mcp.json template
 
 **Files:**
+
 - Create: `chezmoi/editors/vscode/dot_vscode/mcp.json.tmpl`
 
 VS Code reads MCP config from `.vscode/mcp.json` in workspace or from user settings. For global user config, add to `settings.json`. However, since `settings.json` is already a static file (not a template), create a separate deploy script or use the `mcp` key approach.
@@ -359,6 +369,7 @@ git commit -m "feat: add VS Code MCP deploy script"
 ### Task 5: Zed context_servers in settings.json
 
 **Files:**
+
 - Modify: `chezmoi/editors/zed/settings.json` → convert to `.tmpl` or use deploy script
 
 Zed uses JSONC (comments allowed) in `settings.json`. Converting to a chezmoi template would lose comments. Better approach: deploy script that merges `context_servers` into existing Zed settings.
@@ -440,6 +451,7 @@ git commit -m "feat: add Zed MCP deploy script"
 ### Task 6: Claude Code run_onchange script
 
 **Files:**
+
 - Create: `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.ps1.tmpl`
 - Create: `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.sh.tmpl`
 
@@ -525,6 +537,7 @@ git commit -m "feat: add Claude Code MCP deploy scripts (run_onchange)"
 ### Task 7: Update and add tests
 
 **Files:**
+
 - Modify: `scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1`
 
 - [ ] **Step 1: Update existing test for claude-code ID change**

@@ -56,27 +56,27 @@
 
 ### ツール ID 一覧
 
-| ID | ツール | 設定ファイル (Windows) |
-|----|-------|----------------------|
-| `claude-code` | Claude Code CLI | `~/.claude.json` (mcpServers) |
-| `claude-desktop` | Claude Desktop | `%APPDATA%/Claude/claude_desktop_config.json` |
-| `chatgpt` | ChatGPT Desktop | 要確認（設定ファイルパス） |
-| `codex` | Codex CLI | `~/.codex/config.toml` |
-| `gemini` | Gemini CLI | `~/.gemini/settings.json` |
-| `cursor` | Cursor CLI | `~/.cursor/cli-config.json` |
-| `vscode` | VS Code (Copilot) | ユーザー `settings.json` の `mcp` セクション |
-| `windsurf` | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
-| `zed` | Zed Editor | `%APPDATA%/Zed/settings.json` |
+| ID               | ツール            | 設定ファイル (Windows)                        |
+| ---------------- | ----------------- | --------------------------------------------- |
+| `claude-code`    | Claude Code CLI   | `~/.claude.json` (mcpServers)                 |
+| `claude-desktop` | Claude Desktop    | `%APPDATA%/Claude/claude_desktop_config.json` |
+| `chatgpt`        | ChatGPT Desktop   | 要確認（設定ファイルパス）                    |
+| `codex`          | Codex CLI         | `~/.codex/config.toml`                        |
+| `gemini`         | Gemini CLI        | `~/.gemini/settings.json`                     |
+| `cursor`         | Cursor CLI        | `~/.cursor/cli-config.json`                   |
+| `vscode`         | VS Code (Copilot) | ユーザー `settings.json` の `mcp` セクション  |
+| `windsurf`       | Windsurf          | `~/.codeium/windsurf/mcp_config.json`         |
+| `zed`            | Zed Editor        | `%APPDATA%/Zed/settings.json`                 |
 
 ## テンプレート展開ルール
 
 ### トランスポート自動変換
 
-| サーバー transport | ツール HTTP 対応 | 出力形式 |
-|-------------------|----------------|---------|
-| `stdio` | 全ツール | `command` + `args` をそのまま出力 |
-| `http` | HTTP 対応 | ツール固有の URL 形式で出力 |
-| `http` | stdio-only | `mcp-remote` ラッパーで stdio に変換 |
+| サーバー transport | ツール HTTP 対応 | 出力形式                             |
+| ------------------ | ---------------- | ------------------------------------ |
+| `stdio`            | 全ツール         | `command` + `args` をそのまま出力    |
+| `http`             | HTTP 対応        | ツール固有の URL 形式で出力          |
+| `http`             | stdio-only       | `mcp-remote` ラッパーで stdio に変換 |
 
 ### HTTP 対応ツール
 
@@ -150,6 +150,7 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 **設定先:** `~/.codex/config.toml`
 **方法:** 既存テンプレート修正
 **形式:**
+
 - stdio: `command = "..."`, `args = [...]`
 - http: `url = "..."`
 
@@ -158,6 +159,7 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 **設定先:** `~/.gemini/settings.json`
 **方法:** 既存テンプレート修正
 **形式:**
+
 - stdio: `"command": "..."`, `"args": [...]`
 - http: `"url": "..."`
 
@@ -238,10 +240,10 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 
 ### supports ID の変更
 
-| 旧 ID | 新 ID |
-|-------|-------|
-| `claude` | `claude-code` |
-| `codex` | `codex` (変更なし) |
+| 旧 ID    | 新 ID               |
+| -------- | ------------------- |
+| `claude` | `claude-code`       |
+| `codex`  | `codex` (変更なし)  |
 | `cursor` | `cursor` (変更なし) |
 | `gemini` | `gemini` (変更なし) |
 
@@ -252,6 +254,7 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 既存サーバー (`command` あり) はデフォルト `stdio`。明示不要だが、`url` のみのサーバーは `transport: http` が必要。
 
 後方互換: `transport` フィールドがないサーバーは以下で判定:
+
 - `url` あり + `command` なし → `http`
 - `command` あり → `stdio`
 - `url` + `command` 両方あり → ツールに応じて使い分け（既存動作を維持）
@@ -259,12 +262,14 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 ## 変更対象ファイル
 
 ### 新規作成
+
 - `chezmoi/dot_config/claude-desktop/claude_desktop_config.json.tmpl`
 - `chezmoi/dot_codeium/windsurf/mcp_config.json.tmpl`
 - `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.sh.tmpl`
 - `chezmoi/.chezmoiscripts/deploy/llms/run_onchange_deploy_claude_code_mcp.ps1.tmpl`
 
 ### 変更
+
 - `chezmoi/.chezmoidata/mcp_servers.yaml` — `transport` フィールド追加、`supports` ID 拡張
 - `chezmoi/dot_claude/dot_claude.json.tmpl` — `has "claude"` → `has "claude-code"`
 - `chezmoi/dot_codex/config.toml.tmpl` — 変更なし（ID 同じ）
@@ -274,15 +279,18 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 - `chezmoi/editors/zed/settings.json` → `.tmpl` 化して `context_servers` セクション追加
 
 ### ChatGPT Desktop
+
 設定ファイルのパスとフォーマットが未確認。実装フェーズで調査し、テンプレートを作成する。
 
 ## テスト
 
 ### 既存テスト修正
+
 - `ChezmoiTemplate.Tests.ps1` の `onepasswordRead` ガードテストを維持
 - Docker MCP SDK テストを維持
 
 ### 新規テスト
+
 - 各テンプレートが正しい JSON/TOML を出力するか検証
 - `transport: http` + stdio-only ツールで `mcp-remote` ラッパーが生成されるか検証
 - `supports` フィルタが正しく動作するか検証
@@ -291,24 +299,29 @@ claude mcp add "{{ .name }}" -- {{ .command }} {{ range .args }}{{ . }} {{ end }
 ## 実装フェーズ
 
 ### Phase 1: データモデル拡張
+
 - `mcp_servers.yaml` に `transport` フィールド追加
 - `supports` ID を新体系に移行
 - 既存テンプレート (claude, codex, cursor, gemini) を新 ID に対応
 
 ### Phase 2: 新規テンプレート作成
+
 - Claude Desktop テンプレート
 - Windsurf テンプレート
 - VS Code settings.json テンプレート化
 - Zed settings.json テンプレート化
 
 ### Phase 3: Claude Code run_onchange スクリプト
+
 - `claude mcp add` ベースのデプロイスクリプト作成
 - 冪等性の確認
 
 ### Phase 4: ChatGPT Desktop
+
 - 設定ファイルパスの調査
 - テンプレート作成
 
 ### Phase 5: テスト
+
 - 全テンプレートの出力検証テスト
 - `chezmoi apply` → 各ツールでの接続確認
