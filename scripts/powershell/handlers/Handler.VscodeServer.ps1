@@ -115,13 +115,12 @@ class VscodeServerHandler : SetupHandlerBase {
     hidden [void] CleanupVscodeServer([string]$distroName, [string]$user) {
         $this.Log("VS Code Server キャッシュを削除します")
 
-        $userHome = "/home/$user"
-        $cleanup = @(
-            "rm -rf $userHome/.vscode-server $userHome/.vscode-server-insiders",
-            "rm -rf $userHome/.vscode-remote-containers $userHome/.vscode-remote-wsl",
-            "rm -rf /root/.vscode-server /root/.vscode-server-insiders",
+        $safeUser = $user.Replace("'", "''")
+        $cleanup = "userHome='/home/$safeUser'; " +
+            "rm -rf `"`$userHome/.vscode-server`" `"`$userHome/.vscode-server-insiders`" && " +
+            "rm -rf `"`$userHome/.vscode-remote-containers`" `"`$userHome/.vscode-remote-wsl`" && " +
+            "rm -rf /root/.vscode-server /root/.vscode-server-insiders && " +
             "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
-        ) -join " && "
 
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cleanup
         $this.Log("VS Code Server キャッシュを削除しました", "Green")
@@ -167,22 +166,23 @@ class VscodeServerHandler : SetupHandlerBase {
         $serverDir = "$serverRoot/bin/$commit"
         $url = "https://update.code.visualstudio.com/commit:$commit/server-linux-x64/$channel"
 
+        # シェルインジェクション防止: 全値をシングルクォート代入でシェル変数に格納し、
+        # 以降はシェル変数参照（"$var"）のみ使用する
         $safeUser = $user.Replace("'", "''")
         $safeRoot = $serverRoot.Replace("'", "''")
         $safeDir = $serverDir.Replace("'", "''")
         $safeUrl = $url.Replace("'", "''")
-        $chownOwner = "${safeUser}:" + '$groupName'
 
         $cmd = "set -e; " +
         "userName='$safeUser'; " +
-        "groupName=`$(id -gn `"$safeUser`" 2>/dev/null || echo `"$safeUser`"); " +
+        "groupName=`$(id -gn `"`$userName`" 2>/dev/null || echo `"`$userName`"); " +
         "serverRoot='$safeRoot'; " +
         "serverDir='$safeDir'; " +
         "url='$safeUrl'; " +
-        "mkdir -p `"$safeDir`"; " +
-        "if [ ! -f `"$safeDir/.nixos-patched`" ]; then curl -fsSL `"$safeUrl`" | tar -xz -C `"$safeDir`" --strip-components=1; fi; " +
-        "if [ -x `"$safeDir/bin/code-server-insiders`" ] && [ ! -e `"$safeDir/bin/code-server`" ]; then ln -s code-server-insiders `"$safeDir/bin/code-server`"; fi; " +
-        "chown -R `"$chownOwner`" `"$safeRoot`""
+        "mkdir -p `"`$serverDir`"; " +
+        "if [ ! -f `"`$serverDir/.nixos-patched`" ]; then curl -fsSL `"`$url`" | tar -xz -C `"`$serverDir`" --strip-components=1; fi; " +
+        "if [ -x `"`$serverDir/bin/code-server-insiders`" ] && [ ! -e `"`$serverDir/bin/code-server`" ]; then ln -s code-server-insiders `"`$serverDir/bin/code-server`"; fi; " +
+        "chown -R `"`$userName:`$groupName`" `"`$serverRoot`""
 
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cmd
     }
