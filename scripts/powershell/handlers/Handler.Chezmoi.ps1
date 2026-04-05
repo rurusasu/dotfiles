@@ -262,14 +262,22 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        # UAC 昇格プロセスではデスクトップアプリ連携が使えないため op signin を試みる
+        # 1Password CLI が未認証 → ログイン画面を表示して待機
         Write-Host ""
         Write-Host "========================================"  -ForegroundColor Yellow
         Write-Host "[Chezmoi] 1Password CLI の認証が必要です" -ForegroundColor Yellow
         Write-Host "========================================"  -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
-        Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
+        if (Test-IsAdminSession) {
+            Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
+            Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
+        } else {
+            Write-Host "  chezmoi テンプレートが 1Password の秘密情報を参照するため、"              -ForegroundColor Cyan
+            Write-Host "  1Password CLI へのサインインが必要です。"                                 -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "  ヒント: 1Password デスクトップアプリが起動・サインイン済みなら"           -ForegroundColor Gray
+            Write-Host "  自動的に認証される場合があります。アプリを確認してください。"             -ForegroundColor Gray
+        }
         Write-Host ""
 
         $maxRetries = 3
@@ -285,14 +293,22 @@ class ChezmoiHandler : SetupHandlerBase {
             }
 
             if ($i -lt $maxRetries) {
-                $this.LogWarning("1Password CLI のサインインを確認できませんでした。再試行します")
+                $this.LogWarning("1Password CLI のサインインを確認できませんでした")
                 Write-Host ""
-                Write-Host "  Enter を押して再試行してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
+                Write-Host "  1Password デスクトップアプリでサインインしてから Enter を押してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
                 Read-Host | Out-Null
+
+                # デスクトップアプリ連携が有効になった可能性があるため whoami で再確認
+                $result = Invoke-OpWhoAmI -OpExe $opExe
+                if ($result.ExitCode -eq 0) {
+                    $this.Log("1Password CLI: サインイン完了（デスクトップアプリ連携）", "Green")
+                    return
+                }
             }
         }
 
-        $this.LogWarning("1Password CLI のサインインに失敗しました。chezmoi apply でテンプレートエラーが発生する可能性があります")
+        # 全リトライ失敗 → chezmoi apply に進んでも確実に失敗するため例外で停止
+        throw "1Password CLI のサインインに失敗しました。1Password デスクトップアプリでサインインしてから再実行してください。"
     }
 
     <#

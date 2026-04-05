@@ -698,7 +698,7 @@ Describe 'ChezmoiHandler' {
             Should -Invoke Read-Host -Times 0
         }
 
-        It 'should attempt op signin when op whoami fails' {
+        It 'should attempt op signin when op whoami fails and throw after max retries' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -715,10 +715,12 @@ Describe 'ChezmoiHandler' {
             }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
             $script:instructionsShown | Should -Be $true
             Should -Invoke Invoke-OpSignIn -Times 3
+            # 全リトライ失敗時は例外で停止し、失敗結果を返す
+            $result.Success | Should -Be $false
         }
 
         It 'should sign in and log success after op signin succeeds' {
@@ -749,7 +751,7 @@ Describe 'ChezmoiHandler' {
             $script:signedInLogged | Should -Be $true
         }
 
-        It 'should log warning after max retries exhausted' {
+        It 'should throw and return failure after max retries exhausted' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -759,16 +761,13 @@ Describe 'ChezmoiHandler' {
             }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
-            $script:failureWarningLogged = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'サインインに失敗') { $script:failureWarningLogged = $true }
-            }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
-            $script:failureWarningLogged | Should -Be $true
+            # 全リトライ失敗時は throw → catch で CreateFailureResult が返る
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match 'サインインに失敗'
             Should -Invoke Read-Host -Times 2
         }
     }
