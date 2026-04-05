@@ -270,6 +270,44 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'EnsurePnpmSetup - PNPM_HOME restored from registry' {
+        BeforeEach {
+            $script:origPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = ""
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-restored"
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+            Mock Write-Host { }
+            # [System.Environment]::GetEnvironmentVariable をモック不可のため、
+            # 実際のレジストリ値を一時的にセットしてテスト
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:pnpmBin, 'User')
+        }
+        AfterEach {
+            $env:PNPM_HOME = $script:origPnpmHome
+            # レジストリを元に戻す
+            if ($script:origPnpmHome) {
+                [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origPnpmHome, 'User')
+            }
+        }
+
+        It 'should restore PNPM_HOME from registry when env is empty' {
+            $handler.EnsurePnpmSetup()
+            $env:PNPM_HOME | Should -Be $script:pnpmBin
+        }
+
+        It 'should not call pnpm setup when bin path is available after restore' {
+            $handler.EnsurePnpmSetup()
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "setup" } -Times 0
+        }
+    }
+
     Context 'AddPnpmBinToPath - empty bin path' {
         BeforeEach {
             Mock Set-UserEnvironmentPath { }

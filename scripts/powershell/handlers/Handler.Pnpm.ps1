@@ -187,6 +187,16 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     hidden [string] EnsurePnpmSetup() {
+        # PNPM_HOME がプロセスに未設定の場合、レジストリから復元
+        # （前回の pnpm setup で登録済みだが新規シェルにしか反映されないため）
+        if (-not $env:PNPM_HOME) {
+            $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
+            if ($registryPnpmHome) {
+                $env:PNPM_HOME = $registryPnpmHome
+                $this.Log("PNPM_HOME をレジストリから復元しました: $registryPnpmHome", "Gray")
+            }
+        }
+
         $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
         if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
             return $rawBinPath.Trim()
