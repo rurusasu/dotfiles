@@ -34,7 +34,7 @@ async function callMcp(method, args) {
   };
   const resp = await fetch(SLM_MCP_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" },
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
