@@ -136,50 +136,41 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'EnsurePnpmSetup - bin path already available' {
+    Context 'EnsurePnpmSetup - PNPM_HOME already set' {
         BeforeEach {
+            $script:origPnpmHome = $env:PNPM_HOME
             $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
-            Mock Invoke-Pnpm {
-                param($Arguments)
-                if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 0
-                    return $script:pnpmBin
-                }
-                $global:LASTEXITCODE = 0
-                return ""
-            }
+            $env:PNPM_HOME = $script:pnpmBin
+            Mock Invoke-Pnpm { }
             Mock Write-Host { }
         }
+        AfterEach {
+            $env:PNPM_HOME = $script:origPnpmHome
+        }
 
-        It 'should return the bin path' {
+        It 'should return PNPM_HOME directly' {
             $result = $handler.EnsurePnpmSetup()
             $result | Should -Be $script:pnpmBin
         }
 
-        It 'should not call pnpm setup' {
+        It 'should not call pnpm setup or pnpm bin' {
             $handler.EnsurePnpmSetup()
-            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "setup" } -Times 0
+            Should -Invoke Invoke-Pnpm -Times 0
         }
     }
 
-    Context 'EnsurePnpmSetup - bin path fails, setup succeeds' {
+    Context 'EnsurePnpmSetup - PNPM_HOME unset, setup succeeds' {
         BeforeEach {
             $script:origPnpmHome = $env:PNPM_HOME
+            $script:origRegistryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
             $env:PNPM_HOME = ""
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', '', 'User')
             $script:pnpmBin = Join-Path $TestDrive "pnpm-bin-after-setup"
-            $script:setupCalled = $false
             Mock Invoke-Pnpm {
                 param($Arguments)
-                if ($Arguments -contains "bin") {
-                    if ($script:setupCalled) {
-                        $global:LASTEXITCODE = 0
-                        return $script:pnpmBin
-                    }
-                    $global:LASTEXITCODE = 1
-                    return ""
-                }
                 if ($Arguments -contains "setup") {
-                    $script:setupCalled = $true
+                    # pnpm setup がレジストリに PNPM_HOME を設定する動作をシミュレート
+                    [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:pnpmBin, 'User')
                     $global:LASTEXITCODE = 0
                     return ""
                 }
@@ -190,6 +181,7 @@ Describe 'PnpmHandler' {
         }
         AfterEach {
             $env:PNPM_HOME = $script:origPnpmHome
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origRegistryPnpmHome, 'User')
         }
 
         It 'should call pnpm setup' {
@@ -197,72 +189,37 @@ Describe 'PnpmHandler' {
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "setup" } -Times 1
         }
 
-        It 'should return the bin path obtained after setup' {
+        It 'should return PNPM_HOME set by pnpm setup' {
             $result = $handler.EnsurePnpmSetup()
             $result | Should -Be $script:pnpmBin
         }
 
-        It 'should set PNPM_HOME for current process when unset' {
-            $env:PNPM_HOME = ""
+        It 'should set PNPM_HOME for current process' {
             $handler.EnsurePnpmSetup()
-            $env:PNPM_HOME | Should -Not -BeNullOrEmpty
+            $env:PNPM_HOME | Should -Be $script:pnpmBin
         }
     }
 
-    Context 'EnsurePnpmSetup - bin path fails, setup fails' {
-        BeforeEach {
-            # bin コマンドが失敗（PNPM_HOME 未設定を示す）
-            Mock Invoke-Pnpm {
-                $global:LASTEXITCODE = 1
-                return ""
-            } -ParameterFilter { $Arguments -contains "bin" }
-            # setup コマンドも失敗
-            Mock Invoke-Pnpm {
-                $global:LASTEXITCODE = 1
-                return ""
-            } -ParameterFilter { $Arguments -contains "setup" }
-            Mock Write-Host { }
-        }
-
-        It 'should return null' {
-            $result = $handler.EnsurePnpmSetup()
-            $result | Should -BeNullOrEmpty
-        }
-
-        It 'should not throw' {
-            { $handler.EnsurePnpmSetup() } | Should -Not -Throw
-        }
-    }
-
-    Context 'EnsurePnpmSetup - bin path fails after setup, PNPM_HOME fallback' {
+    Context 'EnsurePnpmSetup - PNPM_HOME unset, setup fails' {
         BeforeEach {
             $script:origPnpmHome = $env:PNPM_HOME
-            $env:PNPM_HOME = Join-Path $TestDrive "pnpm-home-fallback"
-            $script:setupCalled = $false
+            $script:origRegistryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
+            $env:PNPM_HOME = ""
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', '', 'User')
             Mock Invoke-Pnpm {
-                param($Arguments)
-                if ($Arguments -contains "bin") {
-                    $global:LASTEXITCODE = 1
-                    return ""
-                }
-                if ($Arguments -contains "setup") {
-                    $script:setupCalled = $true
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                $global:LASTEXITCODE = 0
+                $global:LASTEXITCODE = 1
                 return ""
             }
             Mock Write-Host { }
         }
         AfterEach {
             $env:PNPM_HOME = $script:origPnpmHome
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origRegistryPnpmHome, 'User')
         }
 
-        It 'should return PNPM_HOME as fallback when pnpm bin still fails after setup' {
-            $expected = $env:PNPM_HOME
+        It 'should return null' {
             $result = $handler.EnsurePnpmSetup()
-            $result | Should -Be $expected
+            $result | Should -BeNullOrEmpty
         }
 
         It 'should not throw' {

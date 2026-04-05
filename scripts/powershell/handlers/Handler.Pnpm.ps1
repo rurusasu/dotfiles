@@ -197,10 +197,14 @@ class PnpmHandler : SetupHandlerBase {
             }
         }
 
-        $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
-        if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
-            return $rawBinPath.Trim()
+        # PNPM_HOME が確定済みならそのまま返す（pnpm >= 9 では PNPM_HOME = global bin）
+        # pnpm bin -g は PNPM_HOME が PATH にないとエラーを返すため、
+        # PATH 追加は AddPnpmBinToPath に一元化し、ここでは呼ばない
+        if ($env:PNPM_HOME) {
+            return $env:PNPM_HOME
         }
+
+        # PNPM_HOME が未設定 → pnpm setup を実行
         $this.Log("PNPM_HOME が未設定です。pnpm setup を実行します...")
         $null = Invoke-Pnpm -Arguments @("setup")
         if ($LASTEXITCODE -ne 0) {
@@ -208,20 +212,15 @@ class PnpmHandler : SetupHandlerBase {
             return $null
         }
         $this.Log("pnpm setup が完了しました", "Green")
-        # 現プロセスに PNPM_HOME を反映（pnpm setup は新規シェルにしか反映されないため）
-        if (-not $env:PNPM_HOME) {
-            $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
-            if ($registryPnpmHome) {
-                $env:PNPM_HOME = $registryPnpmHome
-            } elseif ($env:LOCALAPPDATA) {
-                # pnpm >= 9 では PNPM_HOME がグローバル bin を兼ねる前提
-                $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
-            }
+
+        # pnpm setup でレジストリに設定された PNPM_HOME をプロセスに反映
+        $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
+        if ($registryPnpmHome) {
+            $env:PNPM_HOME = $registryPnpmHome
+        } elseif ($env:LOCALAPPDATA) {
+            $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
         }
-        $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
-        if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
-            return $rawBinPath.Trim()
-        }
+
         return $env:PNPM_HOME
     }
 
