@@ -69,7 +69,7 @@ Describe 'Request-AdminElevation' {
             Request-AdminElevation -ScriptPath "C:\test.ps1" -BoundParameters $params
 
             Should -Invoke Start-Process -ParameterFilter {
-                $FilePath -eq "pwsh" -and
+                ($FilePath -eq "pwsh" -or $FilePath -eq "powershell.exe") -and
                 $Verb -eq "RunAs"
             }
         }
