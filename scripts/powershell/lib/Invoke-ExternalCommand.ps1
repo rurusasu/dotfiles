@@ -656,6 +656,28 @@ function Invoke-OpWhoAmI {
 
 <#
 .SYNOPSIS
+    1Password CLI の vault list を実行する
+.DESCRIPTION
+    op whoami はデスクトップアプリ連携環境（特に PowerShell -File モード）で
+    "account is not signed in" を返す場合がある。
+    op vault list は認証済みなら exit 0 を返し、認証チェックとしてより信頼性が高い。
+.PARAMETER OpExe
+    op.exe のパス
+.OUTPUTS
+    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
+#>
+function Invoke-OpVaultList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OpExe
+    )
+    $output = & $OpExe vault list --format=json 2>&1
+    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+<#
+.SYNOPSIS
     1Password CLI の signin を実行する
 .DESCRIPTION
     UAC 昇格プロセスなどデスクトップアプリ連携が使えない環境で
