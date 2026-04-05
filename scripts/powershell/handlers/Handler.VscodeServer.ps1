@@ -253,8 +253,9 @@ class VscodeServerHandler : SetupHandlerBase {
                 if ($patternFiles) {
                     $candidates += $patternFiles
                 }
-            } catch {
+            } catch [System.Management.Automation.ItemNotFoundException] {
                 # グロブパターン展開時のエラーを無視（VS Code 未インストール時など）
+                Write-Verbose "パターン検索でファイルが見つかりません: $pattern"
             }
         }
 
