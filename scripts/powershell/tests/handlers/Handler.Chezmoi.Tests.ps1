@@ -682,7 +682,7 @@ Describe 'ChezmoiHandler' {
         It 'should proceed silently when op whoami succeeds' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+                return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
             }
             Mock Read-Host { return '' }
             $script:signedInLogged = $false
@@ -729,12 +729,12 @@ Describe 'ChezmoiHandler' {
 
         It 'should sign in and log success after op signin succeeds' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            $script:whoamiCallCount = 0
+            $script:vaultListCallCount = 0
             Mock Invoke-OpVaultList {
-                $script:whoamiCallCount++
+                $script:vaultListCallCount++
                 # 2回目で成功（op signin 後）
-                if ($script:whoamiCallCount -ge 2) {
-                    return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+                if ($script:vaultListCallCount -ge 2) {
+                    return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
@@ -829,12 +829,12 @@ Describe 'ChezmoiHandler' {
 
         It 'should succeed when user signs in via desktop app after Read-Host wait' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            $script:whoamiCount = 0
+            $script:vaultListCount = 0
             Mock Invoke-OpVaultList {
-                $script:whoamiCount++
+                $script:vaultListCount++
                 # 1: 初回チェック=失敗, 2: signin後=失敗, 3: ReadHost後デスクトップアプリ連携=成功
-                if ($script:whoamiCount -ge 3) {
-                    return [PSCustomObject]@{ Output = 'user@example.com'; ExitCode = 0 }
+                if ($script:vaultListCount -ge 3) {
+                    return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
@@ -939,7 +939,7 @@ Describe 'ChezmoiHandler' {
             Mock New-DirectorySafe { }
             Mock Write-Host { }
             Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
+                return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
             }
             # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
             Mock Test-IsAdminSession { return $false }
