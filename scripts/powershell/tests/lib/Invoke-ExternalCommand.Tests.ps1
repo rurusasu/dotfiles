@@ -19,6 +19,8 @@ Describe 'Invoke-Chezmoi' {
         # 固定出力を持つ偽 chezmoi スクリプトを作成
         $script:fakeScript = Join-Path $env:TEMP "fake_chezmoi_$(Get-Random).ps1"
         Set-Content $script:fakeScript -Value "Write-Host 'progress line 1'; Write-Host 'progress line 2'"
+        # pwsh (PowerShell 7) がなければ powershell.exe にフォールバック
+        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
     }
 
     AfterAll {
@@ -29,7 +31,7 @@ Describe 'Invoke-Chezmoi' {
         $script:written = @()
         Mock Write-Host { param($Object) $script:written += $Object }
 
-        Invoke-Chezmoi -ExePath "pwsh" -MergeStderr "-NonInteractive" "-File" $script:fakeScript
+        Invoke-Chezmoi -ExePath $script:psExe -MergeStderr "-NonInteractive" "-File" $script:fakeScript
 
         $script:written | Should -Contain "progress line 1"
         $script:written | Should -Contain "progress line 2"
@@ -38,7 +40,7 @@ Describe 'Invoke-Chezmoi' {
     It 'should return output via pipeline when MergeStderr is not set' {
         Mock Write-Host { }
 
-        $result = Invoke-Chezmoi -ExePath "pwsh" "-NonInteractive" "-File" $script:fakeScript
+        $result = Invoke-Chezmoi -ExePath $script:psExe "-NonInteractive" "-File" $script:fakeScript
 
         Should -Invoke Write-Host -Times 0
         $result | Should -Contain "progress line 1"
@@ -415,6 +417,27 @@ Describe 'Test-DockerDaemon' {
         Mock Invoke-Docker { $global:LASTEXITCODE = 1 }
 
         $result = Test-DockerDaemon
+
+        $result | Should -Be $false
+    }
+}
+
+Describe 'Test-WslAvailable' {
+    It 'should return true when wsl --status succeeds' {
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $true
+        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+            "$Arguments" -match '--status'
+        }
+    }
+
+    It 'should return false when wsl --status fails' {
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+
+        $result = Test-WslAvailable
 
         $result | Should -Be $false
     }

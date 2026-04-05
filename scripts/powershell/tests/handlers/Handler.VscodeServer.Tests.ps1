@@ -61,6 +61,7 @@ Describe 'VscodeServerHandler' {
             Mock Test-PathExist { return $false }
             Mock Get-ChildItemSafe { return @() }
             Mock Get-ChildItem { return @() }
+            Mock Test-WslAvailable { return $true }
             $ctx.Options["SkipVscodeServerClean"] = $false
             $ctx.Options["SkipVscodeServerPreinstall"] = $false
 
@@ -84,6 +85,7 @@ Describe 'VscodeServerHandler' {
                 return [PSCustomObject]@{ commit = "abc123" }
             }
             Mock Get-ChildItem { return @() }
+            Mock Test-WslAvailable { return $true }
 
             $result = $handler.CanApply($ctx)
 
@@ -105,10 +107,20 @@ Describe 'VscodeServerHandler' {
                 return [PSCustomObject]@{ commit = "def456" }
             }
             Mock Get-ChildItem { return @() }
+            Mock Test-WslAvailable { return $true }
 
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
+        }
+
+        It 'should return false when WSL is not available' {
+            Mock Write-Host { }
+            Mock Test-WslAvailable { return $false }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
         }
     }
 
@@ -206,9 +218,11 @@ Describe 'VscodeServerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
+                if ($argStr -match "whoami") { return "nixos" }
                 if ($argStr -match "curl") {
                     $script:curlArgs = $argStr
                 }
+                return ""
             }
             $ctx.Options["SkipVscodeServerClean"] = $true
             $ctx.Options["SkipVscodeServerPreinstall"] = $false
@@ -241,9 +255,11 @@ Describe 'VscodeServerHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
+                if ($argStr -match "whoami") { return "nixos" }
                 if ($argStr -match "curl") {
                     $script:curlArgs = $argStr
                 }
+                return ""
             }
             $ctx.Options["SkipVscodeServerClean"] = $true
             $ctx.Options["SkipVscodeServerPreinstall"] = $false
@@ -291,7 +307,7 @@ Describe 'VscodeServerHandler' {
             $script:warningShown = $false
             Mock Write-Host {
                 param($Object)
-                if ($Object -match "product.json が見つからない") {
+                if ($Object -match "product\.json が見つからない") {
                     $script:warningShown = $true
                 }
             }

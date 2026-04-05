@@ -43,6 +43,12 @@ class WslConfigHandler : SetupHandlerBase {
             return $false
         }
 
+        # WSL が利用可能か確認
+        if (-not (Test-WslAvailable)) {
+            $this.Log("WSL が利用できないためスキップします", "Gray")
+            return $false
+        }
+
         return $true
     }
 
