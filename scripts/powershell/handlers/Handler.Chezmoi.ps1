@@ -248,9 +248,11 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        # サインイン済みか確認（op whoami で実際の認証状態をチェック）
-        # op account list はアカウント情報を返すだけで認証状態を確認できないため使わない
-        $result = Invoke-OpWhoAmI -OpExe $opExe
+        # サインイン済みか確認
+        # op whoami はデスクトップアプリ連携環境（特に -File モード）で
+        # "account is not signed in" を返す場合がある。
+        # op vault list は認証済みなら exit 0 を返し、より信頼性が高い。
+        $result = Invoke-OpVaultList -OpExe $opExe
         if ($result.ExitCode -eq 0) {
             $this.Log("1Password CLI: サインイン済み", "Gray")
             return
@@ -288,7 +290,7 @@ class ChezmoiHandler : SetupHandlerBase {
             Invoke-OpSignIn -OpExe $opExe | Out-Null
 
             # signin 後に whoami で確認
-            $result = Invoke-OpWhoAmI -OpExe $opExe
+            $result = Invoke-OpVaultList -OpExe $opExe
             if ($result.ExitCode -eq 0) {
                 $this.Log("1Password CLI: サインイン完了", "Green")
                 return
@@ -301,7 +303,7 @@ class ChezmoiHandler : SetupHandlerBase {
                 Read-Host | Out-Null
 
                 # デスクトップアプリ連携が有効になった可能性があるため whoami で再確認
-                $result = Invoke-OpWhoAmI -OpExe $opExe
+                $result = Invoke-OpVaultList -OpExe $opExe
                 if ($result.ExitCode -eq 0) {
                     $this.Log("1Password CLI: サインイン完了（デスクトップアプリ連携）", "Green")
                     return

@@ -681,7 +681,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should proceed silently when op whoami succeeds' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
             Mock Read-Host { return '' }
@@ -704,7 +704,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should attempt op signin when op whoami fails and throw after max retries' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpSignIn {
@@ -730,7 +730,7 @@ Describe 'ChezmoiHandler' {
         It 'should sign in and log success after op signin succeeds' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             $script:whoamiCallCount = 0
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 $script:whoamiCallCount++
                 # 2回目で成功（op signin 後）
                 if ($script:whoamiCallCount -ge 2) {
@@ -757,7 +757,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should throw and return failure after max retries exhausted' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpSignIn {
@@ -777,7 +777,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should show desktop app hint in non-admin session' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpSignIn {
@@ -803,7 +803,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should show admin-specific message in admin session' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpSignIn {
@@ -830,7 +830,7 @@ Describe 'ChezmoiHandler' {
         It 'should succeed when user signs in via desktop app after Read-Host wait' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             $script:whoamiCount = 0
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 $script:whoamiCount++
                 # 1: 初回チェック=失敗, 2: signin後=失敗, 3: ReadHost後デスクトップアプリ連携=成功
                 if ($script:whoamiCount -ge 3) {
@@ -859,7 +859,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should throw in non-interactive environment when op is not authenticated' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Test-InteractiveEnvironment { return $false }
@@ -873,7 +873,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should show CLI integration hint when no accounts registered' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpAccountList {
@@ -891,7 +891,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should show generic auth error when accounts exist but not authenticated' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpAccountList {
@@ -909,7 +909,7 @@ Describe 'ChezmoiHandler' {
 
         It 'should show restart hint when desktop app connection fails' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
             Mock Invoke-OpAccountList {
@@ -938,7 +938,7 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Invoke-OpWhoAmI {
+            Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = 'my@example.com'; ExitCode = 0 }
             }
             # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
@@ -955,7 +955,7 @@ Describe 'ChezmoiHandler' {
             $handler.CanApply($ctx)
             $handler.Apply($ctx)
 
-            Should -Invoke Invoke-OpWhoAmI -ParameterFilter {
+            Should -Invoke Invoke-OpVaultList -ParameterFilter {
                 $OpExe -eq 'C:\tools\op.exe'
             } -Times 1
         }
@@ -971,7 +971,7 @@ Describe 'ChezmoiHandler' {
             $handler.CanApply($ctx)
             $handler.Apply($ctx)
 
-            Should -Invoke Invoke-OpWhoAmI -ParameterFilter {
+            Should -Invoke Invoke-OpVaultList -ParameterFilter {
                 $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
             } -Times 1
         }
@@ -989,7 +989,7 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             $script:notFoundWarned | Should -Be $true
-            Should -Invoke Invoke-OpWhoAmI -Times 0
+            Should -Invoke Invoke-OpVaultList -Times 0
         }
     }
 
