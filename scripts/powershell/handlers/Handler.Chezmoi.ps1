@@ -256,10 +256,10 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
-        # 非対話環境では Read-Host がハングするためスキップ
+        # 非対話環境では Read-Host がハングするため対話的サインインをスキップ
+        # ただし chezmoi apply は確実に失敗するため、例外で停止する
         if (-not (Test-InteractiveEnvironment)) {
-            $this.LogWarning("1Password CLI が未認証ですが、非対話環境のためセットアップ案内をスキップします")
-            return
+            throw "1Password CLI が未認証です。1Password デスクトップアプリでサインインしてから再実行してください。（非対話環境のため対話的サインインは実行できません）"
         }
 
         # 1Password CLI が未認証 → ログイン画面を表示して待機

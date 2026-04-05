@@ -725,8 +725,12 @@ function Test-WslAvailable {
     [OutputType([bool])]
     param()
 
-    $null = Invoke-Wsl "--status" 2>&1
-    return $LASTEXITCODE -eq 0
+    try {
+        $null = Invoke-Wsl "--status" 2>&1
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
 }
 
 <#
