@@ -323,13 +323,29 @@ class ChezmoiHandler : SetupHandlerBase {
     #>
     hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
         $accountResult = Invoke-OpAccountList -OpExe $opExe
-        $hasAccounts = $false
-        if ($accountResult.ExitCode -eq 0 -and $accountResult.Output) {
-            $outputStr = ($accountResult.Output | Out-String).Trim()
-            # JSON 配列が空でないか確認
-            $hasAccounts = $outputStr -and $outputStr -ne '[]' -and $outputStr -ne ''
+        $outputStr = if ($accountResult.Output) { ($accountResult.Output | Out-String).Trim() } else { '' }
+
+        # op account list 自体が失敗 → デスクトップアプリに接続できない
+        if ($accountResult.ExitCode -ne 0) {
+            $isConnectError = $outputStr -match 'cannot connect|make sure it is running'
+            if ($isConnectError) {
+                return @(
+                    "1Password デスクトップアプリに接続できません。"
+                    "CLI 連携を有効にした後、アプリの再起動が必要な場合があります:"
+                    "  1. タスクトレイの 1Password を右クリック → 「Quit 1Password」で完全終了"
+                    "  2. 1Password デスクトップアプリを再起動"
+                    "  3. アプリでロック解除（パスワード or 生体認証）"
+                    "  4. install.cmd を再実行する"
+                ) -join "`n"
+            }
+            return @(
+                "1Password CLI がデスクトップアプリと通信できません。"
+                "1Password デスクトップアプリが起動・ロック解除されていることを確認してください。"
+            ) -join "`n"
         }
 
+        # account list は成功したがアカウントが空 → CLI連携が無効
+        $hasAccounts = $outputStr -and $outputStr -ne '[]' -and $outputStr -ne ''
         if (-not $hasAccounts) {
             return @(
                 "1Password CLI にアカウントが登録されていません。"
@@ -337,15 +353,17 @@ class ChezmoiHandler : SetupHandlerBase {
                 "  1. 1Password デスクトップアプリを開く"
                 "  2. Settings > Developer を開く"
                 "  3. 「Biometric unlock for 1Password CLI」をオンにする"
-                "  4. install.cmd を再実行する"
+                "  4. 1Password デスクトップアプリを再起動する"
+                "  5. install.cmd を再実行する"
                 ""
                 "  参考: https://developer.1password.com/docs/cli/app-integration/"
             ) -join "`n"
         }
 
+        # アカウントはあるが未認証
         return @(
             "1Password CLI が未認証です。"
-            "1Password デスクトップアプリでサインインしてから再実行してください。"
+            "1Password デスクトップアプリでロック解除してから再実行してください。"
         ) -join "`n"
     }
 

@@ -904,6 +904,25 @@ Describe 'ChezmoiHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match '1Password CLI が未認証です'
+            $result.Message | Should -Match 'ロック解除'
+        }
+
+        It 'should show restart hint when desktop app connection fails' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = 'cannot connect to 1Password app, make sure it is running'; ExitCode = 1 }
+            }
+            Mock Test-InteractiveEnvironment { return $false }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match '接続できません'
+            $result.Message | Should -Match '再起動'
         }
     }
 
