@@ -197,6 +197,16 @@ class PnpmHandler : SetupHandlerBase {
             }
         }
 
+        # PNPM_HOME がプロセス PATH に含まれていない場合、追加
+        # （pnpm bin -g は PNPM_HOME が PATH にないとエラーを返す）
+        if ($env:PNPM_HOME) {
+            $processItems = if ($env:PATH) { $env:PATH -split ";" } else { @() }
+            if ($processItems -notcontains $env:PNPM_HOME) {
+                $env:PATH = "$env:PNPM_HOME;$env:PATH"
+                $this.Log("PNPM_HOME をプロセス PATH に追加しました", "Gray")
+            }
+        }
+
         $rawBinPath = Invoke-Pnpm -Arguments @("bin", "-g")
         if ($LASTEXITCODE -eq 0 -and $rawBinPath -and $rawBinPath.Trim()) {
             return $rawBinPath.Trim()
