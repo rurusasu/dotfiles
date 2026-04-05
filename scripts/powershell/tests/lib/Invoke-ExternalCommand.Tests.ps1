@@ -441,4 +441,12 @@ Describe 'Test-WslAvailable' {
 
         $result | Should -Be $false
     }
+
+    It 'should return false when Invoke-Wsl throws an exception' {
+        Mock Invoke-Wsl { throw "wsl: WSL component not installed" }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $false
+    }
 }

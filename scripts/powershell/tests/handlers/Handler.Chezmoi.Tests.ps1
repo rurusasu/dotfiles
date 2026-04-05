@@ -852,6 +852,20 @@ Describe 'ChezmoiHandler' {
             $script:desktopAppSuccess | Should -Be $true -Because 'デスクトップアプリ連携での成功メッセージが出るべき'
             $result.Success | Should -Be $true
         }
+
+        It 'should throw in non-interactive environment when op is not authenticated' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Test-InteractiveEnvironment { return $false }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match '1Password CLI が未認証'
+        }
     }
 
     Context 'FindOpExe' {
