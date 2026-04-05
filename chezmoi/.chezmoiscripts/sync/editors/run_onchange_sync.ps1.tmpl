@@ -34,7 +34,9 @@ function Sync-Extensions {
     }
 
     # Get currently installed extensions
-    $installed = & $EditorCommand --list-extensions | ForEach-Object { $_.ToLower() }
+    # 一部エディタ CLI (cursor 等) は deprecation warning を stderr に出力するため
+    # 2>$null で抑制し、stdout のみ取得する
+    $installed = & $EditorCommand --list-extensions 2>$null | ForEach-Object { $_.ToLower() }
 
     # Remove unlisted extensions (retry loop for dependency resolution)
     $toRemove = @($installed | Where-Object { $_ -notin $managed })
