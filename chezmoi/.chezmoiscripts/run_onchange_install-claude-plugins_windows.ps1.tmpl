@@ -19,12 +19,16 @@ if (-not (Test-Path -Path $marketplacesDir)) {
 $targetDir = Join-Path $marketplacesDir "{{ .name }}"
 if (-not (Test-Path -Path $targetDir)) {
     Write-Host "Cloning {{ .name }}..."
-    & $gitCmd @gitNonInteractive clone "https://github.com/{{ .repo }}.git" $targetDir
+    # git clone は進捗メッセージを stderr に出力するため、PowerShell が
+    # NativeCommandError として扱わないよう stderr をリダイレクト
+    & $gitCmd @gitNonInteractive clone "https://github.com/{{ .repo }}.git" $targetDir 2>&1 | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) { throw "git clone failed for {{ .name }}" }
 }
 else {
     Write-Host "Updating {{ .name }}..."
     Push-Location $targetDir
-    try { & $gitCmd @gitNonInteractive pull --ff-only } finally { Pop-Location }
+    try { & $gitCmd @gitNonInteractive pull --ff-only 2>&1 | ForEach-Object { Write-Host $_ } } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { Write-Host "Warning: git pull failed for {{ .name }}, skipping" }
 }
 
 {{ end -}}
