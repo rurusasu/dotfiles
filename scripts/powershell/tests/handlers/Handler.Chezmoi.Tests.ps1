@@ -698,7 +698,7 @@ Describe 'ChezmoiHandler' {
             Should -Invoke Read-Host -Times 0
         }
 
-        It 'should attempt op signin when op whoami fails' {
+        It 'should attempt op signin when op whoami fails and throw after max retries' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -715,10 +715,12 @@ Describe 'ChezmoiHandler' {
             }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
             $script:instructionsShown | Should -Be $true
             Should -Invoke Invoke-OpSignIn -Times 3
+            # 全リトライ失敗時は例外で停止し、失敗結果を返す
+            $result.Success | Should -Be $false
         }
 
         It 'should sign in and log success after op signin succeeds' {
@@ -749,7 +751,7 @@ Describe 'ChezmoiHandler' {
             $script:signedInLogged | Should -Be $true
         }
 
-        It 'should log warning after max retries exhausted' {
+        It 'should throw and return failure after max retries exhausted' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpWhoAmI {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -759,17 +761,96 @@ Describe 'ChezmoiHandler' {
             }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
-            $script:failureWarningLogged = $false
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            # 全リトライ失敗時は throw → catch で CreateFailureResult が返る
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match 'サインインに失敗'
+            Should -Invoke Read-Host -Times 2
+        }
+
+        It 'should show desktop app hint in non-admin session' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
+            Mock Test-IsAdminSession { return $false }
+            $script:hintShown = $false
+            $script:adminMsg = $false
             Mock Write-Host {
                 param($Object)
-                if ($Object -match 'サインインに失敗') { $script:failureWarningLogged = $true }
+                if ($Object -match 'デスクトップアプリが起動') { $script:hintShown = $true }
+                if ($Object -match '管理者昇格プロセス') { $script:adminMsg = $true }
             }
             $handler.CanApply($ctx)
 
             $handler.Apply($ctx)
 
-            $script:failureWarningLogged | Should -Be $true
-            Should -Invoke Read-Host -Times 2
+            $script:hintShown | Should -Be $true -Because '非管理者セッションではデスクトップアプリのヒントが表示されるべき'
+            $script:adminMsg | Should -Be $false -Because '非管理者セッションでは管理者用メッセージは出ないべき'
+        }
+
+        It 'should show admin-specific message in admin session' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
+            Mock Test-IsAdminSession { return $true }
+            $script:adminMsg = $false
+            $script:nonAdminHint = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match '管理者昇格プロセス') { $script:adminMsg = $true }
+                if ($Object -match 'デスクトップアプリが起動') { $script:nonAdminHint = $true }
+            }
+            $handler.CanApply($ctx)
+
+            $handler.Apply($ctx)
+
+            $script:adminMsg | Should -Be $true -Because '管理者セッションでは管理者用メッセージが出るべき'
+            $script:nonAdminHint | Should -Be $false -Because '管理者セッションでは非管理者ヒントは出ないべき'
+        }
+
+        It 'should succeed when user signs in via desktop app after Read-Host wait' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            $script:whoamiCount = 0
+            Mock Invoke-OpWhoAmI {
+                $script:whoamiCount++
+                # 1: 初回チェック=失敗, 2: signin後=失敗, 3: ReadHost後デスクトップアプリ連携=成功
+                if ($script:whoamiCount -ge 3) {
+                    return [PSCustomObject]@{ Output = 'user@example.com'; ExitCode = 0 }
+                }
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpSignIn {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Read-Host { return '' }
+            Mock Test-InteractiveEnvironment { return $true }
+            $script:desktopAppSuccess = $false
+            Mock Write-Host {
+                param($Object)
+                if ($Object -match 'デスクトップアプリ連携') { $script:desktopAppSuccess = $true }
+            }
+            Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
+
+            $handler.CanApply($ctx)
+            $result = $handler.Apply($ctx)
+
+            $script:desktopAppSuccess | Should -Be $true -Because 'デスクトップアプリ連携での成功メッセージが出るべき'
+            $result.Success | Should -Be $true
         }
     }
 
