@@ -256,10 +256,13 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
+        # 原因を診断して具体的なエラーメッセージを構築
+        $diagnosis = $this.DiagnoseOpAuthFailure($opExe)
+
         # 非対話環境では Read-Host がハングするため対話的サインインをスキップ
         # ただし chezmoi apply は確実に失敗するため、例外で停止する
         if (-not (Test-InteractiveEnvironment)) {
-            throw "1Password CLI が未認証です。1Password デスクトップアプリでサインインしてから再実行してください。（非対話環境のため対話的サインインは実行できません）"
+            throw $diagnosis
         }
 
         # 1Password CLI が未認証 → ログイン画面を表示して待機
@@ -268,13 +271,12 @@ class ChezmoiHandler : SetupHandlerBase {
         Write-Host "[Chezmoi] 1Password CLI の認証が必要です" -ForegroundColor Yellow
         Write-Host "========================================"  -ForegroundColor Yellow
         Write-Host ""
+        Write-Host "  $diagnosis" -ForegroundColor Cyan
+        Write-Host ""
         if (Test-IsAdminSession) {
             Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
             Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
         } else {
-            Write-Host "  chezmoi テンプレートが 1Password の秘密情報を参照するため、"              -ForegroundColor Cyan
-            Write-Host "  1Password CLI へのサインインが必要です。"                                 -ForegroundColor Cyan
-            Write-Host ""
             Write-Host "  ヒント: 1Password デスクトップアプリが起動・サインイン済みなら"           -ForegroundColor Gray
             Write-Host "  自動的に認証される場合があります。アプリを確認してください。"             -ForegroundColor Gray
         }
@@ -309,6 +311,42 @@ class ChezmoiHandler : SetupHandlerBase {
 
         # 全リトライ失敗 → chezmoi apply に進んでも確実に失敗するため例外で停止
         throw "1Password CLI のサインインに失敗しました。1Password デスクトップアプリでサインインしてから再実行してください。"
+    }
+
+    <#
+    .SYNOPSIS
+        op whoami 失敗の原因を診断し、具体的な対処法を返す
+    .DESCRIPTION
+        以下の順序で原因を特定する:
+        1. op account list が空 → CLI にアカウント未登録（デスクトップアプリ連携が無効）
+        2. それ以外 → 一般的な認証エラー
+    #>
+    hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
+        $accountResult = Invoke-OpAccountList -OpExe $opExe
+        $hasAccounts = $false
+        if ($accountResult.ExitCode -eq 0 -and $accountResult.Output) {
+            $outputStr = ($accountResult.Output | Out-String).Trim()
+            # JSON 配列が空でないか確認
+            $hasAccounts = $outputStr -and $outputStr -ne '[]' -and $outputStr -ne ''
+        }
+
+        if (-not $hasAccounts) {
+            return @(
+                "1Password CLI にアカウントが登録されていません。"
+                "1Password デスクトップアプリで CLI 連携を有効にしてください:"
+                "  1. 1Password デスクトップアプリを開く"
+                "  2. Settings > Developer を開く"
+                "  3. 「Biometric unlock for 1Password CLI」をオンにする"
+                "  4. install.cmd を再実行する"
+                ""
+                "  参考: https://developer.1password.com/docs/cli/app-integration/"
+            ) -join "`n"
+        }
+
+        return @(
+            "1Password CLI が未認証です。"
+            "1Password デスクトップアプリでサインインしてから再実行してください。"
+        ) -join "`n"
     }
 
     <#

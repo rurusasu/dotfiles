@@ -655,6 +655,10 @@ Describe 'ChezmoiHandler' {
             Mock Test-IsAdminSession { return $false }
             # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
             Mock Find-WinGetExe { return $null }
+            # DiagnoseOpAuthFailure で使用される op account list のデフォルトモック
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
+            }
         }
 
         It 'should log warning and continue when op is not found' {
@@ -864,7 +868,42 @@ Describe 'ChezmoiHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match '1Password CLI が未認証'
+            $result.Message | Should -Match '1Password'
+        }
+
+        It 'should show CLI integration hint when no accounts registered' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
+            }
+            Mock Test-InteractiveEnvironment { return $false }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match 'アカウントが登録されていません'
+            $result.Message | Should -Match 'Biometric unlock for 1Password CLI'
+        }
+
+        It 'should show generic auth error when accounts exist but not authenticated' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpWhoAmI {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = '[{"url":"my.1password.com"}]'; ExitCode = 0 }
+            }
+            Mock Test-InteractiveEnvironment { return $false }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match '1Password CLI が未認証です'
         }
     }
 
