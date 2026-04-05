@@ -713,6 +713,24 @@ function Test-InteractiveEnvironment {
 
 <#
 .SYNOPSIS
+    WSL が利用可能かどうかを確認する
+.DESCRIPTION
+    Invoke-Wsl --status を実行し、終了コードで WSL コンポーネントの
+    インストール状態を判定する。Pester でモック可能。
+.OUTPUTS
+    [bool] WSL が利用可能なら $true
+#>
+function Test-WslAvailable {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    $null = Invoke-Wsl "--status" 2>&1
+    return $LASTEXITCODE -eq 0
+}
+
+<#
+.SYNOPSIS
     現在のセッションが管理者権限で実行されているか確認する
 .DESCRIPTION
     Windows Principal を使って管理者ロールを確認する。

@@ -39,6 +39,7 @@ Describe 'DockerHandler' {
         BeforeEach {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
+            Mock Test-WslAvailable { return $true }
         }
 
         It 'should return false when Retries is 0' {
@@ -122,6 +123,14 @@ Describe 'DockerHandler' {
             $handler.CanApply($ctx)
 
             $handler.WslWritableMaxAttempts | Should -Be 15
+        }
+
+        It 'should return false when WSL is not available' {
+            Mock Test-WslAvailable { return $false }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
         }
     }
 

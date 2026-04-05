@@ -61,10 +61,21 @@ Describe 'WslConfigHandler' {
 
         It 'should return true when .wslconfig exists' {
             Mock Test-PathExist { return $true }
+            Mock Test-WslAvailable { return $true }
 
             $result = $handler.CanApply($ctx)
 
             $result | Should -Be $true
+        }
+
+        It 'should return false when WSL is not available' {
+            Mock Test-PathExist { return $true }
+            Mock Test-WslAvailable { return $false }
+            Mock Write-Host { }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
         }
     }
 

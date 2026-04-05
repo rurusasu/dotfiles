@@ -44,6 +44,12 @@ class VscodeServerHandler : SetupHandlerBase {
             return $false
         }
 
+        # WSL が利用可能か確認
+        if (-not (Test-WslAvailable)) {
+            $this.Log("WSL が利用できないためスキップします", "Gray")
+            return $false
+        }
+
         # VS Code のインストール確認（preinstall が有効な場合のみ）
         if (-not $skipPreinstall) {
             try {
@@ -242,12 +248,21 @@ class VscodeServerHandler : SetupHandlerBase {
         }
 
         if ($pattern) {
-            $patternFiles = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
-            if ($patternFiles) {
-                $candidates += $patternFiles
+            try {
+                $patternFiles = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
+                if ($patternFiles) {
+                    $candidates += $patternFiles
+                }
+            } catch {
+                # グロブパターン展開時のエラーを無視（VS Code 未インストール時など）
             }
         }
 
-        return @($candidates | Where-Object { $_ -ne $null }) | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $filtered = @($candidates | Where-Object { $_ -ne $null })
+        if ($filtered.Count -eq 0) {
+            return $null
+        }
+
+        return $filtered | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
 }

@@ -419,3 +419,24 @@ Describe 'Test-DockerDaemon' {
         $result | Should -Be $false
     }
 }
+
+Describe 'Test-WslAvailable' {
+    It 'should return true when wsl --status succeeds' {
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $true
+        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+            "$Arguments" -match '--status'
+        }
+    }
+
+    It 'should return false when wsl --status fails' {
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $false
+    }
+}
