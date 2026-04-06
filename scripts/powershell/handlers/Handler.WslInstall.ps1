@@ -51,23 +51,67 @@ class WslInstallHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $this.Log("WSL コンポーネントをインストールしています...")
-            $this.Log("wsl --install --no-distribution を実行中...")
 
-            # wsl --install は stderr に進捗を出力するため 2>&1 でマージ
+            # 方法1: wsl --install --no-distribution
+            $this.Log("wsl --install --no-distribution を実行中...")
             $output = & wsl --install --no-distribution 2>&1
             $output | ForEach-Object { $this.Log("  $_", "Gray") }
 
-            if ($LASTEXITCODE -ne 0) {
-                return $this.CreateFailureResult("wsl --install が失敗しました (exit=$LASTEXITCODE)")
+            if ($LASTEXITCODE -eq 0) {
+                return $this.CreateRebootRequiredResult()
             }
 
-            $this.Log("WSL コンポーネントのインストールが完了しました", "Green")
-            $this.Log("WSL を有効にするには PC の再起動が必要です", "Yellow")
-            $this.Log("再起動後に install.cmd を再実行してください", "Yellow")
+            # 方法2: wsl --install が失敗した場合、dism.exe で Optional Feature を直接有効化
+            $this.LogWarning("wsl --install が失敗しました。dism.exe で Windows Optional Feature を有効化します...")
+            $dismSuccess = $this.EnableWslFeatures()
 
-            return $this.CreateSuccessResult("WSL をインストールしました（再起動が必要）")
+            if ($dismSuccess) {
+                return $this.CreateRebootRequiredResult()
+            }
+
+            return $this.CreateFailureResult(
+                "WSL のインストールに失敗しました。手動で以下を管理者 PowerShell で実行してください:`n" +
+                "  dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart`n" +
+                "  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart"
+            )
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    <#
+    .SYNOPSIS
+        dism.exe で WSL 関連の Windows Optional Feature を有効化する
+    .OUTPUTS
+        全て成功なら $true
+    #>
+    hidden [bool] EnableWslFeatures() {
+        $features = @(
+            "Microsoft-Windows-Subsystem-Linux",
+            "VirtualMachinePlatform"
+        )
+        $allSuccess = $true
+
+        foreach ($feature in $features) {
+            $this.Log("dism.exe: $feature を有効化中...")
+            $output = & dism.exe /online /enable-feature /featurename:$feature /all /norestart 2>&1
+            $output | ForEach-Object { $this.Log("  $_", "Gray") }
+
+            if ($LASTEXITCODE -ne 0) {
+                $this.LogWarning("$feature の有効化に失敗しました (exit=$LASTEXITCODE)")
+                $allSuccess = $false
+            } else {
+                $this.Log("$feature を有効化しました", "Green")
+            }
+        }
+
+        return $allSuccess
+    }
+
+    hidden [SetupResult] CreateRebootRequiredResult() {
+        $this.Log("WSL コンポーネントのインストールが完了しました", "Green")
+        $this.Log("WSL を有効にするには PC の再起動が必要です", "Yellow")
+        $this.Log("再起動後に install.cmd を再実行してください", "Yellow")
+        return $this.CreateSuccessResult("WSL をインストールしました（再起動が必要）")
     }
 }

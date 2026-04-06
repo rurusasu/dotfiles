@@ -79,15 +79,39 @@ Describe 'WslInstallHandler' {
             $script:wslInstallCalled | Should -Be $true
         }
 
-        It 'should return failure when wsl --install fails' {
+        It 'should fallback to dism when wsl --install fails' {
             Mock wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
+            }
+            $script:dismCalls = @()
+            Mock dism.exe {
+                $script:dismCalls += ($args -join " ")
+                $global:LASTEXITCODE = 0
+                return "The operation completed successfully."
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match '再起動が必要'
+            $script:dismCalls.Count | Should -Be 2
+        }
+
+        It 'should return failure when both wsl --install and dism fail' {
+            Mock wsl {
+                $global:LASTEXITCODE = 1
+                return "Installation failed"
+            }
+            Mock dism.exe {
+                $global:LASTEXITCODE = 1
+                return "Error"
             }
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
+            $result.Message | Should -Match 'dism.exe'
         }
     }
 }
