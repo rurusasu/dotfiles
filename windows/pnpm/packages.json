@@ -1,5 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "pnpm global packages to install on Windows",
-  "globalPackages": ["@google/gemini-cli", "@anthropic-ai/claude-code"]
+  "globalPackages": ["@anthropic-ai/claude-code", "@google/gemini-cli"]
 }

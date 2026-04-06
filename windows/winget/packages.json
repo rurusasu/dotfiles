@@ -1,14 +1,70 @@
 {
   "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
-  "CreationDate": "2026-01-03T11:32:47.820-00:00",
   "Sources": [
     {
       "Packages": [
         {
-          "PackageIdentifier": "AgileBits.1Password"
+          "PackageIdentifier": "AgileBits.1Password.CLI"
         },
         {
-          "PackageIdentifier": "AgileBits.1Password.CLI"
+          "PackageIdentifier": "twpayne.chezmoi"
+        },
+        {
+          "PackageIdentifier": "eza-community.eza"
+        },
+        {
+          "PackageIdentifier": "sharkdp.fd"
+        },
+        {
+          "PackageIdentifier": "junegunn.fzf"
+        },
+        {
+          "PackageIdentifier": "GitHub.cli"
+        },
+        {
+          "PackageIdentifier": "Git.Git"
+        },
+        {
+          "PackageIdentifier": "Task.Task"
+        },
+        {
+          "PackageIdentifier": "Neovim.Neovim"
+        },
+        {
+          "PackageIdentifier": "OpenJS.NodeJS.LTS"
+        },
+        {
+          "PackageIdentifier": "Obsidian.Obsidian"
+        },
+        {
+          "PackageIdentifier": "SST.opencode"
+        },
+        {
+          "PackageIdentifier": "Microsoft.PowerShell"
+        },
+        {
+          "PackageIdentifier": "BurntSushi.ripgrep.MSVC"
+        },
+        {
+          "PackageIdentifier": "Rustlang.Rustup"
+        },
+        {
+          "PackageIdentifier": "SlackTechnologies.Slack"
+        },
+        {
+          "PackageIdentifier": "Starship.Starship"
+        },
+        {
+          "PackageIdentifier": "astral-sh.uv"
+        },
+        {
+          "PackageIdentifier": "wez.wezterm"
+        },
+        {
+          "PackageIdentifier": "ajeetdsouza.zoxide"
+        },
+        {
+          "PackageIdentifier": "AgileBits.1Password"
         },
         {
           "PackageIdentifier": "Anthropic.Claude"
@@ -21,12 +77,6 @@
         },
         {
           "PackageIdentifier": "Docker.DockerDesktop"
-        },
-        {
-          "PackageIdentifier": "Git.Git"
-        },
-        {
-          "PackageIdentifier": "GitHub.cli"
         },
         {
           "PackageIdentifier": "GitHub.Copilot"
@@ -44,25 +94,10 @@
           "PackageIdentifier": "Google.Antigravity"
         },
         {
-          "PackageIdentifier": "Microsoft.PowerShell"
-        },
-        {
           "PackageIdentifier": "Microsoft.PowerToys"
         },
         {
-          "PackageIdentifier": "Task.Task"
-        },
-        {
-          "PackageIdentifier": "Starship.Starship"
-        },
-        {
           "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
-        },
-        {
-          "PackageIdentifier": "Neovim.Neovim"
-        },
-        {
-          "PackageIdentifier": "OpenJS.NodeJS.LTS"
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
@@ -71,49 +106,16 @@
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
-          "PackageIdentifier": "OpenAI.Codex"
+          "PackageIdentifier": "Microsoft.WSL"
         },
         {
-          "PackageIdentifier": "SST.opencode"
+          "PackageIdentifier": "OpenAI.Codex"
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"
         },
         {
-          "PackageIdentifier": "twpayne.chezmoi"
-        },
-        {
-          "PackageIdentifier": "BurntSushi.ripgrep.MSVC"
-        },
-        {
-          "PackageIdentifier": "sharkdp.fd"
-        },
-        {
-          "PackageIdentifier": "astral-sh.uv"
-        },
-        {
           "PackageIdentifier": "Oven-sh.Bun"
-        },
-        {
-          "PackageIdentifier": "eza-community.eza"
-        },
-        {
-          "PackageIdentifier": "junegunn.fzf"
-        },
-        {
-          "PackageIdentifier": "ajeetdsouza.zoxide"
-        },
-        {
-          "PackageIdentifier": "wez.wezterm"
-        },
-        {
-          "PackageIdentifier": "SlackTechnologies.Slack"
-        },
-        {
-          "PackageIdentifier": "Rustlang.Rustup"
-        },
-        {
-          "PackageIdentifier": "Obsidian.Obsidian"
         },
         {
           "PackageIdentifier": "ZedIndustries.Zed"
@@ -139,6 +141,5 @@
         "Type": "Microsoft.Rest"
       }
     }
-  ],
-  "WinGetVersion": "1.12.440"
+  ]
 }

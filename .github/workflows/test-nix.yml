@@ -1,0 +1,44 @@
+name: Nix Checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/test-nix.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/test-nix.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@d1ca217b388ee87b2507a9a93bf01368bde7cec2
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Check flake evaluation
+        run: nix flake check --no-build
+
+      - name: Build package sets (dry-run)
+        run: |
+          nix build .#minimal --dry-run
+          nix build .#default --dry-run
+
+      - name: Check formatting
+        run: nix fmt -- --fail-on-change

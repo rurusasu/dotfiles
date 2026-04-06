@@ -44,12 +44,12 @@ act push -W .github/workflows/ci.yml -l
 
 ## Known Limitations
 
-| Step | Local behavior |
-|---|---|
-| `codeql-action/upload-sarif` | ❌ Fails (needs GitHub API) |
-| `docker/login-action` | ❌ Fails (needs secrets) |
-| `actions/upload-artifact` | ⚠️ Limited (no GitHub storage) |
-| Docker-in-Docker | ⚠️ Needs extra config |
-| `GITHUB_TOKEN` | ⚠️ Scopes differ from real runners |
+| Step                         | Local behavior                     |
+| ---------------------------- | ---------------------------------- |
+| `codeql-action/upload-sarif` | ❌ Fails (needs GitHub API)        |
+| `docker/login-action`        | ❌ Fails (needs secrets)           |
+| `actions/upload-artifact`    | ⚠️ Limited (no GitHub storage)     |
+| Docker-in-Docker             | ⚠️ Needs extra config              |
+| `GITHUB_TOKEN`               | ⚠️ Scopes differ from real runners |
 
 These failures are expected and do not indicate real problems — the steps that matter (install, scan, build) can be validated locally.

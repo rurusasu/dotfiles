@@ -5,6 +5,10 @@
     systems.url = "github:nix-systems/default";
     nixos-wsl.url = "github:nix-community/NixOS-WSL";
     nixos-vscode-server.url = "github:nix-community/nixos-vscode-server";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
