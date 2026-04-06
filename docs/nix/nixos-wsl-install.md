@@ -98,9 +98,8 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 
 生成される主なファイル:
 
-- `~/.dotfiles/nix/profiles/home/common.nix`
-- `~/.dotfiles/nix/home/wsl/default.nix`
-- `~/.dotfiles/nix/home/users/<USER>.nix`
+- `~/.dotfiles/nix/home/packages.nix`
+- `~/.dotfiles/nix/home/wsl/users.nix`
 - `~/.dotfiles/nix/hosts/wsl/default.nix`
 - `~/.dotfiles/nix/hosts/wsl/configuration.nix`
 - `~/.dotfiles/nix/hosts/wsl/hardware-configuration.nix`

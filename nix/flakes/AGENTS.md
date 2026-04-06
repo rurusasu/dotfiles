@@ -11,5 +11,5 @@
 
 ## 変更ルール
 
-- 実装ロジックは `nix/hosts`, `nix/modules`, `nix/profiles` に寄せる。
+- 実装ロジックは `nix/hosts`, `nix/modules`, `nix/home` に寄せる。
 - ここは出力配線を最小限に保つ。

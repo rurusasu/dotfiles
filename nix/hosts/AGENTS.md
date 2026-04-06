@@ -8,4 +8,4 @@
 
 ## ルール
 
-- 共通化できる内容は `nix/modules/` または `nix/profiles/` へ移す。
+- 共通化できる内容は `nix/modules/` へ移す。

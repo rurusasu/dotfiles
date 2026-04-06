@@ -10,8 +10,8 @@
 
 - ホスト固有: `nix/hosts/`
 - 再利用モジュール: `nix/modules/`
-- プロファイル: `nix/profiles/`
-- package set: `nix/packages/`
+- Home Manager: `nix/home/`
+- パッケージ SSOT: `nix/packages/all.nix`
 - flake wiring: `nix/flakes/`
 
 ## 実行
