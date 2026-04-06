@@ -432,7 +432,10 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $this.Log("Post-install セットアップを実行します...")
         $resolved = (Resolve-Path -LiteralPath $scriptPath).Path
-        $wslPath = Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "--", "wslpath", "-a", $resolved)
+        # wslpath にバックスラッシュを渡すと WSL がエスケープシーケンスとして解釈して消失する
+        # フォワードスラッシュに変換してから渡す
+        $resolvedForWsl = $resolved.Replace('\', '/')
+        $wslPath = Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "--", "wslpath", "-a", $resolvedForWsl)
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
             $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
             $rest = $resolved.Substring(2) -replace "\\", "/"
