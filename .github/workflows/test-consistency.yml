@@ -1,0 +1,44 @@
+name: Package Consistency
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nix/packages/**"
+      - "nix/home/**"
+      - "windows/winget/packages.json"
+      - "windows/pnpm/packages.json"
+      - ".github/workflows/test-consistency.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/packages/**"
+      - "nix/home/**"
+      - "windows/winget/packages.json"
+      - "windows/pnpm/packages.json"
+      - ".github/workflows/test-consistency.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@d1ca217b388ee87b2507a9a93bf01368bde7cec2
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Build winget-export from SSOT
+        run: nix build .#winget-export -o /tmp/winget-export
+
+      - name: Verify winget packages.json is in sync
+        run: diff <(jq -S . /tmp/winget-export/winget/packages.json) <(jq -S . windows/winget/packages.json)
+
+      - name: Verify pnpm packages.json is in sync
+        run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)

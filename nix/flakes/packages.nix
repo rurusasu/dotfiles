@@ -6,7 +6,7 @@
 { ... }:
 {
   perSystem =
-    { pkgs, ... }:
+    { pkgs, lib, ... }:
     let
       packageSets = import ../packages { inherit pkgs; };
     in
@@ -23,6 +23,9 @@
         llm = packageSets.llm;
         terminal = packageSets.terminal;
         editors = packageSets.editors;
+
+        # Windows package export (nix build .#winget-export)
+        winget-export = import ../packages/winget.nix { inherit pkgs lib; };
       };
     };
 }

@@ -49,59 +49,11 @@ in
         };
       };
 
+      # CLI tools are managed by Home Manager (nix/home/packages.nix).
+      # Only system-level packages that require root or NixOS module
+      # integration belong here.
       environment.systemPackages = with pkgs; [
-        # Dotfiles manager
-        chezmoi
-
-        # Version control
-        git
-        gh
-
-        # Modern CLI replacements
-        fd # find alternative
-        ripgrep # grep alternative
-        bat # cat alternative
-        eza # ls alternative
-        zoxide # cd alternative
-        fzf # fuzzy finder
-
-        # Shell prompt
-        starship
-
-        # Editor
-        neovim
-
-        # Task runner
-        go-task
-
-        # Archive tools
-        unzip
-        p7zip
-
-        # Python toolchain
-        uv
-
-        # JavaScript runtime (for claude-code, gemini-cli, openclaw)
-        nodejs_22 # openclaw requires Node.js 22+
-        pnpm # WSL interop 経由で Windows 版が見えるため Linux ネイティブ版を明示的に提供
-
-        # Secret management
-        _1password-cli
-
-        # Formatter & lint runner (for git pre-commit hooks)
-        treefmt
-        pre-commit
-        powershell # provides pwsh for PowerShell test hook
-
-        # AI coding agents
-        opencode
-
-        # Kubernetes tools (kind-based local cluster)
-        kind # Local Kubernetes clusters using Docker
-        kubectl # Kubernetes CLI
-        kubernetes-helm # Kubernetes package manager
-        k9s # Kubernetes TUI
-        kubectx # Fast cluster switching
+        git # needed by system-level operations (nix flake, etc.)
       ];
     }
 
