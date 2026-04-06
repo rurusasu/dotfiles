@@ -1,14 +1,6 @@
 name: Package Consistency
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "nix/packages/**"
-      - "nix/home/**"
-      - "windows/winget/packages.json"
-      - "windows/pnpm/packages.json"
-      - ".github/workflows/test-consistency.yml"
   pull_request:
     branches: [main]
     paths:
