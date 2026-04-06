@@ -1,12 +1,6 @@
 name: PowerShell Tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "scripts/powershell/**"
-      - "install.ps1"
-      - ".github/workflows/test-powershell.yml"
   pull_request:
     branches: [main]
     paths:

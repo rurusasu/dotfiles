@@ -1,13 +1,6 @@
 name: Nix Checks
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "nix/**"
-      - "flake.nix"
-      - "flake.lock"
-      - ".github/workflows/test-nix.yml"
   pull_request:
     branches: [main]
     paths:
