@@ -368,12 +368,40 @@ class DockerHandler : SetupHandlerBase {
 
         $this.Log("Docker Desktop を起動します")
         Start-ProcessSafe -FilePath $dockerExe
-        Start-SleepSafe -Seconds 5
+
+        # Docker Desktop 起動後、docker-desktop WSL ディストリビューションが
+        # 利用可能になるまで待機する（最大60秒）
+        $this.WaitForDockerDesktopDistro()
 
         # StopLingeringDockerProcesses による強制終了後、Docker Desktop が
         # WSL cross-distro 共有の docker-desktop-user-distro を 0 バイトで
         # 残すことがある。修復しないと NixOS WSL integration が永続的に失敗する。
         $this.RepairWslProxyBinary()
+    }
+
+    <#
+    .SYNOPSIS
+        Docker Desktop 起動後に docker-desktop ディストリビューションが利用可能になるまで待機する
+    .DESCRIPTION
+        Docker Desktop はプロセス起動後に WSL ディストリビューション (docker-desktop) を
+        初期化する。初期化完了前に docker-desktop ディストリビューションにアクセスすると
+        "/bin/sh: docker-desktop: not found" エラーが発生する。
+    #>
+    hidden [void] WaitForDockerDesktopDistro() {
+        $maxAttempts = 12
+        $delaySec = 5
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+            Start-SleepSafe -Seconds $delaySec
+            $testResult = Invoke-Wsl -d "docker-desktop" "--" "sh" "-c" "echo ok" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $testResult -match "ok") {
+                $this.Log("Docker Desktop ディストリビューションが利用可能です", "Gray")
+                return
+            }
+            if ($i -lt $maxAttempts) {
+                $this.Log("Docker Desktop 初期化待機中... ($i/$maxAttempts)", "Gray")
+            }
+        }
+        $this.LogWarning("Docker Desktop ディストリビューションの初期化がタイムアウトしました（${maxAttempts}回試行）")
     }
 
     <#

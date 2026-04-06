@@ -809,6 +809,67 @@ Describe 'DockerHandler' {
 
             Should -Invoke Start-ProcessSafe -Times 0
         }
+
+        It 'should wait for docker-desktop distro to be ready after startup' {
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+            $script:wslEchoAttempts = 0
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "echo ok") {
+                    $script:wslEchoAttempts++
+                    if ($script:wslEchoAttempts -ge 3) {
+                        $global:LASTEXITCODE = 0
+                        return "ok"
+                    }
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "componentsVersion.json") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "proxy") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "groupadd|whoami") { return "nixos" }
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.Apply($ctx)
+
+            $script:wslEchoAttempts | Should -BeGreaterOrEqual 3
+        }
+
+        It 'should continue even if docker-desktop distro initialization times out' {
+            Mock Get-ProcessSafe { return $null }
+            Mock Start-ProcessSafe { }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "echo ok") {
+                    $global:LASTEXITCODE = 1
+                    return ""
+                }
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
+                }
+                if ($argStr -match "componentsVersion.json") { $global:LASTEXITCODE = 1 }
+                if ($argStr -match "docker-desktop-user-distro") { $global:LASTEXITCODE = 1 }
+                if ($argStr -match "proxy") { $global:LASTEXITCODE = 1 }
+                if ($argStr -match "groupadd|whoami") { return "nixos" }
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            # タイムアウトしても例外は投げずに続行する
+            { $handler.Apply($ctx) } | Should -Not -Throw
+        }
     }
 
     Context 'GetWslDefaultUser' {
