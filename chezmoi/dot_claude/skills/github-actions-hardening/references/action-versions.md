@@ -26,8 +26,8 @@ gh api repos/OWNER/REPO/releases/latest -q .tag_name
 
 Some actions internally use old Node.js 20 actions that you cannot override:
 
-| Action | Internal dependency | Problem |
-|---|---|---|
+| Action                             | Internal dependency             | Problem                                                           |
+| ---------------------------------- | ------------------------------- | ----------------------------------------------------------------- |
 | `aquasecurity/trivy-action@0.35.0` | `actions/cache@v4` (Node.js 20) | Used in composite pre-step, `cache: false` doesn't fully suppress |
 
 ### Solutions (in order of preference)

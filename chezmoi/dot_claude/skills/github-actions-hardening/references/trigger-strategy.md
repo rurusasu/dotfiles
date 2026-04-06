@@ -2,12 +2,12 @@
 
 ## Principle: Don't run what's already validated
 
-| Event | CI (lint/test) | Security scan | Docker build | Docker push |
-|---|---|---|---|---|
-| PR to main | ✅ | — | — | — |
-| push to main (merge) | — | ✅ | ✅ (smoke test) | — |
-| `v*` tag | — | ✅ | ✅ | ✅ |
-| weekly schedule | — | ✅ | — | — |
+| Event                | CI (lint/test) | Security scan | Docker build    | Docker push |
+| -------------------- | -------------- | ------------- | --------------- | ----------- |
+| PR to main           | ✅             | —             | —               | —           |
+| push to main (merge) | —              | ✅            | ✅ (smoke test) | —           |
+| `v*` tag             | —              | ✅            | ✅              | ✅          |
+| weekly schedule      | —              | ✅            | —               | —           |
 
 - **PR**: lint → test only. Merge is the gate.
 - **push to main**: Security + build. CI already passed in PR.
@@ -53,13 +53,13 @@ Lint and test → single `ci.yml` with job dependencies:
 
 ```yaml
 jobs:
-  hadolint: ...     # parallel lint
-  eslint: ...       # parallel lint
-  prettier: ...     # parallel lint
-  ruff: ...         # parallel lint
+  hadolint: ... # parallel lint
+  eslint: ... # parallel lint
+  prettier: ... # parallel lint
+  ruff: ... # parallel lint
 
   vitest:
-    needs: [eslint, prettier]   # test after its lint
+    needs: [eslint, prettier] # test after its lint
   pytest:
     needs: [ruff]
   build-check:

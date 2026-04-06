@@ -12,7 +12,7 @@ Pin version in workflow-level `env:` for single source of truth:
 
 ```yaml
 env:
-  TRIVY_VERSION: 0.69.3  # Check: gh api repos/aquasecurity/trivy/releases/latest -q .tag_name
+  TRIVY_VERSION: 0.69.3 # Check: gh api repos/aquasecurity/trivy/releases/latest -q .tag_name
 ```
 
 Install step (reuse in each job that needs trivy):
