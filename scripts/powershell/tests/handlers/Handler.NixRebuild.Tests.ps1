@@ -89,6 +89,9 @@ Describe 'NixRebuildHandler' {
     Context 'Apply' {
         BeforeEach {
             Mock Write-Host { }
+            # windows/pnpm/packages.json が worktree/CI に存在しない場合でも
+            # pnpm テストが動作するよう Test-Path をモック
+            Mock Test-Path { return $true } -ParameterFilter { $LiteralPath -and $LiteralPath -match 'pnpm.*packages\.json' }
         }
 
         It 'should succeed when nixos-rebuild switch succeeds' {

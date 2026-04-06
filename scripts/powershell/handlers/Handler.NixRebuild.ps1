@@ -5,7 +5,7 @@
 .DESCRIPTION
     - NixOS ディストリビューションの存在確認
     - nixos-rebuild switch の実行
-    - pnpm グローバルパッケージのインストール (nix/pnpm/packages.json)
+    - pnpm グローバルパッケージのインストール (windows/pnpm/packages.json)
 
 .NOTES
     Order = 55 (NixOSWSL=50 の後に実行)
@@ -253,8 +253,8 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch 完了", "Green")
 
-            # pnpm グローバルパッケージをインストール
-            $packagesJsonPath = Join-Path $ctx.DotfilesPath "nix\pnpm\packages.json"
+            # pnpm グローバルパッケージをインストール（SSOT: all.nix → windows/pnpm/packages.json）
+            $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
             $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)
 
             # pre-commit hooks をインストール
