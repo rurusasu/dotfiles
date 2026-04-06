@@ -73,14 +73,14 @@ install.ps1
 
 ## 役割分担
 
-| 役割                 | ツール       | 説明                                         |
-| -------------------- | ------------ | -------------------------------------------- |
-| パッケージ定義 (SSOT)| Nix          | `nix/packages/all.nix` に全ツールを一元定義  |
-| パッケージ (Linux)   | Home Manager | `home.packages` で宣言的インストール         |
-| パッケージ (Windows) | winget/pnpm  | nix から生成した JSON でインストール          |
-| ユーザー設定         | chezmoi      | dotfiles (shell, git, terminal, editor)      |
-| システム設定         | NixOS        | OS レベルの設定 (nix gc, Docker, WSL)        |
-| タスク実行           | Taskfile     | Windows から WSL コマンドを実行              |
+| 役割                  | ツール       | 説明                                        |
+| --------------------- | ------------ | ------------------------------------------- |
+| パッケージ定義 (SSOT) | Nix          | `nix/packages/all.nix` に全ツールを一元定義 |
+| パッケージ (Linux)    | Home Manager | `home.packages` で宣言的インストール        |
+| パッケージ (Windows)  | winget/pnpm  | nix から生成した JSON でインストール        |
+| ユーザー設定          | chezmoi      | dotfiles (shell, git, terminal, editor)     |
+| システム設定          | NixOS        | OS レベルの設定 (nix gc, Docker, WSL)       |
+| タスク実行            | Taskfile     | Windows から WSL コマンドを実行             |
 
 ## パッケージ管理フロー
 
@@ -263,21 +263,21 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 ### CI (GitHub Actions) で実行するテスト
 
-| Workflow | ランナー | テスト内容 |
-| -------- | -------- | ---------- |
-| `test-nix.yml` | Linux | `nix flake check --no-build` (評価エラー検知)、`nix fmt -- --fail-on-change` (フォーマット)、`nix build --dry-run` (ビルド可能性) |
-| `test-powershell.yml` | Windows | PSScriptAnalyzer (lint)、Pester ユニットテスト (ハンドラー) |
-| `test-consistency.yml` | Linux | `nix build .#winget-export` と `windows/winget/packages.json` の diff |
+| Workflow               | ランナー | テスト内容                                                                                                                        |
+| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `test-nix.yml`         | Linux    | `nix flake check --no-build` (評価エラー検知)、`nix fmt -- --fail-on-change` (フォーマット)、`nix build --dry-run` (ビルド可能性) |
+| `test-powershell.yml`  | Windows  | PSScriptAnalyzer (lint)、Pester ユニットテスト (ハンドラー)                                                                       |
+| `test-consistency.yml` | Linux    | `nix build .#winget-export` と `windows/winget/packages.json` の diff                                                             |
 
 ### テスト対象の判断基準
 
-| レベル | 対象 | 方法 | 場所 |
-| ------ | ---- | ---- | ---- |
-| Static Analysis | nix 構文、フォーマット | `nix flake check`、`nix fmt` | CI (Linux) |
-| Unit Test | PowerShell ハンドラー | Pester + モック | CI (Windows) |
-| Unit Test | パッケージ整合性 | winget-export diff | CI (Linux) |
-| Build Test | NixOS config、package sets | `nix build --dry-run` | CI (Linux) |
-| E2E | 実際のインストール | 手動実行 | ローカル |
+| レベル          | 対象                       | 方法                         | 場所         |
+| --------------- | -------------------------- | ---------------------------- | ------------ |
+| Static Analysis | nix 構文、フォーマット     | `nix flake check`、`nix fmt` | CI (Linux)   |
+| Unit Test       | PowerShell ハンドラー      | Pester + モック              | CI (Windows) |
+| Unit Test       | パッケージ整合性           | winget-export diff           | CI (Linux)   |
+| Build Test      | NixOS config、package sets | `nix build --dry-run`        | CI (Linux)   |
+| E2E             | 実際のインストール         | 手動実行                     | ローカル     |
 
 ### CI で実行しないもの
 
@@ -289,9 +289,9 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 | ランナー | 無料枠/月 | 消費レート |
 | -------- | --------- | ---------- |
-| Linux | 2,000 分 | 1x |
-| Windows | 2,000 分 | 2x |
-| macOS | 2,000 分 | 10x |
+| Linux    | 2,000 分  | 1x         |
+| Windows  | 2,000 分  | 2x         |
+| macOS    | 2,000 分  | 10x        |
 
 ---
 

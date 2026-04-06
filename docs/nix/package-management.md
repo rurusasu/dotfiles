@@ -72,22 +72,22 @@ winget import -i windows/winget/packages.json --accept-package-agreements
 
 ## ファイル構成
 
-| ファイル | 役割 |
-| -------- | ---- |
-| `nix/packages/all.nix` | SSOT: 全パッケージ + wingetMap + windowsOnly |
-| `nix/home/packages.nix` | Home Manager module (`home.packages = allPkgs.packages`) |
-| `nix/home/wsl/users.nix` | WSL ユーザーの Home Manager 設定 |
-| `nix/packages/winget.nix` | `nix build .#winget-export` 用 derivation |
-| `nix/packages/default.nix` | `nix profile install .#default` 用 package sets |
-| `nix/modules/host/default.nix` | システムレベルのみ (nix settings, git, Docker) |
+| ファイル                       | 役割                                                     |
+| ------------------------------ | -------------------------------------------------------- |
+| `nix/packages/all.nix`         | SSOT: 全パッケージ + wingetMap + windowsOnly             |
+| `nix/home/packages.nix`        | Home Manager module (`home.packages = allPkgs.packages`) |
+| `nix/home/wsl/users.nix`       | WSL ユーザーの Home Manager 設定                         |
+| `nix/packages/winget.nix`      | `nix build .#winget-export` 用 derivation                |
+| `nix/packages/default.nix`     | `nix profile install .#default` 用 package sets          |
+| `nix/modules/host/default.nix` | システムレベルのみ (nix settings, git, Docker)           |
 
 ## Home Manager と systemPackages の使い分け
 
-| 対象 | 管理先 |
-| ---- | ------ |
-| CLI ツール (git, ripgrep, neovim 等) | Home Manager (`nix/home/packages.nix`) |
-| システム設定に必要なもの (git for nix flake) | `environment.systemPackages` |
-| NixOS モジュール連携 (Docker, ZSH) | `nix/modules/host/default.nix` |
+| 対象                                         | 管理先                                 |
+| -------------------------------------------- | -------------------------------------- |
+| CLI ツール (git, ripgrep, neovim 等)         | Home Manager (`nix/home/packages.nix`) |
+| システム設定に必要なもの (git for nix flake) | `environment.systemPackages`           |
+| NixOS モジュール連携 (Docker, ZSH)           | `nix/modules/host/default.nix`         |
 
 ## CI による整合性チェック
 

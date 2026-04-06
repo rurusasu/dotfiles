@@ -31,7 +31,8 @@ let
           Type = "Microsoft.PreIndexed.Package";
         };
       }
-    ] ++ lib.optionals (msstorePackages != [ ]) [
+    ]
+    ++ lib.optionals (msstorePackages != [ ]) [
       {
         Packages = msstorePackages;
         SourceDetails = {
