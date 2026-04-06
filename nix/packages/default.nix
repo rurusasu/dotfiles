@@ -91,12 +91,28 @@ in
   };
 
   # Individual package sets for selective install
-  inherit
-    core
-    dev
-    llm
-    communication
-    terminal
-    editors
-    ;
+  core = pkgs.buildEnv {
+    name = "dotfiles-core";
+    paths = core;
+  };
+  dev = pkgs.buildEnv {
+    name = "dotfiles-dev";
+    paths = dev;
+  };
+  llm = pkgs.buildEnv {
+    name = "dotfiles-llm";
+    paths = llm;
+  };
+  communication = pkgs.buildEnv {
+    name = "dotfiles-communication";
+    paths = communication;
+  };
+  terminal = pkgs.buildEnv {
+    name = "dotfiles-terminal";
+    paths = terminal;
+  };
+  editors = pkgs.buildEnv {
+    name = "dotfiles-editors";
+    paths = editors;
+  };
 }

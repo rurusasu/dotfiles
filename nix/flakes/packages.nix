@@ -8,21 +8,26 @@
   perSystem =
     { pkgs, lib, ... }:
     let
+      unfreePkgs = import pkgs.path {
+        inherit (pkgs) system;
+        config.allowUnfree = true;
+      };
       packageSets = import ../packages { inherit pkgs; };
+      unfreePackageSets = import ../packages { pkgs = unfreePkgs; };
     in
     {
       packages = {
         # Main package sets (nix profile install .#default)
         default = packageSets.default;
         minimal = packageSets.minimal;
-        full = packageSets.full;
+        full = unfreePackageSets.full;
 
         # Individual sets for selective install
         core = packageSets.core;
         dev = packageSets.dev;
-        llm = packageSets.llm;
+        llm = unfreePackageSets.llm;
         terminal = packageSets.terminal;
-        editors = packageSets.editors;
+        editors = unfreePackageSets.editors;
 
         # Windows package export (nix build .#winget-export)
         winget-export = import ../packages/winget.nix { inherit pkgs lib; };
