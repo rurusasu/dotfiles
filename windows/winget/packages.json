@@ -71,9 +71,6 @@
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
-          "PackageIdentifier": "Microsoft.WSL"
-        },
-        {
           "PackageIdentifier": "OpenAI.Codex"
         },
         {
