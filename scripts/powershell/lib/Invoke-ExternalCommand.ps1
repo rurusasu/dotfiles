@@ -627,9 +627,9 @@ function Invoke-OpAccountList {
 
         [string]$Account
     )
-    $args = @("account", "list")
-    if ($Account) { $args += @("--account", $Account) }
-    $output = & $OpExe @args 2>&1
+    $opArgs = @("account", "list")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
@@ -678,9 +678,9 @@ function Invoke-OpVaultList {
 
         [string]$Account
     )
-    $args = @("vault", "list", "--format=json")
-    if ($Account) { $args += @("--account", $Account) }
-    $output = & $OpExe @args 2>&1
+    $opArgs = @("vault", "list", "--format=json")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
@@ -703,9 +703,9 @@ function Invoke-OpSignIn {
 
         [string]$Account
     )
-    $args = @("signin")
-    if ($Account) { $args += @("--account", $Account) }
-    $output = & $OpExe @args 2>&1
+    $opArgs = @("signin")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
