@@ -83,6 +83,11 @@ class ChezmoiHandler : SetupHandlerBase {
             # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
             $this.EnsureOnePasswordAvailable()
 
+            # chezmoi 内部の op signin に複数アカウント環境でアカウントを指定する
+            # chezmoi.toml の [onepassword].args は op signin には適用されないため
+            # 環境変数で渡す必要がある
+            $env:OP_ACCOUNT = $this.OpAccount
+
             $this.Log("chezmoi でターミナル設定を適用します: $sourcePath")
             New-DirectorySafe -Path $runtimeRoot
             New-DirectorySafe -Path $cachePath
