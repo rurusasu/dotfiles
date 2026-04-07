@@ -22,6 +22,10 @@ export GROUP_ID="$(id -g)"
 export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
 export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
 
+# qmd (markdown search engine)
+export QMD_EMBED_MODEL="hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
+
 # fd/fzf defaults (mirrors Nix defaults)
 FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"
 export FZF_DEFAULT_COMMAND="fd $FD_DEFAULT_OPTS --absolute-path --type f . ."

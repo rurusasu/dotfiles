@@ -16,7 +16,7 @@ let
   pnpmOutput = {
     "$schema" = "https://json.schemastore.org/package.json";
     description = "pnpm global packages to install on Windows";
-    globalPackages = allPkgs.windowsOnly.pnpm;
+    globalPackages = allPkgs.pnpmGlobal ++ allPkgs.windowsOnly.pnpm;
   };
 
   wingetOutput = {

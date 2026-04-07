@@ -53,6 +53,10 @@ else {
     }
 }
 
+# qmd (markdown search engine)
+$env:QMD_EMBED_MODEL = "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+$env:QMD_RERANK_MODEL = "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
+
 # fzf defaults
 $env:FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '"
 if (Get-Command fd -ErrorAction SilentlyContinue) {
