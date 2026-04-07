@@ -20,6 +20,8 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class ChezmoiHandler : SetupHandlerBase {
     # 検出された chezmoi 実行ファイルのパス
     hidden [string]$ChezmoiExePath
+    # 1Password アカウント（複数アカウント環境での --account 指定用）
+    hidden [string]$OpAccount = "my.1password.com"
 
     ChezmoiHandler() {
         $this.Name = "Chezmoi"
@@ -252,7 +254,7 @@ class ChezmoiHandler : SetupHandlerBase {
         # op whoami はデスクトップアプリ連携環境（特に -File モード）で
         # "account is not signed in" を返す場合がある。
         # op vault list は認証済みなら exit 0 を返し、より信頼性が高い。
-        $result = Invoke-OpVaultList -OpExe $opExe
+        $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
         if ($result.ExitCode -eq 0) {
             $this.Log("1Password CLI: サインイン済み", "Gray")
             return
@@ -287,10 +289,10 @@ class ChezmoiHandler : SetupHandlerBase {
         $maxRetries = 3
         for ($i = 1; $i -le $maxRetries; $i++) {
             $this.Log("1Password CLI: サインインを試行中 ($i/$maxRetries)...")
-            Invoke-OpSignIn -OpExe $opExe | Out-Null
+            Invoke-OpSignIn -OpExe $opExe -Account $this.OpAccount | Out-Null
 
             # signin 後に whoami で確認
-            $result = Invoke-OpVaultList -OpExe $opExe
+            $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
             if ($result.ExitCode -eq 0) {
                 $this.Log("1Password CLI: サインイン完了", "Green")
                 return
@@ -303,7 +305,7 @@ class ChezmoiHandler : SetupHandlerBase {
                 Read-Host | Out-Null
 
                 # デスクトップアプリ連携が有効になった可能性があるため whoami で再確認
-                $result = Invoke-OpVaultList -OpExe $opExe
+                $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
                 if ($result.ExitCode -eq 0) {
                     $this.Log("1Password CLI: サインイン完了（デスクトップアプリ連携）", "Green")
                     return
@@ -324,7 +326,7 @@ class ChezmoiHandler : SetupHandlerBase {
         2. それ以外 → 一般的な認証エラー
     #>
     hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
-        $accountResult = Invoke-OpAccountList -OpExe $opExe
+        $accountResult = Invoke-OpAccountList -OpExe $opExe -Account $this.OpAccount
         $outputStr = if ($accountResult.Output) { ($accountResult.Output | Out-String).Trim() } else { '' }
 
         # op account list 自体が失敗 → デスクトップアプリに接続できない

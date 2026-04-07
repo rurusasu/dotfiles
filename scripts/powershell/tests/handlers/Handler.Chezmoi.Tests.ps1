@@ -659,6 +659,8 @@ Describe 'ChezmoiHandler' {
             Mock Invoke-OpAccountList {
                 return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
             }
+            # OpAccount のデフォルト値を検証用変数に保存
+            $script:expectedOpAccount = "my.1password.com"
         }
 
         It 'should log warning and continue when op is not found' {
@@ -700,6 +702,10 @@ Describe 'ChezmoiHandler' {
             # サインイン済みなのでセットアップ案内は表示されない
             $script:instructionsShown | Should -Be $false
             Should -Invoke Read-Host -Times 0
+            # --account パラメータが正しく渡されていること
+            Should -Invoke Invoke-OpVaultList -ParameterFilter {
+                $Account -eq $script:expectedOpAccount
+            }
         }
 
         It 'should attempt op signin when op whoami fails and throw after max retries' {
@@ -723,6 +729,13 @@ Describe 'ChezmoiHandler' {
 
             $script:instructionsShown | Should -Be $true
             Should -Invoke Invoke-OpSignIn -Times 3
+            # --account パラメータが正しく渡されていること
+            Should -Invoke Invoke-OpSignIn -ParameterFilter {
+                $Account -eq $script:expectedOpAccount
+            }
+            Should -Invoke Invoke-OpVaultList -ParameterFilter {
+                $Account -eq $script:expectedOpAccount
+            }
             # 全リトライ失敗時は例外で停止し、失敗結果を返す
             $result.Success | Should -Be $false
         }
@@ -887,6 +900,10 @@ Describe 'ChezmoiHandler' {
             $result.Success | Should -Be $false
             $result.Message | Should -Match 'アカウントが登録されていません'
             $result.Message | Should -Match 'Biometric unlock for 1Password CLI'
+            # DiagnoseOpAuthFailure 内でも --account が渡されていること
+            Should -Invoke Invoke-OpAccountList -ParameterFilter {
+                $Account -eq $script:expectedOpAccount
+            }
         }
 
         It 'should show generic auth error when accounts exist but not authenticated' {
@@ -956,7 +973,7 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $OpExe -eq 'C:\tools\op.exe'
+                $OpExe -eq 'C:\tools\op.exe' -and $Account -eq 'my.1password.com'
             } -Times 1
         }
 
@@ -972,7 +989,7 @@ Describe 'ChezmoiHandler' {
             $handler.Apply($ctx)
 
             Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
+                $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe' -and $Account -eq 'my.1password.com'
             } -Times 1
         }
 

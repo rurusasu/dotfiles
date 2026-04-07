@@ -623,9 +623,13 @@ function Invoke-OpAccountList {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$OpExe
+        [string]$OpExe,
+
+        [string]$Account
     )
-    $output = & $OpExe account list 2>&1
+    $opArgs = @("account", "list")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
@@ -670,9 +674,13 @@ function Invoke-OpVaultList {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$OpExe
+        [string]$OpExe,
+
+        [string]$Account
     )
-    $output = & $OpExe vault list --format=json 2>&1
+    $opArgs = @("vault", "list", "--format=json")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
@@ -691,9 +699,13 @@ function Invoke-OpSignIn {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$OpExe
+        [string]$OpExe,
+
+        [string]$Account
     )
-    $output = & $OpExe signin 2>&1
+    $opArgs = @("signin")
+    if ($Account) { $opArgs += @("--account", $Account) }
+    $output = & $OpExe @opArgs 2>&1
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
 }
 
