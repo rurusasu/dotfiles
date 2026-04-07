@@ -72,6 +72,11 @@ in
   # All packages for Home Manager (Linux/macOS)
   packages = core ++ dev ++ terminal ++ editors ++ llm ++ communication ++ k8s ++ infra;
 
+  # Cross-platform pnpm global packages (no nix equivalent)
+  pnpmGlobal = [
+    "@tobilu/qmd"
+  ];
+
   # nix attr name → winget PackageIdentifier
   # Only cross-platform tools that have a winget equivalent.
   wingetMap = {

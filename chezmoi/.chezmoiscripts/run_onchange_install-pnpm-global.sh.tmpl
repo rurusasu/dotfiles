@@ -1,0 +1,47 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# pnpm グローバルパッケージ インストールスクリプト (Linux/macOS)
+# SSOT: nix/packages/all.nix (pnpmGlobal)
+# Generated from: {{ range .pnpm_global_packages }}{{ . }} {{ end }}
+
+set -euo pipefail
+
+if ! command -v pnpm &>/dev/null; then
+  echo "[WARN] pnpm が見つかりません。スキップします。"
+  echo "  pnpm は nix/packages/all.nix の dev セットで管理されています。"
+  echo "  nixos-rebuild switch を実行してください。"
+  exit 0
+fi
+
+echo "pnpm グローバルパッケージをインストールしています..."
+
+GLOBAL_ROOT=""
+if raw_root=$(pnpm root -g 2>/dev/null); then
+  GLOBAL_ROOT="$raw_root"
+fi
+
+FAILED=0
+INSTALLED=0
+SKIPPED=0
+
+{{ range .pnpm_global_packages -}}
+# {{ . }}
+PKG_NAME="{{ . }}"
+PKG_DIR="${PKG_NAME#@*/}"  # scoped package → scope removed for dir check
+if [ -n "$GLOBAL_ROOT" ] && [ -d "$GLOBAL_ROOT/$PKG_NAME" ]; then
+  echo "  スキップ (インストール済み): $PKG_NAME"
+  SKIPPED=$((SKIPPED + 1))
+else
+  echo "  インストール中: $PKG_NAME"
+  if pnpm add -g "$PKG_NAME"; then
+    echo "  ✓ $PKG_NAME"
+    INSTALLED=$((INSTALLED + 1))
+  else
+    echo "  ✗ $PKG_NAME のインストールに失敗しました"
+    FAILED=$((FAILED + 1))
+  fi
+fi
+
+{{ end -}}
+echo "pnpm グローバル: ${INSTALLED} 個インストール, ${SKIPPED} 個スキップ, ${FAILED} 個失敗"
+{{ end -}}
