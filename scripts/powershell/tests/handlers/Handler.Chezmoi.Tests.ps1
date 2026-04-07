@@ -706,6 +706,8 @@ Describe 'ChezmoiHandler' {
             Should -Invoke Invoke-OpVaultList -ParameterFilter {
                 $Account -eq $script:expectedOpAccount
             }
+            # chezmoi 内部の op signin 用に OP_ACCOUNT 環境変数が設定されていること
+            $env:OP_ACCOUNT | Should -Be $script:expectedOpAccount
         }
 
         It 'should attempt op signin when op whoami fails and throw after max retries' {
