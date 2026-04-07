@@ -404,29 +404,111 @@ QMD スキルをインストール。
 
 ---
 
-## 設定ファイル (qmd.yml)
+## クエリ構文
 
-`~/.config/qmd/qmd.yml` または `QMD_CONFIG_DIR` で指定したディレクトリに配置。
+### 検索タイプ
 
-```yaml
-collections:
-  notes:
-    path: ~/notes
-    pattern: "**/*.md"
-  docs:
-    path: ~/projects/docs
-    pattern: "**/*.{md,txt}"
-    ignore:
-      - "node_modules/**"
-      - "*.test.ts"
+`qmd query` では構造化クエリ構文でサブクエリのタイプを指定できる。
+
+| タイプ | プレフィックス | 用途 | 例 |
+|--------|-------------|------|-----|
+| **lex** | `lex:` | 完全一致、名前、コード識別子 | `lex: "connection pool" timeout` |
+| **vec** | `vec:` | 自然言語の質問 | `vec: 認証の仕組みは？` |
+| **hyde** | `hyde:` | 仮想回答パッセージ (50-100語) | `hyde: The pool uses a 30s timeout...` |
+| **expand** | `expand:` | LLM による自動展開 | `expand: auth flow` |
+| **intent** | `intent:` | 検索意図 (曖昧さ解消) | `intent: web performance` |
+
+### 複数行クエリ
+
+```
+intent: web パフォーマンス
+lex: "connection pool" timeout
+vec: コネクションプールのタイムアウト処理は？
+hyde: コネクションプールは30秒のタイムアウトと指数バックオフを使用する...
 ```
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `collections` | オブジェクト | コレクション名 → 設定のマッピング |
-| `collections.<name>.path` | string | インデックス対象ディレクトリ |
-| `collections.<name>.pattern` | string | glob パターン (省略時: 全ファイル) |
-| `collections.<name>.ignore` | string[] | 除外パターン |
+- 最初のクエリは RRF で 2 倍の重み
+- `intent:` は 1 行のみ
+- `expand:` は型付きクエリと混在不可
+- 型指定なしの行は自動展開される
+
+### lex 構文
+
+| 構文 | 説明 | 例 |
+|------|------|-----|
+| `"phrase"` | 完全一致フレーズ | `"connection pool"` |
+| `-term` | 除外 | `-redis` |
+| `-"phrase"` | フレーズ除外 | `-"old api"` |
+| 前方一致 | 接頭辞マッチ | `perf` → "performance" |
+
+2-5 語でフィラーワードを除いたものが最も効果的。
+
+---
+
+## 設定ファイル (qmd.yml)
+
+設定ファイルのパス: `~/.config/qmd/{indexName}.yml` (デフォルトの indexName は `index`)。
+`--index` オプションで名前付きインデックスを使い分け可能。
+`XDG_CONFIG_HOME` および `QMD_CONFIG_DIR` 環境変数で場所を変更できる。
+
+### 完全スキーマ
+
+```yaml
+# グローバルコンテキスト (全コレクションに適用)
+global_context: "[[WikiWord]] を見つけたら、そのワードで検索してください"
+
+# エディタ URI テンプレート
+editor_uri: "vscode://file/{path}:{line}"
+
+# モデル上書き (オプション)
+models:
+  embed: "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+  rerank: "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
+  generate: "hf:custom/generator.gguf"
+
+# コレクション定義
+collections:
+  meetings:
+    path: ~/Documents/Meetings        # 必須: インデックス対象ディレクトリ
+    pattern: "**/*.md"                 # 必須: glob パターン (デフォルト: "**/*.md")
+    ignore:                            # オプション: 除外 glob パターン
+      - "Sessions/**"
+      - "drafts/**"
+    context:                           # オプション: パスプレフィックス → 説明
+      "/": "ミーティングノートと議事録"
+      "/2024": "2024年のミーティング"
+    update: "git pull"                 # オプション: qmd update 時に実行するコマンド
+    includeByDefault: true             # オプション: デフォルトで検索対象に含めるか (デフォルト: true)
+```
+
+### フィールド一覧
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `global_context` | string | — | 全コレクションに適用されるコンテキスト |
+| `editor_uri` | string | — | エディタリンクテンプレート |
+| `models.embed` | string | — | 埋め込みモデル URI |
+| `models.rerank` | string | — | リランキングモデル URI |
+| `models.generate` | string | — | クエリ展開モデル URI |
+| `collections` | object | — | コレクション名 → 設定のマッピング |
+| `collections.<name>.path` | string | 必須 | インデックス対象ディレクトリの絶対パス |
+| `collections.<name>.pattern` | string | 必須 | glob パターン (デフォルト: `**/*.md`) |
+| `collections.<name>.ignore` | string[] | — | 除外 glob パターン |
+| `collections.<name>.context` | object | — | パスプレフィックス → 説明文のマッピング |
+| `collections.<name>.update` | string | — | `qmd update` 時に実行する bash コマンド |
+| `collections.<name>.includeByDefault` | boolean | — | デフォルト検索対象に含めるか (デフォルト: true) |
+
+### コンテキストのマッチング
+
+最長パスプレフィックスマッチで適用される。例: `journals` コレクション内の `/journal/2024/03/15.md` に対して:
+- `/journal/2024` → "2024年のデイリーノート" (マッチ)
+- `/` → "ノート Vault" (フォールバック)
+
+該当なしの場合は `global_context` が使用される。
+
+### コレクション名の制約
+
+`^[a-zA-Z0-9_-]+$` (英数字、ハイフン、アンダースコアのみ)
 
 ---
 
