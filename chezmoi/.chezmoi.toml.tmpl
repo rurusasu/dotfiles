@@ -2,6 +2,10 @@
 
 sourceDir = {{ .chezmoi.sourceDir | quote }}
 
+[onepassword]
+    command = "op"
+    args = ["--account", "my.1password.com"]
+
 [interpreters.ps1]
     command = "powershell"
     args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
