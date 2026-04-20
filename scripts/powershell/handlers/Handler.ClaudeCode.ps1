@@ -46,6 +46,8 @@ class ClaudeCodeHandler : SetupHandlerBase {
             }
 
             # 公式インストーラースクリプトをダウンロードして実行
+            # Trust: cli.claude.ai は Anthropic が管理する HTTPS エンドポイント。
+            # TLS で配信元の正当性を担保する（curl | sh 相当の信頼モデル）。
             $this.Log("Claude Code をインストールしています...")
             $installerUrl = "https://cli.claude.ai/install.ps1"
             $installerScript = Invoke-RestMethodSafe -Uri $installerUrl
@@ -57,6 +59,9 @@ class ClaudeCodeHandler : SetupHandlerBase {
 
             try {
                 $output = & $tempScript 2>&1
+                if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+                    return $this.CreateFailureResult("インストーラーが失敗しました (exit code: $LASTEXITCODE): $output")
+                }
                 $this.Log("インストーラー出力: $output", "Gray")
             }
             finally {
@@ -89,7 +94,8 @@ class ClaudeCodeHandler : SetupHandlerBase {
         $userPath = Get-UserEnvironmentPath
         $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
 
-        if ($pathItems -notcontains $localBin) {
+        $normalizedBin = $localBin.ToLower()
+        if (-not ($pathItems | Where-Object { $_.ToLower() -eq $normalizedBin })) {
             # .local/bin を先頭に追加して pnpm 等より優先させる
             $newPath = (@($localBin) + $pathItems) -join ";"
             Set-UserEnvironmentPath -Path $newPath
@@ -101,7 +107,7 @@ class ClaudeCodeHandler : SetupHandlerBase {
 
         # 現プロセスの PATH にも追加
         $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
-        if ($processItems -notcontains $localBin) {
+        if (-not ($processItems | Where-Object { $_.ToLower() -eq $normalizedBin })) {
             $env:PATH = "$localBin;$env:PATH"
         }
     }
