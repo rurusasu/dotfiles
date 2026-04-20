@@ -63,7 +63,7 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
     $env:FZF_DEFAULT_COMMAND = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . ."
 }
 
-# Interactive widgets (Alt+Z / Alt+D / Alt+T / Alt+R)
+# Interactive widgets (Alt+Q / Alt+D / Alt+T / Alt+R)
 if (Get-Module -ListAvailable -Name PSReadLine) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
 }
