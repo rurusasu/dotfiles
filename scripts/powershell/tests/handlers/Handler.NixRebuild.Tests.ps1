@@ -136,7 +136,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
         It 'should install pnpm global packages after nixos-rebuild' {
             $script:pnpmArgs = ""
             Mock Get-JsonContent {
-                return @{ globalPackages = @("@google/gemini-cli", "@anthropic-ai/claude-code") }
+                return @{ globalPackages = @("@tobilu/qmd", "@google/gemini-cli") }
             }
             Mock Invoke-Wsl {
                 param($Arguments)
@@ -172,7 +172,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
-                    return @("@tobilu/qmd@1.0.0", "@google/gemini-cli@0.32.1", "@anthropic-ai/claude-code@2.1.70")
+                    return @("@tobilu/qmd@1.0.0", "@google/gemini-cli@0.32.1")
                 }
                 if ($argStr -match "pnpm add") {
                     $script:pnpmAddCalled = $true
