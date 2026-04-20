@@ -1,0 +1,19 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "[mempalace] uv not found, skipping"
+  exit 0
+fi
+
+echo "[mempalace] Installing mempalace via uv tool..."
+
+uv tool install mempalace 2>/dev/null || echo "[mempalace] uv tool install failed (may already be installed), continuing..."
+
+echo "[mempalace] Initializing mempalace in home directory..."
+
+mempalace init ~ 2>/dev/null || echo "[mempalace] mempalace init failed (may already be initialized)"
+
+echo "[mempalace] Done"
+{{ end -}}

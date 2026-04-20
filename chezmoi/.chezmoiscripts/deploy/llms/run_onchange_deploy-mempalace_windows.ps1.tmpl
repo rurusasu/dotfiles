@@ -1,0 +1,23 @@
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "[mempalace] uv not found, skipping"
+    exit 0
+}
+
+Write-Host "[mempalace] Installing mempalace via uv tool..."
+
+uv tool install mempalace 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[mempalace] uv tool install failed (may already be installed), continuing..."
+}
+
+Write-Host "[mempalace] Initializing mempalace in home directory..."
+
+$homeDir = $env:USERPROFILE
+mempalace init $homeDir 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[mempalace] mempalace init failed (may already be initialized)"
+}
+
+Write-Host "[mempalace] Done"
