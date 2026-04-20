@@ -109,6 +109,12 @@ config.send_composed_key_when_left_alt_is_pressed = false
 config.send_composed_key_when_right_alt_is_pressed = false
 
 config.keys = {
+    -- Alt+key → send ESC sequence for fzf/zoxide/PSReadLine bindings
+    { key = "q", mods = "ALT", action = act.SendString("\x1bq") },
+    { key = "d", mods = "ALT", action = act.SendString("\x1bd") },
+    { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
+    { key = "r", mods = "ALT", action = act.SendString("\x1br") },
+
     -- Pane split/close/zoom (Ctrl+Alt)
     { key = "h", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
     { key = "v", mods = "CTRL|ALT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },

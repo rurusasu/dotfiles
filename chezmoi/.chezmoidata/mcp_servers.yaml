@@ -214,22 +214,12 @@ mcp_servers:
       - cursor
       - gemini
 
-  # SuperLocalMemory - Kind クラスタ内で動作 (streamable-http via supergateway)
-  - name: superlocalmemory
-    url: "http://localhost:3000/mcp"
-    supports:
-      - claude-code
-      - claude-desktop
-      - codex
-      - gemini
-      - cursor
-      - vscode
-      - windsurf
-      - zed
-
-  # QMD - Kind クラスタ内で動作 (streamable-http via supergateway, read-only memory)
-  - name: qmd
-    url: "http://localhost:3001/mcp"
+  # MemPalace - Local memory system (stdio via uv tool)
+  - name: mempalace
+    command: python
+    args:
+      - "-m"
+      - "mempalace.mcp_server"
     supports:
       - claude-code
       - claude-desktop

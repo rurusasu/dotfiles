@@ -12,11 +12,6 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
     Set-Alias -Name find -Value fd -Scope Global
 }
 
-# zoxide
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    Invoke-Expression (& zoxide init powershell | Out-String)
-}
-
 # OSC 7 support (advises terminal of current working directory)
 function Write-Osc7CurrentDirectory {
     $current_location = $executionContext.SessionState.Path.CurrentLocation
@@ -36,6 +31,11 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
         Write-Osc7CurrentDirectory
     }
     Invoke-Expression (& starship init powershell)
+}
+
+# zoxide (must init AFTER starship so the prompt hook survives)
+if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& zoxide init powershell | Out-String)
 }
 else {
     # Fallback: emit OSC 7 on each prompt without changing default prompt text
@@ -63,7 +63,7 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
     $env:FZF_DEFAULT_COMMAND = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . ."
 }
 
-# Interactive widgets (Alt+Z / Alt+D / Alt+T / Alt+R)
+# Interactive widgets (Alt+Q / Alt+D / Alt+T / Alt+R)
 if (Get-Module -ListAvailable -Name PSReadLine) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
 }
@@ -71,7 +71,9 @@ if (Get-Module -ListAvailable -Name PSReadLine) {
 if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)) {
     function Invoke-ZoxideInteractive {
         if (-not (Get-Command zoxide -ErrorAction SilentlyContinue)) { return }
-        $result = zoxide query -i
+        $result = zoxide query --list --score |
+            fzf --height=40% --layout=reverse --border --prompt='z> ' --no-sort --nth=2.. |
+            ForEach-Object { ($_ -replace '^\s*[\d.]+\s+', '') }
         if ($result) {
             Set-Location -Path $result
             [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
@@ -108,7 +110,7 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
         }
     }
 
-    Set-PSReadLineKeyHandler -Chord Alt+z -ScriptBlock { Invoke-ZoxideInteractive }
+    Set-PSReadLineKeyHandler -Chord Alt+q -ScriptBlock { Invoke-ZoxideInteractive }
     Set-PSReadLineKeyHandler -Chord Alt+d -ScriptBlock { Invoke-FzfDirectory }
     Set-PSReadLineKeyHandler -Chord Alt+t -ScriptBlock { Invoke-FzfInsertFile }
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }
