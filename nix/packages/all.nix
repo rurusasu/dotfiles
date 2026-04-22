@@ -129,7 +129,6 @@ in
       "9NT1R1C2HH7J"
     ];
     pnpm = [
-      "@anthropic-ai/claude-code"
       "@google/gemini-cli"
     ];
   };
