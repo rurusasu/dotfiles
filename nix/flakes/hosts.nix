@@ -30,6 +30,25 @@ in
             ];
           }
         );
+
+      linux =
+        let
+          system = "x86_64-linux";
+        in
+        withSystem system (
+          { pkgs, ... }:
+          let
+            siteLib = import ../lib {
+              inherit pkgs system;
+              inherit (pkgs) lib;
+            };
+          in
+          Hosts.mkNixos {
+            inherit system siteLib;
+            hostPath = ../hosts/linux;
+            homeModulePath = ../home/linux/users.nix;
+          }
+        );
     };
   };
 }
