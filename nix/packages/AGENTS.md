@@ -1,8 +1,9 @@
-# nix/packages: `nix profile` 向け package set
+# nix/packages: パッケージ SSOT + 補助定義
 
 ## 管理対象
 
-- `default.nix`: package set 定義
+- `sets.nix`: catalog-based SSOT (全パッケージ + winget 対応 + カテゴリ)
+- `winget.nix`: winget/pnpm JSON 生成 derivation
 - 必要に応じて `<package>/default.nix`: custom package build
 
 ## 利用コマンド

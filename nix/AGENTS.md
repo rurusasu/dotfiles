@@ -11,7 +11,7 @@
 - ホスト固有: `nix/hosts/`
 - 再利用モジュール: `nix/modules/`
 - Home Manager: `nix/home/`
-- パッケージ SSOT: `nix/packages/all.nix`
+- パッケージ SSOT: `nix/packages/sets.nix`
 - flake wiring: `nix/flakes/`
 
 ## 実行
