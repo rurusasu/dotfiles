@@ -1,11 +1,13 @@
 # パッケージ管理
 
-## SSOT: `nix/packages/all.nix`
+## SSOT: `nix/packages/sets.nix`
 
 全プラットフォームのパッケージ定義を一元管理する Single Source of Truth。
+`catalog` attrset に全パッケージを定義し、カテゴリ別グルーピング・winget 対応・フラットリストを自動導出する。
 
 ```
-nix/packages/all.nix
+nix/packages/sets.nix
+├── catalog        → { pkg, winget, category } の attrset
 ├── packages       → Home Manager で Linux/macOS にインストール
 ├── wingetMap      → nix attr → winget PackageIdentifier の対応表
 └── windowsOnly    → Windows 専用アプリ (winget/msstore/pnpm)
@@ -15,26 +17,17 @@ nix/packages/all.nix
 
 ### クロスプラットフォームツール (Linux + Windows)
 
-`nix/packages/all.nix` を編集:
+`nix/packages/sets.nix` の `catalog` attrset にエントリを追加:
 
 ```nix
-# 1. packages のカテゴリに追加
-core = with pkgs; [
-  chezmoi
-  git
-  gh
-  new-tool  # ← 追加
-];
-
-# 2. wingetMap に対応を追加
-wingetMap = {
-  new-tool = "Publisher.NewTool";  # ← 追加
-};
+mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
 ```
+
+Set `winget = null` if there is no Windows equivalent.
 
 ### Linux 専用ツール
 
-`packages` に追加するだけ。`wingetMap` への追加は不要。
+`catalog` にエントリを追加し、`winget = null` とする。
 
 ### Windows 専用アプリ
 
@@ -74,11 +67,11 @@ winget import -i windows/winget/packages.json --accept-package-agreements
 
 | ファイル                       | 役割                                                     |
 | ------------------------------ | -------------------------------------------------------- |
-| `nix/packages/all.nix`         | SSOT: 全パッケージ + wingetMap + windowsOnly             |
+| `nix/packages/sets.nix`        | SSOT: catalog (全パッケージ + winget + category)         |
 | `nix/home/packages.nix`        | Home Manager module (`home.packages = allPkgs.packages`) |
 | `nix/home/wsl/users.nix`       | WSL ユーザーの Home Manager 設定                         |
 | `nix/packages/winget.nix`      | `nix build .#winget-export` 用 derivation                |
-| `nix/packages/default.nix`     | `nix profile install .#default` 用 package sets          |
+| `nix/flakes/packages.nix`      | `nix profile install .#default` 用 perSystem buildEnv    |
 | `nix/modules/host/default.nix` | システムレベルのみ (nix settings, git, Docker)           |
 
 ## Home Manager と systemPackages の使い分け
@@ -102,4 +95,4 @@ winget import -i windows/winget/packages.json --accept-package-agreements
 - `windows/winget/packages.json` と `windows/pnpm/packages.json` は **生成ファイル**。直接編集しない
 - WSL では `flake.lock` が `~/.dotfiles` に作られる
 - `allowUnfree` は NixOS config (`nix/modules/host/default.nix`) で設定済み
-- `nix profile install .#default` で使える package sets は `nix/packages/default.nix` で定義
+- `nix profile install .#default` で使える package sets は `nix/flakes/packages.nix` の perSystem で定義

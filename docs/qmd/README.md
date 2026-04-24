@@ -601,7 +601,7 @@ claude plugin install qmd@qmd
 
 ### インストール
 
-- **SSOT**: `nix/packages/all.nix` の `pnpmGlobal` リスト
+- **SSOT**: `nix/packages/sets.nix` の `pnpmGlobal` リスト
 - **Windows**: PnpmHandler が `windows/pnpm/packages.json` からインストール
 - **Linux/macOS**: chezmoi `run_onchange_install-pnpm-global.sh.tmpl` が `pnpm add -g` でインストール
 
@@ -630,7 +630,7 @@ export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
 
 | ファイル                                                           | 役割                               |
 | ------------------------------------------------------------------ | ---------------------------------- |
-| `nix/packages/all.nix`                                             | パッケージ SSOT (`pnpmGlobal`)     |
+| `nix/packages/sets.nix`                                             | パッケージ SSOT (`pnpmGlobal`)     |
 | `chezmoi/.chezmoidata/pnpm_global.yaml`                            | chezmoi テンプレートデータ         |
 | `chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl` | Linux/macOS インストールスクリプト |
 | `chezmoi/shells/zshrc`                                             | 環境変数設定 (Linux)               |

@@ -7,7 +7,7 @@
 **「Windows と Linux で同じ開発環境を構築する」** を目標に、以下の原則で管理する。
 
 1. **Nix (Home Manager) がパッケージの Single Source of Truth (SSOT)**
-   - 全 CLI ツールは `nix/packages/all.nix` に一元定義
+   - 全 CLI ツールは `nix/packages/sets.nix` に一元定義
    - Linux/macOS: Home Manager が `home.packages` としてインストール
    - Windows: `nix build .#winget-export` で winget/pnpm の JSON を導出
 2. **chezmoi が設定ファイルの SSOT**
@@ -23,11 +23,10 @@
 dotfiles/
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── packages/
-│   │   ├── all.nix         # ★ SSOT: 全パッケージ + wingetMap + windowsOnly
-│   │   ├── winget.nix      # winget/pnpm JSON 生成 derivation
-│   │   └── default.nix     # nix profile 向け package sets
+│   │   ├── sets.nix        # ★ SSOT: catalog (全パッケージ + winget + category)
+│   │   └── winget.nix      # winget/pnpm JSON 生成 derivation
 │   ├── home/               # Home Manager 設定
-│   │   ├── packages.nix    # all.nix → home.packages
+│   │   ├── packages.nix    # sets.nix → home.packages
 │   │   └── wsl/users.nix   # WSL ユーザー HM 設定
 │   ├── flakes/             # Flake inputs/outputs, treefmt
 │   ├── hosts/              # Host-specific configs (WSL, Linux)
@@ -75,7 +74,7 @@ install.ps1
 
 | 役割                  | ツール       | 説明                                        |
 | --------------------- | ------------ | ------------------------------------------- |
-| パッケージ定義 (SSOT) | Nix          | `nix/packages/all.nix` に全ツールを一元定義 |
+| パッケージ定義 (SSOT) | Nix          | `nix/packages/sets.nix` に全ツールを一元定義 |
 | パッケージ (Linux)    | Home Manager | `home.packages` で宣言的インストール        |
 | パッケージ (Windows)  | winget/pnpm  | nix から生成した JSON でインストール        |
 | ユーザー設定          | chezmoi      | dotfiles (shell, git, terminal, editor)     |
@@ -85,13 +84,15 @@ install.ps1
 ## パッケージ管理フロー
 
 ```
-nix/packages/all.nix (SSOT)
+nix/packages/sets.nix (SSOT)
+│
+├── catalog          ─── { pkg, winget, category } per package
 │
 ├── packages         ─── nix/home/packages.nix ─── Home Manager (Linux/macOS)
 │                                                    └── home.packages = [...]
 │
 ├── wingetMap        ─── nix/packages/winget.nix ── nix build .#winget-export
-│   (nix→winget対応)     └── windows/winget/packages.json (generated)
+│   (自動導出)           └── windows/winget/packages.json (generated)
 │                        └── windows/pnpm/packages.json  (generated)
 │
 └── windowsOnly      ─── Windows 専用 GUI アプリ (winget/msstore/pnpm)
@@ -100,14 +101,17 @@ nix/packages/all.nix (SSOT)
 
 ### ツール追加手順
 
-1. `nix/packages/all.nix` の該当カテゴリにパッケージ追加
-2. クロスプラットフォームなら `wingetMap` に nix attr → winget ID の対応を追加
-3. `nix build .#winget-export` で winget/pnpm JSON を再生成
-4. `nixos-rebuild switch` で Linux 反映、`winget import` で Windows 反映
+1. `nix/packages/sets.nix` の `catalog` にエントリを追加:
+   ```nix
+   mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
+   ```
+   Set `winget = null` if there is no Windows equivalent.
+2. `nix build .#winget-export` で winget/pnpm JSON を再生成
+3. `nixos-rebuild switch` で Linux 反映、`winget import` で Windows 反映
 
 ### Windows 専用アプリの追加
 
-`nix/packages/all.nix` の `windowsOnly` セクションに追加するだけ。
+`nix/packages/sets.nix` の `windowsOnly` セクションに追加するだけ。
 
 ---
 
