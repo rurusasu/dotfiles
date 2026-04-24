@@ -630,7 +630,7 @@ export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
 
 | ファイル                                                           | 役割                               |
 | ------------------------------------------------------------------ | ---------------------------------- |
-| `nix/packages/sets.nix`                                             | パッケージ SSOT (`pnpmGlobal`)     |
+| `nix/packages/sets.nix`                                            | パッケージ SSOT (`pnpmGlobal`)     |
 | `chezmoi/.chezmoidata/pnpm_global.yaml`                            | chezmoi テンプレートデータ         |
 | `chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl` | Linux/macOS インストールスクリプト |
 | `chezmoi/shells/zshrc`                                             | 環境変数設定 (Linux)               |

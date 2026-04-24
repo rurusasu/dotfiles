@@ -15,7 +15,10 @@
         config.allowUnfree = true;
       };
       sets = import ../packages/sets.nix { inherit pkgs lib; };
-      unfreeSets = import ../packages/sets.nix { pkgs = unfreePkgs; inherit lib; };
+      unfreeSets = import ../packages/sets.nix {
+        pkgs = unfreePkgs;
+        inherit lib;
+      };
     in
     {
       packages = {

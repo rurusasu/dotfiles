@@ -72,14 +72,14 @@ install.ps1
 
 ## 役割分担
 
-| 役割                  | ツール       | 説明                                        |
-| --------------------- | ------------ | ------------------------------------------- |
+| 役割                  | ツール       | 説明                                         |
+| --------------------- | ------------ | -------------------------------------------- |
 | パッケージ定義 (SSOT) | Nix          | `nix/packages/sets.nix` に全ツールを一元定義 |
-| パッケージ (Linux)    | Home Manager | `home.packages` で宣言的インストール        |
-| パッケージ (Windows)  | winget/pnpm  | nix から生成した JSON でインストール        |
-| ユーザー設定          | chezmoi      | dotfiles (shell, git, terminal, editor)     |
-| システム設定          | NixOS        | OS レベルの設定 (nix gc, Docker, WSL)       |
-| タスク実行            | Taskfile     | Windows から WSL コマンドを実行             |
+| パッケージ (Linux)    | Home Manager | `home.packages` で宣言的インストール         |
+| パッケージ (Windows)  | winget/pnpm  | nix から生成した JSON でインストール         |
+| ユーザー設定          | chezmoi      | dotfiles (shell, git, terminal, editor)      |
+| システム設定          | NixOS        | OS レベルの設定 (nix gc, Docker, WSL)        |
+| タスク実行            | Taskfile     | Windows から WSL コマンドを実行              |
 
 ## パッケージ管理フロー
 
