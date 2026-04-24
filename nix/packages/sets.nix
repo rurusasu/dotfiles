@@ -75,17 +75,10 @@ let
     (lib.mapAttrs (_: v: v.winget) catalog);
 
 in
+# Category-resolved package lists (auto-derived from catalog)
+lib.mapAttrs (_: names: resolve names) grouped
+//
 {
-  # Category-resolved package lists
-  core          = resolve grouped.core;
-  dev           = resolve grouped.dev;
-  terminal      = resolve grouped.terminal;
-  editors       = resolve grouped.editors;
-  llm           = resolve grouped.llm;
-  communication = resolve grouped.communication;
-  k8s           = resolve grouped.k8s;
-  infra         = resolve grouped.infra;
-
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
 
