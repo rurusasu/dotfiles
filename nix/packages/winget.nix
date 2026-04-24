@@ -1,22 +1,22 @@
-# Generate windows/winget/packages.json from the SSOT (all.nix).
+# Generate windows/winget/packages.json from the SSOT (sets.nix).
 #
 # Usage:
 #   nix build .#winget-export
 #   cp result windows/winget/packages.json
 { pkgs, lib }:
 let
-  allPkgs = import ./all.nix { inherit pkgs; };
+  sets = import ./sets.nix { inherit pkgs lib; };
 
   wingetPackages =
-    (lib.mapAttrsToList (_: id: { PackageIdentifier = id; }) allPkgs.wingetMap)
-    ++ (map (id: { PackageIdentifier = id; }) allPkgs.windowsOnly.winget);
+    (lib.mapAttrsToList (_: id: { PackageIdentifier = id; }) sets.wingetMap)
+    ++ (map (id: { PackageIdentifier = id; }) sets.windowsOnly.winget);
 
-  msstorePackages = map (id: { PackageIdentifier = id; }) allPkgs.windowsOnly.msstore;
+  msstorePackages = map (id: { PackageIdentifier = id; }) sets.windowsOnly.msstore;
 
   pnpmOutput = {
     "$schema" = "https://json.schemastore.org/package.json";
     description = "pnpm global packages to install on Windows";
-    globalPackages = allPkgs.pnpmGlobal ++ allPkgs.windowsOnly.pnpm;
+    globalPackages = sets.pnpmGlobal ++ sets.windowsOnly.pnpm;
   };
 
   wingetOutput = {

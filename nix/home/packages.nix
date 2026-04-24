@@ -1,8 +1,8 @@
 # Home Manager module — installs all CLI tools from the SSOT.
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 let
-  allPkgs = import ../packages/all.nix { inherit pkgs; };
+  sets = import ../packages/sets.nix { inherit pkgs lib; };
 in
 {
-  home.packages = allPkgs.packages;
+  home.packages = sets.all;
 }
