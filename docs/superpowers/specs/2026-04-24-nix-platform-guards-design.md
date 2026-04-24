@@ -13,11 +13,13 @@ Modify the `resolve` helper in `sets.nix` to filter packages based on `meta.plat
 ### Change: `nix/packages/sets.nix` — `resolve` helper only
 
 Before:
+
 ```nix
 resolve = names: map (n: catalog.${n}.pkg) names;
 ```
 
 After:
+
 ```nix
 resolve =
   names:
