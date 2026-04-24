@@ -5,10 +5,21 @@
 # References:
 # - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
 # - treefmt-nix examples: https://github.com/numtide/treefmt-nix/tree/main/examples
-_: {
+{ config, ... }:
+{
   perSystem =
-    { pkgs, ... }:
+    { pkgs, config, ... }:
     {
+      # devShell with treefmt formatters + Nix linters
+      devShells.default = pkgs.mkShell {
+        packages =
+          config.treefmt.build.devShell.nativeBuildInputs
+          ++ (with pkgs; [
+            statix
+            deadnix
+          ]);
+      };
+
       treefmt = {
         projectRootFile = "flake.nix";
 
