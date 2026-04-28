@@ -49,7 +49,7 @@ class ClaudeCodeHandler : SetupHandlerBase {
             # Trust: cli.claude.ai は Anthropic が管理する HTTPS エンドポイント。
             # TLS で配信元の正当性を担保する（curl | sh 相当の信頼モデル）。
             $this.Log("Claude Code をインストールしています...")
-            $installerUrl = "https://cli.claude.ai/install.ps1"
+            $installerUrl = "https://claude.ai/install.ps1"
             $installerScript = Invoke-RestMethodSafe -Uri $installerUrl
             $this.Log("インストーラースクリプトをダウンロードしました")
 

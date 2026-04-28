@@ -133,31 +133,6 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
     Remove-Variable _candidate -ErrorAction SilentlyContinue
 }
 
-# pnpm global CLI shims
-# pnpm's global bin may not be in PATH yet, or Windows shims may not pass env vars.
-# Define PowerShell functions that call node + entrypoint directly.
-$_pnpmGlobalRoot = $null
-try {
-    $_pnpmGlobalRoot = (& pnpm root -g 2>$null)
-    if ($_pnpmGlobalRoot) { $_pnpmGlobalRoot = $_pnpmGlobalRoot.Trim() }
-} catch {}
-if ($_pnpmGlobalRoot -and (Test-Path $_pnpmGlobalRoot)) {
-    $_pnpmCliShims = @{
-        claude = "@anthropic-ai\claude-code\cli.js"
-        gemini = "@google\gemini-cli\dist\index.js"
-    }
-    foreach ($_entry in $_pnpmCliShims.GetEnumerator()) {
-        $_entrypoint = Join-Path $_pnpmGlobalRoot $_entry.Value
-        if (Test-Path -LiteralPath $_entrypoint -PathType Leaf) {
-            $__ep = $_entrypoint
-            New-Item -Path "Function:\Global:$($_entry.Key)" -Value (
-                [scriptblock]::Create("& node `"$__ep`" @args")
-            ) -Force | Out-Null
-        }
-    }
-}
-Remove-Variable _pnpmGlobalRoot, _pnpmCliShims, _entry, _entrypoint, __ep -ErrorAction SilentlyContinue
-
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
 if (Test-Path $_secretPs1) { . $_secretPs1 }
