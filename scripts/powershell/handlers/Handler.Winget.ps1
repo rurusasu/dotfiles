@@ -121,8 +121,13 @@ class WingetHandler : SetupHandlerBase {
                     if ($source.Packages) {
                         foreach ($pkg in $source.Packages) {
                             if ($pkg.PackageIdentifier) {
+                                $version = $null
+                                if ($pkg.PSObject.Properties.Name -contains "Version") {
+                                    $version = $pkg.Version
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id         = $pkg.PackageIdentifier
+                                    Version    = $version
                                     SourceName = $sourceName
                                 }
                             }
@@ -163,13 +168,20 @@ class WingetHandler : SetupHandlerBase {
             $failed = 0
 
             foreach ($pkg in $toInstall) {
-                $this.Log("インストール中: $($pkg.Id)")
+                $logSuffix = if ($pkg.Version) { " (v$($pkg.Version))" } else { "" }
+                $this.Log("インストール中: $($pkg.Id)$logSuffix")
                 $installArgs = @(
                     "install", "-e", "--id", $pkg.Id,
                     "--silent",
                     "--accept-package-agreements",
                     "--accept-source-agreements"
                 )
+                # Version が packages.json に書かれていれば --version で固定する。
+                # msstore source は固定 version 指定をサポートしないため除外。
+                if ($pkg.Version -and $pkg.SourceName -ne "msstore") {
+                    $installArgs += "--version"
+                    $installArgs += $pkg.Version
+                }
                 if ($pkg.SourceName -eq "msstore") {
                     $installArgs += "--source"
                     $installArgs += "msstore"
