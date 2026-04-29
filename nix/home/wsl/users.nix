@@ -7,8 +7,9 @@
       imports = [ ../common.nix ];
 
       # WSL: GitHub への HTTPS push は Windows 側の Git Credential Manager に委譲する。
-      # WSL 内で credential.helper を未設定にすると `git push` が TTY 入力待ちでハング
-      # する（chezmoi が WSL 内まで適用されないためここで宣言的に補う）。
+      # WSL 内で credential.helper が未設定だと、git の認証フェーズで stdin 入力待ちと
+      # なり非対話シェル経由 (`task push` 等) では無進捗でブロックする
+      # （chezmoi が WSL 内まで適用されないためここで宣言的に補う）。
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
       programs.git = {
         enable = true;
