@@ -64,6 +64,11 @@ foreach ($name in $servers.Keys) {
 }
 
 # Write back as JSON (comments will be lost - this is a known limitation)
-$settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+# Set-Content -Encoding UTF8 prepends a BOM on PowerShell 5.1, which Zed's
+# serde_json parser rejects ("expected value at line 1 column 1") so all
+# user settings stop loading. Use WriteAllText with a BOM-less UTF8Encoding
+# to stay compatible with both PowerShell 5.1 and 7.
+$json = $settings | ConvertTo-Json -Depth 20
+[System.IO.File]::WriteAllText($settingsPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "[zed-mcp] Updated $($servers.Count) context servers in $settingsPath"
 Write-Host "[zed-mcp] Note: JSONC comments were removed during merge"
