@@ -1,22 +1,23 @@
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
-$settingsPath = Join-Path $env:APPDATA "Code\User\settings.json"
-if (-not (Test-Path $settingsPath)) {
-    Write-Host "[vscode-mcp] VS Code settings.json not found at $settingsPath, skipping"
+$userDir = Join-Path $env:APPDATA "Code\User"
+$mcpPath = Join-Path $userDir "mcp.json"
+$settingsPath = Join-Path $userDir "settings.json"
+
+if (-not (Test-Path $userDir)) {
+    Write-Host "[vscode-mcp] VS Code user dir not found at $userDir, skipping"
     exit 0
 }
 
-Write-Host "[vscode-mcp] Updating MCP servers in VS Code settings..."
+Write-Host "[vscode-mcp] Rewriting MCP servers in $mcpPath (SSOT: mcp_servers.yaml)..."
 
-$content = Get-Content $settingsPath -Raw -Encoding UTF8
-$settings = $content | ConvertFrom-Json
-
-# Build MCP servers hashtable
+# Build chezmoi-managed servers from mcp_servers.yaml
+# VS Code natively supports HTTP MCP, so prefer http when url is present.
 $servers = [ordered]@{}
 
 {{ range .mcp_servers }}
 {{- if has "vscode" .supports }}
-{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+{{- if hasKey . "url" }}
 $servers["{{ .name }}"] = [ordered]@{
     type = "http"
     url = "{{ .url }}"
@@ -38,25 +39,27 @@ $servers["{{ .name }}"]["env"] = @{
 {{- end }}
 {{ end }}
 
-# Merge mcp.servers into settings
-if (-not ($settings.PSObject.Properties.Name -contains "mcp")) {
-    $settings | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([PSCustomObject]@{})
+# Full SSOT: rebuild mcp.json from yaml on every run; user-added entries are NOT preserved.
+# To register a new server, add it to chezmoi/.chezmoidata/mcp_servers.yaml with `vscode` in supports.
+$mcp = [ordered]@{
+    servers = [ordered]@{}
+    inputs  = @()
 }
-if (-not ($settings.mcp.PSObject.Properties.Name -contains "servers")) {
-    $settings.mcp | Add-Member -NotePropertyName "servers" -NotePropertyValue ([PSCustomObject]@{})
+foreach ($name in $servers.Keys) {
+    $mcp.servers[$name] = $servers[$name]
 }
 
-foreach ($name in $servers.Keys) {
-    if ($settings.mcp.servers.PSObject.Properties.Name -contains $name) {
-        $settings.mcp.servers.$name = [PSCustomObject]$servers[$name]
-    } else {
-        $settings.mcp.servers | Add-Member -NotePropertyName $name -NotePropertyValue ([PSCustomObject]$servers[$name])
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($mcpPath, ($mcp | ConvertTo-Json -Depth 20), $utf8NoBom)
+Write-Host "[vscode-mcp] Wrote $($servers.Count) MCP servers to $mcpPath"
+
+# Strip deprecated `mcp` block from settings.json (VS Code >=1.102 warns when present)
+if (Test-Path $settingsPath) {
+    $settingsContent = Get-Content $settingsPath -Raw -Encoding UTF8
+    $settings = $settingsContent | ConvertFrom-Json
+    if ($settings.PSObject.Properties.Name -contains "mcp") {
+        $settings.PSObject.Properties.Remove("mcp")
+        [System.IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 20), $utf8NoBom)
+        Write-Host "[vscode-mcp] Removed deprecated 'mcp' block from settings.json"
     }
 }
-
-# Set-Content -Encoding UTF8 prepends a BOM on PowerShell 5.1; some
-# strict JSON consumers (and editors that re-parse the file) reject it.
-# Write BOM-less UTF8 so the output stays portable across PS 5.1 and 7.
-$json = $settings | ConvertTo-Json -Depth 20
-[System.IO.File]::WriteAllText($settingsPath, $json, [System.Text.UTF8Encoding]::new($false))
-Write-Host "[vscode-mcp] Updated $($servers.Count) MCP servers in $settingsPath"
