@@ -54,5 +54,9 @@ foreach ($name in $servers.Keys) {
     }
 }
 
-$settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+# Set-Content -Encoding UTF8 prepends a BOM on PowerShell 5.1; some
+# strict JSON consumers (and editors that re-parse the file) reject it.
+# Write BOM-less UTF8 so the output stays portable across PS 5.1 and 7.
+$json = $settings | ConvertTo-Json -Depth 20
+[System.IO.File]::WriteAllText($settingsPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "[vscode-mcp] Updated $($servers.Count) MCP servers in $settingsPath"
