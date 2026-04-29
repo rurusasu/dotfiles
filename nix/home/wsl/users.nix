@@ -3,6 +3,14 @@
 {
   nixos =
     { ... }:
+    let
+      # GCM のパスには空白 (`Program Files`) が含まれるため、git が helper 値を
+      # `sh -c` に渡す前にトークン分割しないようリテラルなダブルクォートで包む。
+      # home-manager の INI 出力は埋め込み `"` を `\"` にエスケープし、git は
+      # 読み出し時に外側のクォートを除去するので、最終的に shell に届くのは
+      # 1 トークンのクォート付きパスになる。
+      gcmHelper = ''"/mnt/c/Program Files/Git/mingw64/bin/git-credential-manager.exe"'';
+    in
     {
       imports = [ ../common.nix ];
 
@@ -13,11 +21,9 @@
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
       programs.git = {
         enable = true;
-        extraConfig = {
-          credential."https://github.com".helper =
-            "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe";
-          credential."https://gist.github.com".helper =
-            "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe";
+        settings = {
+          credential."https://github.com".helper = gcmHelper;
+          credential."https://gist.github.com".helper = gcmHelper;
         };
       };
     };
