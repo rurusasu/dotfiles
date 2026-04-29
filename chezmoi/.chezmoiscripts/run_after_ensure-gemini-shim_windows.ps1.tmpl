@@ -1,7 +1,19 @@
 {{ if eq .chezmoi.os "windows" -}}
 $ErrorActionPreference = "Stop"
 
-$entrypoint = Join-Path $env:USERPROFILE ".bun\install\global\node_modules\@google\gemini-cli\dist\index.js"
+# Resolve pnpm global root to find gemini-cli entrypoint
+$pnpmRoot = $null
+try {
+  $pnpmRoot = (& pnpm root -g 2>$null)
+  if ($pnpmRoot) { $pnpmRoot = $pnpmRoot.Trim() }
+} catch {}
+
+if (-not $pnpmRoot -or -not (Test-Path $pnpmRoot)) {
+  Write-Host "[gemini-shim] Skip: pnpm global root not found."
+  return
+}
+
+$entrypoint = Join-Path $pnpmRoot "@google\gemini-cli\dist\index.js"
 if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
   Write-Host "[gemini-shim] Skip: Gemini CLI entrypoint not found."
   return
@@ -29,12 +41,13 @@ $shimPath = Join-Path $localBin "gemini.cmd"
 $shimContent = @(
   "@echo off"
   "setlocal"
-  "set ""GEMINI_JS=%USERPROFILE%\.bun\install\global\node_modules\@google\gemini-cli\dist\index.js"""
+  "for /f ""delims="" %%R in ('pnpm root -g 2^>nul') do set ""PNPM_ROOT=%%R"""
+  "set ""GEMINI_JS=%PNPM_ROOT%\@google\gemini-cli\dist\index.js"""
   "if not exist ""%GEMINI_JS%"" ("
   "  echo [ERROR] Gemini CLI entrypoint not found: %GEMINI_JS%"
   "  exit /b 1"
   ")"
-  "bun ""%GEMINI_JS%"" %*"
+  "node ""%GEMINI_JS%"" %*"
   "exit /b %ERRORLEVEL%"
   ""
 ) -join "`r`n"
