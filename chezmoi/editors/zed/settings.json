@@ -182,7 +182,7 @@
       "format_on_save": "on",
       "formatter": "language_server",
       "language_servers": ["ty", "ruff", "!basedpyright", "!pyright"],
-      "soft_wrap": "preferred_line_length",
+      "soft_wrap": "bounded",
       "preferred_line_length": 88
     },
     "Dockerfile": {
