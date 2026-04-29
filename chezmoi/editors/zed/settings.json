@@ -257,5 +257,39 @@
       "provider": "anthropic",
       "model": "claude-sonnet-4-20250514"
     }
+  },
+  // External agents via ACP (Agent Client Protocol).
+  //
+  // Each registry-typed adapter is auto-installed by Zed on first use and
+  // spawns the corresponding native CLI, which reads its own config files
+  // (~/.claude.json, ~/.codex/config.toml, ~/.gemini/settings.json, etc.).
+  // That means MCP servers and other settings declared in the chezmoi
+  // mcp_servers.yaml chain (and per-CLI native configs) flow through to
+  // Zed's Agent Panel automatically — no duplicate wiring here.
+  //
+  // Notes:
+  // - claude-acp / codex-acp support MCP servers; the gemini adapter does
+  //   not currently expose MCP (per Zed docs).
+  // - opencode is in Zed's ACP registry directly (no -acp suffix).
+  // - Cursor is not in Zed's registry; we bridge cursor-agent through the
+  //   community npm adapter `cursor-acp`. Requires the cursor-agent CLI.
+  "agent_servers": {
+    "claude-acp": {
+      "type": "registry"
+    },
+    "codex-acp": {
+      "type": "registry"
+    },
+    "gemini": {
+      "type": "registry"
+    },
+    "opencode": {
+      "type": "registry"
+    },
+    "Cursor": {
+      "type": "custom",
+      "command": "pnpm",
+      "args": ["dlx", "cursor-acp"]
+    }
   }
 }
