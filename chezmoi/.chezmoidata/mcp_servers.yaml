@@ -229,3 +229,25 @@ mcp_servers:
       - vscode
       - windsurf
       - zed
+
+  # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
+  # Docs: https://www.kaggle.com/docs/mcp
+  - name: kaggle
+    # URL-based MCP (remote, auth handled by mcp-remote on first connect)
+    url: "https://www.kaggle.com/mcp"
+    # stdio bridge for tools that don't speak HTTP MCP natively
+    command: pnpm
+    args:
+      - "dlx"
+      - "mcp-remote"
+      - "https://www.kaggle.com/mcp"
+    startup_timeout_sec: 30
+    supports:
+      - claude-code
+      - claude-desktop
+      - codex
+      - cursor
+      - gemini
+      - vscode
+      - windsurf
+      - zed
