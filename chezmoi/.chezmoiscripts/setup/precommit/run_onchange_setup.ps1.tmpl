@@ -6,65 +6,125 @@ $ErrorActionPreference = "Stop"
 
 $ChezmoiSource = if ($env:CHEZMOI_SOURCE_DIR) { $env:CHEZMOI_SOURCE_DIR } else { "$env:USERPROFILE\.local\share\chezmoi" }
 $DotfilesRepo = Split-Path -Parent $ChezmoiSource
+$ConfigPath = Join-Path $DotfilesRepo ".pre-commit-config.yaml"
 
 Write-Host "Setting up pre-commit hooks..."
 
-# Install pre-commit via pip if Python is available but pre-commit is not
-if ((Get-Command python -ErrorAction SilentlyContinue) -and -not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
-  Write-Host "Installing pre-commit via pip..."
-  try {
-    python -m pip install --user pre-commit 2>&1 | Out-Null
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
-    Write-Host "pre-commit installed successfully"
-  }
-  catch {
-    Write-Host "Error installing pre-commit: $_"
-  }
+if (-not (Test-Path $ConfigPath)) {
+    Write-Host "No .pre-commit-config.yaml found in $DotfilesRepo, skipping"
+    return
 }
 
-# Setup pre-commit in dotfiles repository
-if ((Test-Path "$DotfilesRepo\.pre-commit-config.yaml") -and (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
-  Push-Location $DotfilesRepo
-  try {
-    pre-commit install
-    Write-Host "pre-commit hooks installed successfully"
-  }
-  catch {
-    Write-Host "Error installing pre-commit hooks: $_"
-  }
-  finally {
-    Pop-Location
-  }
-} elseif (-not (Test-Path "$DotfilesRepo\.pre-commit-config.yaml")) {
-  Write-Host "No .pre-commit-config.yaml found in dotfiles repository"
-} elseif (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
-  Write-Host "pre-commit not found on Windows. Trying WSL..."
-  if (Get-Command wsl -ErrorAction SilentlyContinue) {
+# Microsoft Store ships a stub `python.exe` on PATH that opens the Store
+# instead of running. `Get-Command python` finds it, so distinguish the
+# real interpreter by trying to execute a no-op import.
+function Test-RealPython {
+    param([string]$Cmd)
     try {
-      $DotfilesRepoUnix = $DotfilesRepo.Replace('\', '/')
-      $WslRepoPath = & wsl.exe wslpath -a -- "$DotfilesRepoUnix"
-      if ($LASTEXITCODE -ne 0 -or -not $WslRepoPath) {
-        if ($DotfilesRepo -match '^[A-Za-z]:\\') {
-          $drive = $DotfilesRepo.Substring(0, 1).ToLower()
-          $rest = $DotfilesRepo.Substring(2).Replace('\', '/')
-          $WslRepoPath = "/mnt/$drive$rest"
-        } else {
-          throw "wslpath failed for $DotfilesRepo"
+        $null = & $Cmd -c "import sys" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
+# Add `~/.local/bin` (uv tool target) to PATH for the current process so a
+# freshly installed pre-commit becomes discoverable without a shell restart.
+$uvBin = Join-Path $env:USERPROFILE ".local\bin"
+if ((Test-Path $uvBin) -and ($env:PATH -notlike "*$uvBin*")) {
+    $env:PATH = "$uvBin;$env:PATH"
+}
+
+$installedVia = $null
+
+if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
+    # Preferred: uv tool install — vendors its own Python, no PATH headaches.
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        Write-Host "Installing pre-commit via 'uv tool install'..."
+        try {
+            & uv tool install pre-commit 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) { $installedVia = "uv" }
+        } catch {
+            Write-Host "uv tool install failed: $_"
         }
-      }
-      & wsl.exe -e bash -lc "cd '$WslRepoPath' && pre-commit install"
-      if ($LASTEXITCODE -eq 0) {
-        Write-Host "pre-commit hooks installed via WSL"
-      } else {
-        Write-Host "WSL pre-commit install failed. Ensure pre-commit is installed in WSL."
-      }
     }
-    catch {
-      Write-Host "WSL pre-commit setup error: $_"
+    # Fallback 1: pipx
+    if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue) -and (Get-Command pipx -ErrorAction SilentlyContinue)) {
+        Write-Host "Installing pre-commit via pipx..."
+        try {
+            & pipx install pre-commit 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) { $installedVia = "pipx" }
+        } catch {
+            Write-Host "pipx install failed: $_"
+        }
     }
-  } else {
-    Write-Host "WSL not available, skipping hook installation"
-  }
+    # Fallback 2: real Python with `pip install --user`
+    if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue) -and (Test-RealPython "python")) {
+        Write-Host "Installing pre-commit via 'python -m pip --user'..."
+        try {
+            & python -m pip install --user --upgrade pre-commit 2>&1 | Out-Host
+            $pyTag = & python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')" 2>$null
+            $userScripts = Join-Path $env:APPDATA "Python\Python$pyTag\Scripts"
+            if (Test-Path $userScripts) { $env:PATH = "$userScripts;$env:PATH" }
+            if (Get-Command pre-commit -ErrorAction SilentlyContinue) { $installedVia = "pip" }
+        } catch {
+            Write-Host "pip install failed: $_"
+        }
+    }
+}
+
+if (Get-Command pre-commit -ErrorAction SilentlyContinue) {
+    # If a previous WSL-based install left a hook with hardcoded /nix/store
+    # shebangs, drop it so `pre-commit install` regenerates a Windows-native
+    # one. Otherwise commits from Git Bash/PowerShell keep failing.
+    $hookPath = Join-Path $DotfilesRepo ".git\hooks\pre-commit"
+    if (Test-Path $hookPath) {
+        $hookHead = Get-Content $hookPath -TotalCount 5 -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($hookHead -match '/nix/store/') {
+            Write-Host "Removing legacy WSL-pinned pre-commit hook"
+            Remove-Item $hookPath -Force
+        }
+    }
+    Push-Location $DotfilesRepo
+    try {
+        & pre-commit install 2>&1 | Out-Host
+        Write-Host "pre-commit hooks installed via Windows ($installedVia)"
+    } catch {
+        Write-Host "Error running 'pre-commit install': $_"
+    } finally {
+        Pop-Location
+    }
+} else {
+    # WSL fallback only if every Windows install path failed. The resulting
+    # hook references WSL Nix store binaries, so commits run from Windows
+    # bash/PowerShell will fail until pre-commit lands on Windows PATH.
+    Write-Host "pre-commit not found on Windows after install attempts."
+    if (Get-Command wsl -ErrorAction SilentlyContinue) {
+        Write-Host "Falling back to WSL (commits outside WSL will fail)..."
+        try {
+            $DotfilesRepoUnix = $DotfilesRepo.Replace('\', '/')
+            $WslRepoPath = & wsl.exe wslpath -a -- "$DotfilesRepoUnix"
+            if ($LASTEXITCODE -ne 0 -or -not $WslRepoPath) {
+                if ($DotfilesRepo -match '^[A-Za-z]:\\') {
+                    $drive = $DotfilesRepo.Substring(0, 1).ToLower()
+                    $rest = $DotfilesRepo.Substring(2).Replace('\', '/')
+                    $WslRepoPath = "/mnt/$drive$rest"
+                } else {
+                    throw "wslpath failed for $DotfilesRepo"
+                }
+            }
+            & wsl.exe -e bash -lc "cd '$WslRepoPath' && pre-commit install"
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "pre-commit hooks installed via WSL"
+            } else {
+                Write-Host "WSL pre-commit install failed."
+            }
+        } catch {
+            Write-Host "WSL pre-commit setup error: $_"
+        }
+    } else {
+        Write-Host "WSL not available, skipping hook installation"
+    }
 }
 
 Write-Host "Pre-commit setup complete."
