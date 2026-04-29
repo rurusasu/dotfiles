@@ -9,8 +9,13 @@ fi
 
 echo "[claude-code-mcp] Syncing MCP servers to ~/.claude.json..."
 
+# `claude mcp add` is a strict insert and refuses to update an existing
+# entry, so re-running this script after a yaml change (e.g. pinning a
+# version) leaves the old args in ~/.claude.json. Remove first, then add,
+# to keep this script idempotent against arg drift.
 {{ range .mcp_servers }}
 {{- if has "claude-code" .supports }}
+claude mcp remove "{{ .name }}" -s user >/dev/null 2>&1 || true
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
 claude mcp add "{{ .name }}" -s user -- npx -y mcp-remote "{{ .url }}" 2>/dev/null || true
 {{- else }}
