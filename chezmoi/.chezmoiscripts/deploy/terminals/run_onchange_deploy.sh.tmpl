@@ -1,7 +1,7 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/bin/bash
 # Deploy terminal configurations for Linux/macOS
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}{{ include "terminals/warp/settings.toml" | sha256sum }}
 
 set -euo pipefail
 
@@ -26,6 +26,7 @@ deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/w
 # Warp (Linux only — macOS out of scope; pkgs.warp-terminal is linux-only in nixpkgs)
 if command -v warp-terminal &>/dev/null; then
   deploy_file "$CHEZMOI_SOURCE/terminals/warp/keybindings.yaml" "$HOME_DIR/.warp/keybindings.yaml"
+  deploy_file "$CHEZMOI_SOURCE/terminals/warp/settings.toml" "$HOME_DIR/.config/warp-terminal/settings.toml"
 fi
 
 echo "Terminal configurations deployed."

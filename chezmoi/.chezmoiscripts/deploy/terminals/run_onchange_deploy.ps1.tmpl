@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy terminal configurations for Windows
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}{{ include "terminals/warp/settings.toml" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -37,6 +37,7 @@ if (Test-Path -LiteralPath $WTSettingsDir) {
 $WarpConfigDir = "$env:LOCALAPPDATA\warp\Warp"
 if (Test-Path -LiteralPath $WarpConfigDir) {
   Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$WarpConfigDir\config\keybindings.yaml"
+  Deploy-File "$ChezmoiSource\terminals\warp\settings.toml" "$WarpConfigDir\config\settings.toml"
 } else {
   Write-Host "Warp config dir not found ($WarpConfigDir), skipping. Launch Warp once to create it, then re-run chezmoi apply."
 }
