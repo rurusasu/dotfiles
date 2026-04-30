@@ -23,7 +23,7 @@ echo "Deploying terminal configurations..."
 
 deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
 
-# Warp
+# Warp (Linux only — macOS out of scope; pkgs.warp-terminal is linux-only in nixpkgs)
 if command -v warp-terminal &>/dev/null; then
   deploy_file "$CHEZMOI_SOURCE/terminals/warp/keybindings.yaml" "$HOME_DIR/.warp/keybindings.yaml"
 fi

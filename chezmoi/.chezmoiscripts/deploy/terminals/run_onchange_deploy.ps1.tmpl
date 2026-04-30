@@ -37,6 +37,8 @@ if (Test-Path -LiteralPath $WTSettingsDir) {
 $WarpConfigDir = "$env:LOCALAPPDATA\warp\Warp"
 if (Test-Path -LiteralPath $WarpConfigDir) {
   Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$WarpConfigDir\config\keybindings.yaml"
+} else {
+  Write-Host "Warp config dir not found ($WarpConfigDir), skipping. Launch Warp once to create it, then re-run chezmoi apply."
 }
 
 Write-Host "Terminal configurations deployed."
