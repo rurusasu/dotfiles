@@ -35,6 +35,7 @@ chezmoi/private_dot_claude/settings.local.json
 .playwright/
 .playwright-mcp/
 .task/
+.worktrees/
 
 # Temporary files
 *.tmp
