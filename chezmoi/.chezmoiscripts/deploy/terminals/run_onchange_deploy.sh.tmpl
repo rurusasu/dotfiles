@@ -22,7 +22,9 @@ deploy_file() {
 echo "Deploying terminal configurations..."
 
 deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
-if [[ -d "$HOME_DIR/.warp" ]] || command -v warp-terminal &>/dev/null; then
+
+# Warp
+if command -v warp-terminal &>/dev/null; then
   deploy_file "$CHEZMOI_SOURCE/terminals/warp/keybindings.yaml" "$HOME_DIR/.warp/keybindings.yaml"
 fi
 

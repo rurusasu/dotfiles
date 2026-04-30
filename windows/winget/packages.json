@@ -76,12 +76,12 @@
           "Version": "0.11.7"
         },
         {
-          "PackageIdentifier": "wez.wezterm",
-          "Version": "20240203-110809-5046fc22"
-        },
-        {
           "PackageIdentifier": "Warp.Warp",
           "Version": "v0.2026.04.15.08.45.stable_03"
+        },
+        {
+          "PackageIdentifier": "wez.wezterm",
+          "Version": "20240203-110809-5046fc22"
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
