@@ -1,0 +1,26 @@
+[agents]
+cloud_conversation_storage_enabled = true
+
+[agents.warp_agent]
+
+[agents.warp_agent.input]
+nld_in_terminal_enabled = true
+
+[agents.warp_agent.other]
+cloud_agent_computer_use_enabled = true
+
+[privacy]
+telemetry_enabled = true
+crash_reporting_enabled = true
+
+[account]
+is_settings_sync_enabled = true
+
+[appearance]
+
+[appearance.text]
+notebook_font_size = 14.0
+font_size = 13.0
+
+[appearance.themes]
+system_theme = true
