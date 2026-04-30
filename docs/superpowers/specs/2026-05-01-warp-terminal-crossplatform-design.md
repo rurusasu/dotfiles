@@ -27,10 +27,10 @@ warp-terminal = {
 
 デプロイ先：
 
-| OS | デプロイ先 |
-|---|---|
-| Linux/WSL | `~/.warp/keybindings.yaml` |
-| Windows | `%LOCALAPPDATA%\warp\Warp\config\keybindings.yaml` |
+| OS        | デプロイ先                                         |
+| --------- | -------------------------------------------------- |
+| Linux/WSL | `~/.warp/keybindings.yaml`                         |
+| Windows   | `%LOCALAPPDATA%\warp\Warp\config\keybindings.yaml` |
 
 ### デプロイスクリプト変更
 
@@ -41,12 +41,12 @@ warp-terminal = {
 
 ## 変更ファイル一覧
 
-| ファイル | 変更種別 |
-|---|---|
-| `nix/packages/sets.nix` | 編集（warp-terminal エントリ追加） |
-| `chezmoi/terminals/warp/keybindings.yaml` | 新規作成（scaffold） |
-| `chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl` | 編集（Warp デプロイ追加） |
-| `chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl` | 編集（Warp デプロイ追加） |
+| ファイル                                                                | 変更種別                           |
+| ----------------------------------------------------------------------- | ---------------------------------- |
+| `nix/packages/sets.nix`                                                 | 編集（warp-terminal エントリ追加） |
+| `chezmoi/terminals/warp/keybindings.yaml`                               | 新規作成（scaffold）               |
+| `chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl` | 編集（Warp デプロイ追加）          |
+| `chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl`  | 編集（Warp デプロイ追加）          |
 
 ## スコープ外
 
