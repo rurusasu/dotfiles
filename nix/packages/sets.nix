@@ -128,6 +128,11 @@ let
       winget = "Starship.Starship";
       category = "terminal";
     };
+    warp-terminal = {
+      pkg = pkgs.warp-terminal;
+      winget = "Warp.Warp";
+      category = "terminal";
+    };
 
     # ── editors ───────────────────────────────────────────
     neovim = {

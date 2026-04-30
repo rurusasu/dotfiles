@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy terminal configurations for Windows
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -32,6 +32,9 @@ $WTSettingsDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8
 if (Test-Path -LiteralPath $WTSettingsDir) {
   Deploy-File "$ChezmoiSource\terminals\windows-terminal\settings.json" "$WTSettingsDir\settings.json"
 }
+
+# Warp
+Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$env:LOCALAPPDATA\warp\Warp\config\keybindings.yaml"
 
 Write-Host "Terminal configurations deployed."
 {{ end -}}
