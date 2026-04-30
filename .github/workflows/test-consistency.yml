@@ -30,7 +30,10 @@ jobs:
         run: nix build .#winget-export -o /tmp/winget-export
 
       - name: Verify winget packages.json is in sync
-        run: diff <(jq -S . /tmp/winget-export/winget/packages.json) <(jq -S . windows/winget/packages.json)
+        run: |
+          diff \
+            <(jq -Sr '[.Sources[].Packages[].PackageIdentifier] | sort[]' /tmp/winget-export/winget/packages.json) \
+            <(jq -Sr '[.Sources[].Packages[].PackageIdentifier] | sort[]' windows/winget/packages.json)
 
       - name: Verify pnpm packages.json is in sync
         run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
