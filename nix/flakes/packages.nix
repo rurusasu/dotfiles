@@ -25,7 +25,7 @@
         # Main package sets
         default = pkgs.buildEnv {
           name = "dotfiles-default";
-          paths = sets.core ++ sets.dev ++ sets.terminal;
+          paths = sets.core ++ sets.dev ++ unfreeSets.terminal;
         };
         minimal = pkgs.buildEnv {
           name = "dotfiles-minimal";
@@ -51,7 +51,7 @@
         };
         terminal = pkgs.buildEnv {
           name = "dotfiles-terminal";
-          paths = sets.terminal;
+          paths = unfreeSets.terminal;
         };
         editors = pkgs.buildEnv {
           name = "dotfiles-editors";
