@@ -34,7 +34,10 @@ if (Test-Path -LiteralPath $WTSettingsDir) {
 }
 
 # Warp
-Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$env:LOCALAPPDATA\warp\Warp\config\keybindings.yaml"
+$WarpConfigDir = "$env:LOCALAPPDATA\warp\Warp"
+if (Test-Path -LiteralPath $WarpConfigDir) {
+  Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$WarpConfigDir\config\keybindings.yaml"
+}
 
 Write-Host "Terminal configurations deployed."
 {{ end -}}
