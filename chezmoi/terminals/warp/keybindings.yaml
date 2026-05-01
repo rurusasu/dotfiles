@@ -7,8 +7,9 @@
 #   close pane (Ctrl+Alt+X), toggle zoom (Ctrl+Alt+W)
 
 # Pane split — matches WezTerm (Ctrl+Alt+H/V) and Windows Terminal
-pane_group:add_horizontal: ctrl-alt-h
-pane_group:add_vertical: ctrl-alt-v
+# Warp uses add_right (split right) / add_down (split down)
+pane_group:add_right: ctrl-alt-h
+pane_group:add_down: ctrl-alt-v
 
 # Pane navigation — matches WezTerm/WT vim-style (Ctrl+Shift+H/J/K/L)
 pane_group:navigate_left: ctrl-shift-H
