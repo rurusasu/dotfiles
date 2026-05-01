@@ -1,7 +1,21 @@
 # Warp keybindings — managed via chezmoi
 # Format: flat YAML map of action_name to key-binding (no root key)
 # Reference: https://github.com/warpdotdev/keysets/blob/main/FORMAT.md
-# Example (macOS):
-#   editor_view:add_cursor_below: cmd-shift-A
-# Example (Windows/Linux):
-#   editor_view:add_cursor_below: ctrl-shift-A
+# Aligned with WezTerm and Windows Terminal conventions.
+#
+# Not configurable here (no action name in Warp):
+#   close pane (Ctrl+Alt+X), toggle zoom (Ctrl+Alt+W)
+
+# Pane split — matches WezTerm (Ctrl+Alt+H/V) and Windows Terminal
+pane_group:add_horizontal: ctrl-alt-h
+pane_group:add_vertical: ctrl-alt-v
+
+# Pane navigation — matches WezTerm/WT vim-style (Ctrl+Shift+H/J/K/L)
+pane_group:navigate_left: ctrl-shift-H
+pane_group:navigate_down: ctrl-shift-J
+pane_group:navigate_up: ctrl-shift-K
+pane_group:navigate_right: ctrl-shift-L
+
+# Tab navigation — matches Windows Terminal (Ctrl+Tab / Ctrl+Shift+Tab)
+workspace:activate_next_tab: ctrl-tab
+workspace:activate_prev_tab: ctrl-shift-tab
