@@ -39,6 +39,11 @@ let
       winget = null;
       category = "core";
     };
+    jq = {
+      pkg = pkgs.jq;
+      winget = "jqlang.jq";
+      category = "core";
+    };
     eza = {
       pkg = pkgs.eza;
       winget = "eza-community.eza";

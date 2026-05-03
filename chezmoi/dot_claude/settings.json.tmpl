@@ -40,6 +40,8 @@
     ],
     "ask": ["Bash(git checkout:*)", "Bash(git commit:*)"]
   },
+  "model": "sonnet",
+  "theme": "light-daltonized",
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
@@ -56,7 +58,16 @@
     "serena@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "linear@claude-plugins-official": true
+    "linear@claude-plugins-official": true,
+    "warp@claude-code-warp": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-warp": {
+      "source": {
+        "source": "github",
+        "repo": "warpdotdev/claude-code-warp"
+      }
+    }
   },
   "hooks": {
     "PostToolUse": [
