@@ -24,7 +24,8 @@
           "Version": "0.72.0"
         },
         {
-          "PackageIdentifier": "jqlang.jq"
+          "PackageIdentifier": "jqlang.jq",
+          "Version": "1.7.1"
         },
         {
           "PackageIdentifier": "GitHub.cli",
