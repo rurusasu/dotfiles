@@ -15,7 +15,7 @@ return {
     {
         "stevearc/oil.nvim",
         cmd = "Oil",
-        keys = { { "<leader>e", "<cmd>Oil<cr>", desc = "File explorer" } },
+        keys = { { "-", "<cmd>Oil<cr>", desc = "Open parent directory" } },
         opts = {
             view_options = { show_hidden = true },
         },

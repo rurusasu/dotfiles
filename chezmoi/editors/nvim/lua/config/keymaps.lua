@@ -41,7 +41,7 @@ map("n", "<leader>q", "<cmd>q<cr>", { desc = "Quit" })
 map("n", "<leader>Q", "<cmd>qa!<cr>", { desc = "Quit all" })
 
 -- File explorer
-map("n", "<leader>e", "<cmd>Oil<cr>", { desc = "File explorer" })
+map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 
 -- Telescope
 map("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Find files" })
