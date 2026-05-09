@@ -115,7 +115,7 @@ jobs:
                 if ($installExit -ne 0) { throw "winget exit $installExit" }
               }
             } catch {
-              Write-Warning "winget install failed for $id: $_"
+              Write-Warning "winget install failed for ${id}: $_"
               $installFailed += $id
             }
           }
