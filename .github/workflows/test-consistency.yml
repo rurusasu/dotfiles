@@ -2,11 +2,23 @@ name: Package Consistency
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "nix/packages/**"
+      - "nix/home/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "windows/winget/packages.json"
+      - "windows/pnpm/packages.json"
+      - ".github/workflows/test-consistency.yml"
   pull_request:
     branches: [main]
     paths:
       - "nix/packages/**"
       - "nix/home/**"
+      - "flake.nix"
+      - "flake.lock"
       - "windows/winget/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/test-consistency.yml"
@@ -28,9 +40,6 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
 
       - name: Build winget-export from SSOT
         run: nix build .#winget-export -o /tmp/winget-export

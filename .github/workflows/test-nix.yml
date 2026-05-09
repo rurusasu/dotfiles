@@ -2,6 +2,13 @@ name: Nix Checks
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/test-nix.yml"
   pull_request:
     branches: [main]
     paths:
@@ -27,9 +34,6 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
 
       - name: Check flake evaluation
         run: nix flake check --no-build
