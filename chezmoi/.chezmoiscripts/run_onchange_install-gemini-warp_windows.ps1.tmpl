@@ -1,0 +1,17 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+
+# gemini CLI が利用可能か確認
+$geminiCmd = Get-Command gemini -ErrorAction SilentlyContinue
+if (-not $geminiCmd) {
+  Write-Host "[gemini-warp] Skip: gemini CLI not found."
+  return
+}
+
+Write-Host "[gemini-warp] Installing Warp extension..."
+& gemini extensions install https://github.com/warpdotdev/gemini-cli-warp 2>&1 | ForEach-Object { Write-Host $_ }
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "[gemini-warp] Warning: extension install returned non-zero (may already be installed)"
+}
+Write-Host "[gemini-warp] Done. Restart Gemini CLI for the extension to activate."
+{{ end -}}
