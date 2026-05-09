@@ -19,7 +19,7 @@ permissions:
 jobs:
   smoke-test:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -42,18 +42,31 @@ jobs:
           }
           winget --version
 
-      - name: Import packages from winget packages.json
+      - name: Install core CLI tools
         shell: pwsh
         run: |
-          winget import `
-            --import-file windows/winget/packages.json `
-            --ignore-unavailable `
-            --no-upgrade `
-            --accept-package-agreements `
-            --accept-source-agreements
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "winget import failed (exit $LASTEXITCODE)"
-            exit 1
+          # Install only the cross-platform core CLI tools that are smoke-tested below.
+          # GUI apps (Docker Desktop, Chrome, VS Code, etc.) are excluded to avoid
+          # GUI installer timeouts and UAC failures blocking CLI-only PRs.
+          $corePackages = @(
+            "twpayne.chezmoi",
+            "Git.Git",
+            "GitHub.cli",
+            "sharkdp.fd",
+            "BurntSushi.ripgrep.MSVC",
+            "jqlang.jq",
+            "eza-community.eza",
+            "ajeetdsouza.zoxide",
+            "junegunn.fzf"
+          )
+
+          foreach ($id in $corePackages) {
+            Write-Host "Installing $id..."
+            winget install --id $id --silent --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "winget install failed for $id (exit $LASTEXITCODE)"
+              exit 1
+            }
           }
 
       - name: Smoke test core tools
