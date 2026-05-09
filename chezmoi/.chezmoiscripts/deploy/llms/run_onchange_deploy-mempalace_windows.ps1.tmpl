@@ -1,3 +1,4 @@
+{{- if eq .chezmoi.os "windows" }}
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
@@ -21,3 +22,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[mempalace] Done"
+{{- end }}
