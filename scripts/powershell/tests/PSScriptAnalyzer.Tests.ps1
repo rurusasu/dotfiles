@@ -1,4 +1,4 @@
-﻿BeforeAll {
+BeforeAll {
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     User-scope setup phase (no elevation).
 

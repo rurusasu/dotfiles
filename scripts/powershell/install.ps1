@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Dotfiles setup orchestrator.
 

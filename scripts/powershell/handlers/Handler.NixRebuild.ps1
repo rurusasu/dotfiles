@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     NixOS-WSL の nixos-rebuild switch を実行するハンドラー
 

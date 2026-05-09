@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 Describe 'Integration Verification - Windows Environment' {
     Context 'GUI Apps Installation' {
