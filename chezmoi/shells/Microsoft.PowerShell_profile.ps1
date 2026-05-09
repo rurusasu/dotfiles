@@ -64,9 +64,8 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
 }
 
 # Interactive widgets (Alt+Q / Alt+D / Alt+T / Alt+R)
-if (Get-Module -ListAvailable -Name PSReadLine) {
-    Import-Module PSReadLine -ErrorAction SilentlyContinue
-}
+# PSReadLine is always available in PowerShell 7 — no ListAvailable scan needed
+Import-Module PSReadLine -ErrorAction SilentlyContinue
 
 if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)) {
     function Invoke-ZoxideInteractive {

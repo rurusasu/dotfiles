@@ -1,4 +1,5 @@
 add_newline = true
+scan_timeout = 30
 format = "$os$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character"
 
 [character]
