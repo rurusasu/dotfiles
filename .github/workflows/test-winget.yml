@@ -45,11 +45,15 @@ jobs:
             Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
             Repair-WinGetPackageManager -AllUsers
           }
-          # Validate winget is functional before proceeding
-          # Note: source update can return non-zero on transient CDN errors; treat as warning
+          # Validate winget is functional before proceeding.
+          # source update can return non-zero on transient CDN errors; treat as warning.
+          # Temporarily suspend Stop preference so native command stderr doesn't abort.
+          $ErrorActionPreference = 'Continue'
           winget source update
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning "winget source update returned $LASTEXITCODE — continuing anyway"
+          $sourceUpdateExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($sourceUpdateExit -ne 0) {
+            Write-Warning "winget source update returned $sourceUpdateExit — continuing anyway"
           }
           winget --version
 
@@ -87,9 +91,13 @@ jobs:
 
           $installFailed = @()
           foreach ($id in $corePackages) {
-            # Skip if already installed to keep the step idempotent
+            # Skip if already installed to keep the step idempotent.
+            # winget list may write to stderr on miss; use Continue to avoid false termination.
+            $ErrorActionPreference = 'Continue'
             $listed = winget list --exact --id $id --source winget 2>&1
-            if ($LASTEXITCODE -eq 0 -and ($listed | Select-String -Quiet $id)) {
+            $listExit = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($listExit -eq 0 -and ($listed | Select-String -Quiet $id)) {
               Write-Host "SKIP $id (already installed)"
               continue
             }
@@ -97,9 +105,14 @@ jobs:
             Write-Host "Installing $id..."
             try {
               Invoke-WithRetry {
+                # Use Continue inside the scriptblock: winget writes stderr progress
+                # that would trip Stop before we can check $LASTEXITCODE.
+                $ErrorActionPreference = 'Continue'
                 winget install --id $id --exact --source winget --silent `
                   --accept-package-agreements --accept-source-agreements --disable-interactivity
-                if ($LASTEXITCODE -ne 0) { throw "winget exit $LASTEXITCODE" }
+                $installExit = $LASTEXITCODE
+                $ErrorActionPreference = 'Stop'
+                if ($installExit -ne 0) { throw "winget exit $installExit" }
               }
             } catch {
               Write-Warning "winget install failed for $id: $_"
