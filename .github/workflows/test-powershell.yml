@@ -47,9 +47,13 @@ jobs:
 
           # Code coverage — dynamic discovery
           $sourceFiles = @(
-            Get-ChildItem ./lib      -Filter "*.ps1"          -ErrorAction SilentlyContinue
-            Get-ChildItem ./handlers -Filter "Handler.*.ps1"  -ErrorAction SilentlyContinue
+            Get-ChildItem ./lib      -Filter "*.ps1"         -ErrorAction SilentlyContinue
+            Get-ChildItem ./handlers -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
           ) | Select-Object -ExpandProperty FullName
+
+          if ($sourceFiles.Count -eq 0) {
+            Write-Warning "Coverage disabled: no source files found under ./lib or ./handlers (PWD: $PWD)"
+          }
 
           if ($sourceFiles.Count -gt 0) {
             $pesterConfig.CodeCoverage.Enabled = $true
@@ -100,4 +104,4 @@ jobs:
             scripts/powershell/test-results.xml
             scripts/powershell/coverage.xml
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: warn
