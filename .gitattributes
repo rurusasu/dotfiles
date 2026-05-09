@@ -1,10 +1,10 @@
 # デフォルトの動作: すべてのテキストファイルはLFに正規化
 * text=auto
 
-# PowerShellスクリプトはCRLFを使用
-*.ps1 text eol=crlf
-*.psm1 text eol=crlf
-*.psd1 text eol=crlf
+# PowerShellスクリプトはCRLFを使用、UTF-8 BOMなし
+*.ps1 text eol=crlf working-tree-encoding=UTF-8
+*.psm1 text eol=crlf working-tree-encoding=UTF-8
+*.psd1 text eol=crlf working-tree-encoding=UTF-8
 
 # Windowsバッチファイル/コマンドファイルはCRLFを使用
 *.bat text eol=crlf
