@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   smoke-test:
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
@@ -37,13 +37,6 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-
-          # On Windows runners winget lives in the AppX path which is not always on PATH.
-          # Add it unconditionally so Get-Command can find it without a fallback install.
-          $appxBin = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
-          if ($appxBin -notin ($env:PATH -split ';')) {
-            $env:PATH = "$appxBin;$env:PATH"
-          }
 
           # Ensure winget is available on the runner
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
