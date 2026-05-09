@@ -1,4 +1,4 @@
-﻿BeforeAll {
+BeforeAll {
     # ソースファイルの読み込み
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     pnpm グローバルパッケージ管理ハンドラー（Windows）
 

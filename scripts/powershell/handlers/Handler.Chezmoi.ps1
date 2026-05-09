@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     chezmoi による dotfiles 適用を管理するハンドラー
 

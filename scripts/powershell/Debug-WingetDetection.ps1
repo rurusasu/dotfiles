@@ -1,4 +1,4 @@
-﻿# IsPackageInstalled の昇格動作診断スクリプト
+# IsPackageInstalled の昇格動作診断スクリプト
 # 絶対パスに出力（昇格時も確実に書き込める）
 $outFile = "D:\ruru\dotfiles\winget_diag_result.txt"
 $results = @()
