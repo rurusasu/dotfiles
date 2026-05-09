@@ -41,4 +41,4 @@
 {{- end }}
 
 [alias]
-  gtr = "!f() { git worktree add \"$(git rev-parse --show-toplevel)/.worktrees/$1\" $1; }; f"
+  gtr = "!f() { [ -z \"$1\" ] && echo 'Usage: git gtr <branch>' && return 1; root=$(git worktree list --porcelain | grep '^worktree ' | head -1 | cut -d' ' -f2); git worktree add \"$root/.worktrees/$1\" \"$1\"; }; f"
