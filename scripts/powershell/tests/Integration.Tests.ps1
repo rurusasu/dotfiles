@@ -60,12 +60,16 @@ Describe 'Integration Verification - Windows Environment' {
         It "should have MoralerspaceHWJPDOC font installed" {
             Add-Type -AssemblyName System.Drawing
             $fonts = [System.Drawing.Text.InstalledFontCollection]::new()
-            $installedNames = $fonts.Families | ForEach-Object { $_.Name }
-            $found = $installedNames | Where-Object { $_ -like "*Moralerspace*HWJPDOC*" -or $_ -like "MoralerspaceHWJPDOC*" }
-            if (-not $found) {
-                throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
+            try {
+                $installedNames = $fonts.Families | ForEach-Object { $_.Name }
+                $found = @($installedNames | Where-Object { $_ -like "*Moralerspace*HWJPDOC*" -or $_ -like "MoralerspaceHWJPDOC*" })
+                if ($found.Count -eq 0) {
+                    throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
+                }
+                Write-Host "確認完了: フォント '$($found | Select-Object -First 1)' がインストール済み"
+            } finally {
+                $fonts.Dispose()
             }
-            Write-Host "確認完了: フォント '$($found[0])' がインストール済み"
         }
     }
 }
