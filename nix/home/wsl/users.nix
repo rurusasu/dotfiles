@@ -19,10 +19,14 @@
       # なり非対話シェル経由 (`task push` 等) では無進捗でブロックする
       # （chezmoi が WSL 内まで適用されないためここで宣言的に補う）。
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
-      # nixpkgs installs the Warp CLI binary as "warp-terminal"; alias to
-      # match the "warp" name used on Windows. WSL-only because Windows
-      # already has warp.exe in PATH.
-      home.shellAliases.warp = "warp-terminal";
+      programs.zsh.shellAliases = {
+        # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming
+        warp = "warp-terminal";
+        # NixOS rebuild shortcuts
+        nrs = "sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
+        nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
+        nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
+      };
 
       programs.git = {
         enable = true;
