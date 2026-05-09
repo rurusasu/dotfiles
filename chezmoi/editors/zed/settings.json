@@ -28,7 +28,7 @@
   "theme": "GitHub Dark Dimmed",
   "ui_font_size": 14,
   "buffer_font_size": 12,
-  "buffer_font_family": "Consolas",
+  "buffer_font_family": "Moralerspace",
   // Vim mode
   "vim_mode": false,
   // Editor settings
@@ -66,7 +66,7 @@
     "shell": {
       "program": "pwsh"
     },
-    "font_size": 13,
+    "font_size": 12,
     "line_height": "comfortable",
     "copy_on_select": false,
     "vim_mode": false

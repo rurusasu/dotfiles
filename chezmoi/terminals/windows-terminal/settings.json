@@ -163,7 +163,7 @@
   "profiles": {
     "defaults": {
       "font": {
-        "face": "Consolas",
+        "face": "Moralerspace",
         "size": 12
       },
       "useAcrylic": true,
