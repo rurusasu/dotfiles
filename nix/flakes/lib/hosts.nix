@@ -14,7 +14,7 @@
       modules = [
         { nixpkgs.hostPlatform = system; }
         hostPath
-        (_: { nixpkgs.overlays = overlays; })
+        { nixpkgs.overlays = overlays; }
         ../../modules/host
       ]
       ++ (
