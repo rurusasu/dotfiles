@@ -30,9 +30,15 @@ jobs:
           # Ensure winget is available on the runner
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Microsoft.WinGet.Client..."
-            Install-PackageProvider -Name NuGet -Force | Out-Null
-            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
+            Install-PackageProvider -Name NuGet -Force
+            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
             Repair-WinGetPackageManager -AllUsers
+          }
+          # Validate winget is functional before proceeding
+          winget source update
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "winget source update failed (exit $LASTEXITCODE)"
+            exit 1
           }
           winget --version
 
@@ -45,35 +51,46 @@ jobs:
             --no-upgrade `
             --accept-package-agreements `
             --accept-source-agreements
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "winget import failed (exit $LASTEXITCODE)"
+            exit 1
+          }
 
       - name: Smoke test core tools
         shell: pwsh
         run: |
-          # Refresh PATH to include newly installed tools
-          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                      [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          # Merge registry paths with current process PATH so newly installed
+          # tools are discoverable while preserving runner-injected entries
+          $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+          $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          $env:PATH = "$machinePath;$userPath;$env:PATH"
 
           $tools = @(
-            @{ cmd = "chezmoi";  args = "--version" },
-            @{ cmd = "git";      args = "--version" },
-            @{ cmd = "gh";       args = "--version" },
-            @{ cmd = "fd";       args = "--version" },
-            @{ cmd = "rg";       args = "--version" },
-            @{ cmd = "jq";       args = "--version" },
-            @{ cmd = "eza";      args = "--version" },
-            @{ cmd = "zoxide";   args = "--version" },
-            @{ cmd = "fzf";      args = "--version" }
+            @{ cmd = "chezmoi"; args = "--version" },
+            @{ cmd = "git";     args = "--version" },
+            @{ cmd = "gh";      args = "--version" },
+            @{ cmd = "fd";      args = "--version" },
+            @{ cmd = "rg";      args = "--version" },
+            @{ cmd = "jq";      args = "--version" },
+            @{ cmd = "eza";     args = "--version" },
+            @{ cmd = "zoxide";  args = "--version" },
+            @{ cmd = "fzf";     args = "--version" }
           )
 
           Write-Host "=== Smoke testing core tools ==="
           $failed = @()
           foreach ($tool in $tools) {
-            try {
-              $output = & $tool.cmd $tool.args 2>&1
-              Write-Host "OK  $($tool.cmd): $output"
-            } catch {
-              Write-Host "FAIL $($tool.cmd): $_" -ForegroundColor Red
+            if (-not (Get-Command $tool.cmd -ErrorAction SilentlyContinue)) {
+              Write-Host "FAIL $($tool.cmd): not found in PATH" -ForegroundColor Red
               $failed += $tool.cmd
+              continue
+            }
+            $output = & $tool.cmd $tool.args 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "FAIL $($tool.cmd): exit code $LASTEXITCODE" -ForegroundColor Red
+              $failed += $tool.cmd
+            } else {
+              Write-Host "OK  $($tool.cmd): $output"
             }
           }
 

@@ -43,17 +43,24 @@ jobs:
         run: |
           nix shell .#default --command bash -c '
             set -euo pipefail
+            check() {
+              local name=$1; shift
+              local out
+              out=$("$name" "$@" 2>&1) || { echo "FAIL $name (exit $?)"; exit 1; }
+              echo "OK  $name: $out"
+            }
             echo "=== Smoke testing core tools ==="
-            chezmoi --version
-            git --version
-            gh --version
-            fd --version
-            rg --version
-            bat --version
-            jq --version
-            eza --version
-            zoxide --version
-            fzf --version
+            check chezmoi --version
+            check git --version
+            check gh --version
+            check fd --version
+            check rg --version
+            check bat --version
+            check jq --version
+            check eza --version
+            check zoxide --version
+            check fzf --version
+            check unzip -v
             echo "=== All core tools OK ==="
           '
 

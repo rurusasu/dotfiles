@@ -272,14 +272,14 @@ flowchart TD
     PR["Pull Request"]
 
     PR -->|"nix/** flake.*"| NX
-    PR -->|"windows/winget/** nix/packages/sets.nix"| WG
+    PR -->|"windows/winget/packages.json\nnix/packages/sets.nix"| WG
     PR -->|"nix/packages/** windows/winget/**"| CO
     PR -->|"scripts/powershell/**"| PS
 
     subgraph NX["test-nix.yml (ubuntu-latest)"]
         N1["① nix flake check\n評価エラー検知"]
         N2["② nix build .#default\n実ビルド"]
-        N3["③ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf"]
+        N3["③ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf unzip"]
         N4["④ nix fmt\nフォーマット確認"]
         N1 --> N2 --> N3 --> N4
     end
@@ -305,12 +305,12 @@ flowchart TD
 
 ### ワークフロー詳細
 
-| Workflow               | ランナー       | 何を保証するか                                       | トリガー                                     |
-| ---------------------- | -------------- | ---------------------------------------------------- | -------------------------------------------- |
-| `test-nix.yml`         | ubuntu-latest  | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                          |
-| `test-winget.yml`      | windows-latest | winget パッケージがインストールでき、ツールが動く    | `windows/winget/**`, `nix/packages/sets.nix` |
-| `test-consistency.yml` | ubuntu-latest  | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`       |
-| `test-powershell.yml`  | windows-latest | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                      |
+| Workflow               | ランナー       | 何を保証するか                                       | トリガー                                                |
+| ---------------------- | -------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| `test-nix.yml`         | ubuntu-latest  | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                                     |
+| `test-winget.yml`      | windows-latest | winget パッケージがインストールでき、ツールが動く    | `windows/winget/packages.json`, `nix/packages/sets.nix` |
+| `test-consistency.yml` | ubuntu-latest  | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`                  |
+| `test-powershell.yml`  | windows-latest | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                                 |
 
 ### テストレベルの判断基準
 
@@ -325,20 +325,20 @@ flowchart TD
 
 ### 検証ツール一覧
 
-| ツール  | Nix smoke test | winget smoke test | 備考           |
-| ------- | :------------: | :---------------: | -------------- |
-| chezmoi |       ✅       |        ✅         |                |
-| git     |       ✅       |        ✅         |                |
-| gh      |       ✅       |        ✅         |                |
-| fd      |       ✅       |        ✅         |                |
-| rg      |       ✅       |        ✅         | ripgrep        |
-| bat     |       ✅       |        ❌         | winget ID なし |
-| jq      |       ✅       |        ✅         |                |
-| eza     |       ✅       |        ✅         |                |
-| zoxide  |       ✅       |        ✅         |                |
-| fzf     |       ✅       |        ✅         |                |
-| unzip   |       ✅       |        ❌         | winget ID なし |
-| p7zip   |       ✅       |        ❌         | winget ID なし |
+| ツール  | Nix smoke test | winget smoke test | 備考                             |
+| ------- | :------------: | :---------------: | -------------------------------- |
+| chezmoi |       ✅       |        ✅         |                                  |
+| git     |       ✅       |        ✅         |                                  |
+| gh      |       ✅       |        ✅         |                                  |
+| fd      |       ✅       |        ✅         |                                  |
+| rg      |       ✅       |        ✅         | ripgrep                          |
+| bat     |       ✅       |        ❌         | winget ID なし                   |
+| jq      |       ✅       |        ✅         |                                  |
+| eza     |       ✅       |        ✅         |                                  |
+| zoxide  |       ✅       |        ✅         |                                  |
+| fzf     |       ✅       |        ✅         |                                  |
+| unzip   |       ✅       |        ❌         | winget ID なし                   |
+| p7zip   |       ❌       |        ❌         | winget ID なし、CLI 動作が不安定 |
 
 ### CI で意図的に実行しないもの
 
