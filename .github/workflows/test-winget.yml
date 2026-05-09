@@ -2,6 +2,12 @@ name: Windows Environment Smoke Test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "windows/winget/packages.json"
+      - "nix/packages/sets.nix"
+      - ".github/workflows/test-winget.yml"
   pull_request:
     branches: [main]
     paths:
@@ -18,15 +24,20 @@ permissions:
 
 jobs:
   smoke-test:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Bootstrap winget
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
           # Ensure winget is available on the runner
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Microsoft.WinGet.Client..."
@@ -45,6 +56,20 @@ jobs:
       - name: Install core CLI tools
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Invoke-WithRetry {
+            param([scriptblock]$Script, [int]$Max = 3)
+            for ($i = 1; $i -le $Max; $i++) {
+              try { & $Script; return } catch {
+                if ($i -eq $Max) { throw }
+                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
+                Start-Sleep -Seconds ($i * 5)
+              }
+            }
+          }
+
           # Install only the cross-platform core CLI tools that are smoke-tested below.
           # GUI apps (Docker Desktop, Chrome, VS Code, etc.) are excluded to avoid
           # GUI installer timeouts and UAC failures blocking CLI-only PRs.
@@ -62,10 +87,22 @@ jobs:
 
           $installFailed = @()
           foreach ($id in $corePackages) {
+            # Skip if already installed to keep the step idempotent
+            $listed = winget list --exact --id $id --source winget 2>&1
+            if ($LASTEXITCODE -eq 0 -and ($listed | Select-String -Quiet $id)) {
+              Write-Host "SKIP $id (already installed)"
+              continue
+            }
+
             Write-Host "Installing $id..."
-            winget install --id $id --source winget --silent --accept-package-agreements --accept-source-agreements
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "winget install failed for $id (exit $LASTEXITCODE)"
+            try {
+              Invoke-WithRetry {
+                winget install --id $id --exact --source winget --silent `
+                  --accept-package-agreements --accept-source-agreements --disable-interactivity
+                if ($LASTEXITCODE -ne 0) { throw "winget exit $LASTEXITCODE" }
+              }
+            } catch {
+              Write-Warning "winget install failed for $id: $_"
               $installFailed += $id
             }
           }

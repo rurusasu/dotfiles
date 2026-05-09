@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "nix/packages/**"
+      - "nix/flakes/**"
       - "nix/home/**"
       - "flake.nix"
       - "flake.lock"
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - "nix/packages/**"
+      - "nix/flakes/**"
       - "nix/home/**"
       - "flake.nix"
       - "flake.lock"
@@ -32,11 +34,13 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
@@ -45,6 +49,7 @@ jobs:
         run: nix build .#winget-export -o /tmp/winget-export
 
       - name: Verify winget packages.json is in sync
+        shell: bash
         run: |
           jq -S '[.Sources[] | {name: .SourceDetails.Name, ids: ([.Packages[].PackageIdentifier] | sort)}]' \
             /tmp/winget-export/winget/packages.json > /tmp/nix-ids.json
@@ -53,4 +58,5 @@ jobs:
           diff /tmp/nix-ids.json /tmp/repo-ids.json
 
       - name: Verify pnpm packages.json is in sync
+        shell: bash
         run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
