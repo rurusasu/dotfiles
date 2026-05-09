@@ -65,14 +65,14 @@ in
       }
       add-zsh-hook precmd __emit_osc7_cwd
 
-      # Alt+Z: zoxide interactive (history-based directory jump)
+      # Alt+q: zoxide interactive (history-based directory jump)
       __zoxide_zi_widget() {
         local result
         result="$(zoxide query -i)" && cd "$result"
         zle reset-prompt
       }
       zle -N __zoxide_zi_widget
-      bindkey '^[z' __zoxide_zi_widget
+      bindkey '^[q' __zoxide_zi_widget
 
       # Alt+D: fzf directory search and cd
       __fzf_cd_widget() {
@@ -120,10 +120,6 @@ in
   programs.zoxide = {
     enable = true;
     enableZshIntegration = true;
-    options = [
-      "--cmd"
-      "cd"
-    ];
   };
 
   # ── Environment variables ────────────────────────────────────────────────
