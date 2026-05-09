@@ -29,6 +29,12 @@
 - Windows Terminal
   - `Ctrl+Shift+H/J/K/L`: ペイン移動
   - `Ctrl+Alt+H/V/X/W`: 分割/close/ズーム
+- Warp
+  - `Ctrl+Shift+H/J/K/L`: ペイン移動
+  - `Ctrl+Alt+H/V`: 分割
+  - `Ctrl+Space`: AI natural language search（nvim/WezTerm leader に合わせた統一キー）
+  - `Ctrl+Enter`: AI agent へ送信（Warp ハードコード、変更不可）
+  - `Ctrl+Y`: AI agent 会話を継続（Warp ハードコード、変更不可）
 
 ### Editors
 

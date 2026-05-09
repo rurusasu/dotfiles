@@ -20,3 +20,6 @@ pane_group:navigate_right: ctrl-shift-L
 # Tab navigation — matches Windows Terminal (Ctrl+Tab / Ctrl+Shift+Tab)
 workspace:activate_next_tab: ctrl-tab
 workspace:activate_prev_tab: ctrl-shift-tab
+
+# AI natural language search — matches WezTerm/nvim leader (Ctrl+Space / Space)
+input:toggle_natural_language_command_search: ctrl-space
