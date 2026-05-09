@@ -46,11 +46,14 @@ tasks:
     desc: Sync skills, format, lint, and commit (via WSL)
     vars:
       MSG: '{{.CLI_ARGS | default "update"}}'
+    env:
+      GIT_COMMIT_MSG: "{{.MSG}}"
+      WSLENV: "GIT_COMMIT_MSG"
     cmds:
       - task: skills:sync
       - task: fmt
       - task: lint
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && git commit -m '{{.MSG}}'"
+      - wsl -d {{.DISTRO}} -- bash -lc 'cd {{.DOTFILES_PATH}} && git add -A && git commit -m "$GIT_COMMIT_MSG"'
 
   push:
     desc: Push to remote (via WSL)
