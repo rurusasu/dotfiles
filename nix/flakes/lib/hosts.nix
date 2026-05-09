@@ -10,11 +10,11 @@
       overlays ? [ ],
     }:
     inputs.nixpkgs.lib.nixosSystem {
-      inherit system;
       specialArgs = { inherit inputs siteLib system; };
       modules = [
+        { nixpkgs.hostPlatform = system; }
         hostPath
-        (_: { nixpkgs.overlays = overlays; })
+        { nixpkgs.overlays = overlays; }
         ../../modules/host
       ]
       ++ (
