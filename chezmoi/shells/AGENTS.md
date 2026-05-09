@@ -10,6 +10,7 @@
 1. 共通機能は bash/zsh/pwsh で挙動を揃える。
 2. 秘密情報は直接書かず `~/.config/shell/secret.*` を source する。
 3. alias 追加は既存キーと衝突しないことを確認する。
+4. NixOS/WSL 固有の alias は `nix/home/wsl/users.nix` の `home.shellAliases` に書く（chezmoi shell ファイルへの重複記述を避けるため）。
 
 ## 反映
 

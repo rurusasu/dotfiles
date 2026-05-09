@@ -6,10 +6,6 @@ alias nrt="sudo nixos-rebuild test --flake ~/.dotfiles --impure"
 alias nrb="sudo nixos-rebuild boot --flake ~/.dotfiles --impure"
 alias find="fd"
 alias grep="rg"
-# warp-terminal is installed as "warp-terminal" on NixOS; alias to match Windows naming
-if command -v warp-terminal >/dev/null 2>&1 && ! command -v warp >/dev/null 2>&1; then
-  alias warp="warp-terminal"
-fi
 # Kubernetes aliases & completion
 if command -v kubectl >/dev/null 2>&1; then
   source <(kubectl completion zsh)
