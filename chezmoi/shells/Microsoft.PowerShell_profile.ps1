@@ -1,5 +1,9 @@
 # PowerShell profile managed by chezmoi
 
+# VS Code Extension Console skips heavy init (starship/zoxide/PSReadLine) to avoid
+# session startup timeout. Basic PowerShell functionality (syntax, completion) still works.
+if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }
+
 # Rebuild PATH from registry to ensure User PATH is available in elevated sessions.
 # Windows Terminal with "elevate: true" may not inherit User-scope PATH entries.
 $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
