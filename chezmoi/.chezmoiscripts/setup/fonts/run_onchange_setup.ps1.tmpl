@@ -1,0 +1,60 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Install MoralerspaceHWJPDOC font for Windows
+# hash: MoralerspaceHWJPDOC v2.0.0
+
+$ErrorActionPreference = "Stop"
+
+$FontVersion  = "v2.0.0"
+$FontName     = "MoralerspaceHWJPDOC"
+$DownloadUrl  = "https://github.com/yuru7/moralerspace/releases/download/$FontVersion/${FontName}_${FontVersion}.zip"
+$TempDir      = Join-Path $env:TEMP "chezmoi-fonts\$FontName"
+$FontsDir     = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
+$RegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+
+function Test-FontInstalled {
+    Add-Type -AssemblyName System.Drawing
+    $installed = [System.Drawing.Text.InstalledFontCollection]::new()
+    try {
+        return ($installed.Families | Where-Object { $_.Name -like "${FontName}*" -or $_.Name -like "*Moralerspace*HWJPDOC*" }).Count -gt 0
+    } finally {
+        $installed.Dispose()
+    }
+}
+
+if (Test-FontInstalled) {
+    Write-Host "$FontName is already installed, skipping."
+    exit 0
+}
+
+Write-Host "Installing $FontName $FontVersion..."
+
+# ダウンロード
+if (-not (Test-Path $TempDir)) {
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+}
+$ZipPath = Join-Path $TempDir "${FontName}_${FontVersion}.zip"
+Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
+
+# 展開
+Expand-Archive -LiteralPath $ZipPath -DestinationPath $TempDir -Force
+
+# フォントインストール（ユーザーフォント: 管理者権限不要）
+if (-not (Test-Path $FontsDir)) {
+    New-Item -ItemType Directory -Path $FontsDir -Force | Out-Null
+}
+
+Get-ChildItem -Path $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
+    $destPath = Join-Path $FontsDir $_.Name
+    Copy-Item -LiteralPath $_.FullName -Destination $destPath -Force
+
+    # レジストリ登録
+    $regName = "$($_.BaseName) (TrueType)"
+    Set-ItemProperty -Path $RegistryPath -Name $regName -Value $_.Name -Force
+    Write-Host "Installed: $($_.Name)"
+}
+
+# 後片付け
+Remove-Item -LiteralPath $TempDir -Recurse -Force
+
+Write-Host "$FontName $FontVersion installation complete."
+{{ end -}}
