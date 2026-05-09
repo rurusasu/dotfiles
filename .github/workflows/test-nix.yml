@@ -34,10 +34,28 @@ jobs:
       - name: Check flake evaluation
         run: nix flake check --no-build
 
-      - name: Build package sets (dry-run)
+      - name: Build package sets
         run: |
-          nix build .#minimal --dry-run
-          nix build .#default --dry-run
+          nix build .#minimal
+          nix build .#default
+
+      - name: Smoke test core tools
+        run: |
+          nix shell .#default --command bash -c '
+            set -euo pipefail
+            echo "=== Smoke testing core tools ==="
+            chezmoi --version
+            git --version
+            gh --version
+            fd --version
+            rg --version
+            bat --version
+            jq --version
+            eza --version
+            zoxide --version
+            fzf --version
+            echo "=== All core tools OK ==="
+          '
 
       - name: Check formatting
         run: nix fmt -- --fail-on-change

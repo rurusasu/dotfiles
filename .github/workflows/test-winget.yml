@@ -1,0 +1,84 @@
+name: Windows Environment Smoke Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "windows/winget/packages.json"
+      - "nix/packages/sets.nix"
+      - ".github/workflows/test-winget.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Bootstrap winget
+        shell: pwsh
+        run: |
+          # Ensure winget is available on the runner
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Microsoft.WinGet.Client..."
+            Install-PackageProvider -Name NuGet -Force | Out-Null
+            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
+            Repair-WinGetPackageManager -AllUsers
+          }
+          winget --version
+
+      - name: Import packages from winget packages.json
+        shell: pwsh
+        run: |
+          winget import `
+            --import-file windows/winget/packages.json `
+            --ignore-unavailable `
+            --no-upgrade `
+            --accept-package-agreements `
+            --accept-source-agreements
+
+      - name: Smoke test core tools
+        shell: pwsh
+        run: |
+          # Refresh PATH to include newly installed tools
+          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                      [System.Environment]::GetEnvironmentVariable("PATH", "User")
+
+          $tools = @(
+            @{ cmd = "chezmoi";  args = "--version" },
+            @{ cmd = "git";      args = "--version" },
+            @{ cmd = "gh";       args = "--version" },
+            @{ cmd = "fd";       args = "--version" },
+            @{ cmd = "rg";       args = "--version" },
+            @{ cmd = "jq";       args = "--version" },
+            @{ cmd = "eza";      args = "--version" },
+            @{ cmd = "zoxide";   args = "--version" },
+            @{ cmd = "fzf";      args = "--version" }
+          )
+
+          Write-Host "=== Smoke testing core tools ==="
+          $failed = @()
+          foreach ($tool in $tools) {
+            try {
+              $output = & $tool.cmd $tool.args 2>&1
+              Write-Host "OK  $($tool.cmd): $output"
+            } catch {
+              Write-Host "FAIL $($tool.cmd): $_" -ForegroundColor Red
+              $failed += $tool.cmd
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Error "Failed tools: $($failed -join ', ')"
+            exit 1
+          }
+          Write-Host "=== All core tools OK ==="
