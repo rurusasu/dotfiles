@@ -55,4 +55,17 @@ Describe 'Integration Verification - Windows Environment' {
             Write-Host "NixOS: 確認完了 '$_' 場所: '$output'"
         }
     }
+
+    Context 'Font Installation' {
+        It "should have MoralerspaceHWJPDOC font installed" {
+            Add-Type -AssemblyName System.Drawing
+            $fonts = [System.Drawing.Text.InstalledFontCollection]::new()
+            $installedNames = $fonts.Families | ForEach-Object { $_.Name }
+            $found = $installedNames | Where-Object { $_ -like "*Moralerspace*HWJPDOC*" -or $_ -like "MoralerspaceHWJPDOC*" }
+            if (-not $found) {
+                throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
+            }
+            Write-Host "確認完了: フォント '$($found[0])' がインストール済み"
+        }
+    }
 }
