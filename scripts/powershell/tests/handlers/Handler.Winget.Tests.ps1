@@ -90,8 +90,8 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "winget" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" },
-                                [PSCustomObject]@{ PackageIdentifier = "twpayne.chezmoi" }
+                                [PSCustomObject]@{ PackageIdentifier = "Git.Git"; verifyCommand = [PSCustomObject]@{ command = "git"; args = @("--version") } },
+                                [PSCustomObject]@{ PackageIdentifier = "twpayne.chezmoi"; verifyCommand = [PSCustomObject]@{ command = "chezmoi"; args = @("--version") } }
                             )
                         }
                     )
@@ -105,6 +105,7 @@ Describe 'WingetHandler' {
                     $global:LASTEXITCODE = 0
                 }
             }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
@@ -229,7 +230,7 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "一部失敗"
+            $result.Message | Should -Match "1 個失敗"
         }
     }
 
@@ -594,6 +595,75 @@ Describe 'WingetHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $false
             $result.Message | Should -Match "winget error"
+        }
+    }
+
+    Context 'Apply - import mode: verifyCommand fails after install' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Broken.Package"
+                                    verifyCommand     = [PSCustomObject]@{ command = "broken-cmd"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 1; throw "command failed" }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should report verify failed count' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証失敗"
+            $result.Message | Should -Not -Match "1 個インストール"
+        }
+    }
+
+    Context 'Apply - import mode: package without verifyCommand' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "GUI.App" }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should count as installed without running verify' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-VerifyCommand -Times 0
         }
     }
 
