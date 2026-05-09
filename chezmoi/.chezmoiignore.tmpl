@@ -15,12 +15,12 @@ README.md
 
 # OS-specific scripts (patterns match target names, not source names)
 {{ if ne .chezmoi.os "darwin" }}
-.chezmoiscripts/*_darwin.sh
+.chezmoiscripts/**/*_darwin.sh
 {{ end }}
 {{ if ne .chezmoi.os "linux" }}
-.chezmoiscripts/*_linux.sh
+.chezmoiscripts/**/*_linux.sh
 {{ end }}
 {{ if ne .chezmoi.os "windows" }}
-.chezmoiscripts/*_windows.ps1
+.chezmoiscripts/**/*_windows.ps1
 {{ end }}
 # OpenClaw は openclaw-k8s リポジトリに移行済み

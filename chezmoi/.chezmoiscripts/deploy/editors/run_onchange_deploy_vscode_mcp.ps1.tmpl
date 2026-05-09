@@ -1,3 +1,4 @@
+{{- if eq .chezmoi.os "windows" }}
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
 $userDir = Join-Path $env:APPDATA "Code\User"
@@ -63,3 +64,4 @@ if (Test-Path $settingsPath) {
         Write-Host "[vscode-mcp] Removed deprecated 'mcp' block from settings.json"
     }
 }
+{{- end }}
