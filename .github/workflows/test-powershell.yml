@@ -2,6 +2,11 @@ name: PowerShell Tests
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/powershell/**"
+      - ".github/workflows/test-powershell.yml"
   pull_request:
     branches: [main]
     paths:
@@ -22,11 +27,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install Pester
+
+      - name: Install PowerShell modules
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module -Name Pester           -RequiredVersion 5.6.1  -Scope CurrentUser -Force
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
 
       - name: Run tests
         shell: pwsh
@@ -38,16 +45,11 @@ jobs:
           $pesterConfig.Run.PassThru = $true
           $pesterConfig.Output.Verbosity = "Detailed"
 
-          # Code coverage
+          # Code coverage — dynamic discovery
           $sourceFiles = @(
-            "./lib/SetupHandler.ps1",
-            "./lib/Invoke-ExternalCommand.ps1",
-            "./handlers/Handler.WslConfig.ps1",
-            "./handlers/Handler.Docker.ps1",
-            "./handlers/Handler.VscodeServer.ps1",
-            "./handlers/Handler.Chezmoi.ps1",
-            "./handlers/Handler.ClaudeCode.ps1"
-          ) | Where-Object { Test-Path $_ }
+            Get-ChildItem ./lib      -Filter "*.ps1"          -ErrorAction SilentlyContinue
+            Get-ChildItem ./handlers -Filter "Handler.*.ps1"  -ErrorAction SilentlyContinue
+          ) | Select-Object -ExpandProperty FullName
 
           if ($sourceFiles.Count -gt 0) {
             $pesterConfig.CodeCoverage.Enabled = $true
@@ -82,13 +84,12 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
-        if: always()
+        if: always() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           files: scripts/powershell/coverage.xml
           flags: powershell
           name: powershell-coverage
           fail_ci_if_error: false
-          verbose: true
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -99,3 +100,4 @@ jobs:
             scripts/powershell/test-results.xml
             scripts/powershell/coverage.xml
           retention-days: 30
+          if-no-files-found: ignore
