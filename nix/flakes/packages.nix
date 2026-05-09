@@ -57,6 +57,10 @@
           name = "dotfiles-editors";
           paths = unfreeSets.editors;
         };
+        fonts = pkgs.buildEnv {
+          name = "dotfiles-fonts";
+          paths = sets.fonts;
+        };
 
         # Windows package export
         winget-export = import ../packages/winget.nix { inherit pkgs lib; };
