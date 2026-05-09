@@ -11,7 +11,7 @@
     { pkgs, lib, ... }:
     let
       unfreePkgs = import pkgs.path {
-        inherit (pkgs) system;
+        system = pkgs.stdenv.hostPlatform.system;
         config.allowUnfree = true;
       };
       sets = import ../packages/sets.nix { inherit pkgs lib; };
