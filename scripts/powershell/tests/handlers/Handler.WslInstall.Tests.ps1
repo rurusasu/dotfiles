@@ -66,7 +66,7 @@ Describe 'WslInstallHandler' {
 
         It 'should run wsl --install --no-distribution' {
             $script:wslInstallCalled = $false
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $script:wslInstallCalled = $true
                 $global:LASTEXITCODE = 0
                 return "Installing WSL..."
@@ -80,12 +80,12 @@ Describe 'WslInstallHandler' {
         }
 
         It 'should fallback to dism when wsl --install fails' {
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
             $script:dismCalls = @()
-            Mock dism.exe {
+            Mock Invoke-Dism {
                 $script:dismCalls += ($args -join " ")
                 $global:LASTEXITCODE = 0
                 return "The operation completed successfully."
@@ -99,11 +99,11 @@ Describe 'WslInstallHandler' {
         }
 
         It 'should return failure when both wsl --install and dism fail' {
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
-            Mock dism.exe {
+            Mock Invoke-Dism {
                 $global:LASTEXITCODE = 1
                 return "Error"
             }

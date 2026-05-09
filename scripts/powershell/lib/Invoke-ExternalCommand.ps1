@@ -34,6 +34,25 @@ function Invoke-Wsl {
 
 <#
 .SYNOPSIS
+    dism.exe コマンドを実行する
+.PARAMETER Arguments
+    dism.exe に渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-Dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+#>
+function Invoke-Dism {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$Arguments
+    )
+    & dism.exe @Arguments
+}
+
+<#
+.SYNOPSIS
     chezmoi コマンドを実行する
 .PARAMETER Arguments
     chezmoi に渡す引数

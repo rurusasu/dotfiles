@@ -54,7 +54,7 @@ class WslInstallHandler : SetupHandlerBase {
 
             # 方法1: wsl --install --no-distribution
             $this.Log("wsl --install --no-distribution を実行中...")
-            $output = & wsl --install --no-distribution 2>&1
+            $output = Invoke-Wsl --install --no-distribution 2>&1
             $output | ForEach-Object { $this.Log("  $_", "Gray") }
 
             if ($LASTEXITCODE -eq 0) {
@@ -94,7 +94,7 @@ class WslInstallHandler : SetupHandlerBase {
 
         foreach ($feature in $features) {
             $this.Log("dism.exe: $feature を有効化中...")
-            $output = & dism.exe /online /enable-feature /featurename:$feature /all /norestart 2>&1
+            $output = Invoke-Dism /online /enable-feature /featurename:$feature /all /norestart 2>&1
             $output | ForEach-Object { $this.Log("  $_", "Gray") }
 
             if ($LASTEXITCODE -ne 0) {
