@@ -470,7 +470,12 @@ Describe 'PnpmHandler' {
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
-                return @{ globalPackages = @("@google/gemini-cli", "typescript") }
+                return @{
+                    globalPackages = @(
+                        @{ name = "@google/gemini-cli"; verifyCommand = @{ command = "gemini"; args = @("--version") } },
+                        @{ name = "typescript" }
+                    )
+                }
             }
             Mock Invoke-Pnpm {
                 param($Arguments)
@@ -504,7 +509,12 @@ Describe 'PnpmHandler' {
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
-                return @{ globalPackages = @("pkg-a", "pkg-b") }
+                return @{
+                    globalPackages = @(
+                        @{ name = "pkg-a" },
+                        @{ name = "pkg-b" }
+                    )
+                }
             }
             Mock Invoke-Pnpm {
                 param($Arguments)
@@ -513,6 +523,7 @@ Describe 'PnpmHandler' {
                 if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
                 $global:LASTEXITCODE = 0; return ""
             }
+            Mock Invoke-VerifyCommand { }
             # root 失敗 → EnsureGeminiCommandShim 0-arg でリトライするが root も失敗して早期 return
             # TestGeminiCommand (Invoke-Gemini) には到達しないが明示的にモックして安全に
             Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
@@ -546,7 +557,10 @@ Describe 'PnpmHandler' {
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
-                    globalPackages = @("@google/gemini-cli", "typescript")
+                    globalPackages = @(
+                        @{ name = "@google/gemini-cli"; verifyCommand = @{ command = "gemini"; args = @("--version") } },
+                        @{ name = "typescript" }
+                    )
                 }
             }
             Mock Invoke-Pnpm {
@@ -565,6 +579,7 @@ Describe 'PnpmHandler' {
             Mock Test-Path { return $false } -ParameterFilter {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -625,7 +640,10 @@ Describe 'PnpmHandler' {
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
                 return @{
-                    globalPackages = @("good-pkg", "bad-pkg")
+                    globalPackages = @(
+                        @{ name = "good-pkg" },
+                        @{ name = "bad-pkg" }
+                    )
                 }
             }
             $script:installCount = 0
@@ -654,6 +672,7 @@ Describe 'PnpmHandler' {
             Mock Test-Path { return $false } -ParameterFilter {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
+            Mock Invoke-VerifyCommand { }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -665,7 +684,7 @@ Describe 'PnpmHandler' {
         It 'should report mixed success/failure counts' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個成功"
+            $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
     }
@@ -813,6 +832,142 @@ Describe 'PnpmHandler' {
             # 空ルートでは Set-UserEnvironmentPath も Invoke-Gemini も呼ばれない
             Should -Invoke Set-UserEnvironmentPath -Times 0
             Should -Invoke Invoke-Gemini -Times 0
+        }
+    }
+
+    Context 'Apply - verifyCommand succeeds' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "pkg-with-verify"; verifyCommand = @{ command = "pkg-cmd"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should count as installed when verify succeeds' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            $result.Message | Should -Not -Match "検証失敗"
+        }
+
+        It 'should call Invoke-VerifyCommand with correct args' {
+            $handler.Apply($ctx)
+            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
+                $Command -eq "pkg-cmd" -and $Arguments -contains "--version"
+            }
+        }
+    }
+
+    Context 'Apply - verifyCommand fails' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "native-pkg"; verifyCommand = @{ command = "native-cmd"; args = @("status") } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 1; throw "binding not found" }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should count as verify failed' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証失敗"
+            $result.Message | Should -Not -Match "1 個インストール"
+        }
+    }
+
+    Context 'Apply - package without verifyCommand' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "simple-pkg" }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand { }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should count as installed without running verify' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-VerifyCommand -Times 0
         }
     }
 }

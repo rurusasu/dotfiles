@@ -1,5 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "pnpm global packages to install on Windows",
-  "globalPackages": ["@tobilu/qmd", "@google/gemini-cli"]
+  "globalPackages": [
+    {
+      "name": "@tobilu/qmd",
+      "verifyCommand": {
+        "args": ["status"],
+        "command": "qmd"
+      }
+    },
+    {
+      "name": "@google/gemini-cli",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "gemini"
+      }
+    }
+  ]
 }

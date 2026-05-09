@@ -822,3 +822,28 @@ function Invoke-Gemini {
     & gemini @Arguments
 }
 
+<#
+.SYNOPSIS
+    任意の外部コマンドを実行する（verifyCommand 用）
+.DESCRIPTION
+    パッケージインストール後の動作検証に使用。
+    packages.json の verifyCommand.command を実行する。
+.PARAMETER Command
+    実行するコマンド名
+.PARAMETER Arguments
+    コマンドに渡す引数
+.OUTPUTS
+    コマンドの出力
+.EXAMPLE
+    Invoke-VerifyCommand -Command "qmd" -Arguments @("status")
+#>
+function Invoke-VerifyCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Arguments = @()
+    )
+    & $Command @Arguments
+}
+

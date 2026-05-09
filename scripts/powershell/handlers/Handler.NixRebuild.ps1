@@ -151,12 +151,13 @@ class NixRebuildHandler : SetupHandlerBase {
             $toInstall = @()
             $skipped = 0
             foreach ($pkg in $packages) {
-                $pkgName = $pkg -replace '@[\d\.]+$', ''
+                $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
+                $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
                 if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
                     $this.Log("スキップ (インストール済み): $pkgName", "Gray")
                     $skipped++
                 } else {
-                    $toInstall += $pkg
+                    $toInstall += $pkgSpec
                 }
             }
 

@@ -1,6 +1,15 @@
 # Single Source of Truth for all packages across platforms.
 # Each entry defines: nix derivation, winget ID (null if none), category.
 #
+# Exported attributes:
+#   - catalog categories (core, dev, terminal, editors, llm, …) → lists of derivations
+#   - all                → flat list of all derivations
+#   - wingetMap          → nix attr name → winget PackageIdentifier
+#   - pnpmGlobal         → cross-platform pnpm global package names
+#   - pnpmVerify         → package name → { command, args } for post-install verification
+#   - wingetVerify       → catalog attr name → { command, args } for post-install verification
+#   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
+#
 # Imported by:
 #   - nix/flakes/packages.nix → perSystem buildEnv outputs
 #   - nix/home/packages.nix   → home.packages
@@ -263,6 +272,84 @@ lib.mapAttrs (_: names: resolve names) grouped
   pnpmGlobal = [
     "@tobilu/qmd"
   ];
+
+  # Post-install verification commands for pnpm packages.
+  # Keys match globalPackages entries. Packages not listed skip verification.
+  pnpmVerify = {
+    "@tobilu/qmd" = {
+      command = "qmd";
+      args = [ "status" ];
+    };
+    "@google/gemini-cli" = {
+      command = "gemini";
+      args = [ "--version" ];
+    };
+  };
+
+  # Post-install verification commands for winget packages.
+  # Keys match catalog attr names. GUI-only packages are omitted.
+  wingetVerify = {
+    chezmoi = {
+      command = "chezmoi";
+      args = [ "--version" ];
+    };
+    git = {
+      command = "git";
+      args = [ "--version" ];
+    };
+    gh = {
+      command = "gh";
+      args = [ "--version" ];
+    };
+    fd = {
+      command = "fd";
+      args = [ "--version" ];
+    };
+    ripgrep = {
+      command = "rg";
+      args = [ "--version" ];
+    };
+    eza = {
+      command = "eza";
+      args = [ "--version" ];
+    };
+    zoxide = {
+      command = "zoxide";
+      args = [ "--version" ];
+    };
+    fzf = {
+      command = "fzf";
+      args = [ "--version" ];
+    };
+    starship = {
+      command = "starship";
+      args = [ "--version" ];
+    };
+    neovim = {
+      command = "nvim";
+      args = [ "--version" ];
+    };
+    nodejs_22 = {
+      command = "node";
+      args = [ "--version" ];
+    };
+    uv = {
+      command = "uv";
+      args = [ "--version" ];
+    };
+    _1password-cli = {
+      command = "op";
+      args = [ "--version" ];
+    };
+    powershell = {
+      command = "pwsh";
+      args = [ "--version" ];
+    };
+    go-task = {
+      command = "task";
+      args = [ "--version" ];
+    };
+  };
 
   # Windows-only packages (no nix equivalent)
   windowsOnly = {

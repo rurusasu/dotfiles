@@ -1,22 +1,55 @@
-# Generate windows/winget/packages.json from the SSOT (sets.nix).
+# Generate windows/winget/packages.json and windows/pnpm/packages.json
+# from the SSOT (sets.nix).
 #
 # Usage:
 #   nix build .#winget-export
-#   cp result windows/winget/packages.json
+#   cp result/winget/packages.json windows/winget/packages.json
+#   cp result/pnpm/packages.json windows/pnpm/packages.json
 { pkgs, lib }:
 let
   sets = import ./sets.nix { inherit pkgs lib; };
 
-  wingetPackages =
-    (lib.mapAttrsToList (_: id: { PackageIdentifier = id; }) sets.wingetMap)
-    ++ (map (id: { PackageIdentifier = id; }) sets.windowsOnly.winget);
+  # Attach verifyCommand to a package object if defined in verifyMap
+  attachVerify =
+    verifyMap: key: pkg:
+    let
+      verify = verifyMap.${key} or null;
+    in
+    if verify == null then
+      pkg
+    else
+      pkg
+      // {
+        verifyCommand = {
+          inherit (verify) command args;
+        };
+      };
+
+  # --- winget ---
+  wingetFromMap = lib.mapAttrsToList (
+    name: id: attachVerify sets.wingetVerify name { PackageIdentifier = id; }
+  ) sets.wingetMap;
+
+  wingetFromWindowsOnly = map (id: { PackageIdentifier = id; }) sets.windowsOnly.winget;
+
+  wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
   msstorePackages = map (id: { PackageIdentifier = id; }) sets.windowsOnly.msstore;
 
+  # --- pnpm ---
+  pnpmFromGlobal = map (name: attachVerify sets.pnpmVerify name { inherit name; }) sets.pnpmGlobal;
+
+  pnpmFromWindowsOnly = map (
+    name: attachVerify sets.pnpmVerify name { inherit name; }
+  ) sets.windowsOnly.pnpm;
+
+  pnpmPackages = pnpmFromGlobal ++ pnpmFromWindowsOnly;
+
+  # --- outputs ---
   pnpmOutput = {
     "$schema" = "https://json.schemastore.org/package.json";
     description = "pnpm global packages to install on Windows";
-    globalPackages = sets.pnpmGlobal ++ sets.windowsOnly.pnpm;
+    globalPackages = pnpmPackages;
   };
 
   wingetOutput = {

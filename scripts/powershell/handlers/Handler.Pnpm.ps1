@@ -118,6 +118,7 @@ class PnpmHandler : SetupHandlerBase {
 
             $failed = @()
             $succeeded = @()
+            $verifyFailed = @()
             $skipped = 0
 
             # グローバルルートを一度だけ取得（ループ内で毎回 pnpm root -g を実行しないよう）
@@ -129,24 +130,35 @@ class PnpmHandler : SetupHandlerBase {
                 $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
             }
 
-            foreach ($pkg in $packages) {
-                $pkgName = $pkg -replace '(?<=.)@[^\s@]+$', ''
+            foreach ($pkgEntry in $packages) {
+                $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
+                $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
+                $verifyCmd = if ($pkgEntry -is [string]) { $null } else { $pkgEntry.verifyCommand }
+
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     $this.Log("スキップ (インストール済み): $pkgName", "Gray")
                     $skipped++
                     continue
                 }
 
-                $this.Log("インストール中: $pkg")
-                $null = Invoke-Pnpm -Arguments @("add", "-g", $pkg)
+                $this.Log("インストール中: $pkgSpec")
+                $null = Invoke-Pnpm -Arguments @("add", "-g", $pkgSpec)
 
-                if ($LASTEXITCODE -eq 0) {
-                    $succeeded += $pkg
-                    $this.Log("✓ $pkg", "Green")
+                if ($LASTEXITCODE -ne 0) {
+                    $failed += $pkgSpec
+                    $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
+                    continue
                 }
-                else {
-                    $failed += $pkg
-                    $this.LogWarning("✗ $pkg のインストールに失敗しました")
+
+                if ($verifyCmd -and $this.TestPackageVerification($verifyCmd)) {
+                    $succeeded += $pkgSpec
+                    $this.Log("✓ $pkgSpec", "Green")
+                } elseif ($verifyCmd) {
+                    $verifyFailed += $pkgSpec
+                    $this.LogWarning("✗ $pkgSpec のインストールは成功しましたが検証に失敗しました")
+                } else {
+                    $succeeded += $pkgSpec
+                    $this.Log("✓ $pkgSpec", "Green")
                 }
             }
 
@@ -157,12 +169,12 @@ class PnpmHandler : SetupHandlerBase {
                 $this.EnsureGeminiCommandShim()
             }
 
-            if ($failed.Count -eq 0) {
-                return $this.CreateSuccessResult("$($succeeded.Count) 個インストール, $skipped 個スキップ")
-            }
-            else {
-                return $this.CreateSuccessResult("$($succeeded.Count) 個成功, $($failed.Count) 個失敗, $skipped 個スキップ")
-            }
+            $parts = @()
+            if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
+            if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
+            if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            $parts += "$skipped 個スキップ"
+            return $this.CreateSuccessResult($parts -join ", ")
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
@@ -184,6 +196,19 @@ class PnpmHandler : SetupHandlerBase {
         if (-not $globalRoot) { return $false }
         $pkgPath = Join-Path $globalRoot $pkgName
         return (Test-Path -LiteralPath $pkgPath -PathType Container)
+    }
+
+    hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        try {
+            $command = $verifyCmd.command
+            $arguments = @($verifyCmd.args)
+            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
     }
 
     hidden [string] EnsurePnpmSetup() {

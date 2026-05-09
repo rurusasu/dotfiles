@@ -126,9 +126,10 @@ class WingetHandler : SetupHandlerBase {
                                     $version = $pkg.Version
                                 }
                                 $packages += [PSCustomObject]@{
-                                    Id         = $pkg.PackageIdentifier
-                                    Version    = $version
-                                    SourceName = $sourceName
+                                    Id            = $pkg.PackageIdentifier
+                                    Version       = $version
+                                    SourceName    = $sourceName
+                                    VerifyCommand = $pkg.verifyCommand
                                 }
                             }
                         }
@@ -166,6 +167,7 @@ class WingetHandler : SetupHandlerBase {
             # 未インストール分をインストール
             $succeeded = 0
             $failed = 0
+            $verifyFailed = 0
 
             foreach ($pkg in $toInstall) {
                 $logSuffix = if ($pkg.Version) { " (v$($pkg.Version))" } else { "" }
@@ -189,23 +191,33 @@ class WingetHandler : SetupHandlerBase {
 
                 Invoke-Winget -Arguments $installArgs | Out-Null
 
-                if ($LASTEXITCODE -eq 0) {
-                    $succeeded++
-                    $this.Log("✓ $($pkg.Id)", "Green")
-                } else {
+                if ($LASTEXITCODE -ne 0) {
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました")
+                    continue
+                }
+
+                if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
+                    $succeeded++
+                    $this.Log("✓ $($pkg.Id)", "Green")
+                } elseif ($pkg.VerifyCommand) {
+                    $verifyFailed++
+                    $this.LogWarning("✗ $($pkg.Id) のインストールは成功しましたが検証に失敗しました")
+                } else {
+                    $succeeded++
+                    $this.Log("✓ $($pkg.Id)", "Green")
                 }
             }
 
             # Rustup インストール後: ~/.cargo/bin を PATH に追加
             $this.EnsureCargoPath()
 
-            if ($failed -eq 0) {
-                return $this.CreateSuccessResult("$succeeded 個インストール, $skipped 個スキップ")
-            } else {
-                return $this.CreateSuccessResult("パッケージをインストールしました（一部失敗: $failed）")
-            }
+            $parts = @()
+            if ($succeeded -gt 0) { $parts += "$succeeded 個インストール" }
+            if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
+            if ($failed -gt 0) { $parts += "$failed 個失敗" }
+            $parts += "$skipped 個スキップ"
+            return $this.CreateSuccessResult($parts -join ", ")
         } catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
@@ -258,6 +270,19 @@ class WingetHandler : SetupHandlerBase {
             return $LASTEXITCODE -eq 0
         }
         catch {
+            return $false
+        }
+    }
+
+    hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        try {
+            $command = $verifyCmd.command
+            $arguments = @($verifyCmd.args)
+            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
     }
