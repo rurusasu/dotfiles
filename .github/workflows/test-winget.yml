@@ -1,0 +1,101 @@
+name: Windows Environment Smoke Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "windows/winget/packages.json"
+      - "nix/packages/sets.nix"
+      - ".github/workflows/test-winget.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Bootstrap winget
+        shell: pwsh
+        run: |
+          # Ensure winget is available on the runner
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Microsoft.WinGet.Client..."
+            Install-PackageProvider -Name NuGet -Force
+            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
+            Repair-WinGetPackageManager -AllUsers
+          }
+          # Validate winget is functional before proceeding
+          winget source update
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "winget source update failed (exit $LASTEXITCODE)"
+            exit 1
+          }
+          winget --version
+
+      - name: Import packages from winget packages.json
+        shell: pwsh
+        run: |
+          winget import `
+            --import-file windows/winget/packages.json `
+            --ignore-unavailable `
+            --no-upgrade `
+            --accept-package-agreements `
+            --accept-source-agreements
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "winget import failed (exit $LASTEXITCODE)"
+            exit 1
+          }
+
+      - name: Smoke test core tools
+        shell: pwsh
+        run: |
+          # Merge registry paths with current process PATH so newly installed
+          # tools are discoverable while preserving runner-injected entries
+          $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+          $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          $env:PATH = "$machinePath;$userPath;$env:PATH"
+
+          $tools = @(
+            @{ cmd = "chezmoi"; args = "--version" },
+            @{ cmd = "git";     args = "--version" },
+            @{ cmd = "gh";      args = "--version" },
+            @{ cmd = "fd";      args = "--version" },
+            @{ cmd = "rg";      args = "--version" },
+            @{ cmd = "jq";      args = "--version" },
+            @{ cmd = "eza";     args = "--version" },
+            @{ cmd = "zoxide";  args = "--version" },
+            @{ cmd = "fzf";     args = "--version" }
+          )
+
+          Write-Host "=== Smoke testing core tools ==="
+          $failed = @()
+          foreach ($tool in $tools) {
+            if (-not (Get-Command $tool.cmd -ErrorAction SilentlyContinue)) {
+              Write-Host "FAIL $($tool.cmd): not found in PATH" -ForegroundColor Red
+              $failed += $tool.cmd
+              continue
+            }
+            $output = & $tool.cmd $tool.args 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "FAIL $($tool.cmd): exit code $LASTEXITCODE" -ForegroundColor Red
+              $failed += $tool.cmd
+            } else {
+              Write-Host "OK  $($tool.cmd): $output"
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Error "Failed tools: $($failed -join ', ')"
+            exit 1
+          }
+          Write-Host "=== All core tools OK ==="

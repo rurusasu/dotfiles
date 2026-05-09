@@ -258,44 +258,97 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 ### テストピラミッド
 
 ```
-          /  E2E  \          ← ローカル手動: VM で実際にインストール
-         /  Build  \         ← CI: nix build、NixOS config ビルド
-        / Integration\       ← CI: nixos-rebuild (dry)、install.cmd
-       /  Unit Tests  \      ← CI: Pester、パッケージ整合性
-      / Static Analysis\     ← CI: flake check、lint、fmt
+       /   Smoke Test   \    ← CI: nix shell --version、winget + --version
+      /    Build Test    \   ← CI: nix build .#default（実ビルド）
+     / Consistency Test  \   ← CI: winget-export diff（JSON 整合性）
+    /     Unit Tests      \  ← CI: Pester（PowerShell ハンドラー）
+   /   Static Analysis    \  ← CI: flake check、lint、fmt
 ```
 
-### CI (GitHub Actions) で実行するテスト
+### CI ワークフロー全体像
 
-| Workflow               | ランナー | テスト内容                                                                                                                        |
-| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `test-nix.yml`         | Linux    | `nix flake check --no-build` (評価エラー検知)、`nix fmt -- --fail-on-change` (フォーマット)、`nix build --dry-run` (ビルド可能性) |
-| `test-powershell.yml`  | Windows  | PSScriptAnalyzer (lint)、Pester ユニットテスト (ハンドラー)                                                                       |
-| `test-consistency.yml` | Linux    | `nix build .#winget-export` と `windows/winget/packages.json` の diff                                                             |
+```mermaid
+flowchart TD
+    PR["Pull Request"]
 
-### テスト対象の判断基準
+    PR -->|"nix/** flake.*"| NX
+    PR -->|"windows/winget/packages.json\nnix/packages/sets.nix"| WG
+    PR -->|"nix/packages/** windows/winget/**"| CO
+    PR -->|"scripts/powershell/**"| PS
 
-| レベル          | 対象                       | 方法                         | 場所         |
-| --------------- | -------------------------- | ---------------------------- | ------------ |
-| Static Analysis | nix 構文、フォーマット     | `nix flake check`、`nix fmt` | CI (Linux)   |
-| Unit Test       | PowerShell ハンドラー      | Pester + モック              | CI (Windows) |
-| Unit Test       | パッケージ整合性           | winget-export diff           | CI (Linux)   |
-| Build Test      | NixOS config、package sets | `nix build --dry-run`        | CI (Linux)   |
-| E2E             | 実際のインストール         | 手動実行                     | ローカル     |
+    subgraph NX["test-nix.yml (ubuntu-latest)"]
+        N1["① nix flake check\n評価エラー検知"]
+        N2["② nix build .#default\n実ビルド"]
+        N3["③ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf unzip"]
+        N4["④ nix fmt\nフォーマット確認"]
+        N1 --> N2 --> N3 --> N4
+    end
 
-### CI で実行しないもの
+    subgraph WG["test-winget.yml (windows-latest)"]
+        W1["① winget import\npackages.json 全量インストール"]
+        W2["② smoke test\nchezmoi git gh fd rg jq eza zoxide fzf"]
+        W1 --> W2
+    end
 
-- **Vagrant/Ansible による VM テスト**: GitHub Actions 標準ランナーはネスト仮想化非対応。個人リポジトリに有料ランナーは過剰
-- **Windows E2E**: UAC、GUI インストーラー等の自動化が困難
-- **NixOS VM test (`nixosTest`)**: 将来オプション。systemd サービスのテストが必要になったら追加
+    subgraph CO["test-consistency.yml (ubuntu-latest)"]
+        C1["① nix build .#winget-export\nNix から JSON 生成"]
+        C2["② diff\n生成 JSON ↔ リポジトリ JSON"]
+        C1 --> C2
+    end
 
-### GitHub Actions 無料枠 (public repo)
+    subgraph PS["test-powershell.yml (windows-latest)"]
+        P1["① Pester\nユニットテスト"]
+        P2["② Codecov\nカバレッジ"]
+        P1 --> P2
+    end
+```
 
-| ランナー | 無料枠/月 | 消費レート |
-| -------- | --------- | ---------- |
-| Linux    | 2,000 分  | 1x         |
-| Windows  | 2,000 分  | 2x         |
-| macOS    | 2,000 分  | 10x        |
+### ワークフロー詳細
+
+| Workflow               | ランナー       | 何を保証するか                                       | トリガー                                                |
+| ---------------------- | -------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| `test-nix.yml`         | ubuntu-latest  | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                                     |
+| `test-winget.yml`      | windows-latest | winget パッケージがインストールでき、ツールが動く    | `windows/winget/packages.json`, `nix/packages/sets.nix` |
+| `test-consistency.yml` | ubuntu-latest  | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`                  |
+| `test-powershell.yml`  | windows-latest | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                                 |
+
+### テストレベルの判断基準
+
+| レベル           | 対象                          | 方法                              | ワークフロー     |
+| ---------------- | ----------------------------- | --------------------------------- | ---------------- |
+| Static Analysis  | Nix 構文、フォーマット        | `nix flake check`, `nix fmt`      | test-nix         |
+| Unit Test        | PowerShell ハンドラー         | Pester + モック                   | test-powershell  |
+| Consistency Test | SSOT ↔ 生成 JSON              | winget-export diff                | test-consistency |
+| Build Test       | Nix package sets              | `nix build .#default`（実ビルド） | test-nix         |
+| Smoke Test       | core CLI ツール（Nix 側）     | `nix shell` + `--version`         | test-nix         |
+| Smoke Test       | core CLI ツール（Windows 側） | `winget import` + `--version`     | test-winget      |
+
+### 検証ツール一覧
+
+| ツール  | Nix smoke test | winget smoke test | 備考                             |
+| ------- | :------------: | :---------------: | -------------------------------- |
+| chezmoi |       ✅       |        ✅         |                                  |
+| git     |       ✅       |        ✅         |                                  |
+| gh      |       ✅       |        ✅         |                                  |
+| fd      |       ✅       |        ✅         |                                  |
+| rg      |       ✅       |        ✅         | ripgrep                          |
+| bat     |       ✅       |        ❌         | winget ID なし                   |
+| jq      |       ✅       |        ✅         |                                  |
+| eza     |       ✅       |        ✅         |                                  |
+| zoxide  |       ✅       |        ✅         |                                  |
+| fzf     |       ✅       |        ✅         |                                  |
+| unzip   |       ✅       |        ❌         | winget ID なし                   |
+| p7zip   |       ❌       |        ❌         | winget ID なし、CLI 動作が不安定 |
+
+### CI で意図的に実行しないもの
+
+- **Windows GUI アプリの E2E**: VS Code, Docker Desktop 等は UAC・GUI インストーラーが自動化非対応
+- **WSL 内 nixos-rebuild switch**: GitHub Actions runner はネスト仮想化非対応
+- **NixOS VM test (`nixosTest`)**: systemd サービスのテストが必要になった時点で追加
+
+### GitHub Actions（public repo）
+
+public リポジトリは **Linux/Windows/macOS ランナーすべて無制限無料**。
 
 ---
 
