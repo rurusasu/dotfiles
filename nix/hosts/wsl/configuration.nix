@@ -15,10 +15,6 @@
   wsl.enable = true;
   wsl.defaultUser = "nixos";
 
-  # Re-register WSLInterop binfmt entry after systemd clears it on boot.
-  # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.
-  wsl.interop.register = true;
-
   # Enable Docker Desktop WSL integration
   # Required for kind to use Docker Desktop as container runtime
   mySettings.wsl.dockerDesktopIntegration = true;
