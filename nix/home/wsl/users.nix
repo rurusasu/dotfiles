@@ -21,7 +21,7 @@
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
       # Exclude WSL mount paths from zoxide's database to avoid indexing
       # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
-      home.sessionVariables.ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+      home.sessionVariables._ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
 
       programs.zsh.shellAliases = {
         # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming
