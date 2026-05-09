@@ -23,4 +23,5 @@ notebook_font_size = 14.0
 font_size = 13.0
 
 [appearance.themes]
-system_theme = true
+system_theme = false
+theme_name = "Phenomenon"
