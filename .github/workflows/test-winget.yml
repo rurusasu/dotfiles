@@ -35,10 +35,10 @@ jobs:
             Repair-WinGetPackageManager -AllUsers
           }
           # Validate winget is functional before proceeding
+          # Note: source update can return non-zero on transient CDN errors; treat as warning
           winget source update
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "winget source update failed (exit $LASTEXITCODE)"
-            exit 1
+            Write-Warning "winget source update returned $LASTEXITCODE — continuing anyway"
           }
           winget --version
 
@@ -60,13 +60,18 @@ jobs:
             "junegunn.fzf"
           )
 
+          $installFailed = @()
           foreach ($id in $corePackages) {
             Write-Host "Installing $id..."
-            winget install --id $id --silent --accept-package-agreements --accept-source-agreements
+            winget install --id $id --source winget --silent --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "winget install failed for $id (exit $LASTEXITCODE)"
-              exit 1
+              Write-Warning "winget install failed for $id (exit $LASTEXITCODE)"
+              $installFailed += $id
             }
+          }
+          if ($installFailed.Count -gt 0) {
+            Write-Error "Failed to install: $($installFailed -join ', ')"
+            exit 1
           }
 
       - name: Smoke test core tools
