@@ -21,6 +21,10 @@
     ];
   };
 
+  # Re-register WSLInterop binfmt entry after systemd clears it on boot.
+  # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.
+  wsl.interop.register = true;
+
   # WSL のデフォルトでは /etc/hosts を毎回上書きするため generateHosts = false で無効化し、
   # NixOS が networking.extraHosts 経由で /etc/hosts を管理できるようにする。
   wsl.wslConf.network.generateHosts = false;
