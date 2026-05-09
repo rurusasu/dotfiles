@@ -44,7 +44,7 @@ fi
 
 # zoxide
 if command -v zoxide >/dev/null 2>&1; then
-  eval "$(zoxide init bash --cmd cd)"
+  eval "$(zoxide init bash)"
 fi
 
 # Color support for ls
@@ -93,12 +93,12 @@ if ! nc -z localhost 22 2>/dev/null; then
   eval "$(ssh-agent -s)" > /dev/null
 fi
 
-# Alt+Z: zoxide interactive (history-based directory jump)
+# Alt+q: zoxide interactive (history-based directory jump)
 __zoxide_zi_widget() {
   local result
   result="$(zoxide query -i)" && cd "$result"
 }
-bind -x '"\ez": __zoxide_zi_widget'
+bind -x '"\eq": __zoxide_zi_widget'
 
 # Alt+D: fzf directory search and cd
 __fzf_cd_widget() {
