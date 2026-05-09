@@ -12,6 +12,10 @@
 
 # Unix系シェルスクリプトはLFを使用
 *.sh text eol=lf
+*.sh.tmpl text eol=lf
+
+# PowerShellテンプレートはCRLFを使用
+*.ps1.tmpl text eol=crlf working-tree-encoding=UTF-8
 
 # その他のテキストファイルはLFを使用
 *.md text eol=lf
