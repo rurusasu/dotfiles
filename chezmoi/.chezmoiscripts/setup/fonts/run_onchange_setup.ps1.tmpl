@@ -12,25 +12,21 @@ $FontsDir     = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
 $RegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 
 function Test-FontInstalled {
-    Add-Type -AssemblyName System.Drawing
-    $installed = [System.Drawing.Text.InstalledFontCollection]::new()
-    try {
-        return ($installed.Families | Where-Object { $_.Name -like "${FontName}*" -or $_.Name -like "*Moralerspace*HWJPDOC*" }).Count -gt 0
-    } finally {
-        $installed.Dispose()
-    }
+  $key = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
+  if ($null -eq $key) { return $false }
+  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "${FontName}*" }).Count -gt 0
 }
 
 if (Test-FontInstalled) {
-    Write-Host "$FontName is already installed, skipping."
-    exit 0
+  Write-Host "$FontName is already installed, skipping."
+  exit 0
 }
 
 Write-Host "Installing $FontName $FontVersion..."
 
 # ダウンロード
-if (-not (Test-Path $TempDir)) {
-    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+if (-not (Test-Path -LiteralPath $TempDir)) {
+  New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 }
 $ZipPath = Join-Path $TempDir "${FontName}_${FontVersion}.zip"
 Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
@@ -39,22 +35,26 @@ Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
 Expand-Archive -LiteralPath $ZipPath -DestinationPath $TempDir -Force
 
 # フォントインストール（ユーザーフォント: 管理者権限不要）
-if (-not (Test-Path $FontsDir)) {
-    New-Item -ItemType Directory -Path $FontsDir -Force | Out-Null
+if (-not (Test-Path -LiteralPath $FontsDir)) {
+  New-Item -ItemType Directory -Path $FontsDir -Force | Out-Null
 }
 
 Get-ChildItem -Path $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
-    $destPath = Join-Path $FontsDir $_.Name
-    Copy-Item -LiteralPath $_.FullName -Destination $destPath -Force
+  $destPath = Join-Path $FontsDir $_.Name
+  Copy-Item -LiteralPath $_.FullName -Destination $destPath -Force
 
-    # レジストリ登録
-    $regName = "$($_.BaseName) (TrueType)"
-    Set-ItemProperty -Path $RegistryPath -Name $regName -Value $_.Name -Force
-    Write-Host "Installed: $($_.Name)"
+  # レジストリ登録
+  $regName = "$($_.BaseName) (TrueType)"
+  Set-ItemProperty -Path $RegistryPath -Name $regName -Value $_.Name -Force
+  Write-Host "Installed: $($_.Name)"
 }
 
 # 後片付け
 Remove-Item -LiteralPath $TempDir -Recurse -Force
+$parentDir = Split-Path -Parent $TempDir
+if ((Test-Path -LiteralPath $parentDir) -and (Get-ChildItem -LiteralPath $parentDir -Force | Measure-Object).Count -eq 0) {
+  Remove-Item -LiteralPath $parentDir -Force
+}
 
 Write-Host "$FontName $FontVersion installation complete."
 {{ end -}}
