@@ -258,7 +258,10 @@ let
         let
           p = catalog.${n}.pkg;
         in
-        if builtins.elem pkgs.system (p.meta.platforms or lib.platforms.all) then p else null
+        if builtins.elem pkgs.stdenv.hostPlatform.system (p.meta.platforms or lib.platforms.all) then
+          p
+        else
+          null
       ) names
     );
 
