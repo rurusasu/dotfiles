@@ -3,22 +3,26 @@ BeforeAll {
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
     # PSScriptAnalyzer モジュールの確認と自動インストール
-    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-        Write-Host "PSScriptAnalyzer をインストールしています..." -ForegroundColor Yellow
+    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq '1.22.0' })) {
+        Write-Host "PSScriptAnalyzer 1.22.0 をインストールしています..." -ForegroundColor Yellow
         try {
-            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
         } catch {
-            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
+            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force"
         }
     }
 
-    Import-Module PSScriptAnalyzer -Force
+    Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
 
     # テスト対象ファイルの収集（動的に検出）
     $sourceFiles = @(
         Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
         Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
     ) | Select-Object -ExpandProperty FullName
+
+    if ($sourceFiles.Count -eq 0) {
+        Write-Warning "ソースファイルが見つかりません (lib/ または handlers/ が存在しない可能性があります)。'全体的なコード品質' テストはスキップされます。"
+    }
 }
 
 Describe 'PSScriptAnalyzer - 静的解析' {
@@ -45,7 +49,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
     }
 
     Context '全体的なコード品質' {
-        It 'should have no Critical issues in all source files' {
+        It 'should have no Critical issues in all source files' -Skip:($sourceFiles.Count -eq 0) {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error
@@ -65,7 +69,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             $allResults | Should -BeNullOrEmpty
         }
 
-        It 'should have 0 Error/Warning issues in the entire project' {
+        It 'should have 0 Error/Warning issues in the entire project' -Skip:($sourceFiles.Count -eq 0) {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error,Warning
