@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Claude Code プラグイン マーケットプレース インストールスクリプト
 # Generated from: {{ range .claude_marketplaces }}{{ .repo }} {{ end }}
 
@@ -15,7 +16,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "https://github.com/{{ .repo }}.git" "$TARGET_DIR"
 else
     echo "Updating {{ .name }}..."
-    cd "$TARGET_DIR" && git pull
+    git -C "$TARGET_DIR" pull --ff-only 2>&1 || echo "Warning: git pull failed for {{ .name }}, skipping"
 fi
 
 {{ end -}}
