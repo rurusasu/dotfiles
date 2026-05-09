@@ -66,7 +66,7 @@ Describe 'WslInstallHandler' {
 
         It 'should run wsl --install --no-distribution' {
             $script:wslInstallCalled = $false
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $script:wslInstallCalled = $true
                 $global:LASTEXITCODE = 0
                 return "Installing WSL..."
@@ -80,13 +80,13 @@ Describe 'WslInstallHandler' {
         }
 
         It 'should fallback to dism when wsl --install fails' {
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
             $script:dismCalls = @()
-            Mock dism.exe {
-                $script:dismCalls += ($args -join " ")
+            Mock Invoke-Dism {
+                $script:dismCalls += ($Arguments -join " ")
                 $global:LASTEXITCODE = 0
                 return "The operation completed successfully."
             }
@@ -96,14 +96,16 @@ Describe 'WslInstallHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match '再起動が必要'
             $script:dismCalls.Count | Should -Be 2
+            $script:dismCalls[0] | Should -Match 'Microsoft-Windows-Subsystem-Linux'
+            $script:dismCalls[1] | Should -Match 'VirtualMachinePlatform'
         }
 
         It 'should return failure when both wsl --install and dism fail' {
-            Mock wsl {
+            Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
-            Mock dism.exe {
+            Mock Invoke-Dism {
                 $global:LASTEXITCODE = 1
                 return "Error"
             }
@@ -112,6 +114,22 @@ Describe 'WslInstallHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match 'dism.exe'
+        }
+
+        It 'should return failure when second dism feature fails' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return "Installation failed"
+            }
+            Mock Invoke-Dism {
+                # VirtualMachinePlatform の有効化が失敗するシナリオ
+                $global:LASTEXITCODE = if ($Arguments -match 'VirtualMachinePlatform') { 1 } else { 0 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke Invoke-Dism -Times 2
         }
     }
 }
