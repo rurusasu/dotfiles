@@ -1,3 +1,4 @@
+{{- if eq .chezmoi.os "windows" }}
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
 $settingsPath = Join-Path $env:APPDATA "Zed\settings.json"
@@ -72,3 +73,4 @@ $json = $settings | ConvertTo-Json -Depth 20
 [System.IO.File]::WriteAllText($settingsPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "[zed-mcp] Updated $($servers.Count) context servers in $settingsPath"
 Write-Host "[zed-mcp] Note: JSONC comments were removed during merge"
+{{- end }}

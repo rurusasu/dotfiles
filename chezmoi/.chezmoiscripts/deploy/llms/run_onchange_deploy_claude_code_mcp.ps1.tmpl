@@ -1,3 +1,4 @@
+{{- if eq .chezmoi.os "windows" }}
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
@@ -25,3 +26,4 @@ Write-Host "[claude-code-mcp] Added/updated {{ .name }} (stdio)"
 {{ end }}
 
 Write-Host "[claude-code-mcp] Done"
+{{- end }}

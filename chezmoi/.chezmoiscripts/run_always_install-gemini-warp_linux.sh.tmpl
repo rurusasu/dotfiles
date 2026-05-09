@@ -9,7 +9,7 @@ if ! command -v gemini &>/dev/null; then
 fi
 
 echo "[gemini-warp] Installing Warp extension..."
-gemini extensions install https://github.com/warpdotdev/gemini-cli-warp || {
+echo "y" | gemini extensions install https://github.com/warpdotdev/gemini-cli-warp || {
   echo "[gemini-warp] Warning: extension install returned non-zero (may already be installed)"
 }
 echo "[gemini-warp] Done. Restart Gemini CLI for the extension to activate."
