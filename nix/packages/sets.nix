@@ -160,6 +160,13 @@ let
       category = "editors";
     };
 
+    # ── fonts ─────────────────────────────────────────────
+    moralerspace = {
+      pkg = pkgs.moralerspace;
+      winget = null;
+      category = "fonts";
+    };
+
     # ── llm ───────────────────────────────────────────────
     claude-code = {
       pkg = pkgs.claude-code;
