@@ -20,8 +20,8 @@ is_settings_sync_enabled = true
 
 [appearance.text]
 font_family = "Moralerspace"
-notebook_font_size = 12.0
-font_size = 12.0
+notebook_font_size = 8.0
+font_size = 8.0
 
 [appearance.themes]
 system_theme = false
