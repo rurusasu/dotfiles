@@ -86,7 +86,7 @@ Describe 'WslInstallHandler' {
             }
             $script:dismCalls = @()
             Mock Invoke-Dism {
-                $script:dismCalls += ($args -join " ")
+                $script:dismCalls += ($Arguments -join " ")
                 $global:LASTEXITCODE = 0
                 return "The operation completed successfully."
             }
@@ -96,6 +96,8 @@ Describe 'WslInstallHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match '再起動が必要'
             $script:dismCalls.Count | Should -Be 2
+            $script:dismCalls[0] | Should -Match 'Microsoft-Windows-Subsystem-Linux'
+            $script:dismCalls[1] | Should -Match 'VirtualMachinePlatform'
         }
 
         It 'should return failure when both wsl --install and dism fail' {
@@ -112,6 +114,22 @@ Describe 'WslInstallHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match 'dism.exe'
+        }
+
+        It 'should return failure when second dism feature fails' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return "Installation failed"
+            }
+            Mock Invoke-Dism {
+                # VirtualMachinePlatform の有効化が失敗するシナリオ
+                $global:LASTEXITCODE = if ($Arguments -match 'VirtualMachinePlatform') { 1 } else { 0 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke Invoke-Dism -Times 2
         }
     }
 }

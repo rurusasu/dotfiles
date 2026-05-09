@@ -73,6 +73,24 @@ Describe 'Invoke-Wsl' {
     }
 }
 
+Describe 'Invoke-Dism' {
+    It 'should pass arguments to dism.exe' {
+        Mock dism.exe { return "test output" }
+
+        $result = Invoke-Dism /online /get-features
+
+        Should -Invoke dism.exe -Times 1
+    }
+
+    It 'should pass multiple arguments' {
+        Mock dism.exe { return "The operation completed successfully." }
+
+        Invoke-Dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+
+        Should -Invoke dism.exe -Times 1
+    }
+}
+
 Describe 'Invoke-Diskpart' {
     BeforeAll {
         $script:tempDir = Join-Path $env:TEMP "diskpart_test_$(Get-Random)"
