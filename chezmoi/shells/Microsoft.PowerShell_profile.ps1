@@ -64,8 +64,11 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
 }
 
 # Interactive widgets (Alt+Q / Alt+D / Alt+T / Alt+R)
-# PSReadLine is always available in PowerShell 7 — no ListAvailable scan needed
-Import-Module PSReadLine -ErrorAction SilentlyContinue
+# PSReadLine is bundled with the standard PS7 installer; skip the slow -ListAvailable scan.
+# On PS7, load failure is unexpected and should surface as an error, not be silently swallowed.
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    Import-Module PSReadLine
+}
 
 if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)) {
     function Invoke-ZoxideInteractive {
