@@ -128,6 +128,7 @@
   "notebook.cellToolbarLocation": {
     "default": "right"
   },
+  "terminal.integrated.fontFamily": "Moralerspace",
   "terminal.integrated.fontSize": 12,
   "terminal.integrated.defaultProfile.linux": "bash",
   "terminal.integrated.tabs.enabled": true,
