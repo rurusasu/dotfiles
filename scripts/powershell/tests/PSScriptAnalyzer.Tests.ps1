@@ -1,20 +1,33 @@
+BeforeDiscovery {
+    # Discovery フェーズで $sourceFiles を確定させる（-Skip: 評価に必要）
+    $projectRoot = Split-Path -Parent $PSScriptRoot
+    $sourceFiles = @(
+        Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
+        Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+    ) | Select-Object -ExpandProperty FullName
+}
+
 BeforeAll {
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
     # PSScriptAnalyzer モジュールの確認と自動インストール
-    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq '1.22.0' })) {
+    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq ([version]'1.22.0') })) {
         Write-Host "PSScriptAnalyzer 1.22.0 をインストールしています..." -ForegroundColor Yellow
         try {
-            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -ErrorAction Stop
         } catch {
             throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force"
         }
     }
 
-    Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
+    try {
+        Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force -ErrorAction Stop
+    } catch {
+        throw "PSScriptAnalyzer 1.22.0 のインポートに失敗しました: $($_.Exception.Message)"
+    }
 
-    # テスト対象ファイルの収集（動的に検出）
+    # Run フェーズ用に再収集（BeforeDiscovery で収集済みの変数はフェーズをまたいで引き継がれない）
     $sourceFiles = @(
         Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
         Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
