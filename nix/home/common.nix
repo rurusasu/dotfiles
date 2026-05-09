@@ -133,7 +133,6 @@ in
     QMD_RERANK_MODEL = "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0";
     # fzf
     FZF_DEFAULT_COMMAND = "fd ${fdOpts} --absolute-path --type f . .";
-    FZF_CTRL_T_COMMAND = "fd ${fdOpts} --absolute-path --type f . .";
     FZF_ALT_C_COMMAND = "fd ${fdOpts} --absolute-path --type d . .";
     FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '";
   };
