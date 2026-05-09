@@ -2,6 +2,12 @@ name: Windows Environment Smoke Test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "windows/winget/packages.json"
+      - "nix/packages/sets.nix"
+      - ".github/workflows/test-winget.yml"
   pull_request:
     branches: [main]
     paths:
@@ -23,28 +29,53 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Bootstrap winget
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
           # Ensure winget is available on the runner
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing Microsoft.WinGet.Client..."
-            Install-PackageProvider -Name NuGet -Force
+            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
+            $ErrorActionPreference = 'Continue'
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
+            $ErrorActionPreference = 'Stop'
             Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
             Repair-WinGetPackageManager -AllUsers
           }
-          # Validate winget is functional before proceeding
-          # Note: source update can return non-zero on transient CDN errors; treat as warning
+          # Validate winget is functional before proceeding.
+          # source update can return non-zero on transient CDN errors; treat as warning.
+          # Temporarily suspend Stop preference so native command stderr doesn't abort.
+          $ErrorActionPreference = 'Continue'
           winget source update
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning "winget source update returned $LASTEXITCODE — continuing anyway"
+          $sourceUpdateExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($sourceUpdateExit -ne 0) {
+            Write-Warning "winget source update returned $sourceUpdateExit — continuing anyway"
           }
           winget --version
 
       - name: Install core CLI tools
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Invoke-WithRetry {
+            param([scriptblock]$Script, [int]$Max = 3)
+            for ($i = 1; $i -le $Max; $i++) {
+              try { & $Script; return } catch {
+                if ($i -eq $Max) { throw }
+                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
+                Start-Sleep -Seconds ($i * 5)
+              }
+            }
+          }
+
           # Install only the cross-platform core CLI tools that are smoke-tested below.
           # GUI apps (Docker Desktop, Chrome, VS Code, etc.) are excluded to avoid
           # GUI installer timeouts and UAC failures blocking CLI-only PRs.
@@ -62,10 +93,31 @@ jobs:
 
           $installFailed = @()
           foreach ($id in $corePackages) {
+            # Skip if already installed to keep the step idempotent.
+            # winget list may write to stderr on miss; use Continue to avoid false termination.
+            $ErrorActionPreference = 'Continue'
+            $listed = winget list --exact --id $id --source winget 2>&1
+            $listExit = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($listExit -eq 0 -and ($listed | Select-String -Quiet $id)) {
+              Write-Host "SKIP $id (already installed)"
+              continue
+            }
+
             Write-Host "Installing $id..."
-            winget install --id $id --source winget --silent --accept-package-agreements --accept-source-agreements
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "winget install failed for $id (exit $LASTEXITCODE)"
+            try {
+              Invoke-WithRetry {
+                # Use Continue inside the scriptblock: winget writes stderr progress
+                # that would trip Stop before we can check $LASTEXITCODE.
+                $ErrorActionPreference = 'Continue'
+                winget install --id $id --exact --source winget --silent `
+                  --accept-package-agreements --accept-source-agreements --disable-interactivity
+                $installExit = $LASTEXITCODE
+                $ErrorActionPreference = 'Stop'
+                if ($installExit -ne 0) { throw "winget exit $installExit" }
+              }
+            } catch {
+              Write-Warning "winget install failed for ${id}: $_"
               $installFailed += $id
             }
           }

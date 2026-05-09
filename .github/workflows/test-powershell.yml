@@ -22,18 +22,40 @@ permissions:
 
 jobs:
   test:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Cache PowerShell modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~\Documents\PowerShell\Modules
+          key: ${{ runner.os }}-psmodules-pester-5.6.1-pssa-1.22.0
 
       - name: Install PowerShell modules
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Invoke-WithRetry {
+            param([scriptblock]$Script, [int]$Max = 3)
+            for ($i = 1; $i -le $Max; $i++) {
+              try { & $Script; return } catch {
+                if ($i -eq $Max) { throw }
+                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
+                Start-Sleep -Seconds ($i * 5)
+              }
+            }
+          }
+
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester           -RequiredVersion 5.6.1  -Scope CurrentUser -Force
-          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
+          Invoke-WithRetry { Install-Module -Name Pester           -RequiredVersion 5.6.1  -Scope CurrentUser -Force -Repository PSGallery }
+          Invoke-WithRetry { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery }
 
       - name: Run tests
         shell: pwsh
