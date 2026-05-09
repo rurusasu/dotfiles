@@ -1,12 +1,16 @@
 name: PowerShell Tests
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
       - "scripts/powershell/**"
-      - "install.ps1"
       - ".github/workflows/test-powershell.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,9 +18,10 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install Pester
         shell: pwsh
         run: |
@@ -40,7 +45,8 @@ jobs:
             "./handlers/Handler.WslConfig.ps1",
             "./handlers/Handler.Docker.ps1",
             "./handlers/Handler.VscodeServer.ps1",
-            "./handlers/Handler.Chezmoi.ps1"
+            "./handlers/Handler.Chezmoi.ps1",
+            "./handlers/Handler.ClaudeCode.ps1"
           ) | Where-Object { Test-Path $_ }
 
           if ($sourceFiles.Count -gt 0) {
@@ -75,7 +81,7 @@ jobs:
           }
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         if: always()
         with:
           files: scripts/powershell/coverage.xml
@@ -85,7 +91,7 @@ jobs:
           verbose: true
 
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: test-results
