@@ -38,10 +38,19 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
+          # On Windows runners winget lives in the AppX path which is not always on PATH.
+          # Add it unconditionally so Get-Command can find it without a fallback install.
+          $appxBin = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+          if ($appxBin -notin ($env:PATH -split ';')) {
+            $env:PATH = "$appxBin;$env:PATH"
+          }
+
           # Ensure winget is available on the runner
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing Microsoft.WinGet.Client..."
-            Install-PackageProvider -Name NuGet -Force
+            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
+            $ErrorActionPreference = 'Continue'
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
+            $ErrorActionPreference = 'Stop'
             Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
             Repair-WinGetPackageManager -AllUsers
           }
