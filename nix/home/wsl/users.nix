@@ -19,6 +19,11 @@
       # なり非対話シェル経由 (`task push` 等) では無進捗でブロックする
       # （chezmoi が WSL 内まで適用されないためここで宣言的に補う）。
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
+      # nixpkgs installs the Warp CLI binary as "warp-terminal"; alias to
+      # match the "warp" name used on Windows. WSL-only because Windows
+      # already has warp.exe in PATH.
+      home.shellAliases.warp = "warp-terminal";
+
       programs.git = {
         enable = true;
         settings = {
