@@ -37,6 +37,10 @@ chezmoi/private_dot_claude/settings.local.json
 .task/
 .worktrees/
 
+# AI agent generated files
+docs/superpowers/
+docs/plans/
+
 # Temporary files
 *.tmp
 *.log
