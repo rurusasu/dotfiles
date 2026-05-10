@@ -14,7 +14,7 @@ telemetry_enabled = true
 crash_reporting_enabled = true
 
 [account]
-is_settings_sync_enabled = true
+is_settings_sync_enabled = false
 
 [appearance]
 
