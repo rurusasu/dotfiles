@@ -19,7 +19,6 @@ is_settings_sync_enabled = false
 [appearance]
 
 [appearance.text]
-font_family = "Moralerspace Neon HWJPDOC"
 font_name = "Moralerspace Neon HWJPDOC"
 ai_font_name = "Moralerspace Neon HWJPDOC"
 match_ai_font = false
