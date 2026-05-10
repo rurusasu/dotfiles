@@ -14,7 +14,7 @@ $RegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 function Test-FontInstalled {
   $key = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
   if ($null -eq $key) { return $false }
-  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "${FontName}*" }).Count -gt 0
+  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "*HWJPDOC*" }).Count -gt 0
 }
 
 if (Test-FontInstalled) {
@@ -39,13 +39,13 @@ if (-not (Test-Path -LiteralPath $FontsDir)) {
   New-Item -ItemType Directory -Path $FontsDir -Force | Out-Null
 }
 
-Get-ChildItem -Path $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
+Get-ChildItem -LiteralPath $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
   $destPath = Join-Path $FontsDir $_.Name
   Copy-Item -LiteralPath $_.FullName -Destination $destPath -Force
 
-  # レジストリ登録
+  # レジストリ登録（HKCU ユーザーフォントはフルパスが必要）
   $regName = "$($_.BaseName) (TrueType)"
-  Set-ItemProperty -Path $RegistryPath -Name $regName -Value $_.Name -Force
+  Set-ItemProperty -Path $RegistryPath -Name $regName -Value $destPath -Force
   Write-Host "Installed: $($_.Name)"
 }
 

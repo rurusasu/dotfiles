@@ -58,18 +58,16 @@ Describe 'Integration Verification - Windows Environment' {
 
     Context 'Font Installation' {
         It "should have MoralerspaceHWJPDOC font installed" {
-            Add-Type -AssemblyName System.Drawing
-            $fonts = [System.Drawing.Text.InstalledFontCollection]::new()
-            try {
-                $installedNames = $fonts.Families | ForEach-Object { $_.Name }
-                $found = @($installedNames | Where-Object { $_ -like "*Moralerspace*HWJPDOC*" -or $_ -like "MoralerspaceHWJPDOC*" })
-                if ($found.Count -eq 0) {
-                    throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
-                }
-                Write-Host "確認完了: フォント '$($found | Select-Object -First 1)' がインストール済み"
-            } finally {
-                $fonts.Dispose()
+            # GDI キャッシュ（InstalledFontCollection）はセッション再起動後に更新されるため
+            # レジストリを直接確認する（インストール直後でも信頼性が高い）
+            $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+            $key = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+            if ($null -eq $key) { throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。" }
+            $found = @($key.PSObject.Properties | Where-Object { $_.Name -like "Moralerspace*HWJPDOC*" })
+            if ($found.Count -eq 0) {
+                throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
             }
+            Write-Host "確認完了: フォント '$($found[0].Name)' がインストール済み ($($found.Count) 件)"
         }
     }
 }
