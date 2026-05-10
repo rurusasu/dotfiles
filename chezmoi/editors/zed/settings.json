@@ -26,8 +26,8 @@
     "dark": "Material Icon Theme"
   },
   "theme": "GitHub Dark Dimmed",
-  "ui_font_size": 14,
-  "buffer_font_size": 12,
+  "ui_font_size": 10,
+  "buffer_font_size": 10,
   "buffer_font_family": "Moralerspace",
   // Vim mode
   "vim_mode": false,
@@ -66,7 +66,7 @@
     "shell": {
       "program": "pwsh"
     },
-    "font_size": 12,
+    "font_size": 10,
     "line_height": "comfortable",
     "copy_on_select": false,
     "vim_mode": false

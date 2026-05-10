@@ -164,7 +164,7 @@
     "defaults": {
       "font": {
         "face": "Moralerspace",
-        "size": 8
+        "size": 10
       },
       "useAcrylic": true,
       "opacity": 85,

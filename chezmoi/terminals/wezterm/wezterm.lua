@@ -75,7 +75,7 @@ config.color_scheme = "gruvbox-custom"
 
 -- Font settings
 config.font = wezterm.font("Moralerspace")
-config.font_size = 8.0
+config.font_size = 10.0
 
 -- IME support
 config.use_ime = true
