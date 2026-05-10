@@ -55,4 +55,19 @@ Describe 'Integration Verification - Windows Environment' {
             Write-Host "NixOS: 確認完了 '$_' 場所: '$output'"
         }
     }
+
+    Context 'Font Installation' {
+        It "should have MoralerspaceHWJPDOC font installed" {
+            # GDI キャッシュ（InstalledFontCollection）はセッション再起動後に更新されるため
+            # レジストリを直接確認する（インストール直後でも信頼性が高い）
+            $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+            $key = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+            if ($null -eq $key) { throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。" }
+            $found = @($key.PSObject.Properties | Where-Object { $_.Name -like "Moralerspace*HWJPDOC*" })
+            if ($found.Count -eq 0) {
+                throw "フォント 'MoralerspaceHWJPDOC' がインストールされていません。chezmoi apply を実行してください。"
+            }
+            Write-Host "確認完了: フォント '$($found[0].Name)' がインストール済み ($($found.Count) 件)"
+        }
+    }
 }
