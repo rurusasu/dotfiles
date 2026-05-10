@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy shell configurations for Windows
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zshrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/env.ps1" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/env.ps1" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -30,7 +30,6 @@ function Deploy-File {
 Write-Host "Deploying shell configurations..."
 
 Deploy-File "$ChezmoiSource\shells\bashrc" "$HomeDir\.bashrc"
-Deploy-File "$ChezmoiSource\shells\zshrc" "$HomeDir\.zshrc"
 Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
 
 # PowerShell profiles (PowerShell 7 and Windows PowerShell 5.1)

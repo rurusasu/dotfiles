@@ -48,12 +48,12 @@ tasks:
       MSG: '{{.CLI_ARGS | default "update"}}'
     env:
       GIT_COMMIT_MSG: "{{.MSG}}"
-      WSLENV: "GIT_COMMIT_MSG"
+      WSLENV: "GIT_COMMIT_MSG:$WSLENV"
     cmds:
       - task: skills:sync
       - task: fmt
       - task: lint
-      - wsl -d {{.DISTRO}} -- bash -lc 'cd {{.DOTFILES_PATH}} && git add -A && git commit -m "$GIT_COMMIT_MSG"'
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && git commit -m \"\$(echo \"$GIT_COMMIT_MSG\" | sed \"s/^'//;s/'$//\")\""
 
   push:
     desc: Push to remote (via WSL)

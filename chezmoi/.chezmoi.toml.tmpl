@@ -6,6 +6,9 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
     command = "op"
     account = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
 
+[scriptEnv]
+    OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+
 [interpreters.ps1]
     command = "powershell"
     args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
