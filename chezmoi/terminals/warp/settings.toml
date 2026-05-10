@@ -20,6 +20,9 @@ is_settings_sync_enabled = false
 
 [appearance.text]
 font_family = "Moralerspace Neon HWJPDOC"
+font_name = "Moralerspace Neon HWJPDOC"
+ai_font_name = "Moralerspace Neon HWJPDOC"
+match_ai_font = false
 notebook_font_size = 10.0
 font_size = 10.0
 
