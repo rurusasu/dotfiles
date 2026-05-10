@@ -74,7 +74,7 @@ config.color_schemes = {
 config.color_scheme = "gruvbox-custom"
 
 -- Font settings
-config.font = wezterm.font("Moralerspace")
+config.font = wezterm.font("Moralerspace Neon HWJPDOC")
 config.font_size = 10.0
 
 -- IME support

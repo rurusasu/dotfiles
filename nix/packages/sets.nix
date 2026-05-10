@@ -162,7 +162,7 @@ let
 
     # ── fonts ─────────────────────────────────────────────
     moralerspace = {
-      pkg = pkgs.moralerspace;
+      pkg = pkgs.moralerspace-hwjpdoc;
       winget = null;
       category = "fonts";
     };
