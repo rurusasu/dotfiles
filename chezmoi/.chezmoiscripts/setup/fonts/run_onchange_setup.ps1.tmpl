@@ -4,6 +4,18 @@
 
 $ErrorActionPreference = "Stop"
 
+# 現在のセッションにフォントをロードするための Win32 API
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class FontHelper {
+    [DllImport("gdi32.dll", CharSet = CharSet.Auto)]
+    public static extern int AddFontResourceEx(string lpFileName, uint fl, IntPtr pdv);
+    [DllImport("user32.dll")]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+}
+"@
+
 $FontVersion  = "v2.0.0"
 $FontName     = "MoralerspaceHWJPDOC"
 $DownloadUrl  = "https://github.com/yuru7/moralerspace/releases/download/$FontVersion/${FontName}_${FontVersion}.zip"
@@ -46,8 +58,15 @@ Get-ChildItem -LiteralPath $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
   # レジストリ登録（HKCU ユーザーフォントはフルパスが必要）
   $regName = "$($_.BaseName) (TrueType)"
   Set-ItemProperty -Path $RegistryPath -Name $regName -Value $destPath -Force
+
+  # 現在のセッションにフォントをロード（再ログオン不要）
+  [FontHelper]::AddFontResourceEx($destPath, 0, [IntPtr]::Zero) | Out-Null
   Write-Host "Installed: $($_.Name)"
 }
+
+# フォント変更を全ウィンドウにブロードキャスト（WM_FONTCHANGE = 0x001D, HWND_BROADCAST = -1）
+[FontHelper]::SendMessage([IntPtr](-1), 0x001D, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+Write-Host "Font change broadcasted to all windows."
 
 # 後片付け
 Remove-Item -LiteralPath $TempDir -Recurse -Force
