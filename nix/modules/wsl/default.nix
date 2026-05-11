@@ -11,6 +11,11 @@
     fcitx5-gtk
   ];
 
+  # Merge /share/fcitx5 from all installed packages into /run/current-system/sw/share/fcitx5.
+  # Without this, fcitx5 cannot find addon/inputmethod conf files provided by
+  # separate packages like fcitx5-mozc (only the fcitx5 package itself is searched by default).
+  environment.pathsToLink = [ "/share/fcitx5" ];
+
   system.activationScripts.wslWhoami = {
     text = ''
       mkdir -p /usr/bin

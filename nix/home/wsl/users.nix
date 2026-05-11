@@ -21,6 +21,27 @@
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
       # Exclude WSL mount paths from zoxide's database to avoid indexing
       # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
+      # Declaratively manage fcitx5 input method profile.
+      # fcitx5 overwrites this file on exit, so home-manager re-applies it on
+      # each activation (nrs). Users should not edit this file manually.
+      home.file.".config/fcitx5/profile".text = ''
+        [Groups/0]
+        Name=Default
+        Default Layout=us
+        DefaultIM=mozc
+
+        [Groups/0/Items/0]
+        Name=keyboard-us
+        Layout=
+
+        [Groups/0/Items/1]
+        Name=mozc
+        Layout=
+
+        [GroupOrder]
+        0=Default
+      '';
+
       home.sessionVariables = {
         _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
         # fcitx5 GTK_IM_MODULE bridge: Warp runs in Wayland mode but reads these
