@@ -35,9 +35,10 @@
       };
 
       # gnome-keyring as a user systemd service.
-      # WSL has no PAM login flow, so the daemon won't be auto-unlocked; running it
-      # via systemd with --unlock-on-start keeps the default keyring open without a
-      # password prompt, which is acceptable in a local WSL environment.
+      # WSL has no PAM login flow so the system-level keyring service is never
+      # auto-started. This user unit ensures the daemon runs on every login.
+      # The keyring starts locked; Warp will create a new default collection
+      # with an empty password on first use, which is acceptable for WSL.
       systemd.user.services.gnome-keyring = {
         Unit = {
           Description = "GNOME Keyring daemon";

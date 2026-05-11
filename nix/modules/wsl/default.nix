@@ -23,9 +23,10 @@
     ];
   };
 
-  # Secret Service for Warp (and other apps) to persist credentials across restarts.
-  # Without this, Warp shows "Failed to acquire default Secret Service collection".
-  services.gnome.gnome-keyring.enable = true;
+  # PAM integration for gnome-keyring: auto-unlocks the keyring on login when a
+  # proper PAM session is used. The daemon itself is started by a Home Manager
+  # user systemd service (see nix/home/wsl/users.nix) to avoid a duplicate
+  # instance competing for the org.freedesktop.secrets D-Bus name.
   security.pam.services.login.enableGnomeKeyring = true;
 
   # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
