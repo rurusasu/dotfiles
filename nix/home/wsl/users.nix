@@ -50,8 +50,7 @@
       systemd.user.services.fcitx5 = {
         Unit = {
           Description = "Fcitx5 input method daemon";
-          After = [ "graphical-session.target" ];
-          PartOf = [ "graphical-session.target" ];
+          After = [ "basic.target" ];
         };
         Service = {
           ExecStart = "/run/current-system/sw/bin/fcitx5 --disable=wayland";
@@ -61,7 +60,7 @@
             "WAYLAND_DISPLAY="
           ];
         };
-        Install.WantedBy = [ "graphical-session.target" ];
+        Install.WantedBy = [ "default.target" ];
       };
 
       # gnome-keyring as a user systemd service.
