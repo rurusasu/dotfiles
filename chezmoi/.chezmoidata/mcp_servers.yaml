@@ -255,11 +255,13 @@ mcp_servers:
       - zed
 
   # Playwright - Browser automation MCP (VS Code only; used via Copilot chat)
+  # --isolated: セッションごとに独立したブラウザを起動し、複数セッション間の競合を防ぐ
   - name: playwright
     command: pnpm
     args:
       - "dlx"
-      - "@playwright/mcp@0.0.71"
+      - "@playwright/mcp@0.0.75"
+      - "--isolated"
     startup_timeout_sec: 60
     supports:
       - vscode
