@@ -84,6 +84,10 @@
           Environment = [
             "DISPLAY=:0"
             "WAYLAND_DISPLAY="
+            # fcitx5 searches its own store-path lib dir by default, not the merged
+            # /run/current-system/sw path. This makes addon .so files from separate
+            # packages (e.g. fcitx5-mozc) visible at runtime.
+            "FCITX_ADDON_DIRS=/run/current-system/sw/lib/fcitx5"
           ];
         };
         Install.WantedBy = [ "default.target" ];
