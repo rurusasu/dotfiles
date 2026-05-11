@@ -23,6 +23,14 @@
     ];
   };
 
+  # Japanese input via fcitx5+mozc.
+  # fcitx5 is started as a user systemd service by this option automatically.
+  i18n.inputMethod = {
+    enable = true;
+    type = "fcitx5";
+    fcitx5.addons = with pkgs; [ fcitx5-mozc ];
+  };
+
   # PAM integration for gnome-keyring: auto-unlocks the keyring on login when a
   # proper PAM session is used. The daemon itself is started by a Home Manager
   # user systemd service (see nix/home/wsl/users.nix) to avoid a duplicate

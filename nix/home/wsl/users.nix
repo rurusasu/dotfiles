@@ -27,11 +27,32 @@
         # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming.
         # LD_LIBRARY_PATH must include wayland because Warp dlopen()s libwayland-client
         # at runtime and the binary bypasses nix-ld (it links directly against NixOS glibc).
-        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft warp-terminal";
+        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft GTK_IM_MODULE=fcitx QT_IM_MODULE=fcitx XMODIFIERS=@im=fcitx warp-terminal";
         # NixOS rebuild shortcuts
         nrs = "sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
         nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
+      };
+
+      # fcitx5 user systemd service (X11 mode only).
+      # WSLg's Wayland compositor does not support zwp_input_method_v2, so
+      # WAYLAND_DISPLAY is explicitly unset to force X11/XWayland mode where
+      # fcitx5's GTK_IM_MODULE bridge works.
+      systemd.user.services.fcitx5 = {
+        Unit = {
+          Description = "Fcitx5 input method daemon (X11 mode)";
+          After = [ "graphical-session.target" ];
+          PartOf = [ "graphical-session.target" ];
+        };
+        Service = {
+          ExecStart = "/run/current-system/sw/bin/fcitx5 --disable=wayland";
+          Restart = "on-failure";
+          Environment = [
+            "DISPLAY=:0"
+            "WAYLAND_DISPLAY="
+          ];
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
       };
 
       # gnome-keyring as a user systemd service.
