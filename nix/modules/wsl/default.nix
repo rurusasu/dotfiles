@@ -1,7 +1,14 @@
 { config, pkgs, ... }:
 {
-  environment.systemPackages = [
-    pkgs.coreutils
+  environment.systemPackages = with pkgs; [
+    coreutils
+    # Japanese input: fcitx5+mozc installed as system packages.
+    # i18n.inputMethod is intentionally NOT used here because it auto-generates
+    # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
+    # user systemd service that runs fcitx5 with --disable=wayland (required for WSLg).
+    fcitx5
+    fcitx5-mozc
+    fcitx5-gtk
   ];
 
   system.activationScripts.wslWhoami = {
