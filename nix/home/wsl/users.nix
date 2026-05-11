@@ -2,7 +2,7 @@
 # Imported by nix/flakes/lib/hosts.nix as home-manager.users.
 {
   nixos =
-    { ... }:
+    { pkgs, ... }:
     let
       # GCM のパスには空白 (`Program Files`) が含まれるため、git が helper 値を
       # `sh -c` に渡す前にトークン分割しないようリテラルなダブルクォートで包む。
@@ -24,12 +24,30 @@
       home.sessionVariables._ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
 
       programs.zsh.shellAliases = {
-        # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming
-        warp = "warp-terminal";
+        # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming.
+        # LD_LIBRARY_PATH must include wayland because Warp dlopen()s libwayland-client
+        # at runtime and the binary bypasses nix-ld (it links directly against NixOS glibc).
+        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft warp-terminal";
         # NixOS rebuild shortcuts
         nrs = "sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
         nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
+      };
+
+      # gnome-keyring as a user systemd service.
+      # WSL has no PAM login flow, so the daemon won't be auto-unlocked; running it
+      # via systemd with --unlock-on-start keeps the default keyring open without a
+      # password prompt, which is acceptable in a local WSL environment.
+      systemd.user.services.gnome-keyring = {
+        Unit = {
+          Description = "GNOME Keyring daemon";
+          After = [ "basic.target" ];
+        };
+        Service = {
+          ExecStart = "${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --foreground --components=secrets";
+          Restart = "on-abort";
+        };
+        Install.WantedBy = [ "default.target" ];
       };
 
       programs.git = {
