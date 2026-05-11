@@ -21,26 +21,35 @@
       # GCM 本体のパスは WSL 限定なので home-manager の WSL プロファイルに置く。
       # Exclude WSL mount paths from zoxide's database to avoid indexing
       # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
-      home.sessionVariables._ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+      home.sessionVariables = {
+        _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+        # fcitx5 GTK_IM_MODULE bridge: Warp runs in Wayland mode but reads these
+        # env vars to delegate key events to the fcitx5 daemon via the GTK IM module.
+        GTK_IM_MODULE = "fcitx";
+        QT_IM_MODULE = "fcitx";
+        XMODIFIERS = "@im=fcitx";
+      };
 
       programs.zsh.shellAliases = {
         # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming.
         # LD_LIBRARY_PATH must include wayland because Warp dlopen()s libwayland-client
         # at runtime and the binary bypasses nix-ld (it links directly against NixOS glibc).
-        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft GTK_IM_MODULE=fcitx QT_IM_MODULE=fcitx XMODIFIERS=@im=fcitx warp-terminal";
+        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft warp-terminal";
         # NixOS rebuild shortcuts
         nrs = "sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
         nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
       };
 
-      # fcitx5 user systemd service (X11 mode only).
+      # fcitx5 user systemd service.
       # WSLg's Wayland compositor does not support zwp_input_method_v2, so
-      # WAYLAND_DISPLAY is explicitly unset to force X11/XWayland mode where
-      # fcitx5's GTK_IM_MODULE bridge works.
+      # fcitx5 is started with --disable=wayland to prevent it from crashing
+      # ("waylandmodule: Connection removed"). Warp itself continues to run in
+      # Wayland mode; Japanese input works via the GTK_IM_MODULE=fcitx bridge
+      # which routes key events to this daemon regardless of display backend.
       systemd.user.services.fcitx5 = {
         Unit = {
-          Description = "Fcitx5 input method daemon (X11 mode)";
+          Description = "Fcitx5 input method daemon";
           After = [ "graphical-session.target" ];
           PartOf = [ "graphical-session.target" ];
         };

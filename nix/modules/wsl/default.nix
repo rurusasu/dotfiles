@@ -1,7 +1,14 @@
 { config, pkgs, ... }:
 {
-  environment.systemPackages = [
-    pkgs.coreutils
+  environment.systemPackages = with pkgs; [
+    coreutils
+    # Japanese input: fcitx5+mozc installed as system packages.
+    # i18n.inputMethod is intentionally NOT used here because it auto-generates
+    # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
+    # user systemd service that runs fcitx5 with --disable=wayland (required for WSLg).
+    fcitx5
+    fcitx5-mozc
+    fcitx5-gtk
   ];
 
   system.activationScripts.wslWhoami = {
@@ -21,14 +28,6 @@
       wayland
       libxkbcommon
     ];
-  };
-
-  # Japanese input via fcitx5+mozc.
-  # fcitx5 is started as a user systemd service by this option automatically.
-  i18n.inputMethod = {
-    enable = true;
-    type = "fcitx5";
-    fcitx5.addons = with pkgs; [ fcitx5-mozc ];
   };
 
   # PAM integration for gnome-keyring: auto-unlocks the keyring on login when a
