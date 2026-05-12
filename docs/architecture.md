@@ -31,9 +31,7 @@ dotfiles/
 │   ├── flakes/             # Flake inputs/outputs, treefmt
 │   ├── hosts/              # Host-specific configs (WSL, Linux)
 │   ├── modules/            # Custom NixOS modules (system-level)
-│   ├── profiles/           # Reusable config profiles
-│   ├── lib/                # Helper functions
-│   └── overlays/           # Nixpkgs overlays
+│   └── lib/                # Helper functions
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)
