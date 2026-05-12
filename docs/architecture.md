@@ -33,8 +33,7 @@ dotfiles/
 │   ├── modules/            # Custom NixOS modules (system-level)
 │   ├── profiles/           # Reusable config profiles
 │   ├── lib/                # Helper functions
-│   ├── overlays/           # Nixpkgs overlays
-│   └── templates/          # Project templates
+│   └── overlays/           # Nixpkgs overlays
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)
