@@ -15,9 +15,18 @@ Host *
     IdentityAgent ~/.1password/agent.sock
 {{- end }}
 
-# GitHub (default)
+# GitHub (personal account: rurusasu)
 Host github.com
     HostName github.com
     User git
     IdentityFile ~/.ssh/signing_key.pub
+    IdentitiesOnly yes
+
+# GitHub (work account: kohei-miki-im8). Re-point work repo remotes to
+# `git@github-work:owner/repo` to switch SSH key and trigger the
+# hasconfig-based git identity override in ~/.gitconfig.
+Host github-work
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_work.pub
     IdentitiesOnly yes

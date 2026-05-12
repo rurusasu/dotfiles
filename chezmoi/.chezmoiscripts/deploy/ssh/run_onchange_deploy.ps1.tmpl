@@ -1,8 +1,11 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy SSH configuration for Windows
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
-{{- if lookPath "op" }}
-# pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+{{/* Accept either op or op.exe (symmetric with the Unix variant). */}}
+{{- $hasOp := or (lookPath "op") (lookPath "op.exe") }}
+{{- if $hasOp }}
+# personal-pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+# work-pubkey-hash:     {{ onepasswordRead "op://Employee/GitHub Work/public key" "FXVKKR2KWFCMHGMEA7HQYK6XRE" | sha256sum }}
 {{- end }}
 
 $ErrorActionPreference = "Stop"
@@ -31,11 +34,17 @@ $sshConfig = @'
 '@
 Deploy-Content $sshConfig "$HomeDir\.ssh\config"
 
-{{- if lookPath "op" }}
-$pubkey = '{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
-Deploy-Content $pubkey "$HomeDir\.ssh\signing_key.pub"
+{{- if $hasOp }}
+# Personal SSH public key (from rurusasu's Private vault).
+$personalPubkey = '{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
+Deploy-Content $personalPubkey "$HomeDir\.ssh\signing_key.pub"
+
+# Work SSH public key (from kohei-miki-im8's Employee vault on the work
+# 1Password account; passed as the 2nd onepasswordRead arg).
+$workPubkey = '{{ onepasswordRead "op://Employee/GitHub Work/public key" "FXVKKR2KWFCMHGMEA7HQYK6XRE" }}'
+Deploy-Content $workPubkey "$HomeDir\.ssh\github_work.pub"
 {{- else }}
-Write-Host "WARNING: op CLI not available, skipping signing_key.pub deployment"
+Write-Host "WARNING: op/op.exe CLI not available, skipping public key deployment"
 {{- end }}
 
 Write-Host "SSH configuration deployed."
