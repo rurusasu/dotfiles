@@ -2,7 +2,10 @@
 #!/bin/bash
 # Deploy SSH configuration for Linux/macOS
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
-{{- if lookPath "op" }}
+{{/* Under WSL the chezmoi config routes [onepassword].command to op.exe, so
+     accept either binary as evidence that 1Password CLI is reachable. */}}
+{{- $hasOp := or (lookPath "op") (lookPath "op.exe") }}
+{{- if $hasOp }}
 # personal-pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
 # work-pubkey-hash:     {{ onepasswordRead "op://Employee/GitHub Work/public key" "FXVKKR2KWFCMHGMEA7HQYK6XRE" | sha256sum }}
 {{- end }}
@@ -27,7 +30,7 @@ SSH_CONFIG='{{ include "ssh/config.tmpl" }}'
 deploy_content "$SSH_CONFIG" "$HOME_DIR/.ssh/config"
 chmod 600 "$HOME_DIR/.ssh/config"
 
-{{- if lookPath "op" }}
+{{- if $hasOp }}
 # Personal SSH public key (from rurusasu's Private vault).
 PERSONAL_PUBKEY='{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
 deploy_content "$PERSONAL_PUBKEY" "$HOME_DIR/.ssh/signing_key.pub"
@@ -39,7 +42,7 @@ WORK_PUBKEY='{{ onepasswordRead "op://Employee/GitHub Work/public key" "FXVKKR2K
 deploy_content "$WORK_PUBKEY" "$HOME_DIR/.ssh/github_work.pub"
 chmod 644 "$HOME_DIR/.ssh/github_work.pub"
 {{- else }}
-echo "WARNING: op CLI not available, skipping public key deployment"
+echo "WARNING: op/op.exe CLI not available, skipping public key deployment"
 {{- end }}
 
 echo "SSH configuration deployed."
