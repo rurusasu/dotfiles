@@ -15,7 +15,8 @@
 BeforeAll {
     $script:chezmoiRoot = Join-Path $PSScriptRoot "../../../../chezmoi"
     $script:sshConfigTmpl = Join-Path $script:chezmoiRoot "ssh/config.tmpl"
-    $script:gitconfigTmpl = Join-Path $script:chezmoiRoot "create_dot_gitconfig.tmpl"
+    $script:gitconfigTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig.tmpl"
+    $script:gitconfigWorkTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig-work.tmpl"
     $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_onchange_deploy.ps1.tmpl"
     $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_onchange_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
@@ -42,6 +43,10 @@ Describe 'SSH config テンプレート' {
         $script:sshContent | Should -Match 'IdentityFile.*signing_key\.pub'
     }
 
+    It 'github-work ホストが github_work.pub を IdentityFile に指定していること' {
+        $script:sshContent | Should -Match 'IdentityFile.*github_work\.pub' -Because "work account 用に分離した公開鍵を参照する"
+    }
+
     It 'IdentitiesOnly yes が設定されていること' {
         $script:sshContent | Should -Match 'IdentitiesOnly\s+yes' -Because "エージェントに不要な鍵を提示させないため"
     }
@@ -50,7 +55,7 @@ Describe 'SSH config テンプレート' {
         $identityFiles = [regex]::Matches($script:sshContent, 'IdentityFile\s+(.+)') |
             ForEach-Object { $_.Groups[1].Value.Trim() }
 
-        $deployedKeys = @('~/.ssh/signing_key.pub')
+        $deployedKeys = @('~/.ssh/signing_key.pub', '~/.ssh/github_work.pub')
         foreach ($keyPath in $identityFiles) {
             $keyPath | Should -BeIn $deployedKeys -Because "参照される公開鍵はすべて deploy スクリプトでデプロイされる必要がある"
         }
@@ -95,6 +100,30 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Not -Match 'directory\s*=\s*\*' -Because (
             "CVE-2022-24765: safe.directory = * は dubious ownership チェックを全無効化する"
         )
+    }
+
+    It 'includeIf hasconfig フックが work identity を切替えるよう設定されていること' {
+        $script:gitconfigContent | Should -Match 'includeIf\s+"hasconfig:remote\.\*\.url:git@github-work:' -Because (
+            "ssh/config.tmpl の Host github-work alias と組み合わせて work identity を自動適用する"
+        )
+    }
+}
+
+Describe 'gitconfig-work テンプレート' {
+    BeforeAll {
+        $script:gitconfigWorkContent = Get-Content -Path $script:gitconfigWorkTmpl -Raw
+    }
+
+    It '[user] セクションを持つこと' {
+        $script:gitconfigWorkContent | Should -Match '\[user\]'
+    }
+
+    It 'work signingkey が github_work.pub を指していること' {
+        $script:gitconfigWorkContent | Should -Match 'github_work\.pub'
+    }
+
+    It 'git.work データから値を引いていること' {
+        $script:gitconfigWorkContent | Should -Match 'get \$work "name"' -Because "personal.yaml の git.work サブツリーから取得する"
     }
 }
 
@@ -195,16 +224,26 @@ Describe 'personal.yaml の git データ' {
         $script:personalYaml = Get-Content -Path (Join-Path $script:chezmoiRoot ".chezmoidata/personal.yaml") -Raw
     }
 
-    It 'git.name が設定されていること' {
-        $script:personalYaml | Should -Match 'name:\s*".+"'
+    It 'git.personal サブツリーが定義されていること' {
+        $script:personalYaml | Should -Match '(?ms)^git:\s*\r?\n.*?\bpersonal:' -Because "personal identity 用のサブツリーが必要 (multi-identity 構造)"
     }
 
-    It 'git.email が設定されていること' {
-        $script:personalYaml | Should -Match 'email:\s*".+"'
+    It 'git.work サブツリーが定義されていること' {
+        $script:personalYaml | Should -Match '(?ms)^git:\s*\r?\n.*?\bwork:' -Because "work identity 用のサブツリーが必要 (multi-identity 構造)"
     }
 
-    It 'git.signingkey のデフォルト値が signing_key.pub であること' {
+    It 'commit author email に noreply 形式が使われていること' {
+        $script:personalYaml | Should -Match '\+\w+@users\.noreply\.github\.com' -Because (
+            "公開リポへの実 email 露出を防ぐため GitHub noreply 形式に統一する"
+        )
+    }
+
+    It 'personal signingkey が signing_key.pub を指していること' {
         $script:personalYaml | Should -Match 'signing_key\.pub'
+    }
+
+    It 'work signingkey が github_work.pub を指していること' {
+        $script:personalYaml | Should -Match 'github_work\.pub'
     }
 
     It 'telegramUserId が含まれていないこと' {
