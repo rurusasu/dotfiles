@@ -20,6 +20,8 @@ function Deploy-File {
     }
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
     Write-Host "Deployed: $Destination"
+  } else {
+    Write-Warning "Source file not found, skipping: $Source"
   }
 }
 
@@ -39,13 +41,17 @@ if (Test-Path -LiteralPath $WarpConfigDir) {
   Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$WarpConfigDir\config\keybindings.yaml"
   Deploy-File "$ChezmoiSource\terminals\warp\settings.toml" "$WarpConfigDir\config\settings.toml"
 
-  # Warp Workflows (zoxide, fzf-cd, fzf-history)
+  # Warp Workflows — Warp stores workflows in %APPDATA% (Roaming), not %LOCALAPPDATA%
+  # NOTE: When adding a new workflow YAML, you MUST add its hash to the hash line above
+  # so that chezmoi detects the change and re-runs this script.
   $WorkflowSrcDir = "$ChezmoiSource\terminals\warp\workflows"
   $WorkflowDestDir = "$env:APPDATA\warp\Warp\data\workflows"
   if (Test-Path -LiteralPath $WorkflowSrcDir) {
     Get-ChildItem -Path $WorkflowSrcDir -Filter "*.yaml" | ForEach-Object {
       Deploy-File $_.FullName "$WorkflowDestDir\$($_.Name)"
     }
+  } else {
+    Write-Warning "Warp workflows source dir not found ($WorkflowSrcDir), skipping workflow deployment."
   }
 } else {
   Write-Host "Warp config dir not found ($WarpConfigDir), skipping. Launch Warp once to create it, then re-run chezmoi apply."
