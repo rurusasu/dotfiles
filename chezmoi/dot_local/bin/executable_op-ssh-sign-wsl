@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# op-ssh-sign-wsl — wrap Windows op-ssh-sign.exe so WSL git users can sign
+# commits with their 1Password SSH key.
+#
+# git invokes the signing program as:
+#     <program> -Y sign -n git -f <pubkey> <buffer_path>
+#
+# op-ssh-sign.exe (the 1Password helper) has three quirks we work around:
+#   (1) It ignores the trailing positional payload arg and reads stdin
+#       instead. We pipe the buffer file through stdin.
+#   (2) git expects the signature at <buffer>.sig, but op-ssh-sign.exe
+#       writes to stdout. We redirect stdout to that path.
+#   (3) Being a Windows binary, it can't read Linux paths for -f <pubkey>.
+#       We translate via wslpath -w for any WSL-side path.
+#
+# The trailing positional buffer arg can also be a WSL path; we read it
+# directly via bash redirection so no translation is needed.
+set -euo pipefail
+
+args=("$@")
+last_idx=$((${#args[@]} - 1))
+buffer="${args[$last_idx]}"
+
+# Translate any -f <pubkey> path from WSL to Windows form.
+for i in "${!args[@]}"; do
+  if (( i > 0 )) \
+      && [[ "${args[$((i-1))]}" == "-f" ]] \
+      && [[ "${args[$i]}" == /* ]] \
+      && [[ "${args[$i]}" != /mnt/* ]]; then
+    args[$i]=$(wslpath -w "${args[$i]}")
+  fi
+done
+
+# Drop the positional buffer arg (op-ssh-sign.exe reads stdin instead).
+unset "args[$last_idx]"
+
+# Sign: stdin = buffer contents, stdout = signature → <buffer>.sig
+op-ssh-sign.exe "${args[@]}" < "$buffer" > "$buffer.sig"

@@ -71,16 +71,8 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Match 'format\s*=\s*ssh'
     }
 
-    It 'commit.gpgsign が true に設定されていること (non-WSL)' {
-        # WSL では gpgsign=false が default (op-ssh-sign.exe が WSL /tmp の signing buffer を読めないため)。
-        # template の else ブランチで true なので、template 全体としては true 設定が存在する。
-        $script:gitconfigContent | Should -Match 'gpgsign\s*=\s*true'
-    }
-
-    It 'WSL では gpgsign=false にして待避していること' {
-        $script:gitconfigContent | Should -Match '(?s)isWSL.+?gpgsign\s*=\s*false' -Because (
-            "WSL での signing は git の /tmp 経由 buffer が Windows op-ssh-sign から読めないため不可"
-        )
+    It 'commit.gpgsign が true に設定されていること' {
+        $script:gitconfigContent | Should -Match 'gpgsign\s*=\s*true' -Because "全 OS で commit 署名を有効にする (WSL は LIF-188 wrapper 経由)"
     }
 
     It 'Windows 用に op-ssh-sign.exe が gpg.ssh.program に設定されていること' {
@@ -95,11 +87,23 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Match '/opt/1Password/op-ssh-sign'
     }
 
-    It 'WSL 検出ブランチで op-ssh-sign.exe を使うこと' {
-        # template の WSL 分岐: contains "microsoft" (lower .chezmoi.kernel.osrelease)
-        $script:gitconfigContent | Should -Match '(?s)contains\s+"microsoft".+?program\s*=\s*op-ssh-sign\.exe' -Because (
-            "WSL では native Linux 1Password が無いので Windows store の op-ssh-sign.exe を PATH 経由で使う"
+    It 'WSL 検出ブランチで op-ssh-sign-wsl wrapper を使うこと' {
+        # template の WSL 分岐: $isWSL → ~/.local/bin/op-ssh-sign-wsl
+        $script:gitconfigContent | Should -Match '(?s)\$isWSL.+?program\s*=\s*~/\.local/bin/op-ssh-sign-wsl' -Because (
+            "WSL では op-ssh-sign.exe の interop quirks (positional payload 無視、Linux パス非対応) を wrapper で吸収する (LIF-188)"
         )
+    }
+
+    It 'op-ssh-sign-wsl wrapper script が deploy 対象として存在すること' {
+        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/dot_bin/executable_op-ssh-sign-wsl"
+        Test-Path -Path $wrapperPath | Should -Be $true -Because "LIF-188: gpg.ssh.program が指す wrapper の本体"
+    }
+
+    It 'op-ssh-sign-wsl wrapper が op-ssh-sign.exe を最終的に呼ぶこと' {
+        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/dot_bin/executable_op-ssh-sign-wsl"
+        if (Test-Path -Path $wrapperPath) {
+            (Get-Content -Path $wrapperPath -Raw) | Should -Match 'op-ssh-sign\.exe' -Because "wrapper 最終的に Windows binary を起動"
+        }
     }
 
     It 'ssh-keygen を gpg.ssh.program に使用していないこと' {
