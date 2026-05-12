@@ -41,11 +41,11 @@ if (Test-Path -LiteralPath $WarpConfigDir) {
   Deploy-File "$ChezmoiSource\terminals\warp\keybindings.yaml" "$WarpConfigDir\config\keybindings.yaml"
   Deploy-File "$ChezmoiSource\terminals\warp\settings.toml" "$WarpConfigDir\config\settings.toml"
 
-  # Warp Workflows — Warp stores workflows in %APPDATA% (Roaming), not %LOCALAPPDATA%
+  # Warp Workflows — stored under the same %LOCALAPPDATA% tree as config
   # NOTE: When adding a new workflow YAML, you MUST add its hash to the hash line above
   # so that chezmoi detects the change and re-runs this script.
   $WorkflowSrcDir = "$ChezmoiSource\terminals\warp\workflows"
-  $WorkflowDestDir = "$env:APPDATA\warp\Warp\data\workflows"
+  $WorkflowDestDir = "$WarpConfigDir\data\workflows"
   if (Test-Path -LiteralPath $WorkflowSrcDir) {
     Get-ChildItem -Path $WorkflowSrcDir -Filter "*.yaml" | ForEach-Object {
       Deploy-File $_.FullName "$WorkflowDestDir\$($_.Name)"
