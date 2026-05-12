@@ -3,7 +3,15 @@
 sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [onepassword]
+{{- if and (eq .chezmoi.os "linux") (env "WSL_DISTRO_NAME") }}
+    # Under WSL the Linux `op` CLI cannot bridge to the Windows 1Password app's
+    # CLI integration. Use `op.exe` (on PATH via winget) so chezmoi templates
+    # can resolve `op://...` refs without a separate Linux signin. Adds ~200ms
+    # per call due to Windows process startup.
+    command = "op.exe"
+{{- else }}
     command = "op"
+{{- end }}
     account = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
 
 [scriptEnv]

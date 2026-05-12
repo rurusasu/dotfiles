@@ -106,7 +106,7 @@ Bash で `curl` を使い、Grok API の Responses エンドポイントに `x_s
 **APIキー取得:**
 
 ```bash
-XAI_API_KEY=$(op read 'op://Personal/xAI-Grok-Twitter/console/apikey')
+XAI_API_KEY=$(op read 'op://Private/xAI-Grok-Twitter/console/apikey')
 ```
 
 **リクエスト例:**
@@ -319,6 +319,6 @@ score: スコア/ブックマーク数（取得できた場合）
   2. `web_fetch: https://www.daemonology.net/hn-daily/` (Hacker News Daily) で上位記事を取得
   3. `web_fetch: https://www.hntoplinks.com/` (HN Top Links) を参照
 - **Zenn RSSは正常動作**: `web_fetch: https://zenn.dev/feed` で安定的にXMLが取得可能（text/xml）
-- **Grok API エラー**: APIキーが無効または期限切れの場合、`op read 'op://Personal/xAI-Grok-Twitter/console/apikey'` でキーを確認。console.x.ai でキーを再生成し 1Password を更新する
+- **Grok API エラー**: APIキーが無効または期限切れの場合、`op read 'op://Private/xAI-Grok-Twitter/console/apikey'` でキーを確認。console.x.ai でキーを再生成し 1Password を更新する
 - **Grok API 429 (Rate Limit)**: 無料クレジット超過の可能性。console.x.ai で使用量を確認。フォールバック（方法B: web_search + アグリゲーター）に切り替える
 - **X検索結果が少ない**: 検索クエリを英語・日本語両方で試す。`from_date`/`to_date` で範囲を広げる。フォールバックとして `twittrend.jp` や `getdaytrends.com` も参照可能

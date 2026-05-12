@@ -14,8 +14,8 @@
 [ -n "$GH_TOKEN" ] && [ -n "$TAVILY_API_KEY" ] && return 0
 command -v op >/dev/null 2>&1 || return 0
 
-_secret_tmpl='GH_TOKEN={{ op://Personal/GitHubUsedUserPAT/credential }}
-TAVILY_API_KEY={{ op://Personal/TavilyUsedUserPAT/credential }}'
+_secret_tmpl='GH_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
+TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}'
 
 # `op inject` reads the template on stdin and emits KEY=value lines on stdout
 # with secrets substituted. `set -a` exports every assignment that follows.
