@@ -1,0 +1,24 @@
+# 1Password SSH agent key filter.
+#
+# Avoids OpenSSH "Too many authentication failures" errors caused by the
+# agent offering more than MaxAuthTries (default 6) keys before the right
+# one is reached. By whitelisting only the keys we actually use, the agent
+# offers them in declared order and SSH succeeds on the first try.
+#
+# Reference: https://developer.1password.com/docs/ssh/agent/config/
+#
+# Item IDs are used (rather than names) to be robust against renames and
+# to disambiguate from sibling items with the same display name (e.g.
+# Private vault contains both an SSH_KEY and a LOGIN item titled "GitHub").
+
+# Personal GitHub SSH key (account: rurusasu / my.1password.com)
+[[ssh-keys]]
+item = "xnoq6xbcdktkph76e2bg37ou6y"
+vault = "Private"
+account = "my.1password.com"
+
+# Work GitHub SSH key (account: kohei-miki-im8 / aimatecoltd.1password.com)
+[[ssh-keys]]
+item = "jj25m5a2xkp4ckswmyvp2dwlxe"
+vault = "Employee"
+account = "aimatecoltd.1password.com"
