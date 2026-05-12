@@ -1,0 +1,6 @@
+name: zoxide interactive
+command: zi
+description: Jump to a directory using zoxide interactive search
+tags:
+  - navigation
+  - zoxide
