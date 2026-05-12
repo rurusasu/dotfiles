@@ -6,7 +6,6 @@
     ./hosts.nix
     ./packages.nix
     ./systems.nix
-    ./templates.nix
     ./treefmt.nix
   ];
 }

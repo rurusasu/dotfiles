@@ -6,7 +6,6 @@
 - `hosts.nix`: `nixosConfigurations` wiring
 - `packages.nix`: package outputs
 - `systems.nix`: 対応プラットフォーム
-- `templates.nix`: flake templates
 - `treefmt.nix`: formatter wiring
 
 ## 変更ルール
