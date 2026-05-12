@@ -54,6 +54,14 @@
         GTK_IM_MODULE = "fcitx";
         QT_IM_MODULE = "fcitx";
         XMODIFIERS = "@im=fcitx";
+        # 1Password multi-account: chezmoi's [onepassword].command routes to
+        # op.exe under WSL (LIF-182), but Windows binaries inherit env vars
+        # from WSL only when WSLENV lists them. /u makes OP_ACCOUNT visible
+        # only when crossing WSL→Windows (not the other direction).
+        # Without this, op.exe fails with "multiple accounts found" because
+        # chezmoi templates call op signin without --account.
+        WSLENV = "OP_ACCOUNT/u";
+        OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
       };
 
       programs.zsh.shellAliases = {
