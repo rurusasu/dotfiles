@@ -1,6 +1,6 @@
 # Secret environment variables via 1Password CLI
 # Sourced by .bashrc and .zshrc at shell startup
-# Works on: Linux (zsh/bash), WSL (NixOS), Git Bash (Windows)
+# Works on: Linux (zsh/bash), WSL (NixOS, uses op.exe), Git Bash (Windows)
 #
 # Set actual item paths in 1Password before using:
 #   op item create --category login --title "GitHub CLI" ...
@@ -14,8 +14,9 @@
 [ -n "$GH_TOKEN" ] && [ -n "$TAVILY_API_KEY" ] && return 0
 
 # Under WSL the Linux `op` CLI cannot bridge to the Windows 1Password app's
-# desktop integration. Use `op.exe` (on PATH via winget) so secrets resolve
-# without a separate Linux signin — mirrors chezmoi's [onepassword].command.
+# CLI integration. Use `op.exe` (on PATH via winget) so secrets resolve
+# without a separate Linux signin — mirrors chezmoi's [onepassword].command
+# (.chezmoi.toml.tmpl).
 if [ -n "$WSL_DISTRO_NAME" ]; then
   _op_cmd=op.exe
 else
@@ -31,7 +32,12 @@ TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}'
 
 # `op inject` reads the template on stdin and emits KEY=value lines on stdout
 # with secrets substituted. `set -a` exports every assignment that follows.
-_resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject 2>/dev/null) || _resolved=''
+_resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject 2>/dev/null) || {
+  printf '[secret/env.sh] warning: %s inject failed; GH_TOKEN/TAVILY_API_KEY not set\n' "$_op_cmd" >&2
+  _resolved=''
+}
+# Strip Windows CR that op.exe may emit under WSL.
+_resolved=$(printf '%s' "$_resolved" | tr -d '\r')
 if [ -n "$_resolved" ]; then
   set -a
   eval "$_resolved"
