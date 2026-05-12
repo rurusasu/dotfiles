@@ -27,12 +27,16 @@ command -v "$_op_cmd" >/dev/null 2>&1 || {
   return 0
 }
 
+# Use the same account as chezmoi's [onepassword].account (.chezmoi.toml.tmpl)
+# to avoid "multiple accounts found" errors from op.exe under WSL.
+_op_acct="${OP_ACCOUNT:-EJLA3HRAVZBCXIQ7SRSFGQBTNU}"
+
 _secret_tmpl='GH_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
 TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}'
 
 # `op inject` reads the template on stdin and emits KEY=value lines on stdout
 # with secrets substituted. `set -a` exports every assignment that follows.
-_resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject 2>/dev/null) || {
+_resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject --account "$_op_acct" 2>/dev/null) || {
   printf '[secret/env.sh] warning: %s inject failed; GH_TOKEN/TAVILY_API_KEY not set\n' "$_op_cmd" >&2
   _resolved=''
 }
@@ -43,4 +47,4 @@ if [ -n "$_resolved" ]; then
   eval "$_resolved"
   set +a
 fi
-unset _secret_tmpl _resolved _op_cmd
+unset _secret_tmpl _resolved _op_cmd _op_acct
