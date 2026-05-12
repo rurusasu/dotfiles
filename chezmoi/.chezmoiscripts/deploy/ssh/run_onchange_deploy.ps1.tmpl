@@ -2,7 +2,7 @@
 # Deploy SSH configuration for Windows
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
 {{- if lookPath "op" }}
-# pubkey-hash: {{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+# pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
 {{- end }}
 
 $ErrorActionPreference = "Stop"
@@ -32,7 +32,7 @@ $sshConfig = @'
 Deploy-Content $sshConfig "$HomeDir\.ssh\config"
 
 {{- if lookPath "op" }}
-$pubkey = '{{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
+$pubkey = '{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
 Deploy-Content $pubkey "$HomeDir\.ssh\signing_key.pub"
 {{- else }}
 Write-Host "WARNING: op CLI not available, skipping signing_key.pub deployment"

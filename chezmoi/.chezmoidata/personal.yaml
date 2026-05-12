@@ -1,10 +1,21 @@
-# Git ユーザー情報（create_dot_gitconfig.tmpl から参照される）
-# chezmoi.toml には [data.git] を持たせず、ここを唯一のソースとする
-# PC ごとに変更したい場合は chezmoi edit-config で [data.git] を追加して上書き
+# Git identity for multi-account setup (rendered into ~/.gitconfig and ~/.gitconfig-work).
+#
+# personal: applied as base identity for all repos
+# work:     applied as override when repo remote uses git@github-work:... alias
+#           (loaded via [includeIf "hasconfig:remote.*.url:..."] in ~/.gitconfig)
+#
+# Emails use GitHub noreply form to avoid exposing real addresses in public
+# commit history. They're public-derivable from GitHub user IDs, so safe to
+# commit to this public repo.
 git:
-  name: "Kohei Miki"
-  email: "rurusasu@gmail.com"
-  signingkey: "~/.ssh/signing_key.pub"
+  personal:
+    name: "rurusasu"
+    email: "36875744+rurusasu@users.noreply.github.com"
+    signingkey: "~/.ssh/signing_key.pub"
+  work:
+    name: "Kohei Miki"
+    email: "193406428+kohei-miki-im8@users.noreply.github.com"
+    signingkey: "~/.ssh/github_work.pub"
 
 # chezmoi テンプレート展開用フラグ（.chezmoiignore.tmpl で参照）
 # install.cmd の同意状態は ~/.config/dotfiles/consent.json で別管理

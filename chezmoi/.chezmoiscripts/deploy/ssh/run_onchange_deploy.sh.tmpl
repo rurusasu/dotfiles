@@ -3,7 +3,7 @@
 # Deploy SSH configuration for Linux/macOS
 # hash: {{ include "ssh/config.tmpl" | sha256sum }}
 {{- if lookPath "op" }}
-# pubkey-hash: {{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
+# pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" | sha256sum }}
 {{- end }}
 
 set -euo pipefail
@@ -27,7 +27,7 @@ deploy_content "$SSH_CONFIG" "$HOME_DIR/.ssh/config"
 chmod 600 "$HOME_DIR/.ssh/config"
 
 {{- if lookPath "op" }}
-PUBKEY='{{ onepasswordRead "op://Personal/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
+PUBKEY='{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" }}'
 deploy_content "$PUBKEY" "$HOME_DIR/.ssh/signing_key.pub"
 chmod 644 "$HOME_DIR/.ssh/signing_key.pub"
 {{- else }}

@@ -15,8 +15,8 @@ if ($env:GH_TOKEN -and $env:TAVILY_API_KEY) { return }
 if (-not (Get-Command op -ErrorAction SilentlyContinue)) { return }
 
 $_secretTmpl = @"
-GH_TOKEN={{ op://Personal/GitHubUsedUserPAT/credential }}
-TAVILY_API_KEY={{ op://Personal/TavilyUsedUserPAT/credential }}
+GH_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
+TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}
 "@
 
 try {
