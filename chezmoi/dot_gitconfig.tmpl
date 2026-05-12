@@ -10,16 +10,7 @@
 
 {{- $isWSL := and (eq .chezmoi.os "linux") (contains "microsoft" (lower .chezmoi.kernel.osrelease)) }}
 [commit]
-{{- if $isWSL }}
-  # WSL: git's signing buffer is created in /tmp (WSL FS) but Windows
-  # op-ssh-sign.exe cannot read Linux paths. A proper fix needs a wrapper
-  # that stages the buffer in a Windows-accessible location. Until then,
-  # WSL commits are unsigned by default. Set per-repo `commit.gpgsign=true`
-  # to opt in once a workaround is in place.
-  gpgsign = false
-{{- else }}
   gpgsign = true
-{{- end }}
 
 [gpg]
   format = ssh
@@ -29,10 +20,11 @@
   program = C:/Program Files/1Password/app/8/op-ssh-sign.exe
 {{- else if eq .chezmoi.os "darwin" }}
   program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
-{{- else if and (eq .chezmoi.os "linux") (contains "microsoft" (lower .chezmoi.kernel.osrelease)) }}
-  # WSL: native Linux 1Password isn't installed; reach the Windows binary
-  # via the Store-installed execution alias on PATH.
-  program = op-ssh-sign.exe
+{{- else if $isWSL }}
+  # WSL: native Linux 1Password isn't installed and the Windows
+  # op-ssh-sign.exe has interop quirks (ignores positional payload,
+  # rejects Linux pubkey paths). The wrapper bridges those gaps.
+  program = ~/.local/bin/op-ssh-sign-wsl
 {{- else }}
   program = /opt/1Password/op-ssh-sign
 {{- end }}
