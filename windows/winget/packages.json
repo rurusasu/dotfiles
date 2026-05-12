@@ -18,6 +18,13 @@
           }
         },
         {
+          "PackageIdentifier": "direnv.direnv",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "direnv"
+          }
+        },
+        {
           "PackageIdentifier": "eza-community.eza",
           "verifyCommand": {
             "args": ["--version"],

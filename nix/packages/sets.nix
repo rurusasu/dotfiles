@@ -68,6 +68,11 @@ let
       winget = "junegunn.fzf";
       category = "core";
     };
+    direnv = {
+      pkg = pkgs.direnv;
+      winget = "direnv.direnv";
+      category = "core";
+    };
     unzip = {
       pkg = pkgs.unzip;
       winget = null;
@@ -329,6 +334,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     fzf = {
       command = "fzf";
+      args = [ "--version" ];
+    };
+    direnv = {
+      command = "direnv";
       args = [ "--version" ];
     };
     starship = {

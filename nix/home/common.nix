@@ -122,6 +122,13 @@ in
     enableZshIntegration = true;
   };
 
+  # ── direnv ───────────────────────────────────────────────────────────────
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+    enableZshIntegration = true;
+  };
+
   # ── Environment variables ────────────────────────────────────────────────
   home.sessionVariables = {
     # qmd (markdown search engine)
