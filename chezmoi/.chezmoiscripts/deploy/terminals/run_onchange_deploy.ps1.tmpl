@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy terminal configurations for Windows
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}{{ include "terminals/warp/settings.toml" | sha256sum }}{{ include "terminals/warp/workflows/zoxide.yaml" | sha256sum }}{{ include "terminals/warp/workflows/fzf-cd.yaml" | sha256sum }}{{ include "terminals/warp/workflows/fzf-history.yaml" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}{{ include "terminals/warp/settings.toml" | sha256sum }}{{ include "terminals/warp/workflows/zoxide.yaml" | sha256sum }}{{ include "terminals/warp/workflows/fzf-cd.yaml" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
