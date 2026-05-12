@@ -95,15 +95,13 @@ Describe 'gitconfig テンプレート' {
     }
 
     It 'op-ssh-sign-wsl wrapper script が deploy 対象として存在すること' {
-        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/dot_bin/executable_op-ssh-sign-wsl"
+        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-ssh-sign-wsl"
         Test-Path -Path $wrapperPath | Should -Be $true -Because "LIF-188: gpg.ssh.program が指す wrapper の本体"
     }
 
     It 'op-ssh-sign-wsl wrapper が op-ssh-sign.exe を最終的に呼ぶこと' {
-        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/dot_bin/executable_op-ssh-sign-wsl"
-        if (Test-Path -Path $wrapperPath) {
-            (Get-Content -Path $wrapperPath -Raw) | Should -Match 'op-ssh-sign\.exe' -Because "wrapper 最終的に Windows binary を起動"
-        }
+        $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-ssh-sign-wsl"
+        (Get-Content -Path $wrapperPath -Raw) | Should -Match 'op-ssh-sign\.exe' -Because "wrapper 最終的に Windows binary を起動"
     }
 
     It 'ssh-keygen を gpg.ssh.program に使用していないこと' {

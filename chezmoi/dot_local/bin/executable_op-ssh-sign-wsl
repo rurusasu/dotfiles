@@ -17,6 +17,14 @@
 # directly via bash redirection so no translation is needed.
 set -euo pipefail
 
+# Defensive: git always passes at least `-Y sign -n git -f <pubkey> <buffer>`,
+# but guard against being called with no positional buffer (verify mode etc.)
+# to avoid `bad array subscript` under set -u.
+if (( $# < 1 )); then
+  echo "op-ssh-sign-wsl: missing positional payload arg" >&2
+  exit 64
+fi
+
 args=("$@")
 last_idx=$((${#args[@]} - 1))
 buffer="${args[$last_idx]}"
