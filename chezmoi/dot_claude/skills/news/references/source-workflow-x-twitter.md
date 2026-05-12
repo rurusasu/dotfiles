@@ -4,7 +4,7 @@ Grok API `x_search` を使って X の投稿をリアルタイム検索し、結
 
 ## Prerequisites
 
-- xAI APIキー: `op://Private/xAI-Grok-Twitter/console/apikey`
+- xAI APIキー: `op://Personal/xAI-Grok-Twitter/console/apikey`
 - エンドポイント: `https://api.x.ai/v1/responses`
 - モデル: `grok-4-1-fast`
 
@@ -13,7 +13,7 @@ Grok API `x_search` を使って X の投稿をリアルタイム検索し、結
 ### Step 1: APIキー取得
 
 ```bash
-XAI_API_KEY=$(op read 'op://Private/xAI-Grok-Twitter/console/apikey')
+XAI_API_KEY=$(op read 'op://Personal/xAI-Grok-Twitter/console/apikey')
 ```
 
 ### Step 2: x_search でトレンド検索
