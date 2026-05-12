@@ -16,6 +16,10 @@ crash_reporting_enabled = true
 [account]
 is_settings_sync_enabled = false
 
+[terminal.input]
+honor_ps1 = true
+input_box_type_setting = "classic"
+
 [appearance]
 
 [appearance.text]

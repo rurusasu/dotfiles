@@ -1,0 +1,10 @@
+name: fzf history search
+command: "{{command}}"
+description: Search command history using fzf and execute selected command
+arguments:
+  - name: command
+    description: Selected command from history
+    default_value: ""
+tags:
+  - history
+  - fzf
