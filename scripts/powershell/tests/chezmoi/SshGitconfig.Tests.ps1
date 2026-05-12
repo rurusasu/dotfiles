@@ -71,8 +71,16 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Match 'format\s*=\s*ssh'
     }
 
-    It 'commit.gpgsign が true に設定されていること' {
+    It 'commit.gpgsign が true に設定されていること (non-WSL)' {
+        # WSL では gpgsign=false が default (op-ssh-sign.exe が WSL /tmp の signing buffer を読めないため)。
+        # template の else ブランチで true なので、template 全体としては true 設定が存在する。
         $script:gitconfigContent | Should -Match 'gpgsign\s*=\s*true'
+    }
+
+    It 'WSL では gpgsign=false にして待避していること' {
+        $script:gitconfigContent | Should -Match '(?s)isWSL.+?gpgsign\s*=\s*false' -Because (
+            "WSL での signing は git の /tmp 経由 buffer が Windows op-ssh-sign から読めないため不可"
+        )
     }
 
     It 'Windows 用に op-ssh-sign.exe が gpg.ssh.program に設定されていること' {
@@ -85,6 +93,13 @@ Describe 'gitconfig テンプレート' {
 
     It 'Linux 用に op-ssh-sign が gpg.ssh.program に設定されていること' {
         $script:gitconfigContent | Should -Match '/opt/1Password/op-ssh-sign'
+    }
+
+    It 'WSL 検出ブランチで op-ssh-sign.exe を使うこと' {
+        # template の WSL 分岐: contains "microsoft" (lower .chezmoi.kernel.osrelease)
+        $script:gitconfigContent | Should -Match '(?s)contains\s+"microsoft".+?program\s*=\s*op-ssh-sign\.exe' -Because (
+            "WSL では native Linux 1Password が無いので Windows store の op-ssh-sign.exe を PATH 経由で使う"
+        )
     }
 
     It 'ssh-keygen を gpg.ssh.program に使用していないこと' {
