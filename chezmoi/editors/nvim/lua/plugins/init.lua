@@ -132,7 +132,7 @@ return {
             { "<leader>du", "<cmd>DevcontainerUp<cr>", desc = "Devcontainer up" },
             { "<leader>dc", "<cmd>DevcontainerConnect<cr>", desc = "Devcontainer connect" },
             { "<leader>dd", "<cmd>DevcontainerDown<cr>", desc = "Devcontainer down" },
-            { "<leader>dt", "<cmd>DevContainerToggle<cr>", desc = "Devcontainer toggle log" },
+            { "<leader>dt", "<cmd>DevcontainerToggle<cr>", desc = "Devcontainer toggle log" },
         },
         init = function()
             require("devcontainer-cli").setup({
