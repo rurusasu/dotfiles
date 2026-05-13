@@ -53,7 +53,7 @@ tasks:
       - task: skills:sync
       - task: fmt
       - task: lint
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && git commit -m \"\$(echo \"$GIT_COMMIT_MSG\" | sed \"s/^'//;s/'$//\")\""
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && printf '%s' \"$GIT_COMMIT_MSG\" | git commit -F -"
 
   push:
     desc: Push to remote (via WSL)
