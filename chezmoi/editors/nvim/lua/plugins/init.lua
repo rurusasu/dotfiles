@@ -124,6 +124,42 @@ return {
         opts = {},
     },
 
+    -- AI coding assistant (codecompanion + Codex via ACP)
+    {
+        "olimorris/codecompanion.nvim",
+        dependencies = {
+            "nvim-lua/plenary.nvim",
+            "nvim-treesitter/nvim-treesitter",
+        },
+        cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions" },
+        keys = {
+            { "<leader>aa", "<cmd>CodeCompanionChat Toggle<cr>", desc = "AI chat toggle" },
+            { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "AI inline" },
+            { "<leader>ac", "<cmd>CodeCompanionActions<cr>", mode = { "n", "v" }, desc = "AI actions" },
+        },
+        opts = {
+            adapters = {
+                acp = {
+                    claude_code = function()
+                        return require("codecompanion.adapters").extend("claude_code", {
+                            env = {
+                                -- `claude setup-token` でブラウザ認証後に取得したトークンを参照
+                                CLAUDE_CODE_OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN",
+                            },
+                            defaults = {
+                                mcpServers = "inherit_from_config",
+                            },
+                        })
+                    end,
+                },
+            },
+            interactions = {
+                chat = { adapter = "claude_code" },
+                inline = { adapter = "claude_code" },
+            },
+        },
+    },
+
     -- Devcontainer
     {
         "erichlf/devcontainer-cli.nvim",
