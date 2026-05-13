@@ -10,6 +10,13 @@
       }
     },
     {
+      "name": "@prisma/language-server",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "prisma-language-server"
+      }
+    },
+    {
       "name": "@google/gemini-cli",
       "verifyCommand": {
         "args": ["--version"],
