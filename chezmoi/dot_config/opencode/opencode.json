@@ -1,4 +1,175 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@warp-dot-dev/opencode-warp"]
+  "plugin": ["@warp-dot-dev/opencode-warp"],
+  "lsp": {
+    "nixd": {
+      "command": ["nixd"],
+      "initialization": {
+        "formatting": {
+          "command": ["nixfmt"]
+        },
+        "options": {
+          "nixos": {
+            "expr": "(builtins.getFlake (builtins.getEnv \"HOME\" + \"/.dotfiles\")).nixosConfigurations.nixos.options"
+          }
+        }
+      }
+    },
+    "ruff": {
+      "command": ["ruff", "server"],
+      "initialization": {
+        "settings": {
+          "lineLength": 88,
+          "lint": {
+            "preview": true
+          },
+          "format": {
+            "preview": true
+          },
+          "organizeImports": true,
+          "fixAll": true
+        }
+      }
+    },
+    "yaml-language-server": {
+      "command": ["yaml-language-server", "--stdio"],
+      "extensions": [".yaml", ".yml"],
+      "initialization": {
+        "yaml": {
+          "format": {
+            "enable": true
+          },
+          "validate": true,
+          "completion": true,
+          "hover": true,
+          "schemaStore": {
+            "enable": true
+          }
+        }
+      }
+    },
+    "taplo": {
+      "command": ["taplo", "lsp", "stdio"],
+      "extensions": [".toml"],
+      "initialization": {
+        "evenBetterToml": {
+          "formatter": {
+            "alignEntries": false,
+            "reorderKeys": true
+          }
+        }
+      }
+    },
+    "bash-language-server": {
+      "command": ["bash-language-server", "start"],
+      "extensions": [".sh", ".bash"],
+      "initialization": {
+        "bashIde": {
+          "globPattern": "**/*@(.sh|.bash)",
+          "enableSourceErrorDiagnostics": true
+        }
+      }
+    },
+    "lua-language-server": {
+      "command": ["lua-language-server"],
+      "extensions": [".lua"],
+      "initialization": {
+        "Lua": {
+          "runtime": {
+            "version": "LuaJIT"
+          },
+          "diagnostics": {
+            "globals": ["vim"]
+          },
+          "workspace": {
+            "checkThirdParty": false
+          },
+          "telemetry": {
+            "enable": false
+          }
+        }
+      }
+    },
+    "marksman": {
+      "command": ["marksman", "server"],
+      "extensions": [".md", ".mdx"]
+    },
+    "gopls": {
+      "command": ["gopls"],
+      "extensions": [".go"],
+      "initialization": {
+        "usePlaceholders": true,
+        "semanticTokens": true,
+        "staticcheck": true,
+        "gofumpt": true,
+        "hints": {
+          "assignVariableTypes": true,
+          "compositeLiteralFields": true,
+          "compositeLiteralTypes": true,
+          "constantValues": true,
+          "functionTypeParameters": true,
+          "parameterNames": true,
+          "rangeVariableTypes": true
+        },
+        "analyses": {
+          "unusedparams": true,
+          "shadow": true,
+          "nilness": true,
+          "unusedwrite": true,
+          "useany": true
+        }
+      }
+    },
+    "rust-analyzer": {
+      "command": ["rust-analyzer"],
+      "extensions": [".rs"],
+      "initialization": {
+        "checkOnSave": true,
+        "check": {
+          "command": "clippy",
+          "features": "all"
+        },
+        "inlayHints": {
+          "bindingModeHints": { "enable": true },
+          "closureCaptureHints": { "enable": true },
+          "closureReturnTypeHints": { "enable": "always" },
+          "lifetimeElisionHints": { "enable": "skip_trivial" },
+          "typeHints": { "hideNamedConstructor": false }
+        },
+        "procMacro": { "enable": true },
+        "cargo": {
+          "allFeatures": true,
+          "buildScripts": { "enable": true }
+        }
+      }
+    },
+    "typescript-language-server": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"],
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "non-relative",
+          "includeInlayParameterNameHints": "all",
+          "includeInlayParameterNameHintsWhenArgumentMatchesName": false,
+          "includeInlayFunctionParameterTypeHints": true,
+          "includeInlayVariableTypeHints": true,
+          "includeInlayPropertyDeclarationTypeHints": true,
+          "includeInlayFunctionLikeReturnTypeHints": true,
+          "includeInlayEnumMemberValueHints": true
+        }
+      }
+    },
+    "oxlint": {
+      "command": ["oxlint", "--lsp-server"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".astro", ".vue"]
+    },
+    "prisma": {
+      "command": ["prisma-language-server", "--stdio"],
+      "extensions": [".prisma"]
+    },
+    "astro": {
+      "command": ["astro-language-server", "--stdio"],
+      "extensions": [".astro"]
+    }
+  }
 }

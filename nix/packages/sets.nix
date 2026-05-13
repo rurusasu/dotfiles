@@ -249,6 +249,68 @@ let
       winget = "SST.opencode";
       category = "infra";
     };
+
+    # ── lsp ───────────────────────────────────────────────
+    nixd = {
+      pkg = pkgs.nixd;
+      winget = null;
+      category = "lsp";
+    };
+    ruff = {
+      pkg = pkgs.ruff;
+      winget = null;
+      category = "lsp";
+    };
+    yaml-language-server = {
+      pkg = pkgs.yaml-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    taplo = {
+      pkg = pkgs.taplo;
+      winget = null;
+      category = "lsp";
+    };
+    bash-language-server = {
+      pkg = pkgs.bash-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    lua-language-server = {
+      pkg = pkgs.lua-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    marksman = {
+      pkg = pkgs.marksman;
+      winget = null;
+      category = "lsp";
+    };
+    gopls = {
+      pkg = pkgs.gopls;
+      winget = null;
+      category = "lsp";
+    };
+    rust-analyzer = {
+      pkg = pkgs.rust-analyzer;
+      winget = null;
+      category = "lsp";
+    };
+    typescript-language-server = {
+      pkg = pkgs.typescript-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    astro-language-server = {
+      pkg = pkgs.astro-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    oxlint = {
+      pkg = pkgs.oxlint;
+      winget = null;
+      category = "lsp";
+    };
   };
 
   # Group package names by category
@@ -286,6 +348,7 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Cross-platform pnpm global packages
   pnpmGlobal = [
     "@tobilu/qmd"
+    "@prisma/language-server"
   ];
 
   # Post-install verification commands for pnpm packages.
@@ -294,6 +357,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     "@tobilu/qmd" = {
       command = "qmd";
       args = [ "status" ];
+    };
+    "@prisma/language-server" = {
+      command = "prisma-language-server";
+      args = [ "--version" ];
     };
     "@google/gemini-cli" = {
       command = "gemini";
