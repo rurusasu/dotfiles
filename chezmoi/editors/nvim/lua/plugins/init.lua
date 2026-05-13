@@ -140,4 +140,215 @@ return {
             dotfiles_targetPath = "~/.dotfiles",
         },
     },
+
+    -- LSP: server manager
+    {
+        "williamboman/mason.nvim",
+        build = ":MasonUpdate",
+        opts = {},
+    },
+
+    -- LSP: mason <-> lspconfig bridge
+    {
+        "williamboman/mason-lspconfig.nvim",
+        dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
+        opts = {
+            ensure_installed = {
+                "nixd",
+                "gopls",
+                "rust_analyzer",
+                "ts_ls",
+                "yamlls",
+                "taplo",
+                "bashls",
+                "lua_ls",
+                "marksman",
+                "ruff",
+            },
+            automatic_installation = true,
+        },
+    },
+
+    -- LSP: configurations
+    {
+        "neovim/nvim-lspconfig",
+        event = { "BufReadPre", "BufNewFile" },
+        dependencies = { "hrsh7th/cmp-nvim-lsp" },
+        config = function()
+            local lspconfig = require("lspconfig")
+            local capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+            local on_attach = function(_, bufnr)
+                local map = function(keys, func, desc)
+                    vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
+                end
+                map("gd", vim.lsp.buf.definition, "Go to definition")
+                map("gr", vim.lsp.buf.references, "References")
+                map("K", vim.lsp.buf.hover, "Hover docs")
+                map("<leader>rn", vim.lsp.buf.rename, "Rename")
+                map("<leader>ca", vim.lsp.buf.code_action, "Code action")
+                map("<leader>f", function()
+                    vim.lsp.buf.format({ async = true })
+                end, "Format")
+            end
+
+            local servers = {
+                nixd = {
+                    settings = {
+                        nixd = {
+                            formatting = { command = { "nixfmt" } },
+                            options = {
+                                nixos = {
+                                    expr = '(builtins.getFlake (builtins.getEnv "HOME" + "/.dotfiles")).nixosConfigurations.nixos.options',
+                                },
+                            },
+                        },
+                    },
+                },
+                gopls = {
+                    settings = {
+                        gopls = {
+                            usePlaceholders = true,
+                            semanticTokens = true,
+                            staticcheck = true,
+                            gofumpt = true,
+                            hints = {
+                                assignVariableTypes = true,
+                                compositeLiteralFields = true,
+                                compositeLiteralTypes = true,
+                                constantValues = true,
+                                functionTypeParameters = true,
+                                parameterNames = true,
+                                rangeVariableTypes = true,
+                            },
+                            analyses = {
+                                unusedparams = true,
+                                shadow = true,
+                                nilness = true,
+                                unusedwrite = true,
+                                useany = true,
+                            },
+                        },
+                    },
+                },
+                rust_analyzer = {
+                    settings = {
+                        ["rust-analyzer"] = {
+                            checkOnSave = true,
+                            check = { command = "clippy" },
+                            inlayHints = {
+                                bindingModeHints = { enable = true },
+                                closureCaptureHints = { enable = true },
+                                closureReturnTypeHints = { enable = "always" },
+                                lifetimeElisionHints = { enable = "skip_trivial" },
+                                typeHints = { hideNamedConstructor = false },
+                            },
+                            procMacro = { enable = true },
+                            cargo = { allFeatures = true, buildScripts = { enable = true } },
+                        },
+                    },
+                },
+                ts_ls = {
+                    init_options = {
+                        preferences = {
+                            importModuleSpecifierPreference = "non-relative",
+                            includeInlayParameterNameHints = "all",
+                            includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+                            includeInlayFunctionParameterTypeHints = true,
+                            includeInlayVariableTypeHints = true,
+                            includeInlayPropertyDeclarationTypeHints = true,
+                            includeInlayFunctionLikeReturnTypeHints = true,
+                            includeInlayEnumMemberValueHints = true,
+                        },
+                    },
+                },
+                yamlls = {
+                    settings = {
+                        yaml = {
+                            format = { enable = true },
+                            validate = true,
+                            completion = true,
+                            hover = true,
+                            schemaStore = { enable = true },
+                        },
+                    },
+                },
+                taplo = {},
+                bashls = {
+                    settings = {
+                        bashIde = {
+                            globPattern = "**/*@(.sh|.bash)",
+                            enableSourceErrorDiagnostics = true,
+                        },
+                    },
+                },
+                lua_ls = {
+                    settings = {
+                        Lua = {
+                            runtime = { version = "LuaJIT" },
+                            diagnostics = { globals = { "vim" } },
+                            workspace = { checkThirdParty = false },
+                            telemetry = { enable = false },
+                        },
+                    },
+                },
+                marksman = {},
+                ruff = {},
+            }
+
+            for server, config in pairs(servers) do
+                config.capabilities = capabilities
+                config.on_attach = on_attach
+                lspconfig[server].setup(config)
+            end
+        end,
+    },
+
+    -- Completion
+    {
+        "hrsh7th/nvim-cmp",
+        event = "InsertEnter",
+        dependencies = {
+            "hrsh7th/cmp-nvim-lsp",
+            "hrsh7th/cmp-buffer",
+            "hrsh7th/cmp-path",
+            "L3MON4D3/LuaSnip",
+            "saadparwaiz1/cmp_luasnip",
+        },
+        config = function()
+            local cmp = require("cmp")
+            local luasnip = require("luasnip")
+            cmp.setup({
+                snippet = {
+                    expand = function(args)
+                        luasnip.lsp_expand(args.body)
+                    end,
+                },
+                mapping = cmp.mapping.preset.insert({
+                    ["<C-Space>"] = cmp.mapping.complete(),
+                    ["<CR>"] = cmp.mapping.confirm({ select = false }),
+                    ["<Tab>"] = cmp.mapping(function(fallback)
+                        if cmp.visible() then
+                            cmp.select_next_item()
+                        elseif luasnip.expand_or_jumpable() then
+                            luasnip.expand_or_jump()
+                        else
+                            fallback()
+                        end
+                    end, { "i", "s" }),
+                    ["<S-Tab>"] = cmp.mapping(function(fallback)
+                        if cmp.visible() then
+                            cmp.select_prev_item()
+                        else
+                            fallback()
+                        end
+                    end, { "i", "s" }),
+                }),
+                sources = cmp.config.sources(
+                    { { name = "nvim_lsp" }, { name = "luasnip" } },
+                    { { name = "buffer" }, { name = "path" } }
+                ),
+            })
+        end,
+    },
 }

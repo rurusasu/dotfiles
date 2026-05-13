@@ -1,0 +1,174 @@
+# Language server definitions
+[language-server.nixd]
+command = "nixd"
+config.nixd.formatting.command = [ "nixfmt" ]
+config.nixd.options.nixos.expr = '(builtins.getFlake (builtins.getEnv "HOME" + "/.dotfiles")).nixosConfigurations.nixos.options'
+
+[language-server.gopls]
+command = "gopls"
+config.usePlaceholders = true
+config.semanticTokens = true
+config.staticcheck = true
+config.gofumpt = true
+config.analyses.unusedparams = true
+config.analyses.shadow = true
+config.analyses.nilness = true
+config.analyses.unusedwrite = true
+config.analyses.useany = true
+config.hints.assignVariableTypes = true
+config.hints.compositeLiteralFields = true
+config.hints.compositeLiteralTypes = true
+config.hints.constantValues = true
+config.hints.functionTypeParameters = true
+config.hints.parameterNames = true
+config.hints.rangeVariableTypes = true
+
+[language-server.rust-analyzer]
+command = "rust-analyzer"
+config.checkOnSave = true
+config.check.command = "clippy"
+config.procMacro.enable = true
+config.cargo.allFeatures = true
+config.cargo.buildScripts.enable = true
+config.inlayHints.bindingModeHints.enable = true
+config.inlayHints.closureCaptureHints.enable = true
+config.inlayHints.closureReturnTypeHints.enable = "always"
+config.inlayHints.lifetimeElisionHints.enable = "skip_trivial"
+config.inlayHints.typeHints.hideNamedConstructor = false
+
+[language-server.typescript-language-server]
+command = "typescript-language-server"
+args = [ "--stdio" ]
+config.preferences.importModuleSpecifierPreference = "non-relative"
+config.preferences.includeInlayParameterNameHints = "all"
+config.preferences.includeInlayParameterNameHintsWhenArgumentMatchesName = false
+config.preferences.includeInlayFunctionParameterTypeHints = true
+config.preferences.includeInlayVariableTypeHints = true
+config.preferences.includeInlayPropertyDeclarationTypeHints = true
+config.preferences.includeInlayFunctionLikeReturnTypeHints = true
+config.preferences.includeInlayEnumMemberValueHints = true
+
+[language-server.oxlint]
+command = "oxlint"
+args = [ "--lsp" ]
+
+[language-server.yaml-language-server]
+command = "yaml-language-server"
+args = [ "--stdio" ]
+config.yaml.format.enable = true
+config.yaml.validate = true
+config.yaml.completion = true
+config.yaml.hover = true
+config.yaml.schemaStore.enable = true
+
+[language-server.taplo]
+command = "taplo"
+args = [ "lsp", "stdio" ]
+config.evenBetterToml.formatter.alignEntries = false
+config.evenBetterToml.formatter.reorderKeys = true
+
+[language-server.bash-language-server]
+command = "bash-language-server"
+args = [ "start" ]
+config.bashIde.globPattern = "**/*@(.sh|.bash)"
+config.bashIde.enableSourceErrorDiagnostics = true
+
+[language-server.lua-language-server]
+command = "lua-language-server"
+config.Lua.runtime.version = "LuaJIT"
+config.Lua.diagnostics.globals = [ "vim" ]
+config.Lua.workspace.checkThirdParty = false
+config.Lua.telemetry.enable = false
+
+[language-server.marksman]
+command = "marksman"
+args = [ "server" ]
+
+[language-server.ruff]
+command = "ruff"
+args = [ "server" ]
+config.settings.lineLength = 88
+config.settings.lint.preview = true
+config.settings.format.preview = true
+config.settings.organizeImports = true
+config.settings.fixAll = true
+
+[language-server.prisma-language-server]
+command = "prisma-language-server"
+args = [ "--stdio" ]
+
+[language-server.astro-ls]
+command = "astro-ls"
+args = [ "--stdio" ]
+
+# Language overrides
+[[language]]
+name = "nix"
+language-servers = [ "nixd" ]
+formatter = { command = "nixfmt" }
+auto-format = true
+
+[[language]]
+name = "go"
+language-servers = [ "gopls" ]
+auto-format = true
+
+[[language]]
+name = "rust"
+language-servers = [ "rust-analyzer" ]
+auto-format = true
+
+[[language]]
+name = "typescript"
+language-servers = [ "typescript-language-server", "oxlint" ]
+
+[[language]]
+name = "tsx"
+language-servers = [ "typescript-language-server", "oxlint" ]
+
+[[language]]
+name = "javascript"
+language-servers = [ "typescript-language-server", "oxlint" ]
+
+[[language]]
+name = "jsx"
+language-servers = [ "typescript-language-server", "oxlint" ]
+
+[[language]]
+name = "yaml"
+language-servers = [ "yaml-language-server" ]
+
+[[language]]
+name = "toml"
+language-servers = [ "taplo" ]
+auto-format = true
+
+[[language]]
+name = "bash"
+language-servers = [ "bash-language-server" ]
+
+[[language]]
+name = "lua"
+language-servers = [ "lua-language-server" ]
+auto-format = true
+
+[[language]]
+name = "markdown"
+language-servers = [ "marksman" ]
+formatter = { command = "dprint", args = [ "fmt", "--stdin", "md" ] }
+auto-format = true
+
+[[language]]
+name = "python"
+language-servers = [ "ruff" ]
+formatter = { command = "ruff", args = [ "format", "-" ] }
+auto-format = true
+
+[[language]]
+name = "prisma"
+language-servers = [ "prisma-language-server" ]
+auto-format = true
+
+[[language]]
+name = "astro"
+language-servers = [ "astro-ls" ]

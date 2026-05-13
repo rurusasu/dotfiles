@@ -102,6 +102,7 @@
   // Language-specific settings
   "languages": {
     "JavaScript": {
+      "language_servers": ["typescript-language-server", "oxlint"],
       "formatter": {
         "external": {
           "command": "oxfmt",
@@ -110,6 +111,7 @@
       }
     },
     "TypeScript": {
+      "language_servers": ["typescript-language-server", "oxlint"],
       "formatter": {
         "external": {
           "command": "oxfmt",
@@ -126,6 +128,7 @@
       }
     },
     "YAML": {
+      "language_servers": ["yaml-language-server"],
       "formatter": {
         "external": {
           "command": "oxfmt",
@@ -134,6 +137,7 @@
       }
     },
     "TOML": {
+      "language_servers": ["taplo"],
       "formatter": {
         "external": {
           "command": "taplo",
@@ -142,6 +146,7 @@
       }
     },
     "Markdown": {
+      "language_servers": ["marksman"],
       "formatter": {
         "external": {
           "command": "dprint",
@@ -151,6 +156,7 @@
       "soft_wrap": "editor_width"
     },
     "Lua": {
+      "language_servers": ["lua-language-server"],
       "formatter": {
         "external": {
           "command": "stylua",
@@ -171,6 +177,7 @@
       }
     },
     "Shell Script": {
+      "language_servers": ["bash-language-server"],
       "formatter": {
         "external": {
           "command": "shfmt",
@@ -185,6 +192,16 @@
       "soft_wrap": "bounded",
       "preferred_line_length": 88
     },
+    "Go": {
+      "language_servers": ["gopls"],
+      "format_on_save": "on",
+      "formatter": "language_server"
+    },
+    "Rust": {
+      "language_servers": ["rust-analyzer"],
+      "format_on_save": "on",
+      "formatter": "language_server"
+    },
     "Dockerfile": {
       "format_on_save": "on",
       "formatter": "language_server"
@@ -193,6 +210,12 @@
       "format_on_save": "on",
       "formatter": "language_server",
       "language_servers": ["ty", "ruff", "!basedpyright", "!pyright"]
+    },
+    "Prisma": {
+      "language_servers": ["prisma-language-server"]
+    },
+    "Astro": {
+      "language_servers": ["astro-ls"]
     }
   },
   // LSP settings
@@ -247,6 +270,103 @@
               "enable": true
             }
           }
+        }
+      }
+    },
+    "gopls": {
+      "initialization_options": {
+        "usePlaceholders": true,
+        "semanticTokens": true,
+        "staticcheck": true,
+        "gofumpt": true,
+        "hints": {
+          "assignVariableTypes": true,
+          "compositeLiteralFields": true,
+          "compositeLiteralTypes": true,
+          "constantValues": true,
+          "functionTypeParameters": true,
+          "parameterNames": true,
+          "rangeVariableTypes": true
+        },
+        "analyses": {
+          "unusedparams": true,
+          "shadow": true,
+          "nilness": true,
+          "unusedwrite": true,
+          "useany": true
+        }
+      }
+    },
+    "rust-analyzer": {
+      "initialization_options": {
+        "checkOnSave": true,
+        "check": {
+          "command": "clippy"
+        },
+        "inlayHints": {
+          "bindingModeHints": { "enable": true },
+          "closureCaptureHints": { "enable": true },
+          "closureReturnTypeHints": { "enable": "always" },
+          "lifetimeElisionHints": { "enable": "skip_trivial" },
+          "typeHints": { "hideNamedConstructor": false }
+        },
+        "procMacro": { "enable": true },
+        "cargo": {
+          "allFeatures": true,
+          "buildScripts": { "enable": true }
+        }
+      }
+    },
+    "typescript-language-server": {
+      "initialization_options": {
+        "preferences": {
+          "importModuleSpecifierPreference": "non-relative",
+          "includeInlayParameterNameHints": "all",
+          "includeInlayParameterNameHintsWhenArgumentMatchesName": false,
+          "includeInlayFunctionParameterTypeHints": true,
+          "includeInlayVariableTypeHints": true,
+          "includeInlayPropertyDeclarationTypeHints": true,
+          "includeInlayFunctionLikeReturnTypeHints": true,
+          "includeInlayEnumMemberValueHints": true
+        }
+      }
+    },
+    "yaml-language-server": {
+      "initialization_options": {
+        "yaml": {
+          "format": { "enable": true },
+          "validate": true,
+          "completion": true,
+          "hover": true,
+          "schemaStore": { "enable": true }
+        }
+      }
+    },
+    "taplo": {
+      "initialization_options": {
+        "evenBetterToml": {
+          "formatter": {
+            "alignEntries": false,
+            "reorderKeys": true
+          }
+        }
+      }
+    },
+    "bash-language-server": {
+      "initialization_options": {
+        "bashIde": {
+          "globPattern": "**/*@(.sh|.bash)",
+          "enableSourceErrorDiagnostics": true
+        }
+      }
+    },
+    "lua-language-server": {
+      "initialization_options": {
+        "Lua": {
+          "runtime": { "version": "LuaJIT" },
+          "diagnostics": { "globals": ["vim"] },
+          "workspace": { "checkThirdParty": false },
+          "telemetry": { "enable": false }
         }
       }
     }
