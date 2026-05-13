@@ -42,6 +42,10 @@
   - `Leader` は `Space`
   - `Space+e`: エクスプローラ
   - `Space+ff/fg/fb`: ファイル検索/grep/buffers
+  - `Space+aa`: AI チャット toggle (codecompanion)
+  - `Space+ai`: AI インライン補助 (codecompanion)
+  - `Space+ac`: AI アクションメニュー (codecompanion)
+  - `Space+du/dc/dd/dt`: Devcontainer up/connect/down/toggle
 - VS Code / Cursor
   - `Vim` 拡張は利用しない
   - `Ctrl+Shift+H/J/K/L`: editor group 移動
