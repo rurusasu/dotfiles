@@ -130,6 +130,11 @@ let
       winget = null;
       category = "dev";
     };
+    devcontainer = {
+      pkg = pkgs.devcontainer;
+      winget = null;
+      category = "dev";
+    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {

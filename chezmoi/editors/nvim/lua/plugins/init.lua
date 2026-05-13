@@ -134,7 +134,7 @@ return {
             { "<leader>dd", "<cmd>DevcontainerDown<cr>", desc = "Devcontainer down" },
             { "<leader>dt", "<cmd>DevcontainerToggle<cr>", desc = "Devcontainer toggle log" },
         },
-        init = function()
+        config = function()
             require("devcontainer-cli").setup({
                 dotfiles_repository = "https://github.com/rurusasu/dotfiles",
                 dotfiles_branch = "main",
