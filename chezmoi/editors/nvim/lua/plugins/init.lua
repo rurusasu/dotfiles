@@ -124,7 +124,7 @@ return {
         opts = {},
     },
 
-    -- AI coding assistant (codecompanion + Codex via ACP)
+    -- AI coding assistant (codecompanion + Claude Code via ACP)
     {
         "olimorris/codecompanion.nvim",
         dependencies = {
