@@ -126,8 +126,7 @@
       "initialization": {
         "checkOnSave": true,
         "check": {
-          "command": "clippy",
-          "features": "all"
+          "command": "clippy"
         },
         "inlayHints": {
           "bindingModeHints": { "enable": true },
@@ -160,7 +159,7 @@
       }
     },
     "oxlint": {
-      "command": ["oxlint", "--lsp-server"],
+      "command": ["oxlint", "--lsp"],
       "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".astro", ".vue"]
     },
     "prisma": {
@@ -168,7 +167,7 @@
       "extensions": [".prisma"]
     },
     "astro": {
-      "command": ["astro-language-server", "--stdio"],
+      "command": ["astro-ls", "--stdio"],
       "extensions": [".astro"]
     }
   }
