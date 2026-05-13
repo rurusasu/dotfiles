@@ -123,4 +123,23 @@ return {
         event = { "BufReadPost", "BufNewFile" },
         opts = {},
     },
+
+    -- Devcontainer
+    {
+        "erichlf/devcontainer-cli.nvim",
+        dependencies = { "akinsho/toggleterm.nvim" },
+        keys = {
+            { "<leader>du", "<cmd>DevcontainerUp<cr>", desc = "Devcontainer up" },
+            { "<leader>dc", "<cmd>DevcontainerConnect<cr>", desc = "Devcontainer connect" },
+            { "<leader>dd", "<cmd>DevcontainerDown<cr>", desc = "Devcontainer down" },
+            { "<leader>dt", "<cmd>DevcontainerToggle<cr>", desc = "Devcontainer toggle log" },
+        },
+        init = function()
+            require("devcontainer-cli").setup({
+                dotfiles_repository = "https://github.com/rurusasu/dotfiles",
+                dotfiles_branch = "main",
+                dotfiles_targetPath = "~/.dotfiles",
+            })
+        end,
+    },
 }
