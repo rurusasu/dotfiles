@@ -166,21 +166,9 @@ return {
         dependencies = { "akinsho/toggleterm.nvim" },
         keys = {
             { "<leader>du", "<cmd>DevcontainerUp<cr>", desc = "Devcontainer up" },
+            { "<leader>dc", "<cmd>DevcontainerExec bash<cr>", desc = "Devcontainer shell" },
             { "<leader>dd", "<cmd>DevcontainerDown<cr>", desc = "Devcontainer down" },
             { "<leader>dt", "<cmd>DevcontainerToggle<cr>", desc = "Devcontainer toggle log" },
-            {
-                "<leader>dc",
-                function()
-                    -- wqa fails on unnamed buffers; delete them first
-                    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-                        if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_name(buf) == "" then
-                            vim.api.nvim_buf_delete(buf, { force = true })
-                        end
-                    end
-                    vim.cmd("DevcontainerConnect")
-                end,
-                desc = "Devcontainer connect",
-            },
         },
         opts = {
             dotfiles_repository = "https://github.com/rurusasu/dotfiles",
