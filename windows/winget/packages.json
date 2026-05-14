@@ -104,9 +104,6 @@
           }
         },
         {
-          "PackageIdentifier": "Rustlang.Rustup"
-        },
-        {
           "PackageIdentifier": "SlackTechnologies.Slack"
         },
         {

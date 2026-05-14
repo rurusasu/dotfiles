@@ -100,11 +100,6 @@ let
       winget = null;
       category = "dev";
     };
-    rustup = {
-      pkg = pkgs.rustup;
-      winget = "Rustlang.Rustup";
-      category = "dev";
-    };
     gnumake = {
       pkg = pkgs.gnumake;
       winget = null;
