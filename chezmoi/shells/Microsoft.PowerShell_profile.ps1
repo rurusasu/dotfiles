@@ -144,6 +144,50 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
     Remove-Variable _candidate -ErrorAction SilentlyContinue
 }
 
+# devcontainer: enter the project's devcontainer in a tmux session
+# and start nvim inside it. Terminal-agnostic mirror of the zsh/bash
+# `dcnvim` defined in nix/home/common.nix and chezmoi/shells/bashrc.
+# Re-running attaches to the existing tmux session so nvim state
+# survives terminal close.
+#
+# Usage: dcnvim [-Workspace <path>]   # defaults to $PWD
+#
+# Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
+# container to provide nvim + tmux. See bootstrap.sh at repo root.
+function dcnvim {
+    [CmdletBinding()]
+    param([string]$Workspace = (Get-Location).Path)
+
+    if (-not (Get-Command devcontainer -ErrorAction SilentlyContinue)) {
+        Write-Error "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli"
+        return
+    }
+    if (-not (Test-Path (Join-Path $Workspace ".devcontainer")) -and
+        -not (Test-Path (Join-Path $Workspace ".devcontainer.json"))) {
+        Write-Error "dcnvim: no .devcontainer/ or .devcontainer.json under $Workspace"
+        return
+    }
+
+    # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so the
+    # container's just-bootstrapped ~/.local/bin/nvim is found. nvim/tmux
+    # presence is checked explicitly because tmux exits 0 if its child
+    # command is missing, masking the failure to the host.
+    $payload = @'
+export PATH="$HOME/.local/bin:$PATH"
+command -v nvim >/dev/null 2>&1 || {
+  echo "dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+  exit 127
+}
+command -v tmux >/dev/null 2>&1 || {
+  echo "dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+  exit 127
+}
+tmux new -A -s main "nvim ."
+'@
+
+    & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
+}
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
 if (Test-Path $_secretPs1) { . $_secretPs1 }
