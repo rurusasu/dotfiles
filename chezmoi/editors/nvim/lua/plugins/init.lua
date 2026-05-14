@@ -166,7 +166,7 @@ return {
         dependencies = { "akinsho/toggleterm.nvim" },
         keys = {
             { "<leader>du", "<cmd>DevcontainerUp<cr>", desc = "Devcontainer up" },
-            { "<leader>dc", "<cmd>DevcontainerExec bash<cr>", desc = "Devcontainer connect (shell)" },
+            { "<leader>dc", "<cmd>DevcontainerExec bash<cr>", desc = "Devcontainer shell" },
             { "<leader>dd", "<cmd>DevcontainerDown<cr>", desc = "Devcontainer down" },
             { "<leader>dt", "<cmd>DevcontainerToggle<cr>", desc = "Devcontainer toggle log" },
         },
