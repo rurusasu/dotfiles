@@ -136,5 +136,24 @@ __fzf_history_widget() {
 }
 bind -x '"\er": __fzf_history_widget'
 
+# devcontainer: enter the project's devcontainer in a tmux session
+# and start nvim inside it. Terminal-agnostic (works in WezTerm,
+# Windows Terminal, Warp, etc.). Re-running attaches to the existing
+# tmux session so nvim state survives terminal close.
+#
+# Usage: dcnvim [workspace-folder]   # defaults to $PWD
+#
+# Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
+# container to provide nvim + tmux. See bootstrap.sh at repo root.
+dcnvim() {
+  local workspace="${1:-$PWD}"
+  if ! command -v devcontainer >/dev/null 2>&1; then
+    echo "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli" >&2
+    return 127
+  fi
+  devcontainer exec --workspace-folder "$workspace" -- \
+    bash -lc 'tmux new -A -s main "nvim ."'
+}
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
