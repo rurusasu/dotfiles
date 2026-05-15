@@ -172,7 +172,7 @@ startup_timeout_sec = {{ .startup_timeout_sec }}
 {{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}
 {{- if and $hasOp (hasKey $opEnv $key) }}
-{{ $key }} = "{{ onepasswordRead (index $opEnv $key) }}"
+{{ $key }} = "{{ onepasswordRead (index $opEnv $key) $.op_account_personal }}"
 {{- else }}
 {{ $key }} = "{{ $value }}"
 {{- end }}

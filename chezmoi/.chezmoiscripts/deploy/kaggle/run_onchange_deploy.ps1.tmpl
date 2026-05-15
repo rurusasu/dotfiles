@@ -1,7 +1,7 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy Kaggle API credentials for Windows
 {{- if lookPath "op" }}
-# token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" | sha256sum }}
+# token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal | sha256sum }}
 {{- end }}
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $KaggleDir)) {
   New-Item -ItemType Directory -Path $KaggleDir -Force | Out-Null
 }
 
-$token = '{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" }}'
+$token = '{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal }}'
 
 # New API Token method: ~/.kaggle/access_token
 Set-Content -Path "$KaggleDir\access_token" -Value $token -NoNewline -Force

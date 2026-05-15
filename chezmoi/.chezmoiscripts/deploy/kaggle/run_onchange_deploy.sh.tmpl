@@ -2,7 +2,7 @@
 #!/bin/bash
 # Deploy Kaggle API credentials for Linux/macOS
 {{- if lookPath "op" }}
-# token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" | sha256sum }}
+# token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal | sha256sum }}
 {{- end }}
 
 set -euo pipefail
@@ -15,7 +15,7 @@ echo "Deploying Kaggle API credentials..."
 
 mkdir -p "$KAGGLE_DIR"
 
-TOKEN='{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" }}'
+TOKEN='{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal }}'
 
 # New API Token method: ~/.kaggle/access_token
 printf '%s' "$TOKEN" > "$KAGGLE_DIR/access_token"
