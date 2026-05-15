@@ -189,6 +189,13 @@
         },
         {
           "PackageIdentifier": "ZedIndustries.Zed"
+        },
+        {
+          "PackageIdentifier": "zig.zig",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "zig"
+          }
         }
       ],
       "SourceDetails": {
