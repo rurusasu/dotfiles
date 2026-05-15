@@ -1,4 +1,17 @@
 # chezmoi configuration
+#
+# ⚠️ When this file changes, run `chezmoi init` to regenerate the active
+#    ~/.config/chezmoi/chezmoi.toml. Otherwise `chezmoi apply` keeps using
+#    the old config — `[data]` additions show up as
+#    `map has no entry for key "..."` errors. chezmoi prints a warning
+#    ("config file template has changed, run chezmoi init to regenerate
+#    config file") but does not block the apply.
+#
+# ⚠️ For `onepasswordRead`, always pass the account as the 2nd argument
+#    (e.g. `onepasswordRead "op://Private/..." .op_account_personal`).
+#    chezmoi 2.70.x silently ignores `[onepassword] account = "..."` in
+#    its flat form, so this is the only reliable way to disambiguate
+#    multi-account 1Password setups. See LIF-210.
 
 sourceDir = {{ .chezmoi.sourceDir | quote }}
 
