@@ -12,7 +12,15 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
 {{- else }}
     command = "op"
 {{- end }}
-    account = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+
+# Account UUIDs exposed as template data so onepasswordRead "op://..." can
+# pass the account explicitly as its 2nd argument. chezmoi's flat
+# [onepassword] account field is silently ignored in 2.70.x, so this is the
+# only reliable way to disambiguate when multiple 1Password accounts are
+# signed in. See LIF-210.
+[data]
+    op_account_personal = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+    op_account_work = "FXVKKR2KWFCMHGMEA7HQYK6XRE"
 
 [scriptEnv]
     OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"

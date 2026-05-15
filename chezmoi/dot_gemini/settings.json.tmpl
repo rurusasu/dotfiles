@@ -42,7 +42,7 @@
 {{- if not $envFirst }},{{ end }}
 {{- $envFirst = false }}
 {{- if and $hasOp (hasKey $opEnv $key) }}
-        "{{ $key }}": "{{ onepasswordRead (index $opEnv $key) }}"
+        "{{ $key }}": "{{ onepasswordRead (index $opEnv $key) $.op_account_personal }}"
 {{- else }}
         "{{ $key }}": "{{ $value }}"
 {{- end }}
