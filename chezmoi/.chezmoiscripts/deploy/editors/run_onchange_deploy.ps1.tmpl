@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy editor configurations for Windows
-# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
+# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}{{ include "editors/nvim/init.lua" | sha256sum }}{{ include "editors/nvim/lua/config/options.lua" | sha256sum }}{{ include "editors/nvim/lua/config/keymaps.lua" | sha256sum }}{{ include "editors/nvim/lua/config/osc7.lua" | sha256sum }}{{ include "editors/nvim/lua/plugins/init.lua" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -55,6 +55,36 @@ if (Test-Path -LiteralPath $NvimSource) {
   }
   Copy-Item -Path "$NvimSource\*" -Destination $NvimConfig -Recurse -Force
   Write-Host "Deployed: $NvimConfig"
+
+  # Headless :Lazy sync so first nvim launch does not need manual :Lazy sync.
+  # Best-effort with 90s cap; cannot block chezmoi apply. Skipped silently if
+  # nvim or a C compiler is missing — both must be present for
+  # nvim-treesitter's parser build (:TSUpdate) to succeed.
+  $nvim = Get-Command nvim -ErrorAction SilentlyContinue
+  $compiler = @('zig', 'cl', 'gcc', 'clang') |
+    Where-Object { Get-Command $_ -ErrorAction SilentlyContinue } |
+    Select-Object -First 1
+  if ($nvim -and $compiler) {
+    Write-Host "Pre-warming lazy.nvim plugins (best effort, 90s cap)..."
+    $lazyLog = Join-Path $env:LOCALAPPDATA 'nvim-bootstrap.log'
+    $proc = Start-Process -FilePath $nvim.Source `
+      -ArgumentList '--headless', '+Lazy! sync', '+qa' `
+      -NoNewWindow -PassThru `
+      -RedirectStandardOutput $lazyLog `
+      -RedirectStandardError "$lazyLog.err"
+    if (-not $proc.WaitForExit(90000)) {
+      $proc.Kill()
+      Write-Host "lazy.nvim pre-warm timed out; see $lazyLog"
+    } elseif ($proc.ExitCode -ne 0) {
+      Write-Host "lazy.nvim pre-warm exited $($proc.ExitCode); see $lazyLog"
+    } else {
+      Write-Host "lazy.nvim pre-warm complete."
+    }
+  } elseif (-not $nvim) {
+    Write-Host "nvim not on PATH; skipping :Lazy sync (run winget install Neovim.Neovim)."
+  } else {
+    Write-Host "No C compiler on PATH (zig/cl/gcc/clang); skipping :Lazy sync (run winget install zig.zig)."
+  }
 }
 
 Write-Host "Editor configurations deployed."
