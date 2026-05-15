@@ -12,11 +12,15 @@ return {
     },
 
     -- File explorer
+    -- Eager-load so oil hijacks netrw at startup; otherwise `nvim <dir>`
+    -- (e.g. `nvim .` from tmux/`dcnvim`) is handled by built-in netrw
+    -- before oil's setup runs.
     {
         "stevearc/oil.nvim",
-        cmd = "Oil",
+        lazy = false,
         keys = { { "-", "<cmd>Oil<cr>", desc = "Open parent directory" } },
         opts = {
+            default_file_explorer = true,
             view_options = { show_hidden = true },
         },
     },
