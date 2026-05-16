@@ -126,6 +126,15 @@ tasks:
       - chezmoi apply --source {{.TASKFILE_DIR}}/chezmoi
 
   # ===========================================
+  # Docker
+  # ===========================================
+  docker:prune:
+    desc: Remove unused Docker images, containers, and build cache
+    cmds:
+      - docker system prune -a --force
+      - docker builder prune -a --force
+
+  # ===========================================
   # Git Hooks
   # ===========================================
   hooks:install:
