@@ -184,6 +184,7 @@ return {
     -- LSP: server manager
     {
         "williamboman/mason.nvim",
+        lazy = false,
         build = ":MasonUpdate",
         opts = {},
     },
@@ -191,10 +192,10 @@ return {
     -- LSP: mason <-> lspconfig bridge
     {
         "williamboman/mason-lspconfig.nvim",
+        lazy = false,
         dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
         opts = {
             ensure_installed = {
-                "nixd",
                 "gopls",
                 "rust_analyzer",
                 "ts_ls",
