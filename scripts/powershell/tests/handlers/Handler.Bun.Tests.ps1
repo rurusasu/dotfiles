@@ -51,7 +51,7 @@ Describe 'BunHandler' {
         }
     }
 
-    Context 'CanApply - bun.exe link already exists' {
+    Context 'CanApply - link exists AND PATH already configured' {
         BeforeEach {
             Mock Get-ChildItem {
                 return [PSCustomObject]@{
@@ -61,14 +61,38 @@ Describe 'BunHandler' {
                 $Path -like "*WinGet\Packages" -and $Filter -like "Oven-sh.Bun_*"
             }
 
-            # bun-windows-x64\bun.exe も Links\bun.exe も存在
             Mock Test-Path { return $true }
+            # 実行環境ごとに変わる Links パスを含めて USER PATH を返す
+            $script:expectedLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
             Mock Write-Host { }
         }
 
-        It 'should return false when link exists' {
+        It 'should return false when both link and PATH are set' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $false
+        }
+    }
+
+    Context 'CanApply - link exists but PATH not configured' {
+        BeforeEach {
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{
+                    FullName = "C:\Users\test\AppData\Local\Microsoft\WinGet\Packages\Oven-sh.Bun_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                }
+            } -ParameterFilter {
+                $Path -like "*WinGet\Packages" -and $Filter -like "Oven-sh.Bun_*"
+            }
+
+            Mock Test-Path { return $true }
+            # USER PATH に Links が含まれていない状態
+            Mock Get-UserEnvironmentPath { return "C:\Windows;C:\Windows\System32" }
+            Mock Write-Host { }
+        }
+
+        It 'should return true so Apply can add PATH' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
         }
     }
 
@@ -89,6 +113,7 @@ Describe 'BunHandler' {
                 if ($Path -like "*Links") { return $true }
                 return $false
             }
+            Mock Get-UserEnvironmentPath { return "" }
             Mock Write-Host { }
         }
 
@@ -135,6 +160,8 @@ Describe 'BunHandler' {
             Mock New-Item { } -ParameterFilter { $ItemType -eq "HardLink" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { }
 
             Mock Write-Host { }
         }
@@ -168,6 +195,8 @@ Describe 'BunHandler' {
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
 
             Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { }
 
             Mock Write-Host { }
         }
@@ -176,6 +205,38 @@ Describe 'BunHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Copy-Item -Times 1
+        }
+    }
+
+    Context 'Apply - link exists but PATH missing (recovers from previous partial run)' {
+        BeforeEach {
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{
+                    FullName = "C:\Users\test\AppData\Local\Microsoft\WinGet\Packages\Oven-sh.Bun_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                }
+            } -ParameterFilter {
+                $Path -like "*WinGet\Packages" -and $Filter -like "Oven-sh.Bun_*"
+            }
+
+            # link はすでに存在するが PATH に含まれていない状態を再現
+            Mock Test-Path { return $true }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock New-Item { throw "should not be called when link exists" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
+            Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+
+            Mock Write-Host { }
+        }
+
+        It 'should add Links to PATH without recreating the link' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            Should -Invoke Set-UserEnvironmentPath -Times 1
+            Should -Invoke Copy-Item -Times 0
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
         }
     }
 }

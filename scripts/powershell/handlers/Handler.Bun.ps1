@@ -34,8 +34,10 @@ class BunHandler : SetupHandlerBase {
         $linksPath = $this.GetLinksPath()
         $linkPath = Join-Path $linksPath "bun.exe"
 
-        if (Test-Path $linkPath) {
-            $this.Log("bun.exe リンクは既に存在します", "Gray")
+        # リンクが既にあっても Links パスが USER PATH に無い場合は適用する。
+        # (手動 shim, 過去の部分実行, copy フォールバック後を想定。)
+        if ((Test-Path $linkPath) -and $this.IsLinksInUserPath($linksPath)) {
+            $this.Log("bun.exe リンクと PATH 設定は既に完了しています", "Gray")
             return $false
         }
 
@@ -55,47 +57,55 @@ class BunHandler : SetupHandlerBase {
             }
 
             $linkPath = Join-Path $linksPath "bun.exe"
-            $this.Log("シンボリックリンクを作成しています: $linkPath -> $bunExe")
 
-            # Windows ではシンボリックリンク作成に管理者権限または開発者モードが必要
-            # 失敗した場合はハードリンクまたはコピーにフォールバック
-            $linkCreated = $false
+            # リンクが無いときだけ作成。既存リンクは尊重して再作成しない。
+            if (-not (Test-Path $linkPath)) {
+                $this.Log("シンボリックリンクを作成しています: $linkPath -> $bunExe")
 
-            try {
-                New-Item -ItemType SymbolicLink -Path $linkPath -Target $bunExe -Force -ErrorAction Stop | Out-Null
-                $this.Log("シンボリックリンクを作成しました", "Green")
-                $linkCreated = $true
-            }
-            catch {
-                $this.LogWarning("シンボリックリンク作成失敗: $($_.Exception.Message)")
-            }
+                # Windows ではシンボリックリンク作成に管理者権限または開発者モードが必要。
+                # 失敗時はハードリンク、それも失敗ならコピーへフォールバック。
+                $linkCreated = $false
 
-            if (-not $linkCreated) {
                 try {
-                    New-Item -ItemType HardLink -Path $linkPath -Target $bunExe -Force -ErrorAction Stop | Out-Null
-                    $this.Log("ハードリンクを作成しました", "Green")
+                    New-Item -ItemType SymbolicLink -Path $linkPath -Target $bunExe -ErrorAction Stop | Out-Null
+                    $this.Log("シンボリックリンクを作成しました", "Green")
                     $linkCreated = $true
                 }
                 catch {
-                    $this.LogWarning("ハードリンク作成失敗: $($_.Exception.Message)")
+                    $this.LogWarning("シンボリックリンク作成失敗: $($_.Exception.Message)")
+                }
+
+                if (-not $linkCreated) {
+                    try {
+                        New-Item -ItemType HardLink -Path $linkPath -Target $bunExe -ErrorAction Stop | Out-Null
+                        $this.Log("ハードリンクを作成しました", "Green")
+                        $linkCreated = $true
+                    }
+                    catch {
+                        $this.LogWarning("ハードリンク作成失敗: $($_.Exception.Message)")
+                    }
+                }
+
+                if (-not $linkCreated) {
+                    Copy-Item -Path $bunExe -Destination $linkPath -Force
+                    $this.Log("ファイルをコピーしました", "Green")
                 }
             }
-
-            if (-not $linkCreated) {
-                Copy-Item -Path $bunExe -Destination $linkPath -Force
-                $this.Log("ファイルをコピーしました", "Green")
+            else {
+                $this.Log("bun.exe リンクは既に存在します", "Gray")
             }
 
-            $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-            if ($userPath -notlike "*$linksPath*") {
+            # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
+            if (-not $this.IsLinksInUserPath($linksPath)) {
                 $this.Log("PATH に Links フォルダを追加しています...")
-                $newPath = "$userPath;$linksPath"
-                [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+                $userPath = Get-UserEnvironmentPath
+                $newPath = if ($userPath) { "$userPath;$linksPath" } else { $linksPath }
+                Set-UserEnvironmentPath -Path $newPath
                 $env:Path = "$env:Path;$linksPath"
                 $this.Log("PATH を更新しました", "Green")
             }
 
-            return $this.CreateSuccessResult("bun.exe リンクを作成しました")
+            return $this.CreateSuccessResult("bun.exe リンクと PATH を設定しました")
         }
         catch {
             return $this.CreateFailureResult("Bun 設定に失敗しました", $_)
@@ -121,5 +131,11 @@ class BunHandler : SetupHandlerBase {
 
     hidden [string] GetLinksPath() {
         return Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+    }
+
+    hidden [bool] IsLinksInUserPath([string]$linksPath) {
+        $userPath = Get-UserEnvironmentPath
+        if (-not $userPath) { return $false }
+        return $userPath -like "*$linksPath*"
     }
 }
