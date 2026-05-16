@@ -210,12 +210,15 @@ return {
     },
 
     -- LSP: configurations
+    -- Uses nvim 0.11+ `vim.lsp.config()` / `vim.lsp.enable()`. The legacy
+    -- `require("lspconfig")[name].setup()` flow prints a deprecation warning
+    -- and will be removed in nvim-lspconfig v3.0.0. nvim-lspconfig is still
+    -- the source of bundled server defaults (`cmd`, `filetypes`, etc.).
     {
         "neovim/nvim-lspconfig",
         event = { "BufReadPre", "BufNewFile" },
         dependencies = { "hrsh7th/cmp-nvim-lsp" },
         config = function()
-            local lspconfig = require("lspconfig")
             local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
             local on_attach = function(_, bufnr)
@@ -231,6 +234,12 @@ return {
                     vim.lsp.buf.format({ async = true })
                 end, "Format")
             end
+
+            -- Defaults applied to every server via the '*' wildcard.
+            vim.lsp.config("*", {
+                capabilities = capabilities,
+                on_attach = on_attach,
+            })
 
             local servers = {
                 nixd = {
@@ -336,10 +345,9 @@ return {
                 ruff = {},
             }
 
-            for server, config in pairs(servers) do
-                config.capabilities = capabilities
-                config.on_attach = on_attach
-                lspconfig[server].setup(config)
+            for name, cfg in pairs(servers) do
+                vim.lsp.config(name, cfg)
+                vim.lsp.enable(name)
             end
         end,
     },
