@@ -129,10 +129,12 @@ tasks:
   # Docker
   # ===========================================
   docker:prune:
-    desc: Remove unused Docker images, containers, and build cache
+    desc: "DESTRUCTIVE: Remove all unused Docker images, containers, networks, and build cache"
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker system prune -a --force
-      - docker builder prune -a --force
 
   # ===========================================
   # Git Hooks
