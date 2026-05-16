@@ -60,6 +60,20 @@
           }
         },
         {
+          "PackageIdentifier": "GoLang.Go",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "go"
+          }
+        },
+        {
+          "PackageIdentifier": "Python.Python.3.13",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "python"
+          }
+        },
+        {
           "PackageIdentifier": "Task.Task",
           "verifyCommand": {
             "args": ["--version"],
