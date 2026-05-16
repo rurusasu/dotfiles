@@ -72,13 +72,21 @@ if (Test-Path -LiteralPath $NvimSource) {
       -NoNewWindow -PassThru `
       -RedirectStandardOutput $lazyLog `
       -RedirectStandardError "$lazyLog.err"
-    if (-not $proc.WaitForExit(90000)) {
+    # WaitForExit(timeout) returns bool but does not guarantee ExitCode is
+    # populated on Process objects returned via Start-Process -PassThru with
+    # redirected I/O. Call WaitForExit() (no args) once HasExited is true to
+    # finalize ExitCode before reading it.
+    $proc.WaitForExit(90000) | Out-Null
+    if (-not $proc.HasExited) {
       $proc.Kill()
       Write-Host "lazy.nvim pre-warm timed out; see $lazyLog"
-    } elseif ($proc.ExitCode -ne 0) {
-      Write-Host "lazy.nvim pre-warm exited $($proc.ExitCode); see $lazyLog"
     } else {
-      Write-Host "lazy.nvim pre-warm complete."
+      $proc.WaitForExit()
+      if ($proc.ExitCode -ne 0) {
+        Write-Host "lazy.nvim pre-warm exited $($proc.ExitCode); see $lazyLog"
+      } else {
+        Write-Host "lazy.nvim pre-warm complete."
+      }
     }
   } elseif (-not $nvim) {
     Write-Host "nvim not on PATH; skipping :Lazy sync (run winget install Neovim.Neovim)."
