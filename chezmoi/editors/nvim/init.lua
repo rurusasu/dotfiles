@@ -1,6 +1,13 @@
 -- Neovim configuration
 -- Managed by chezmoi
 
+-- Windows: prepend real Python to PATH so Mason (pip/pypi installs) bypass
+-- the App Execution Alias stub in WindowsApps.
+if vim.fn.has("win32") == 1 then
+    local py = vim.fn.expand("$LOCALAPPDATA") .. "\\Programs\\Python\\Python313"
+    vim.env.PATH = py .. "\\Scripts;" .. py .. ";" .. vim.env.PATH
+end
+
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then

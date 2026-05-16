@@ -23,6 +23,50 @@ return {
             default_file_explorer = true,
             view_options = { show_hidden = true },
         },
+        config = function(_, opts)
+            require("oil").setup(opts)
+            -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
+            if vim.fn.has("win32") == 1 and vim.fn.executable("wmic") == 0 then
+                local files = require("oil.adapters.files")
+                local cache = require("oil.cache")
+                local util = require("oil.util")
+                local orig = files.list
+                files.list = function(url, column_defs, cb)
+                    local _, path = util.parse_url(url)
+                    if path ~= "/" then
+                        return orig(url, column_defs, cb)
+                    end
+                    local stdout = ""
+                    local jid = vim.fn.jobstart({
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-Command",
+                        "Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name + ':' }",
+                    }, {
+                        stdout_buffered = true,
+                        on_stdout = function(_, data)
+                            stdout = table.concat(data, "\n")
+                        end,
+                        on_exit = function(_, code)
+                            if code ~= 0 then
+                                return cb("Error listing windows devices")
+                            end
+                            local entries = {}
+                            for _, line in ipairs(vim.split(stdout, "\n", { trimempty = true })) do
+                                local drive = line:match("^(%a+):?%s*$")
+                                if drive then
+                                    table.insert(entries, cache.create_entry(url, drive, "directory"))
+                                end
+                            end
+                            cb(nil, entries)
+                        end,
+                    })
+                    if jid <= 0 then
+                        cb("Could not list windows devices")
+                    end
+                end
+            end
+        end,
     },
 
     -- Fuzzy finder
@@ -184,6 +228,7 @@ return {
     -- LSP: server manager
     {
         "williamboman/mason.nvim",
+        lazy = false,
         build = ":MasonUpdate",
         opts = {},
     },
@@ -191,10 +236,10 @@ return {
     -- LSP: mason <-> lspconfig bridge
     {
         "williamboman/mason-lspconfig.nvim",
+        lazy = false,
         dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
         opts = {
             ensure_installed = {
-                "nixd",
                 "gopls",
                 "rust_analyzer",
                 "ts_ls",
