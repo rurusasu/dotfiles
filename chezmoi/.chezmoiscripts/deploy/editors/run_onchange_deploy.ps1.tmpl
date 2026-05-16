@@ -67,26 +67,27 @@ if (Test-Path -LiteralPath $NvimSource) {
   if ($nvim -and $compiler) {
     Write-Host "Pre-warming lazy.nvim plugins (best effort, 90s cap)..."
     $lazyLog = Join-Path $env:LOCALAPPDATA 'nvim-bootstrap.log'
-    $proc = Start-Process -FilePath $nvim.Source `
-      -ArgumentList '--headless', '+Lazy! sync', '+qa' `
-      -NoNewWindow -PassThru `
-      -RedirectStandardOutput $lazyLog `
-      -RedirectStandardError "$lazyLog.err"
-    # WaitForExit(timeout) returns bool but does not guarantee ExitCode is
-    # populated on Process objects returned via Start-Process -PassThru with
-    # redirected I/O. Call WaitForExit() (no args) once HasExited is true to
-    # finalize ExitCode before reading it.
-    $proc.WaitForExit(90000) | Out-Null
-    if (-not $proc.HasExited) {
-      $proc.Kill()
-      Write-Host "lazy.nvim pre-warm timed out; see $lazyLog"
-    } else {
-      $proc.WaitForExit()
-      if ($proc.ExitCode -ne 0) {
-        Write-Host "lazy.nvim pre-warm exited $($proc.ExitCode); see $lazyLog"
+    # Start-Process -PassThru -NoNewWindow with redirected I/O has a known
+    # .NET issue where the returned Process object's ExitCode is null even
+    # after the process has exited. Use Start-Job so a separate PowerShell
+    # process owns nvim and reports $LASTEXITCODE via the pipeline.
+    $job = Start-Job -ScriptBlock {
+      param($NvimPath, $LogPath)
+      & $NvimPath --headless "+Lazy! sync" +qa *> $LogPath
+      return $LASTEXITCODE
+    } -ArgumentList $nvim.Source, $lazyLog
+    if (Wait-Job $job -Timeout 90) {
+      $exitCode = Receive-Job $job
+      Remove-Job $job
+      if ($exitCode -ne 0) {
+        Write-Host "lazy.nvim pre-warm exited $exitCode; see $lazyLog"
       } else {
         Write-Host "lazy.nvim pre-warm complete."
       }
+    } else {
+      Stop-Job $job
+      Remove-Job $job
+      Write-Host "lazy.nvim pre-warm timed out; see $lazyLog"
     }
   } elseif (-not $nvim) {
     Write-Host "nvim not on PATH; skipping :Lazy sync (run winget install Neovim.Neovim)."
