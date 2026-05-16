@@ -24,8 +24,9 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
                 if (-not $content) { continue }
 
-                # onepasswordRead を含むがファイル全体に lookPath "op" が無い場合は違反
-                if ($content -match 'onepasswordRead' -and $content -notmatch 'lookPath\s+"op"') {
+                # テンプレート展開 ({{...}}) 内の onepasswordRead 呼び出しのみが対象。
+                # コメント内の言及やドキュメント記述は除外する。
+                if ($content -match '\{\{[^}]*onepasswordRead' -and $content -notmatch 'lookPath\s+"op"') {
                     $violations += $file.FullName
                 }
             }
@@ -43,8 +44,11 @@ Describe 'chezmoi テンプレート バリデーション' {
 
                 $inOpGuard = $false
                 # $hasOp 変数経由の間接ガードも検出する
-                # パターン: $hasOp := and (hasKey . "op_env") (lookPath "op")
-                #           if and $hasOp ...
+                # 受理パターン:
+                #   $hasOp := and (hasKey . "op_env") (lookPath "op")
+                #   $hasOp := or  (lookPath "op")    (lookPath "op.exe")
+                #   {{- if and $hasOp ... }}
+                #   {{- if $hasOp }}
                 $hasOpVarGuard = $false
                 $inHasOpBlock = $false
                 $lineNum = 0
@@ -52,22 +56,24 @@ Describe 'chezmoi テンプレート バリデーション' {
                 foreach ($line in $lines) {
                     $lineNum++
 
-                    # 直接ガード: {{- if lookPath "op" }}
-                    if ($line -match '\{\{-?\s*if\s+lookPath\s+"op"') {
+                    # 直接ガード: {{- if lookPath "op" }} または {{- if (lookPath "op" ) ... }}
+                    if ($line -match '\{\{-?\s*if\s+[^}]*lookPath\s+"op"') {
                         $inOpGuard = $true
                     }
 
-                    # 間接ガード: $hasOp := and ... (lookPath "op")
-                    if ($line -match '\$hasOp\s*:=\s*and\s.*lookPath\s+"op"') {
+                    # 間接ガード: $hasOp := (and|or) ... (lookPath "op")
+                    if ($line -match '\$hasOp\s*:=\s*(?:and|or)\s.*lookPath\s+"op"') {
                         $hasOpVarGuard = $true
                     }
 
-                    # 間接ガードブロック開始: {{- if and $hasOp ...
-                    if ($line -match '\{\{-?\s*if\s+and\s+\$hasOp' -and $hasOpVarGuard) {
+                    # 間接ガードブロック開始: {{- if $hasOp }} / {{- if and $hasOp ... }}
+                    if ($line -match '\{\{-?\s*if\s+(?:and\s+)?\$hasOp' -and $hasOpVarGuard) {
                         $inHasOpBlock = $true
                     }
 
-                    if ($line -match 'onepasswordRead' -and -not $inOpGuard -and -not $inHasOpBlock) {
+                    # テンプレート展開 ({{...}}) 内の呼び出しのみを対象とする。
+                    # コメント (`# For onepasswordRead, ...`) やドキュメント記述は除外。
+                    if ($line -match '\{\{[^}]*onepasswordRead' -and -not $inOpGuard -and -not $inHasOpBlock) {
                         "$($file.Name):$lineNum should be inside a lookPath `"op`" block" |
                             Should -BeNullOrEmpty
                     }
