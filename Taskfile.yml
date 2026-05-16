@@ -126,6 +126,27 @@ tasks:
       - chezmoi apply --source {{.TASKFILE_DIR}}/chezmoi
 
   # ===========================================
+  # Docker
+  # ===========================================
+  docker:prune:
+    desc: "DESTRUCTIVE: Remove all unused Docker images, containers, networks, and build cache"
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker system prune -a --force
+
+  docker:compact:
+    desc: "Prune Docker objects and compact VHDX to reclaim SSD space (requires admin)"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File windows/compact-docker-vhd.ps1 -Force
+
+  docker:compact:schedule:
+    desc: Register weekly Windows Scheduled Task to auto-compact Docker VHDX (requires admin)
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File windows/register-docker-compact-task.ps1
+
+  # ===========================================
   # Git Hooks
   # ===========================================
   hooks:install:
