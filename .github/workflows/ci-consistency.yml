@@ -12,7 +12,7 @@ on:
       - "flake.lock"
       - "windows/winget/packages.json"
       - "windows/pnpm/packages.json"
-      - ".github/workflows/test-consistency.yml"
+      - ".github/workflows/ci-consistency.yml"
   pull_request:
     branches: [main]
     paths:
@@ -23,19 +23,18 @@ on:
       - "flake.lock"
       - "windows/winget/packages.json"
       - "windows/pnpm/packages.json"
-      - ".github/workflows/test-consistency.yml"
+      - ".github/workflows/ci-consistency.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
