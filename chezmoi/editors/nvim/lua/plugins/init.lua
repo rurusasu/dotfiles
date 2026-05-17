@@ -194,28 +194,15 @@ return {
                 acp = {
                     claude_code = function()
                         return require("codecompanion.adapters").extend("claude_code", {
-                            env = {
-                                CLAUDE_CODE_OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN",
-                            },
                             defaults = {
                                 mcpServers = "inherit_from_config",
                             },
                         })
                     end,
-                    opencode = function()
-                        return require("codecompanion.adapters").extend("opencode", {})
-                    end,
                     codex = function()
                         return require("codecompanion.adapters").extend("codex", {
                             defaults = {
                                 auth_method = "chatgpt",
-                            },
-                        })
-                    end,
-                    gemini_cli = function()
-                        return require("codecompanion.adapters").extend("gemini_cli", {
-                            defaults = {
-                                auth_method = "oauth-personal",
                             },
                         })
                     end,
