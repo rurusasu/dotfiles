@@ -222,7 +222,14 @@ return {
                 },
             },
             interactions = {
-                chat = { adapter = "claude_code" },
+                chat = {
+                    adapter = "claude_code",
+                    keymaps = {
+                        send = {
+                            modes = { n = "<CR>", i = "<C-CR>" },
+                        },
+                    },
+                },
                 inline = { adapter = "claude_code" },
             },
         },
