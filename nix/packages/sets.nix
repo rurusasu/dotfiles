@@ -289,6 +289,11 @@ let
       winget = "SST.opencode";
       category = "infra";
     };
+    google-cloud-sdk = {
+      pkg = pkgs.google-cloud-sdk;
+      winget = "Google.CloudSDK";
+      category = "infra";
+    };
 
     # ── lsp ───────────────────────────────────────────────
     nixd = {
@@ -487,6 +492,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     python3 = {
       command = "python";
       args = [ "--version" ];
+    };
+    google-cloud-sdk = {
+      command = "gcloud";
+      args = [ "version" ];
     };
   };
 
