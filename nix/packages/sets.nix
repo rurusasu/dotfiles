@@ -389,6 +389,7 @@ lib.mapAttrs (_: names: resolve names) grouped
   pnpmGlobal = [
     "@tobilu/qmd"
     "@prisma/language-server"
+    "@agentclientprotocol/claude-agent-acp"
   ];
 
   # Post-install verification commands for pnpm packages.
@@ -404,6 +405,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     "@google/gemini-cli" = {
       command = "gemini";
+      args = [ "--version" ];
+    };
+    "@agentclientprotocol/claude-agent-acp" = {
+      command = "claude-agent-acp";
       args = [ "--version" ];
     };
   };
