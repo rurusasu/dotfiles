@@ -17,17 +17,17 @@
       }
     },
     {
-      "name": "@google/gemini-cli",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "gemini"
-      }
-    },
-    {
       "name": "@agentclientprotocol/claude-agent-acp",
       "verifyCommand": {
         "args": ["--version"],
         "command": "claude-agent-acp"
+      }
+    },
+    {
+      "name": "@google/gemini-cli",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "gemini"
       }
     }
   ]
