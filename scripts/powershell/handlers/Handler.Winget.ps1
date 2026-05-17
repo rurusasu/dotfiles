@@ -117,7 +117,10 @@ class WingetHandler : SetupHandlerBase {
             $packages = @()
             if ($packagesJson.Sources) {
                 foreach ($source in $packagesJson.Sources) {
-                    $sourceName = $source.SourceDetails.Name
+                    $sourceName = $null
+                    if ($source.PSObject.Properties.Name -contains "SourceDetails") {
+                        $sourceName = $source.SourceDetails.Name
+                    }
                     if ($source.Packages) {
                         foreach ($pkg in $source.Packages) {
                             if ($pkg.PackageIdentifier) {
@@ -279,9 +282,13 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) {
+            $this.LogWarning("verifyCommand に 'command' フィールドがありません")
+            return $false
+        }
         try {
             $command = $verifyCmd.command
-            $arguments = @($verifyCmd.args)
+            $arguments = if ($verifyCmd.PSObject.Properties.Name -contains "args") { @($verifyCmd.args) } else { @() }
             $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
             return $LASTEXITCODE -eq 0
         }

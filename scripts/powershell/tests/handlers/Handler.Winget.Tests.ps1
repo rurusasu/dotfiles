@@ -1,5 +1,5 @@
 BeforeAll {
-    # ソースファイルの読み込み
+    Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Winget.ps1
