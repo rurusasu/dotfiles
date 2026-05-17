@@ -80,6 +80,7 @@ class WingetHandler : SetupHandlerBase {
             }
             return $false
         } catch {
+            $this.LogWarning("winget 動作確認中に例外が発生しました: $($_.Exception.Message)")
             return $false
         }
     }
@@ -117,7 +118,10 @@ class WingetHandler : SetupHandlerBase {
             $packages = @()
             if ($packagesJson.Sources) {
                 foreach ($source in $packagesJson.Sources) {
-                    $sourceName = $source.SourceDetails.Name
+                    $sourceName = $null
+                    if ($source.PSObject.Properties.Name -contains "SourceDetails") {
+                        $sourceName = $source.SourceDetails.Name
+                    }
                     if ($source.Packages) {
                         foreach ($pkg in $source.Packages) {
                             if ($pkg.PackageIdentifier) {
@@ -125,11 +129,15 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "Version") {
                                     $version = $pkg.Version
                                 }
+                                $verifyCommand = $null
+                                if ($pkg.PSObject.Properties.Name -contains "verifyCommand") {
+                                    $verifyCommand = $pkg.verifyCommand
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id            = $pkg.PackageIdentifier
                                     Version       = $version
                                     SourceName    = $sourceName
-                                    VerifyCommand = $pkg.verifyCommand
+                                    VerifyCommand = $verifyCommand
                                 }
                             }
                         }
@@ -219,6 +227,7 @@ class WingetHandler : SetupHandlerBase {
             $parts += "$skipped 個スキップ"
             return $this.CreateSuccessResult($parts -join ", ")
         } catch {
+            $this.LogWarning("winget パッケージインストール中に予期しないエラーが発生しました: $($_.Exception.Message)")
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -254,6 +263,7 @@ class WingetHandler : SetupHandlerBase {
             return $ids
         }
         catch {
+            $this.LogWarning("インストール済みパッケージ一覧の取得に失敗しました: $($_.Exception.Message)")
             return @()
         }
     }
@@ -270,14 +280,19 @@ class WingetHandler : SetupHandlerBase {
             return $LASTEXITCODE -eq 0
         }
         catch {
+            $this.LogWarning("パッケージ確認中にエラーが発生しました ($packageId): $($_.Exception.Message)")
             return $false
         }
     }
 
     hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) {
+            $this.LogWarning("verifyCommand に 'command' フィールドがありません")
+            return $false
+        }
         try {
             $command = $verifyCmd.command
-            $arguments = @($verifyCmd.args)
+            $arguments = if ($verifyCmd.PSObject.Properties.Name -contains "args") { @($verifyCmd.args) } else { @() }
             $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
             return $LASTEXITCODE -eq 0
         }

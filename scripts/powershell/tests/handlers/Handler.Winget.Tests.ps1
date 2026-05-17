@@ -1,5 +1,5 @@
 BeforeAll {
-    # ソースファイルの読み込み
+    Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Winget.ps1
@@ -664,6 +664,46 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+    }
+
+    Context 'Apply - import mode: mixed packages with and without verifyCommand' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "GUI.App" },
+                                [PSCustomObject]@{ PackageIdentifier = "CLI.Tool"; verifyCommand = [PSCustomObject]@{ command = "cli-tool"; args = @("--version") } }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should install all packages and return success when some lack verifyCommand' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "2 個インストール"
+        }
+
+        It 'should run verify only for packages that have verifyCommand' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            Should -Invoke Invoke-VerifyCommand -Times 1
         }
     }
 
