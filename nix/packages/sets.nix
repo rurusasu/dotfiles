@@ -475,6 +475,14 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "task";
       args = [ "--version" ];
     };
+    go = {
+      command = "go";
+      args = [ "version" ];
+    };
+    python3 = {
+      command = "python";
+      args = [ "--version" ];
+    };
   };
 
   # Windows-only packages (no nix equivalent)
