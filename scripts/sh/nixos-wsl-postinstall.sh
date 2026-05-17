@@ -284,11 +284,6 @@ if [[ ! -f $HOST_CONFIG_PATH ]]; then
   if [[ -f /etc/nixos/configuration.nix ]]; then
     cp -f /etc/nixos/configuration.nix "$HOST_CONFIG_PATH"
     sed -i '\|<nixos-wsl/modules>|d' "$HOST_CONFIG_PATH"
-    # Add Docker Desktop integration setting for k3s
-    sed -i '/wsl.defaultUser/a\
-\
-  # Enable Docker Desktop WSL integration handling for k3s\
-  mySettings.wsl.dockerDesktopIntegration = true;' "$HOST_CONFIG_PATH"
     echo "Created: $HOST_CONFIG_PATH"
   fi
 else
