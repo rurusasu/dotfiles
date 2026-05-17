@@ -104,6 +104,13 @@
           "PackageIdentifier": "SST.opencode"
         },
         {
+          "PackageIdentifier": "Google.CloudSDK",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "gcloud"
+          }
+        },
+        {
           "PackageIdentifier": "Microsoft.PowerShell",
           "verifyCommand": {
             "args": ["--version"],
