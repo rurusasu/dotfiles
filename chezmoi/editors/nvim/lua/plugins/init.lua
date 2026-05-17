@@ -124,7 +124,8 @@ return {
                 section_separators = "",
             },
             sections = {
-                lualine_b = { "branch", { "filename", path = 1 }, "diff", "diagnostics" },
+                lualine_b = { "branch", "diff", "diagnostics" },
+                lualine_c = { { "filename", path = 1 } },
             },
         },
     },
