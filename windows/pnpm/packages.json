@@ -22,6 +22,13 @@
         "args": ["--version"],
         "command": "gemini"
       }
+    },
+    {
+      "name": "@agentclientprotocol/claude-agent-acp",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "claude-agent-acp"
+      }
     }
   ]
 }
