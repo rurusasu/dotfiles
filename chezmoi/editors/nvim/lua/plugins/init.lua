@@ -176,7 +176,7 @@ return {
         opts = {},
     },
 
-    -- AI coding assistant (codecompanion + Claude Code via ACP)
+    -- AI coding assistant (codecompanion + ACP agents)
     {
         "olimorris/codecompanion.nvim",
         dependencies = {
@@ -195,11 +195,33 @@ return {
                     claude_code = function()
                         return require("codecompanion.adapters").extend("claude_code", {
                             env = {
-                                -- `claude setup-token` でブラウザ認証後に取得したトークンを参照
                                 CLAUDE_CODE_OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN",
                             },
                             defaults = {
                                 mcpServers = "inherit_from_config",
+                            },
+                        })
+                    end,
+                    opencode = function()
+                        return require("codecompanion.adapters").extend("opencode", {})
+                    end,
+                    codex = function()
+                        return require("codecompanion.adapters").extend("codex", {
+                            defaults = {
+                                auth_method = "openai-api-key",
+                            },
+                            env = {
+                                OPENAI_API_KEY = "OPENAI_API_KEY",
+                            },
+                        })
+                    end,
+                    gemini_cli = function()
+                        return require("codecompanion.adapters").extend("gemini_cli", {
+                            defaults = {
+                                auth_method = "gemini-api-key",
+                            },
+                            env = {
+                                GEMINI_API_KEY = "GEMINI_API_KEY",
                             },
                         })
                     end,
