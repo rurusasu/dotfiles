@@ -40,34 +40,49 @@ jobs:
 
       - name: Run statix
         run: |
+          # statix exits non-zero when findings exist; capture that separately from infra errors.
+          # stderr is preserved so build/infra failures surface in logs.
           nix shell nixpkgs#statix --command \
-            statix check --format json . > statix.json 2>/dev/null || true
+            statix check --format json . > statix.json || STATIX_EXIT=$?
+          echo "statix_exit=${STATIX_EXIT:-0}" >> "$GITHUB_ENV"
 
       - name: Convert to SARIF
         run: |
           python3 - << 'PYEOF'
           import json, sys
 
+          # statix --format json emits one JSON object per file on separate lines (NDJSON),
+          # e.g. {"file":"a.nix","report":[...]}\n{"file":"b.nix","report":[...]}\n
+          # Parse line-by-line to avoid JSONDecodeError on multi-file output.
+          SEV_MAP = {"Error": "error", "Warn": "warning", "Hint": "note"}
+          data = []
+          error_count = 0
           try:
               with open("statix.json") as f:
-                  raw = f.read().strip()
-              data = json.loads(raw) if raw else []
-          except Exception as e:
-              print(f"Warning: could not parse statix output: {e}", file=sys.stderr)
-              data = []
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      try:
+                          data.append(json.loads(line))
+                      except json.JSONDecodeError as e:
+                          print(f"Warning: skipping unparseable line: {e}", file=sys.stderr)
+          except FileNotFoundError:
+              print("Warning: statix.json not found — empty SARIF will be uploaded", file=sys.stderr)
 
-          # statix --format json emits a list of {file, report: [{note, severity, diagnostics: [{at, message, kind}]}]}
           results = []
-          for item in data if isinstance(data, list) else data.get("results", []):
+          for item in data:
               file_path = item.get("file", "")
               for check in item.get("report", []):
                   note = check.get("note", "")
-                  severity = check.get("severity", "Warning")
-                  level = "error" if severity.lower() == "error" else "warning"
+                  severity = check.get("severity", "Warn")
+                  level = SEV_MAP.get(severity, "warning")
                   for diag in check.get("diagnostics", []):
                       at = diag.get("at", {})
                       frm = at.get("from", {})
                       to = at.get("to", {})
+                      if severity == "Error":
+                          error_count += 1
                       results.append({
                           "ruleId": "statix/lint",
                           "message": {"text": f"{note}: {diag.get('message', '')}".strip(": ")},
@@ -104,11 +119,14 @@ jobs:
           }
           with open("statix.sarif", "w") as f:
               json.dump(sarif, f, indent=2)
-          print(f"SARIF: {len(results)} finding(s)")
+          print(f"SARIF: {len(results)} finding(s), {error_count} error(s)")
+
+          with open("statix_errors.txt", "w") as f:
+              f.write(str(error_count))
           PYEOF
 
       - name: Upload SARIF to Security tab
-        uses: github/codeql-action/upload-sarif@78ed0c7291d93e40c51b085850dc669a4c3ab73b # v3
+        uses: github/codeql-action/upload-sarif@458d36d7d4f47d0dd16ca424c1d3cda0060f1360 # v3
         if: always()
         with:
           sarif_file: statix.sarif
@@ -116,21 +134,11 @@ jobs:
 
       - name: Fail on statix errors
         run: |
-          python3 - << 'PYEOF'
-          import json, sys
-          try:
-              data = json.loads(open("statix.json").read() or "[]")
-          except Exception:
-              sys.exit(0)
-          errors = 0
-          for item in data if isinstance(data, list) else data.get("results", []):
-              for check in item.get("report", []):
-                  if check.get("severity", "").lower() == "error":
-                      errors += len(check.get("diagnostics", []))
-          if errors:
-              print(f"statix: {errors} error(s) found")
-              sys.exit(1)
-          PYEOF
+          errors=$(cat statix_errors.txt 2>/dev/null || echo "0")
+          if [ "$errors" -gt 0 ]; then
+            echo "statix: $errors error(s) found"
+            exit 1
+          fi
 
   fmt:
     name: Format (nix fmt)
