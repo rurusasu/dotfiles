@@ -1,0 +1,207 @@
+name: Nix CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/ci-nix.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/ci-nix.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (statix)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+
+      - name: Run statix
+        run: |
+          nix shell nixpkgs#statix --command \
+            statix check --format json . > statix.json 2>/dev/null || true
+
+      - name: Convert to SARIF
+        run: |
+          python3 - << 'PYEOF'
+          import json, sys
+
+          try:
+              with open("statix.json") as f:
+                  raw = f.read().strip()
+              data = json.loads(raw) if raw else []
+          except Exception as e:
+              print(f"Warning: could not parse statix output: {e}", file=sys.stderr)
+              data = []
+
+          # statix --format json emits a list of {file, report: [{note, severity, diagnostics: [{at, message, kind}]}]}
+          results = []
+          for item in data if isinstance(data, list) else data.get("results", []):
+              file_path = item.get("file", "")
+              for check in item.get("report", []):
+                  note = check.get("note", "")
+                  severity = check.get("severity", "Warning")
+                  level = "error" if severity.lower() == "error" else "warning"
+                  for diag in check.get("diagnostics", []):
+                      at = diag.get("at", {})
+                      frm = at.get("from", {})
+                      to = at.get("to", {})
+                      results.append({
+                          "ruleId": "statix/lint",
+                          "message": {"text": f"{note}: {diag.get('message', '')}".strip(": ")},
+                          "level": level,
+                          "locations": [{
+                              "physicalLocation": {
+                                  "artifactLocation": {
+                                      "uri": file_path,
+                                      "uriBaseId": "%SRCROOT%"
+                                  },
+                                  "region": {
+                                      "startLine": max(1, frm.get("line", 1)),
+                                      "startColumn": max(1, frm.get("column", 1)),
+                                      "endLine": max(1, to.get("line", 1)),
+                                      "endColumn": max(1, to.get("column", 1))
+                                  }
+                              }
+                          }]
+                      })
+
+          sarif = {
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                  "tool": {
+                      "driver": {
+                          "name": "statix",
+                          "informationUri": "https://github.com/nerdypepper/statix",
+                          "rules": []
+                      }
+                  },
+                  "results": results
+              }]
+          }
+          with open("statix.sarif", "w") as f:
+              json.dump(sarif, f, indent=2)
+          print(f"SARIF: {len(results)} finding(s)")
+          PYEOF
+
+      - name: Upload SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@78ed0c7291d93e40c51b085850dc669a4c3ab73b # v3
+        if: always()
+        with:
+          sarif_file: statix.sarif
+          category: statix
+
+      - name: Fail on statix errors
+        run: |
+          python3 - << 'PYEOF'
+          import json, sys
+          try:
+              data = json.loads(open("statix.json").read() or "[]")
+          except Exception:
+              sys.exit(0)
+          errors = 0
+          for item in data if isinstance(data, list) else data.get("results", []):
+              for check in item.get("report", []):
+                  if check.get("severity", "").lower() == "error":
+                      errors += len(check.get("diagnostics", []))
+          if errors:
+              print(f"statix: {errors} error(s) found")
+              sys.exit(1)
+          PYEOF
+
+  fmt:
+    name: Format (nix fmt)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+
+      - name: Check formatting
+        run: nix fmt -- --fail-on-change
+
+  test:
+    name: Test (flake check + build + smoke)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [lint, fmt]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+
+      - name: Check flake evaluation
+        run: |
+          output=$(nix flake check --no-build 2>&1)
+          echo "$output"
+          if echo "$output" | grep -q "evaluation warning"; then
+            echo "ERROR: evaluation warnings found"
+            exit 1
+          fi
+
+      - name: Build package sets
+        run: |
+          nix build .#minimal
+          nix build .#default
+
+      - name: Smoke test core tools
+        run: |
+          nix shell .#default --command bash -c '
+            set -euo pipefail
+            check() {
+              local name=$1; shift
+              local out
+              out=$("$name" "$@" 2>&1) || { echo "FAIL $name (exit $?)"; exit 1; }
+              echo "OK  $name: $out"
+            }
+            echo "=== Smoke testing core tools ==="
+            check chezmoi --version
+            check git --version
+            check gh --version
+            check fd --version
+            check rg --version
+            check bat --version
+            check jq --version
+            check eza --version
+            check zoxide --version
+            check fzf --version
+            check unzip -v
+            echo "=== All core tools OK ==="
+          '
