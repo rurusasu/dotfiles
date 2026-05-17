@@ -2,6 +2,7 @@
 {
   environment.systemPackages = with pkgs; [
     coreutils
+    nvidia-container-toolkit
     # Japanese input: fcitx5+mozc installed as system packages.
     # i18n.inputMethod is intentionally NOT used here because it auto-generates
     # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
@@ -47,6 +48,24 @@
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
     config.common.default = "*";
+  };
+
+  # Native dockerd. Kind node containers use regular runc at the docker level;
+  # GPU access inside kind nodes is handled via CDI (see k8s/kind/cluster.yaml).
+  # Windows can reach the socket via: DOCKER_HOST=unix:///wsl.localhost/NixOS/var/run/docker.sock
+  virtualisation.docker.enable = true;
+
+  users.users.nixos.extraGroups = [ "docker" ];
+
+  # Generate CDI spec on each activation so kind worker nodes can mount
+  # /etc/cdi and use GPU resources through containerd CDI.
+  system.activationScripts.nvidiaCdi = {
+    deps = [ "wslWhoami" ];
+    text = ''
+      mkdir -p /etc/cdi
+      ${pkgs.nvidia-container-toolkit}/bin/nvidia-ctk cdi generate \
+        --output /etc/cdi/nvidia.yaml 2>/dev/null || true
+    '';
   };
 
   # Re-register WSLInterop binfmt entry after systemd clears it on boot.
