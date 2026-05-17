@@ -208,20 +208,14 @@ return {
                     codex = function()
                         return require("codecompanion.adapters").extend("codex", {
                             defaults = {
-                                auth_method = "openai-api-key",
-                            },
-                            env = {
-                                OPENAI_API_KEY = "OPENAI_API_KEY",
+                                auth_method = "chatgpt",
                             },
                         })
                     end,
                     gemini_cli = function()
                         return require("codecompanion.adapters").extend("gemini_cli", {
                             defaults = {
-                                auth_method = "gemini-api-key",
-                            },
-                            env = {
-                                GEMINI_API_KEY = "GEMINI_API_KEY",
+                                auth_method = "oauth-personal",
                             },
                         })
                     end,
