@@ -1,4 +1,4 @@
-name: PowerShell Tests
+name: PowerShell CI
 
 on:
   workflow_dispatch:
@@ -6,24 +6,121 @@ on:
     branches: [main]
     paths:
       - "scripts/powershell/**"
-      - ".github/workflows/test-powershell.yml"
+      - ".github/workflows/ci-powershell.yml"
   pull_request:
     branches: [main]
     paths:
       - "scripts/powershell/**"
-      - ".github/workflows/test-powershell.yml"
+      - ".github/workflows/ci-powershell.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
+  lint:
+    name: Lint (PSScriptAnalyzer)
+    runs-on: windows-2025
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Cache PSScriptAnalyzer
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~\Documents\PowerShell\Modules\PSScriptAnalyzer
+          key: ${{ runner.os }}-pssa-lint-1.22.0
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) {
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery
+          }
+
+      - name: Run PSScriptAnalyzer and generate SARIF
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $settings = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/PSScriptAnalyzerSettings.psd1'
+          $findings = Invoke-ScriptAnalyzer -Path scripts/powershell -Recurse -Settings $settings
+
+          $sevMap = @{ Error = 'error'; ParseError = 'error'; Warning = 'warning'; Information = 'note' }
+          $results = [object[]]@(
+            $findings | ForEach-Object {
+              $uri = [System.IO.Path]::GetRelativePath($env:GITHUB_WORKSPACE, $_.ScriptPath).Replace('\', '/')
+              @{
+                ruleId    = $_.RuleName
+                message   = @{ text = $_.Message }
+                level     = $sevMap[$_.Severity.ToString()]
+                locations = @(@{
+                  physicalLocation = @{
+                    artifactLocation = @{ uri = $uri; uriBaseId = '%SRCROOT%' }
+                    region           = @{ startLine = [int]$_.Line; startColumn = [int]$_.Column }
+                  }
+                })
+              }
+            }
+          )
+          $sarif = @{
+            '$schema' = 'https://json.schemastore.org/sarif-2.1.0.json'
+            version   = '2.1.0'
+            runs      = @(@{
+              tool    = @{
+                driver = @{
+                  name           = 'PSScriptAnalyzer'
+                  informationUri = 'https://github.com/PowerShell/PSScriptAnalyzer'
+                  rules          = @()
+                }
+              }
+              results = $results
+            })
+          }
+          $sarif | ConvertTo-Json -Depth 10 | Set-Content pssa.sarif -Encoding UTF8
+          Write-Host "SARIF: $(@($findings).Count) finding(s)"
+
+          $errors = @($findings | Where-Object { $_.Severity -in 'Error','ParseError' }).Count
+          Set-Content pssa_errors.txt $errors
+
+      - name: Upload SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@458d36d7d4f47d0dd16ca424c1d3cda0060f1360 # v3
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          sarif_file: pssa.sarif
+          category: PSScriptAnalyzer
+
+      - name: Fail on PSScriptAnalyzer errors
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path pssa_errors.txt)) {
+            Write-Error "pssa_errors.txt not found — SARIF generation step likely failed"
+            exit 1
+          }
+          $errors = [int](Get-Content pssa_errors.txt -Raw).Trim()
+          if ($errors -gt 0) {
+            Write-Error "PSScriptAnalyzer: $errors error(s) found"
+            exit 1
+          }
+
   test:
+    name: Test (Pester + Codecov)
     runs-on: windows-2025
     timeout-minutes: 20
+    needs: lint
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -91,7 +188,6 @@ jobs:
 
           $result = Invoke-Pester -Configuration $pesterConfig
 
-          # Output summary
           Write-Host ""
           Write-Host "=== Test Summary ===" -ForegroundColor Cyan
           Write-Host "Passed: $($result.PassedCount)" -ForegroundColor Green
@@ -104,9 +200,7 @@ jobs:
             Write-Host "Coverage: $([math]::Round($result.CodeCoverage.CoveragePercent, 2))%"
           }
 
-          if ($result.FailedCount -gt 0) {
-            exit 1
-          }
+          if ($result.FailedCount -gt 0) { exit 1 }
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
