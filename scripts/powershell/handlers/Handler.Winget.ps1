@@ -125,11 +125,15 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "Version") {
                                     $version = $pkg.Version
                                 }
+                                $verifyCommand = $null
+                                if ($pkg.PSObject.Properties.Name -contains "verifyCommand") {
+                                    $verifyCommand = $pkg.verifyCommand
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id            = $pkg.PackageIdentifier
                                     Version       = $version
                                     SourceName    = $sourceName
-                                    VerifyCommand = $pkg.verifyCommand
+                                    VerifyCommand = $verifyCommand
                                 }
                             }
                         }
