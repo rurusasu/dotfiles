@@ -80,6 +80,7 @@ class WingetHandler : SetupHandlerBase {
             }
             return $false
         } catch {
+            $this.LogWarning("winget 動作確認中に例外が発生しました: $($_.Exception.Message)")
             return $false
         }
     }
@@ -226,6 +227,7 @@ class WingetHandler : SetupHandlerBase {
             $parts += "$skipped 個スキップ"
             return $this.CreateSuccessResult($parts -join ", ")
         } catch {
+            $this.LogWarning("winget パッケージインストール中に予期しないエラーが発生しました: $($_.Exception.Message)")
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -261,6 +263,7 @@ class WingetHandler : SetupHandlerBase {
             return $ids
         }
         catch {
+            $this.LogWarning("インストール済みパッケージ一覧の取得に失敗しました: $($_.Exception.Message)")
             return @()
         }
     }
@@ -277,6 +280,7 @@ class WingetHandler : SetupHandlerBase {
             return $LASTEXITCODE -eq 0
         }
         catch {
+            $this.LogWarning("パッケージ確認中にエラーが発生しました ($packageId): $($_.Exception.Message)")
             return $false
         }
     }

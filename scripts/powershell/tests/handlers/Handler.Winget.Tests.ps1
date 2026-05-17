@@ -692,7 +692,7 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should handle mixed packages without StrictMode error' {
+        It 'should install all packages and return success when some lack verifyCommand' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
@@ -701,7 +701,8 @@ Describe 'WingetHandler' {
 
         It 'should run verify only for packages that have verifyCommand' {
             $ctx.Options["WingetMode"] = "import"
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
             Should -Invoke Invoke-VerifyCommand -Times 1
         }
     }
