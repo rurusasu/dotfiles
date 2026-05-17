@@ -92,12 +92,12 @@ let
     };
     python3 = {
       pkg = pkgs.python3;
-      winget = null;
+      winget = "Python.Python.3.13";
       category = "dev";
     };
     go = {
       pkg = pkgs.go;
-      winget = null;
+      winget = "GoLang.Go";
       category = "dev";
     };
     gnumake = {
@@ -475,6 +475,14 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "task";
       args = [ "--version" ];
     };
+    go = {
+      command = "go";
+      args = [ "version" ];
+    };
+    python3 = {
+      command = "python";
+      args = [ "--version" ];
+    };
   };
 
   # Windows-only packages (no nix equivalent)
@@ -499,6 +507,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "TablePlus.TablePlus"
       "Oven-sh.Bun"
       "ZedIndustries.Zed"
+      "zig.zig"
     ];
     msstore = [
       "9NT1R1C2HH7J"
