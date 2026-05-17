@@ -176,8 +176,14 @@ in
     FZF_DEFAULT_COMMAND = "fd ${fdOpts} --absolute-path --type f . .";
     FZF_ALT_C_COMMAND = "fd ${fdOpts} --absolute-path --type d . .";
     FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '";
+    # pnpm global bin directory
+    PNPM_HOME = "$HOME/.local/share/pnpm";
   };
 
   # PATH: bun global binaries (claude-code, gemini-cli, etc.)
-  home.sessionPath = [ "$HOME/.bun/bin" ];
+  #       pnpm global binaries
+  home.sessionPath = [
+    "$HOME/.bun/bin"
+    "$HOME/.local/share/pnpm"
+  ];
 }
