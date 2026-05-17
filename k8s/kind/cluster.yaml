@@ -8,12 +8,18 @@ containerdConfigPatches:
       cdi_spec_dirs = ["/etc/cdi"]
 nodes:
   - role: control-plane
+    image: kindest/node:v1.35.1
   - role: control-plane
+    image: kindest/node:v1.35.1
   - role: control-plane
+    image: kindest/node:v1.35.1
   - role: worker
+    image: kindest/node:v1.35.1
   - role: worker
-  # GPU worker: CDI spec mounted from host /etc/cdi
+    image: kindest/node:v1.35.1
+  # GPU worker: CDI spec and WSL libs mounted from host
   - role: worker
+    image: kindest/node:v1.35.1
     extraMounts:
       - hostPath: /etc/cdi
         containerPath: /etc/cdi
