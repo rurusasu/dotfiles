@@ -15,10 +15,6 @@
   wsl.enable = true;
   wsl.defaultUser = "nixos";
 
-  # Enable Docker Desktop WSL integration
-  # Required for kind to use Docker Desktop as container runtime
-  mySettings.wsl.dockerDesktopIntegration = true;
-
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
   # on your system were taken. It's perfectly fine and recommended to leave

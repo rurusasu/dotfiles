@@ -2,6 +2,7 @@
 {
   environment.systemPackages = with pkgs; [
     coreutils
+    nvidia-container-toolkit
     # Japanese input: fcitx5+mozc installed as system packages.
     # i18n.inputMethod is intentionally NOT used here because it auto-generates
     # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
@@ -49,6 +50,21 @@
     config.common.default = "*";
   };
 
+  # Native dockerd with nvidia as default runtime.
+  # Windows can reach the socket via: DOCKER_HOST=unix:///wsl.localhost/NixOS/var/run/docker.sock
+  virtualisation.docker = {
+    enable = true;
+    daemon.settings = {
+      "default-runtime" = "nvidia";
+      runtimes.nvidia = {
+        path = "nvidia-container-runtime";
+        args = [ ];
+      };
+    };
+  };
+
+  users.users.nixos.extraGroups = [ "docker" ];
+
   # Re-register WSLInterop binfmt entry after systemd clears it on boot.
   # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.
   wsl.interop.register = true;
@@ -58,9 +74,11 @@
   wsl.wslConf.network.generateHosts = false;
 
   # Ensure nix-ld works for non-login shells (e.g. VS Code WSL server).
+  # /usr/lib/wsl/lib is added for NVIDIA GPU access via WSL2 (libcuda, nvidia-smi, etc.)
   environment.variables = {
     NIX_LD = "/run/current-system/sw/share/nix-ld/lib/ld.so";
     NIX_LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
     WARP_ENABLE_WAYLAND = "1";
+    LD_LIBRARY_PATH = "/usr/lib/wsl/lib";
   };
 }
