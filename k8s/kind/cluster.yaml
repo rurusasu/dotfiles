@@ -3,9 +3,9 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: learning
 containerdConfigPatches:
   - |-
-    [plugins."io.containerd.grpc.v1.cri".cdi]
-      enabled = true
-      spec-dirs = ["/etc/cdi"]
+    [plugins."io.containerd.grpc.v1.cri"]
+      enable_cdi = true
+      cdi_spec_dirs = ["/etc/cdi"]
 nodes:
   - role: control-plane
   - role: control-plane
