@@ -3,8 +3,13 @@
 [![NixOS](https://img.shields.io/badge/NixOS-26.05-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
-[![PowerShell Tests](https://github.com/rurusasu/dotfiles/actions/workflows/test-powershell.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/test-powershell.yml)
-[![codecov](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=powershell)](https://codecov.io/gh/rurusasu/dotfiles)
+[![ci-nix](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml)
+[![ci-powershell](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml)
+[![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
+[![ci-winget](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml)
+[![ci-consistency](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml)
+[![powershell coverage](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=powershell)](https://codecov.io/gh/rurusasu/dotfiles)
+[![chezmoi coverage](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=chezmoi)](https://codecov.io/gh/rurusasu/dotfiles)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 NixOS/Home Manager + chezmoi を使った dotfiles の一元管理リポジトリ
