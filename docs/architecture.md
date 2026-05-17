@@ -281,7 +281,7 @@ flowchart TD
         N1 --> N2 --> N3 --> N4
     end
 
-    subgraph WG["test-winget.yml (windows-latest)"]
+    subgraph WG["test-winget.yml (windows-2025)"]
         W1["① winget import\npackages.json 全量インストール"]
         W2["② smoke test\nchezmoi git gh fd rg jq eza zoxide fzf"]
         W1 --> W2
@@ -293,7 +293,7 @@ flowchart TD
         C1 --> C2
     end
 
-    subgraph PS["test-powershell.yml (windows-latest)"]
+    subgraph PS["test-powershell.yml (windows-2025)"]
         P1["① Pester\nユニットテスト"]
         P2["② Codecov\nカバレッジ"]
         P1 --> P2
@@ -302,12 +302,12 @@ flowchart TD
 
 ### ワークフロー詳細
 
-| Workflow               | ランナー       | 何を保証するか                                       | トリガー                                                |
-| ---------------------- | -------------- | ---------------------------------------------------- | ------------------------------------------------------- |
-| `test-nix.yml`         | ubuntu-latest  | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                                     |
-| `test-winget.yml`      | windows-latest | winget パッケージがインストールでき、ツールが動く    | `windows/winget/packages.json`, `nix/packages/sets.nix` |
-| `test-consistency.yml` | ubuntu-latest  | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`                  |
-| `test-powershell.yml`  | windows-latest | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                                 |
+| Workflow               | ランナー      | 何を保証するか                                       | トリガー                                                |
+| ---------------------- | ------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| `test-nix.yml`         | ubuntu-latest | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                                     |
+| `test-winget.yml`      | windows-2025  | winget パッケージがインストールでき、ツールが動く    | `windows/winget/packages.json`, `nix/packages/sets.nix` |
+| `test-consistency.yml` | ubuntu-latest | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`                  |
+| `test-powershell.yml`  | windows-2025  | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                                 |
 
 ### テストレベルの判断基準
 
