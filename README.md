@@ -8,8 +8,6 @@
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![ci-winget](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml)
 [![ci-consistency](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml)
-[![powershell coverage](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=powershell)](https://codecov.io/gh/rurusasu/dotfiles)
-[![chezmoi coverage](https://codecov.io/gh/rurusasu/dotfiles/branch/main/graph/badge.svg?flag=chezmoi)](https://codecov.io/gh/rurusasu/dotfiles)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 NixOS/Home Manager + chezmoi を使った dotfiles の一元管理リポジトリ
