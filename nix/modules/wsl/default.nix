@@ -54,6 +54,9 @@
   # GPU access inside kind nodes is handled via CDI (see k8s/kind/cluster.yaml).
   # Windows can reach the socket via: DOCKER_HOST=unix:///wsl.localhost/NixOS/var/run/docker.sock
   virtualisation.docker.enable = true;
+  virtualisation.docker.daemon.settings = {
+    insecure-registries = [ "registry.localhost" ];
+  };
 
   users.users.nixos.extraGroups = [ "docker" ];
 
