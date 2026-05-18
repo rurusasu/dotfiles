@@ -3,6 +3,7 @@
   environment.systemPackages = with pkgs; [
     coreutils
     nvidia-container-toolkit
+    _1password-cli
     # Japanese input: fcitx5+mozc installed as system packages.
     # i18n.inputMethod is intentionally NOT used here because it auto-generates
     # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
@@ -65,13 +66,13 @@
   # kind.yaml: extraMounts hostPath=/etc/containerd/certs.d
   system.activationScripts.containerdCertsD = {
     text = ''
-      mkdir -p /etc/containerd/certs.d/registry.localhost
-      cat > /etc/containerd/certs.d/registry.localhost/hosts.toml << 'EOF'
-server = "http://registry.localhost"
+            mkdir -p /etc/containerd/certs.d/registry.localhost
+            cat > /etc/containerd/certs.d/registry.localhost/hosts.toml << 'EOF'
+      server = "http://registry.localhost"
 
-[host."http://zot.infra.svc.cluster.local:5080"]
-  capabilities = ["pull", "resolve"]
-EOF
+      [host."http://zot.infra.svc.cluster.local:5080"]
+        capabilities = ["pull", "resolve"]
+      EOF
     '';
   };
 
