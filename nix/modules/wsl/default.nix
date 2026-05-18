@@ -60,6 +60,21 @@
 
   users.users.nixos.extraGroups = [ "docker" ];
 
+  # Provide containerd hosts.toml for registry.localhost so kind nodes can
+  # mount /etc/containerd/certs.d and use the in-cluster Zot as a mirror.
+  # kind.yaml: extraMounts hostPath=/etc/containerd/certs.d
+  system.activationScripts.containerdCertsD = {
+    text = ''
+      mkdir -p /etc/containerd/certs.d/registry.localhost
+      cat > /etc/containerd/certs.d/registry.localhost/hosts.toml << 'EOF'
+server = "http://registry.localhost"
+
+[host."http://zot.infra.svc.cluster.local:5080"]
+  capabilities = ["pull", "resolve"]
+EOF
+    '';
+  };
+
   # Generate CDI spec on each activation so kind worker nodes can mount
   # /etc/cdi and use GPU resources through containerd CDI.
   system.activationScripts.nvidiaCdi = {
