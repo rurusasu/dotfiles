@@ -239,223 +239,53 @@ return {
         },
     },
 
-    -- LSP: server manager
-    {
-        "williamboman/mason.nvim",
-        lazy = false,
-        build = ":MasonUpdate",
-        opts = {},
-    },
-
-    -- LSP: mason <-> lspconfig bridge
-    {
-        "williamboman/mason-lspconfig.nvim",
-        lazy = false,
-        dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
-        opts = {
-            ensure_installed = {
-                "gopls",
-                "rust_analyzer",
-                "ts_ls",
-                "yamlls",
-                "taplo",
-                "bashls",
-                "lua_ls",
-                "marksman",
-                "ruff",
-            },
-            automatic_installation = true,
-        },
-    },
-
     -- LSP: configurations
-    -- Uses nvim 0.11+ `vim.lsp.config()` / `vim.lsp.enable()`. The legacy
-    -- `require("lspconfig")[name].setup()` flow prints a deprecation warning
-    -- and will be removed in nvim-lspconfig v3.0.0. nvim-lspconfig is still
-    -- the source of bundled server defaults (`cmd`, `filetypes`, etc.).
+    -- Uses nvim 0.12 built-in vim.lsp.enable() / LspAttach autocmd pattern.
+    -- Mason removed; servers are managed by Nix (NixOS) or winget/pnpm (Windows).
+    -- vim.fn.executable() guards ensure graceful degradation on any platform.
     {
         "neovim/nvim-lspconfig",
         event = { "BufReadPre", "BufNewFile" },
-        dependencies = { "hrsh7th/cmp-nvim-lsp" },
         config = function()
-            local capabilities = require("cmp_nvim_lsp").default_capabilities()
-
-            local on_attach = function(_, bufnr)
-                local map = function(keys, func, desc)
-                    vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
-                end
-                map("gd", vim.lsp.buf.definition, "Go to definition")
-                map("gr", vim.lsp.buf.references, "References")
-                map("K", vim.lsp.buf.hover, "Hover docs")
-                map("<leader>rn", vim.lsp.buf.rename, "Rename")
-                map("<leader>ca", vim.lsp.buf.code_action, "Code action")
-                map("<leader>f", function()
-                    vim.lsp.buf.format({ async = true })
-                end, "Format")
-            end
-
-            -- Defaults applied to every server via the '*' wildcard.
-            vim.lsp.config("*", {
-                capabilities = capabilities,
-                on_attach = on_attach,
+            vim.api.nvim_create_autocmd("LspAttach", {
+                callback = function(args)
+                    local client = vim.lsp.get_client_by_id(args.data.client_id)
+                    local bufnr = args.buf
+                    local map = function(keys, func, desc)
+                        vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
+                    end
+                    map("gd", vim.lsp.buf.definition, "Go to definition")
+                    map("gr", vim.lsp.buf.references, "References")
+                    map("K", vim.lsp.buf.hover, "Hover docs")
+                    map("<leader>rn", vim.lsp.buf.rename, "Rename")
+                    map("<leader>ca", vim.lsp.buf.code_action, "Code action")
+                    map("<leader>f", function()
+                        vim.lsp.buf.format({ async = true })
+                    end, "Format")
+                    if client and client.supports_method("textDocument/completion") then
+                        vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })
+                    end
+                end,
             })
 
-            local servers = {
-                nixd = {
-                    settings = {
-                        nixd = {
-                            formatting = { command = { "nixfmt" } },
-                            options = {
-                                nixos = {
-                                    expr = '(builtins.getFlake (builtins.getEnv "HOME" + "/.dotfiles")).nixosConfigurations.nixos.options',
-                                },
-                            },
-                        },
-                    },
-                },
-                gopls = {
-                    settings = {
-                        gopls = {
-                            usePlaceholders = true,
-                            semanticTokens = true,
-                            staticcheck = true,
-                            gofumpt = true,
-                            hints = {
-                                assignVariableTypes = true,
-                                compositeLiteralFields = true,
-                                compositeLiteralTypes = true,
-                                constantValues = true,
-                                functionTypeParameters = true,
-                                parameterNames = true,
-                                rangeVariableTypes = true,
-                            },
-                            analyses = {
-                                unusedparams = true,
-                                shadow = true,
-                                nilness = true,
-                                unusedwrite = true,
-                                useany = true,
-                            },
-                        },
-                    },
-                },
-                rust_analyzer = {
-                    settings = {
-                        ["rust-analyzer"] = {
-                            checkOnSave = true,
-                            check = { command = "clippy" },
-                            inlayHints = {
-                                bindingModeHints = { enable = true },
-                                closureCaptureHints = { enable = true },
-                                closureReturnTypeHints = { enable = "always" },
-                                lifetimeElisionHints = { enable = "skip_trivial" },
-                                typeHints = { hideNamedConstructor = false },
-                            },
-                            procMacro = { enable = true },
-                            cargo = { allFeatures = true, buildScripts = { enable = true } },
-                        },
-                    },
-                },
-                ts_ls = {
-                    init_options = {
-                        preferences = {
-                            importModuleSpecifierPreference = "non-relative",
-                            includeInlayParameterNameHints = "all",
-                            includeInlayParameterNameHintsWhenArgumentMatchesName = false,
-                            includeInlayFunctionParameterTypeHints = true,
-                            includeInlayVariableTypeHints = true,
-                            includeInlayPropertyDeclarationTypeHints = true,
-                            includeInlayFunctionLikeReturnTypeHints = true,
-                            includeInlayEnumMemberValueHints = true,
-                        },
-                    },
-                },
-                yamlls = {
-                    settings = {
-                        yaml = {
-                            format = { enable = true },
-                            validate = true,
-                            completion = true,
-                            hover = true,
-                            schemaStore = { enable = true },
-                        },
-                    },
-                },
-                taplo = {},
-                bashls = {
-                    settings = {
-                        bashIde = {
-                            globPattern = "**/*@(.sh|.bash)",
-                            enableSourceErrorDiagnostics = true,
-                        },
-                    },
-                },
-                lua_ls = {
-                    settings = {
-                        Lua = {
-                            runtime = { version = "LuaJIT" },
-                            diagnostics = { globals = { "vim" } },
-                            workspace = { checkThirdParty = false },
-                            telemetry = { enable = false },
-                        },
-                    },
-                },
-                marksman = {},
-                ruff = {},
+            local server_bins = {
+                gopls = "gopls",
+                rust_analyzer = "rust-analyzer",
+                ts_ls = "typescript-language-server",
+                yamlls = "yaml-language-server",
+                taplo = "taplo",
+                bashls = "bash-language-server",
+                lua_ls = "lua-language-server",
+                marksman = "marksman",
+                ruff = "ruff",
+                nixd = "nixd",
             }
 
-            for name, cfg in pairs(servers) do
-                vim.lsp.config(name, cfg)
-                vim.lsp.enable(name)
+            for name, exe in pairs(server_bins) do
+                if vim.fn.executable(exe) == 1 then
+                    vim.lsp.enable(name)
+                end
             end
-        end,
-    },
-
-    -- Completion
-    {
-        "hrsh7th/nvim-cmp",
-        event = "InsertEnter",
-        dependencies = {
-            "hrsh7th/cmp-nvim-lsp",
-            "hrsh7th/cmp-buffer",
-            "hrsh7th/cmp-path",
-            "L3MON4D3/LuaSnip",
-            "saadparwaiz1/cmp_luasnip",
-        },
-        config = function()
-            local cmp = require("cmp")
-            local luasnip = require("luasnip")
-            cmp.setup({
-                snippet = {
-                    expand = function(args)
-                        luasnip.lsp_expand(args.body)
-                    end,
-                },
-                mapping = cmp.mapping.preset.insert({
-                    ["<C-Space>"] = cmp.mapping.complete(),
-                    ["<CR>"] = cmp.mapping.confirm({ select = false }),
-                    ["<Tab>"] = cmp.mapping(function(fallback)
-                        if cmp.visible() then
-                            cmp.select_next_item()
-                        elseif luasnip.expand_or_jumpable() then
-                            luasnip.expand_or_jump()
-                        else
-                            fallback()
-                        end
-                    end, { "i", "s" }),
-                    ["<S-Tab>"] = cmp.mapping(function(fallback)
-                        if cmp.visible() then
-                            cmp.select_prev_item()
-                        else
-                            fallback()
-                        end
-                    end, { "i", "s" }),
-                }),
-                sources = cmp.config.sources(
-                    { { name = "nvim_lsp" }, { name = "luasnip" } },
-                    { { name = "buffer" }, { name = "path" } }
-                ),
-            })
         end,
     },
 }

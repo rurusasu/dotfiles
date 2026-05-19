@@ -303,7 +303,7 @@ let
     };
     ruff = {
       pkg = pkgs.ruff;
-      winget = null;
+      winget = "astral-sh.ruff";
       category = "lsp";
     };
     yaml-language-server = {
@@ -323,7 +323,7 @@ let
     };
     lua-language-server = {
       pkg = pkgs.lua-language-server;
-      winget = null;
+      winget = "LuaLS.lua-language-server";
       category = "lsp";
     };
     marksman = {
@@ -395,6 +395,8 @@ lib.mapAttrs (_: names: resolve names) grouped
     "@tobilu/qmd"
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
+    "typescript-language-server"
+    "yaml-language-server"
   ];
 
   # Post-install verification commands for pnpm packages.
