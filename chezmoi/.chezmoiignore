@@ -1,0 +1,3 @@
+{{ if ne .chezmoi.os "windows" }}
+setup-nvim-windows-junction.ps1
+{{ end }}
