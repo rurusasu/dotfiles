@@ -116,7 +116,7 @@ config.keys = {
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
     -- Pane split/close/zoom (Ctrl+Alt)
-    { key = "|", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "\\", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
     { key = "-", mods = "CTRL|ALT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     { key = "x", mods = "CTRL|ALT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
