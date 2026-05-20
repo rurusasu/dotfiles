@@ -116,16 +116,16 @@ config.keys = {
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
     -- Pane split/close/zoom (Ctrl+Alt)
-    { key = "h", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "v", mods = "CTRL|ALT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    { key = "|", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "-", mods = "CTRL|ALT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     { key = "x", mods = "CTRL|ALT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
-    -- Pane navigation (Ctrl+Shift + H/J/K/L)
-    { key = "h", mods = "CTRL|SHIFT", action = act.ActivatePaneDirection("Left") },
-    { key = "j", mods = "CTRL|SHIFT", action = act.ActivatePaneDirection("Down") },
-    { key = "k", mods = "CTRL|SHIFT", action = act.ActivatePaneDirection("Up") },
-    { key = "l", mods = "CTRL|SHIFT", action = act.ActivatePaneDirection("Right") },
+    -- Pane navigation (Ctrl+Alt + H/J/K/L)
+    { key = "h", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Left") },
+    { key = "j", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Down") },
+    { key = "k", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Up") },
+    { key = "l", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Right") },
 
     -- Pane resize (Ctrl+Alt + Arrow)
     { key = "LeftArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Left", 5 }) },
@@ -133,7 +133,8 @@ config.keys = {
     { key = "UpArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Up", 5 }) },
     { key = "RightArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Right", 5 }) },
 
-    -- Tab management (Leader)
+    -- Tab management (Ctrl+Alt+T, also Leader)
+    { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "t", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "x", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
     { key = "l", mods = "LEADER", action = act.ActivateTabRelative(1) },

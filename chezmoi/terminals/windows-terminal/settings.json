@@ -82,6 +82,26 @@
       "id": "User.moveFocus.down"
     },
     {
+      "command": "newTab",
+      "id": "User.newTab"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "left" },
+      "id": "User.resizePane.left"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "right" },
+      "id": "User.resizePane.right"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "up" },
+      "id": "User.resizePane.up"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "down" },
+      "id": "User.resizePane.down"
+    },
+    {
       "command": "unbound",
       "keys": "alt+c"
     },
@@ -112,11 +132,11 @@
     },
     {
       "id": "User.splitPane.horizontal",
-      "keys": "ctrl+alt+h"
+      "keys": "ctrl+shift+alt+\\"
     },
     {
       "id": "User.splitPane.vertical",
-      "keys": "ctrl+alt+v"
+      "keys": "ctrl+alt+-"
     },
     {
       "id": "User.closePane",
@@ -128,19 +148,19 @@
     },
     {
       "id": "User.moveFocus.left",
-      "keys": "ctrl+shift+h"
+      "keys": "ctrl+alt+h"
     },
     {
       "id": "User.moveFocus.right",
-      "keys": "ctrl+shift+l"
+      "keys": "ctrl+alt+l"
     },
     {
       "id": "User.moveFocus.up",
-      "keys": "ctrl+shift+k"
+      "keys": "ctrl+alt+k"
     },
     {
       "id": "User.moveFocus.down",
-      "keys": "ctrl+shift+j"
+      "keys": "ctrl+alt+j"
     },
     {
       "id": "User.nextTab",
@@ -153,6 +173,26 @@
     {
       "id": "User.toggleFullscreen",
       "keys": "f11"
+    },
+    {
+      "id": "User.newTab",
+      "keys": "ctrl+alt+t"
+    },
+    {
+      "id": "User.resizePane.left",
+      "keys": "ctrl+alt+left"
+    },
+    {
+      "id": "User.resizePane.right",
+      "keys": "ctrl+alt+right"
+    },
+    {
+      "id": "User.resizePane.up",
+      "keys": "ctrl+alt+up"
+    },
+    {
+      "id": "User.resizePane.down",
+      "keys": "ctrl+alt+down"
     }
   ],
   "newTabMenu": [

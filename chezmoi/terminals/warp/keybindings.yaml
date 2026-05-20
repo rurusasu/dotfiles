@@ -1,28 +1,28 @@
 # Warp keybindings — managed via chezmoi
 # Format: flat YAML map of action_name to key-binding (no root key)
 # Reference: https://github.com/warpdotdev/keysets/blob/main/FORMAT.md
-# Aligned with WezTerm and Windows Terminal conventions.
+# All terminal multiplexer operations use Ctrl+Alt prefix.
 #
 # Not configurable here (no action name in Warp):
 #   close pane (Ctrl+Alt+X), toggle zoom (Ctrl+Alt+W)
 
-# Pane split — matches WezTerm (Ctrl+Alt+H/V) and Windows Terminal
-# Warp uses add_right (split right) / add_down (split down)
-pane_group:add_right: ctrl-alt-h
-pane_group:add_down: ctrl-alt-v
-
-# Pane navigation — matches WezTerm/WT vim-style (Ctrl+Shift+H/J/K/L)
-pane_group:navigate_left: ctrl-shift-H
-pane_group:navigate_down: ctrl-shift-J
-pane_group:navigate_up: ctrl-shift-K
-pane_group:navigate_right: ctrl-shift-L
-
-# Tab navigation — matches Windows Terminal (Ctrl+Tab / Ctrl+Shift+Tab)
+# Tab
+workspace:open_tab: ctrl-alt-t
 workspace:activate_next_tab: ctrl-tab
 workspace:activate_prev_tab: ctrl-shift-tab
 
-# AI natural language search — matches WezTerm/nvim leader (Ctrl+Space / Space)
+# Pane split — | (vertical line) = split right, - (horizontal line) = split down
+pane_group:add_right: ctrl-alt-|
+pane_group:add_down: ctrl-alt--
+
+# Pane navigation
+pane_group:navigate_left: ctrl-alt-h
+pane_group:navigate_down: ctrl-alt-j
+pane_group:navigate_up: ctrl-alt-k
+pane_group:navigate_right: ctrl-alt-l
+
+# AI natural language search
 input:toggle_natural_language_command_search: ctrl-space
 
-# Workflows panel (Ctrl+Alt+Q) — zoxide/fzf workflows are registered here
+# Workflows panel
 input:toggle_workflows: ctrl-alt-q
