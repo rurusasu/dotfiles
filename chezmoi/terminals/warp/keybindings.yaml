@@ -7,7 +7,7 @@
 #   close pane (Ctrl+Alt+X), toggle zoom (Ctrl+Alt+W)
 
 # Tab
-workspace:open_tab: ctrl-alt-t
+workspace:open_new_tab: ctrl-alt-t
 workspace:activate_next_tab: ctrl-tab
 workspace:activate_prev_tab: ctrl-shift-tab
 
