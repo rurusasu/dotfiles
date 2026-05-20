@@ -5,9 +5,14 @@
 {{/* Under WSL the chezmoi config routes [onepassword].command to op.exe, so
      accept either binary as evidence that 1Password CLI is reachable. */}}
 {{- $hasOp := or (lookPath "op") (lookPath "op.exe") }}
+{{- $hasWorkAccount := false }}
 {{- if $hasOp }}
+{{- $accounts := output $hasOp "account" "list" }}
+{{- $hasWorkAccount = contains .op_account_work $accounts }}
 # personal-pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" .op_account_personal | sha256sum }}
+{{- if $hasWorkAccount }}
 # work-pubkey-hash:     {{ onepasswordRead "op://Employee/GitHub Work/public key" .op_account_work | sha256sum }}
+{{- end }}
 {{- end }}
 
 set -euo pipefail
@@ -36,11 +41,13 @@ PERSONAL_PUBKEY='{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/pub
 deploy_content "$PERSONAL_PUBKEY" "$HOME_DIR/.ssh/signing_key.pub"
 chmod 644 "$HOME_DIR/.ssh/signing_key.pub"
 
+{{- if $hasWorkAccount }}
 # Work SSH public key (from kohei-miki-im8's Employee vault on the work
 # 1Password account; passed as the 2nd onepasswordRead arg).
 WORK_PUBKEY='{{ onepasswordRead "op://Employee/GitHub Work/public key" .op_account_work }}'
 deploy_content "$WORK_PUBKEY" "$HOME_DIR/.ssh/github_work.pub"
 chmod 644 "$HOME_DIR/.ssh/github_work.pub"
+{{- end }}
 {{- else }}
 echo "WARNING: op/op.exe CLI not available, skipping public key deployment"
 {{- end }}
