@@ -131,6 +131,12 @@ let
       category = "dev";
     };
 
+    win32yank = {
+      pkg = pkgs.win32yank;
+      winget = null;
+      category = "core";
+    };
+
     # ── terminal ──────────────────────────────────────────
     wezterm = {
       pkg = pkgs.wezterm;
