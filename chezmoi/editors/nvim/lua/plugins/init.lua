@@ -256,7 +256,6 @@ return {
             ensure_installed = {
                 "gopls",
                 "rust_analyzer",
-                "ts_ls",
                 "yamlls",
                 "taplo",
                 "bashls",
@@ -280,24 +279,35 @@ return {
         config = function()
             local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
-            local on_attach = function(_, bufnr)
-                local map = function(keys, func, desc)
-                    vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
-                end
-                map("gd", vim.lsp.buf.definition, "Go to definition")
-                map("gr", vim.lsp.buf.references, "References")
-                map("K", vim.lsp.buf.hover, "Hover docs")
-                map("<leader>rn", vim.lsp.buf.rename, "Rename")
-                map("<leader>ca", vim.lsp.buf.code_action, "Code action")
-                map("<leader>f", function()
-                    vim.lsp.buf.format({ async = true })
-                end, "Format")
-            end
+            -- nvim 0.11+: use LspAttach autocmd instead of on_attach in vim.lsp.config
+            vim.api.nvim_create_autocmd("LspAttach", {
+                callback = function(args)
+                    local bufnr = args.buf
+                    local map = function(keys, func, desc)
+                        vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
+                    end
+                    -- gd: LSP definition if supported, else telescope grep across files
+                    map("gd", function()
+                        local clients = vim.lsp.get_clients({ bufnr = bufnr, method = "textDocument/definition" })
+                        if #clients > 0 then
+                            vim.lsp.buf.definition()
+                        else
+                            require("telescope.builtin").grep_string({ word_match = "-w" })
+                        end
+                    end, "Go to definition")
+                    map("gr", vim.lsp.buf.references, "References")
+                    map("K", vim.lsp.buf.hover, "Hover docs")
+                    map("<leader>rn", vim.lsp.buf.rename, "Rename")
+                    map("<leader>ca", vim.lsp.buf.code_action, "Code action")
+                    map("<leader>f", function()
+                        vim.lsp.buf.format({ async = true })
+                    end, "Format")
+                end,
+            })
 
             -- Defaults applied to every server via the '*' wildcard.
             vim.lsp.config("*", {
                 capabilities = capabilities,
-                on_attach = on_attach,
             })
 
             local servers = {
@@ -356,19 +366,10 @@ return {
                         },
                     },
                 },
-                ts_ls = {
-                    init_options = {
-                        preferences = {
-                            importModuleSpecifierPreference = "non-relative",
-                            includeInlayParameterNameHints = "all",
-                            includeInlayParameterNameHintsWhenArgumentMatchesName = false,
-                            includeInlayFunctionParameterTypeHints = true,
-                            includeInlayVariableTypeHints = true,
-                            includeInlayPropertyDeclarationTypeHints = true,
-                            includeInlayFunctionLikeReturnTypeHints = true,
-                            includeInlayEnumMemberValueHints = true,
-                        },
-                    },
+                oxlint = {
+                    cmd = { "oxlint", "--lsp" },
+                    filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "vue", "svelte" },
+                    root_markers = { "package.json", ".git" },
                 },
                 yamlls = {
                     settings = {

@@ -301,6 +301,11 @@ let
       winget = null;
       category = "lsp";
     };
+    ty = {
+      pkg = pkgs.ty;
+      winget = "astral-sh.ty";
+      category = "lsp";
+    };
     ruff = {
       pkg = pkgs.ruff;
       winget = null;
@@ -341,11 +346,6 @@ let
       winget = null;
       category = "lsp";
     };
-    typescript-language-server = {
-      pkg = pkgs.typescript-language-server;
-      winget = null;
-      category = "lsp";
-    };
     astro-language-server = {
       pkg = pkgs.astro-language-server;
       winget = null;
@@ -353,7 +353,7 @@ let
     };
     oxlint = {
       pkg = pkgs.oxlint;
-      winget = null;
+      winget = "oxc-project.oxlint";
       category = "lsp";
     };
   };
