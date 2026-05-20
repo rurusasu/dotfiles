@@ -8,13 +8,24 @@
 { ... }:
 {
   perSystem =
-    { pkgs, lib, ... }:
+    {
+      pkgs,
+      lib,
+      inputs',
+      ...
+    }:
     let
-      unfreePkgs = import pkgs.path {
-        system = pkgs.stdenv.hostPlatform.system;
-        config.allowUnfree = true;
+      workmuxOverlay = _: _: { workmux = inputs'.workmux.packages.default; };
+      unfreePkgs =
+        (import pkgs.path {
+          system = pkgs.stdenv.hostPlatform.system;
+          config.allowUnfree = true;
+        }).extend
+          workmuxOverlay;
+      sets = import ../packages/sets.nix {
+        pkgs = pkgs.extend workmuxOverlay;
+        inherit lib;
       };
-      sets = import ../packages/sets.nix { inherit pkgs lib; };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;

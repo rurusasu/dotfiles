@@ -40,6 +40,9 @@ map("n", "<C-s>", "<cmd>w<cr>", { desc = "Save file" })
 map("n", "<leader>q", "<cmd>q<cr>", { desc = "Quit" })
 map("n", "<leader>Q", "<cmd>qa!<cr>", { desc = "Quit all" })
 
+-- Diagnostics
+map("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic" })
+
 -- File explorer
 map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 
