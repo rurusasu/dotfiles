@@ -1,0 +1,14 @@
+nerdfont: true
+merge_strategy: rebase
+
+agent: cc
+
+agents:
+  cc: "claude"
+  cx: "codex --auto-approve"
+  oc: "opencode"
+
+panes:
+  - command: <agent>
+    focus: true
+  - split: horizontal

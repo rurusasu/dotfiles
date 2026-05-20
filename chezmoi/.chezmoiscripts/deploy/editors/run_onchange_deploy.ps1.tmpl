@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy editor configurations for Windows
-# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}{{ include "editors/nvim/init.lua" | sha256sum }}{{ include "editors/nvim/lua/config/options.lua" | sha256sum }}{{ include "editors/nvim/lua/config/keymaps.lua" | sha256sum }}{{ include "editors/nvim/lua/config/osc7.lua" | sha256sum }}{{ include "editors/nvim/lua/plugins/init.lua" | sha256sum }}
+# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -44,57 +44,6 @@ Deploy-File "$ChezmoiSource\editors\cursor\keybindings.json" "$CursorConfig\keyb
 $ZedConfig = "$env:APPDATA\Zed"
 Deploy-File "$ChezmoiSource\editors\zed\settings.json" "$ZedConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\zed\keymap.json" "$ZedConfig\keymap.json"
-
-# Neovim
-$NvimConfig = "$env:LOCALAPPDATA\nvim"
-$NvimSource = "$ChezmoiSource\editors\nvim"
-if (Test-Path -LiteralPath $NvimSource) {
-  Write-Host "Deploying Neovim configuration..."
-  if (-not (Test-Path -LiteralPath $NvimConfig)) {
-    New-Item -ItemType Directory -Path $NvimConfig -Force | Out-Null
-  }
-  Copy-Item -Path "$NvimSource\*" -Destination $NvimConfig -Recurse -Force
-  Write-Host "Deployed: $NvimConfig"
-
-  # Headless :Lazy sync so first nvim launch does not need manual :Lazy sync.
-  # Best-effort with 90s cap; cannot block chezmoi apply. Skipped silently if
-  # nvim or a C compiler is missing — both must be present for
-  # nvim-treesitter's parser build (:TSUpdate) to succeed.
-  $nvim = Get-Command nvim -ErrorAction SilentlyContinue
-  $compiler = @('zig', 'cl', 'gcc', 'clang') |
-    Where-Object { Get-Command $_ -ErrorAction SilentlyContinue } |
-    Select-Object -First 1
-  if ($nvim -and $compiler) {
-    Write-Host "Pre-warming lazy.nvim plugins (best effort, 90s cap)..."
-    $lazyLog = Join-Path $env:LOCALAPPDATA 'nvim-bootstrap.log'
-    # Start-Process -PassThru -NoNewWindow with redirected I/O has a known
-    # .NET issue where the returned Process object's ExitCode is null even
-    # after the process has exited. Use Start-Job so a separate PowerShell
-    # process owns nvim and reports $LASTEXITCODE via the pipeline.
-    $job = Start-Job -ScriptBlock {
-      param($NvimPath, $LogPath)
-      & $NvimPath --headless "+Lazy! sync" +qa *> $LogPath
-      return $LASTEXITCODE
-    } -ArgumentList $nvim.Source, $lazyLog
-    if (Wait-Job $job -Timeout 90) {
-      $exitCode = Receive-Job $job
-      Remove-Job $job
-      if ($exitCode -ne 0) {
-        Write-Host "lazy.nvim pre-warm exited $exitCode; see $lazyLog"
-      } else {
-        Write-Host "lazy.nvim pre-warm complete."
-      }
-    } else {
-      Stop-Job $job
-      Remove-Job $job
-      Write-Host "lazy.nvim pre-warm timed out; see $lazyLog"
-    }
-  } elseif (-not $nvim) {
-    Write-Host "nvim not on PATH; skipping :Lazy sync (run winget install Neovim.Neovim)."
-  } else {
-    Write-Host "No C compiler on PATH (zig/cl/gcc/clang); skipping :Lazy sync (run winget install zig.zig)."
-  }
-}
 
 Write-Host "Editor configurations deployed."
 {{ end -}}

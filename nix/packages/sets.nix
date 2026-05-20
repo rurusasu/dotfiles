@@ -183,6 +183,11 @@ let
       winget = null;
       category = "llm";
     };
+    workmux = {
+      pkg = pkgs.workmux;
+      winget = null;
+      category = "llm";
+    };
 
     # ── communication ─────────────────────────────────────
     slack = {

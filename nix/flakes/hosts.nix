@@ -5,6 +5,9 @@
 }:
 let
   Hosts = import ./lib/hosts.nix { inherit inputs; };
+  workmuxOverlay = final: prev: {
+    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default;
+  };
 in
 {
   flake = {
@@ -25,6 +28,7 @@ in
             inherit system siteLib;
             hostPath = ../hosts/wsl;
             homeModulePath = ../home/wsl/users.nix;
+            overlays = [ workmuxOverlay ];
             extraModules = [
               inputs.nixos-wsl.nixosModules.wsl
             ];
@@ -47,6 +51,7 @@ in
             inherit system siteLib;
             hostPath = ../hosts/linux;
             homeModulePath = ../home/linux/users.nix;
+            overlays = [ workmuxOverlay ];
           }
         );
     };

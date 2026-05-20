@@ -13,6 +13,7 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    workmux.url = "github:raine/workmux";
   };
 
   outputs =
