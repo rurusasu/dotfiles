@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -114,6 +114,9 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("buildi
 
             $result.Success | Should -Be $true
             $result.Message | Should -Be "NixOS 設定を適用しました"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
+            } -Times 1
         }
 
         It 'should fail when nixos-rebuild switch fails' {
@@ -131,6 +134,10 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "nixos-rebuild switch が失敗しました"
+            $result.Message | Should -Match "error: build failed"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq 'Red' -and ([string]$Object) -match 'error: build failed'
+            } -Times 1
         }
 
         It 'should install pnpm global packages after nixos-rebuild' {
@@ -206,7 +213,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
-                    return @("@tobilu/qmd@1.0.0", "@prisma/language-server@5.22.0", "@google/gemini-cli@0.32.1")
+                    return @("@tobilu/qmd@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "@google/gemini-cli@0.32.1")
                 }
                 if ($argStr -match "pnpm add") {
                     $script:pnpmAddCalled = $true
