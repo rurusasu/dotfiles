@@ -4,6 +4,9 @@
     {
       "Packages": [
         {
+          "PackageIdentifier": "AgileBits.1Password"
+        },
+        {
           "PackageIdentifier": "AgileBits.1Password.CLI",
           "verifyCommand": {
             "args": ["--version"],
@@ -11,52 +14,36 @@
           }
         },
         {
-          "PackageIdentifier": "twpayne.chezmoi",
+          "PackageIdentifier": "Anthropic.Claude"
+        },
+        {
+          "PackageIdentifier": "Anysphere.Cursor"
+        },
+        {
+          "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
           "verifyCommand": {
             "args": ["--version"],
-            "command": "chezmoi"
+            "command": "rg"
           }
         },
         {
-          "PackageIdentifier": "direnv.direnv",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "direnv"
-          }
-        },
-        {
-          "PackageIdentifier": "eza-community.eza",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "eza"
-          }
-        },
-        {
-          "PackageIdentifier": "sharkdp.fd",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "fd"
-          }
-        },
-        {
-          "PackageIdentifier": "junegunn.fzf",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "fzf"
-          }
-        },
-        {
-          "PackageIdentifier": "GitHub.cli",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "gh"
-          }
+          "PackageIdentifier": "Docker.DockerDesktop"
         },
         {
           "PackageIdentifier": "Git.Git",
           "verifyCommand": {
             "args": ["--version"],
             "command": "git"
+          }
+        },
+        {
+          "PackageIdentifier": "GitHub.Copilot"
+        },
+        {
+          "PackageIdentifier": "GitHub.cli",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "gh"
           }
         },
         {
@@ -67,41 +54,10 @@
           }
         },
         {
-          "PackageIdentifier": "Python.Python.3.13",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "python"
-          }
+          "PackageIdentifier": "Google.Antigravity"
         },
         {
-          "PackageIdentifier": "Task.Task",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "task"
-          }
-        },
-        {
-          "PackageIdentifier": "jqlang.jq"
-        },
-        {
-          "PackageIdentifier": "Neovim.Neovim",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "nvim"
-          }
-        },
-        {
-          "PackageIdentifier": "OpenJS.NodeJS.LTS",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "node"
-          }
-        },
-        {
-          "PackageIdentifier": "Obsidian.Obsidian"
-        },
-        {
-          "PackageIdentifier": "SST.opencode"
+          "PackageIdentifier": "Google.Chrome"
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
@@ -118,11 +74,52 @@
           }
         },
         {
-          "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
+          "PackageIdentifier": "Microsoft.PowerToys"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudioCode"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WSL"
+        },
+        {
+          "PackageIdentifier": "Microsoft.WindowsTerminal"
+        },
+        {
+          "PackageIdentifier": "Neovim.Neovim",
           "verifyCommand": {
             "args": ["--version"],
-            "command": "rg"
+            "command": "nvim"
           }
+        },
+        {
+          "PackageIdentifier": "Obsidian.Obsidian"
+        },
+        {
+          "PackageIdentifier": "OpenAI.Codex"
+        },
+        {
+          "PackageIdentifier": "OpenJS.NodeJS.LTS",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "node"
+          }
+        },
+        {
+          "PackageIdentifier": "Oven-sh.Bun"
+        },
+        {
+          "PackageIdentifier": "Python.Python.3.13",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "python"
+          }
+        },
+        {
+          "PackageIdentifier": "SST.opencode"
         },
         {
           "PackageIdentifier": "SlackTechnologies.Slack"
@@ -135,17 +132,23 @@
           }
         },
         {
-          "PackageIdentifier": "astral-sh.uv",
+          "PackageIdentifier": "TablePlus.TablePlus"
+        },
+        {
+          "PackageIdentifier": "Task.Task",
           "verifyCommand": {
             "args": ["--version"],
-            "command": "uv"
+            "command": "task"
           }
+        },
+        {
+          "PackageIdentifier": "TheBrowserCompany.Arc"
         },
         {
           "PackageIdentifier": "Warp.Warp"
         },
         {
-          "PackageIdentifier": "wez.wezterm"
+          "PackageIdentifier": "ZedIndustries.Zed"
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
@@ -155,61 +158,64 @@
           }
         },
         {
-          "PackageIdentifier": "AgileBits.1Password"
+          "PackageIdentifier": "astral-sh.ty"
         },
         {
-          "PackageIdentifier": "Anthropic.Claude"
+          "PackageIdentifier": "astral-sh.uv",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "uv"
+          }
         },
         {
-          "PackageIdentifier": "Anysphere.Cursor"
-        },
-        {
-          "PackageIdentifier": "TheBrowserCompany.Arc"
-        },
-        {
-          "PackageIdentifier": "Docker.DockerDesktop"
-        },
-        {
-          "PackageIdentifier": "GitHub.Copilot"
+          "PackageIdentifier": "direnv.direnv",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "direnv"
+          }
         },
         {
           "PackageIdentifier": "dprint.dprint"
         },
         {
+          "PackageIdentifier": "eza-community.eza",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "eza"
+          }
+        },
+        {
           "PackageIdentifier": "hadolint.hadolint"
         },
         {
-          "PackageIdentifier": "Google.Chrome"
+          "PackageIdentifier": "jqlang.jq"
         },
         {
-          "PackageIdentifier": "Google.Antigravity"
+          "PackageIdentifier": "junegunn.fzf",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "fzf"
+          }
         },
         {
-          "PackageIdentifier": "Microsoft.PowerToys"
+          "PackageIdentifier": "oxc-project.oxlint"
         },
         {
-          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
+          "PackageIdentifier": "sharkdp.fd",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "fd"
+          }
         },
         {
-          "PackageIdentifier": "Microsoft.VisualStudioCode"
+          "PackageIdentifier": "twpayne.chezmoi",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "chezmoi"
+          }
         },
         {
-          "PackageIdentifier": "Microsoft.WindowsTerminal"
-        },
-        {
-          "PackageIdentifier": "Microsoft.WSL"
-        },
-        {
-          "PackageIdentifier": "OpenAI.Codex"
-        },
-        {
-          "PackageIdentifier": "TablePlus.TablePlus"
-        },
-        {
-          "PackageIdentifier": "Oven-sh.Bun"
-        },
-        {
-          "PackageIdentifier": "ZedIndustries.Zed"
+          "PackageIdentifier": "wez.wezterm"
         },
         {
           "PackageIdentifier": "zig.zig",
