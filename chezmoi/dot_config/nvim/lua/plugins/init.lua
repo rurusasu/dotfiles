@@ -239,34 +239,6 @@ return {
         },
     },
 
-    -- LSP: server manager
-    {
-        "williamboman/mason.nvim",
-        lazy = false,
-        build = ":MasonUpdate",
-        opts = {},
-    },
-
-    -- LSP: mason <-> lspconfig bridge
-    {
-        "williamboman/mason-lspconfig.nvim",
-        lazy = false,
-        dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
-        opts = {
-            ensure_installed = {
-                "gopls",
-                "rust_analyzer",
-                "yamlls",
-                "taplo",
-                "bashls",
-                "lua_ls",
-                "marksman",
-                "ruff",
-            },
-            automatic_installation = true,
-        },
-    },
-
     -- LSP: configurations
     -- Uses nvim 0.11+ `vim.lsp.config()` / `vim.lsp.enable()`. The legacy
     -- `require("lspconfig")[name].setup()` flow prints a deprecation warning
