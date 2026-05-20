@@ -132,7 +132,7 @@
     },
     {
       "id": "User.splitPane.horizontal",
-      "keys": "ctrl+shift+alt+\\"
+      "keys": "ctrl+alt+|"
     },
     {
       "id": "User.splitPane.vertical",
