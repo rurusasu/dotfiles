@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy shell configurations for Windows
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/env.ps1" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/env.ps1" | sha256sum }}{{ include "secret/secrets.env" | sha256sum }}{{ include "secret/wezterm-launch.cmd" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -45,6 +45,10 @@ Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocumen
 # 1Password-managed secret loaders (Git Bash / WSL bash / PowerShell)
 Deploy-File "$ChezmoiSource\secret\env.sh"  "$HomeDir\.config\shell\secret.sh"
 Deploy-File "$ChezmoiSource\secret\env.ps1" "$HomeDir\.config\shell\secret.ps1"
+
+# op run env-file and WezTerm launcher (1Password official pattern)
+Deploy-File "$ChezmoiSource\secret\secrets.env"       "$HomeDir\.config\shell\secrets.env"
+Deploy-File "$ChezmoiSource\secret\wezterm-launch.cmd" "$HomeDir\.local\bin\wezterm-launch.cmd"
 
 Write-Host "Shell configurations deployed."
 {{ end -}}

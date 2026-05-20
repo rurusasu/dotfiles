@@ -2,7 +2,7 @@
 #!/bin/bash
 # Deploy shell configurations for Linux/macOS
 # zshrc is managed by Home Manager (programs.zsh) on all HM-managed platforms.
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/secrets.env" | sha256sum }}
 
 set -euo pipefail
 
@@ -30,6 +30,9 @@ deploy_file "$CHEZMOI_SOURCE/shells/profile" "$HOME_DIR/.profile"
 
 # 1Password-managed secret loader
 deploy_file "$CHEZMOI_SOURCE/secret/env.sh" "$HOME_DIR/.config/shell/secret.sh"
+
+# op run env-file (1Password official pattern)
+deploy_file "$CHEZMOI_SOURCE/secret/secrets.env" "$HOME_DIR/.config/shell/secrets.env"
 
 echo "Shell configurations deployed."
 {{ end -}}
