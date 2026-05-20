@@ -12,7 +12,7 @@ workspace:activate_next_tab: ctrl-tab
 workspace:activate_prev_tab: ctrl-shift-tab
 
 # Pane split — | (vertical line) = split right, - (horizontal line) = split down
-pane_group:add_right: ctrl-alt-|
+pane_group:add_right: ctrl-alt-\
 pane_group:add_down: ctrl-alt--
 
 # Pane navigation
