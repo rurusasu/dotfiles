@@ -30,7 +30,8 @@ opt.wrap = false
 opt.splitbelow = true
 opt.splitright = true
 
--- Clipboard: use win32yank in WSL, system clipboard elsewhere
+-- Clipboard: always use unnamedplus; in WSL route it through win32yank.exe
+opt.clipboard = "unnamedplus"
 if vim.fn.has("wsl") == 1 then
     vim.g.clipboard = {
         name = "win32yank",
@@ -38,8 +39,6 @@ if vim.fn.has("wsl") == 1 then
         paste = { ["+"] = "win32yank.exe -o --lf", ["*"] = "win32yank.exe -o --lf" },
         cache_enabled = 0,
     }
-else
-    opt.clipboard = "unnamedplus"
 end
 
 -- Undo persistence
