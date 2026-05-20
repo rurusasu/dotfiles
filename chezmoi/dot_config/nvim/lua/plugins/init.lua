@@ -253,17 +253,9 @@ return {
         lazy = false,
         dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
         opts = {
-            ensure_installed = {
-                "gopls",
-                "rust_analyzer",
-                "yamlls",
-                "taplo",
-                "bashls",
-                "lua_ls",
-                "marksman",
-                "ruff",
-            },
-            automatic_installation = true,
+            -- All LSP servers are managed by Nix; Mason must not attempt re-installation
+            ensure_installed = {},
+            automatic_installation = false,
         },
     },
 
