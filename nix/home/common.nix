@@ -58,6 +58,11 @@ in
         eval "$(task --completion zsh)"
       fi
 
+      # workmux completion
+      if command -v workmux >/dev/null 2>&1; then
+        eval "$(workmux completions zsh)"
+      fi
+
       # Emit OSC 7 so terminals can open split/tab in current directory
       autoload -Uz add-zsh-hook
       __emit_osc7_cwd() {

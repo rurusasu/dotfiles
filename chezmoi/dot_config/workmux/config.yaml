@@ -4,9 +4,16 @@ merge_strategy: rebase
 agent: cc
 
 agents:
-  cc: "claude"
+  cc: "claude --dangerously-skip-permissions"
   cx: "codex --auto-approve"
   oc: "opencode"
+
+files:
+  symlink:
+    - .envrc
+
+post_create:
+  - direnv allow
 
 panes:
   - command: <agent>
