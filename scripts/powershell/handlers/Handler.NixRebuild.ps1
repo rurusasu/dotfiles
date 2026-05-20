@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     NixOS-WSL の nixos-rebuild switch を実行するハンドラー
 
@@ -238,18 +238,26 @@ class NixRebuildHandler : SetupHandlerBase {
                 "bash", "-lc", "grep -qs 'directory = \*' /root/.gitconfig 2>/dev/null || printf '[safe]\n\tdirectory = *\n' >> /root/.gitconfig"
             ) | Out-Null
 
-            # root で nixos-rebuild switch を実行（nixos ユーザーの dotfiles を使用）
-            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nixos-rebuild switch --flake .#nixos")
+            # root で nixos-rebuild switch を実行。2>&1 で stderr も捕捉しエラー詳細をログに残す。
+            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nixos-rebuild switch --flake .#nixos 2>&1")
+            $nixosExitCode = $LASTEXITCODE
 
-            # 出力をログに表示
+            # error: で始まる行は LogError（赤）、それ以外は Gray で表示
+            $errorLines = [System.Collections.Generic.List[string]]::new()
             $output | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
-                    $this.Log("  $_", "Gray")
+                    if ($_ -match '^error:') {
+                        $this.LogError("  $_")
+                        $errorLines.Add([string]$_)
+                    } else {
+                        $this.Log("  $_", "Gray")
+                    }
                 }
             }
 
-            if ($LASTEXITCODE -ne 0) {
-                throw "nixos-rebuild switch が失敗しました (exit code: $LASTEXITCODE)"
+            if ($nixosExitCode -ne 0) {
+                $errorDetail = if ($errorLines.Count -gt 0) { ": $($errorLines[0])" } else { "" }
+                throw "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
             }
 
             $this.Log("nixos-rebuild switch 完了", "Green")
