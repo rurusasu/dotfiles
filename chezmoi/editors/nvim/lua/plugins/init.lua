@@ -403,6 +403,11 @@ return {
                 },
                 marksman = {},
                 ruff = {},
+                ty = {
+                    cmd = { "ty", "server" },
+                    filetypes = { "python" },
+                    root_markers = { "pyproject.toml", "setup.py", "setup.cfg", ".git" },
+                },
             }
 
             for name, cfg in pairs(servers) do
