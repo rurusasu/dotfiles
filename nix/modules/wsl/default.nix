@@ -29,31 +29,34 @@
   # can authenticate from WSL. The NixOS-native op binary has no socket from the
   # Windows app; op.exe on Windows connects via the named pipe directly.
   # op run is kept on the native binary because it injects secrets into Linux processes.
-  system.activationScripts.opWrapper = {
-    text = ''
-            mkdir -p /usr/local/bin
-            cat > /usr/local/bin/op << 'WRAPPER'
-      #!/bin/bash
-      OP_NATIVE="/etc/profiles/per-user/nixos/bin/op"
-      # op run injects secrets into Linux processes — keep on native binary
-      if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
-        exec "$OP_NATIVE" "$@"
-      fi
-      # Find op.exe via Windows PATH (available in WSL via interop)
-      OP_EXE=$(IFS=:; for p in $PATH; do
-        [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
-      done)
-      if [ -z "$OP_EXE" ]; then
-        echo "[ERROR] op.exe not found in PATH" >&2
-        exit 1
-      fi
-      OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
-      export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
-      exec "$OP_EXE" "$@"
-      WRAPPER
-            chmod +x /usr/local/bin/op
-    '';
-  };
+  system.activationScripts.opWrapper =
+    let
+      opScript = pkgs.writeShellScript "op-wrapper" ''
+        OP_NATIVE="/etc/profiles/per-user/nixos/bin/op"
+        # op run injects secrets into Linux processes — keep on native binary
+        if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
+          exec "$OP_NATIVE" "$@"
+        fi
+        # Find op.exe via Windows PATH (available in WSL via interop)
+        OP_EXE=$(IFS=:; for p in $PATH; do
+          [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
+        done)
+        if [ -z "$OP_EXE" ]; then
+          echo "[ERROR] op.exe not found in PATH" >&2
+          exit 1
+        fi
+        OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
+        export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
+        exec "$OP_EXE" "$@"
+      '';
+    in
+    {
+      text = ''
+        mkdir -p /usr/local/bin
+        cp ${opScript} /usr/local/bin/op
+        chmod +x /usr/local/bin/op
+      '';
+    };
 
   # Allow running dynamically linked binaries in WSL (e.g. VS Code Server).
   programs.nix-ld = {
