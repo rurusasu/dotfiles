@@ -157,16 +157,16 @@ in
           cd "$(ghq list --full-path | fzf)" 2>/dev/null
           return
         fi
-        local repo dir name
-        repo=$(ghq list | fzf) || return
-        name=''${repo##*/}
-        dir="$(ghq root)/$repo"
-        tmux has-session -t "$name" 2>/dev/null ||
-          tmux new-session -d -c "$dir" -s "$name"
+        local repo_slug session_name repo_dir
+        repo_slug=$(ghq list | fzf) || return
+        session_name=''${repo_slug##*/}
+        repo_dir="$(ghq root)/$repo_slug"
+        tmux has-session -t "$session_name" 2>/dev/null ||
+          tmux new-session -d -c "$repo_dir" -s "$session_name"
         if [[ -n "''${TMUX:-}" ]]; then
-          tmux switch-client -t "$name"
+          tmux switch-client -t "$session_name"
         else
-          tmux attach-session -t "$name"
+          tmux attach-session -t "$session_name"
         fi
       }
 
