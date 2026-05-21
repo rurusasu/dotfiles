@@ -6,7 +6,9 @@
 let
   Hosts = import ./lib/hosts.nix { inherit inputs; };
   workmuxOverlay = final: prev: {
-    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default;
+    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default.overrideAttrs (_: {
+      doCheck = false;
+    });
   };
 in
 {

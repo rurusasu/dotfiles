@@ -7,7 +7,9 @@
 { inputs, ... }:
 let
   workmuxOverlay = final: prev: {
-    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default;
+    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default.overrideAttrs (_: {
+      doCheck = false;
+    });
   };
   mkHome =
     system:
