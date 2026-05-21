@@ -184,22 +184,12 @@ return {
         opts = {},
     },
 
-    -- AI sidekick: Next Edit Suggestions (NES) + AI CLI terminal
+    -- AI sidekick: AI CLI terminal (claude/codex/gemini/opencode)
     {
         "folke/sidekick.nvim",
         event = "VeryLazy",
         dependencies = { "folke/snacks.nvim" },
         keys = {
-            {
-                "<Tab>",
-                function()
-                    if not require("sidekick").nes_jump_or_apply() then
-                        return "<Tab>"
-                    end
-                end,
-                expr = true,
-                desc = "Goto/Apply Next Edit Suggestion",
-            },
             {
                 "<C-.>",
                 function()
@@ -211,9 +201,9 @@ return {
             {
                 "<leader>aa",
                 function()
-                    require("sidekick.cli").toggle()
+                    require("sidekick.cli").toggle({ name = "claude" })
                 end,
-                desc = "Sidekick toggle CLI",
+                desc = "Sidekick toggle Claude (default)",
             },
             {
                 "<leader>as",
@@ -221,6 +211,13 @@ return {
                     require("sidekick.cli").select()
                 end,
                 desc = "Sidekick select CLI",
+            },
+            {
+                "<leader>ad",
+                function()
+                    require("sidekick.cli").close()
+                end,
+                desc = "Sidekick detach CLI",
             },
             {
                 "<leader>at",
@@ -237,12 +234,38 @@ return {
                 end,
                 desc = "Sidekick send file",
             },
+            {
+                "<leader>av",
+                function()
+                    require("sidekick.cli").send({ msg = "{selection}" })
+                end,
+                mode = { "x" },
+                desc = "Sidekick send selection",
+            },
+            {
+                "<leader>ap",
+                function()
+                    require("sidekick.cli").prompt()
+                end,
+                mode = { "n", "x" },
+                desc = "Sidekick prompt library",
+            },
         },
         opts = {
             cli = {
                 mux = {
                     backend = "tmux",
                     enabled = true,
+                },
+                tools = {
+                    aider = false,
+                    amazon_q = false,
+                    copilot = false,
+                    crush = false,
+                    cursor = false,
+                    grok = false,
+                    pi = false,
+                    qwen = false,
                 },
             },
         },
@@ -400,7 +423,6 @@ return {
                     },
                 },
                 marksman = {},
-                copilot = {},
                 ruff = {},
                 ty = {
                     cmd = { "ty", "server" },

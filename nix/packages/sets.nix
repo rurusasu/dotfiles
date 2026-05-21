@@ -361,11 +361,6 @@ let
       winget = "oxc-project.oxlint";
       category = "lsp";
     };
-    copilot-language-server = {
-      pkg = pkgs.copilot-language-server;
-      winget = null;
-      category = "lsp";
-    };
   };
 
   # Group package names by category
