@@ -59,3 +59,11 @@
 [safe]
   directory = D:/ruru/dotfiles
 {{- end }}
+
+[ghq]
+{{- if eq .chezmoi.os "windows" }}
+  root = D:/my_programing
+  root = D:/ruru
+{{- else }}
+  root = ~/ghq
+{{- end }}
