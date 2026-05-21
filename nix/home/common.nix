@@ -153,6 +153,10 @@ in
 
       # tm: ghq + fzf でリポジトリ選択 → tmux セッション作成/切替
       tm() {
+        if ! command -v tmux &>/dev/null; then
+          cd "$(ghq list --full-path | fzf)" 2>/dev/null
+          return
+        fi
         local repo path name
         repo=$(ghq list | fzf) || return
         name=''${repo##*/}
