@@ -176,48 +176,74 @@ return {
         opts = {},
     },
 
-    -- AI coding assistant (codecompanion + ACP agents)
+    -- UI utilities (required by sidekick.nvim)
     {
-        "olimorris/codecompanion.nvim",
-        dependencies = {
-            "nvim-lua/plenary.nvim",
-            "nvim-treesitter/nvim-treesitter",
-        },
-        cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions" },
+        "folke/snacks.nvim",
+        lazy = false,
+        priority = 900,
+        opts = {},
+    },
+
+    -- AI sidekick: Next Edit Suggestions (NES) + AI CLI terminal
+    {
+        "folke/sidekick.nvim",
+        event = "VeryLazy",
+        dependencies = { "folke/snacks.nvim" },
         keys = {
-            { "<leader>aa", "<cmd>CodeCompanionChat Toggle<cr>", desc = "AI chat toggle" },
-            { "<leader>ai", "<cmd>CodeCompanion<cr>", mode = { "n", "v" }, desc = "AI inline" },
-            { "<leader>ac", "<cmd>CodeCompanionActions<cr>", mode = { "n", "v" }, desc = "AI actions" },
+            {
+                "<Tab>",
+                function()
+                    if not require("sidekick").nes_jump_or_apply() then
+                        return "<Tab>"
+                    end
+                end,
+                expr = true,
+                desc = "Goto/Apply Next Edit Suggestion",
+            },
+            {
+                "<C-.>",
+                function()
+                    require("sidekick.cli").focus()
+                end,
+                mode = { "n", "t", "i", "x" },
+                desc = "Sidekick focus",
+            },
+            {
+                "<leader>aa",
+                function()
+                    require("sidekick.cli").toggle()
+                end,
+                desc = "Sidekick toggle CLI",
+            },
+            {
+                "<leader>as",
+                function()
+                    require("sidekick.cli").select()
+                end,
+                desc = "Sidekick select CLI",
+            },
+            {
+                "<leader>at",
+                function()
+                    require("sidekick.cli").send({ msg = "{this}" })
+                end,
+                mode = { "x", "n" },
+                desc = "Sidekick send this",
+            },
+            {
+                "<leader>af",
+                function()
+                    require("sidekick.cli").send({ msg = "{file}" })
+                end,
+                desc = "Sidekick send file",
+            },
         },
         opts = {
-            adapters = {
-                acp = {
-                    claude_code = function()
-                        return require("codecompanion.adapters").extend("claude_code", {
-                            defaults = {
-                                mcpServers = "inherit_from_config",
-                            },
-                        })
-                    end,
-                    codex = function()
-                        return require("codecompanion.adapters").extend("codex", {
-                            defaults = {
-                                auth_method = "chatgpt",
-                            },
-                        })
-                    end,
+            cli = {
+                mux = {
+                    backend = "tmux",
+                    enabled = true,
                 },
-            },
-            interactions = {
-                chat = {
-                    adapter = "claude_code",
-                    keymaps = {
-                        send = {
-                            modes = { n = "<CR>", i = "<C-CR>" },
-                        },
-                    },
-                },
-                inline = { adapter = "claude_code" },
             },
         },
     },
@@ -374,6 +400,7 @@ return {
                     },
                 },
                 marksman = {},
+                copilot = {},
                 ruff = {},
                 ty = {
                     cmd = { "ty", "server" },
