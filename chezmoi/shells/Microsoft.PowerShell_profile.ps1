@@ -194,9 +194,9 @@ function tm {
         Write-Error "tm: ghq not found. Install with: winget install x-motemen.ghq"
         return
     }
-    $repo = ghq list | fzf
-    if ($repo) {
-        Set-Location "$(ghq root)\$repo"
+    $result = ghq list --full-path | fzf
+    if ($result) {
+        Set-Location -Path $result
     }
 }
 
