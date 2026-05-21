@@ -151,6 +151,15 @@ in
           '
       }
 
+      # tm: ghq + fzf でリポジトリ選択 → tmux セッション作成/切替
+      tm() {
+        local repo
+        repo=$(ghq list | fzf) || return
+        local name=''${repo##*/}
+        local path="$(ghq root)/$repo"
+        tmux new-session -A -s "$name" -c "$path"
+      }
+
       # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
       [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
     '';
