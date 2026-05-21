@@ -218,6 +218,9 @@
           "PackageIdentifier": "wez.wezterm"
         },
         {
+          "PackageIdentifier": "x-motemen.ghq"
+        },
+        {
           "PackageIdentifier": "zig.zig",
           "verifyCommand": {
             "args": ["version"],
