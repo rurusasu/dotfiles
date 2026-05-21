@@ -188,6 +188,18 @@ tmux new -A -s main "nvim ."
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
 }
 
+# tm: ghq + fzf でリポジトリ選択 → cd (Windows 版: tmux なし)
+function tm {
+    if (-not (Get-Command ghq -ErrorAction SilentlyContinue)) {
+        Write-Error "tm: ghq not found. Install with: scoop install ghq"
+        return
+    }
+    $repo = ghq list | fzf
+    if ($repo) {
+        Set-Location "$(ghq root)\$repo"
+    }
+}
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
 if (Test-Path $_secretPs1) { . $_secretPs1 }
