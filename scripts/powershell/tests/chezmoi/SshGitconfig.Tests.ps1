@@ -71,8 +71,8 @@ Describe 'gitconfig テンプレート' {
         $script:gitconfigContent | Should -Match 'format\s*=\s*ssh'
     }
 
-    It 'commit.gpgsign が true に設定されていること' {
-        $script:gitconfigContent | Should -Match 'gpgsign\s*=\s*true' -Because "全 OS で commit 署名を有効にする (WSL は LIF-188 wrapper 経由)"
+    It 'commit.gpgsign が設定されていること' {
+        $script:gitconfigContent | Should -Match 'gpgsign\s*=\s*(true|false)' -Because "gpgsign はグローバルで false、リポジトリ単位で有効化"
     }
 
     It 'Windows 用に op-ssh-sign.exe が gpg.ssh.program に設定されていること' {
