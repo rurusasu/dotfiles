@@ -157,8 +157,7 @@ in
         repo=$(ghq list | fzf) || return
         name=''${repo##*/}
         path="$(ghq root)/$repo"
-        tmux list-sessions -F "#{session_name}" 2>/dev/null |
-          grep -qE "^''${name}$" ||
+        tmux has-session -t "$name" 2>/dev/null ||
           tmux new-session -d -c "$path" -s "$name"
         if [[ -n "''${TMUX:-}" ]]; then
           tmux switch-client -t "$name"
