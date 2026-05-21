@@ -10,7 +10,7 @@
 
 {{- $isWSL := and (eq .chezmoi.os "linux") (contains "microsoft" (lower .chezmoi.kernel.osrelease)) }}
 [commit]
-  gpgsign = true
+  gpgsign = false
 
 [gpg]
   format = ssh
