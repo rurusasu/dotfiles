@@ -153,11 +153,17 @@ in
 
       # tm: ghq + fzf でリポジトリ選択 → tmux セッション作成/切替
       tm() {
-        local repo
+        local repo path name
         repo=$(ghq list | fzf) || return
-        local name=''${repo##*/}
-        local path="$(ghq root)/$repo"
-        tmux new-session -A -s "$name" -c "$path"
+        name=''${repo##*/}
+        path="$(ghq root)/$repo"
+        tmux has-session -t "$name" 2>/dev/null ||
+          tmux new-session -d -c "$path" -s "$name"
+        if [[ -n "''${TMUX:-}" ]]; then
+          tmux switch-client -t "$name"
+        else
+          tmux attach-session -t "$name"
+        fi
       }
 
       # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
