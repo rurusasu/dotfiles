@@ -112,7 +112,7 @@ let
     };
     ghq = {
       pkg = pkgs.ghq;
-      winget = null;
+      winget = "x-motemen.ghq";
       category = "dev";
     };
     uv = {

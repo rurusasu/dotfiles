@@ -191,7 +191,7 @@ tmux new -A -s main "nvim ."
 # tm: ghq + fzf でリポジトリ選択 → cd (Windows 版: tmux なし)
 function tm {
     if (-not (Get-Command ghq -ErrorAction SilentlyContinue)) {
-        Write-Error "tm: ghq not found. Install with: scoop install ghq"
+        Write-Error "tm: ghq not found. Install with: winget install x-motemen.ghq"
         return
     }
     $repo = ghq list | fzf
