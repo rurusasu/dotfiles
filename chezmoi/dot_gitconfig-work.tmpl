@@ -11,5 +11,7 @@
   email = {{ get $work "email" | default "work@example.com" | quote }}
   signingkey = {{ get $work "signingkey" | default "~/.ssh/github_work.pub" | quote }}
 
+{{- if eq .chezmoi.os "windows" }}
 [credential "https://github.com"]
   username = kohei-miki-im8
+{{- end }}
