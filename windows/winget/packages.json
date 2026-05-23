@@ -6,63 +6,49 @@
         {
           "PackageIdentifier": "AgileBits.1Password.CLI",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "op"
           }
         },
         {
           "PackageIdentifier": "twpayne.chezmoi",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "chezmoi"
           }
         },
         {
           "PackageIdentifier": "direnv.direnv",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "direnv"
           }
         },
         {
           "PackageIdentifier": "eza-community.eza",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "eza"
           }
         },
         {
           "PackageIdentifier": "sharkdp.fd",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "fd"
           }
         },
         {
           "PackageIdentifier": "junegunn.fzf",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "fzf"
           }
         },
         {
           "PackageIdentifier": "GitHub.cli",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "gh"
           }
         },
@@ -72,36 +58,28 @@
         {
           "PackageIdentifier": "Git.Git",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "git"
           }
         },
         {
           "PackageIdentifier": "GoLang.Go",
           "verifyCommand": {
-            "args": [
-              "version"
-            ],
+            "args": ["version"],
             "command": "go"
           }
         },
         {
           "PackageIdentifier": "Task.Task",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "task"
           }
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
           "verifyCommand": {
-            "args": [
-              "version"
-            ],
+            "args": ["version"],
             "command": "gcloud"
           }
         },
@@ -114,18 +92,14 @@
         {
           "PackageIdentifier": "Neovim.Neovim",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "nvim"
           }
         },
         {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "node"
           }
         },
@@ -141,27 +115,21 @@
         {
           "PackageIdentifier": "Microsoft.PowerShell",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "pwsh"
           }
         },
         {
           "PackageIdentifier": "Python.Python.3.13",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "python"
           }
         },
         {
           "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "rg"
           }
         },
@@ -171,9 +139,7 @@
         {
           "PackageIdentifier": "Starship.Starship",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "starship"
           }
         },
@@ -183,9 +149,7 @@
         {
           "PackageIdentifier": "astral-sh.uv",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "uv"
           }
         },
@@ -198,9 +162,7 @@
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
           "verifyCommand": {
-            "args": [
-              "--version"
-            ],
+            "args": ["--version"],
             "command": "zoxide"
           }
         },
