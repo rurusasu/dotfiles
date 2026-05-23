@@ -1,6 +1,7 @@
-# Loaded by ~/.gitconfig via [includeIf "hasconfig:remote.*.url:git@github-work:**"].
-# Overrides [user.*] fields when the current repo's remote uses the github-work
-# SSH host alias (defined in ~/.ssh/config, see chezmoi/ssh/config.tmpl).
+# Loaded by ~/.gitconfig via:
+#   - [includeIf "hasconfig:remote.*.url:git@github-work:**"] (SSH work repos)
+#   - [includeIf "gitdir/i:D:/my_programing/"] (Windows work repos by directory)
+# Overrides [user.*] and [credential.*] fields for work repos.
 #
 # Identity source: chezmoi/.chezmoidata/personal.yaml (git.work).
 {{- $git := (get . "git" | default (dict)) }}
@@ -9,3 +10,6 @@
   name = {{ get $work "name" | default "Work User" | quote }}
   email = {{ get $work "email" | default "work@example.com" | quote }}
   signingkey = {{ get $work "signingkey" | default "~/.ssh/github_work.pub" | quote }}
+
+[credential "https://github.com"]
+  username = kohei-miki-im8
