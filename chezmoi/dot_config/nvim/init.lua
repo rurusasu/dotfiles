@@ -34,7 +34,7 @@ require("config.osc7").setup()
 -- Load plugins
 require("lazy").setup("plugins", {
     defaults = { lazy = true },
-    install = { colorscheme = { "gruvbox" } },
+    install = { colorscheme = { "kanagawa" } },
     checker = { enabled = false },
     performance = {
         rtp = {
