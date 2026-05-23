@@ -207,14 +207,21 @@ return {
             {
                 "<leader>gg",
                 function()
-                    local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
-                    _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
-                    _G._SNACKS_LG_CLOSE = function()
-                        local lg = _G.__snacks_last_lg
-                        if lg and lg.close then
-                            pcall(lg.close, lg)
+                    local root = Snacks.git.get_root()
+                    if not root then
+                        vim.notify("lazygit: not in a git repository", vim.log.levels.WARN)
+                        return
+                    end
+                    if vim.fn.has("win32") == 1 then
+                        -- Windows: bypass Snacks.lazygit config injection entirely
+                        Snacks.terminal({ "lazygit" }, { cwd = root, win = { style = "lazygit" } })
+                    else
+                        _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
+                        _G._SNACKS_LG_CLOSE = function()
+                            local lg = _G.__snacks_last_lg
+                            if lg and lg.close then pcall(lg.close, lg) end
+                            _G.__snacks_last_lg = nil
                         end
-                        _G.__snacks_last_lg = nil
                     end
                 end,
                 desc = "Lazygit",
@@ -222,20 +229,20 @@ return {
             {
                 "<leader>gl",
                 function()
-                    local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
-                    Snacks.lazygit.log({ cwd = root })
+                    local root = Snacks.git.get_root()
+                    if not root then return end
+                    if vim.fn.has("win32") == 1 then
+                        Snacks.terminal({ "lazygit", "log" }, { cwd = root, win = { style = "lazygit" } })
+                    else
+                        Snacks.lazygit.log({ cwd = root })
+                    end
                 end,
                 desc = "Git log",
             },
             { "<leader>gf", function() Snacks.lazygit.log_file() end, desc = "Git log (file)" },
         },
         opts = {
-            lazygit = {
-                enabled = true,
-                -- On Windows, snacks config injection (editPreset=nvim-remote) causes
-                -- lazygit to exit with code 1. Disable on Windows; Unix handles nvr fine.
-                configure = vim.fn.has("win32") == 0,
-            },
+            lazygit = { enabled = true },
         },
     },
 
