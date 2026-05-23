@@ -200,6 +200,13 @@ function tm {
     }
 }
 
+# dotf: run task from dotfiles root without changing cwd
+function dotf {
+    $dotfilesDir = Split-Path -Parent (chezmoi source-path)
+    Push-Location $dotfilesDir
+    try { task @args } finally { Pop-Location }
+}
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
 if (Test-Path $_secretPs1) { . $_secretPs1 }

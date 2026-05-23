@@ -17,6 +17,9 @@
 ## 実行コマンド
 
 ```bash
+# dotfiles 反映（NixOS + Windows 両方）
+dotf chezmoi        # task chezmoi の短縮形
+
 # WSL/NixOS
 nrs
 sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
@@ -25,6 +28,7 @@ nix fmt
 
 ```powershell
 # Windows
+dotf chezmoi        # task chezmoi の短縮形
 pwsh -File scripts/powershell/install.ps1
 task test:powershell
 task lint:all
