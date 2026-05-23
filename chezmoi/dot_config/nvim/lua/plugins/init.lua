@@ -275,6 +275,31 @@ return {
         },
         opts = {
             cli = {
+                win = {
+                    config = function(terminal)
+                        -- Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+                        -- creates a "No agents running" buffer in Neovim via the NVIM
+                        -- socket. Intercept jobstart to drop NVIM from the env so the
+                        -- panel is not rendered inside Neovim.
+                        if terminal.tool.name ~= "claude" then
+                            return
+                        end
+                        local orig_start = terminal.start
+                        function terminal:start()
+                            local orig_js = vim.fn.jobstart
+                            vim.fn.jobstart = function(cmd, opts)
+                                opts = opts or {}
+                                if opts.env then
+                                    opts.env.NVIM = nil
+                                end
+                                local r = orig_js(cmd, opts)
+                                vim.fn.jobstart = orig_js
+                                return r
+                            end
+                            return orig_start(self)
+                        end
+                    end,
+                },
                 mux = {
                     backend = "tmux",
                     enabled = false,
