@@ -198,12 +198,32 @@ return {
         },
     },
 
-    -- UI utilities (required by sidekick.nvim)
+    -- UI utilities + lazygit float
     {
         "folke/snacks.nvim",
         lazy = false,
         priority = 900,
-        opts = {},
+        keys = {
+            {
+                "<leader>gg",
+                function()
+                    _G.__snacks_last_lg = Snacks.lazygit.open()
+                    _G._SNACKS_LG_CLOSE = function()
+                        local lg = _G.__snacks_last_lg
+                        if lg and lg.close then
+                            pcall(lg.close, lg)
+                        end
+                        _G.__snacks_last_lg = nil
+                    end
+                end,
+                desc = "Lazygit",
+            },
+            { "<leader>gl", function() Snacks.lazygit.log() end,      desc = "Git log" },
+            { "<leader>gf", function() Snacks.lazygit.log_file() end, desc = "Git log (file)" },
+        },
+        opts = {
+            lazygit = { enabled = true },
+        },
     },
 
     -- AI sidekick: AI CLI terminal (claude/codex/gemini/opencode)
@@ -279,19 +299,18 @@ return {
                     backend = "tmux",
                     enabled = false,
                 },
-                tools = {
+                tools = vim.tbl_extend("force", {
                     aider = false,
                     amazon_q = false,
-                    claude = {
-                        cmd = { "env", "-u", "NVIM", "claude" },
-                    },
                     copilot = false,
                     crush = false,
                     cursor = false,
                     grok = false,
                     pi = false,
                     qwen = false,
-                },
+                }, vim.fn.has("unix") == 1 and {
+                    claude = { cmd = { "env", "-u", "NVIM", "claude" } },
+                } or {}),
             },
         },
     },
