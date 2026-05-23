@@ -207,7 +207,8 @@ return {
             {
                 "<leader>gg",
                 function()
-                    _G.__snacks_last_lg = Snacks.lazygit.open()
+                    local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
+                    _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
                     _G._SNACKS_LG_CLOSE = function()
                         local lg = _G.__snacks_last_lg
                         if lg and lg.close then
@@ -218,7 +219,14 @@ return {
                 end,
                 desc = "Lazygit",
             },
-            { "<leader>gl", function() Snacks.lazygit.log() end,      desc = "Git log" },
+            {
+                "<leader>gl",
+                function()
+                    local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
+                    Snacks.lazygit.log({ cwd = root })
+                end,
+                desc = "Git log",
+            },
             { "<leader>gf", function() Snacks.lazygit.log_file() end, desc = "Git log (file)" },
         },
         opts = {
