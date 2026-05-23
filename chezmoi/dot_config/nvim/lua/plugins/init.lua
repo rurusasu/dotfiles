@@ -184,6 +184,20 @@ return {
         opts = {},
     },
 
+    -- Terminal-mode escape: jk → Normal-mode (faster than <C-\><C-n>)
+    {
+        "max397574/better-escape.nvim",
+        event = "InsertEnter",
+        opts = {
+            timeout = 100,
+            default_mappings = false,
+            mappings = {
+                i = { j = { k = "<ESC>" } },
+                t = { j = { k = "<C-\\><C-n>" } },
+            },
+        },
+    },
+
     -- UI utilities (required by sidekick.nvim)
     {
         "folke/snacks.nvim",
@@ -263,7 +277,7 @@ return {
             cli = {
                 mux = {
                     backend = "tmux",
-                    enabled = true,
+                    enabled = false,
                 },
                 tools = {
                     aider = false,
