@@ -60,7 +60,7 @@ opt.backup = false
 -- shell is visible immediately after :q (fixes ghost-screen in WezTerm/WT)
 vim.api.nvim_create_autocmd("VimLeave", {
     callback = function()
-        io.write("\027[?1049l")
+        io.write("\027[?1049l\027[H\027[2J")
         io.flush()
     end,
 })
