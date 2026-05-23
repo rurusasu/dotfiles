@@ -187,7 +187,7 @@ return {
     -- Terminal-mode escape: jk → Normal-mode (faster than <C-\><C-n>)
     {
         "max397574/better-escape.nvim",
-        event = "InsertEnter",
+        event = { "InsertEnter", "TermOpen" },
         opts = {
             timeout = 100,
             default_mappings = false,
