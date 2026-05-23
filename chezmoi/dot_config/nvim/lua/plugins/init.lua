@@ -224,7 +224,9 @@ return {
                         _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
                         _G._SNACKS_LG_CLOSE = function()
                             local lg = _G.__snacks_last_lg
-                            if lg and lg.close then pcall(lg.close, lg) end
+                            if lg and lg.close then
+                                pcall(lg.close, lg)
+                            end
                             _G.__snacks_last_lg = nil
                         end
                     end
@@ -235,7 +237,9 @@ return {
                 "<leader>gl",
                 function()
                     local root = Snacks.git.get_root()
-                    if not root then return end
+                    if not root then
+                        return
+                    end
                     if vim.fn.has("win32") == 1 then
                         Snacks.terminal({ "lazygit", "log" }, { cwd = root, win = { style = "lazygit" } })
                     else
@@ -244,7 +248,13 @@ return {
                 end,
                 desc = "Git log",
             },
-            { "<leader>gf", function() Snacks.lazygit.log_file() end, desc = "Git log (file)" },
+            {
+                "<leader>gf",
+                function()
+                    Snacks.lazygit.log_file()
+                end,
+                desc = "Git log (file)",
+            },
         },
         opts = {
             lazygit = { enabled = true },

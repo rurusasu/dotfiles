@@ -167,6 +167,4 @@ config.keys = {
     { key = "9", mods = "LEADER", action = act.ActivateTab(8) },
 }
 
-config.enable_scroll_back_on_alternate_screen = false
-
 return config
