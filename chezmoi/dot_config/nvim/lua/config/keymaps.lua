@@ -46,6 +46,9 @@ map("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic" })
 -- File explorer
 map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 
+-- Terminal mode
+map("t", "jk", "<C-\\><C-n>", { desc = "Exit terminal mode" })
+
 -- Telescope
 map("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Find files" })
 map("n", "<leader>fg", "<cmd>Telescope live_grep<cr>", { desc = "Live grep" })
