@@ -279,19 +279,18 @@ return {
                     backend = "tmux",
                     enabled = false,
                 },
-                tools = {
+                tools = vim.tbl_extend("force", {
                     aider = false,
                     amazon_q = false,
-                    claude = {
-                        cmd = { "env", "-u", "NVIM", "claude" },
-                    },
                     copilot = false,
                     crush = false,
                     cursor = false,
                     grok = false,
                     pi = false,
                     qwen = false,
-                },
+                }, vim.fn.has("unix") == 1 and {
+                    claude = { cmd = { "env", "-u", "NVIM", "claude" } },
+                } or {}),
             },
         },
     },
