@@ -37,25 +37,6 @@ mcp_servers:
       - gemini
       - vscode
 
-  # Serena - Code intelligence
-  - name: serena
-    command: uvx
-    args:
-      - "--from"
-      - "git+https://github.com/oraios/serena"
-      - "serena"
-      - "start-mcp-server"
-    startup_timeout_sec: 60
-    supports:
-      - codex
-      - claude-code
-      - claude-desktop
-      - vscode
-      - windsurf
-      - zed
-      - cursor
-      - gemini
-
   # GitHub - GitHub API integration
   - name: github
     command: pnpm

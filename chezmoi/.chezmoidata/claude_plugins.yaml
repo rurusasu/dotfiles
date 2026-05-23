@@ -39,9 +39,6 @@ claude_plugins:
   - name: playwright
     marketplace: claude-plugins-official
     type: external_plugins
-  - name: serena
-    marketplace: claude-plugins-official
-    type: external_plugins
   # claude-plugins-official: 外部プラグイン (MCP サーバー付き)
   - name: chrome-devtools-mcp
     marketplace: claude-plugins-official

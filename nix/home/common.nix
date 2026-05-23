@@ -70,6 +70,15 @@ in
       }
       add-zsh-hook precmd __emit_osc7_cwd
 
+      # Disable mouse reporting at the shell prompt.
+      # TERM=wezterm exposes mouse-capable terminfo entries; without this,
+      # clicks send SGR sequences that zsh prints as literal characters.
+      # Programs that need mouse (nvim, tmux) re-enable it themselves.
+      __disable_mouse_reporting() {
+        printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l' 2>/dev/null
+      }
+      add-zsh-hook precmd __disable_mouse_reporting
+
       # Alt+q: zoxide interactive (history-based directory jump)
       __zoxide_zi_widget() {
         local result

@@ -121,9 +121,12 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
 
   chezmoi:
-    desc: Apply chezmoi dotfiles
+    desc: Apply chezmoi dotfiles (WSL + Windows)
     cmds:
       - chezmoi apply --source {{.TASKFILE_DIR}}/chezmoi
+      - |
+        WIN_PATH=$(wslpath -w "{{.TASKFILE_DIR}}/chezmoi")
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "chezmoi apply --source '$WIN_PATH'"
 
   # ===========================================
   # Docker
