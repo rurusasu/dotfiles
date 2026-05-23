@@ -152,16 +152,20 @@ config.keys = {
     { key = "Space", mods = "LEADER", action = act.QuickSelect },
     { key = "F11", action = act.ToggleFullScreen },
 
-    -- Disable default font size bindings (conflict with tmux C-a -)
+    -- Disable all default font size bindings
     { key = "+", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "-", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "0", mods = "CTRL", action = act.DisableDefaultAssignment },
+    { key = "+", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "-", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "=", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "0", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
 
-    -- Font size (CTRL|SHIFT to avoid conflict with tmux C-a -)
-    { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
-    { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
-    { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
+    -- Font size via LEADER (Ctrl+Space then +/-/0)
+    { key = "+", mods = "LEADER", action = act.IncreaseFontSize },
+    { key = "-", mods = "LEADER", action = act.DecreaseFontSize },
+    { key = "0", mods = "LEADER", action = act.ResetFontSize },
 
     -- Tab numbers
     { key = "1", mods = "LEADER", action = act.ActivateTab(0) },
