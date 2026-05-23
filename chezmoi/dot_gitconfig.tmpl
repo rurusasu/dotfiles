@@ -37,7 +37,10 @@
   sshCommand = ssh
 {{- end }}
 
-{{- if ne .chezmoi.os "windows" }}
+{{- if eq .chezmoi.os "windows" }}
+[credential "https://github.com"]
+  username = rurusasu
+{{- else }}
 [credential "https://github.com"]
   helper = "!gh auth git-credential"
 [credential "https://gist.github.com"]
@@ -58,6 +61,9 @@
 {{- if eq .chezmoi.os "windows" }}
 [safe]
   directory = *
+
+[includeIf "gitdir/i:D:/my_programing/"]
+  path = ~/.gitconfig-work
 {{- end }}
 
 [ghq]
