@@ -109,6 +109,9 @@ config.send_composed_key_when_left_alt_is_pressed = false
 config.send_composed_key_when_right_alt_is_pressed = false
 
 config.keys = {
+    -- Shift+Enter → insert newline (Claude Code, Codex, multi-line prompts)
+    { key = "Return", mods = "SHIFT", action = act.SendString("\n") },
+
     -- Alt+key → send ESC sequence for fzf/zoxide/PSReadLine bindings
     { key = "q", mods = "ALT", action = act.SendString("\x1bq") },
     { key = "d", mods = "ALT", action = act.SendString("\x1bd") },
