@@ -108,6 +108,30 @@
     {
       "command": "unbound",
       "keys": "alt+z"
+    },
+    {
+      "command": "unbound",
+      "keys": "ctrl+plus"
+    },
+    {
+      "command": "unbound",
+      "keys": "ctrl+minus"
+    },
+    {
+      "command": "unbound",
+      "keys": "ctrl+0"
+    },
+    {
+      "command": { "action": "adjustFontSize", "delta": 1 },
+      "id": "User.increaseFontSize"
+    },
+    {
+      "command": { "action": "adjustFontSize", "delta": -1 },
+      "id": "User.decreaseFontSize"
+    },
+    {
+      "command": "resetFontSize",
+      "id": "User.resetFontSize"
     }
   ],
   "copyFormatting": "none",
@@ -197,6 +221,18 @@
     {
       "id": "User.resizePane.down",
       "keys": "ctrl+alt+down"
+    },
+    {
+      "id": "User.increaseFontSize",
+      "keys": "ctrl+shift+plus"
+    },
+    {
+      "id": "User.decreaseFontSize",
+      "keys": "ctrl+shift+minus"
+    },
+    {
+      "id": "User.resetFontSize",
+      "keys": "ctrl+shift+0"
     }
   ],
   "newTabMenu": [
