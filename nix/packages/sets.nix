@@ -130,6 +130,11 @@ let
       winget = null;
       category = "dev";
     };
+    lazygit = {
+      pkg = pkgs.lazygit;
+      winget = "JesseDuffield.lazygit";
+      category = "dev";
+    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
@@ -157,6 +162,11 @@ let
     neovim = {
       pkg = pkgs.neovim;
       winget = "Neovim.Neovim";
+      category = "editors";
+    };
+    neovim-remote = {
+      pkg = pkgs.neovim-remote;
+      winget = null;
       category = "editors";
     };
     obsidian = {
