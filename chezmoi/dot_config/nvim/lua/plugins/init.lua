@@ -230,7 +230,12 @@ return {
             { "<leader>gf", function() Snacks.lazygit.log_file() end, desc = "Git log (file)" },
         },
         opts = {
-            lazygit = { enabled = true },
+            lazygit = {
+                enabled = true,
+                -- On Windows, snacks config injection (editPreset=nvim-remote) causes
+                -- lazygit to exit with code 1. Disable on Windows; Unix handles nvr fine.
+                configure = vim.fn.has("win32") == 0,
+            },
         },
     },
 
