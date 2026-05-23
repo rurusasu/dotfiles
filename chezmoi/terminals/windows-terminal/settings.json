@@ -119,6 +119,10 @@
   "showTabsFullscreen": true,
   "keybindings": [
     {
+      "keys": "shift+enter",
+      "command": { "action": "sendInput", "input": "\n" }
+    },
+    {
       "id": "User.copy",
       "keys": "ctrl+c"
     },
