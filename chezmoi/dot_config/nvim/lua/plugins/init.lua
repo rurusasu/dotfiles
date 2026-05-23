@@ -213,8 +213,13 @@ return {
                         return
                     end
                     if vim.fn.has("win32") == 1 then
-                        -- Windows: bypass Snacks.lazygit config injection entirely
-                        Snacks.terminal({ "lazygit" }, { cwd = root, win = { style = "lazygit" } })
+                        -- Windows: bypass Snacks.lazygit; use open() not toggle().
+                        -- Unset $NVIM so lazygit doesn't attempt nvim-remote at startup.
+                        Snacks.terminal.open({ "lazygit" }, {
+                            cwd = root,
+                            env = { NVIM = "" },
+                            win = { style = "lazygit" },
+                        })
                     else
                         _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
                         _G._SNACKS_LG_CLOSE = function()
