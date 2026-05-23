@@ -12,6 +12,8 @@ end
 -- Terminal type (enables undercurl, colored underlines, etc.)
 config.term = "wezterm"
 
+config.automatically_reload_config = true
+
 -- Color scheme
 config.color_schemes = {
     ["gruvbox-custom"] = {
@@ -150,10 +152,10 @@ config.keys = {
     { key = "Space", mods = "LEADER", action = act.QuickSelect },
     { key = "F11", action = act.ToggleFullScreen },
 
-    -- Font size
-    { key = "+", mods = "CTRL", action = act.IncreaseFontSize },
-    { key = "-", mods = "CTRL", action = act.DecreaseFontSize },
-    { key = "0", mods = "CTRL", action = act.ResetFontSize },
+    -- Font size (CTRL|SHIFT to avoid conflict with tmux C-a -)
+    { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
+    { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
+    { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
 
     -- Tab numbers
     { key = "1", mods = "LEADER", action = act.ActivateTab(0) },
