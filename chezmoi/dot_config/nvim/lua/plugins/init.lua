@@ -282,6 +282,9 @@ return {
                 tools = {
                     aider = false,
                     amazon_q = false,
+                    claude = {
+                        cmd = { "env", "-u", "NVIM", "claude" },
+                    },
                     copilot = false,
                     crush = false,
                     cursor = false,

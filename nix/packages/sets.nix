@@ -85,8 +85,8 @@ let
     };
 
     # ── dev ───────────────────────────────────────────────
-    nodejs_22 = {
-      pkg = pkgs.nodejs_22;
+    nodejs_24 = {
+      pkg = pkgs.nodejs_24;
       winget = "OpenJS.NodeJS.LTS";
       category = "dev";
     };
@@ -470,7 +470,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "nvim";
       args = [ "--version" ];
     };
-    nodejs_22 = {
+    nodejs_24 = {
       command = "node";
       args = [ "--version" ];
     };
