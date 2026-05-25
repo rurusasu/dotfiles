@@ -415,6 +415,8 @@ lib.mapAttrs (_: names: resolve names) grouped
     "@tobilu/qmd"
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
+    "typescript-language-server"
+    "typescript"
   ];
 
   # Post-install verification commands for pnpm packages.
@@ -430,6 +432,14 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     "@google/gemini-cli" = {
       command = "gemini";
+      args = [ "--version" ];
+    };
+    "typescript-language-server" = {
+      command = "typescript-language-server";
+      args = [ "--version" ];
+    };
+    "typescript" = {
+      command = "tsc";
       args = [ "--version" ];
     };
     "@agentclientprotocol/claude-agent-acp" = {

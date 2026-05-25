@@ -26,6 +26,7 @@ return {
                 conceallevel = 3,
                 concealcursor = "nvic",
             },
+            watch_for_changes = true,
             keymaps = {
                 ["\\"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
                 ["|"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
