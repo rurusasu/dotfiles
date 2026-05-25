@@ -371,6 +371,11 @@ let
       winget = "oxc-project.oxlint";
       category = "lsp";
     };
+    typescript-language-server = {
+      pkg = pkgs.typescript-language-server;
+      winget = null;
+      category = "lsp";
+    };
   };
 
   # Group package names by category
