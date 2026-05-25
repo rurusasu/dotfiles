@@ -415,6 +415,8 @@ lib.mapAttrs (_: names: resolve names) grouped
     "@tobilu/qmd"
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
+    "typescript-language-server"
+    "typescript"
   ];
 
   # Post-install verification commands for pnpm packages.
