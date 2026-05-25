@@ -22,14 +22,16 @@ return {
         opts = {
             default_file_explorer = true,
             view_options = { show_hidden = true },
+            win_options = {
+                conceallevel = 3,
+                concealcursor = "nvic",
+            },
         },
         config = function(_, opts)
             require("oil").setup(opts)
             vim.api.nvim_create_autocmd("FileType", {
                 pattern = "oil",
                 callback = function()
-                    vim.opt_local.conceallevel = 2
-                    vim.opt_local.concealcursor = "nivc"
                     local ok, cmp = pcall(require, "cmp")
                     if ok then
                         cmp.setup.buffer({ enabled = false })
