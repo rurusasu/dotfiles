@@ -368,6 +368,9 @@ return {
             },
         },
         opts = {
+            win = {
+                layout = "float",
+            },
             cli = {
                 mux = {
                     backend = "tmux",
