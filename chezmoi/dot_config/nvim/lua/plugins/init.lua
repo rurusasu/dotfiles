@@ -36,8 +36,8 @@ return {
             vim.api.nvim_create_autocmd("FileType", {
                 pattern = "oil",
                 callback = function()
-                    local ok, cmp = pcall(require, "cmp")
-                    if ok then
+                    local cmp = package.loaded["cmp"]
+                    if cmp then
                         cmp.setup.buffer({ enabled = false })
                     end
                 end,
