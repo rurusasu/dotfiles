@@ -26,6 +26,10 @@ return {
                 conceallevel = 3,
                 concealcursor = "nvic",
             },
+            keymaps = {
+                ["\\"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
+                ["s"] = { "actions.select", opts = { horizontal = true }, desc = "Open hsplit" },
+            },
         },
         config = function(_, opts)
             require("oil").setup(opts)
@@ -97,6 +101,19 @@ return {
             "nvim-telescope/telescope-ghq.nvim",
         },
         config = function(_, opts)
+            local actions = require("telescope.actions")
+            opts.defaults = vim.tbl_deep_extend("force", opts.defaults or {}, {
+                mappings = {
+                    i = {
+                        ["\\"] = actions.select_vertical,
+                        ["-"] = actions.select_horizontal,
+                    },
+                    n = {
+                        ["\\"] = actions.select_vertical,
+                        ["-"] = actions.select_horizontal,
+                    },
+                },
+            })
             local telescope = require("telescope")
             telescope.setup(opts)
             telescope.load_extension("ghq")
