@@ -138,7 +138,7 @@ config.keys = {
     { key = "UpArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Up", 5 }) },
     { key = "RightArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Right", 5 }) },
 
-    -- Tab management (Ctrl+Alt+T, also Leader)
+    -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "t", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "x", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
