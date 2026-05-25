@@ -29,6 +29,7 @@ return {
                 pattern = "oil",
                 callback = function()
                     vim.opt_local.conceallevel = 2
+                    vim.opt_local.concealcursor = "nivc"
                 end,
             })
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
