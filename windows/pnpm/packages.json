@@ -29,6 +29,20 @@
         "args": ["--version"],
         "command": "gemini"
       }
+    },
+    {
+      "name": "typescript-language-server",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "typescript-language-server"
+      }
+    },
+    {
+      "name": "typescript",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "tsc"
+      }
     }
   ]
 }
