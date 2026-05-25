@@ -142,8 +142,8 @@ config.keys = {
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "t", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "x", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
-    { key = "l", mods = "LEADER", action = act.ActivateTabRelative(1) },
-    { key = "h", mods = "LEADER", action = act.ActivateTabRelative(-1) },
+    { key = "Tab", mods = "CTRL", action = act.ActivateTabRelative(1) },
+    { key = "Tab", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(-1) },
 
     -- Misc
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
