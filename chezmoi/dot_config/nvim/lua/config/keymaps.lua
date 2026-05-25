@@ -63,8 +63,8 @@ map("n", "<leader>x", "<cmd>q<cr>", { desc = "Close window" })
 map("n", "<leader>h", "<cmd>bprevious<cr>", { desc = "Prev buffer" })
 map("n", "<leader>l", "<cmd>bnext<cr>", { desc = "Next buffer" })
 
--- Terminal mode: pass C-h/j/k/l through to tmux via vim-tmux-navigator
-map("t", "<C-h>", "<C-\\><C-n><C-w>h", { desc = "Go to left window" })
-map("t", "<C-j>", "<C-\\><C-n><C-w>j", { desc = "Go to lower window" })
-map("t", "<C-k>", "<C-\\><C-n><C-w>k", { desc = "Go to upper window" })
-map("t", "<C-l>", "<C-\\><C-n><C-w>l", { desc = "Go to right window" })
+-- Terminal mode: use TmuxNavigate so boundary-crossing to tmux panes works
+map("t", "<C-h>", "<C-\\><C-n>:TmuxNavigateLeft<cr>", { desc = "Go to left window" })
+map("t", "<C-j>", "<C-\\><C-n>:TmuxNavigateDown<cr>", { desc = "Go to lower window" })
+map("t", "<C-k>", "<C-\\><C-n>:TmuxNavigateUp<cr>", { desc = "Go to upper window" })
+map("t", "<C-l>", "<C-\\><C-n>:TmuxNavigateRight<cr>", { desc = "Go to right window" })
