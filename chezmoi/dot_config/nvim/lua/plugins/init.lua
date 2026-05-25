@@ -28,6 +28,7 @@ return {
             },
             keymaps = {
                 ["\\"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
+                ["|"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
                 ["s"] = { "actions.select", opts = { horizontal = true }, desc = "Open hsplit" },
                 ["t"] = { "actions.select", opts = { tab = true }, desc = "Open in new tab" },
                 ["<C-h>"] = false,
@@ -109,10 +110,12 @@ return {
                 mappings = {
                     i = {
                         ["\\"] = actions.select_vertical,
+                        ["|"] = actions.select_vertical,
                         ["-"] = actions.select_horizontal,
                     },
                     n = {
                         ["\\"] = actions.select_vertical,
+                        ["|"] = actions.select_vertical,
                         ["-"] = actions.select_horizontal,
                     },
                 },
