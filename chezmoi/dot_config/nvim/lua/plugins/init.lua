@@ -29,6 +29,7 @@ return {
             keymaps = {
                 ["\\"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
                 ["s"] = { "actions.select", opts = { horizontal = true }, desc = "Open hsplit" },
+                ["t"] = { "actions.select", opts = { tab = true }, desc = "Open in new tab" },
             },
         },
         config = function(_, opts)
