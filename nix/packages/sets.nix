@@ -434,6 +434,14 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "gemini";
       args = [ "--version" ];
     };
+    "typescript-language-server" = {
+      command = "typescript-language-server";
+      args = [ "--version" ];
+    };
+    "typescript" = {
+      command = "tsc";
+      args = [ "--version" ];
+    };
     "@agentclientprotocol/claude-agent-acp" = {
       command = "claude-agent-acp";
       args = [ "--version" ];

@@ -24,13 +24,6 @@
       }
     },
     {
-      "name": "@google/gemini-cli",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "gemini"
-      }
-    },
-    {
       "name": "typescript-language-server",
       "verifyCommand": {
         "args": ["--version"],
@@ -42,6 +35,13 @@
       "verifyCommand": {
         "args": ["--version"],
         "command": "tsc"
+      }
+    },
+    {
+      "name": "@google/gemini-cli",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "gemini"
       }
     }
   ]
