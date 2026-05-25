@@ -22,13 +22,24 @@ return {
         opts = {
             default_file_explorer = true,
             view_options = { show_hidden = true },
+            win_options = {
+                conceallevel = 3,
+                concealcursor = "nvic",
+            },
+            keymaps = {
+                ["\\"] = { "actions.select", opts = { vertical = true }, desc = "Open vsplit" },
+                ["s"] = { "actions.select", opts = { horizontal = true }, desc = "Open hsplit" },
+            },
         },
         config = function(_, opts)
             require("oil").setup(opts)
             vim.api.nvim_create_autocmd("FileType", {
                 pattern = "oil",
                 callback = function()
-                    vim.opt_local.conceallevel = 2
+                    local cmp = package.loaded["cmp"]
+                    if cmp then
+                        cmp.setup.buffer({ enabled = false })
+                    end
                 end,
             })
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
@@ -90,6 +101,19 @@ return {
             "nvim-telescope/telescope-ghq.nvim",
         },
         config = function(_, opts)
+            local actions = require("telescope.actions")
+            opts.defaults = vim.tbl_deep_extend("force", opts.defaults or {}, {
+                mappings = {
+                    i = {
+                        ["\\"] = actions.select_vertical,
+                        ["-"] = actions.select_horizontal,
+                    },
+                    n = {
+                        ["\\"] = actions.select_vertical,
+                        ["-"] = actions.select_horizontal,
+                    },
+                },
+            })
             local telescope = require("telescope")
             telescope.setup(opts)
             telescope.load_extension("ghq")
