@@ -30,6 +30,10 @@ return {
                 callback = function()
                     vim.opt_local.conceallevel = 2
                     vim.opt_local.concealcursor = "nivc"
+                    local ok, cmp = pcall(require, "cmp")
+                    if ok then
+                        cmp.setup.buffer({ enabled = false })
+                    end
                 end,
             })
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
