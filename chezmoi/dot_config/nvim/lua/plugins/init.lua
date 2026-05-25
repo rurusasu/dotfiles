@@ -25,6 +25,12 @@ return {
         },
         config = function(_, opts)
             require("oil").setup(opts)
+            vim.api.nvim_create_autocmd("FileType", {
+                pattern = "oil",
+                callback = function()
+                    vim.opt_local.conceallevel = 2
+                end,
+            })
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
             if vim.fn.has("win32") == 1 and vim.fn.executable("wmic") == 0 then
                 local files = require("oil.adapters.files")
@@ -353,7 +359,7 @@ return {
     -- Tmux pane navigation (C-h/j/k/l shared with nvim windows)
     {
         "christoomey/vim-tmux-navigator",
-        event = "VeryLazy",
+        cmd = { "TmuxNavigateLeft", "TmuxNavigateDown", "TmuxNavigateUp", "TmuxNavigateRight" },
     },
 
     -- Devcontainer

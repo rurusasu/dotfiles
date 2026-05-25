@@ -2,7 +2,7 @@
 
 local map = vim.keymap.set
 
--- Better window navigation
+-- Better window navigation (overridden by vim-tmux-navigator with TmuxNavigate* at startup)
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
 map("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
 map("n", "<C-k>", "<C-w>k", { desc = "Go to upper window" })
@@ -55,3 +55,16 @@ map("n", "<leader>fg", "<cmd>Telescope live_grep<cr>", { desc = "Live grep" })
 map("n", "<leader>fb", "<cmd>Telescope buffers<cr>", { desc = "Buffers" })
 map("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Help tags" })
 map("n", "<leader>fr", "<cmd>Telescope oldfiles<cr>", { desc = "Recent files" })
+
+-- Unified window management (same characters as tmux/terminal layers)
+map("n", "<leader>\\", "<cmd>vsplit<cr>", { desc = "Vertical split" })
+map("n", "<leader>-", "<cmd>split<cr>", { desc = "Horizontal split" })
+map("n", "<leader>x", "<cmd>q<cr>", { desc = "Close window" })
+map("n", "<leader>h", "<cmd>bprevious<cr>", { desc = "Prev buffer" })
+map("n", "<leader>l", "<cmd>bnext<cr>", { desc = "Next buffer" })
+
+-- Terminal mode: use TmuxNavigate so boundary-crossing to tmux panes works
+map("t", "<C-h>", "<C-\\><C-n>:TmuxNavigateLeft<cr>", { desc = "Go to left window" })
+map("t", "<C-j>", "<C-\\><C-n>:TmuxNavigateDown<cr>", { desc = "Go to lower window" })
+map("t", "<C-k>", "<C-\\><C-n>:TmuxNavigateUp<cr>", { desc = "Go to upper window" })
+map("t", "<C-l>", "<C-\\><C-n>:TmuxNavigateRight<cr>", { desc = "Go to right window" })
