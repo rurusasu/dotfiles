@@ -2,7 +2,7 @@
 
 local map = vim.keymap.set
 
--- Better window navigation
+-- Better window navigation (overridden by vim-tmux-navigator with TmuxNavigate* at startup)
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
 map("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
 map("n", "<C-k>", "<C-w>k", { desc = "Go to upper window" })

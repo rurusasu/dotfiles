@@ -353,7 +353,7 @@ return {
     -- Tmux pane navigation (C-h/j/k/l shared with nvim windows)
     {
         "christoomey/vim-tmux-navigator",
-        event = "VeryLazy",
+        cmd = { "TmuxNavigateLeft", "TmuxNavigateDown", "TmuxNavigateUp", "TmuxNavigateRight" },
     },
 
     -- Devcontainer
