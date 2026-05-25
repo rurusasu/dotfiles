@@ -140,6 +140,8 @@ return {
                 "python",
                 "typescript",
                 "javascript",
+                "tsx",
+                "jsx",
                 "json",
                 "yaml",
                 "toml",
@@ -543,6 +545,7 @@ return {
                         },
                     },
                 },
+                ts_ls = {},
                 marksman = {},
                 ruff = {},
                 ty = {
