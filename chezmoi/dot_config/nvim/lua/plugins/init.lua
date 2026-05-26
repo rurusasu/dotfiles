@@ -160,23 +160,6 @@ return {
         end,
     },
 
-    -- Status line
-    {
-        "nvim-lualine/lualine.nvim",
-        event = "VeryLazy",
-        opts = {
-            options = {
-                theme = "gruvbox",
-                component_separators = "|",
-                section_separators = "",
-            },
-            sections = {
-                lualine_b = { "branch", "diff", "diagnostics" },
-                lualine_c = { { "filename", path = 1 } },
-            },
-        },
-    },
-
     -- Git signs
     {
         "lewis6991/gitsigns.nvim",
