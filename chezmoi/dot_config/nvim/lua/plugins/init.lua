@@ -658,15 +658,21 @@ return {
         event = "VeryLazy",
         dependencies = { "nvim-tree/nvim-web-devicons" },
         config = function()
-            local devicons = require("nvim-web-devicons")
             local c = {
-                bg = "#313244",
-                fg = "#cdd6f4",
-                dim = "#7f849c",
-                error = "#f38ba8",
-                warn = "#fab387",
-                info = "#89b4fa",
+                fg = "#c0caf5",
+                dim = "#565f89",
+                error = "#f7768e",
+                warn = "#e0af68",
+                info = "#7dcfff",
             }
+            local set_hl = function()
+                vim.api.nvim_set_hl(0, "InclineActive", { bg = "#2d2f3f", fg = c.fg })
+                vim.api.nvim_set_hl(0, "InclineInactive", { bg = "#2d2f3f", fg = c.dim })
+            end
+            set_hl()
+            vim.api.nvim_create_autocmd("ColorScheme", { callback = set_hl })
+
+            local devicons = require("nvim-web-devicons")
             local generic_set = {}
             for _, n in ipairs({
                 "init.lua",
@@ -693,6 +699,10 @@ return {
                     padding = 1,
                     margin = { horizontal = 1, vertical = 0 },
                     placement = { horizontal = "right", vertical = "bottom" },
+                    winhighlight = {
+                        active = { Normal = "InclineActive" },
+                        inactive = { Normal = "InclineInactive" },
+                    },
                     options = { winblend = 0 },
                 },
                 render = function(props)
@@ -711,11 +721,13 @@ return {
                         end
                     end
 
-                    local icon, icon_color =
-                        devicons.get_icon_color(tail, vim.fn.fnamemodify(fname, ":e"), { default = true })
-                    icon = icon or ""
-                    icon_color = icon_color or c.fg
-                    local modified = vim.bo[bufnr].modified
+                    local icon, icon_color
+                    if fname ~= "" then
+                        icon, icon_color =
+                            devicons.get_icon_color(tail, vim.fn.fnamemodify(fname, ":e"), { default = true })
+                    end
+                    icon = icon or " "
+                    icon_color = (focused and icon_color) or c.dim
 
                     local result = {}
                     if focused then
@@ -737,13 +749,11 @@ return {
                         end
                     end
 
-                    result[#result + 1] = { icon .. " ", guifg = focused and icon_color or c.dim }
+                    result[#result + 1] = { icon .. " ", guifg = icon_color }
                     result[#result + 1] = { name, guifg = focused and c.fg or c.dim }
-                    if modified then
+                    if vim.bo[bufnr].modified then
                         result[#result + 1] = { " ●", guifg = c.warn }
                     end
-
-                    result.guibg = c.bg
                     return result
                 end,
             })
