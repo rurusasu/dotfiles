@@ -17,6 +17,17 @@ config.automatically_reload_config = true
 -- Color scheme (matches Windows Terminal's CGA built-in scheme).
 config.color_scheme = "CGA"
 
+-- Override cursor colors on top of CGA: the built-in CGA scheme uses the
+-- same grey (#AAAAAA) for cursor and foreground, which makes the cursor and
+-- IME composition text disappear against the prompt. Use bright CGA colors
+-- so the cursor (and IME compose state) stay visible.
+config.colors = {
+    cursor_bg = "#ffff55", -- CGA bright yellow
+    cursor_fg = "#000000",
+    cursor_border = "#ffff55",
+    compose_cursor = "#ff5555", -- CGA bright red during IME composition
+}
+
 -- Font settings
 config.font = wezterm.font("Moralerspace Neon HWJPDOC")
 config.font_size = 11.0
