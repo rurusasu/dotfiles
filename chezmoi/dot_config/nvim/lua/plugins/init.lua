@@ -655,14 +655,14 @@ return {
     -- Floating file info per window
     {
         "b0o/incline.nvim",
-        event = { "BufReadPost", "BufNewFile" },
+        event = "VeryLazy",
         dependencies = { "nvim-tree/nvim-web-devicons" },
         config = function()
             local devicons = require("nvim-web-devicons")
             local c = {
-                bg = "#1e1e2e",
+                bg = "#313244",
                 fg = "#cdd6f4",
-                dim = "#585b70",
+                dim = "#7f849c",
                 error = "#f38ba8",
                 warn = "#fab387",
                 info = "#89b4fa",
@@ -693,9 +693,13 @@ return {
                     padding = 1,
                     margin = { horizontal = 1, vertical = 0 },
                     placement = { horizontal = "right", vertical = "bottom" },
+                    options = { winblend = 0 },
                 },
                 render = function(props)
                     local bufnr = props.buf
+                    if vim.bo[bufnr].buftype == "terminal" then
+                        return false
+                    end
                     local focused = props.focused
                     local fname = vim.api.nvim_buf_get_name(bufnr)
                     local tail = fname ~= "" and vim.fn.fnamemodify(fname, ":t") or "[No Name]"
@@ -709,6 +713,8 @@ return {
 
                     local icon, icon_color =
                         devicons.get_icon_color(tail, vim.fn.fnamemodify(fname, ":e"), { default = true })
+                    icon = icon or ""
+                    icon_color = icon_color or c.fg
                     local modified = vim.bo[bufnr].modified
 
                     local result = {}
