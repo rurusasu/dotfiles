@@ -77,7 +77,12 @@ config.color_scheme = "gruvbox-custom"
 
 -- Font settings
 config.font = wezterm.font("Moralerspace Neon HWJPDOC")
-config.font_size = 10.0
+config.font_size = 11.0
+config.line_height = 1.15
+config.cell_width = 1.0
+
+-- WebGpu renders text more sharply than the legacy OpenGL front end on Windows.
+config.front_end = "WebGpu"
 
 -- IME support
 config.use_ime = true
