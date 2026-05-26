@@ -247,6 +247,29 @@ return {
         priority = 900,
         keys = {
             {
+                "<leader><leader>",
+                function()
+                    local picker = require("snacks").picker
+                    local root = require("snacks.git").get_root()
+                    local sources = require("snacks.picker.config.sources")
+
+                    local files = root == nil and sources.files
+                        or vim.tbl_deep_extend("force", sources.git_files, {
+                            untracked = true,
+                            cwd = vim.uv.cwd(),
+                        })
+
+                    picker({
+                        multi = { "buffers", "recent", files },
+                        format = "file",
+                        matcher = { frecency = true, sort_empty = true },
+                        filter = { cwd = true },
+                        transform = "unique_file",
+                    })
+                end,
+                desc = "Find files (smart)",
+            },
+            {
                 "<leader>gg",
                 function()
                     local root = Snacks.git.get_root()
@@ -311,6 +334,7 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
+            picker = { enabled = true },
         },
     },
 
