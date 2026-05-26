@@ -2,9 +2,10 @@
 
 local opt = vim.opt
 
--- Line numbers
+-- Line numbers: relative on left, absolute on right
 opt.number = true
 opt.relativenumber = true
+opt.statuscolumn = "%{v:lnum}  %=%{v:relnum?printf('%3d', v:relnum):'   '} "
 
 -- Indentation
 opt.tabstop = 2
@@ -27,6 +28,11 @@ opt.sidescrolloff = 8
 opt.wrap = true
 opt.linebreak = true
 opt.breakindent = true
+
+-- Clear statusline (hide to gain code area; info moved to tmux/incline/modes)
+opt.laststatus = 0
+opt.statusline = "─"
+opt.fillchars:append({ stl = "─", stlnc = "─" })
 
 -- Split behavior
 opt.splitbelow = true
