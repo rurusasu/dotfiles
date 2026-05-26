@@ -628,7 +628,7 @@ return {
     -- Floating file info per window
     {
         "b0o/incline.nvim",
-        event = "BufReadPost",
+        event = { "BufReadPost", "BufNewFile" },
         dependencies = { "nvim-tree/nvim-web-devicons" },
         config = function()
             local devicons = require("nvim-web-devicons")
