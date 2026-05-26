@@ -11,6 +11,7 @@ let
     mkMerge
     types
     ;
+  sets = import ../../packages/sets.nix { inherit pkgs lib; };
 in
 {
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {
@@ -37,7 +38,10 @@ in
       };
 
       nixpkgs.config.allowUnfree = true;
-      fonts.fontconfig.enable = true;
+      fonts = {
+        fontconfig.enable = true;
+        packages = sets.fonts;
+      };
       programs.zsh.enable = true;
 
       programs.git = {
