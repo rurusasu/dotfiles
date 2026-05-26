@@ -34,6 +34,9 @@ opt.laststatus = 0
 opt.statusline = "─"
 opt.fillchars:append({ stl = "─", stlnc = "─" })
 
+-- Clear winbar (use Snacks.picker for buffer switching instead)
+opt.winbar = ""
+
 -- Split behavior
 opt.splitbelow = true
 opt.splitright = true

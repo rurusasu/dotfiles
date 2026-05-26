@@ -167,6 +167,26 @@ return {
         opts = {},
     },
 
+    -- Mode indicator via cursorline background color
+    {
+        "mvllow/modes.nvim",
+        event = "ModeChanged",
+        opts = {
+            colors = {
+                copy = "#f9e2af",
+                delete = "#f38ba8",
+                insert = "#89dceb",
+                visual = "#cba6f7",
+            },
+            line_opacity = {
+                copy = 0.4,
+                delete = 0.4,
+                insert = 0.4,
+                visual = 0.4,
+            },
+        },
+    },
+
     -- Which-key
     {
         "folke/which-key.nvim",
@@ -226,6 +246,29 @@ return {
         lazy = false,
         priority = 900,
         keys = {
+            {
+                "<leader><leader>",
+                function()
+                    local picker = require("snacks").picker
+                    local root = require("snacks.git").get_root()
+                    local sources = require("snacks.picker.config.sources")
+
+                    local files = root == nil and sources.files
+                        or vim.tbl_deep_extend("force", sources.git_files, {
+                            untracked = true,
+                            cwd = vim.uv.cwd(),
+                        })
+
+                    picker({
+                        multi = { "buffers", "recent", files },
+                        format = "file",
+                        matcher = { frecency = true, sort_empty = true },
+                        filter = { cwd = true },
+                        transform = "unique_file",
+                    })
+                end,
+                desc = "Find files (smart)",
+            },
             {
                 "<leader>gg",
                 function()
@@ -291,6 +334,7 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
+            picker = { enabled = true },
         },
     },
 
