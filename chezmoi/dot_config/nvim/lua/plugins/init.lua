@@ -167,6 +167,26 @@ return {
         opts = {},
     },
 
+    -- Mode indicator via cursorline background color
+    {
+        "mvllow/modes.nvim",
+        event = "ModeChanged",
+        opts = {
+            colors = {
+                copy = "#f9e2af",
+                delete = "#f38ba8",
+                insert = "#89dceb",
+                visual = "#cba6f7",
+            },
+            line_opacity = {
+                copy = 0.4,
+                delete = 0.4,
+                insert = 0.4,
+                visual = 0.4,
+            },
+        },
+    },
+
     -- Which-key
     {
         "folke/which-key.nvim",
