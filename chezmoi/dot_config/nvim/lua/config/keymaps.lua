@@ -69,10 +69,23 @@ map("t", "<C-j>", "<C-\\><C-n>:TmuxNavigateDown<cr>", { desc = "Go to lower wind
 map("t", "<C-k>", "<C-\\><C-n>:TmuxNavigateUp<cr>", { desc = "Go to upper window" })
 map("t", "<C-l>", "<C-\\><C-n>:TmuxNavigateRight<cr>", { desc = "Go to right window" })
 
--- Move any :terminal to the bottom automatically
+-- Open terminal in a 15-line split at the bottom
+vim.api.nvim_create_user_command("Term", function()
+    vim.cmd("botright 15split | terminal")
+    vim.cmd("startinsert")
+end, { desc = "Open terminal in bottom split" })
+
+-- Redirect :terminal (typed at start of command line) to :Term.
+-- getcmdpos() guard prevents expansion mid-command (e.g. :edit terminal stays intact).
+vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'Term' : 'terminal']])
+
+-- If a terminal opens alongside other windows (plugins, scripted :terminal),
+-- snap it to the bottom. Single-window case is handled by :Term above.
 vim.api.nvim_create_autocmd("TermOpen", {
     callback = function()
-        vim.cmd("wincmd J")
-        vim.cmd("resize 15")
+        if vim.fn.winnr("$") > 1 then
+            vim.cmd("wincmd J")
+            vim.cmd("resize 15")
+        end
     end,
 })
