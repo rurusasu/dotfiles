@@ -23,11 +23,6 @@ config.font_size = 11.0
 config.line_height = 1.15
 config.cell_width = 1.0
 
--- Use the font's own Powerline / box-drawing glyphs instead of WezTerm's
--- built-in renderings; the built-ins are vertically centered differently than
--- Moralerspace's Nerd Font glyphs, which makes starship's separators jitter.
-config.custom_block_glyphs = false
-
 -- WebGpu renders text more sharply than the legacy OpenGL front end on Windows.
 config.front_end = "WebGpu"
 
