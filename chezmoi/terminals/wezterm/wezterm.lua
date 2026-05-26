@@ -14,72 +14,19 @@ config.term = "wezterm"
 
 config.automatically_reload_config = true
 
--- Color scheme
-config.color_schemes = {
-    ["gruvbox-custom"] = {
-        ansi = {
-            "#1d2021",
-            "#fb4934",
-            "#b8bb26",
-            "#fabd2f",
-            "#83a598",
-            "#d3869b",
-            "#8ec07c",
-            "#d5c4a1",
-        },
-        brights = {
-            "#665c54",
-            "#fb4934",
-            "#b8bb26",
-            "#fabd2f",
-            "#83a598",
-            "#d3869b",
-            "#8ec07c",
-            "#fbf1c7",
-        },
-        background = "#1d2021",
-        foreground = "#ebdbb2",
-        cursor_bg = "#ebdbb2",
-        cursor_fg = "#1d2021",
-        selection_bg = "#504945",
-        selection_fg = "#ebdbb2",
-        split = "#665c54",
-        compose_cursor = "#fe8019",
-        scrollbar_thumb = "#3c3836",
-        tab_bar = {
-            background = "#1d2021",
-            inactive_tab_edge = "#3c3836",
-            active_tab = {
-                bg_color = "#3c3836",
-                fg_color = "#ebdbb2",
-            },
-            inactive_tab = {
-                bg_color = "#1d2021",
-                fg_color = "#665c54",
-            },
-            inactive_tab_hover = {
-                bg_color = "#3c3836",
-                fg_color = "#ebdbb2",
-            },
-            new_tab = {
-                bg_color = "#1d2021",
-                fg_color = "#665c54",
-            },
-            new_tab_hover = {
-                bg_color = "#3c3836",
-                fg_color = "#ebdbb2",
-            },
-        },
-    },
-}
-
-config.color_scheme = "gruvbox-custom"
+-- Color scheme (matches Windows Terminal's CGA built-in scheme).
+config.color_scheme = "CGA"
 
 -- Font settings
 config.font = wezterm.font("Moralerspace Neon HWJPDOC")
 config.font_size = 11.0
 config.line_height = 1.15
 config.cell_width = 1.0
+
+-- Use the font's own Powerline / box-drawing glyphs instead of WezTerm's
+-- built-in renderings; the built-ins are vertically centered differently than
+-- Moralerspace's Nerd Font glyphs, which makes starship's separators jitter.
+config.custom_block_glyphs = false
 
 -- WebGpu renders text more sharply than the legacy OpenGL front end on Windows.
 config.front_end = "WebGpu"

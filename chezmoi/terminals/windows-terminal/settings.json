@@ -248,7 +248,7 @@
       },
       "useAcrylic": true,
       "opacity": 85,
-      "colorScheme": "One Half Dark",
+      "colorScheme": "CGA",
       "cursorShape": "bar",
       "padding": "8, 8, 8, 8"
     },
