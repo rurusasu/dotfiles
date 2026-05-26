@@ -68,3 +68,11 @@ map("t", "<C-h>", "<C-\\><C-n>:TmuxNavigateLeft<cr>", { desc = "Go to left windo
 map("t", "<C-j>", "<C-\\><C-n>:TmuxNavigateDown<cr>", { desc = "Go to lower window" })
 map("t", "<C-k>", "<C-\\><C-n>:TmuxNavigateUp<cr>", { desc = "Go to upper window" })
 map("t", "<C-l>", "<C-\\><C-n>:TmuxNavigateRight<cr>", { desc = "Go to right window" })
+
+-- Move any :terminal to the bottom automatically
+vim.api.nvim_create_autocmd("TermOpen", {
+    callback = function()
+        vim.cmd("wincmd J")
+        vim.cmd("resize 15")
+    end,
+})
