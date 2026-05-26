@@ -294,9 +294,20 @@ return {
                 end,
                 desc = "Git log (file)",
             },
+            {
+                "<leader>tt",
+                function()
+                    Snacks.terminal.toggle(nil, {
+                        win = { position = "bottom", height = 0.3 },
+                    })
+                end,
+                mode = { "n", "t" },
+                desc = "Toggle bottom terminal",
+            },
         },
         opts = {
             lazygit = { enabled = true },
+            terminal = { enabled = true },
         },
     },
 
@@ -369,7 +380,7 @@ return {
         },
         opts = {
             win = {
-                layout = "float",
+                layout = "right",
             },
             cli = {
                 mux = {
