@@ -408,10 +408,10 @@ return {
             },
         },
         opts = {
-            win = {
-                layout = "right",
-            },
             cli = {
+                win = {
+                    layout = "right",
+                },
                 mux = {
                     backend = "tmux",
                     enabled = false,
