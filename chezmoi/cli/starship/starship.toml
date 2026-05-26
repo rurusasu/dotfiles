@@ -29,6 +29,7 @@ truncate_to_repo = true
 
 [git_branch]
 symbol = " "
+format = "on [$symbol$branch]($style) "
 
 [git_status]
 ahead = ""
