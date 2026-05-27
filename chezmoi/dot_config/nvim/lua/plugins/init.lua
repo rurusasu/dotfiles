@@ -426,10 +426,7 @@ return {
             cli = {
                 mux = {
                     backend = "tmux",
-                    -- tmux が PATH にある時のみ有効化。Windows ネイティブ nvim や
-                    -- tmux 未インストール環境では terminal backend にフォールバック
-                    -- する (= sidekick の session/init.lua:124-128 と同じ判定)。
-                    enabled = vim.fn.executable("tmux") == 1,
+                    enabled = false,
                 },
                 tools = vim.fn.has("unix") == 1 and {
                     claude = { cmd = { "env", "-u", "NVIM", "claude" } },
