@@ -372,14 +372,23 @@ return {
             {
                 "<leader>aa",
                 function()
-                    require("sidekick.cli").toggle({ name = "claude" })
+                    -- external = true は他 tmux セッションで起動済みの CLI。
+                    -- 検出されると toggle 対象が曖昧になり画面に出ないので除外し、
+                    -- 常にローカルの claude を相手にする。
+                    require("sidekick.cli").toggle({
+                        name = "claude",
+                        focus = true,
+                        filter = function(state)
+                            return not state.external
+                        end,
+                    })
                 end,
-                desc = "Sidekick toggle Claude (default)",
+                desc = "Sidekick toggle Claude (local only)",
             },
             {
                 "<leader>as",
                 function()
-                    require("sidekick.cli").select()
+                    require("sidekick.cli").select({ focus = true })
                 end,
                 desc = "Sidekick select CLI",
             },
@@ -426,6 +435,8 @@ return {
             cli = {
                 win = {
                     layout = "right",
+                    -- split.width はターミナル幅より大きいと bottom にフォールバックする。
+                    -- デフォルト (80 cols) のままにしておき、必要なら手元で resize する。
                 },
                 mux = {
                     backend = "tmux",
