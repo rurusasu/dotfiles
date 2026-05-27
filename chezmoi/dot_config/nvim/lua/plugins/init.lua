@@ -375,7 +375,14 @@ return {
                     -- show() は attach: true, show: true で呼ぶので、
                     -- 既存があれば再表示、なければ spawn して right split で開く。
                     -- toggle() は terminal が無いと早期 return するため新規起動できない。
-                    require("sidekick.cli").show({ name = "claude", focus = true })
+                    -- external を除外して他 tmux セッションの Claude に誤 attach しない。
+                    require("sidekick.cli").show({
+                        name = "claude",
+                        focus = true,
+                        filter = function(state)
+                            return not state.external
+                        end,
+                    })
                 end,
                 desc = "Sidekick show Claude (right pane)",
             },
