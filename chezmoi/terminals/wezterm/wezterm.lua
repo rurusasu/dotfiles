@@ -100,20 +100,18 @@ config.keys = {
     { key = "Space", mods = "LEADER", action = act.QuickSelect },
     { key = "F11", action = act.ToggleFullScreen },
 
-    -- Disable all default font size bindings
+    -- Disable default font size bindings except Ctrl+Shift+{+/-/0}
     { key = "+", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "-", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "0", mods = "CTRL", action = act.DisableDefaultAssignment },
-    { key = "+", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
-    { key = "-", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
-    { key = "0", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "\\", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
 
-    -- Font size via LEADER (Ctrl+Space then +/-/0)
-    { key = "+", mods = "LEADER", action = act.IncreaseFontSize },
-    { key = "-", mods = "LEADER", action = act.DecreaseFontSize },
-    { key = "0", mods = "LEADER", action = act.ResetFontSize },
+    -- Font size via Ctrl+Shift+{+/-/0}
+    { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
+    { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
+    { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
 
     -- Tab numbers
     { key = "1", mods = "LEADER", action = act.ActivateTab(0) },
