@@ -337,6 +337,16 @@ return {
                 mode = { "n", "t" },
                 desc = "Toggle bottom terminal",
             },
+            {
+                "<leader>tf",
+                function()
+                    -- snacks.terminal の position = "float" が bottom に化ける問題
+                    -- を避けるため、純粋 nvim API で実装した自前 float terminal を使う。
+                    require("config.float_term").toggle()
+                end,
+                mode = { "n", "t" },
+                desc = "Toggle floating terminal",
+            },
         },
         opts = {
             lazygit = { enabled = true },
