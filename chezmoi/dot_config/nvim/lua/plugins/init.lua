@@ -49,6 +49,21 @@ return {
                     end
                 end,
             })
+            -- WSL の /mnt/ (9p) では inotify が発火しないため
+            -- watch_for_changes (fs_event ベース) が機能しない。
+            -- フォーカス復帰時に限って手動 refresh で代替する。
+            -- BufEnter は使わない: oil 自身の `-` ナビゲーションで新 buffer を
+            -- 開くたびに refresh が走ると buffer が空になるため。
+            vim.api.nvim_create_autocmd("FocusGained", {
+                group = vim.api.nvim_create_augroup("OilRefreshFallback", { clear = true }),
+                callback = function()
+                    if vim.bo.filetype == "oil" then
+                        pcall(function()
+                            require("oil.actions").refresh.callback()
+                        end)
+                    end
+                end,
+            })
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
             if vim.fn.has("win32") == 1 and vim.fn.executable("wmic") == 0 then
                 local files = require("oil.adapters.files")
