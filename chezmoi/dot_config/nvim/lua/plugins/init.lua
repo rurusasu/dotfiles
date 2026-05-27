@@ -372,19 +372,9 @@ return {
             {
                 "<leader>aa",
                 function()
-                    -- show() は attach: true, show: true で呼ぶので、
-                    -- 既存があれば再表示、なければ spawn して right split で開く。
-                    -- toggle() は terminal が無いと早期 return するため新規起動できない。
-                    -- external を除外して他 tmux セッションの Claude に誤 attach しない。
-                    require("sidekick.cli").show({
-                        name = "claude",
-                        focus = true,
-                        filter = function(state)
-                            return not state.external
-                        end,
-                    })
+                    require("sidekick.cli").toggle({ name = "claude", focus = true })
                 end,
-                desc = "Sidekick show Claude (right pane)",
+                desc = "Sidekick toggle Claude",
             },
             {
                 "<leader>as",
@@ -434,29 +424,37 @@ return {
         },
         opts = {
             cli = {
-                win = {
-                    layout = "right",
-                    -- split.width はターミナル幅より大きいと bottom にフォールバックする。
-                    -- デフォルト (80 cols) のままにしておき、必要なら手元で resize する。
-                },
                 mux = {
                     backend = "tmux",
-                    enabled = false,
+                    enabled = true,
                 },
-                tools = vim.tbl_extend("force", {
-                    aider = false,
-                    amazon_q = false,
-                    copilot = false,
-                    crush = false,
-                    cursor = false,
-                    grok = false,
-                    pi = false,
-                    qwen = false,
-                }, vim.fn.has("unix") == 1 and {
+                tools = vim.fn.has("unix") == 1 and {
                     claude = { cmd = { "env", "-u", "NVIM", "claude" } },
-                } or {}),
+                } or nil,
             },
         },
+        config = function(_, opts)
+            require("sidekick").setup(opts)
+            -- sidekick の default cli.win.layout = "right" でも環境次第で
+            -- bottom split に化けるため、CLI window が現れたら強制的に最右
+            -- vsplit に移動する workaround。本来不要だが暫定で入れる。
+            vim.api.nvim_create_autocmd("WinNew", {
+                group = vim.api.nvim_create_augroup("SidekickForceRight", { clear = true }),
+                callback = function()
+                    vim.schedule(function()
+                        for _, win in ipairs(vim.api.nvim_list_wins()) do
+                            if vim.api.nvim_win_is_valid(win) and vim.w[win].sidekick_cli then
+                                pcall(function()
+                                    vim.api.nvim_set_current_win(win)
+                                    vim.cmd("wincmd L")
+                                end)
+                                return
+                            end
+                        end
+                    end)
+                end,
+            })
+        end,
     },
 
     -- Tmux pane navigation (C-h/j/k/l shared with nvim windows)
