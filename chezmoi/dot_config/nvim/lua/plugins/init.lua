@@ -372,10 +372,11 @@ return {
             {
                 "<leader>aa",
                 function()
-                    -- external = true は他 tmux セッションで起動済みの CLI。
-                    -- 検出されると toggle 対象が曖昧になり画面に出ないので除外し、
-                    -- 常にローカルの claude を相手にする。
-                    require("sidekick.cli").toggle({
+                    -- show() は attach: true, show: true で呼ぶので、
+                    -- 既存があれば再表示、なければ spawn して right split で開く。
+                    -- toggle() は terminal が無いと早期 return するため新規起動できない。
+                    -- external を除外して他 tmux セッションの Claude に誤 attach しない。
+                    require("sidekick.cli").show({
                         name = "claude",
                         focus = true,
                         filter = function(state)
@@ -383,7 +384,7 @@ return {
                         end,
                     })
                 end,
-                desc = "Sidekick toggle Claude (local only)",
+                desc = "Sidekick show Claude (right pane)",
             },
             {
                 "<leader>as",
