@@ -49,21 +49,11 @@ return {
                     end
                 end,
             })
-            -- WSL の /mnt/ (9p) では inotify が発火しないため
-            -- watch_for_changes (fs_event ベース) が機能しない。
-            -- フォーカス復帰時に限って手動 refresh で代替する。
-            -- BufEnter は使わない: oil 自身の `-` ナビゲーションで新 buffer を
-            -- 開くたびに refresh が走ると buffer が空になるため。
-            vim.api.nvim_create_autocmd("FocusGained", {
-                group = vim.api.nvim_create_augroup("OilRefreshFallback", { clear = true }),
-                callback = function()
-                    if vim.bo.filetype == "oil" then
-                        pcall(function()
-                            require("oil.actions").refresh.callback()
-                        end)
-                    end
-                end,
-            })
+            -- (削除: PR #263 で入れた FocusGained refresh は user の select 操作と
+            -- 衝突して `cache.lua:138: Entry X missing parent url` を起こす race
+            -- condition があったため撤回。WSL /mnt の外部変更反映は手動 `<C-l>`
+            -- (oil default の refresh) で対応する。)
+
             -- wmic was removed in Windows 11; patch drive listing to use PowerShell.
             if vim.fn.has("win32") == 1 and vim.fn.executable("wmic") == 0 then
                 local files = require("oil.adapters.files")
@@ -351,7 +341,27 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
-            picker = { enabled = true },
+            picker = {
+                enabled = true,
+                -- snacks picker から Alt+a で選択中の項目を sidekick の
+                -- 現在の AI CLI セッションに送る (ファイルパス / grep ヒット /
+                -- 複数選択 / 位置情報まで自動付与される)。
+                actions = {
+                    sidekick_send = function(...)
+                        return require("sidekick.cli.picker.snacks").send(...)
+                    end,
+                },
+                win = {
+                    input = {
+                        keys = {
+                            ["<a-a>"] = {
+                                "sidekick_send",
+                                mode = { "n", "i" },
+                            },
+                        },
+                    },
+                },
+            },
         },
     },
 

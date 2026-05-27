@@ -15,8 +15,11 @@ function M.sync_cwd_to_terminal()
     if vim.bo.filetype == "oil" then
         local ok, oil = pcall(require, "oil")
         if ok then
-            local oil_dir = oil.get_current_dir()
-            if oil_dir and oil_dir ~= "" then
+            -- Windows のドライブ root (C:\) など、oil の get_current_dir が
+            -- 内部で `attempt to index local 'drive' (a nil value)` を投げる
+            -- ケースがあるため pcall で吸収し、フォールバックで getcwd() を使う。
+            local got_dir, oil_dir = pcall(oil.get_current_dir)
+            if got_dir and oil_dir and oil_dir ~= "" then
                 emit_osc7(oil_dir)
                 return
             end
