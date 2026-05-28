@@ -134,7 +134,8 @@ in
       # Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
       # container to provide nvim + tmux. See bootstrap.sh at repo root.
       dcnvim() {
-        local workspace="''${1:-$PWD}"
+        local workspace
+        workspace="$(realpath -e "''${1:-$PWD}" 2>/dev/null || readlink -f "''${1:-$PWD}")"
         if ! command -v devcontainer >/dev/null 2>&1; then
           echo "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli" >&2
           return 127
