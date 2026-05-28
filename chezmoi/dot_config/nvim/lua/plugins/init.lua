@@ -247,6 +247,21 @@ return {
         },
     },
 
+    -- Image rendering via Kitty graphics protocol (used by snacks picker preview)
+    {
+        "3rd/image.nvim",
+        build = false,
+        opts = {
+            backend = "kitty",
+            processor = "magick_cli",
+            max_width_window_percentage = 100,
+            max_height_window_percentage = 80,
+            editor_only_render_when_focused = true,
+            hijack_file_patterns = { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.bmp", "*.tiff" },
+            integrations = { markdown = { enabled = false } },
+        },
+    },
+
     -- UI utilities + lazygit float
     {
         "folke/snacks.nvim",
@@ -357,6 +372,7 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
+            image = { enabled = true },
             picker = {
                 enabled = true,
                 -- snacks picker から Alt+a で選択中の項目を sidekick の
@@ -379,6 +395,33 @@ return {
                 },
             },
         },
+        init = function()
+            -- PDF: pdftoppm で先頭ページを PNG に変換して image.nvim で表示
+            -- VeryLazy 後に snacks.picker.preview が確実にロードされてからパッチ
+            vim.api.nvim_create_autocmd("User", {
+                pattern = "VeryLazy",
+                once = true,
+                callback = function()
+                    local ok, preview = pcall(require, "snacks.picker.preview")
+                    if not ok or not preview.file then
+                        return
+                    end
+                    local orig_file = preview.file
+                    preview.file = function(ctx)
+                        local file = ctx.item and (ctx.item.file or ctx.item.path or "")
+                        if file:match("%.pdf$") then
+                            local tmp = vim.fn.tempname()
+                            vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            local patched = vim.tbl_deep_extend("force", ctx, {
+                                item = vim.tbl_extend("force", ctx.item, { file = tmp .. ".png" }),
+                            })
+                            return preview.image and preview.image(patched) or false
+                        end
+                        return orig_file(ctx)
+                    end
+                end,
+            })
+        end,
     },
 
     -- AI sidekick: AI CLI terminal (claude/codex/gemini/opencode)
