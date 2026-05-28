@@ -156,7 +156,7 @@ let
       category = "dev";
     };
     poppler-utils = {
-      pkg = pkgs.poppler_utils;
+      pkg = pkgs.poppler-utils;
       winget = null; # Windows は ImageMagick + Ghostscript で代替
       category = "dev";
     };
