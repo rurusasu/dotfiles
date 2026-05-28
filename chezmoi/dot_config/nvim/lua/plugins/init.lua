@@ -357,7 +357,7 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
-            image = { enabled = true },
+            image = { enabled = true, force = true },
             picker = {
                 enabled = true,
                 -- snacks picker から Alt+a で選択中の項目を sidekick の
