@@ -21,7 +21,9 @@ config.color_scheme = "Catppuccin Mocha"
 -- Font settings
 config.font = wezterm.font("Moralerspace Neon HWJPDOC")
 config.font_size = 11.0
-config.line_height = 1.15
+-- 1.15 だと Moralerspace HWJPDOC の descender (g/j/p/y 等) が cell の下端で
+-- 切れて見えるため 1.25 に上げて余白を確保。
+config.line_height = 1.25
 config.cell_width = 1.0
 
 -- WebGpu renders text more sharply than the legacy OpenGL front end on Windows.
@@ -107,6 +109,7 @@ config.keys = {
     { key = "0", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
     { key = "\\", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "w", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
 
     -- Font size via Ctrl+Shift+{+/-/0}
     { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },

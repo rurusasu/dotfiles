@@ -64,12 +64,31 @@ end
 map({ "n", "t" }, "<M-+>", fterm_grow, { desc = "Float term: grow (+5%)" })
 map({ "n", "t" }, "<M-_>", fterm_shrink, { desc = "Float term: shrink (-5%)" })
 
--- Telescope
-map("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Find files" })
-map("n", "<leader>fg", "<cmd>Telescope live_grep<cr>", { desc = "Live grep" })
-map("n", "<leader>fb", "<cmd>Telescope buffers<cr>", { desc = "Buffers" })
-map("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Help tags" })
-map("n", "<leader>fr", "<cmd>Telescope oldfiles<cr>", { desc = "Recent files" })
+-- Move floating window (Alt+Shift+HJKL)
+local function move_float(dr, dc)
+    local win = vim.api.nvim_get_current_win()
+    local cfg = vim.api.nvim_win_get_config(win)
+    if cfg.relative == "" then
+        vim.notify("move_float: not a float (relative='')", vim.log.levels.WARN)
+        return
+    end
+    cfg.row = (cfg.row or 0) + dr
+    cfg.col = (cfg.col or 0) + dc
+    vim.api.nvim_win_set_config(win, cfg)
+    vim.notify(("move_float: row=%.0f col=%.0f"):format(cfg.row, cfg.col), vim.log.levels.INFO)
+end
+map("t", "<A-H>", function()
+    move_float(0, -3)
+end, { desc = "Float: move left" })
+map("t", "<A-J>", function()
+    move_float(3, 0)
+end, { desc = "Float: move down" })
+map("t", "<A-K>", function()
+    move_float(-3, 0)
+end, { desc = "Float: move up" })
+map("t", "<A-L>", function()
+    move_float(0, 3)
+end, { desc = "Float: move right" })
 
 -- Unified window management (same characters as tmux/terminal layers)
 map("n", "<leader>\\", "<cmd>vsplit<cr>", { desc = "Vertical split" })
