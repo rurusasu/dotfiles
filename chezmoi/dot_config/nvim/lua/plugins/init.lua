@@ -211,21 +211,6 @@ return {
         },
     },
 
-    -- Image rendering via Kitty graphics protocol (used by snacks picker preview)
-    {
-        "3rd/image.nvim",
-        build = false,
-        opts = {
-            backend = "kitty",
-            processor = "magick_cli",
-            max_width_window_percentage = 100,
-            max_height_window_percentage = 80,
-            editor_only_render_when_focused = true,
-            hijack_file_patterns = { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.bmp", "*.tiff" },
-            integrations = { markdown = { enabled = false } },
-        },
-    },
-
     -- UI utilities + lazygit float
     {
         "folke/snacks.nvim",
