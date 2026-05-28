@@ -45,7 +45,8 @@ Describe 'フォント設定の一貫性' {
             # .git, .worktrees, ノードモジュール等を除外して repo 配下を走査
             Push-Location $script:repoRoot
             try {
-                $matches = git grep -l -I -E $script:legacyFontPattern 2>$null
+                # `$matches` は PowerShell の自動変数 (-match で書き込まれる) なので避ける
+                $grepHits = git grep -l -I -E $script:legacyFontPattern 2>$null
             }
             finally {
                 Pop-Location
@@ -53,7 +54,7 @@ Describe 'フォント設定の一貫性' {
 
             # このテストファイル自身は legacyFontPattern を文字列として持つので除外
             $thisFileRel = "scripts/powershell/tests/chezmoi/FontConsistency.Tests.ps1"
-            $offenders = @($matches | Where-Object { $_ -and $_ -ne $thisFileRel })
+            $offenders = @($grepHits | Where-Object { $_ -and $_ -ne $thisFileRel })
 
             $offenders | Should -BeNullOrEmpty -Because (
                 "Moralerspace -> UDEV Gothic 移行漏れ。" +
