@@ -34,6 +34,11 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
 [data]
     op_account_personal = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
     op_account_work = "FXVKKR2KWFCMHGMEA7HQYK6XRE"
+    [data.github]
+        # GitHub username — used by dot_config/devcontainer/devcontainer.json.tmpl
+        # to build dotfiles repository URL. Hardcoded; chezmoi data does not have
+        # a clean way to read git config, and value rarely changes per host.
+        username = "rurusasu"
 
 [scriptEnv]
     OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
