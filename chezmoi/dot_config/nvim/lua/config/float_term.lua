@@ -1,9 +1,19 @@
--- Floating terminal toggle. snacks.terminal の position = "float" が機能しない /
--- vim.fn.termopen() が float window を split に書き換える環境への対策として、
--- 純粋 nvim API + termopen 後に nvim_win_set_config で float 構成を再適用する。
+-- Floating terminal toggle + dynamic resize.
+-- snacks.terminal の position = "float" が機能しない / vim.fn.termopen() が
+-- float window を split に書き換える環境への対策として、純粋 nvim API +
+-- termopen 後に nvim_win_set_config で float 構成を再適用する。
+-- 寸法は lua/config/window_styles.lua の共通 SSOT を参照し、現セッション中の
+-- ratio 上書きはモジュール local state に保持する (toggle hide でも維持される)。
+local styles = require("config.window_styles")
+
 local M = {}
 
-local state = { buf = nil, win = nil }
+-- state.ratio が nil の間は styles.float.width に追従する。
+local state = { buf = nil, win = nil, ratio = nil }
+
+local STEP = 0.05
+local MIN_RATIO = 0.3
+local MAX_RATIO = 0.98
 
 local function shell_cmd()
     if vim.fn.has("win32") == 1 then
@@ -12,17 +22,28 @@ local function shell_cmd()
     return vim.o.shell
 end
 
+local function current_ratio()
+    return state.ratio or styles.float.width
+end
+
 local function float_config()
-    local width = math.floor(vim.o.columns * 0.85)
-    local height = math.floor(vim.o.lines * 0.85)
+    local r = current_ratio()
+    local width = math.floor(vim.o.columns * r)
+    local height = math.floor(vim.o.lines * r)
     return {
         relative = "editor",
         row = math.floor((vim.o.lines - height) / 2),
         col = math.floor((vim.o.columns - width) / 2),
         width = width,
         height = height,
-        border = "rounded",
+        border = styles.float.border,
     }
+end
+
+local function apply_size()
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+        pcall(vim.api.nvim_win_set_config, state.win, float_config())
+    end
 end
 
 function M.toggle()
@@ -67,5 +88,26 @@ function M.toggle()
 
     vim.cmd("startinsert")
 end
+
+function M.grow()
+    state.ratio = math.min(current_ratio() + STEP, MAX_RATIO)
+    apply_size()
+end
+
+function M.shrink()
+    state.ratio = math.max(current_ratio() - STEP, MIN_RATIO)
+    apply_size()
+end
+
+function M.reset()
+    state.ratio = nil
+    apply_size()
+end
+
+-- 端末リサイズ時に開いている float terminal を新しい画面寸法に合わせて再配置。
+vim.api.nvim_create_autocmd("VimResized", {
+    group = vim.api.nvim_create_augroup("FloatTermResize", { clear = true }),
+    callback = apply_size,
+})
 
 return M
