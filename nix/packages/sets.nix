@@ -371,6 +371,11 @@ let
       winget = null;
       category = "lsp";
     };
+    stylua = {
+      pkg = pkgs.stylua;
+      winget = null;
+      category = "lsp";
+    };
     marksman = {
       pkg = pkgs.marksman;
       winget = null;
