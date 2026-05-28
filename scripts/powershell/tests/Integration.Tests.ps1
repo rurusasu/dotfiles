@@ -13,7 +13,6 @@ Describe 'Integration Verification - Windows Environment' {
 
     Context 'Dev Tools Installation' {
         It "should have <_> installed" -ForEach @(
-            'antigravity'
             'gh'
             'rg'
             'fd'

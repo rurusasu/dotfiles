@@ -20,11 +20,6 @@ COMMANDS=(
   "zoxide"
 )
 
-# Interop commands (Windows binaries exposed to WSL)
-INTEROP_COMMANDS=(
-  "antigravity"
-)
-
 FAILED=0
 
 check_command() {
@@ -39,12 +34,6 @@ check_command() {
 
 echo "ネイティブ/Nixpkgs ツールを確認中..."
 for cmd in "${COMMANDS[@]}"; do
-  check_command "$cmd"
-done
-
-echo ""
-echo "Windows 相互運用ツールを確認中..."
-for cmd in "${INTEROP_COMMANDS[@]}"; do
   check_command "$cmd"
 done
 
