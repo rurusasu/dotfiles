@@ -7,12 +7,19 @@
 #
 #   1. tmux + git + curl + tar via apt (Debian/Ubuntu base only).
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
-#   3. Symlink chezmoi/editors/nvim → ~/.config/nvim.
-#   4. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
+#   3. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
+#      so the container gets the same dotfiles as the host.
+#   4. claude code CLI install (best effort, via npm).
+#   5. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
 #
 # Idempotent — safe to re-run on every DevcontainerUp.
 
 set -euo pipefail
+
+# Ensure user-local bin paths are on PATH for this script's own checks
+# (have chezmoi / have claude / have nvim). Future shells get these from
+# the rc wiring further down; this is for the current process only.
+export PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
