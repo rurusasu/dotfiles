@@ -19,6 +19,9 @@ opt.smartcase = true
 opt.hlsearch = true
 opt.incsearch = true
 
+-- Mouse: enable in all modes so floating windows can be dragged by title bar
+opt.mouse = "a"
+
 -- UI
 opt.termguicolors = true
 opt.signcolumn = "yes"

@@ -10,7 +10,9 @@ local M = {}
 M.float = {
     width = 0.85,
     height = 0.85,
-    border = "rounded",
+    -- "rounded" (╭╮╰╯) は line_height > 1 の WezTerm で行間に隙間が
+    -- 出て border がガタつくため、cell 連続性が安定する "single" を採用。
+    border = "single",
 }
 
 return M
