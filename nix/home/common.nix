@@ -122,6 +122,8 @@ in
       zle -N __fzf_history_widget
       bindkey '^[r' __fzf_history_widget
 
+      ${builtins.readFile ./dcnvim-session-name.sh}
+
       # devcontainer: enter the project's devcontainer in a tmux session
       # and start nvim inside it. Terminal-agnostic (works in WezTerm,
       # Windows Terminal, Warp, etc.). Re-running attaches to the existing
@@ -141,23 +143,29 @@ in
           echo "dcnvim: no .devcontainer/ or .devcontainer.json under $workspace" >&2
           return 1
         fi
+        local ghq_root=""
+        command -v ghq >/dev/null 2>&1 && ghq_root="$(ghq root 2>/dev/null || true)"
+        local session_name
+        session_name="$(_dcnvim_session_name "$workspace" "$ghq_root")"
         # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so
         # the container's just-bootstrapped ~/.local/bin/nvim is found.
         # nvim/tmux presence is checked because tmux exits 0 if its child
         # command is missing, masking the failure to the host.
+        # session name is single-quoted for bash; ghq slug basename is safe
+        # against shell metacharacters.
         devcontainer exec --workspace-folder "$workspace" -- \
-          bash -lc '
-            export PATH="$HOME/.local/bin:$PATH"
+          bash -lc "
+            export PATH=\"\$HOME/.local/bin:\$PATH\"
             command -v nvim >/dev/null 2>&1 || {
-              echo "dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+              echo 'dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
               exit 127
             }
             command -v tmux >/dev/null 2>&1 || {
-              echo "dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+              echo 'dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
               exit 127
             }
-            tmux new -A -s main "nvim ."
-          '
+            tmux new -A -s '$session_name' 'nvim .'
+          "
       }
 
       # tm: ghq + fzf でリポジトリ選択 → tmux セッション作成/切替
