@@ -1,0 +1,10 @@
+{
+  // @devcontainers/cli が `devcontainer up` 時に dotfiles リポを
+  // ~/.dotfiles に clone し、installCommand を実行する。
+  // 実行内容: dotfiles repo 直下の bootstrap.sh (chezmoi apply +
+  // claude code install + nvim/tmux 等の最低限)。
+  // 詳細: docs/superpowers/specs/2026-05-28-devcontainer-nvim-tmux-design.md
+  "dotfiles.repository": "{{ printf "https://github.com/%s/dotfiles" .github.username }}",
+  "dotfiles.targetPath": "~/.dotfiles",
+  "dotfiles.installCommand": "bootstrap.sh"
+}
