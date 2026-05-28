@@ -140,11 +140,16 @@ let
       winget = "JesseDuffield.lazygit";
       category = "dev";
     };
+    bats = {
+      pkg = pkgs.bats;
+      winget = null; # Windows 対応せず (NixOS/WSL のみ)
+      category = "dev";
+    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
       pkg = pkgs.wezterm;
-      winget = "wez.wezterm";
+      winget = "wez.wezterm.nightly";
       category = "terminal";
     };
     tmux = {

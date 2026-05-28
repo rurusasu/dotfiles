@@ -149,9 +149,13 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
 
 # devcontainer: enter the project's devcontainer in a tmux session
 # and start nvim inside it. Terminal-agnostic mirror of the zsh/bash
-# `dcnvim` defined in nix/home/common.nix and chezmoi/shells/bashrc.
+# `dcnvim` defined in nix/home/common.nix.
 # Re-running attaches to the existing tmux session so nvim state
 # survives terminal close.
+#
+# Session name policy mirrors `tm` (Linux): if the workspace lives
+# under ghq root, use the slug basename (e.g. ghq/github.com/foo/bar
+# -> "bar"); otherwise fall back to the workspace folder basename.
 #
 # Usage: dcnvim [-Workspace <path>]   # defaults to $PWD
 #
@@ -171,35 +175,84 @@ function dcnvim {
         return
     }
 
+    # Bring container up + inject dotfiles. CLI does not read
+    # ~/.config/devcontainer/devcontainer.json (that's a VS Code extension
+    # config), so dotfiles flags must be passed explicitly. Idempotent.
+    $dotfilesUrl = if ($env:DOTFILES_REPOSITORY_URL) {
+        $env:DOTFILES_REPOSITORY_URL
+    } else {
+        'https://github.com/rurusasu/dotfiles'
+    }
+    & devcontainer up `
+        --workspace-folder $Workspace `
+        --dotfiles-repository $dotfilesUrl `
+        --dotfiles-install-command bootstrap.sh | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "dcnvim: devcontainer up failed (exit $LASTEXITCODE)"
+        return
+    }
+
+    # Resolve session name. ghq slug basename if under ghq root, else
+    # workspace basename. Mirrors _dcnvim_session_name in
+    # nix/home/dcnvim-session-name.sh.
+    $sessionName = $null
+    if (Get-Command ghq -ErrorAction SilentlyContinue) {
+        $ghqRoot = (& ghq root 2>$null | Select-Object -First 1)
+        if ($ghqRoot) {
+            $ghqRoot = $ghqRoot.TrimEnd('/', '\')
+            $wsAbs = (Resolve-Path -LiteralPath $Workspace).Path.TrimEnd('/', '\')
+            $wsNorm = $wsAbs -replace '\\', '/'
+            $rootNorm = $ghqRoot -replace '\\', '/'
+            if ($wsNorm.StartsWith("$rootNorm/")) {
+                $slug = $wsNorm.Substring($rootNorm.Length + 1)
+                $sessionName = ($slug -split '/')[-1]
+            }
+        }
+    }
+    if (-not $sessionName) {
+        $wsAbs = (Resolve-Path -LiteralPath $Workspace).Path
+        $sessionName = Split-Path -Leaf $wsAbs.TrimEnd('/', '\')
+    }
+
     # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so the
     # container's just-bootstrapped ~/.local/bin/nvim is found. nvim/tmux
     # presence is checked explicitly because tmux exits 0 if its child
     # command is missing, masking the failure to the host.
-    $payload = @'
-export PATH="$HOME/.local/bin:$PATH"
+    # Use double-quoted here-string so $sessionName interpolates; escape
+    # bash variables with backtick so they stay literal for the shell.
+    $payload = @"
+export PATH="`$HOME/.local/bin:`$PATH"
 command -v nvim >/dev/null 2>&1 || {
-  echo "dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+  echo 'dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
   exit 127
 }
 command -v tmux >/dev/null 2>&1 || {
-  echo "dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+  echo 'dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
   exit 127
 }
-tmux new -A -s main "nvim ."
-'@
+tmux new -A -s '$sessionName' 'nvim .'
+"@
 
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
 }
 
-# tm: ghq + fzf でリポジトリ選択 → cd (Windows 版: tmux なし)
+# tm: ghq + fzf でリポジトリ選択 → cd。
+# 選択先に .devcontainer/ または .devcontainer.json があれば
+# 自動で dcnvim を起動して container 開発に入る。
+# Linux 版 tm (nix/home/common.nix) は host tmux に attach するが、
+# Windows host には tmux が無いため、container 開発の入口として動く。
 function tm {
     if (-not (Get-Command ghq -ErrorAction SilentlyContinue)) {
         Write-Error "tm: ghq not found. Install with: winget install x-motemen.ghq"
         return
     }
-    $result = ghq list --full-path | fzf
-    if ($result) {
-        Set-Location -Path $result
+    $repoSlug = ghq list | fzf
+    if (-not $repoSlug) { return }
+    $repoDir = Join-Path (ghq root) $repoSlug
+    Set-Location -Path $repoDir
+
+    if ((Test-Path .devcontainer) -or (Test-Path .devcontainer.json)) {
+        dcnvim
     }
 }
 

@@ -122,6 +122,8 @@ in
       zle -N __fzf_history_widget
       bindkey '^[r' __fzf_history_widget
 
+      ${builtins.readFile ./dcnvim-session-name.sh}
+
       # devcontainer: enter the project's devcontainer in a tmux session
       # and start nvim inside it. Terminal-agnostic (works in WezTerm,
       # Windows Terminal, Warp, etc.). Re-running attaches to the existing
@@ -132,7 +134,8 @@ in
       # Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
       # container to provide nvim + tmux. See bootstrap.sh at repo root.
       dcnvim() {
-        local workspace="''${1:-$PWD}"
+        local workspace
+        workspace="$(realpath -e "''${1:-$PWD}" 2>/dev/null || readlink -f "''${1:-$PWD}")"
         if ! command -v devcontainer >/dev/null 2>&1; then
           echo "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli" >&2
           return 127
@@ -141,23 +144,42 @@ in
           echo "dcnvim: no .devcontainer/ or .devcontainer.json under $workspace" >&2
           return 1
         fi
+        # Bring container up + inject dotfiles. CLI does not read
+        # ~/.config/devcontainer/devcontainer.json (that's a VS Code
+        # extension config), so dotfiles flags must be passed explicitly.
+        # Idempotent: skips on a container already up.
+        local dotfiles_url="''${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles}"
+        devcontainer up \
+          --workspace-folder "$workspace" \
+          --dotfiles-repository "$dotfiles_url" \
+          --dotfiles-install-command bootstrap.sh \
+          >/dev/null || {
+            echo "dcnvim: devcontainer up failed" >&2
+            return 1
+          }
+        local ghq_root=""
+        command -v ghq >/dev/null 2>&1 && ghq_root="$(ghq root 2>/dev/null || true)"
+        local session_name
+        session_name="$(_dcnvim_session_name "$workspace" "$ghq_root")"
         # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so
         # the container's just-bootstrapped ~/.local/bin/nvim is found.
         # nvim/tmux presence is checked because tmux exits 0 if its child
         # command is missing, masking the failure to the host.
+        # session name is single-quoted for bash; ghq slug basename is safe
+        # against shell metacharacters.
         devcontainer exec --workspace-folder "$workspace" -- \
-          bash -lc '
-            export PATH="$HOME/.local/bin:$PATH"
+          bash -lc "
+            export PATH=\"\$HOME/.local/bin:\$PATH\"
             command -v nvim >/dev/null 2>&1 || {
-              echo "dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+              echo 'dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
               exit 127
             }
             command -v tmux >/dev/null 2>&1 || {
-              echo "dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
+              echo 'dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
               exit 127
             }
-            tmux new -A -s main "nvim ."
-          '
+            tmux new -A -s '$session_name' 'nvim .'
+          "
       }
 
       # tm: ghq + fzf でリポジトリ選択 → tmux セッション作成/切替

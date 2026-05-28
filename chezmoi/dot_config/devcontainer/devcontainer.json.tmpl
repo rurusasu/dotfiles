@@ -1,0 +1,12 @@
+{
+  // VS Code Dev Containers Extension が devcontainer 起動時に dotfiles リポを
+  // clone し、installCommand を実行する。CLI (@devcontainers/cli) はこの設定を
+  // 読まない (CLI には --dotfiles-* フラグを渡す必要があり、それは dcnvim
+  // 関数側で行う)。
+  // 実行内容: dotfiles repo 直下の bootstrap.sh (chezmoi apply +
+  // claude code install + nvim/tmux 等の最低限)。
+  // 詳細: docs/superpowers/specs/2026-05-28-devcontainer-nvim-tmux-design.md
+  "dotfiles.repository": "{{ printf "https://github.com/%s/dotfiles" (get .github "username" | default "rurusasu") }}",
+  "dotfiles.targetPath": "~/.dotfiles",
+  "dotfiles.installCommand": "bootstrap.sh"
+}

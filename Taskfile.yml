@@ -112,6 +112,11 @@ tasks:
     cmds:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration"
 
+  test:bash:
+    desc: Run bats unit tests for shell helpers
+    cmds:
+      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"
+
   # ===========================================
   # Windows Setup
   # ===========================================
