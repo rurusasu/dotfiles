@@ -546,7 +546,6 @@ lib.mapAttrs (_: names: resolve names) grouped
       "dprint.dprint"
       "hadolint.hadolint"
       "Google.Chrome"
-      "Google.Antigravity"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
       "Microsoft.VisualStudioCode"
