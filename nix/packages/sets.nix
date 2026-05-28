@@ -115,6 +115,11 @@ let
       winget = "x-motemen.ghq";
       category = "dev";
     };
+    gwq = {
+      pkg = import ./gwq/default.nix { inherit pkgs; };
+      winget = null;
+      category = "dev";
+    };
     uv = {
       pkg = pkgs.uv;
       winget = "astral-sh.uv";
