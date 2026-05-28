@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
-# Install MoralerspaceNeonHWJPDOC font for Windows
-# hash: MoralerspaceNeonHWJPDOC v2.0.0
+# Install UDEV Gothic NF font for Windows
+# hash: UDEVGothic_NF v2.2.0
 
 $ErrorActionPreference = "Stop"
 
@@ -16,9 +16,9 @@ public class FontHelper {
 }
 "@
 
-$FontVersion  = "v2.0.0"
-$FontName     = "MoralerspaceNeonHWJPDOC"
-$DownloadUrl  = "https://github.com/yuru7/moralerspace/releases/download/$FontVersion/${FontName}_${FontVersion}.zip"
+$FontVersion  = "v2.2.0"
+$FontName     = "UDEVGothic_NF"
+$DownloadUrl  = "https://github.com/yuru7/udev-gothic/releases/download/$FontVersion/${FontName}_${FontVersion}.zip"
 $TempDir      = Join-Path $env:TEMP "chezmoi-fonts\$FontName"
 $FontsDir     = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
 $RegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
@@ -26,7 +26,7 @@ $RegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 function Test-FontInstalled {
   $key = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
   if ($null -eq $key) { return $false }
-  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "*NeonHWJPDOC*" }).Count -gt 0
+  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "*UDEVGothic*NF*" }).Count -gt 0
 }
 
 if (Test-FontInstalled) {
