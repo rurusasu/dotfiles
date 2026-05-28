@@ -107,6 +107,7 @@ config.keys = {
     { key = "0", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
     { key = "\\", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
+    { key = "w", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
 
     -- Font size via Ctrl+Shift+{+/-/0}
     { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
