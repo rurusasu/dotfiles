@@ -145,6 +145,16 @@ let
       winget = null; # Windows 対応せず (NixOS/WSL のみ)
       category = "dev";
     };
+    imagemagick = {
+      pkg = pkgs.imagemagick;
+      winget = null;
+      category = "dev";
+    };
+    poppler-utils = {
+      pkg = pkgs.poppler_utils;
+      winget = null;
+      category = "dev";
+    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
