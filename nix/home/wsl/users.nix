@@ -36,6 +36,7 @@
 
       home.sessionVariables = {
         _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+        BROWSER = "explorer.exe";
         # fcitx5 GTK_IM_MODULE bridge: Warp runs in Wayland mode but reads these
         # env vars to delegate key events to the fcitx5 daemon via the GTK IM module.
         GTK_IM_MODULE = "fcitx";
