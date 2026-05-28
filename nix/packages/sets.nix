@@ -149,7 +149,7 @@ let
     # ── terminal ──────────────────────────────────────────
     wezterm = {
       pkg = pkgs.wezterm;
-      winget = "wez.wezterm";
+      winget = "wez.wezterm.nightly";
       category = "terminal";
     };
     tmux = {
