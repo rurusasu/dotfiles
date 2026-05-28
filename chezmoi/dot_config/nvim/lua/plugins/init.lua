@@ -242,8 +242,7 @@ return {
                         vim.notify("ghq not found", vim.log.levels.WARN)
                         return
                     end
-                    Snacks.picker.pick("ghq", {
-                        source = "proc",
+                    Snacks.picker.pick("proc", {
                         cmd = "ghq",
                         args = { "list", "--full-path" },
                         title = "ghq repos",

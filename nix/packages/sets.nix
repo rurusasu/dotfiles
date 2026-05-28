@@ -152,7 +152,7 @@ let
     };
     ghostscript = {
       pkg = pkgs.ghostscript;
-      winget = "ArtifexSoftware.GhostScript";
+      winget = null; # winget カタログ未収録 — Windows は https://ghostscript.com から手動インストール
       category = "dev";
     };
     poppler-utils = {
