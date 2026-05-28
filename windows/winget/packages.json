@@ -194,6 +194,9 @@
           "PackageIdentifier": "ImageMagick.ImageMagick"
         },
         {
+          "PackageIdentifier": "oschwartz10612.Poppler"
+        },
+        {
           "PackageIdentifier": "Google.Chrome"
         },
         {
