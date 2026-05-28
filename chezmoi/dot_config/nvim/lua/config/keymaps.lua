@@ -69,13 +69,12 @@ local function move_float(dr, dc)
     local win = vim.api.nvim_get_current_win()
     local cfg = vim.api.nvim_win_get_config(win)
     if cfg.relative == "" then
-        vim.notify("move_float: not a float (relative='')", vim.log.levels.WARN)
         return
     end
     cfg.row = (cfg.row or 0) + dr
     cfg.col = (cfg.col or 0) + dc
     vim.api.nvim_win_set_config(win, cfg)
-    vim.notify(("move_float: row=%.0f col=%.0f"):format(cfg.row, cfg.col), vim.log.levels.INFO)
+    require("config.float_persist").save(win)
 end
 map("t", "<A-H>", function()
     move_float(0, -3)
@@ -108,6 +107,8 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("botright 15split | terminal")
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
+
+require("config.float_persist").setup()
 
 -- Redirect :terminal (typed at start of command line) to :Term.
 -- getcmdpos() guard prevents expansion mid-command (e.g. :edit terminal stays intact).
