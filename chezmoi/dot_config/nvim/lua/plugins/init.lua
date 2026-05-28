@@ -232,9 +232,27 @@ return {
         lazy = false,
         priority = 1000,
         keys = {
-            { "<leader>ff", function() Snacks.picker.files() end, desc = "Find files" },
-            { "<leader>fg", function() Snacks.picker.grep() end, desc = "Live grep" },
-            { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
+            {
+                "<leader>ff",
+                function()
+                    Snacks.picker.files()
+                end,
+                desc = "Find files",
+            },
+            {
+                "<leader>fg",
+                function()
+                    Snacks.picker.grep()
+                end,
+                desc = "Live grep",
+            },
+            {
+                "<leader>fb",
+                function()
+                    Snacks.picker.buffers()
+                end,
+                desc = "Buffers",
+            },
             {
                 "<leader>fq",
                 function()
