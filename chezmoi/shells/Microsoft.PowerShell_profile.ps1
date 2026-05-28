@@ -131,17 +131,20 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
 # Claude Code needs this env var to locate bash.exe on Windows.
 # Set it at session level so ALL child processes (node, pnpm, etc.) inherit it.
 if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
-    foreach ($_candidate in @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe"),
-        "C:\Program Files\Git\bin\bash.exe",
-        "C:\Program Files (x86)\Git\bin\bash.exe"
-    )) {
+    # Codex 等の最小環境で起動された場合 $env:LOCALAPPDATA が null になるため Join-Path がエラーになる。
+    $_candidates = [System.Collections.Generic.List[string]]::new()
+    if ($env:LOCALAPPDATA) {
+        $_candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe"))
+    }
+    $_candidates.Add("C:\Program Files\Git\bin\bash.exe")
+    $_candidates.Add("C:\Program Files (x86)\Git\bin\bash.exe")
+    foreach ($_candidate in $_candidates) {
         if (Test-Path -LiteralPath $_candidate -PathType Leaf) {
             $env:CLAUDE_CODE_GIT_BASH_PATH = $_candidate
             break
         }
     }
-    Remove-Variable _candidate -ErrorAction SilentlyContinue
+    Remove-Variable _candidate, _candidates -ErrorAction SilentlyContinue
 }
 
 # devcontainer: enter the project's devcontainer in a tmux session
@@ -208,6 +211,9 @@ function dotf {
 }
 
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
-$_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
-if (Test-Path $_secretPs1) { . $_secretPs1 }
-Remove-Variable _secretPs1
+# Codex 等の最小環境では $HOME が空文字列のため Join-Path がエラーになる。
+if ($HOME) {
+    $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
+    if (Test-Path $_secretPs1) { . $_secretPs1 }
+    Remove-Variable _secretPs1
+}

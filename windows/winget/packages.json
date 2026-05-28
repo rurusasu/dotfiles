@@ -157,7 +157,7 @@
           "PackageIdentifier": "Warp.Warp"
         },
         {
-          "PackageIdentifier": "wez.wezterm"
+          "PackageIdentifier": "wez.wezterm.nightly"
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
