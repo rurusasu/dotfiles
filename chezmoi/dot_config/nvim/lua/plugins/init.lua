@@ -367,7 +367,14 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
-            image = { enabled = true, force = true, convert = { notify = true } },
+            image = {
+                enabled = true,
+                force = true,
+                convert = { notify = true },
+                -- "pdf" を除外: picker では monkey-patch が pdftoppm で処理するため
+                -- snacks 自身の magick/Ghostscript パイプラインが走らないようにする
+                formats = { "png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "heic", "avif", "mp4", "mov", "avi", "mkv", "webm", "icns" },
+            },
             picker = {
                 enabled = true,
                 -- snacks picker から Alt+a で選択中の項目を sidekick の
@@ -412,7 +419,7 @@ return {
                                     "PDF preview requires poppler (pdftoppm). Install via: winget install oschwartz10612.Poppler",
                                     vim.log.levels.WARN
                                 )
-                                return orig_file(ctx)
+                                return false
                             end
                             local tmp = vim.fn.tempname()
                             vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
