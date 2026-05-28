@@ -15,6 +15,23 @@ local STEP = 0.05
 local MIN_RATIO = 0.3
 local MAX_RATIO = 0.98
 
+local ratio_path = vim.fn.stdpath("data") .. "/nvim_float_term_ratio.json"
+
+local function load_ratio()
+    local ok, lines = pcall(vim.fn.readfile, ratio_path)
+    if not ok or #lines == 0 then
+        return
+    end
+    local ok2, saved = pcall(vim.fn.json_decode, lines[1])
+    if ok2 and saved and type(saved.ratio) == "number" then
+        state.ratio = saved.ratio
+    end
+end
+
+local function save_ratio()
+    pcall(vim.fn.writefile, { vim.fn.json_encode({ ratio = state.ratio }) }, ratio_path)
+end
+
 local function shell_cmd()
     if vim.fn.has("win32") == 1 then
         return "pwsh.exe"
@@ -92,26 +109,52 @@ end
 function M.grow()
     state.ratio = math.min(current_ratio() + STEP, MAX_RATIO)
     apply_size()
+    save_ratio()
 end
 
 function M.shrink()
     state.ratio = math.max(current_ratio() - STEP, MIN_RATIO)
     apply_size()
+    save_ratio()
 end
 
 function M.reset()
     state.ratio = nil
     apply_size()
+    save_ratio()
 end
 
--- 端末リサイズ時に開いている float terminal を新しい画面寸法に合わせて再配置。
--- リサイズ後は古い border が画面に残ることがあるため redraw! で強制再描画する。
+-- 端末リサイズ時に開いている float terminal を新しい画面寸法に合わせる。
+-- nvim_win_set_config では emulator に古い border が残り続けるため、
+-- window を一度閉じて再オープンすることで完全に消す。
+-- terminal mode で作業中なら resize 後も terminal mode に戻す。
 vim.api.nvim_create_autocmd("VimResized", {
     group = vim.api.nvim_create_augroup("FloatTermResize", { clear = true }),
     callback = function()
-        apply_size()
-        vim.cmd("redraw!")
+        if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
+            return
+        end
+        local was_in_terminal = vim.api.nvim_get_mode().mode == "t"
+        vim.schedule(function()
+            if state.win and vim.api.nvim_win_is_valid(state.win) then
+                pcall(vim.api.nvim_win_close, state.win, true)
+                state.win = nil
+            end
+            if not (state.buf and vim.api.nvim_buf_is_valid(state.buf)) then
+                return
+            end
+            state.win = vim.api.nvim_open_win(state.buf, true, float_config())
+            vim.wo[state.win].number = false
+            vim.wo[state.win].relativenumber = false
+            vim.wo[state.win].signcolumn = "no"
+            vim.wo[state.win].cursorline = false
+            if was_in_terminal then
+                vim.cmd("startinsert")
+            end
+        end)
     end,
 })
+
+load_ratio()
 
 return M
