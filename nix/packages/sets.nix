@@ -152,7 +152,12 @@ let
     };
     ghostscript = {
       pkg = pkgs.ghostscript;
-      winget = "ArtifexSoftware.GhostScript";
+      winget = null; # winget カタログ未収録 — Windows は https://ghostscript.com から手動インストール
+      category = "dev";
+    };
+    poppler-utils = {
+      pkg = pkgs.poppler-utils;
+      winget = null; # Windows は ImageMagick + Ghostscript で代替
       category = "dev";
     };
 
@@ -363,6 +368,11 @@ let
     };
     lua-language-server = {
       pkg = pkgs.lua-language-server;
+      winget = null;
+      category = "lsp";
+    };
+    stylua = {
+      pkg = pkgs.stylua;
       winget = null;
       category = "lsp";
     };

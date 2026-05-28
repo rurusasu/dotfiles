@@ -191,6 +191,9 @@
           "PackageIdentifier": "hadolint.hadolint"
         },
         {
+          "PackageIdentifier": "ImageMagick.ImageMagick"
+        },
+        {
           "PackageIdentifier": "Google.Chrome"
         },
         {

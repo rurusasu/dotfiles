@@ -98,42 +98,6 @@ return {
         end,
     },
 
-    -- Fuzzy finder
-    {
-        "nvim-telescope/telescope.nvim",
-        cmd = "Telescope",
-        keys = {
-            { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
-            { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Live grep" },
-            { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
-            { "<leader>fq", "<cmd>Telescope ghq list<cr>", desc = "ghq repos" },
-        },
-        dependencies = {
-            "nvim-lua/plenary.nvim",
-            "nvim-telescope/telescope-ghq.nvim",
-        },
-        config = function(_, opts)
-            local actions = require("telescope.actions")
-            opts.defaults = vim.tbl_deep_extend("force", opts.defaults or {}, {
-                mappings = {
-                    i = {
-                        ["\\"] = actions.select_vertical,
-                        ["|"] = actions.select_vertical,
-                        ["-"] = actions.select_horizontal,
-                    },
-                    n = {
-                        ["\\"] = actions.select_vertical,
-                        ["|"] = actions.select_vertical,
-                        ["-"] = actions.select_horizontal,
-                    },
-                },
-            })
-            local telescope = require("telescope")
-            telescope.setup(opts)
-            telescope.load_extension("ghq")
-        end,
-    },
-
     -- Treesitter
     {
         "nvim-treesitter/nvim-treesitter",
@@ -254,6 +218,52 @@ return {
         priority = 1000,
         keys = {
             {
+                "<leader>ff",
+                function()
+                    Snacks.picker.files()
+                end,
+                desc = "Find files",
+            },
+            {
+                "<leader>fg",
+                function()
+                    Snacks.picker.grep()
+                end,
+                desc = "Live grep",
+            },
+            {
+                "<leader>fb",
+                function()
+                    Snacks.picker.buffers()
+                end,
+                desc = "Buffers",
+            },
+            {
+                "<leader>fq",
+                function()
+                    if vim.fn.executable("ghq") == 0 then
+                        vim.notify("ghq not found", vim.log.levels.WARN)
+                        return
+                    end
+                    Snacks.picker.pick("proc", {
+                        cmd = "ghq",
+                        args = { "list", "--full-path" },
+                        title = "ghq repos",
+                        transform = function(item)
+                            item.file = item.text
+                            return item
+                        end,
+                        confirm = function(picker, item)
+                            picker:close()
+                            if item and item.file then
+                                vim.cmd.cd(item.file)
+                            end
+                        end,
+                    })
+                end,
+                desc = "ghq repos",
+            },
+            {
                 "<leader><leader>",
                 function()
                     local picker = require("snacks").picker
@@ -357,7 +367,7 @@ return {
         opts = {
             lazygit = { enabled = true },
             terminal = { enabled = true },
-            image = { enabled = true, force = true },
+            image = { enabled = true, force = true, convert = { notify = true } },
             picker = {
                 enabled = true,
                 -- snacks picker から Alt+a で選択中の項目を sidekick の
@@ -380,6 +390,38 @@ return {
                 },
             },
         },
+        init = function()
+            -- PDF: 先頭ページを PNG に変換して image.nvim で表示
+            -- Windows: ImageMagick + Ghostscript、Linux/WSL: pdftoppm (poppler)
+            -- VeryLazy 後に snacks.picker.preview が確実にロードされてからパッチ
+            vim.api.nvim_create_autocmd("User", {
+                pattern = "VeryLazy",
+                once = true,
+                callback = function()
+                    local ok, preview = pcall(require, "snacks.picker.preview")
+                    if not ok or not preview.file then
+                        return
+                    end
+                    local orig_file = preview.file
+                    preview.file = function(ctx)
+                        local file = ctx.item and (ctx.item.file or ctx.item.path or "")
+                        if file:match("%.pdf$") then
+                            local tmp = vim.fn.tempname()
+                            if vim.fn.has("win32") == 1 then
+                                vim.fn.system({ "magick", file .. "[0]", "-density", "150", tmp .. ".png" })
+                            else
+                                vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            end
+                            local patched = vim.tbl_deep_extend("force", ctx, {
+                                item = vim.tbl_extend("force", ctx.item, { file = tmp .. ".png" }),
+                            })
+                            return preview.image and preview.image(patched) or false
+                        end
+                        return orig_file(ctx)
+                    end
+                end,
+            })
+        end,
     },
 
     -- AI sidekick: AI CLI terminal (claude/codex/gemini/opencode)
@@ -526,13 +568,13 @@ return {
                     local map = function(keys, func, desc)
                         vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
                     end
-                    -- gd: LSP definition if supported, else telescope grep across files
+                    -- gd: LSP definition if supported, else snacks grep for word under cursor
                     map("gd", function()
                         local clients = vim.lsp.get_clients({ bufnr = bufnr, method = "textDocument/definition" })
                         if #clients > 0 then
                             vim.lsp.buf.definition()
                         else
-                            require("telescope.builtin").grep_string({ word_match = "-w" })
+                            Snacks.picker.grep_word()
                         end
                     end, "Go to definition")
                     map("gr", vim.lsp.buf.references, "References")

@@ -70,6 +70,19 @@ opt.completeopt = "menu,menuone,noselect"
 opt.swapfile = false
 opt.backup = false
 
+-- Windows: ensure ImageMagick is in PATH for snacks image conversion.
+-- winget installs to a versioned dir (ImageMagick-7.x.x-…) that may not
+-- reach nvim when launched from a shell whose profile has not yet rebuilt
+-- PATH from the registry.
+if vim.fn.has("win32") == 1 and vim.fn.executable("magick") == 0 then
+    for _, dir in ipairs(vim.fn.glob("C:/Program Files/ImageMagick*", false, true)) do
+        if vim.fn.isdirectory(dir) == 1 then
+            vim.env.PATH = dir .. ";" .. vim.env.PATH
+            break
+        end
+    end
+end
+
 -- Restore terminal on exit: explicitly switch off alternate screen so the
 -- shell is visible immediately after :q (fixes ghost-screen in WezTerm/WT)
 vim.api.nvim_create_autocmd("VimLeave", {
