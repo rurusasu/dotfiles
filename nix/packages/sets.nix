@@ -155,11 +155,6 @@ let
       winget = "ArtifexSoftware.GhostScript";
       category = "dev";
     };
-    poppler-utils = {
-      pkg = pkgs.poppler_utils;
-      winget = null; # Windows は ImageMagick + Ghostscript で代替
-      category = "dev";
-    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {

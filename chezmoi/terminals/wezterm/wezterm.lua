@@ -54,6 +54,12 @@ config.leader = {
     timeout_milliseconds = 2000,
 }
 
+-- Force snacks.nvim to recognise WezTerm's Kitty graphics protocol support.
+-- Auto-detection can fail on Windows where TERM_PROGRAM may not propagate.
+config.set_environment_variables = {
+    SNACKS_WEZTERM = "true",
+}
+
 -- Alt key sends escape sequence for fzf Alt+C support
 config.send_composed_key_when_left_alt_is_pressed = false
 config.send_composed_key_when_right_alt_is_pressed = false
