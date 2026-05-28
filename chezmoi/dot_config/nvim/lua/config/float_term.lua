@@ -94,6 +94,8 @@ function M.toggle(opts)
     opts = opts or {}
     local id = opts.id or "shell"
     local cmd = opts.cmd or default_shell()
+    local cwd = opts.cwd
+    local env = opts.env
     local inst = get(id)
 
     -- Already open → hide (buf は保持して次回再表示で resume できるように)。
@@ -103,9 +105,24 @@ function M.toggle(opts)
         return
     end
 
+    -- cwd / cmd / env が前回と違う場合は古い buffer を捨てて新規に作り直す。
+    -- 例: repo A で lazygit を開いて hide → repo B に移動して再 toggle、を
+    -- そのまま reuse すると A の lazygit プロセスが見えてしまう。
+    if
+        inst.buf
+        and vim.api.nvim_buf_is_valid(inst.buf)
+        and (not vim.deep_equal(inst.cmd, cmd) or inst.cwd ~= cwd or not vim.deep_equal(inst.env, env))
+    then
+        pcall(vim.api.nvim_buf_delete, inst.buf, { force = true })
+        inst.buf = nil
+    end
+
     local reuse = inst.buf and vim.api.nvim_buf_is_valid(inst.buf)
     if not reuse then
         inst.buf = vim.api.nvim_create_buf(false, true)
+        inst.cmd = cmd
+        inst.cwd = cwd
+        inst.env = env
     end
 
     local cfg = float_config()
@@ -114,10 +131,13 @@ function M.toggle(opts)
 
     if not reuse then
         vim.fn.termopen(cmd, {
-            cwd = opts.cwd,
-            env = opts.env,
+            cwd = cwd,
+            env = env,
             on_exit = function()
                 inst.buf = nil
+                inst.cmd = nil
+                inst.cwd = nil
+                inst.env = nil
                 if inst.win and vim.api.nvim_win_is_valid(inst.win) then
                     pcall(vim.api.nvim_win_close, inst.win, true)
                 end
