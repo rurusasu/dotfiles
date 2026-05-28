@@ -8,6 +8,9 @@ if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }
 # Windows Terminal with "elevate: true" may not inherit User-scope PATH entries.
 $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
 
+# Tell snacks.nvim to use WezTerm's Kitty graphics protocol for image preview.
+$env:SNACKS_WEZTERM = "true"
+
 # Aliases
 if (Get-Command rg -ErrorAction SilentlyContinue) {
     Set-Alias -Name grep -Value rg -Scope Global
