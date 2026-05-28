@@ -49,6 +49,21 @@ map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 -- Terminal mode
 map("t", "jk", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 
+-- Float terminal resize (Alt+ 単キー)。nvim の terminal mode は prefix mapping
+-- が動作しにくいため、確実に届く single keystroke の Alt 系を採用。
+-- Shift キーが必要な記号 (`+` / `_`) を使うことで、視覚的にも拡大/縮小と
+-- 結びつきやすい。リセットは少なくとも今は keymap 化していない:
+-- `:lua require("config.float_term").reset()` で呼び出し可能。
+local function fterm_grow()
+    require("config.float_term").grow()
+end
+local function fterm_shrink()
+    require("config.float_term").shrink()
+end
+
+map({ "n", "t" }, "<M-+>", fterm_grow, { desc = "Float term: grow (+5%)" })
+map({ "n", "t" }, "<M-_>", fterm_shrink, { desc = "Float term: shrink (-5%)" })
+
 -- Telescope
 map("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Find files" })
 map("n", "<leader>fg", "<cmd>Telescope live_grep<cr>", { desc = "Live grep" })
