@@ -31,4 +31,4 @@ font_size = 10.0
 
 [appearance.themes]
 system_theme = false
-theme_name = "Phenomenon"
+theme_name = "Catppuccin Mocha"

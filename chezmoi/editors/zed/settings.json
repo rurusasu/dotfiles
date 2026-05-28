@@ -2,7 +2,8 @@
   // Zed settings - uses JSONC format (comments allowed)
   // Extensions - auto-install listed extensions, unlisted ones are removed
   "auto_install_extensions": {
-    "github-theme": true,
+    "catppuccin": true,
+    "github-theme": false,
     "powershell": true,
     "dprint": true,
     "nix": true,
@@ -25,7 +26,11 @@
     "light": "Material Icon Theme",
     "dark": "Material Icon Theme"
   },
-  "theme": "GitHub Dark Dimmed",
+  "theme": {
+    "mode": "dark",
+    "dark": "Catppuccin Mocha",
+    "light": "Catppuccin Latte"
+  },
   "ui_font_size": 10,
   "buffer_font_size": 10,
   "buffer_font_family": "Moralerspace Neon HWJPDOC",
