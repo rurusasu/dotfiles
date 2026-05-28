@@ -190,7 +190,8 @@ function dcnvim {
         }
     }
     if (-not $sessionName) {
-        $sessionName = Split-Path -Leaf $Workspace.TrimEnd('/', '\')
+        $wsAbs = (Resolve-Path -LiteralPath $Workspace).Path
+        $sessionName = Split-Path -Leaf $wsAbs.TrimEnd('/', '\')
     }
 
     # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so the
