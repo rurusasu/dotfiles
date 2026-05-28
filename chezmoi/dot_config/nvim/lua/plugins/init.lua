@@ -391,9 +391,10 @@ return {
             },
         },
         init = function()
-            -- PDF: 先頭ページを PNG に変換して image.nvim で表示
-            -- Windows: ImageMagick + Ghostscript、Linux/WSL: pdftoppm (poppler)
-            -- VeryLazy 後に snacks.picker.preview が確実にロードされてからパッチ
+            -- PDF: pdftoppm で先頭ページを PNG に変換して snacks image で表示。
+            -- snacks.picker.util.path() は item._path をキャッシュするため、
+            -- patched item に _path を明示セットしないと元の PDF パスが渡る。
+            -- VeryLazy 後に snacks.picker.preview が確実にロードされてからパッチ。
             vim.api.nvim_create_autocmd("User", {
                 pattern = "VeryLazy",
                 once = true,
@@ -406,14 +407,19 @@ return {
                     preview.file = function(ctx)
                         local file = ctx.item and (ctx.item.file or ctx.item.path or "")
                         if file:match("%.pdf$") then
-                            local tmp = vim.fn.tempname()
-                            if vim.fn.has("win32") == 1 then
-                                vim.fn.system({ "magick", file .. "[0]", "-density", "150", tmp .. ".png" })
-                            else
-                                vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            if vim.fn.executable("pdftoppm") == 0 then
+                                vim.notify(
+                                    "PDF preview requires poppler (pdftoppm). Install via: winget install oschwartz10612.Poppler",
+                                    vim.log.levels.WARN
+                                )
+                                return orig_file(ctx)
                             end
+                            local tmp = vim.fn.tempname()
+                            vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            tmp = tmp .. ".png"
+                            -- _path をリセットしないと元の PDF パスのキャッシュが残る
                             local patched = vim.tbl_deep_extend("force", ctx, {
-                                item = vim.tbl_extend("force", ctx.item, { file = tmp .. ".png" }),
+                                item = vim.tbl_extend("force", ctx.item, { file = tmp, _path = tmp }),
                             })
                             return preview.image and preview.image(patched) or false
                         end
