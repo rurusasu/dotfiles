@@ -172,6 +172,23 @@ function dcnvim {
         return
     }
 
+    # Bring container up + inject dotfiles. CLI does not read
+    # ~/.config/devcontainer/devcontainer.json (that's a VS Code extension
+    # config), so dotfiles flags must be passed explicitly. Idempotent.
+    $dotfilesUrl = if ($env:DOTFILES_REPOSITORY_URL) {
+        $env:DOTFILES_REPOSITORY_URL
+    } else {
+        'https://github.com/rurusasu/dotfiles'
+    }
+    & devcontainer up `
+        --workspace-folder $Workspace `
+        --dotfiles-repository $dotfilesUrl `
+        --dotfiles-install-command bootstrap.sh | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "dcnvim: devcontainer up failed (exit $LASTEXITCODE)"
+        return
+    }
+
     # Resolve session name. ghq slug basename if under ghq root, else
     # workspace basename. Mirrors _dcnvim_session_name in
     # nix/home/dcnvim-session-name.sh.

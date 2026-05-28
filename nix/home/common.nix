@@ -143,6 +143,19 @@ in
           echo "dcnvim: no .devcontainer/ or .devcontainer.json under $workspace" >&2
           return 1
         fi
+        # Bring container up + inject dotfiles. CLI does not read
+        # ~/.config/devcontainer/devcontainer.json (that's a VS Code
+        # extension config), so dotfiles flags must be passed explicitly.
+        # Idempotent: skips on a container already up.
+        local dotfiles_url="''${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles}"
+        devcontainer up \
+          --workspace-folder "$workspace" \
+          --dotfiles-repository "$dotfiles_url" \
+          --dotfiles-install-command bootstrap.sh \
+          >/dev/null || {
+            echo "dcnvim: devcontainer up failed" >&2
+            return 1
+          }
         local ghq_root=""
         command -v ghq >/dev/null 2>&1 && ghq_root="$(ghq root 2>/dev/null || true)"
         local session_name
