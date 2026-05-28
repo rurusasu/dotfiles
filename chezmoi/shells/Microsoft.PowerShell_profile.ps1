@@ -215,15 +215,23 @@ tmux new -A -s '$sessionName' 'nvim .'
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
 }
 
-# tm: ghq + fzf でリポジトリ選択 → cd (Windows 版: tmux なし)
+# tm: ghq + fzf でリポジトリ選択 → cd。
+# 選択先に .devcontainer/ または .devcontainer.json があれば
+# 自動で dcnvim を起動して container 開発に入る。
+# Linux 版 tm (nix/home/common.nix) は host tmux に attach するが、
+# Windows host には tmux が無いため、container 開発の入口として動く。
 function tm {
     if (-not (Get-Command ghq -ErrorAction SilentlyContinue)) {
         Write-Error "tm: ghq not found. Install with: winget install x-motemen.ghq"
         return
     }
-    $result = ghq list --full-path | fzf
-    if ($result) {
-        Set-Location -Path $result
+    $repoSlug = ghq list | fzf
+    if (-not $repoSlug) { return }
+    $repoDir = Join-Path (ghq root) $repoSlug
+    Set-Location -Path $repoDir
+
+    if ((Test-Path .devcontainer) -or (Test-Path .devcontainer.json)) {
+        dcnvim
     }
 }
 
