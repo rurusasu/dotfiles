@@ -48,6 +48,16 @@ elif ! have apt-get; then
   log "apt-get not found — package install skipped (install tmux/curl/git manually)"
 fi
 
+# ── chezmoi binary (best effort) ────────────────────────────────────────
+# devcontainer-cli が dotfiles リポを ~/.dotfiles に clone しているので、
+# chezmoi の source として再利用する。install は user-local prefix を使う。
+if ! have chezmoi && have curl; then
+  log "installing chezmoi to ~/.local/bin"
+  mkdir -p "$HOME/.local/bin"
+  sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" ||
+    log "chezmoi install failed; chezmoi apply will be skipped"
+fi
+
 # ── modern Neovim (distro nvim is usually too old for lazy.nvim) ────────
 # Read --version once with sed `q` so nvim is not killed by SIGPIPE under
 # `set -o pipefail` (which would abort the entire script on the
@@ -117,17 +127,45 @@ for f in "$HOME/.profile" "$HOME/.bashrc"; do
   fi
 done
 
-# ── nvim config symlink ─────────────────────────────────────────────────
-# `ln -sfn` does not replace a real directory at the target; check first
-# so a stale `~/.config/nvim/` from a previous provisioner is removed.
-mkdir -p "$HOME/.config"
-target="$HOME/.config/nvim"
-if [ -e "$target" ] && [ ! -L "$target" ]; then
-  log "removing existing non-symlink $target"
-  rm -rf "$target"
+# ── chezmoi apply (host と同じ dotfiles を container に展開) ────────────
+# devcontainer-cli が clone した $ROOT を source として再利用するため
+# `chezmoi init --apply --source` を使う (二重 clone 回避)。
+# 一部 template が op CLI を要求して失敗する可能性があるので
+# `|| log` で best-effort 扱い。
+if have chezmoi; then
+  log "chezmoi init --apply --source $ROOT/chezmoi"
+  chezmoi init --apply --source "$ROOT/chezmoi" 2>&1 | sed 's/^/[chezmoi] /' >&2 ||
+    log "chezmoi apply had errors (continuing — container may be partially configured)"
 fi
-ln -sfn "$ROOT/chezmoi/editors/nvim" "$target"
-log "linked $target -> $ROOT/chezmoi/editors/nvim"
+
+# ── claude code CLI (best effort) ───────────────────────────────────────
+# Sidekick.nvim から container 内で起動するため。
+# npm が無ければ apt で nodejs+npm を試行。npm install は user-local
+# prefix で行い、 system 領域に書かない。
+if ! have claude; then
+  if ! have npm && [ "$can_install" -eq 1 ] && have apt-get; then
+    log "installing nodejs + npm for claude code"
+    $SUDO env DEBIAN_FRONTEND=noninteractive \
+      apt-get install -y -qq --no-install-recommends nodejs npm ||
+      log "nodejs/npm install failed"
+  fi
+  if have npm; then
+    log "installing @anthropic-ai/claude-code (user-local prefix)"
+    mkdir -p "$HOME/.local/npm"
+    npm config set prefix "$HOME/.local/npm" >/dev/null
+    if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+      # PATH wiring for next shells
+      for f in "$HOME/.profile" "$HOME/.bashrc"; do
+        grep -q '\.local/npm/bin' "$f" 2>/dev/null ||
+          printf '\n# Added by dotfiles bootstrap (npm)\nexport PATH="$HOME/.local/npm/bin:$PATH"\n' >>"$f"
+      done
+    else
+      log "claude code install failed (continuing)"
+    fi
+  else
+    log "skipping claude code install (no npm)"
+  fi
+fi
 
 # ── lazy.nvim plugin pre-warm (best effort) ─────────────────────────────
 # stderr goes to a log file so a broken init.lua or plugin compile error
