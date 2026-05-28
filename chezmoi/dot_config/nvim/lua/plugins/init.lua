@@ -396,7 +396,8 @@ return {
             },
         },
         init = function()
-            -- PDF: pdftoppm で先頭ページを PNG に変換して image.nvim で表示
+            -- PDF: 先頭ページを PNG に変換して image.nvim で表示
+            -- Windows: ImageMagick + Ghostscript、Linux/WSL: pdftoppm (poppler)
             -- VeryLazy 後に snacks.picker.preview が確実にロードされてからパッチ
             vim.api.nvim_create_autocmd("User", {
                 pattern = "VeryLazy",
@@ -411,7 +412,11 @@ return {
                         local file = ctx.item and (ctx.item.file or ctx.item.path or "")
                         if file:match("%.pdf$") then
                             local tmp = vim.fn.tempname()
-                            vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            if vim.fn.has("win32") == 1 then
+                                vim.fn.system({ "magick", file .. "[0]", "-density", "150", tmp .. ".png" })
+                            else
+                                vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            end
                             local patched = vim.tbl_deep_extend("force", ctx, {
                                 item = vim.tbl_extend("force", ctx.item, { file = tmp .. ".png" }),
                             })
