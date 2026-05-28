@@ -105,9 +105,13 @@ function M.reset()
 end
 
 -- 端末リサイズ時に開いている float terminal を新しい画面寸法に合わせて再配置。
+-- リサイズ後は古い border が画面に残ることがあるため redraw! で強制再描画する。
 vim.api.nvim_create_autocmd("VimResized", {
     group = vim.api.nvim_create_augroup("FloatTermResize", { clear = true }),
-    callback = apply_size,
+    callback = function()
+        apply_size()
+        vim.cmd("redraw!")
+    end,
 })
 
 return M
