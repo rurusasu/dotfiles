@@ -147,12 +147,17 @@ let
     };
     imagemagick = {
       pkg = pkgs.imagemagick;
-      winget = null;
+      winget = "ImageMagick.ImageMagick";
+      category = "dev";
+    };
+    ghostscript = {
+      pkg = pkgs.ghostscript;
+      winget = "ArtifexSoftware.GhostScript";
       category = "dev";
     };
     poppler-utils = {
       pkg = pkgs.poppler_utils;
-      winget = null;
+      winget = null; # Windows は ImageMagick + Ghostscript で代替
       category = "dev";
     };
 
