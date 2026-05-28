@@ -186,8 +186,8 @@ let
     };
 
     # ── fonts ─────────────────────────────────────────────
-    moralerspace = {
-      pkg = pkgs.moralerspace-hwjpdoc;
+    udev-gothic-nf = {
+      pkg = pkgs.udev-gothic-nf;
       winget = null;
       category = "fonts";
     };

@@ -19,11 +19,9 @@ config.automatically_reload_config = true
 config.color_scheme = "Catppuccin Mocha"
 
 -- Font settings
-config.font = wezterm.font("Moralerspace Neon HWJPDOC")
+config.font = wezterm.font("UDEV Gothic NF")
 config.font_size = 11.0
--- 1.15 だと Moralerspace HWJPDOC の descender (g/j/p/y 等) が cell の下端で
--- 切れて見えるため 1.25 に上げて余白を確保。
-config.line_height = 1.25
+config.line_height = 1.0
 config.cell_width = 1.0
 
 -- WebGpu renders text more sharply than the legacy OpenGL front end on Windows.

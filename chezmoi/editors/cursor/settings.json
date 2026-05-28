@@ -1,6 +1,6 @@
 {
   "editor.fontSize": 10,
-  "editor.fontFamily": "Moralerspace Neon HWJPDOC",
+  "editor.fontFamily": "UDEV Gothic NF",
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "ibecker.treefmt-vscode",
   "editor.minimap.enabled": true,
@@ -128,7 +128,7 @@
   "notebook.cellToolbarLocation": {
     "default": "left"
   },
-  "terminal.integrated.fontFamily": "Moralerspace Neon HWJPDOC",
+  "terminal.integrated.fontFamily": "UDEV Gothic NF",
   "terminal.integrated.fontSize": 10,
   "terminal.integrated.defaultProfile.linux": "bash",
   "terminal.integrated.tabs.enabled": true,

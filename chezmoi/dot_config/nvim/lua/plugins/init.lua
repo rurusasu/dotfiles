@@ -285,12 +285,13 @@ return {
                         return
                     end
                     if vim.fn.has("win32") == 1 then
-                        -- Windows: bypass Snacks.lazygit; use open() not toggle().
-                        -- Unset $NVIM so lazygit doesn't attempt nvim-remote at startup.
-                        Snacks.terminal.open({ "lazygit" }, {
+                        -- Windows: snacks.terminal の float が split に化けるため
+                        -- 自前 float_term で開く。NVIM を空にして nvim-remote 起動を抑止。
+                        require("config.float_term").toggle({
+                            id = "lazygit",
+                            cmd = { "lazygit" },
                             cwd = root,
                             env = { NVIM = "" },
-                            win = { style = "lazygit" },
                         })
                     else
                         _G.__snacks_last_lg = Snacks.lazygit.open({ cwd = root })
@@ -313,7 +314,12 @@ return {
                         return
                     end
                     if vim.fn.has("win32") == 1 then
-                        Snacks.terminal({ "lazygit", "log" }, { cwd = root, win = { style = "lazygit" } })
+                        require("config.float_term").toggle({
+                            id = "lazygit-log",
+                            cmd = { "lazygit", "log" },
+                            cwd = root,
+                            env = { NVIM = "" },
+                        })
                     else
                         Snacks.lazygit.log({ cwd = root })
                     end
