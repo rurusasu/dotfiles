@@ -55,6 +55,30 @@ Describe 'Integration Verification - Windows Environment' {
         }
     }
 
+    Context 'Neovim PATH Dependencies (options.lua glob patterns)' {
+        It "should find magick.exe via ImageMagick glob" {
+            # options.lua: vim.fn.glob("C:/Program Files/ImageMagick*")
+            $dirs = @(Get-Item "C:/Program Files/ImageMagick*" -ErrorAction SilentlyContinue)
+            $found = $dirs | Where-Object { Test-Path (Join-Path $_.FullName "magick.exe") }
+            if (-not $found) {
+                throw "magick.exe が見つかりません。ImageMagick をインストールしてください: winget install ImageMagick.ImageMagick"
+            }
+            Write-Host "確認完了: magick.exe @ $($found[0].FullName)"
+        }
+
+        It "should find pdftoppm.exe via Poppler glob" {
+            # options.lua: vim.fn.glob("$LOCALAPPDATA/Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin")
+            $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+            $pattern = Join-Path $localAppData "Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin"
+            $dirs = @(Get-Item $pattern -ErrorAction SilentlyContinue)
+            $found = $dirs | Where-Object { Test-Path (Join-Path $_.FullName "pdftoppm.exe") }
+            if (-not $found) {
+                throw "pdftoppm.exe が見つかりません。Poppler をインストールしてください: winget install oschwartz10612.Poppler"
+            }
+            Write-Host "確認完了: pdftoppm.exe @ $($found[0].FullName)"
+        }
+    }
+
     Context 'Font Installation' {
         It "should have UDEV Gothic NF font installed" {
             # GDI キャッシュ（InstalledFontCollection）はセッション再起動後に更新されるため

@@ -70,15 +70,26 @@ opt.completeopt = "menu,menuone,noselect"
 opt.swapfile = false
 opt.backup = false
 
--- Windows: ensure ImageMagick is in PATH for snacks image conversion.
--- winget installs to a versioned dir (ImageMagick-7.x.x-…) that may not
--- reach nvim when launched from a shell whose profile has not yet rebuilt
--- PATH from the registry.
-if vim.fn.has("win32") == 1 and vim.fn.executable("magick") == 0 then
-    for _, dir in ipairs(vim.fn.glob("C:/Program Files/ImageMagick*", false, true)) do
-        if vim.fn.isdirectory(dir) == 1 then
-            vim.env.PATH = dir .. ";" .. vim.env.PATH
-            break
+-- Windows: ensure ImageMagick and Poppler are in PATH for snacks image/PDF conversion.
+-- winget installs to versioned dirs that may not reach nvim when launched from a shell
+-- whose profile has not yet rebuilt PATH from the registry.
+if vim.fn.has("win32") == 1 then
+    if vim.fn.executable("magick") == 0 then
+        for _, dir in ipairs(vim.fn.glob("C:/Program Files/ImageMagick*", false, true)) do
+            if vim.fn.isdirectory(dir) == 1 then
+                vim.env.PATH = dir .. ";" .. vim.env.PATH
+                break
+            end
+        end
+    end
+    if vim.fn.executable("pdftoppm") == 0 then
+        -- WinGet installs Poppler as: oschwartz10612.Poppler_.../poppler-X.Y.Z/Library/bin
+        local pattern = vim.fn.expand("$LOCALAPPDATA") .. "/Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin"
+        for _, dir in ipairs(vim.fn.glob(pattern, false, true)) do
+            if vim.fn.isdirectory(dir) == 1 then
+                vim.env.PATH = dir .. ";" .. vim.env.PATH
+                break
+            end
         end
     end
 end
