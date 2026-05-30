@@ -266,6 +266,23 @@ function dotf {
     try { task @args } finally { Pop-Location }
 }
 
+# claude: intercept `claude update` to run pnpm install + postinstall.
+# pnpm v10 blocks build scripts by default, so the native binary postinstall
+# never runs when using `claude update` directly, leaving a stub exe.
+function claude {
+    if ($args[0] -eq 'update') {
+        pnpm install -g "@anthropic-ai/claude-code@latest"
+        if ($LASTEXITCODE -eq 0) {
+            $pkgDir = Join-Path (pnpm root -g).Trim() "@anthropic-ai\claude-code"
+            Push-Location $pkgDir
+            try { node install.cjs } finally { Pop-Location }
+        }
+        return
+    }
+    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue
+    if ($ps1) { & $ps1.Source @args } else { & claude.exe @args }
+}
+
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
 # Codex 等の最小環境では $HOME が空文字列のため Join-Path がエラーになる。
 if ($HOME) {
