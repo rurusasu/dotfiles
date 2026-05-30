@@ -32,6 +32,9 @@ config.use_ime = true
 
 -- Window appearance
 config.window_background_opacity = 0.85
+if is_windows then
+    config.win32_system_backdrop = "Acrylic"
+end
 config.window_decorations = "TITLE|RESIZE"
 config.window_padding = {
     left = 8,
