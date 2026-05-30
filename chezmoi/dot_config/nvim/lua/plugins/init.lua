@@ -36,6 +36,7 @@ return {
                 ["t"] = { "actions.select", opts = { tab = true }, desc = "Open in new tab" },
                 ["<C-h>"] = false,
                 ["<C-l>"] = false,
+                ["<Esc>"] = "actions.close",
             },
         },
         config = function(_, opts)
