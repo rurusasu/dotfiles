@@ -111,7 +111,7 @@ end, { desc = "Open terminal in bottom split" })
 -- New terminal session in a vertical split (Alt-\ works in normal + terminal mode)
 -- noautocmd prevents the TermOpen autocmd from snapping vsplit to bottom
 local function open_vsplit_term()
-    vim.cmd("noautocmd vsplit | terminal")
+    vim.cmd("noautocmd botright vsplit | terminal")
     vim.cmd("startinsert")
 end
 map("n", "<M-\\>", open_vsplit_term, { desc = "VSplit new terminal" })
