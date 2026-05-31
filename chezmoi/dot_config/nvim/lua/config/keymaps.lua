@@ -125,6 +125,15 @@ local function add_terminal_session()
     else
         vim.cmd("botright 15split | terminal")
     end
+    local new_win = vim.api.nvim_get_current_win()
+    vim.schedule(function()
+        if vim.api.nvim_win_is_valid(new_win) then
+            vim.wo[new_win].number = false
+            vim.wo[new_win].relativenumber = false
+            vim.wo[new_win].signcolumn = "no"
+            vim.wo[new_win].cursorline = false
+        end
+    end)
     vim.cmd("startinsert")
 end
 map("n", "<M-\\>", add_terminal_session, { desc = "New terminal session" })
