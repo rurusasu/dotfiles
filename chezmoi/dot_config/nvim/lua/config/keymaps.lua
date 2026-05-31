@@ -113,7 +113,8 @@ end, { desc = "Open terminal in bottom split" })
 local function add_terminal_session()
     local term_win = nil
     for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if vim.bo[vim.api.nvim_win_get_buf(win)].buftype == "terminal" then
+        local is_float = vim.api.nvim_win_get_config(win).relative ~= ""
+        if not is_float and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == "terminal" then
             term_win = win
             break
         end
