@@ -374,7 +374,23 @@ return {
                 convert = { notify = true },
                 -- "pdf" を除外: picker では monkey-patch が pdftoppm で処理するため
                 -- snacks 自身の magick/Ghostscript パイプラインが走らないようにする
-                formats = { "png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "heic", "avif", "mp4", "mov", "avi", "mkv", "webm", "icns" },
+                formats = {
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "gif",
+                    "bmp",
+                    "webp",
+                    "tiff",
+                    "heic",
+                    "avif",
+                    "mp4",
+                    "mov",
+                    "avi",
+                    "mkv",
+                    "webm",
+                    "icns",
+                },
             },
             picker = {
                 enabled = true,

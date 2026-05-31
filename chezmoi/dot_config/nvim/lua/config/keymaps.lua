@@ -108,19 +108,42 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
+-- Alt-\: if a terminal window is already visible, add a new session beside it
+-- (vsplit within the terminal row). Otherwise open the first one at the bottom.
+local function add_terminal_session()
+    local term_win = nil
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local is_float = vim.api.nvim_win_get_config(win).relative ~= ""
+        if not is_float and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == "terminal" then
+            term_win = win
+            break
+        end
+    end
+    if term_win then
+        vim.api.nvim_set_current_win(term_win)
+        vim.cmd("vsplit | terminal")
+    else
+        vim.cmd("botright 15split | terminal")
+    end
+    vim.cmd("startinsert")
+end
+map("n", "<M-\\>", add_terminal_session, { desc = "New terminal session" })
+map("t", "<M-\\>", function()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
+    vim.schedule(add_terminal_session)
+end, { desc = "New terminal session" })
+
 require("config.float_persist").setup()
 
 -- Redirect :terminal (typed at start of command line) to :Term.
 -- getcmdpos() guard prevents expansion mid-command (e.g. :edit terminal stays intact).
 vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'Term' : 'terminal']])
 
--- If a terminal opens alongside other windows (plugins, scripted :terminal),
--- snap it to the bottom. Single-window case is handled by :Term above.
+-- Terminal window options: hide line numbers and sign column.
 vim.api.nvim_create_autocmd("TermOpen", {
     callback = function()
-        if vim.fn.winnr("$") > 1 then
-            vim.cmd("wincmd J")
-            vim.cmd("resize 15")
-        end
+        vim.wo.number = false
+        vim.wo.relativenumber = false
+        vim.wo.signcolumn = "no"
     end,
 })
