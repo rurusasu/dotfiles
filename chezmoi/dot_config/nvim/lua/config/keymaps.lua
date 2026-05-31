@@ -108,32 +108,20 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
--- Flag to suppress TermOpen snap when we deliberately open a vsplit terminal.
--- noautocmd does not reliably suppress TermOpen because Neovim fires it via
--- the job system asynchronously, after the noautocmd context ends.
-local _vsplit_term_opening = false
-
-local function open_vsplit_term()
-    _vsplit_term_opening = true
-    vim.cmd("botright vsplit | terminal")
-    vim.schedule(function()
-        _vsplit_term_opening = false
-    end)
-    vim.cmd("startinsert")
+-- Open a new terminal session at the bottom (VS Code style).
+-- Works from both normal and terminal mode.
+local function open_bottom_term()
+    vim.cmd("Term")
 end
-map("n", "<M-\\>", open_vsplit_term, { desc = "VSplit new terminal" })
+map("n", "<M-\\>", open_bottom_term, { desc = "New terminal at bottom" })
 map("t", "<M-\\>", function()
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(open_vsplit_term)
-end, { desc = "VSplit new terminal" })
-
--- New terminal session in a horizontal split from terminal mode (Alt--)
+    vim.schedule(open_bottom_term)
+end, { desc = "New terminal at bottom" })
 map("t", "<M-->", function()
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(function()
-        vim.cmd("Term")
-    end)
-end, { desc = "HSplit new terminal" })
+    vim.schedule(open_bottom_term)
+end, { desc = "New terminal at bottom" })
 
 require("config.float_persist").setup()
 
@@ -143,12 +131,8 @@ vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'T
 
 -- If a terminal opens alongside other windows (plugins, scripted :terminal),
 -- snap it to the bottom. Single-window case is handled by :Term above.
--- Skip when open_vsplit_term is opening a deliberate vertical split.
 vim.api.nvim_create_autocmd("TermOpen", {
     callback = function()
-        if _vsplit_term_opening then
-            return
-        end
         if vim.fn.winnr("$") > 1 then
             vim.cmd("wincmd J")
             vim.cmd("resize 15")
