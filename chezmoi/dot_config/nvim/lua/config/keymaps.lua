@@ -132,6 +132,7 @@ local function add_terminal_session()
             vim.wo[new_win].relativenumber = false
             vim.wo[new_win].signcolumn = "no"
             vim.wo[new_win].cursorline = false
+            vim.wo[new_win].statuscolumn = ""
         end
     end)
     vim.cmd("startinsert")
@@ -157,6 +158,7 @@ vim.api.nvim_create_autocmd("TermOpen", {
             vim.wo[win].relativenumber = false
             vim.wo[win].signcolumn = "no"
             vim.wo[win].cursorline = false
+            vim.wo[win].statuscolumn = ""
         end
     end,
 })
