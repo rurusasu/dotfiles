@@ -130,9 +130,13 @@ function M.toggle(opts)
     apply_window_options(inst.win)
 
     if not reuse then
-        vim.fn.termopen(cmd, {
+        -- float が current の状態で jobstart({term=true}) を直接呼ぶ。
+        -- nvim_buf_call を経由すると temporary split が生成され float が壊れる。
+        -- termopen は Windows で float を split に変換するため jobstart({term=true}) を使う。
+        vim.fn.jobstart(cmd, {
             cwd = cwd,
             env = env,
+            term = true,
             on_exit = function()
                 inst.buf = nil
                 inst.cmd = nil
@@ -144,11 +148,6 @@ function M.toggle(opts)
                 inst.win = nil
             end,
         })
-        -- termopen が float window を split に変換するケースに備えて
-        -- float config を再適用する。
-        if inst.win and vim.api.nvim_win_is_valid(inst.win) then
-            pcall(vim.api.nvim_win_set_config, inst.win, cfg)
-        end
     end
 
     vim.cmd("startinsert")

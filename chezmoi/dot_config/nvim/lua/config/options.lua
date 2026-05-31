@@ -84,7 +84,8 @@ if vim.fn.has("win32") == 1 then
     end
     if vim.fn.executable("pdftoppm") == 0 then
         -- WinGet installs Poppler as: oschwartz10612.Poppler_.../poppler-X.Y.Z/Library/bin
-        local pattern = vim.fn.expand("$LOCALAPPDATA") .. "/Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin"
+        local pattern = vim.fn.expand("$LOCALAPPDATA")
+            .. "/Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin"
         for _, dir in ipairs(vim.fn.glob(pattern, false, true)) do
             if vim.fn.isdirectory(dir) == 1 then
                 vim.env.PATH = dir .. ";" .. vim.env.PATH

@@ -108,6 +108,26 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
+-- New terminal session in a vertical split (Alt-\ works in normal + terminal mode)
+-- noautocmd prevents the TermOpen autocmd from snapping vsplit to bottom
+local function open_vsplit_term()
+    vim.cmd("noautocmd vsplit | terminal")
+    vim.cmd("startinsert")
+end
+map("n", "<M-|>", open_vsplit_term, { desc = "VSplit new terminal" })
+map("t", "<M-|>", function()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
+    vim.schedule(open_vsplit_term)
+end, { desc = "VSplit new terminal" })
+
+-- New terminal session in a horizontal split from terminal mode (Alt--)
+map("t", "<M-->", function()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
+    vim.schedule(function()
+        vim.cmd("Term")
+    end)
+end, { desc = "HSplit new terminal" })
+
 require("config.float_persist").setup()
 
 -- Redirect :terminal (typed at start of command line) to :Term.
