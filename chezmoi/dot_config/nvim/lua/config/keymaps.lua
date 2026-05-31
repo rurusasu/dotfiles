@@ -108,10 +108,17 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
--- New terminal session in a vertical split (Alt-\ works in normal + terminal mode)
--- noautocmd prevents the TermOpen autocmd from snapping vsplit to bottom
+-- Flag to suppress TermOpen snap when we deliberately open a vsplit terminal.
+-- noautocmd does not reliably suppress TermOpen because Neovim fires it via
+-- the job system asynchronously, after the noautocmd context ends.
+local _vsplit_term_opening = false
+
 local function open_vsplit_term()
-    vim.cmd("noautocmd botright vsplit | terminal")
+    _vsplit_term_opening = true
+    vim.cmd("botright vsplit | terminal")
+    vim.schedule(function()
+        _vsplit_term_opening = false
+    end)
     vim.cmd("startinsert")
 end
 map("n", "<M-\\>", open_vsplit_term, { desc = "VSplit new terminal" })
@@ -136,8 +143,12 @@ vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'T
 
 -- If a terminal opens alongside other windows (plugins, scripted :terminal),
 -- snap it to the bottom. Single-window case is handled by :Term above.
+-- Skip when open_vsplit_term is opening a deliberate vertical split.
 vim.api.nvim_create_autocmd("TermOpen", {
     callback = function()
+        if _vsplit_term_opening then
+            return
+        end
         if vim.fn.winnr("$") > 1 then
             vim.cmd("wincmd J")
             vim.cmd("resize 15")
