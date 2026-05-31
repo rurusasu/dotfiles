@@ -140,10 +140,14 @@ require("config.float_persist").setup()
 vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'Term' : 'terminal']])
 
 -- Terminal window options: hide line numbers and sign column.
+-- Use win_findbuf to target the correct window regardless of async timing.
 vim.api.nvim_create_autocmd("TermOpen", {
-    callback = function()
-        vim.wo.number = false
-        vim.wo.relativenumber = false
-        vim.wo.signcolumn = "no"
+    callback = function(args)
+        for _, win in ipairs(vim.fn.win_findbuf(args.buf)) do
+            vim.wo[win].number = false
+            vim.wo[win].relativenumber = false
+            vim.wo[win].signcolumn = "no"
+            vim.wo[win].cursorline = false
+        end
     end,
 })
