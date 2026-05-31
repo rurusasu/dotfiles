@@ -108,20 +108,42 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
--- Open a new terminal session at the bottom (VS Code style).
--- Works from both normal and terminal mode.
-local function open_bottom_term()
-    vim.cmd("Term")
+-- VS Code Ctrl-` style: toggle a persistent bottom terminal (same session).
+local _bterm = { buf = nil, win = nil }
+
+local function toggle_bottom_term()
+    if _bterm.win and vim.api.nvim_win_is_valid(_bterm.win) then
+        vim.api.nvim_win_hide(_bterm.win)
+        _bterm.win = nil
+        return
+    end
+
+    if _bterm.buf and not vim.api.nvim_buf_is_valid(_bterm.buf) then
+        _bterm.buf = nil
+    end
+
+    if _bterm.buf then
+        vim.cmd("botright 15split")
+        _bterm.win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(_bterm.win, _bterm.buf)
+    else
+        vim.cmd("botright 15split | terminal")
+        _bterm.win = vim.api.nvim_get_current_win()
+        _bterm.buf = vim.api.nvim_get_current_buf()
+    end
+
+    vim.cmd("startinsert")
 end
-map("n", "<M-\\>", open_bottom_term, { desc = "New terminal at bottom" })
+
+map("n", "<M-\\>", toggle_bottom_term, { desc = "Toggle bottom terminal" })
 map("t", "<M-\\>", function()
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(open_bottom_term)
-end, { desc = "New terminal at bottom" })
+    vim.schedule(toggle_bottom_term)
+end, { desc = "Toggle bottom terminal" })
 map("t", "<M-->", function()
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(open_bottom_term)
-end, { desc = "New terminal at bottom" })
+    vim.schedule(toggle_bottom_term)
+end, { desc = "Toggle bottom terminal" })
 
 require("config.float_persist").setup()
 
