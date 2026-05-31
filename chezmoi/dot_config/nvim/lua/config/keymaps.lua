@@ -108,50 +108,13 @@ vim.api.nvim_create_user_command("Term", function()
     vim.cmd("startinsert")
 end, { desc = "Open terminal in bottom split" })
 
--- VS Code Ctrl-` style: toggle a persistent bottom terminal (same session).
--- _bterm_opening suppresses the TermOpen snap (wincmd J) when we open the
--- terminal ourselves via botright — the autocmd fires asynchronously and
--- would otherwise fight our placement.
-local _bterm_opening = false
-local _bterm = { buf = nil, win = nil }
-
-local function toggle_bottom_term()
-    if _bterm.win and vim.api.nvim_win_is_valid(_bterm.win) then
-        vim.api.nvim_win_hide(_bterm.win)
-        _bterm.win = nil
-        return
-    end
-
-    if _bterm.buf and not vim.api.nvim_buf_is_valid(_bterm.buf) then
-        _bterm.buf = nil
-    end
-
-    if _bterm.buf then
-        vim.cmd("botright 15split")
-        _bterm.win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(_bterm.win, _bterm.buf)
-    else
-        _bterm_opening = true
-        vim.cmd("botright 15split | terminal")
-        vim.schedule(function()
-            _bterm_opening = false
-        end)
-        _bterm.win = vim.api.nvim_get_current_win()
-        _bterm.buf = vim.api.nvim_get_current_buf()
-    end
-
-    vim.cmd("startinsert")
+-- Alt-\ toggles the bottom terminal via snacks.nvim (same as <leader>tt).
+-- Snacks.terminal.toggle handles session persistence and cross-platform
+-- placement correctly without fighting TermOpen autocmds.
+local function snacks_bottom_term()
+    Snacks.terminal.toggle(nil, { win = { position = "bottom", height = 0.3 } })
 end
-
-map("n", "<M-\\>", toggle_bottom_term, { desc = "Toggle bottom terminal" })
-map("t", "<M-\\>", function()
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(toggle_bottom_term)
-end, { desc = "Toggle bottom terminal" })
-map("t", "<M-->", function()
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true), "n", true)
-    vim.schedule(toggle_bottom_term)
-end, { desc = "Toggle bottom terminal" })
+map({ "n", "t" }, "<M-\\>", snacks_bottom_term, { desc = "Toggle bottom terminal" })
 
 require("config.float_persist").setup()
 
@@ -161,12 +124,8 @@ vim.cmd([[cabbrev <expr> terminal (getcmdtype() == ':' && getcmdpos() <= 9) ? 'T
 
 -- If a terminal opens alongside other windows (plugins, scripted :terminal),
 -- snap it to the bottom. Single-window case is handled by :Term above.
--- Skip when toggle_bottom_term placed it with botright already.
 vim.api.nvim_create_autocmd("TermOpen", {
     callback = function()
-        if _bterm_opening then
-            return
-        end
         if vim.fn.winnr("$") > 1 then
             vim.cmd("wincmd J")
             vim.cmd("resize 15")
