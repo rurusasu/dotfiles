@@ -31,7 +31,7 @@ config.front_end = "WebGpu"
 config.use_ime = true
 
 -- Window appearance
-config.window_background_opacity = 0.85
+config.window_background_opacity = 0.75
 if is_windows then
     config.win32_system_backdrop = "Acrylic"
 end
