@@ -71,7 +71,7 @@ jobs:
 
   macos:
     name: E2E (macOS)
-    runs-on: macos-15
+    runs-on: macos-13
     timeout-minutes: 45
     permissions:
       contents: read
@@ -128,6 +128,16 @@ jobs:
 
       - name: Set up Docker
         uses: docker/setup-docker-action@v4
+
+      - name: Switch to Linux container context
+        shell: pwsh
+        run: |
+          docker context use desktop-linux 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "desktop-linux context not found, using default"
+            docker context use default
+          }
+          docker info | Select-String "OS Type"
 
       - name: Install devcontainer CLI
         shell: pwsh
