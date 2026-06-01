@@ -115,9 +115,9 @@ jobs:
             -- bash .devcontainer/ci/e2e.sh
 
   windows:
-    name: E2E (Windows)
+    name: E2E (Windows via WSL2)
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -126,50 +126,37 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v4
-
-      - name: Switch to Linux container context
+      - name: Set up Docker and devcontainer CLI in WSL2
         shell: pwsh
         run: |
-          docker context use desktop-linux 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "desktop-linux context not found, using default"
-            docker context use default
-          }
-          docker info | Select-String "OS Type"
-
-      - name: Install devcontainer CLI
-        shell: pwsh
-        run: npm install -g @devcontainers/cli
+          wsl -d Ubuntu -- bash -lc @'
+            set -euo pipefail
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends docker.io nodejs npm
+            sudo service docker start
+            sudo npm install -g @devcontainers/cli
+          '@
 
       - name: Start devcontainer
-        shell: bash
+        shell: pwsh
         run: |
-          devcontainer up \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder .
+          $wsPath = (wsl -d Ubuntu -- wslpath -u '${{ github.workspace }}').Trim()
+          wsl -d Ubuntu -- bash -lc "cd '$wsPath' && sudo devcontainer up --config .devcontainer/ci/devcontainer.json --workspace-folder ."
 
       - name: Smoke test
-        shell: bash
+        shell: pwsh
         run: |
-          devcontainer exec \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder . \
-            -- bash .devcontainer/ci/smoke.sh
+          $wsPath = (wsl -d Ubuntu -- wslpath -u '${{ github.workspace }}').Trim()
+          wsl -d Ubuntu -- bash -lc "cd '$wsPath' && sudo devcontainer exec --config .devcontainer/ci/devcontainer.json --workspace-folder . -- bash .devcontainer/ci/smoke.sh"
 
       - name: bats unit tests
-        shell: bash
+        shell: pwsh
         run: |
-          devcontainer exec \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder . \
-            -- bash .devcontainer/ci/bats.sh
+          $wsPath = (wsl -d Ubuntu -- wslpath -u '${{ github.workspace }}').Trim()
+          wsl -d Ubuntu -- bash -lc "cd '$wsPath' && sudo devcontainer exec --config .devcontainer/ci/devcontainer.json --workspace-folder . -- bash .devcontainer/ci/bats.sh"
 
       - name: tmux + nvim headless E2E
-        shell: bash
+        shell: pwsh
         run: |
-          devcontainer exec \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder . \
-            -- bash .devcontainer/ci/e2e.sh
+          $wsPath = (wsl -d Ubuntu -- wslpath -u '${{ github.workspace }}').Trim()
+          wsl -d Ubuntu -- bash -lc "cd '$wsPath' && sudo devcontainer exec --config .devcontainer/ci/devcontainer.json --workspace-folder . -- bash .devcontainer/ci/e2e.sh"
