@@ -135,6 +135,8 @@ tasks:
       - cmd: wsl -d {{.DISTRO}} -- chezmoi apply --force
         platforms: [windows]
       - chezmoi apply --force
+      - cmd: cmd.exe /c "chezmoi apply --force"
+        platforms: [linux, darwin]
 
   # ===========================================
   # Docker
