@@ -3,10 +3,19 @@
   "$schema": "https://aka.ms/terminal-profiles-schema",
   "actions": [
     {
-      "command": {
-        "action": "copy",
-        "singleLine": false
-      },
+      "command": { "action": "resizePane", "direction": "left" },
+      "id": "User.resizePane.left"
+    },
+    {
+      "command": "find",
+      "id": "User.find"
+    },
+    {
+      "command": "toggleFullscreen",
+      "id": "User.toggleFullscreen"
+    },
+    {
+      "command": { "action": "copy", "singleLine": false },
       "id": "User.copy"
     },
     {
@@ -14,243 +23,127 @@
       "id": "User.paste"
     },
     {
-      "command": {
-        "action": "splitPane",
-        "split": "right",
-        "splitMode": "duplicate"
-      },
+      "command": { "action": "splitPane", "split": "right", "splitMode": "duplicate" },
       "id": "User.splitPane.horizontal"
-    },
-    {
-      "command": {
-        "action": "splitPane",
-        "split": "down",
-        "splitMode": "duplicate"
-      },
-      "id": "User.splitPane.vertical"
     },
     {
       "command": "closePane",
       "id": "User.closePane"
     },
     {
-      "command": "togglePaneZoom",
-      "id": "User.togglePaneZoom"
-    },
-    {
-      "command": "toggleFullscreen",
-      "id": "User.toggleFullscreen"
-    },
-    {
-      "command": "find",
-      "id": "User.find"
-    },
-    {
-      "command": "nextTab",
-      "id": "User.nextTab"
-    },
-    {
-      "command": "prevTab",
-      "id": "User.prevTab"
-    },
-    {
-      "command": {
-        "action": "moveFocus",
-        "direction": "left"
-      },
-      "id": "User.moveFocus.left"
-    },
-    {
-      "command": {
-        "action": "moveFocus",
-        "direction": "right"
-      },
-      "id": "User.moveFocus.right"
-    },
-    {
-      "command": {
-        "action": "moveFocus",
-        "direction": "up"
-      },
-      "id": "User.moveFocus.up"
-    },
-    {
-      "command": {
-        "action": "moveFocus",
-        "direction": "down"
-      },
-      "id": "User.moveFocus.down"
-    },
-    {
-      "command": "newTab",
-      "id": "User.newTab"
-    },
-    {
-      "command": { "action": "resizePane", "direction": "left" },
-      "id": "User.resizePane.left"
-    },
-    {
-      "command": { "action": "resizePane", "direction": "right" },
-      "id": "User.resizePane.right"
-    },
-    {
-      "command": { "action": "resizePane", "direction": "up" },
-      "id": "User.resizePane.up"
+      "command": { "action": "adjustFontSize", "delta": -1 },
+      "id": "User.decreaseFontSize"
     },
     {
       "command": { "action": "resizePane", "direction": "down" },
       "id": "User.resizePane.down"
     },
     {
-      "command": "unbound",
-      "keys": "alt+c"
+      "command": { "action": "splitPane", "split": "down", "splitMode": "duplicate" },
+      "id": "User.splitPane.vertical"
     },
     {
-      "command": "unbound",
-      "keys": "alt+z"
+      "command": "togglePaneZoom",
+      "id": "User.togglePaneZoom"
     },
     {
-      "command": "unbound",
-      "keys": "ctrl+plus"
+      "command": { "action": "nextTab" },
+      "id": "User.nextTab"
     },
     {
-      "command": "unbound",
-      "keys": "ctrl+minus"
+      "command": { "action": "prevTab" },
+      "id": "User.prevTab"
     },
     {
-      "command": "unbound",
-      "keys": "ctrl+0"
+      "command": { "action": "moveFocus", "direction": "left" },
+      "id": "User.moveFocus.left"
     },
     {
-      "command": { "action": "adjustFontSize", "delta": 1 },
-      "id": "User.increaseFontSize"
+      "command": { "action": "sendInput", "input": "\n" },
+      "id": "User.sendInput.DFCDAF06"
     },
     {
-      "command": { "action": "adjustFontSize", "delta": -1 },
-      "id": "User.decreaseFontSize"
+      "command": { "action": "newTab" },
+      "id": "User.newTab"
+    },
+    {
+      "command": { "action": "moveFocus", "direction": "right" },
+      "id": "User.moveFocus.right"
     },
     {
       "command": "resetFontSize",
       "id": "User.resetFontSize"
+    },
+    {
+      "command": { "action": "moveFocus", "direction": "up" },
+      "id": "User.moveFocus.up"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "right" },
+      "id": "User.resizePane.right"
+    },
+    {
+      "command": { "action": "moveFocus", "direction": "down" },
+      "id": "User.moveFocus.down"
+    },
+    {
+      "command": { "action": "resizePane", "direction": "up" },
+      "id": "User.resizePane.up"
+    },
+    {
+      "command": { "action": "adjustFontSize", "delta": 1 },
+      "id": "User.increaseFontSize"
     }
   ],
+  "alwaysShowNotificationIcon": true,
   "copyFormatting": "none",
   "copyOnSelect": false,
   "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
-  "language": "ja",
-  "alwaysShowNotificationIcon": true,
-  "useAcrylicInTabRow": true,
-  "showTabsFullscreen": true,
   "keybindings": [
-    {
-      "keys": "shift+enter",
-      "command": { "action": "sendInput", "input": "\n" }
-    },
-    {
-      "id": "User.copy",
-      "keys": "ctrl+c"
-    },
-    {
-      "id": "User.paste",
-      "keys": "ctrl+v"
-    },
-    {
-      "id": "User.find",
-      "keys": "ctrl+shift+f"
-    },
-    {
-      "id": "User.splitPane.horizontal",
-      "keys": "ctrl+alt+\\"
-    },
-    {
-      "id": "User.splitPane.vertical",
-      "keys": "ctrl+alt+-"
-    },
-    {
-      "id": "User.closePane",
-      "keys": "ctrl+alt+x"
-    },
-    {
-      "id": "User.togglePaneZoom",
-      "keys": "ctrl+alt+w"
-    },
-    {
-      "id": "User.moveFocus.left",
-      "keys": "ctrl+alt+h"
-    },
-    {
-      "id": "User.moveFocus.right",
-      "keys": "ctrl+alt+l"
-    },
-    {
-      "id": "User.moveFocus.up",
-      "keys": "ctrl+alt+k"
-    },
-    {
-      "id": "User.moveFocus.down",
-      "keys": "ctrl+alt+j"
-    },
-    {
-      "id": "User.nextTab",
-      "keys": "ctrl+tab"
-    },
-    {
-      "id": "User.prevTab",
-      "keys": "ctrl+shift+tab"
-    },
-    {
-      "id": "User.toggleFullscreen",
-      "keys": "f11"
-    },
-    {
-      "id": "User.newTab",
-      "keys": "ctrl+alt+t"
-    },
-    {
-      "id": "User.resizePane.left",
-      "keys": "ctrl+alt+left"
-    },
-    {
-      "id": "User.resizePane.right",
-      "keys": "ctrl+alt+right"
-    },
-    {
-      "id": "User.resizePane.up",
-      "keys": "ctrl+alt+up"
-    },
-    {
-      "id": "User.resizePane.down",
-      "keys": "ctrl+alt+down"
-    },
-    {
-      "id": "User.increaseFontSize",
-      "keys": "ctrl+shift+plus"
-    },
-    {
-      "id": "User.decreaseFontSize",
-      "keys": "ctrl+shift+minus"
-    },
-    {
-      "id": "User.resetFontSize",
-      "keys": "ctrl+shift+0"
-    }
+    { "id": null, "keys": "alt+c" },
+    { "id": "User.prevTab", "keys": "ctrl+shift+tab" },
+    { "id": "User.copy", "keys": "ctrl+c" },
+    { "id": null, "keys": "alt+z" },
+    { "id": "User.sendInput.DFCDAF06", "keys": "shift+enter" },
+    { "id": null, "keys": "ctrl+plus" },
+    { "id": null, "keys": "ctrl+minus" },
+    { "id": null, "keys": "ctrl+0" },
+    { "id": "User.find", "keys": "ctrl+shift+f" },
+    { "id": "User.paste", "keys": "ctrl+v" },
+    { "id": "User.splitPane.horizontal", "keys": "ctrl+alt+\\" },
+    { "id": "User.resizePane.right", "keys": "ctrl+alt+right" },
+    { "id": "User.splitPane.vertical", "keys": "ctrl+alt+minus" },
+    { "id": "User.closePane", "keys": "ctrl+alt+x" },
+    { "id": "User.togglePaneZoom", "keys": "ctrl+alt+w" },
+    { "id": "User.moveFocus.left", "keys": "ctrl+alt+h" },
+    { "id": "User.moveFocus.up", "keys": "ctrl+alt+k" },
+    { "id": "User.moveFocus.right", "keys": "ctrl+alt+l" },
+    { "id": "User.moveFocus.down", "keys": "ctrl+alt+j" },
+    { "id": "User.nextTab", "keys": "ctrl+tab" },
+    { "id": "User.toggleFullscreen", "keys": "f11" },
+    { "id": "User.newTab", "keys": "ctrl+alt+t" },
+    { "id": "User.resizePane.left", "keys": "ctrl+alt+left" },
+    { "id": "User.resizePane.up", "keys": "ctrl+alt+up" },
+    { "id": "User.resizePane.down", "keys": "ctrl+alt+down" },
+    { "id": "User.resetFontSize", "keys": "ctrl+shift+0" },
+    { "id": "User.increaseFontSize", "keys": "ctrl+shift+plus" },
+    { "id": "User.decreaseFontSize", "keys": "ctrl+shift+minus" }
   ],
+  "language": "ja",
   "newTabMenu": [
-    {
-      "type": "remainingProfiles"
-    }
+    { "type": "remainingProfiles" }
   ],
   "profiles": {
     "defaults": {
+      "colorScheme": "Catppuccin Mocha",
+      "cursorShape": "bar",
       "font": {
         "face": "UDEV Gothic NF",
         "size": 10
       },
-      "useAcrylic": true,
       "opacity": 75,
-      "colorScheme": "Catppuccin Mocha",
-      "cursorShape": "bar",
-      "padding": "8, 8, 8, 8"
+      "padding": "8, 8, 8, 8",
+      "useAcrylic": true
     },
     "list": [
       {
@@ -260,16 +153,17 @@
         "name": "Windows PowerShell"
       },
       {
+        "backgroundImage": "desktopWallpaper",
+        "backgroundImageOpacity": 0.6,
+        "backgroundImageStretchMode": "uniformToFill",
+        "colorScheme": "Catppuccin Mocha",
         "elevate": true,
         "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
         "hidden": false,
         "name": "PowerShell",
+        "opacity": 60,
         "source": "Windows.Terminal.PowershellCore",
-        "backgroundImage": "desktopWallpaper",
-        "backgroundImageOpacity": 0.25,
-        "backgroundImageStretchMode": "uniformToFill",
-        "colorScheme": "Catppuccin Mocha",
-        "opacity": 25
+        "useAcrylic": false
       },
       {
         "guid": "{2ece5bfe-50ed-5f3a-ab87-5cd4baafed2b}",
@@ -287,28 +181,30 @@
   },
   "schemes": [
     {
-      "name": "Catppuccin Mocha",
-      "cursorColor": "#F5E0DC",
-      "selectionBackground": "#585B70",
       "background": "#1E1E2E",
-      "foreground": "#CDD6F4",
       "black": "#45475A",
-      "red": "#F38BA8",
-      "green": "#A6E3A1",
-      "yellow": "#F9E2AF",
       "blue": "#89B4FA",
-      "purple": "#F5C2E7",
-      "cyan": "#94E2D5",
-      "white": "#BAC2DE",
       "brightBlack": "#585B70",
-      "brightRed": "#F38BA8",
-      "brightGreen": "#A6E3A1",
-      "brightYellow": "#F9E2AF",
       "brightBlue": "#89B4FA",
-      "brightPurple": "#F5C2E7",
       "brightCyan": "#94E2D5",
-      "brightWhite": "#A6ADC8"
+      "brightGreen": "#A6E3A1",
+      "brightPurple": "#F5C2E7",
+      "brightRed": "#F38BA8",
+      "brightWhite": "#A6ADC8",
+      "brightYellow": "#F9E2AF",
+      "cursorColor": "#F5E0DC",
+      "cyan": "#94E2D5",
+      "foreground": "#CDD6F4",
+      "green": "#A6E3A1",
+      "name": "Catppuccin Mocha",
+      "purple": "#F5C2E7",
+      "red": "#F38BA8",
+      "selectionBackground": "#585B70",
+      "white": "#BAC2DE",
+      "yellow": "#F9E2AF"
     }
   ],
-  "themes": []
+  "showTabsFullscreen": true,
+  "themes": [],
+  "useAcrylicInTabRow": true
 }
