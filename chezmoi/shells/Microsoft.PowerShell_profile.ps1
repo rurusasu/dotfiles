@@ -166,7 +166,23 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
 # container to provide nvim + tmux. See bootstrap.sh at repo root.
 function dcnvim {
     [CmdletBinding()]
-    param([string]$Workspace = (Get-Location).Path)
+    param([string]$Workspace = "")
+
+    # No arg + cwd has .devcontainer  → use cwd
+    # No arg + no .devcontainer       → ghq list | fzf picker
+    # Explicit path                   → use that path
+    if (-not $Workspace) {
+        $cwd = (Get-Location).Path
+        if ((Test-Path (Join-Path $cwd ".devcontainer")) -or (Test-Path (Join-Path $cwd ".devcontainer.json"))) {
+            $Workspace = $cwd
+        } elseif (Get-Command ghq -ErrorAction SilentlyContinue) {
+            $selected = ghq list | fzf --prompt="devcontainer> "
+            if (-not $selected) { return }
+            $Workspace = Join-Path (ghq root) $selected
+        } else {
+            $Workspace = $cwd
+        }
+    }
 
     if (-not (Get-Command devcontainer -ErrorAction SilentlyContinue)) {
         Write-Error "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli"
