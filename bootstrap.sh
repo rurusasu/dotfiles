@@ -45,6 +45,7 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
   have curl || need+=("curl")
   have git || need+=("git")
   have tar || need+=("tar")
+  dpkg -s ca-certificates >/dev/null 2>&1 || need+=("ca-certificates")
   if [ "${#need[@]}" -gt 0 ]; then
     log "apt install: ${need[*]}"
     $SUDO apt-get update -qq
