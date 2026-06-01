@@ -1,0 +1,6 @@
+{
+  "name": "dotfiles CI",
+  "image": "ubuntu:24.04",
+  "postCreateCommand": "bash ${containerWorkspaceFolder}/bootstrap.sh",
+  "remoteUser": "root"
+}
