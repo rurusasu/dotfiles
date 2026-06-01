@@ -279,7 +279,7 @@ function claude {
         }
         return
     }
-    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue
+    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue | Where-Object { $_.Source -like '*\pnpm\*' } | Select-Object -First 1
     if ($ps1) { & $ps1.Source @args } else { & claude.exe @args }
 }
 
