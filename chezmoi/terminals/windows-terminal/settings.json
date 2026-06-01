@@ -247,7 +247,7 @@
         "size": 10
       },
       "useAcrylic": true,
-      "opacity": 85,
+      "opacity": 75,
       "colorScheme": "Catppuccin Mocha",
       "cursorShape": "bar",
       "padding": "8, 8, 8, 8"
