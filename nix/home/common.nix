@@ -129,13 +129,27 @@ in
       # Windows Terminal, Warp, etc.). Re-running attaches to the existing
       # tmux session so nvim state survives terminal close.
       #
-      # Usage: dcnvim [workspace-folder]   # defaults to $PWD
+      # Usage: dcnvim [workspace-folder]
+      #   No arg + cwd has .devcontainer  → use cwd
+      #   No arg + no .devcontainer       → ghq list | fzf picker
+      #   Explicit path                   → use that path
       #
       # Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
       # container to provide nvim + tmux. See bootstrap.sh at repo root.
       dcnvim() {
         local workspace
-        workspace="$(realpath -e "''${1:-$PWD}" 2>/dev/null || readlink -f "''${1:-$PWD}")"
+        if [ -n "''${1:-}" ]; then
+          workspace="$(realpath -e "$1" 2>/dev/null || readlink -f "$1")"
+        elif [ -d "$PWD/.devcontainer" ] || [ -f "$PWD/.devcontainer.json" ]; then
+          workspace="$PWD"
+        elif command -v ghq >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1; then
+          local ghq_root selected
+          ghq_root="$(ghq root 2>/dev/null)" || ghq_root=""
+          selected="$(ghq list | fzf --prompt='devcontainer> ')" || return 0
+          workspace="$(realpath -e "$ghq_root/$selected" 2>/dev/null || readlink -f "$ghq_root/$selected")"
+        else
+          workspace="$PWD"
+        fi
         if ! command -v devcontainer >/dev/null 2>&1; then
           echo "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli" >&2
           return 127
