@@ -4,6 +4,7 @@ version: "3"
 vars:
   DISTRO: NixOS
   DOTFILES_PATH: ~/.dotfiles
+  WSL: '{{if eq .OS "windows"}}wsl -d {{.DISTRO}} -- {{end}}'
 
 tasks:
   default:
@@ -15,19 +16,19 @@ tasks:
   # Formatting & Linting (via NixOS)
   # ===========================================
   fmt:
-    desc: Run nix fmt (via WSL)
+    desc: Run nix fmt
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix fmt"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt"'
 
   fmt:check:
-    desc: Check formatting without changes (via WSL)
+    desc: Check formatting without changes
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"'
 
   lint:
-    desc: Run pre-commit on all files (via WSL)
+    desc: Run pre-commit on all files
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'
 
   # ===========================================
   # Sync (chezmoi re-add)
@@ -43,7 +44,7 @@ tasks:
   # Git Operations (via NixOS)
   # ===========================================
   commit:
-    desc: Sync skills, format, lint, and commit (via WSL)
+    desc: Sync skills, format, lint, and commit
     vars:
       MSG: '{{.CLI_ARGS | default "update"}}'
     env:
@@ -53,15 +54,15 @@ tasks:
       - task: skills:sync
       - task: fmt
       - task: lint
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git add -A && printf '%s\n' \"$GIT_COMMIT_MSG\" | git commit -F -"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && git add -A && printf ''%s\n'' \"$GIT_COMMIT_MSG\" | git commit -F -"'
 
   push:
-    desc: Push to remote (via WSL)
+    desc: Push to remote
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && git push"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && git push"'
 
   sync:
-    desc: Format, lint, commit and push (via WSL)
+    desc: Format, lint, commit and push
     vars:
       MSG: '{{.CLI_ARGS | default "update"}}'
     cmds:
@@ -72,19 +73,19 @@ tasks:
   # NixOS Operations
   # ===========================================
   rebuild:
-    desc: Run nixos-rebuild switch (via WSL)
+    desc: Run nixos-rebuild switch
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && sudo nixos-rebuild switch --flake . --impure"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && sudo nixos-rebuild switch --flake . --impure"'
 
   build:
-    desc: Dry build NixOS configuration (via WSL)
+    desc: Dry build NixOS configuration
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix build .#nixosConfigurations.nixos.config.system.build.toplevel --dry-run"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix build .#nixosConfigurations.nixos.config.system.build.toplevel --dry-run"'
 
   update:
-    desc: Update flake inputs (via WSL)
+    desc: Update flake inputs
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix flake update"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update"'
 
   # ===========================================
   # Development
@@ -92,12 +93,15 @@ tasks:
   shell:
     desc: Enter NixOS shell
     cmds:
-      - wsl -d {{.DISTRO}}
+      - cmd: wsl -d {{.DISTRO}}
+        platforms: [windows]
+      - cmd: echo "Already in NixOS shell"
+        platforms: [linux, darwin]
 
   dev:
-    desc: Enter nix develop shell (via WSL)
+    desc: Enter nix develop shell
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && nix develop"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop"'
 
   # ===========================================
   # Testing
@@ -115,7 +119,7 @@ tasks:
   test:bash:
     desc: Run bats unit tests for shell helpers
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"'
 
   # ===========================================
   # Windows Setup
@@ -128,7 +132,8 @@ tasks:
   chezmoi:
     desc: Apply chezmoi dotfiles (NixOS + Windows)
     cmds:
-      - wsl -d NixOS -- chezmoi apply --force
+      - cmd: wsl -d {{.DISTRO}} -- chezmoi apply --force
+        platforms: [windows]
       - chezmoi apply --force
 
   # ===========================================
@@ -156,18 +161,18 @@ tasks:
   # Git Hooks
   # ===========================================
   hooks:install:
-    desc: Install pre-commit git hooks (via WSL)
+    desc: Install pre-commit git hooks
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit install --install-hooks"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit install --install-hooks"'
     sources:
       - .pre-commit-config.yaml
 
   hooks:uninstall:
-    desc: Uninstall pre-commit git hooks (via WSL)
+    desc: Uninstall pre-commit git hooks
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit uninstall"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit uninstall"'
 
   hooks:check:
-    desc: Run all pre-commit hooks manually on all files (via WSL)
+    desc: Run all pre-commit hooks manually on all files
     cmds:
-      - wsl -d {{.DISTRO}} -- bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'
