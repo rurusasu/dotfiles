@@ -34,9 +34,9 @@ class BunHandler : SetupHandlerBase {
         $linksPath = $this.GetLinksPath()
         $linkPath = Join-Path $linksPath "bun.exe"
 
-        # リンクが既にあっても Links パスが USER PATH に無い場合は適用する。
-        # (手動 shim, 過去の部分実行, copy フォールバック後を想定。)
-        if ((Test-Path $linkPath) -and $this.IsLinksInUserPath($linksPath)) {
+        # リンクが最新でも Links パスが USER PATH に無い場合は適用する。
+        # (winget upgrade 後の陳腐化, 手動 shim, 過去の部分実行, copy フォールバック後を想定。)
+        if ($this.IsPortableLinkCurrent($linkPath, $bunExe) -and $this.IsLinksInUserPath($linksPath)) {
             $this.Log("bun.exe リンクと PATH 設定は既に完了しています", "Gray")
             return $false
         }
@@ -58,41 +58,13 @@ class BunHandler : SetupHandlerBase {
 
             $linkPath = Join-Path $linksPath "bun.exe"
 
-            # リンクが無いときだけ作成。既存リンクは尊重して再作成しない。
-            if (-not (Test-Path $linkPath)) {
-                $this.Log("シンボリックリンクを作成しています: $linkPath -> $bunExe")
-
-                # Windows ではシンボリックリンク作成に管理者権限または開発者モードが必要。
-                # 失敗時はハードリンク、それも失敗ならコピーへフォールバック。
-                $linkCreated = $false
-
-                try {
-                    New-Item -ItemType SymbolicLink -Path $linkPath -Target $bunExe -ErrorAction Stop | Out-Null
-                    $this.Log("シンボリックリンクを作成しました", "Green")
-                    $linkCreated = $true
-                }
-                catch {
-                    $this.LogWarning("シンボリックリンク作成失敗: $($_.Exception.Message)")
-                }
-
-                if (-not $linkCreated) {
-                    try {
-                        New-Item -ItemType HardLink -Path $linkPath -Target $bunExe -ErrorAction Stop | Out-Null
-                        $this.Log("ハードリンクを作成しました", "Green")
-                        $linkCreated = $true
-                    }
-                    catch {
-                        $this.LogWarning("ハードリンク作成失敗: $($_.Exception.Message)")
-                    }
-                }
-
-                if (-not $linkCreated) {
-                    Copy-Item -Path $bunExe -Destination $linkPath -Force
-                    $this.Log("ファイルをコピーしました", "Green")
-                }
+            # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
+            # winget upgrade 後に Links\bun.exe が旧バージョンを指す問題への対処。
+            if (-not $this.IsPortableLinkCurrent($linkPath, $bunExe)) {
+                $this.CreatePortableLink($linkPath, $bunExe)
             }
             else {
-                $this.Log("bun.exe リンクは既に存在します", "Gray")
+                $this.Log("bun.exe リンクは最新です", "Gray")
             }
 
             # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。

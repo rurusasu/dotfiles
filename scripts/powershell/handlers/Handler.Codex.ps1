@@ -27,7 +27,9 @@ class CodexHandler : SetupHandlerBase {
     .SYNOPSIS
         実行可否を判定する
     .DESCRIPTION
-        Codex パッケージがインストールされていて、Links に codex.exe がない場合に適用
+        Codex パッケージがインストールされていて、Links\codex.exe が
+        現行 exe を指していない（未作成 / winget upgrade 後の陳腐化）か、
+        Links が USER PATH に未登録の場合に適用する。
     #>
     [bool] CanApply([SetupContext]$ctx) {
         $codexExe = $this.GetCodexExecutablePath()
@@ -39,8 +41,10 @@ class CodexHandler : SetupHandlerBase {
         $linksPath = $this.GetLinksPath()
         $linkPath = Join-Path $linksPath "codex.exe"
 
-        if (Test-Path $linkPath) {
-            $this.Log("codex.exe リンクは既に存在します", "Gray")
+        # リンクが最新でも Links が PATH に無ければ適用する。
+        # (winget upgrade 後の陳腐化, copy フォールバック後, 過去の部分実行を想定。)
+        if ($this.IsPortableLinkCurrent($linkPath, $codexExe) -and $this.IsLinksInUserPath($linksPath)) {
+            $this.Log("codex.exe リンクと PATH 設定は既に完了しています", "Gray")
             return $false
         }
 
@@ -64,51 +68,27 @@ class CodexHandler : SetupHandlerBase {
             }
 
             $linkPath = Join-Path $linksPath "codex.exe"
-            $this.Log("シンボリックリンクを作成しています: $linkPath -> $codexExe")
 
-            # Windows ではシンボリックリンク作成に管理者権限または開発者モードが必要
-            # 失敗した場合はハードリンクまたはコピーにフォールバック
-            $linkCreated = $false
-
-            # まずシンボリックリンクを試す
-            try {
-                New-Item -ItemType SymbolicLink -Path $linkPath -Target $codexExe -Force -ErrorAction Stop | Out-Null
-                $this.Log("シンボリックリンクを作成しました", "Green")
-                $linkCreated = $true
+            # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
+            # winget upgrade 後に Links\codex.exe が旧バージョンを指す問題への対処。
+            if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
+                $this.CreatePortableLink($linkPath, $codexExe)
             }
-            catch {
-                $this.LogWarning("シンボリックリンク作成失敗: $($_.Exception.Message)")
+            else {
+                $this.Log("codex.exe リンクは最新です", "Gray")
             }
 
-            # シンボリックリンクが失敗した場合、ハードリンクを試す
-            if (-not $linkCreated) {
-                try {
-                    New-Item -ItemType HardLink -Path $linkPath -Target $codexExe -Force -ErrorAction Stop | Out-Null
-                    $this.Log("ハードリンクを作成しました", "Green")
-                    $linkCreated = $true
-                }
-                catch {
-                    $this.LogWarning("ハードリンク作成失敗: $($_.Exception.Message)")
-                }
-            }
-
-            # すべて失敗した場合はファイルをコピー
-            if (-not $linkCreated) {
-                Copy-Item -Path $codexExe -Destination $linkPath -Force
-                $this.Log("ファイルをコピーしました", "Green")
-            }
-
-            # Links パスが PATH に登録されているか確認
-            $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-            if ($userPath -notlike "*$linksPath*") {
+            # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
+            if (-not $this.IsLinksInUserPath($linksPath)) {
                 $this.Log("PATH に Links フォルダを追加しています...")
-                $newPath = "$userPath;$linksPath"
-                [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+                $userPath = Get-UserEnvironmentPath
+                $newPath = if ($userPath) { "$userPath;$linksPath" } else { $linksPath }
+                Set-UserEnvironmentPath -Path $newPath
                 $env:Path = "$env:Path;$linksPath"
                 $this.Log("PATH を更新しました", "Green")
             }
 
-            return $this.CreateSuccessResult("codex.exe リンクを作成しました")
+            return $this.CreateSuccessResult("codex.exe リンクと PATH を設定しました")
         }
         catch {
             return $this.CreateFailureResult("Codex 設定に失敗しました", $_)
@@ -146,5 +126,15 @@ class CodexHandler : SetupHandlerBase {
     #>
     hidden [string] GetLinksPath() {
         return Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+    }
+
+    <#
+    .SYNOPSIS
+        Links フォルダが USER PATH に登録済みか判定する
+    #>
+    hidden [bool] IsLinksInUserPath([string]$linksPath) {
+        $userPath = Get-UserEnvironmentPath
+        if (-not $userPath) { return $false }
+        return $userPath -like "*$linksPath*"
     }
 }
