@@ -1,6 +1,9 @@
 {
   "mcpServers": {
 {{- $first := true }}
+{{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
+{{- $opPersonal := false }}
+{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
 {{- if has "claude-desktop" .supports }}
@@ -17,7 +20,7 @@
 {{- if hasKey . "env" }},
       "env": {
 {{- $envFirst := true }}
-{{- $hasOp := and (hasKey . "op_env") (lookPath "op") }}
+{{- $hasOp := and (hasKey . "op_env") $opPersonal }}
 {{- $opEnv := dict }}
 {{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}
