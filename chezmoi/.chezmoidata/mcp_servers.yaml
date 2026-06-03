@@ -198,11 +198,12 @@ mcp_servers:
       - gemini
 
   # MemPalace - Local memory system (stdio via uv tool)
+  # `uv tool install mempalace` で隔離 venv に入るため、system python では
+  # `mempalace.mcp_server` を import できない。uv tool が PATH に出す
+  # 専用エントリポイント `mempalace-mcp` を直接起動する。
   - name: mempalace
-    command: python
-    args:
-      - "-m"
-      - "mempalace.mcp_server"
+    command: mempalace-mcp
+    args: []
     supports:
       - claude-code
       - claude-desktop

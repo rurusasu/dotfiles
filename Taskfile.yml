@@ -4,7 +4,9 @@ version: "3"
 vars:
   DISTRO: NixOS
   DOTFILES_PATH: ~/.dotfiles
-  WSL: '{{if eq .OS "windows"}}wsl -d {{.DISTRO}} -- {{end}}'
+  # OS は go-task の特殊変数なのでドット無しで参照する（`.OS` は常に空になり、
+  # Windows から実行しても WSL プレフィックスが付かず失敗する）。
+  WSL: '{{if eq OS "windows"}}wsl -d {{.DISTRO}} -- {{end}}'
 
 tasks:
   default:
