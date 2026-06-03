@@ -15,6 +15,14 @@
     - nix package と Windows font installer の zip 名が同じバージョンを参照している
 #>
 
+# It -ForEach は Discovery フェーズで評価されるため、そこで参照する定数は
+# BeforeDiscovery で設定する必要がある（BeforeAll は Run フェーズで遅すぎ、
+# StrictMode 下では「変数未設定」で Discovery が失敗する）。
+BeforeDiscovery {
+    $script:expectedFont = "UDEV Gothic NF"
+    $script:expectedNixPkg = "udev-gothic-nf"
+}
+
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:expectedFont = "UDEV Gothic NF"

@@ -37,51 +37,51 @@ Describe 'chezmoi テンプレート バリデーション' {
             )
         }
 
-        It 'onepasswordRead の各呼び出しが個別に lookPath ブロック内にあること' {
+        It 'onepasswordRead の各呼び出しが個別に op ガードブロック内にあること' {
             foreach ($file in $script:templateFiles) {
                 $lines = Get-Content -Path $file.FullName -ErrorAction SilentlyContinue
                 if (-not $lines) { continue }
 
-                $inOpGuard = $false
-                # $hasOp 変数経由の間接ガードも検出する
-                # 受理パターン:
-                #   $hasOp := and (hasKey . "op_env") (lookPath "op")
-                #   $hasOp := or  (lookPath "op")    (lookPath "op.exe")
-                #   {{- if and $hasOp ... }}
-                #   {{- if $hasOp }}
-                $hasOpVarGuard = $false
-                $inHasOpBlock = $false
-                $lineNum = 0
+                # op に由来するガード変数を収集する。lookPath / op アカウント /
+                # 既存の op 変数から派生したものだけを「ガード」として認める。
+                #   $opCmd      := or (lookPath "op") (lookPath "op.exe")        ← lookPath 由来
+                #   $opPersonal  = contains .op_account_personal (output $opCmd ...) ← account 由来
+                #   $hasOp      := and (hasKey . "op_env") $opPersonal           ← op 変数派生
+                #   $hasPersonalAccount = contains .op_account_personal $accounts
+                $opVars = [System.Collections.Generic.HashSet[string]]::new()
+                foreach ($line in $lines) {
+                    if ($line -match '\$(\w+)\s*:?=\s*.*lookPath\s+"op') {
+                        [void]$opVars.Add($Matches[1])
+                    }
+                    elseif ($line -match '\$(\w+)\s*:?=\s*.*op_account') {
+                        [void]$opVars.Add($Matches[1])
+                    }
+                    elseif ($line -match '\$(\w+)\s*:?=\s*.*\$(\w+)' -and $opVars.Contains($Matches[2])) {
+                        [void]$opVars.Add($Matches[1])
+                    }
+                }
 
+                $inOpGuard = $false
+                $lineNum = 0
                 foreach ($line in $lines) {
                     $lineNum++
 
-                    # 直接ガード: {{- if lookPath "op" }} または {{- if (lookPath "op" ) ... }}
+                    # ガードブロック開始: {{ if ... }} が lookPath "op" か op 由来変数を参照
                     if ($line -match '\{\{-?\s*if\s+[^}]*lookPath\s+"op"') {
                         $inOpGuard = $true
                     }
-
-                    # 間接ガード: $hasOp := (and|or) ... (lookPath "op")
-                    if ($line -match '\$hasOp\s*:=\s*(?:and|or)\s.*lookPath\s+"op"') {
-                        $hasOpVarGuard = $true
-                    }
-
-                    # 間接ガードブロック開始: {{- if $hasOp }} / {{- if and $hasOp ... }}
-                    if ($line -match '\{\{-?\s*if\s+(?:and\s+)?\$hasOp' -and $hasOpVarGuard) {
-                        $inHasOpBlock = $true
+                    elseif ($line -match '\{\{-?\s*if\b[^}]*?\$(\w+)' -and $opVars.Contains($Matches[1])) {
+                        $inOpGuard = $true
                     }
 
                     # テンプレート展開 ({{...}}) 内の呼び出しのみを対象とする。
                     # コメント (`# For onepasswordRead, ...`) やドキュメント記述は除外。
-                    if ($line -match '\{\{[^}]*onepasswordRead' -and -not $inOpGuard -and -not $inHasOpBlock) {
-                        "$($file.Name):$lineNum should be inside a lookPath `"op`" block" |
+                    if ($line -match '\{\{[^}]*onepasswordRead' -and -not $inOpGuard) {
+                        "$($file.Name):$lineNum should be inside an op guard block (lookPath `"op`" / `$opPersonal / etc.)" |
                             Should -BeNullOrEmpty
                     }
 
-                    if ($line -match '\{\{-?\s*end\s*\}\}') {
-                        if ($inHasOpBlock) { $inHasOpBlock = $false }
-                        elseif ($inOpGuard) { $inOpGuard = $false }
-                    }
+                    if ($line -match '\{\{-?\s*end\s*\}\}' -and $inOpGuard) { $inOpGuard = $false }
                 }
             }
         }
