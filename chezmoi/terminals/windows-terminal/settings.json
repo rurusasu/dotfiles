@@ -130,9 +130,7 @@
     { "id": "User.decreaseFontSize", "keys": "ctrl+shift+minus" }
   ],
   "language": "ja",
-  "newTabMenu": [
-    { "type": "remainingProfiles" }
-  ],
+  "newTabMenu": [{ "type": "remainingProfiles" }],
   "profiles": {
     "defaults": {
       "colorScheme": "Catppuccin Mocha",
