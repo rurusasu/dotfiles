@@ -156,3 +156,71 @@ jobs:
           path: scripts/powershell/test-results.xml
           retention-days: 30
           if-no-files-found: warn
+
+  op-guard:
+    # Behavioral guard for the "op present but unauthenticated" environment
+    # (devcontainers, CI, fresh clones). The static Pester lint only checks
+    # that onepasswordRead is wrapped in *a* guard; it cannot tell whether the
+    # guard is strong enough. Here we put a stub `op` on PATH that simulates
+    # the binary being installed with no account signed in, then render every
+    # template that calls onepasswordRead and require each to succeed. A guard
+    # that only checks `lookPath "op"` would call `op read` and fail — which is
+    # exactly the regression this job catches (see the self-check step).
+    name: Render guard (op unauthenticated)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install chezmoi
+        run: |
+          set -euo pipefail
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install stub op (present but unauthenticated)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          cat > "$HOME/.local/bin/op" <<'STUB'
+          #!/usr/bin/env bash
+          # Simulate 1Password CLI installed but with no account signed in.
+          [ "${1:-}" = "account" ] && [ "${2:-}" = "list" ] && exit 0   # empty list, success
+          [ "${1:-}" = "--version" ] && { echo "0.0.0-stub"; exit 0; }
+          echo "[stub op] no 1Password account found (unauthenticated)" >&2
+          exit 1
+          STUB
+          chmod +x "$HOME/.local/bin/op"
+
+      - name: Render every onepasswordRead template (must succeed)
+        run: |
+          set -euo pipefail
+          src="$PWD/chezmoi"
+          chezmoi init --source "$src"
+          fail=0
+          while IFS= read -r f; do
+            if ! chezmoi --source "$src" execute-template < "$f" >/dev/null 2>/tmp/te.err; then
+              rel="${f#"$src"/}"
+              echo "::error file=chezmoi/${rel}::onepasswordRead failed while op is unauthenticated — the guard is insufficient (must skip the read when the account is not signed in)"
+              sed 's/^/    /' /tmp/te.err
+              fail=1
+            fi
+          done < <(grep -rl --include='*.tmpl' -E '\{\{[^}]*onepasswordRead' "$src")
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "OK  all onepasswordRead templates render cleanly with op present but unauthenticated"
+
+      - name: Self-check (a lookPath-only guard must be caught)
+        run: |
+          set -uo pipefail
+          src="$PWD/chezmoi"
+          weak='{{ if lookPath "op" }}{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal }}{{ end }}'
+          if printf '%s' "$weak" | chezmoi --source "$src" execute-template >/dev/null 2>&1; then
+            echo "::error::self-check failed: a lookPath-only guard rendered successfully, so this job would not catch the original bug class"
+            exit 1
+          fi
+          echo "OK  weak lookPath-only guard correctly fails under unauthenticated op"

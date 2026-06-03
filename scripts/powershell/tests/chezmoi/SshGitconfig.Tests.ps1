@@ -171,7 +171,7 @@ Describe 'SSH deploy スクリプト' {
 
             foreach ($line in $lines) {
                 $lineNum++
-                if ($line -match '\{\{-?\s*if\s+(lookPath\s+"op[^"]*"|\$hasOp)\b') { $inOpGuard = $true }
+                if ($line -match '\{\{-?\s*if\s+[^}]*(lookPath\s+"op[^"]*"|\$hasOp|\$hasPersonalAccount|\$hasWorkAccount|\$opPersonal)\b') { $inOpGuard = $true }
                 if ($line -match 'onepasswordRead' -and -not $inOpGuard -and $line -notmatch '^\s*#') {
                     $violations += "line $lineNum"
                 }
@@ -202,7 +202,7 @@ Describe 'SSH deploy スクリプト' {
 
             foreach ($line in $lines) {
                 $lineNum++
-                if ($line -match '\{\{-?\s*if\s+(lookPath\s+"op[^"]*"|\$hasOp)\b') { $inOpGuard = $true }
+                if ($line -match '\{\{-?\s*if\s+[^}]*(lookPath\s+"op[^"]*"|\$hasOp|\$hasPersonalAccount|\$hasWorkAccount|\$opPersonal)\b') { $inOpGuard = $true }
                 if ($line -match 'onepasswordRead' -and -not $inOpGuard -and $line -notmatch '^\s*#') {
                     $violations += "line $lineNum"
                 }
