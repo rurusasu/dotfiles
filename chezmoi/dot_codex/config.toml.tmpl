@@ -150,6 +150,9 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 # MCP サーバー設定 (Generated from .chezmoidata/mcp_servers.yaml)
 ################################################################################
 
+{{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
+{{- $opPersonal := false }}
+{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
 [mcp_servers]
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
@@ -167,7 +170,7 @@ startup_timeout_sec = {{ .startup_timeout_sec }}
 {{- end }}
 {{- if hasKey . "env" }}
 [mcp_servers.{{ .name }}.env]
-{{- $hasOp := and (hasKey . "op_env") (lookPath "op") }}
+{{- $hasOp := and (hasKey . "op_env") $opPersonal }}
 {{- $opEnv := dict }}
 {{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}

@@ -4,10 +4,14 @@
 {{/* Accept either op or op.exe (symmetric with the Unix variant). */}}
 {{- $hasOp := or (lookPath "op") (lookPath "op.exe") }}
 {{- $hasWorkAccount := false }}
+{{- $hasPersonalAccount := false }}
 {{- if $hasOp }}
 {{- $accounts := output $hasOp "account" "list" }}
 {{- $hasWorkAccount = contains .op_account_work $accounts }}
+{{- $hasPersonalAccount = contains .op_account_personal $accounts }}
+{{- if $hasPersonalAccount }}
 # personal-pubkey-hash: {{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" .op_account_personal | sha256sum }}
+{{- end }}
 {{- if $hasWorkAccount }}
 # work-pubkey-hash:     {{ onepasswordRead "op://Employee/GitHub Work/public key" .op_account_work | sha256sum }}
 {{- end }}
@@ -39,10 +43,11 @@ $sshConfig = @'
 '@
 Deploy-Content $sshConfig "$HomeDir\.ssh\config"
 
-{{- if $hasOp }}
+{{- if $hasPersonalAccount }}
 # Personal SSH public key (from rurusasu's Private vault).
 $personalPubkey = '{{ onepasswordRead "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key" .op_account_personal }}'
 Deploy-Content $personalPubkey "$HomeDir\.ssh\signing_key.pub"
+{{- end }}
 
 {{- if $hasWorkAccount }}
 # Work SSH public key (from kohei-miki-im8's Employee vault on the work
@@ -50,8 +55,8 @@ Deploy-Content $personalPubkey "$HomeDir\.ssh\signing_key.pub"
 $workPubkey = '{{ onepasswordRead "op://Employee/GitHub Work/public key" .op_account_work }}'
 Deploy-Content $workPubkey "$HomeDir\.ssh\github_work.pub"
 {{- end }}
-{{- else }}
-Write-Host "WARNING: op/op.exe CLI not available, skipping public key deployment"
+{{- if not (or $hasPersonalAccount $hasWorkAccount) }}
+Write-Host "WARNING: no 1Password account signed in, skipping public key deployment"
 {{- end }}
 
 Write-Host "SSH configuration deployed."

@@ -1,6 +1,9 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy Kaggle API credentials for Windows
-{{- if lookPath "op" }}
+{{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
+{{- $opPersonal := false }}
+{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
+{{- if $opPersonal }}
 # token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal | sha256sum }}
 {{- end }}
 
@@ -8,7 +11,7 @@ $ErrorActionPreference = "Stop"
 
 $KaggleDir = "$env:USERPROFILE\.kaggle"
 
-{{- if lookPath "op" }}
+{{- if $opPersonal }}
 Write-Host "Deploying Kaggle API credentials..."
 
 if (-not (Test-Path -LiteralPath $KaggleDir)) {
@@ -21,6 +24,6 @@ $token = '{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .o
 Set-Content -Path "$KaggleDir\access_token" -Value $token -NoNewline -Force
 Write-Host "Deployed: $KaggleDir\access_token"
 {{- else }}
-Write-Host "WARNING: op CLI not available, skipping Kaggle API credentials deployment"
+Write-Host "WARNING: 1Password personal account not signed in, skipping Kaggle API credentials deployment"
 {{- end }}
 {{ end -}}
