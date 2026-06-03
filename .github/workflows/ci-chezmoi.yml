@@ -8,10 +8,11 @@ on:
       - "chezmoi/**"
       - ".github/workflows/ci-chezmoi.yml"
   pull_request:
+    # No paths filter: this workflow's checks are required by the main ruleset,
+    # so they must report on every PR (a path-filtered required check stays
+    # "expected" forever and blocks unrelated PRs). Jobs are fast; running them
+    # on every PR is the cost of having them be reliable required checks.
     branches: [main]
-    paths:
-      - "chezmoi/**"
-      - ".github/workflows/ci-chezmoi.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
