@@ -564,7 +564,6 @@ lib.mapAttrs (_: names: resolve names) grouped
     winget = [
       "AgileBits.1Password"
       "Anthropic.Claude"
-      "Anysphere.Cursor"
       "TheBrowserCompany.Arc"
       "Docker.DockerDesktop"
       "GitHub.Copilot"
@@ -579,7 +578,6 @@ lib.mapAttrs (_: names: resolve names) grouped
       "OpenAI.Codex"
       "TablePlus.TablePlus"
       "Oven-sh.Bun"
-      "ZedIndustries.Zed"
       "zig.zig"
     ];
     msstore = [

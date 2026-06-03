@@ -173,9 +173,6 @@
           "PackageIdentifier": "Anthropic.Claude"
         },
         {
-          "PackageIdentifier": "Anysphere.Cursor"
-        },
-        {
           "PackageIdentifier": "TheBrowserCompany.Arc"
         },
         {
@@ -219,9 +216,6 @@
         },
         {
           "PackageIdentifier": "Oven-sh.Bun"
-        },
-        {
-          "PackageIdentifier": "ZedIndustries.Zed"
         },
         {
           "PackageIdentifier": "zig.zig"
