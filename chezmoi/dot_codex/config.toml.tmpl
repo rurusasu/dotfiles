@@ -2,7 +2,7 @@
 # 参照: https://developers.openai.com/codex/config-reference/
 
 # 使用するデフォルトモデル
-model = "gpt-5.3-codex"
+model = "gpt-5.5"
 
 # モデルの推論努力を制御する
 model_reasoning_effort = "medium"
@@ -37,7 +37,7 @@ approval_policy = "on-request"
 
 # ツール呼び出しのファイルシステム/ネットワークサンドボックスポリシー:
 # "read-only" (デフォルト), "workspace-write", "danger-full-access" (サンドボックスなし - 極めて危険)
-sandbox_mode = "read-only"
+sandbox_mode = "danger-full-access"
 
 ################################################################################
 # ウェブ検索
@@ -98,11 +98,27 @@ elevated_windows_sandbox = true
 shell_snapshot = true
 # サブエージェント (Multi-agent mode)
 multi_agent = true
+# ライフサイクルフック
+hooks = true
 
 # 開発中機能の警告を抑制する
 suppress_unstable_features_warning = true
 # ChatGPT Apps 連携
 apps = false
+
+################################################################################
+# フック設定
+################################################################################
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'python3 "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py"'
+command_windows = 'python "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py"'
+timeout = 30
+statusMessage = "Checking Claude-aligned Bash policy"
 
 ################################################################################
 # スキル設定
@@ -152,7 +168,15 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opPersonal := false }}
-{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
+{{- $opAccounts := "" }}
+{{- if $opCmd }}
+{{- if eq .chezmoi.os "windows" }}
+{{- $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}
+{{- else }}
+{{- $opAccounts = output "sh" "-c" (printf "'%s' account list 2>/dev/null || true" $opCmd) }}
+{{- end }}
+{{- end }}
+{{- $opPersonal = contains .op_account_personal $opAccounts }}
 [mcp_servers]
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
@@ -163,8 +187,13 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 url = "{{ .url }}"
 {{- else }}
 [mcp_servers.{{ .name }}]
+{{- if and (eq .command "docker") (eq $.chezmoi.os "windows") }}
+command = "pwsh"
+args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{{ $.chezmoi.homeDir | replace "\\" "/" }}/.local/bin/codex-docker-mcp.ps1"{{ range $i, $arg := .args }}, "{{ $arg }}"{{ end }}]
+{{- else }}
 command = "{{ .command }}"
 args = [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
+{{- end }}
 {{- if hasKey . "startup_timeout_sec" }}
 startup_timeout_sec = {{ .startup_timeout_sec }}
 {{- end }}

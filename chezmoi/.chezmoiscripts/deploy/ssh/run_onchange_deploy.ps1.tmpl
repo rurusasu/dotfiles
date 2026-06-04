@@ -6,7 +6,7 @@
 {{- $hasWorkAccount := false }}
 {{- $hasPersonalAccount := false }}
 {{- if $hasOp }}
-{{- $accounts := output $hasOp "account" "list" }}
+{{- $accounts := output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $hasOp) }}
 {{- $hasWorkAccount = contains .op_account_work $accounts }}
 {{- $hasPersonalAccount = contains .op_account_personal $accounts }}
 {{- if $hasPersonalAccount }}

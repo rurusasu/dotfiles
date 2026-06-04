@@ -37,11 +37,11 @@ prefix_rule(
     not_match = [],
 )
 
-# Allow Git typical operations (that are not covered by safety.rules)
+# Allow Git typical operations (that are not covered by commands.rules)
 prefix_rule(
-    pattern = ["git", ["status", "diff", "add", "commit", "pull", "fetch", "log"]],
+    pattern = ["git", ["status", "diff", "add", "fetch", "log"]],
     decision = "allow",
-    justification = "Standard safe git operations.",
-    match = ["git status", "git add .", "git commit -m 'fix'", "git pull"],
-    not_match = ["git push -f"],  # Blocked by safety.rules
+    justification = "Standard safe git operations that do not conflict with Claude-aligned ask/deny rules.",
+    match = ["git status", "git add .", "git fetch", "git log"],
+    not_match = [],
 )

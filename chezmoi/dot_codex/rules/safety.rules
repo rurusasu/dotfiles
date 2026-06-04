@@ -9,18 +9,3 @@ prefix_rule(
     match = ["rm -rf /"],
     not_match = ["rm -rf ./temp", "rm -rf /tmp/test"],
 )
-
-# Prevent force pushing without lease
-prefix_rule(
-    pattern = ["git", "push", ["-f", "--force"]],
-    decision = "forbidden",
-    justification = "Force pushing can overwrite remote history. Use --force-with-lease instead for safety.",
-    match = [
-        "git push -f origin main",
-        "git push --force origin feature",
-    ],
-    not_match = [
-        "git push --force-with-lease origin main",
-        "git push origin main",
-    ],
-)

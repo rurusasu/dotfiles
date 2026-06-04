@@ -8,7 +8,7 @@
 {{- $hasWorkAccount := false }}
 {{- $hasPersonalAccount := false }}
 {{- if $hasOp }}
-{{- $accounts := output $hasOp "account" "list" }}
+{{- $accounts := output "sh" "-c" (printf "'%s' account list 2>/dev/null || true" $hasOp) }}
 {{- $hasWorkAccount = contains .op_account_work $accounts }}
 {{- $hasPersonalAccount = contains .op_account_personal $accounts }}
 {{- if $hasPersonalAccount }}

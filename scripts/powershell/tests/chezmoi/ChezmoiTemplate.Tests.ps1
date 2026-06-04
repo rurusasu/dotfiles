@@ -230,6 +230,24 @@ Describe 'chezmoi テンプレート バリデーション' {
 
             $violations | Should -BeNullOrEmpty -Because "Docker MCP サーバーの env 変数は args の -e で Docker に渡す必要がある"
         }
+
+        It 'Codex Windows テンプレートでは Docker MCP が起動 wrapper 経由で実行されること' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -Path $templatePath -Raw
+
+            $content | Should -Match 'eq \.command "docker"' -Because "Docker MCP だけを wrapper 経由にする"
+            $content | Should -Match 'command = "pwsh"' -Because "PowerShell 7 で wrapper を起動できる"
+            $content | Should -Match 'codex-docker-mcp\.ps1' -Because "Docker Desktop の自動起動待ち wrapper を使う"
+        }
+
+        It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {
+            $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex-docker-mcp.ps1"
+            $content = Get-Content -Path $wrapperPath -Raw
+
+            $content | Should -Match '\[Console\]::Error\.WriteLine' -Because "MCP stdio の stdout を壊さないためログは stderr に出す"
+            $content | Should -Not -Match 'Write-Host' -Because "Write-Host は MCP stdio と相性が悪い"
+            $content | Should -Match 'Docker Desktop\.exe' -Because "Docker daemon 未起動時に Docker Desktop を起動する"
+        }
     }
 
     Context 'supports ID の整合性' {
