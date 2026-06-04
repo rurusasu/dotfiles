@@ -3,7 +3,9 @@
 {{- $first := true }}
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opPersonal := false }}
-{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
+{{- $opAccounts := "" }}
+{{- if $opCmd }}{{ $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}{{ end }}
+{{- $opPersonal = contains .op_account_personal $opAccounts }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
 {{- if has "windsurf" .supports }}

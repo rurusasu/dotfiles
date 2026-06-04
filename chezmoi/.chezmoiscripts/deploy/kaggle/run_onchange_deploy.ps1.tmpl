@@ -2,7 +2,9 @@
 # Deploy Kaggle API credentials for Windows
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opPersonal := false }}
-{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
+{{- $opAccounts := "" }}
+{{- if $opCmd }}{{ $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}{{ end }}
+{{- $opPersonal = contains .op_account_personal $opAccounts }}
 {{- if $opPersonal }}
 # token-hash: {{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal | sha256sum }}
 {{- end }}

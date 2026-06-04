@@ -236,7 +236,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content = Get-Content -Path $templatePath -Raw
 
             $content | Should -Match 'eq \.command "docker"' -Because "Docker MCP だけを wrapper 経由にする"
-            $content | Should -Match 'C:/Windows/System32/WindowsPowerShell/v1\.0/powershell\.exe' -Because "PATH が絞られていても PowerShell wrapper を起動できる"
+            $content | Should -Match 'command = "pwsh"' -Because "PowerShell 7 で wrapper を起動できる"
             $content | Should -Match 'codex-docker-mcp\.ps1' -Because "Docker Desktop の自動起動待ち wrapper を使う"
         }
 

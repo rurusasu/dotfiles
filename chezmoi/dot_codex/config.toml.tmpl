@@ -168,7 +168,15 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opPersonal := false }}
-{{- if $opCmd }}{{ $opPersonal = contains .op_account_personal (output $opCmd "account" "list") }}{{ end }}
+{{- $opAccounts := "" }}
+{{- if $opCmd }}
+{{- if eq .chezmoi.os "windows" }}
+{{- $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}
+{{- else }}
+{{- $opAccounts = output "sh" "-c" (printf "'%s' account list 2>/dev/null || true" $opCmd) }}
+{{- end }}
+{{- end }}
+{{- $opPersonal = contains .op_account_personal $opAccounts }}
 [mcp_servers]
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
@@ -180,7 +188,7 @@ url = "{{ .url }}"
 {{- else }}
 [mcp_servers.{{ .name }}]
 {{- if and (eq .command "docker") (eq $.chezmoi.os "windows") }}
-command = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+command = "pwsh"
 args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{{ $.chezmoi.homeDir | replace "\\" "/" }}/.local/bin/codex-docker-mcp.ps1"{{ range $i, $arg := .args }}, "{{ $arg }}"{{ end }}]
 {{- else }}
 command = "{{ .command }}"
