@@ -80,7 +80,7 @@ mcp_servers:
       - "-e"
       - "TAVILY_API_KEY"
       - "mcp/tavily"
-    startup_timeout_sec: 60
+    startup_timeout_sec: 300
     env:
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
     op_env:
@@ -105,7 +105,7 @@ mcp_servers:
       - "-e"
       - "EXA_API_KEY"
       - "mcp/exa"
-    startup_timeout_sec: 60
+    startup_timeout_sec: 300
     env:
       EXA_API_KEY: "${EXA_API_KEY}"
     op_env:
@@ -130,7 +130,7 @@ mcp_servers:
       - "-e"
       - "FIRECRAWL_API_KEY"
       - "mcp/firecrawl"
-    startup_timeout_sec: 60
+    startup_timeout_sec: 300
     env:
       FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY}"
     op_env:

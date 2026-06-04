@@ -5,6 +5,7 @@
 - `config.toml`
 - `agents/*.toml`
 - `rules/*.rules`
+- `hooks/*.py`
 - `AGENTS.override.md`
 
 ## ルール

@@ -1,5 +1,5 @@
 # Codex execpolicy rules (Starlark)
-# Based on chezmoi/dot_claude/settings.json (deny/ask mapped to forbidden/prompt).
+# Keep Bash deny/ask decisions aligned with chezmoi/dot_claude/settings.json.
 
 # --- Forbidden: destructive or sensitive ---
 prefix_rule(
@@ -37,12 +37,6 @@ prefix_rule(
     pattern = ["git", "pull"],
     decision = "forbidden",
     justification = "Pull can change working tree unexpectedly.",
-)
-
-prefix_rule(
-    pattern = ["git", "push"],
-    decision = "forbidden",
-    justification = "Pushing requires manual review.",
 )
 
 prefix_rule(

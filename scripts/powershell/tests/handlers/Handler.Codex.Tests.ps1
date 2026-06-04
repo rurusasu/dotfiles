@@ -17,6 +17,10 @@ BeforeAll {
     # GetCodexExecutablePath() が返すパス（パッケージ dir + 実行ファイル名）
     $script:codexPkgDir = "C:\Users\test\AppData\Local\Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe"
     $script:codexExe = Join-Path $script:codexPkgDir "codex-x86_64-pc-windows-msvc.exe"
+    $script:homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { [Environment]::GetFolderPath("UserProfile") }
+    $script:localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $script:homeDir "AppData\Local" }
+    $script:expectedLinks = Join-Path $script:localAppData "Microsoft\WinGet\Links"
+    $script:expectedLocalBin = Join-Path $script:homeDir ".local\bin"
 
     # Codex パッケージが存在することにする共通モック
     function script:Set-CodexPackageInstalled {
@@ -76,8 +80,7 @@ Describe 'CodexHandler' {
             Mock Get-Item {
                 return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
             } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
-            $script:expectedLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
-            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
             Mock Write-Host { }
         }
 
@@ -103,7 +106,6 @@ Describe 'CodexHandler' {
                 }
                 return [PSCustomObject]@{ LinkType = ""; Length = 246156592; LastWriteTimeUtc = [datetime]'2024-06-01' }
             }
-            $script:expectedLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
             Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
             Mock Write-Host { }
         }
@@ -130,6 +132,27 @@ Describe 'CodexHandler' {
         }
 
         It 'should return true so Apply can add PATH' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
+        }
+    }
+
+    Context 'CanApply - link and WinGet PATH configured but local bin missing' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
+            Mock Write-Host { }
+        }
+
+        It 'should return true so Apply can add local bin for MCP tools' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
@@ -242,7 +265,6 @@ Describe 'CodexHandler' {
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
             Mock Copy-Item { }
-            $script:expectedLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
             Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
@@ -275,15 +297,47 @@ Describe 'CodexHandler' {
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
             Mock Copy-Item { }
-            Mock Get-UserEnvironmentPath { return "C:\Windows;C:\Windows\System32" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;C:\Windows\System32;$script:expectedLocalBin" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should add PATH without recreating the link' {
+        It 'should add WinGet Links PATH without recreating the link' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Set-UserEnvironmentPath -Times 1
+            Should -Invoke Copy-Item -Times 0
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
+        }
+    }
+
+    Context 'Apply - link current, only local bin missing' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($Path -like "*Links") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock New-Item { throw "should not recreate a current link" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Remove-Item { }
+            Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should add local bin for MCP tools without recreating the link' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "$script:expectedLocalBin*" }
             Should -Invoke Copy-Item -Times 0
             Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
         }
