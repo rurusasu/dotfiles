@@ -4,7 +4,13 @@
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opPersonal := false }}
 {{- $opAccounts := "" }}
-{{- if $opCmd }}{{ $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}{{ end }}
+{{- if $opCmd }}
+{{- if eq .chezmoi.os "windows" }}
+{{- $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}
+{{- else }}
+{{- $opAccounts = output "sh" "-c" (printf "'%s' account list 2>/dev/null || true" $opCmd) }}
+{{- end }}
+{{- end }}
 {{- $opPersonal = contains .op_account_personal $opAccounts }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
