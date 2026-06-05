@@ -78,8 +78,9 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "input=$(cat); case \"$input\" in *'git commit'*) b=$(git branch --show-current); case \"$b\" in main|staging|master) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Direct commits to %s are prohibited. Create a feature branch first.\"}}' \"$b\";; esac;; esac",
-            "statusMessage": "Checking protected branch..."
+            "command": "if command -v python >/dev/null 2>&1; then py=python; else py=python3; fi; \"$py\" \"$CLAUDE_PROJECT_DIR/.codex/hooks/deny_protected_branch_commit.py\"",
+            "timeout": 30,
+            "statusMessage": "Checking protected branch policy"
           }
         ]
       }
