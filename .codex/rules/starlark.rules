@@ -1,0 +1,38 @@
+# starlark.rules
+# Rules for Starlark/Bazel development workflows
+
+# Allow buildifier (Starlark formatter)
+prefix_rule(
+    pattern = ["buildifier"],
+    decision = "allow",
+    justification = "buildifier is the standard formatter for Starlark/Bazel files.",
+    match = ["buildifier BUILD", "buildifier -r .", "buildifier --lint=fix BUILD.bazel"],
+    not_match = [],
+)
+
+# Allow buildozer (Bazel BUILD file editor)
+prefix_rule(
+    pattern = ["buildozer"],
+    decision = "allow",
+    justification = "buildozer is a tool for editing BUILD files programmatically.",
+    match = ["buildozer 'add deps //foo:bar' //my:target", "buildozer 'print srcs' //..."],
+    not_match = [],
+)
+
+# Allow bazel commands
+prefix_rule(
+    pattern = ["bazel", ["build", "test", "run", "query", "clean", "info", "fetch", "sync"]],
+    decision = "allow",
+    justification = "Standard Bazel build commands.",
+    match = ["bazel build //...", "bazel test //...", "bazel run //:app"],
+    not_match = [],
+)
+
+# Allow bazelisk (Bazel version manager)
+prefix_rule(
+    pattern = ["bazelisk"],
+    decision = "allow",
+    justification = "bazelisk is a Bazel launcher that manages versions.",
+    match = ["bazelisk build //...", "bazelisk test //..."],
+    not_match = [],
+)

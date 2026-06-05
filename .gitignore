@@ -17,7 +17,9 @@ Thumbs.db
 .idea/
 *.iml
 .vscode/
-.claude/
+# `.claude/` 配下はローカル専用だが、プロジェクト共有設定の settings.json のみ追跡する
+.claude/*
+!.claude/settings.json
 
 # Personal/sensitive files
 *_local

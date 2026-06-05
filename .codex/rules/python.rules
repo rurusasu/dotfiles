@@ -1,0 +1,83 @@
+# python.rules
+# Rules for Python development workflows
+
+# Allow python execution
+prefix_rule(
+    pattern = ["python"],
+    decision = "allow",
+    justification = "Allow executing Python scripts.",
+    match = ["python script.py", "python -m http.server"],
+    not_match = [],
+)
+
+# Allow python3 execution
+prefix_rule(
+    pattern = ["python3"],
+    decision = "allow",
+    justification = "Allow executing Python3 scripts.",
+    match = ["python3 script.py", "python3 -m http.server"],
+    not_match = [],
+)
+
+# Deny pip - use uv instead
+prefix_rule(
+    pattern = ["pip"],
+    decision = "forbidden",
+    justification = "pip is deprecated in this project. Use 'uv add <package>' to add dependencies, 'uv sync' to install from pyproject.toml.",
+    match = ["pip install requests", "pip uninstall numpy", "pip freeze"],
+    not_match = [],
+)
+
+# Deny uv pip - use uv add/sync instead
+prefix_rule(
+    pattern = ["uv", "pip"],
+    decision = "forbidden",
+    justification = "Do not use 'uv pip'. Use 'uv add <package>' to add dependencies and 'uv sync' to install them.",
+    match = ["uv pip install requests", "uv pip freeze"],
+    not_match = [],
+)
+
+# Allow uv commands (except uv pip which is denied above)
+prefix_rule(
+    pattern = ["uv", ["add", "remove", "sync", "lock", "run", "venv", "init", "build", "publish", "tree", "tool"]],
+    decision = "allow",
+    justification = "uv is the preferred package manager. Use 'uv add' for dependencies, 'uv sync' to install.",
+    match = ["uv add flask", "uv sync", "uv run python app.py", "uv venv"],
+    not_match = [],
+)
+
+# Allow Poetry commands (legacy support)
+prefix_rule(
+    pattern = ["poetry"],
+    decision = "allow",
+    justification = "Poetry is allowed for legacy projects. For new projects, prefer uv.",
+    match = ["poetry add flask", "poetry run python app.py"],
+    not_match = [],
+)
+
+# Allow common testing and linting tools
+prefix_rule(
+    pattern = [["pytest", "mypy", "black", "flake8", "ruff", "isort"]],
+    decision = "allow",
+    justification = "Standard code quality and testing tools are safe to run.",
+    match = ["pytest tests/", "black .", "ruff check ."],
+    not_match = [],
+)
+
+# Allow venv creation
+prefix_rule(
+    pattern = ["python", "-m", "venv"],
+    decision = "allow",
+    justification = "Creating virtual environments is safe.",
+    match = ["python -m venv .venv"],
+    not_match = [],
+)
+
+# Allow python3 venv creation
+prefix_rule(
+    pattern = ["python3", "-m", "venv"],
+    decision = "allow",
+    justification = "Creating virtual environments is safe.",
+    match = ["python3 -m venv .venv"],
+    not_match = [],
+)
