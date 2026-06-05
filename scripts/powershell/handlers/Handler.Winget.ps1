@@ -133,16 +133,36 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "verifyCommand") {
                                     $verifyCommand = $pkg.verifyCommand
                                 }
+                                $installArgs = @()
+                                if ($pkg.PSObject.Properties.Name -contains "installArgs") {
+                                    $installArgs = @($pkg.installArgs)
+                                }
+                                $portableLink = $null
+                                if ($pkg.PSObject.Properties.Name -contains "portableLink") {
+                                    $portableLink = $pkg.portableLink
+                                }
+                                $pathEntries = @()
+                                if ($pkg.PSObject.Properties.Name -contains "pathEntries") {
+                                    $pathEntries = @($pkg.pathEntries)
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id            = $pkg.PackageIdentifier
                                     Version       = $version
                                     SourceName    = $sourceName
                                     VerifyCommand = $verifyCommand
+                                    InstallArgs   = $installArgs
+                                    PortableLink  = $portableLink
+                                    PathEntries   = $pathEntries
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            if ($ctx.GetOption("WingetVerifyCommandOnly", $false)) {
+                $packages = @($packages | Where-Object { $null -ne $_.VerifyCommand })
+                $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個)", "Gray")
             }
 
             if ($packages.Count -eq 0) {
@@ -162,6 +182,8 @@ class WingetHandler : SetupHandlerBase {
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
                     if ($pkg.VerifyCommand) {
                         Update-ProcessEnvironmentPath
+                        $this.EnsurePortableLink($pkg)
+                        $this.EnsurePathEntries($pkg)
                         if ($this.TestPackageVerification($pkg.VerifyCommand)) {
                             $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
                             $verified++
@@ -174,6 +196,9 @@ class WingetHandler : SetupHandlerBase {
                             Version       = $pkg.Version
                             SourceName    = $pkg.SourceName
                             VerifyCommand = $pkg.VerifyCommand
+                            InstallArgs   = $pkg.InstallArgs
+                            PortableLink  = $pkg.PortableLink
+                            PathEntries   = $pkg.PathEntries
                             Force         = $true
                         }
                     }
@@ -187,6 +212,9 @@ class WingetHandler : SetupHandlerBase {
                         Version       = $pkg.Version
                         SourceName    = $pkg.SourceName
                         VerifyCommand = $pkg.VerifyCommand
+                        InstallArgs   = $pkg.InstallArgs
+                        PortableLink  = $pkg.PortableLink
+                        PathEntries   = $pkg.PathEntries
                         Force         = $false
                     }
                 }
@@ -225,6 +253,9 @@ class WingetHandler : SetupHandlerBase {
                     $installArgs += "--source"
                     $installArgs += "msstore"
                 }
+                if ($pkg.InstallArgs) {
+                    $installArgs += @($pkg.InstallArgs)
+                }
                 if ($pkg.Force) {
                     $installArgs += "--force"
                 }
@@ -238,6 +269,9 @@ class WingetHandler : SetupHandlerBase {
                 }
 
                 Update-ProcessEnvironmentPath
+
+                $this.EnsurePortableLink($pkg)
+                $this.EnsurePathEntries($pkg)
 
                 if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                     $succeeded++
@@ -260,7 +294,11 @@ class WingetHandler : SetupHandlerBase {
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
-            return $this.CreateSuccessResult($parts -join ", ")
+            $message = $parts -join ", "
+            if ($failed -gt 0 -or $verifyFailed -gt 0) {
+                return $this.CreateFailureResult($message)
+            }
+            return $this.CreateSuccessResult($message)
         } catch {
             $this.LogWarning("winget パッケージインストール中に予期しないエラーが発生しました: $($_.Exception.Message)")
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
@@ -334,6 +372,109 @@ class WingetHandler : SetupHandlerBase {
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
+        }
+    }
+
+    hidden [void] EnsurePortableLink([object]$pkg) {
+        if (-not $pkg.PortableLink) { return }
+
+        $linkName = $null
+        if ($pkg.PortableLink.PSObject.Properties.Name -contains "linkName") {
+            $linkName = [string]$pkg.PortableLink.linkName
+        }
+        $targetPattern = $null
+        if ($pkg.PortableLink.PSObject.Properties.Name -contains "targetPattern") {
+            $targetPattern = [string]$pkg.PortableLink.targetPattern
+        }
+        if (-not $linkName -or -not $targetPattern) {
+            $this.LogWarning("portableLink に linkName または targetPattern がありません: $($pkg.Id)")
+            return
+        }
+
+        $packagesBase = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+        $packageDir = Get-ChildItem -Path $packagesBase -Directory -Filter "$($pkg.Id)_*" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if (-not $packageDir) {
+            $this.LogWarning("portableLink のパッケージディレクトリが見つかりません: $($pkg.Id)")
+            return
+        }
+
+        $target = Get-ChildItem -Path $packageDir.FullName -File -Filter $targetPattern -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if (-not $target) {
+            $this.LogWarning("portableLink の対象 exe が見つかりません: $($pkg.Id) ($targetPattern)")
+            return
+        }
+
+        $linksPath = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+        if (-not (Test-Path -LiteralPath $linksPath)) {
+            New-Item -ItemType Directory -Path $linksPath -Force | Out-Null
+        }
+
+        $linkPath = Join-Path $linksPath $linkName
+        if (-not $this.IsPortableLinkCurrent($linkPath, $target.FullName)) {
+            $this.CreatePortableLink($linkPath, $target.FullName)
+        }
+
+        $userPath = Get-UserEnvironmentPath
+        $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+        if ($pathItems -notcontains $linksPath) {
+            Set-UserEnvironmentPath -Path (($pathItems + @($linksPath)) -join ";")
+        }
+        if (($env:PATH -split ";") -notcontains $linksPath) {
+            $env:PATH = "$env:PATH;$linksPath"
+        }
+    }
+
+    hidden [void] EnsurePathEntries([object]$pkg) {
+        if (-not $pkg.PathEntries) { return }
+
+        $resolvedEntries = [System.Collections.Generic.List[string]]::new()
+        foreach ($rawEntry in @($pkg.PathEntries)) {
+            if ([string]::IsNullOrWhiteSpace([string]$rawEntry)) { continue }
+
+            $expanded = [Environment]::ExpandEnvironmentVariables([string]$rawEntry)
+            $resolvedMatches = @(Get-Item -Path $expanded -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer })
+            if ($resolvedMatches.Count -eq 0 -and (Test-Path -LiteralPath $expanded -PathType Container)) {
+                $resolvedMatches = @(Get-Item -LiteralPath $expanded -ErrorAction SilentlyContinue)
+            }
+
+            if ($resolvedMatches.Count -eq 0) {
+                $this.LogWarning("pathEntries のディレクトリが見つかりません: $($pkg.Id) ($rawEntry)")
+                continue
+            }
+
+            foreach ($match in $resolvedMatches) {
+                if (-not [string]::IsNullOrWhiteSpace($match.FullName)) {
+                    $resolvedEntries.Add($match.FullName)
+                }
+            }
+        }
+
+        if ($resolvedEntries.Count -eq 0) { return }
+
+        $userPath = Get-UserEnvironmentPath
+        $userPathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+        $processPathItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+
+        $newUserPathItems = [System.Collections.Generic.List[string]]::new()
+        foreach ($item in $userPathItems) { $newUserPathItems.Add($item) }
+
+        $updatedUserPath = $false
+        foreach ($entry in $resolvedEntries) {
+            if ($userPathItems -notcontains $entry) {
+                $newUserPathItems.Add($entry)
+                $updatedUserPath = $true
+            }
+            if ($processPathItems -notcontains $entry) {
+                $env:PATH = if ($env:PATH) { "$env:PATH;$entry" } else { $entry }
+                $processPathItems += $entry
+            }
+        }
+
+        if ($updatedUserPath) {
+            Set-UserEnvironmentPath -Path ($newUserPathItems -join ";")
+            $this.Log("USER PATH にパッケージ PATH を追加しました: $($resolvedEntries -join ', ')", "Green")
         }
     }
 

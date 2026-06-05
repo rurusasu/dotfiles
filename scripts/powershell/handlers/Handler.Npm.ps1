@@ -187,7 +187,11 @@ class NpmHandler : SetupHandlerBase {
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
-            return $this.CreateSuccessResult($parts -join ", ")
+            $message = $parts -join ", "
+            if ($failed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
+                return $this.CreateFailureResult($message)
+            }
+            return $this.CreateSuccessResult($message)
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)

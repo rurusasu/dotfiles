@@ -185,7 +185,11 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             $script:pnpmArgs = ""
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
-                    @{ name = "@tobilu/qmd"; verifyCommand = @{ command = "qmd"; args = @("status") } },
+                    @{
+                        name          = "@tobilu/qmd"
+                        installArgs   = @("--allow-build", "better-sqlite3")
+                        verifyCommand = @{ command = "qmd"; args = @("status") }
+                    },
                     @{ name = "@google/gemini-cli" }
                 )}
             }
@@ -211,6 +215,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             $handler.Apply($ctx)
 
             $script:pnpmArgs | Should -Match "pnpm add -g"
+            $script:pnpmArgs | Should -Match "--allow-build"
+            $script:pnpmArgs | Should -Match "better-sqlite3"
             $script:pnpmArgs | Should -Match "gemini-cli"
             $script:pnpmArgs | Should -Not -Match "@\{name="
         }
@@ -291,7 +297,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:verifyCalls | Should -Be 2
         }
 
-        It 'should succeed even when pnpm global install fails' {
+        It 'should fail when pnpm global install fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -309,8 +315,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             }
             $result = $handler.Apply($ctx)
 
-            # pnpm add 失敗でも Apply 自体は成功とみなす
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージ"
         }
 
         It 'should pass correct arguments to WSL' {
@@ -550,7 +556,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:corepakCalled | Should -Be $true
         }
 
-        It 'should succeed even when corepack enable fails' {
+        It 'should fail when pnpm bootstrap fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
@@ -567,8 +573,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             }
             $result = $handler.Apply($ctx)
 
-            # corepack 失敗 → EnsurePnpmAvailable が throw → InstallPnpmGlobalPackages の catch で握りつぶし
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージ"
         }
 
         It 'should setup PNPM_HOME when directory does not exist' {

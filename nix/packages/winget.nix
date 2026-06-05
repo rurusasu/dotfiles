@@ -25,22 +25,79 @@ let
         };
       };
 
+  attachInstallArgs =
+    installArgsMap: key: pkg:
+    let
+      installArgs = installArgsMap.${key} or null;
+    in
+    if installArgs == null then
+      pkg
+    else
+      pkg // { inherit installArgs; };
+
+  attachPortableLink =
+    portableLinksMap: key: pkg:
+    let
+      portableLink = portableLinksMap.${key} or null;
+    in
+    if portableLink == null then
+      pkg
+    else
+      pkg // { inherit portableLink; };
+
+  attachPathEntries =
+    pathEntriesMap: key: pkg:
+    let
+      pathEntries = pathEntriesMap.${key} or null;
+    in
+    if pathEntries == null then
+      pkg
+    else
+      pkg // { inherit pathEntries; };
+
+  attachPnpmInstallArgs =
+    installArgsMap: key: pkg:
+    let
+      installArgs = installArgsMap.${key} or null;
+    in
+    if installArgs == null then
+      pkg
+    else
+      pkg // { inherit installArgs; };
+
+  attachWingetMetadata =
+    key: pkg:
+    attachPathEntries sets.wingetPathEntries key (
+      attachPortableLink sets.wingetPortableLinksById key (
+        attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+      )
+    );
+
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
-    name: id: attachVerify sets.wingetVerify name { PackageIdentifier = id; }
+    name: id: attachWingetMetadata name { PackageIdentifier = id; }
   ) sets.wingetMap;
 
-  wingetFromWindowsOnly = map (id: { PackageIdentifier = id; }) sets.windowsOnly.winget;
+  wingetFromWindowsOnly = map (
+    id:
+    attachPathEntries sets.wingetPathEntries id (
+      attachPortableLink sets.wingetPortableLinksById id (
+        attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+      )
+    )
+  ) sets.windowsOnly.winget;
 
   wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
   msstorePackages = map (id: { PackageIdentifier = id; }) sets.windowsOnly.msstore;
 
   # --- pnpm ---
-  pnpmFromGlobal = map (name: attachVerify sets.pnpmVerify name { inherit name; }) sets.pnpmGlobal;
+  pnpmFromGlobal = map (
+    name: attachPnpmInstallArgs sets.pnpmInstallArgs name (attachVerify sets.pnpmVerify name { inherit name; })
+  ) sets.pnpmGlobal;
 
   pnpmFromWindowsOnly = map (
-    name: attachVerify sets.pnpmVerify name { inherit name; }
+    name: attachPnpmInstallArgs sets.pnpmInstallArgs name (attachVerify sets.pnpmVerify name { inherit name; })
   ) sets.windowsOnly.pnpm;
 
   pnpmPackages = pnpmFromGlobal ++ pnpmFromWindowsOnly;

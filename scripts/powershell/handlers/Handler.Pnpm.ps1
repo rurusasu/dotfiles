@@ -135,6 +135,23 @@ class PnpmHandler : SetupHandlerBase {
                 $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
                 $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
                 $verifyCmd = if ($pkgEntry -is [string]) { $null } else { $pkgEntry.verifyCommand }
+                $installArgs = @()
+                if ($pkgEntry -isnot [string]) {
+                    if ($pkgEntry -is [System.Collections.IDictionary] -and $pkgEntry.Contains("installArgs")) {
+                        foreach ($arg in @($pkgEntry["installArgs"])) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                    elseif ($pkgEntry.PSObject.Properties.Name -contains "installArgs") {
+                        foreach ($arg in @($pkgEntry.installArgs)) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                }
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
@@ -154,7 +171,7 @@ class PnpmHandler : SetupHandlerBase {
                 }
 
                 $this.Log("インストール中: $pkgSpec")
-                $null = Invoke-Pnpm -Arguments @("add", "-g", $pkgSpec)
+                $null = Invoke-Pnpm -Arguments (@("add", "-g") + $installArgs + @($pkgSpec))
 
                 if ($LASTEXITCODE -ne 0) {
                     $failed += $pkgSpec
@@ -187,7 +204,11 @@ class PnpmHandler : SetupHandlerBase {
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
-            return $this.CreateSuccessResult($parts -join ", ")
+            $message = $parts -join ", "
+            if ($failed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
+                return $this.CreateFailureResult($message)
+            }
+            return $this.CreateSuccessResult($message)
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
@@ -269,27 +290,37 @@ class PnpmHandler : SetupHandlerBase {
                 return
             }
 
-            if (-not (Test-Path -LiteralPath $pnpmBinPath)) {
-                New-Item -ItemType Directory -Path $pnpmBinPath -Force | Out-Null
+            $pathsToAdd = @($pnpmBinPath)
+            $childBinPath = Join-Path $pnpmBinPath "bin"
+            if ($pathsToAdd -notcontains $childBinPath) {
+                $pathsToAdd += $childBinPath
+            }
+
+            foreach ($pathToAdd in $pathsToAdd) {
+                if (-not (Test-Path -LiteralPath $pathToAdd)) {
+                    New-Item -ItemType Directory -Path $pathToAdd -Force | Out-Null
+                }
             }
 
             $userPath = Get-UserEnvironmentPath
-            $pathItems = if ($userPath) { $userPath -split ";" } else { @() }
+            $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
 
-            if ($pathItems -notcontains $pnpmBinPath) {
-                $newPath = ($pnpmBinPath, $userPath | Where-Object { $_ }) -join ";"
+            $missingUserPaths = @($pathsToAdd | Where-Object { $_ -notin $pathItems })
+            if ($missingUserPaths.Count -gt 0) {
+                $newPath = (@($missingUserPaths) + $pathItems) -join ";"
                 Set-UserEnvironmentPath -Path $newPath
-                $this.Log("pnpm bin を USER PATH に追加しました: $pnpmBinPath", "Green")
+                $this.Log("pnpm bin を USER PATH に追加しました: $($missingUserPaths -join ';')", "Green")
             }
             else {
                 $this.Log("pnpm bin は既に PATH に含まれています", "Gray")
             }
 
             # 現プロセスの PATH にも追加（pnpm add -g が同一セッションで動作するよう）
-            $processItems = if ($env:PATH) { $env:PATH -split ";" } else { @() }
-            if ($processItems -notcontains $pnpmBinPath) {
-                $env:PATH = "$pnpmBinPath;$env:PATH"
-                $this.Log("pnpm bin を現プロセス PATH に追加しました", "Gray")
+            $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+            $missingProcessPaths = @($pathsToAdd | Where-Object { $_ -notin $processItems })
+            if ($missingProcessPaths.Count -gt 0) {
+                $env:PATH = (@($missingProcessPaths) + $processItems) -join ";"
+                $this.Log("pnpm bin を現プロセス PATH に追加しました: $($missingProcessPaths -join ';')", "Gray")
             }
         }
         catch {

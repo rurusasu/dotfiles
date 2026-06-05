@@ -166,7 +166,7 @@ jobs:
   test:
     name: Test (flake check + build + smoke)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: [lint, fmt]
     permissions:
       contents: read
@@ -194,28 +194,76 @@ jobs:
         run: |
           nix build .#minimal
           nix build .#default
+          nix build .#full
 
-      - name: Smoke test core tools
+      - name: Install full profile and smoke test tools
         run: |
-          nix shell .#default --command bash -c '
-            set -euo pipefail
-            check() {
-              local name=$1; shift
-              local out
-              out=$("$name" "$@" 2>&1) || { echo "FAIL $name (exit $?)"; exit 1; }
-              echo "OK  $name: $out"
-            }
-            echo "=== Smoke testing core tools ==="
-            check chezmoi --version
-            check git --version
-            check gh --version
-            check fd --version
-            check rg --version
-            check bat --version
-            check jq --version
-            check eza --version
-            check zoxide --version
-            check fzf --version
-            check unzip -v
-            echo "=== All core tools OK ==="
-          '
+          set -euo pipefail
+          profile="$RUNNER_TEMP/dotfiles-full-profile"
+          nix profile install --profile "$profile" .#full
+          export PATH="$profile/bin:$PATH"
+
+          check() {
+            local name=$1; shift
+            local out
+            out=$("$name" "$@" 2>&1) || { echo "FAIL $name (exit $?)"; exit 1; }
+            echo "OK  $name: $out"
+          }
+
+          echo "=== Smoke testing installed full profile tools ==="
+          check chezmoi --version
+          check git --version
+          check gh --version
+          check fd --version
+          check rg --version
+          check bat --version
+          check jq --version
+          check eza --version
+          check zoxide --version
+          check fzf --version
+          check direnv --version
+          check unzip -v
+          check 7z
+          check node --version
+          check python --version
+          check go version
+          check make --version
+          check cmake --version
+          check ghq --version
+          check uv --version
+          check pnpm --version
+          check task --version
+          check devcontainer --version
+          check lazygit --version
+          check bats --version
+          check magick --version
+          check gs --version
+          check pdftoppm -v
+          check tmux -V
+          check starship --version
+          check wezterm --version
+          check op --version
+          check opencode --version
+          check claude --version
+          check codex --version
+          check gcloud version
+          check kind version
+          check kubectl version --client=true
+          check helm version --short
+          check kustomize version
+          check stern --version
+          check argocd version --client --short
+          check sops --version
+          check trivy --version
+          check dive --version
+          check nixd --version
+          check ruff --version
+          check yaml-language-server --version
+          check taplo --version
+          check bash-language-server --version
+          check lua-language-server --version
+          check stylua --version
+          check marksman --version
+          check gopls version
+          check rust-analyzer --version
+          echo "=== Installed full profile tools OK ==="

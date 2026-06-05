@@ -234,10 +234,10 @@ Describe 'NpmHandler' {
             }
         }
 
-        It 'should return success with partial failure info' {
+        It 'should return failure with partial failure info' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }

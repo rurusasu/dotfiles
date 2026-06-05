@@ -132,18 +132,18 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
-    hidden [void] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
+    hidden [bool] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
         try {
             if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
                 $this.Log("pnpm パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
-                return
+                return $true
             }
 
             $json = Get-JsonContent -Path $packagesJsonPath
             $packages = $json.globalPackages
             if (-not $packages -or $packages.Count -eq 0) {
                 $this.Log("インストールする pnpm パッケージがありません", "Gray")
-                return
+                return $true
             }
 
             # pnpm が利用可能か確認し、なければ corepack で有効化
@@ -161,6 +161,23 @@ class NixRebuildHandler : SetupHandlerBase {
                 $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
                 $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
                 $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
+                $installArgs = @()
+                if ($pkg -isnot [string]) {
+                    if ($pkg -is [System.Collections.IDictionary] -and $pkg.Contains("installArgs")) {
+                        foreach ($arg in @($pkg["installArgs"])) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                    elseif ($pkg.PSObject.Properties.Name -contains "installArgs") {
+                        foreach ($arg in @($pkg.installArgs)) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                }
                 if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
                     if ($verifyCmd) {
                         if ($this.TestPnpmPackageVerificationInWsl($distroName, $verifyCmd)) {
@@ -181,6 +198,7 @@ class NixRebuildHandler : SetupHandlerBase {
                 $toInstall += [PSCustomObject]@{
                     Spec          = $pkgSpec
                     VerifyCommand = $verifyCmd
+                    InstallArgs   = $installArgs
                 }
             }
 
@@ -189,18 +207,20 @@ class NixRebuildHandler : SetupHandlerBase {
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
                 $parts += "$skipped 個スキップ"
                 $this.Log("pnpm グローバルパッケージはすべてインストール済みで、検証対象も正常です ($($parts -join ', '))", "Gray")
-                return
+                return $true
             }
 
             # シェルメタ文字を含むパッケージ名（@scope/pkg 等）を安全に渡すためクォート
             $packageSpecs = @($toInstall | ForEach-Object { $_.Spec })
+            $installArgs = @($toInstall | ForEach-Object { @($_.InstallArgs) } | Where-Object { $_ } | Select-Object -Unique)
+            $quotedInstallArgs = ($installArgs | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
             $quotedPkgs = ($packageSpecs | ForEach-Object { $this.QuoteShellArg($_) }) -join " "
             $this.Log("pnpm グローバルパッケージをインストールしています: $($packageSpecs -join ', ')")
 
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
             $pnpmOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g $quotedPkgs"
+                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g $quotedInstallArgs $quotedPkgs"
             )
             $pnpmExitCode = $LASTEXITCODE
 
@@ -212,6 +232,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if ($pnpmExitCode -ne 0) {
                 $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
+                return $false
             }
             else {
                 $verifyFailed = 0
@@ -226,11 +247,17 @@ class NixRebuildHandler : SetupHandlerBase {
                 if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
                 $parts += "$skipped 個スキップ"
+                if ($verifyFailed -gt 0) {
+                    $this.LogWarning("pnpm グローバルパッケージの検証に失敗しました ($($parts -join ', '))")
+                    return $false
+                }
                 $this.Log("pnpm グローバルパッケージのインストール完了 ($($parts -join ', '))", "Green")
+                return $true
             }
         }
         catch {
             $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
+            return $false
         }
     }
 
@@ -340,7 +367,9 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # pnpm グローバルパッケージをインストール（SSOT: all.nix → windows/pnpm/packages.json）
             $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
-            $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)
+            if (-not $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)) {
+                throw "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
+            }
 
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)

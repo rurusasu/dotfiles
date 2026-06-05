@@ -6,13 +6,39 @@ on:
     branches: [main]
     paths:
       - "windows/winget/packages.json"
+      - "windows/npm/packages.json"
+      - "windows/pnpm/packages.json"
       - "nix/packages/sets.nix"
+      - "nix/packages/winget.nix"
+      - "install.cmd"
+      - "scripts/powershell/install.ps1"
+      - "scripts/powershell/install.user.ps1"
+      - "scripts/powershell/handlers/Handler.Winget.ps1"
+      - "scripts/powershell/handlers/Handler.Npm.ps1"
+      - "scripts/powershell/handlers/Handler.Pnpm.ps1"
+      - "scripts/powershell/handlers/Handler.Codex.ps1"
+      - "scripts/powershell/handlers/Handler.ClaudeCode.ps1"
+      - "scripts/powershell/handlers/Handler.Bun.ps1"
+      - "scripts/powershell/lib/**"
       - ".github/workflows/ci-winget.yml"
   pull_request:
     branches: [main]
     paths:
       - "windows/winget/packages.json"
+      - "windows/npm/packages.json"
+      - "windows/pnpm/packages.json"
       - "nix/packages/sets.nix"
+      - "nix/packages/winget.nix"
+      - "install.cmd"
+      - "scripts/powershell/install.ps1"
+      - "scripts/powershell/install.user.ps1"
+      - "scripts/powershell/handlers/Handler.Winget.ps1"
+      - "scripts/powershell/handlers/Handler.Npm.ps1"
+      - "scripts/powershell/handlers/Handler.Pnpm.ps1"
+      - "scripts/powershell/handlers/Handler.Codex.ps1"
+      - "scripts/powershell/handlers/Handler.ClaudeCode.ps1"
+      - "scripts/powershell/handlers/Handler.Bun.ps1"
+      - "scripts/powershell/lib/**"
       - ".github/workflows/ci-winget.yml"
 
 concurrency:
@@ -22,7 +48,7 @@ concurrency:
 jobs:
   smoke-test:
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -58,113 +84,13 @@ jobs:
           }
           winget --version
 
-      - name: Install core CLI tools
+      - name: Run install.cmd strict user phase
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          function Invoke-WithRetry {
-            param([scriptblock]$Script, [int]$Max = 3)
-            for ($i = 1; $i -le $Max; $i++) {
-              try { & $Script; return } catch {
-                if ($i -eq $Max) { throw }
-                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
-                Start-Sleep -Seconds ($i * 5)
-              }
-            }
+          cmd.exe /c install.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly
+          if ($LASTEXITCODE -ne 0) {
+            throw "install.cmd strict user phase failed with exit code $LASTEXITCODE"
           }
-
-          # Install only the cross-platform core CLI tools that are smoke-tested below.
-          # GUI apps (Docker Desktop, Chrome, VS Code, etc.) are excluded to avoid
-          # GUI installer timeouts and UAC failures blocking CLI-only PRs.
-          $corePackages = @(
-            "twpayne.chezmoi",
-            "Git.Git",
-            "GitHub.cli",
-            "sharkdp.fd",
-            "BurntSushi.ripgrep.MSVC",
-            "jqlang.jq",
-            "eza-community.eza",
-            "ajeetdsouza.zoxide",
-            "junegunn.fzf"
-          )
-
-          $installFailed = @()
-          foreach ($id in $corePackages) {
-            # Skip if already installed to keep the step idempotent.
-            # winget list may write to stderr on miss; use Continue to avoid false termination.
-            $ErrorActionPreference = 'Continue'
-            $listed = winget list --exact --id $id --source winget 2>&1
-            $listExit = $LASTEXITCODE
-            $ErrorActionPreference = 'Stop'
-            if ($listExit -eq 0 -and ($listed | Select-String -Quiet $id)) {
-              Write-Host "SKIP $id (already installed)"
-              continue
-            }
-
-            Write-Host "Installing $id..."
-            try {
-              Invoke-WithRetry {
-                # Use Continue inside the scriptblock: winget writes stderr progress
-                # that would trip Stop before we can check $LASTEXITCODE.
-                $ErrorActionPreference = 'Continue'
-                winget install --id $id --exact --source winget --silent `
-                  --accept-package-agreements --accept-source-agreements --disable-interactivity
-                $installExit = $LASTEXITCODE
-                $ErrorActionPreference = 'Stop'
-                if ($installExit -ne 0) { throw "winget exit $installExit" }
-              }
-            } catch {
-              Write-Warning "winget install failed for ${id}: $_"
-              $installFailed += $id
-            }
-          }
-          if ($installFailed.Count -gt 0) {
-            Write-Error "Failed to install: $($installFailed -join ', ')"
-            exit 1
-          }
-
-      - name: Smoke test core tools
-        shell: pwsh
-        run: |
-          # Merge registry paths with current process PATH so newly installed
-          # tools are discoverable while preserving runner-injected entries
-          $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-          $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
-          $env:PATH = "$machinePath;$userPath;$env:PATH"
-
-          $tools = @(
-            @{ cmd = "chezmoi"; args = "--version" },
-            @{ cmd = "git";     args = "--version" },
-            @{ cmd = "gh";      args = "--version" },
-            @{ cmd = "fd";      args = "--version" },
-            @{ cmd = "rg";      args = "--version" },
-            @{ cmd = "jq";      args = "--version" },
-            @{ cmd = "eza";     args = "--version" },
-            @{ cmd = "zoxide";  args = "--version" },
-            @{ cmd = "fzf";     args = "--version" }
-          )
-
-          Write-Host "=== Smoke testing core tools ==="
-          $failed = @()
-          foreach ($tool in $tools) {
-            if (-not (Get-Command $tool.cmd -ErrorAction SilentlyContinue)) {
-              Write-Host "FAIL $($tool.cmd): not found in PATH" -ForegroundColor Red
-              $failed += $tool.cmd
-              continue
-            }
-            $output = & $tool.cmd $tool.args 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "FAIL $($tool.cmd): exit code $LASTEXITCODE" -ForegroundColor Red
-              $failed += $tool.cmd
-            } else {
-              Write-Host "OK  $($tool.cmd): $output"
-            }
-          }
-
-          if ($failed.Count -gt 0) {
-            Write-Error "Failed tools: $($failed -join ', ')"
-            exit 1
-          }
-          Write-Host "=== All core tools OK ==="

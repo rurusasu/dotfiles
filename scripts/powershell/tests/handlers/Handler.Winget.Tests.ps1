@@ -308,10 +308,10 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should return success with partial failure warning' {
+        It 'should return failure with partial failure warning' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個失敗"
         }
     }
@@ -707,12 +707,215 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should report verify failed count' {
+        It 'should return failure and report verify failed count' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個検証失敗"
             $result.Message | Should -Not -Match "1 個インストール"
+        }
+    }
+
+    Context 'Apply - import mode: WingetVerifyCommandOnly option' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "GUI.App" },
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "CLI.Tool"
+                                    verifyCommand     = [PSCustomObject]@{ command = "cli-tool"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should install only packages with verifyCommand' {
+            $script:installIds = @()
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                } elseif ($Arguments -contains "install") {
+                    $idIndex = [array]::IndexOf($Arguments, "--id") + 1
+                    $script:installIds += $Arguments[$idIndex]
+                    $global:LASTEXITCODE = 0
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:installIds | Should -Contain "CLI.Tool"
+            $script:installIds | Should -Not -Contain "GUI.App"
+        }
+    }
+
+    Context 'Apply - import mode: package installArgs' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Microsoft.PowerShell"
+                                    installArgs       = @("--installer-type", "wix")
+                                    verifyCommand     = [PSCustomObject]@{ command = "pwsh"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "PowerShell 7.6.2" }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should pass extra install arguments to winget install' {
+            $script:capturedArgs = $null
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $script:capturedArgs = $Arguments
+                }
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:capturedArgs | Should -Contain "--installer-type"
+            $script:capturedArgs | Should -Contain "wix"
+        }
+    }
+
+    Context 'Apply - import mode: package portableLink' {
+        BeforeEach {
+            $script:origLocalAppData = $env:LOCALAPPDATA
+            $script:origUserProfile = $env:USERPROFILE
+            $env:LOCALAPPDATA = Join-Path $TestDrive "LocalAppData"
+            $env:USERPROFILE = Join-Path $TestDrive "UserProfile"
+            $script:packageDir = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\oxc-project.oxlint_Microsoft.Winget.Source"
+            New-Item -ItemType Directory -Path $script:packageDir -Force | Out-Null
+            Set-Content -Path (Join-Path $script:packageDir "oxlint-x86_64-pc-windows-msvc.exe") -Value "exe" -NoNewline
+
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "oxc-project.oxlint"
+                                    portableLink      = [PSCustomObject]@{
+                                        linkName      = "oxlint.exe"
+                                        targetPattern = "oxlint-*.exe"
+                                    }
+                                    verifyCommand     = [PSCustomObject]@{ command = "oxlint"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach {
+            $env:LOCALAPPDATA = $script:origLocalAppData
+            $env:USERPROFILE = $script:origUserProfile
+        }
+
+        It 'should create command shim before verification' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\oxlint.exe" | Should -Exist
+            Should -Invoke Invoke-VerifyCommand -Times 1
+            Should -Invoke Set-UserEnvironmentPath -Times 1
+        }
+    }
+
+    Context 'Apply - import mode: package pathEntries' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:toolDir = Join-Path $TestDrive "ToolBin"
+            New-Item -ItemType Directory -Path $script:toolDir -Force | Out-Null
+
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Path.Tool"
+                                    pathEntries       = @($script:toolDir)
+                                    verifyCommand     = [PSCustomObject]@{ command = "path-tool"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+        AfterEach {
+            $env:PATH = $script:origPath
+        }
+
+        It 'should add configured path entries before verification' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $env:PATH -split ";" | Should -Contain $script:toolDir
+            Should -Invoke Invoke-VerifyCommand -Times 1
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter {
+                $Path -like "*$($script:toolDir)*"
+            }
         }
     }
 

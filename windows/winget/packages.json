@@ -127,6 +127,10 @@
         },
         {
           "PackageIdentifier": "oxc-project.oxlint",
+          "portableLink": {
+            "linkName": "oxlint.exe",
+            "targetPattern": "oxlint-*.exe"
+          },
           "verifyCommand": {
             "args": ["--version"],
             "command": "oxlint"
@@ -134,6 +138,7 @@
         },
         {
           "PackageIdentifier": "Microsoft.PowerShell",
+          "installArgs": ["--installer-type", "wix"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "pwsh"
@@ -182,6 +187,7 @@
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
+          "pathEntries": ["%ProgramFiles%\\WezTerm"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "wezterm"
@@ -228,6 +234,16 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "magick"
+          }
+        },
+        {
+          "PackageIdentifier": "oschwartz10612.Poppler",
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
+          ],
+          "verifyCommand": {
+            "args": ["-v"],
+            "command": "pdftoppm"
           }
         },
         {

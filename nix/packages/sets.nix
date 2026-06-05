@@ -7,7 +7,10 @@
 #   - wingetMap          → nix attr name → winget PackageIdentifier
 #   - pnpmGlobal         → cross-platform pnpm global package names
 #   - pnpmVerify         → package name → { command, args } for post-install verification
+#   - pnpmInstallArgs    → package name → extra pnpm add -g arguments
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
+#   - wingetInstallArgs  → catalog attr name → extra winget install arguments
+#   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
 #
 # Imported by:
@@ -157,7 +160,7 @@ let
     };
     poppler-utils = {
       pkg = pkgs.poppler-utils;
-      winget = null; # Windows は ImageMagick + Ghostscript で代替
+      winget = "oschwartz10612.Poppler";
       category = "dev";
     };
 
@@ -478,6 +481,11 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
   };
 
+  # Extra pnpm install arguments for packages that need approved native builds.
+  pnpmInstallArgs = {
+    "@tobilu/qmd" = [ "--allow-build" "better-sqlite3" ];
+  };
+
   # Post-install verification commands for winget packages.
   # Keys match catalog attr names. GUI-only packages are omitted.
   wingetVerify = {
@@ -499,6 +507,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     ripgrep = {
       command = "rg";
+      args = [ "--version" ];
+    };
+    jq = {
+      command = "jq";
       args = [ "--version" ];
     };
     eza = {
@@ -549,12 +561,93 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "go";
       args = [ "version" ];
     };
+    ghq = {
+      command = "ghq";
+      args = [ "--version" ];
+    };
+    lazygit = {
+      command = "lazygit";
+      args = [ "--version" ];
+    };
+    imagemagick = {
+      command = "magick";
+      args = [ "--version" ];
+    };
+    poppler-utils = {
+      command = "pdftoppm";
+      args = [ "-v" ];
+    };
+    wezterm = {
+      command = "wezterm";
+      args = [ "--version" ];
+    };
+    ty = {
+      command = "ty";
+      args = [ "--version" ];
+    };
+    opencode = {
+      command = "opencode";
+      args = [ "--version" ];
+    };
+    oxlint = {
+      command = "oxlint";
+      args = [ "--version" ];
+    };
     python3 = {
       command = "python";
       args = [ "--version" ];
     };
     google-cloud-sdk = {
       command = "gcloud";
+      args = [ "version" ];
+    };
+  };
+
+  # Extra winget install arguments for packages that need a specific installer.
+  wingetInstallArgs = {
+    powershell = [ "--installer-type" "wix" ];
+  };
+
+  # Extra PATH directories for installers that do not register CLI commands on PATH.
+  # Entries may contain Windows environment variables and glob wildcards.
+  wingetPathEntries = {
+    poppler-utils = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin" ];
+    wezterm = [ "%ProgramFiles%\\WezTerm" ];
+  };
+
+  # Portable winget packages whose package exe name does not match the command name.
+  wingetPortableLinksById = {
+    oxlint = {
+      linkName = "oxlint.exe";
+      targetPattern = "oxlint-*.exe";
+    };
+    "oxc-project.oxlint" = {
+      linkName = "oxlint.exe";
+      targetPattern = "oxlint-*.exe";
+    };
+  };
+
+  # Post-install verification commands for Windows-only winget packages.
+  # Keys match PackageIdentifier values because these packages have no catalog attr.
+  wingetVerifyById = {
+    "dprint.dprint" = {
+      command = "dprint";
+      args = [ "--version" ];
+    };
+    "hadolint.hadolint" = {
+      command = "hadolint";
+      args = [ "--version" ];
+    };
+    "OpenAI.Codex" = {
+      command = "codex";
+      args = [ "--version" ];
+    };
+    "Oven-sh.Bun" = {
+      command = "bun";
+      args = [ "--version" ];
+    };
+    "zig.zig" = {
+      command = "zig";
       args = [ "version" ];
     };
   };

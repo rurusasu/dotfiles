@@ -44,4 +44,11 @@ Describe 'install.ps1 (orchestrator)' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'
     }
+
+    It 'should support CI user-phase package verification switches' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '\[switch\]\$UserPhaseOnly'
+        $content | Should -Match '\[switch\]\$WingetVerifyCommandOnly'
+        $content | Should -Match 'WingetVerifyCommandOnly'
+    }
 }

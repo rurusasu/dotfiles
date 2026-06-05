@@ -230,6 +230,7 @@ Describe 'PnpmHandler' {
     Context 'EnsurePnpmSetup - PNPM_HOME restored from registry' {
         BeforeEach {
             $script:origPnpmHome = $env:PNPM_HOME
+            $script:origRegistryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
             $env:PNPM_HOME = ""
             $script:pnpmBin = Join-Path $TestDrive "pnpm-restored"
             Mock Invoke-Pnpm {
@@ -248,10 +249,7 @@ Describe 'PnpmHandler' {
         }
         AfterEach {
             $env:PNPM_HOME = $script:origPnpmHome
-            # レジストリを元に戻す
-            if ($script:origPnpmHome) {
-                [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origPnpmHome, 'User')
-            }
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origRegistryPnpmHome, 'User')
         }
 
         It 'should restore PNPM_HOME from registry when env is empty' {
@@ -284,10 +282,12 @@ Describe 'PnpmHandler' {
     Context 'AddPnpmBinToPath - already in user PATH' {
         BeforeEach {
             $script:pnpmBin = Join-Path $TestDrive "pnpm-global-bin"
+            $script:pnpmBinChild = Join-Path $script:pnpmBin "bin"
             New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            New-Item $script:pnpmBinChild -ItemType Directory -Force | Out-Null
             $script:origPath = $env:PATH
             $env:PATH = "C:\Windows\System32"
-            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Get-UserEnvironmentPath { return "$script:pnpmBin;$script:pnpmBinChild" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
@@ -303,6 +303,7 @@ Describe 'PnpmHandler' {
         It 'should add bin path to current process PATH' {
             $handler.AddPnpmBinToPath($script:pnpmBin)
             $env:PATH -split ";" | Should -Contain $script:pnpmBin
+            $env:PATH -split ";" | Should -Contain $script:pnpmBinChild
         }
     }
 
@@ -328,6 +329,7 @@ Describe 'PnpmHandler' {
         It 'should add bin path to current process PATH' {
             $handler.AddPnpmBinToPath($script:pnpmBin)
             $env:PATH -split ";" | Should -Contain $script:pnpmBin
+            $env:PATH -split ";" | Should -Contain (Join-Path $script:pnpmBin "bin")
         }
     }
 
@@ -733,9 +735,9 @@ Describe 'PnpmHandler' {
             $env:PATH = $script:origPath
         }
 
-        It 'should report mixed success/failure counts' {
+        It 'should return failure with mixed success/failure counts' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
@@ -897,7 +899,11 @@ Describe 'PnpmHandler' {
             Mock Get-JsonContent {
                 return @{
                     globalPackages = @(
-                        @{ name = "pkg-with-verify"; verifyCommand = @{ command = "pkg-cmd"; args = @("--version") } }
+                        @{
+                            name          = "pkg-with-verify"
+                            installArgs   = @("--allow-build", "native-addon")
+                            verifyCommand = @{ command = "pkg-cmd"; args = @("--version") }
+                        }
                     )
                 }
             }
@@ -934,6 +940,15 @@ Describe 'PnpmHandler' {
             Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
                 $Command -eq "pkg-cmd" -and $Arguments -contains "--version"
             }
+        }
+
+        It 'should pass package installArgs to pnpm add' {
+            $handler.Apply($ctx)
+            Should -Invoke Invoke-Pnpm -ParameterFilter {
+                $Arguments -contains "add" -and
+                $Arguments -contains "--allow-build" -and
+                $Arguments -contains "native-addon"
+            } -Times 1
         }
     }
 
@@ -972,9 +987,9 @@ Describe 'PnpmHandler' {
         }
         AfterEach { $env:PATH = $script:origPath }
 
-        It 'should count as verify failed' {
+        It 'should return failure and count as verify failed' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個検証失敗"
             $result.Message | Should -Not -Match "1 個インストール"
         }
