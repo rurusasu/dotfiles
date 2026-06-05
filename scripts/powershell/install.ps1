@@ -160,7 +160,14 @@ if ($adminRequired) {
         $argList += "-LogFile"
         $argList += $logFile
 
-        $proc = Start-Process -FilePath $shell -ArgumentList $argList -Verb RunAs -Wait -PassThru
+        try {
+            $proc = Start-Process -FilePath $shell -ArgumentList $argList -Verb RunAs -Wait -PassThru
+        }
+        catch [System.InvalidOperationException] {
+            Write-Warning "Admin phase was canceled or could not be started: $($_.Exception.Message)"
+            Write-Warning "Re-run install.cmd and approve the UAC prompt to apply admin-required tasks."
+            $proc = $null
+        }
 
         # ログファイルの内容を元のコンソールに表示
         if (Test-Path $logFile) {
@@ -168,6 +175,9 @@ if ($adminRequired) {
             Get-Content $logFile | ForEach-Object { Write-Host $_ }
         }
 
+        if ($null -eq $proc) {
+            Write-Host "Admin phase skipped." -ForegroundColor Yellow
+        }
         if ($null -ne $proc -and $proc.ExitCode -ne 0) {
             throw "Admin phase failed with exit code $($proc.ExitCode)."
         }

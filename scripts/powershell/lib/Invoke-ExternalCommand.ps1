@@ -755,6 +755,40 @@ function Set-UserEnvironmentPath {
 
 <#
 .SYNOPSIS
+    現在の PowerShell プロセスの PATH を環境変数ストアから再構築する
+.DESCRIPTION
+    winget install 後は Machine/User PATH が更新されても、実行中の
+    PowerShell プロセスには自動反映されない。検証コマンドを同じ
+    install.cmd 実行内で見つけられるようにする。
+#>
+function Update-ProcessEnvironmentPath {
+    [CmdletBinding()]
+    param()
+
+    $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+    $userPath = Get-UserEnvironmentPath
+    $processPath = [System.Environment]::GetEnvironmentVariable("PATH", "Process")
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $items = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($pathValue in @($machinePath, $userPath, $processPath)) {
+        if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
+
+        foreach ($item in ($pathValue -split ";")) {
+            $trimmed = $item.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+            if ($seen.Add($trimmed)) {
+                $items.Add($trimmed)
+            }
+        }
+    }
+
+    $env:PATH = $items -join ";"
+}
+
+<#
+.SYNOPSIS
     対話環境かどうかを判定する
 .DESCRIPTION
     Pester でモック可能にするため [Environment]::UserInteractive / [Console]::IsInputRedirected を
