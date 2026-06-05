@@ -69,7 +69,9 @@ let
     key: pkg:
     attachPathEntries sets.wingetPathEntries key (
       attachPortableLink sets.wingetPortableLinksById key (
-        attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+        attachInstallArgs sets.wingetInstallArgs key (
+          attachVerify sets.wingetVerify key pkg
+        )
       )
     );
 
@@ -93,11 +95,17 @@ let
 
   # --- pnpm ---
   pnpmFromGlobal = map (
-    name: attachPnpmInstallArgs sets.pnpmInstallArgs name (attachVerify sets.pnpmVerify name { inherit name; })
+    name:
+    attachPnpmInstallArgs sets.pnpmInstallArgs name (
+      attachVerify sets.pnpmVerify name { inherit name; }
+    )
   ) sets.pnpmGlobal;
 
   pnpmFromWindowsOnly = map (
-    name: attachPnpmInstallArgs sets.pnpmInstallArgs name (attachVerify sets.pnpmVerify name { inherit name; })
+    name:
+    attachPnpmInstallArgs sets.pnpmInstallArgs name (
+      attachVerify sets.pnpmVerify name { inherit name; }
+    )
   ) sets.windowsOnly.pnpm;
 
   pnpmPackages = pnpmFromGlobal ++ pnpmFromWindowsOnly;

@@ -611,7 +611,9 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Extra PATH directories for installers that do not register CLI commands on PATH.
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
-    poppler-utils = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin" ];
+    poppler-utils = [
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
+    ];
     wezterm = [ "%ProgramFiles%\\WezTerm" ];
   };
 
