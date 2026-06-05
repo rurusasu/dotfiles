@@ -101,33 +101,45 @@ def tokenize(segment: str) -> list[str]:
         return segment.split()
 
 
-def git_subcommand(segment: str) -> str | None:
-    """Return the git subcommand if the segment is a git invocation."""
+def parse_git_segment(segment: str) -> tuple[str | None, list[str]]:
+    """Return (subcommand, global option tokens) for a git invocation.
+
+    Global options such as -C/--git-dir/--work-tree change which repository
+    the subcommand operates on, so they are collected for branch resolution.
+    """
     tokens = tokenize(segment)
     if not tokens:
-        return None
+        return None, []
 
     program = os.path.basename(tokens[0]).lower()
     if program not in {"git", "git.exe"}:
-        return None
+        return None, []
 
+    global_opts: list[str] = []
     i = 1
     while i < len(tokens):
         token = tokens[i]
         if token in GIT_OPTS_WITH_ARG:
+            global_opts.extend(tokens[i : i + 2])
             i += 2
             continue
         if token.startswith("-"):
+            global_opts.append(token)
             i += 1
             continue
-        return token
-    return None
+        return token, global_opts
+    return None, global_opts
 
 
-def current_branch(cwd: str | None) -> str | None:
+def current_branch(cwd: str | None, global_opts: list[str]) -> str | None:
+    """Resolve the branch of the repository the git invocation targets.
+
+    Re-passing the global options (e.g. -C <path>) makes git itself resolve
+    the effective working tree, matching the commit invocation exactly.
+    """
     try:
         result = subprocess.run(
-            ["git", "branch", "--show-current"],
+            ["git", *global_opts, "branch", "--show-current"],
             cwd=cwd or None,
             capture_output=True,
             text=True,
@@ -160,18 +172,17 @@ def main() -> int:
     if not isinstance(command, str):
         return 0
 
-    if not any(
-        git_subcommand(segment) == "commit"
-        for segment in split_shell_segments(command)
-    ):
-        return 0
-
-    branch = current_branch(payload.get("cwd"))
-    if branch in PROTECTED_BRANCHES:
-        deny(
-            f"Direct commits to protected branch '{branch}' are prohibited. "
-            "Create a feature branch and open a PR instead."
-        )
+    for segment in split_shell_segments(command):
+        subcommand, global_opts = parse_git_segment(segment)
+        if subcommand != "commit":
+            continue
+        branch = current_branch(payload.get("cwd"), global_opts)
+        if branch in PROTECTED_BRANCHES:
+            deny(
+                f"Direct commits to protected branch '{branch}' are prohibited. "
+                "Create a feature branch and open a PR instead."
+            )
+            break
 
     return 0
 
