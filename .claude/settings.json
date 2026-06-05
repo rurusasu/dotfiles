@@ -1,0 +1,88 @@
+{
+  "permissions": {
+    "allow": ["Read", "Write", "WebSearch", "Bash"],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(rm:*)",
+      "Bash(pip:*)",
+      "Bash(uv pip:*)",
+      "Bash(git pop:*)",
+      "Bash(git pull:*)",
+      "Bash(git rm:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(git restore:*)",
+      "Bash(git revert:*)",
+      "Bash(git stash:*)",
+      "Read(.env*)",
+      "Edit(.env*)",
+      "Write(.env*)",
+      "Read(secrets/*)",
+      "Edit(secrets/*)",
+      "Write(secrets/*)",
+      "Read(id_rsa*)",
+      "Read(id_ed25519*)",
+      "Read(*.pem)",
+      "Edit(*.pem)",
+      "Write(*.pem)",
+      "Read(*.key)",
+      "Edit(*.key)",
+      "Write(*.key)",
+      "Edit(pyproject.toml)",
+      "Write(pyproject.toml)",
+      "Edit(requirements.txt)",
+      "Write(requirements.txt)",
+      "Edit(uv.lock)",
+      "Write(uv.lock)",
+      "Bash(python:*pyproject:*)",
+      "Bash(python3:*pyproject:*)",
+      "Bash(python3 -c:*pyproject:*)"
+    ],
+    "ask": ["Bash(git checkout:*)", "Bash(git commit:*)"]
+  },
+  "model": "sonnet",
+  "theme": "light-daltonized",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "linear@claude-plugins-official": true,
+    "warp@claude-code-warp": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-warp": {
+      "source": {
+        "source": "github",
+        "repo": "warpdotdev/claude-code-warp"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "input=$(cat); case \"$input\" in *'git commit'*) b=$(git branch --show-current); case \"$b\" in main|staging|master) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Direct commits to %s are prohibited. Create a feature branch first.\"}}' \"$b\";; esac;; esac",
+            "statusMessage": "Checking protected branch..."
+          }
+        ]
+      }
+    ]
+  }
+}
