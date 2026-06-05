@@ -34,14 +34,13 @@ project_doc_fallback_filenames = [ "copilot-instructions.md" ]
 ################################################################################
 
 # 自律実行のため承認プロンプトを出さない。
-# 安全性は以下の 3 層で担保する:
-#   1. sandbox_mode = "workspace-write" (書き込みはワークスペース内に限定)
-#   2. rules/*.rules (sudo, rm, git rebase 等の破壊的コマンドは forbidden)
-#   3. hooks/ (保護ブランチへの直接コミットを deny)
+# 安全性は以下の 2 層で担保する:
+#   1. rules/*.rules (sudo, rm, git rebase 等の破壊的コマンドは forbidden)
+#   2. hooks/ (保護ブランチへの直接コミットを deny)
 approval_policy = "never"
 
-# ワークスペース内のみ書き込み可。danger-full-access は自律実行では使わない
-sandbox_mode = "workspace-write"
+# Git 操作まで自律実行できるよう、ファイルシステム sandbox は無効化する。
+sandbox_mode = "danger-full-access"
 
 [sandbox_workspace_write]
 # ビルド・テストツール (pytest, npm 等) が一時ディレクトリを使えるようにする

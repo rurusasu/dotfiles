@@ -486,18 +486,70 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
         }
         AfterEach { $env:PATH = $script:origPath }
 
         It 'should skip all already-installed packages' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "2 個スキップ"
+            $result.Message | Should -Match "1 個検証済み"
+            $result.Message | Should -Match "1 個スキップ"
         }
 
         It 'should not call pnpm add for installed packages' {
             $handler.Apply($ctx)
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 0
+        }
+    }
+
+    Context 'Apply - installed package verification fails' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:verifyCalls = 0
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            New-Item (Join-Path $script:globalRoot "broken-pkg") -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "broken-pkg"; verifyCommand = @{ command = "broken"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") { $global:LASTEXITCODE = 0; return $script:globalRoot }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyCalls++
+                if ($script:verifyCalls -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "broken"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should reinstall when installed package verification fails' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 1
+            Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }
 

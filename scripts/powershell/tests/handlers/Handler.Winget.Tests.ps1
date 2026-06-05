@@ -183,7 +183,7 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "インストール済み"
+            $result.Message | Should -Match "1 個スキップ"
         }
 
         It 'should not call winget install' {
@@ -206,6 +206,78 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
             $script:installCalled | Should -Be $false
+        }
+    }
+
+    Context 'Apply - import mode: installed package verification fails' {
+        BeforeEach {
+            $script:verifyCalls = 0
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "twpayne.chezmoi"
+                                    verifyCommand     = [PSCustomObject]@{ command = "chezmoi"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-VerifyCommand {
+                if (-not $script:verifyCalls) { $script:verifyCalls = 0 }
+                $script:verifyCalls++
+                if ($script:verifyCalls -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "chezmoi not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "2.70.5"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name     Id              Version Source",
+                        "----------------------------------------",
+                        "chezmoi  twpayne.chezmoi 2.70.5  winget"
+                    )
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should reinstall with force when installed package verification fails' {
+            $script:installArgs = $null
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name     Id              Version Source",
+                        "----------------------------------------",
+                        "chezmoi  twpayne.chezmoi 2.70.5  winget"
+                    )
+                }
+                if ($Arguments -contains "install") {
+                    $script:installArgs = $Arguments
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:installArgs | Should -Contain "--force"
+            Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }
 

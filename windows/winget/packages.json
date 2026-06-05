@@ -53,7 +53,11 @@
           }
         },
         {
-          "PackageIdentifier": "x-motemen.ghq"
+          "PackageIdentifier": "x-motemen.ghq",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ghq"
+          }
         },
         {
           "PackageIdentifier": "Git.Git",
@@ -84,10 +88,18 @@
           }
         },
         {
-          "PackageIdentifier": "jqlang.jq"
+          "PackageIdentifier": "jqlang.jq",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "jq"
+          }
         },
         {
-          "PackageIdentifier": "JesseDuffield.lazygit"
+          "PackageIdentifier": "JesseDuffield.lazygit",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "lazygit"
+          }
         },
         {
           "PackageIdentifier": "Neovim.Neovim",
@@ -107,10 +119,18 @@
           "PackageIdentifier": "Obsidian.Obsidian"
         },
         {
-          "PackageIdentifier": "SST.opencode"
+          "PackageIdentifier": "SST.opencode",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "opencode"
+          }
         },
         {
-          "PackageIdentifier": "oxc-project.oxlint"
+          "PackageIdentifier": "oxc-project.oxlint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "oxlint"
+          }
         },
         {
           "PackageIdentifier": "Microsoft.PowerShell",
@@ -144,7 +164,11 @@
           }
         },
         {
-          "PackageIdentifier": "astral-sh.ty"
+          "PackageIdentifier": "astral-sh.ty",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ty"
+          }
         },
         {
           "PackageIdentifier": "astral-sh.uv",
@@ -157,7 +181,11 @@
           "PackageIdentifier": "Warp.Warp"
         },
         {
-          "PackageIdentifier": "wez.wezterm.nightly"
+          "PackageIdentifier": "wez.wezterm.nightly",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "wezterm"
+          }
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
@@ -182,13 +210,25 @@
           "PackageIdentifier": "GitHub.Copilot"
         },
         {
-          "PackageIdentifier": "dprint.dprint"
+          "PackageIdentifier": "dprint.dprint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "dprint"
+          }
         },
         {
-          "PackageIdentifier": "hadolint.hadolint"
+          "PackageIdentifier": "hadolint.hadolint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "hadolint"
+          }
         },
         {
-          "PackageIdentifier": "ImageMagick.ImageMagick"
+          "PackageIdentifier": "ImageMagick.ImageMagick",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "magick"
+          }
         },
         {
           "PackageIdentifier": "Google.Chrome"
@@ -209,16 +249,28 @@
           "PackageIdentifier": "Microsoft.WSL"
         },
         {
-          "PackageIdentifier": "OpenAI.Codex"
+          "PackageIdentifier": "OpenAI.Codex",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "codex"
+          }
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"
         },
         {
-          "PackageIdentifier": "Oven-sh.Bun"
+          "PackageIdentifier": "Oven-sh.Bun",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "bun"
+          }
         },
         {
-          "PackageIdentifier": "zig.zig"
+          "PackageIdentifier": "zig.zig",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "zig"
+          }
         }
       ],
       "SourceDetails": {

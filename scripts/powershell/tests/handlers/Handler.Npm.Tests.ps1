@@ -185,7 +185,7 @@ Describe 'NpmHandler' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "インストール済み"
+            $result.Message | Should -Match "2 個スキップ"
         }
     }
 
@@ -238,7 +238,7 @@ Describe 'NpmHandler' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個成功"
+            $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
     }

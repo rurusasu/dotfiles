@@ -154,22 +154,51 @@ class WingetHandler : SetupHandlerBase {
             # 正規表現で検出できないパッケージ（ARP エントリ等）は個別チェックにフォールバック
             $installedIds = $this.GetInstalledPackageIds()
 
-            # 未インストールのパッケージをフィルタリング
+            # 未インストール、または検証に失敗したパッケージをフィルタリング
             $toInstall = @()
             $skipped = 0
+            $verified = 0
             foreach ($pkg in $packages) {
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
-                    $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
-                    $skipped++
+                    if ($pkg.VerifyCommand) {
+                        Update-ProcessEnvironmentPath
+                        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+                            $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
+                        $toInstall += [PSCustomObject]@{
+                            Id            = $pkg.Id
+                            Version       = $pkg.Version
+                            SourceName    = $pkg.SourceName
+                            VerifyCommand = $pkg.VerifyCommand
+                            Force         = $true
+                        }
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
+                        $skipped++
+                    }
                 } else {
-                    $toInstall += $pkg
+                    $toInstall += [PSCustomObject]@{
+                        Id            = $pkg.Id
+                        Version       = $pkg.Version
+                        SourceName    = $pkg.SourceName
+                        VerifyCommand = $pkg.VerifyCommand
+                        Force         = $false
+                    }
                 }
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("すべてのパッケージがインストール済みです", "Green")
+                $this.Log("すべてのパッケージがインストール済みで、検証対象も正常です", "Green")
                 $this.EnsureCargoPath()
-                return $this.CreateSuccessResult("インストール済み: $($packages.Count) 個")
+                $parts = @()
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                return $this.CreateSuccessResult($parts -join ", ")
             }
 
             # 未インストール分をインストール
@@ -195,6 +224,9 @@ class WingetHandler : SetupHandlerBase {
                 if ($pkg.SourceName -eq "msstore") {
                     $installArgs += "--source"
                     $installArgs += "msstore"
+                }
+                if ($pkg.Force) {
+                    $installArgs += "--force"
                 }
 
                 Invoke-Winget -Arguments $installArgs | Out-Null
@@ -226,6 +258,7 @@ class WingetHandler : SetupHandlerBase {
             if ($succeeded -gt 0) { $parts += "$succeeded 個インストール" }
             if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
+            if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             return $this.CreateSuccessResult($parts -join ", ")
         } catch {

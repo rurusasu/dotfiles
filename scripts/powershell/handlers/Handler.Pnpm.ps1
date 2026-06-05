@@ -120,6 +120,7 @@ class PnpmHandler : SetupHandlerBase {
             $succeeded = @()
             $verifyFailed = @()
             $skipped = 0
+            $verified = 0
 
             # グローバルルートを一度だけ取得（ループ内で毎回 pnpm root -g を実行しないよう）
             $globalRootForCheck = ""
@@ -136,9 +137,20 @@ class PnpmHandler : SetupHandlerBase {
                 $verifyCmd = if ($pkgEntry -is [string]) { $null } else { $pkgEntry.verifyCommand }
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
-                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                    $skipped++
-                    continue
+                    if ($verifyCmd) {
+                        if ($this.TestPackageVerification($verifyCmd)) {
+                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                        $skipped++
+                        continue
+                    }
                 }
 
                 $this.Log("インストール中: $pkgSpec")
@@ -173,6 +185,7 @@ class PnpmHandler : SetupHandlerBase {
             if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             return $this.CreateSuccessResult($parts -join ", ")
         }

@@ -156,25 +156,46 @@ class NixRebuildHandler : SetupHandlerBase {
             )
             $toInstall = @()
             $skipped = 0
+            $verified = 0
             foreach ($pkg in $packages) {
                 $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
                 $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
+                $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
                 if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
-                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                    $skipped++
-                } else {
-                    $toInstall += $pkgSpec
+                    if ($verifyCmd) {
+                        if ($this.TestPnpmPackageVerificationInWsl($distroName, $verifyCmd)) {
+                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                        $skipped++
+                        continue
+                    }
+                }
+
+                $toInstall += [PSCustomObject]@{
+                    Spec          = $pkgSpec
+                    VerifyCommand = $verifyCmd
                 }
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("pnpm グローバルパッケージはすべてインストール済みです ($skipped 個スキップ)", "Gray")
+                $parts = @()
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                $this.Log("pnpm グローバルパッケージはすべてインストール済みで、検証対象も正常です ($($parts -join ', '))", "Gray")
                 return
             }
 
             # シェルメタ文字を含むパッケージ名（@scope/pkg 等）を安全に渡すためクォート
-            $quotedPkgs = ($toInstall | ForEach-Object { "'$($_ -replace "'", "'\\''")'" }) -join " "
-            $this.Log("pnpm グローバルパッケージをインストールしています: $($toInstall -join ', ')")
+            $packageSpecs = @($toInstall | ForEach-Object { $_.Spec })
+            $quotedPkgs = ($packageSpecs | ForEach-Object { $this.QuoteShellArg($_) }) -join " "
+            $this.Log("pnpm グローバルパッケージをインストールしています: $($packageSpecs -join ', ')")
 
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
             $pnpmOutput = Invoke-Wsl -Arguments @(
@@ -193,12 +214,61 @@ class NixRebuildHandler : SetupHandlerBase {
                 $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
             }
             else {
-                $this.Log("pnpm グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
+                $verifyFailed = 0
+                foreach ($pkg in $toInstall) {
+                    if ($pkg.VerifyCommand -and -not $this.TestPnpmPackageVerificationInWsl($distroName, $pkg.VerifyCommand)) {
+                        $verifyFailed++
+                        $this.LogWarning("✗ $($pkg.Spec) のインストールは成功しましたが検証に失敗しました")
+                    }
+                }
+
+                $parts = @("$($toInstall.Count) 個インストール")
+                if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                $this.Log("pnpm グローバルパッケージのインストール完了 ($($parts -join ', '))", "Green")
             }
         }
         catch {
             $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
         }
+    }
+
+    hidden [bool] TestPnpmPackageVerificationInWsl([string]$distroName, [object]$verifyCmd) {
+        if (-not $verifyCmd) {
+            return $false
+        }
+
+        try {
+            $command = $null
+            $arguments = @()
+            if ($verifyCmd -is [hashtable]) {
+                if (-not $verifyCmd.ContainsKey("command")) { return $false }
+                $command = [string]$verifyCmd["command"]
+                if ($verifyCmd.ContainsKey("args")) { $arguments = @($verifyCmd["args"]) }
+            }
+            else {
+                if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) { return $false }
+                $command = [string]$verifyCmd.command
+                if ($verifyCmd.PSObject.Properties.Name -contains "args") { $arguments = @($verifyCmd.args) }
+            }
+
+            $cmdLine = (@($command) + $arguments | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
+
+            Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; $cmdLine"
+            ) | Out-Null
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
+    }
+
+    hidden [string] QuoteShellArg([string]$value) {
+        return "'" + ($value -replace "'", "'\\''") + "'"
     }
 
     hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {

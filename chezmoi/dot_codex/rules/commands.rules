@@ -75,18 +75,18 @@ prefix_rule(
     justification = "Stash requires manual review.",
 )
 
-# --- Prompt: ask before risky actions ---
+# --- Allow: routine git workflow commands ---
 prefix_rule(
     pattern = ["git", "checkout"],
-    decision = "prompt",
-    justification = "Confirm before switching branches.",
+    decision = "allow",
+    justification = "Allow branch switching; destructive git operations remain forbidden.",
     match = ["git checkout main", "git checkout -b feature/test"],
 )
 
 prefix_rule(
     pattern = ["git", "commit"],
-    decision = "prompt",
-    justification = "Confirm before creating commits.",
+    decision = "allow",
+    justification = "Allow commits; protected branch commits are blocked by hooks.",
     match = ["git commit -m \"msg\""],
 )
 

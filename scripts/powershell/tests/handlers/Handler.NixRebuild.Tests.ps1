@@ -244,6 +244,53 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:pnpmAddCalled | Should -Be $false
         }
 
+        It 'should reinstall installed pnpm package when verifyCommand fails in WSL' {
+            $script:pnpmAddCalled = $false
+            $script:verifyCalls = 0
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                    @{ name = "@tobilu/qmd"; verifyCommand = @{ command = "qmd"; args = @("status") } }
+                )}
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") {
+                    $global:LASTEXITCODE = 0
+                    return @("@tobilu/qmd@1.0.0")
+                }
+                if ($argStr -match "qmd.*status") {
+                    $script:verifyCalls++
+                    if ($script:verifyCalls -eq 1) {
+                        $global:LASTEXITCODE = 1
+                        return "qmd not found"
+                    }
+                    $global:LASTEXITCODE = 0
+                    return "ok"
+                }
+                if ($argStr -match "pnpm add") {
+                    $script:pnpmAddCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return @("installed")
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:pnpmAddCalled | Should -Be $true
+            $script:verifyCalls | Should -Be 2
+        }
+
         It 'should succeed even when pnpm global install fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
