@@ -73,7 +73,7 @@ jobs:
 
   macos:
     name: E2E (macOS)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     timeout-minutes: 45
     permissions:
       contents: read

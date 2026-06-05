@@ -62,4 +62,11 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow | Should -Match '"install\.cmd"'
         $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
+
+    It 'should use a supported Intel macOS runner for devcontainer E2E' {
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+
+        $devcontainerWorkflow | Should -Match 'runs-on:\s+macos-15-intel'
+        $devcontainerWorkflow | Should -Not -Match 'runs-on:\s+macos-13'
+    }
 }
