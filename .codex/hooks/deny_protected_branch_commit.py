@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -91,9 +92,18 @@ def split_shell_segments(command: str) -> list[str]:
     return segments
 
 
+def tokenize(segment: str) -> list[str]:
+    """Tokenize shell-aware so quoted values (e.g. -c user.name="Jane Doe")
+    stay single tokens. Fall back to naive splitting on unbalanced quotes."""
+    try:
+        return shlex.split(segment, posix=True)
+    except ValueError:
+        return segment.split()
+
+
 def git_subcommand(segment: str) -> str | None:
     """Return the git subcommand if the segment is a git invocation."""
-    tokens = segment.split()
+    tokens = tokenize(segment)
     if not tokens:
         return None
 
