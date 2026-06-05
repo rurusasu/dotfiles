@@ -180,17 +180,19 @@ class WingetHandler : SetupHandlerBase {
             $skipped = 0
             $verified = 0
             foreach ($pkg in $packages) {
+                if ($pkg.VerifyCommand) {
+                    Update-ProcessEnvironmentPath
+                    $this.EnsurePortableLink($pkg)
+                    $this.EnsurePathEntries($pkg)
+                    if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+                        $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
+                        $verified++
+                        continue
+                    }
+                }
+
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
                     if ($pkg.VerifyCommand) {
-                        Update-ProcessEnvironmentPath
-                        $this.EnsurePortableLink($pkg)
-                        $this.EnsurePathEntries($pkg)
-                        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
-                            $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
-                            $verified++
-                            continue
-                        }
-
                         $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
                         $toInstall += [PSCustomObject]@{
                             Id            = $pkg.Id

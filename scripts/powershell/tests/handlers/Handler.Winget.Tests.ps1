@@ -84,6 +84,7 @@ Describe 'WingetHandler' {
 
     Context 'Apply - import mode: all packages not installed' {
         BeforeEach {
+            $script:verifyAttempts = @{}
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -108,7 +109,16 @@ Describe 'WingetHandler' {
                     $global:LASTEXITCODE = 0
                 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand {
+                param($Command)
+                if (-not $script:verifyAttempts.ContainsKey($Command)) {
+                    $script:verifyAttempts[$Command] = 1
+                    $global:LASTEXITCODE = 1
+                    throw "$Command not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
@@ -145,8 +155,8 @@ Describe 'WingetHandler' {
 
             $handler.Apply($ctx)
 
-            Should -Invoke Update-ProcessEnvironmentPath -Times 2
-            Should -Invoke Invoke-VerifyCommand -Times 2
+            Should -Invoke Update-ProcessEnvironmentPath -Times 4
+            Should -Invoke Invoke-VerifyCommand -Times 4
         }
     }
 
@@ -724,6 +734,7 @@ Describe 'WingetHandler' {
 
     Context 'Apply - import mode: WingetVerifyCommandOnly option' {
         BeforeEach {
+            $script:verifyAttempts = @{}
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -746,7 +757,16 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand {
+                param($Command)
+                if (-not $script:verifyAttempts.ContainsKey($Command)) {
+                    $script:verifyAttempts[$Command] = 1
+                    $global:LASTEXITCODE = 1
+                    throw "$Command not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
@@ -772,10 +792,35 @@ Describe 'WingetHandler' {
             $script:installIds | Should -Contain "CLI.Tool"
             $script:installIds | Should -Not -Contain "GUI.App"
         }
+
+        It 'should skip install when verifyCommand already works even if winget list misses the package' {
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            $script:installIds = @()
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                }
+                elseif ($Arguments -contains "install") {
+                    $idIndex = [array]::IndexOf($Arguments, "--id") + 1
+                    $script:installIds += $Arguments[$idIndex]
+                    $global:LASTEXITCODE = 0
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "検証済み"
+            $script:installIds.Count | Should -Be 0
+        }
     }
 
     Context 'Apply - import mode: package installArgs' {
         BeforeEach {
+            $script:verifyAttempts = 0
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
@@ -798,7 +843,15 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "PowerShell 7.6.2" }
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "pwsh not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "PowerShell 7.6.2"
+            }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
@@ -984,11 +1037,12 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should install all packages and return success when some lack verifyCommand' {
+        It 'should install packages without verifyCommand and skip verified CLI packages' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "2 個インストール"
+            $result.Message | Should -Match "1 個インストール"
+            $result.Message | Should -Match "1 個検証済み"
         }
 
         It 'should run verify only for packages that have verifyCommand' {
