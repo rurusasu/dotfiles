@@ -6,12 +6,14 @@ on:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "tests/bash/**"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"
   pull_request:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "tests/bash/**"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"
 

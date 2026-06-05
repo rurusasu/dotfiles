@@ -64,14 +64,15 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     hidden [bool] TestWslExecutable() {
         try {
+            $timeoutSeconds = Get-WslCheckTimeoutSecond
             # wsl --version はディストリビューション未登録でも exit 0 を返す最も確実な確認方法
             # 管理者昇格プロセスでも動作する
-            Invoke-Wsl -Arguments @("--version") | Out-Null
+            Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("--version") | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
             # --version に対応していない古い WSL では --status を試す
-            $output = Invoke-Wsl -Arguments @("--status")
+            $output = Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("--status")
             # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
             $cleanOutput = ($output | ForEach-Object {
                 ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
@@ -289,7 +290,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         wsl --list --quiet の出力は null バイトを含む場合があるため除去してから比較する。
     #>
     hidden [bool] DistroExists([string]$name) {
-        $list = Invoke-Wsl -Arguments @("--list", "--quiet") | ForEach-Object {
+        $list = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @("--list", "--quiet") | ForEach-Object {
             ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
         } | Where-Object { $_ }
         return $list -contains $name

@@ -32,7 +32,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
         # NixOS ディストリビューションが存在するか確認
         try {
-            $distros = Invoke-Wsl -Arguments @("-l", "-q")
+            $distros = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @("-l", "-q")
             if ($LASTEXITCODE -ne 0) {
                 $this.LogWarning("WSL が利用できません")
                 return $false
@@ -220,7 +220,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
             $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
                     "-d", $distroName, "-u", "nixos", "--",
-                    "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g --reporter=append-only $quotedInstallArgs $quotedPkgs"
+                    "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
                 ))
 
             if ($pnpmExitCode -ne 0) {
@@ -271,23 +271,44 @@ class NixRebuildHandler : SetupHandlerBase {
         try {
             $command = $null
             $arguments = @()
+            $timeoutSeconds = 30
+            $verifyType = "command"
             if ($verifyCmd -is [hashtable]) {
                 if (-not $verifyCmd.ContainsKey("command")) { return $false }
                 $command = [string]$verifyCmd["command"]
                 if ($verifyCmd.ContainsKey("args")) { $arguments = @($verifyCmd["args"]) }
+                if ($verifyCmd.ContainsKey("timeoutSeconds")) { $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"] }
+                if ($verifyCmd.ContainsKey("type")) { $verifyType = [string]$verifyCmd["type"] }
             }
             else {
                 if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) { return $false }
                 $command = [string]$verifyCmd.command
                 if ($verifyCmd.PSObject.Properties.Name -contains "args") { $arguments = @($verifyCmd.args) }
+                if ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds") { $timeoutSeconds = [int]$verifyCmd.timeoutSeconds }
+                if ($verifyCmd.PSObject.Properties.Name -contains "type") { $verifyType = [string]$verifyCmd.type }
             }
+            if ($timeoutSeconds -le 0) { $timeoutSeconds = 30 }
 
-            $cmdLine = (@($command) + $arguments | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
+            if ($verifyType -eq "commandExists") {
+                $cmdLine = "command -v $($this.QuoteShellArg($command))"
+                $this.Log("検証中: command -v $command", "Gray")
+            }
+            else {
+                $cmdLine = (@($command) + $arguments | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
+                $this.Log("検証中: $command $($arguments -join ' ')", "Gray")
+            }
 
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; $cmdLine"
-            ) | Out-Null
+                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; timeout ${timeoutSeconds}s $cmdLine"
+            ) | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+            if ($LASTEXITCODE -eq 124) {
+                $this.Log("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')", "Yellow")
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {

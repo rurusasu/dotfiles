@@ -258,6 +258,8 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
+        $this.Log("1Password CLI: 認証状態を確認しています...", "Gray")
+
         # サインイン済みか確認
         # op whoami はデスクトップアプリ連携環境（特に -File モード）で
         # "account is not signed in" を返す場合がある。
@@ -337,6 +339,14 @@ class ChezmoiHandler : SetupHandlerBase {
     hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
         $accountResult = Invoke-OpAccountList -OpExe $opExe -Account $this.OpAccount
         $outputStr = if ($accountResult.Output) { ($accountResult.Output | Out-String).Trim() } else { '' }
+
+        if ($accountResult.ExitCode -eq 124) {
+            return @(
+                "1Password CLI がタイムアウトしました。"
+                "1Password デスクトップアプリが起動・ロック解除されていることを確認してください。"
+                "CLI 連携を有効にした直後は、1Password アプリを完全終了して再起動してください。"
+            ) -join "`n"
+        }
 
         # op account list 自体が失敗 → デスクトップアプリに接続できない
         if ($accountResult.ExitCode -ne 0) {

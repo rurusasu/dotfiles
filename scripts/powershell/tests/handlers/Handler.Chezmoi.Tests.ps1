@@ -886,6 +886,23 @@ Describe 'ChezmoiHandler' {
             $result.Message | Should -Match '1Password'
         }
 
+        It 'should fail clearly when 1Password CLI commands time out' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpVaultList {
+                return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
+            }
+            Mock Invoke-OpAccountList {
+                return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
+            }
+            Mock Test-InteractiveEnvironment { return $false }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match '1Password CLI がタイムアウト'
+        }
+
         It 'should show CLI integration hint when no accounts registered' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {

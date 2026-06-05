@@ -174,7 +174,7 @@ class PnpmHandler : SetupHandlerBase {
                 }
 
                 $this.Log("インストール中: $pkgSpec")
-                $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only") + $installArgs + @($pkgSpec))
+                $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only", "--yes") + $installArgs + @($pkgSpec))
 
                 if ($pnpmExitCode -ne 0) {
                     $failed += $pkgSpec
@@ -242,13 +242,64 @@ class PnpmHandler : SetupHandlerBase {
         try {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            $verifyType = $this.GetVerifyType($verifyCmd)
+            if ($verifyType -eq "commandExists") {
+                $this.Log("検証中: command -v $command", "Gray")
+                $cmd = Get-ExternalCommand -Name $command
+                if ($cmd) {
+                    $this.Log("  $($cmd.Source)", "Gray")
+                    return $true
+                }
+                $this.Log("検証コマンドが見つかりません: $command", "Yellow")
+                return $false
+            }
+
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            $displayCommand = (@($command) + $arguments) -join " "
+            $this.Log("検証中: $displayCommand", "Gray")
+
+            $output = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            $output | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -eq 124) {
+                $this.Log("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $displayCommand", "Yellow")
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
+    }
+
+    hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        return 30
+    }
+
+    hidden [string] GetVerifyType([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("type")) {
+            return [string]$verifyCmd["type"]
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "type")) {
+            return [string]$verifyCmd.type
+        }
+        return "command"
     }
 
     hidden [int] InvokePnpmInstall([string[]]$arguments) {

@@ -471,13 +471,19 @@ lib.mapAttrs (_: names: resolve names) grouped
       args = [ "--version" ];
     };
     "@agentclientprotocol/claude-agent-acp" = {
+      type = "commandExists";
       command = "claude-agent-acp";
-      args = [ "--version" ];
+      args = [ ];
     };
   };
 
   # Extra pnpm install arguments for packages that need approved native builds.
-  pnpmInstallArgs = { };
+  pnpmInstallArgs = {
+    "@google/gemini-cli" = [
+      "--allow-build=@github/keytar"
+      "--allow-build=node-pty"
+    ];
+  };
 
   # Post-install verification commands for winget packages.
   # Keys match catalog attr names. GUI-only packages are omitted.
@@ -602,7 +608,10 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   # Extra winget install arguments for packages that need a specific installer.
   wingetInstallArgs = {
-    powershell = [ "--installer-type" "wix" ];
+    powershell = [
+      "--installer-type"
+      "wix"
+    ];
   };
 
   # Extra PATH directories for installers that do not register CLI commands on PATH.

@@ -77,6 +77,76 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
+Describe 'Invoke-VerifyCommand' {
+    BeforeAll {
+        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
+    }
+
+    It 'should return output when verify command exits before timeout' {
+        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "Write-Output 'verify ok'; exit 0"
+        ) -TimeoutSeconds 5
+
+        $result | Should -Contain "verify ok"
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'should stop verify command when timeout expires' {
+        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "Start-Sleep -Seconds 5; exit 0"
+        ) -TimeoutSeconds 1
+
+        $result | Should -Match "タイムアウト"
+        $global:LASTEXITCODE | Should -Be 124
+    }
+}
+
+Describe 'Invoke-OpCommand' {
+    It 'should run op vault list through timeout wrapper' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+        Mock Get-OpCommandTimeoutSecond { return 3 }
+
+        $result = Invoke-OpVaultList -OpExe "C:\op.exe" -Account "my.1password.com"
+
+        $result.ExitCode | Should -Be 124
+        $result.Output | Should -Contain "timeout"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "C:\op.exe" -and
+            $Arguments -contains "vault" -and
+            $Arguments -contains "list" -and
+            $Arguments -contains "--account" -and
+            $Arguments -contains "my.1password.com" -and
+            $TimeoutSeconds -eq 3
+        }
+    }
+
+    It 'should use a separate timeout for op signin' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+        Mock Get-OpSignInTimeoutSecond { return 7 }
+
+        $result = Invoke-OpSignIn -OpExe "C:\op.exe" -Account "my.1password.com"
+
+        $result.ExitCode | Should -Be 124
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "C:\op.exe" -and
+            $Arguments -contains "signin" -and
+            $TimeoutSeconds -eq 7
+        }
+    }
+}
+
 Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
@@ -100,6 +170,21 @@ Describe 'Invoke-Wsl' {
         Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
 
         Should -Invoke wsl -Times 1
+    }
+
+    It 'should run WSL through timeout wrapper when TimeoutSeconds is specified' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+
+        $result = Invoke-Wsl -TimeoutSeconds 1 -Arguments @("--status")
+
+        $result | Should -Contain "timeout"
+        $global:LASTEXITCODE | Should -Be 124
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "wsl" -and $Arguments -contains "--status" -and $TimeoutSeconds -eq 1
+        }
     }
 }
 
@@ -532,5 +617,20 @@ Describe 'Test-WslAvailable' {
         $result = Test-WslAvailable
 
         $result | Should -Be $false
+    }
+
+    It 'should return false when WSL status check times out' {
+        Mock Get-WslCheckTimeoutSecond { return 1 }
+        Mock Invoke-Wsl {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $false
+        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+            $TimeoutSeconds -eq 1 -and $Arguments -contains "--status"
+        }
     }
 }

@@ -122,6 +122,10 @@ foreach ($handler in $handlers) {
         continue
     }
 
+    if (-not $CheckOnly) {
+        Write-Host "[$($handler.Name)] 適用可否を確認しています..." -ForegroundColor Gray
+    }
+
     # プリフライトチェック: ログをバッファリングして表示しない
     $handler._bufferLogs = $true
     try {

@@ -221,7 +221,11 @@ Describe 'NixRebuildHandler' {
                 return @{ globalPackages = @(
                         @{ name = "@prisma/language-server" },
                         @{ name = "@agentclientprotocol/claude-agent-acp" },
-                        @{ name = "typescript-language-server" }
+                        @{ name = "typescript-language-server" },
+                        @{
+                            name        = "@google/gemini-cli"
+                            installArgs = @("--allow-build=@github/keytar", "--allow-build=node-pty")
+                        }
                     )
                 }
             }
@@ -250,10 +254,129 @@ Describe 'NixRebuildHandler' {
             $result.Success | Should -Be $true
             $script:pnpmArgs | Should -Match "pnpm add -g"
             $script:pnpmArgs | Should -Match "--reporter=append-only"
+            $script:pnpmArgs | Should -Match "--yes"
             $script:pnpmArgs | Should -Match "@prisma/language-server"
             $script:pnpmArgs | Should -Match "@agentclientprotocol/claude-agent-acp"
             $script:pnpmArgs | Should -Match "typescript-language-server"
+            $script:pnpmArgs | Should -Match "@google/gemini-cli"
+            $script:pnpmArgs | Should -Match "--allow-build=@github/keytar"
+            $script:pnpmArgs | Should -Match "--allow-build=node-pty"
             $script:pnpmArgs | Should -Not -Match "\btimeout\b"
+        }
+
+        It 'should run WSL pnpm verification with visible output and timeout guard' {
+            $script:verifyArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s") {
+                    $script:verifyArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "0.41.0"
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:verifyArgs | Should -Match "timeout 30s"
+            $script:verifyArgs | Should -Match "claude-agent-acp"
+            $script:verifyArgs | Should -Match "--version"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: claude-agent-acp --version"
+            } -Times 1
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "0.41.0"
+            } -Times 1
+        }
+
+        It 'should verify WSL stdio pnpm tools by command existence without executing them' {
+            $script:verifyArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ type = "commandExists"; command = "claude-agent-acp"; args = @() } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s command -v") {
+                    $script:verifyArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "/home/nixos/.npm-global/bin/claude-agent-acp"
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:verifyArgs | Should -Match "timeout 30s command -v"
+            $script:verifyArgs | Should -Match "claude-agent-acp"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
+            } -Times 1
+        }
+
+        It 'should fail WSL pnpm verification clearly when timeout expires' {
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s") { $global:LASTEXITCODE = 124; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Yellow" -and ([string]$Object) -match "タイムアウト"
+            } -Times 1
         }
 
         It 'should install pnpm global packages when entries are objects with name field' {

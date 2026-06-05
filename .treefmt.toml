@@ -17,7 +17,7 @@ command = "pwsh"
 options = [
   "-NoProfile",
   "-Command",
-  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery | Out-Null }; Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force; $raw = Get-Content -Raw -LiteralPath $env:FILENAME; $crlf = [string][char]13 + [string][char]10; $lf = [string][char]10; $content = $raw.Replace($crlf, $lf).Replace($lf, $crlf); $formatted = Invoke-Formatter -ScriptDefinition $content; $normalized = $formatted.Replace($crlf, $lf).Replace($lf, $crlf); [System.IO.File]::WriteAllText($env:FILENAME, $normalized, [System.Text.UTF8Encoding]::new($false)) }",
+  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery | Out-Null }; Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force; $target = if (-not [string]::IsNullOrWhiteSpace($env:FILENAME)) { $env:FILENAME } elseif ($args.Count -gt 0) { $args[0] } else { throw 'treefmt did not pass a filename' }; $raw = Get-Content -Raw -LiteralPath $target; $crlf = [string][char]13 + [string][char]10; $lf = [string][char]10; $content = $raw.Replace($crlf, $lf).Replace($lf, $crlf); $formatted = Invoke-Formatter -ScriptDefinition $content; $normalized = $formatted.Replace($crlf, $lf).Replace($lf, $crlf); if ($normalized -ne $raw) { [System.IO.File]::WriteAllText($target, $normalized, [System.Text.UTF8Encoding]::new($false)) } }",
 ]
 includes = [ "*.ps1" ]
 

@@ -12,8 +12,9 @@
     {
       "name": "@agentclientprotocol/claude-agent-acp",
       "verifyCommand": {
-        "args": ["--version"],
-        "command": "claude-agent-acp"
+        "args": [],
+        "command": "claude-agent-acp",
+        "type": "commandExists"
       }
     },
     {
@@ -31,6 +32,7 @@
       }
     },
     {
+      "installArgs": ["--allow-build=@github/keytar", "--allow-build=node-pty"],
       "name": "@google/gemini-cli",
       "verifyCommand": {
         "args": ["--version"],

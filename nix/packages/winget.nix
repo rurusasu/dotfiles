@@ -22,7 +22,9 @@ let
       // {
         verifyCommand = {
           inherit (verify) command args;
-        };
+        }
+        // lib.optionalAttrs (verify ? type) { inherit (verify) type; }
+        // lib.optionalAttrs (verify ? timeoutSeconds) { inherit (verify) timeoutSeconds; };
       };
 
   attachInstallArgs =
@@ -30,48 +32,34 @@ let
     let
       installArgs = installArgsMap.${key} or null;
     in
-    if installArgs == null then
-      pkg
-    else
-      pkg // { inherit installArgs; };
+    if installArgs == null then pkg else pkg // { inherit installArgs; };
 
   attachPortableLink =
     portableLinksMap: key: pkg:
     let
       portableLink = portableLinksMap.${key} or null;
     in
-    if portableLink == null then
-      pkg
-    else
-      pkg // { inherit portableLink; };
+    if portableLink == null then pkg else pkg // { inherit portableLink; };
 
   attachPathEntries =
     pathEntriesMap: key: pkg:
     let
       pathEntries = pathEntriesMap.${key} or null;
     in
-    if pathEntries == null then
-      pkg
-    else
-      pkg // { inherit pathEntries; };
+    if pathEntries == null then pkg else pkg // { inherit pathEntries; };
 
   attachPnpmInstallArgs =
     installArgsMap: key: pkg:
     let
       installArgs = installArgsMap.${key} or null;
     in
-    if installArgs == null then
-      pkg
-    else
-      pkg // { inherit installArgs; };
+    if installArgs == null then pkg else pkg // { inherit installArgs; };
 
   attachWingetMetadata =
     key: pkg:
     attachPathEntries sets.wingetPathEntries key (
       attachPortableLink sets.wingetPortableLinksById key (
-        attachInstallArgs sets.wingetInstallArgs key (
-          attachVerify sets.wingetVerify key pkg
-        )
+        attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
       )
     );
 
