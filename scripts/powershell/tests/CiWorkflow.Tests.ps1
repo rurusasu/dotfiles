@@ -55,6 +55,15 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'User Phase Complete!'
     }
 
+    It 'should retry winget source update when the runner reports Cancelled' {
+        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-winget.yml") -Raw
+
+        $wingetWorkflow | Should -Match 'function Invoke-WingetSourceUpdate'
+        $wingetWorkflow | Should -Match '\bCancelled\b'
+        $wingetWorkflow | Should -Match 'winget source reset --force'
+        $wingetWorkflow | Should -Match 'throw "winget source update did not complete after \$Attempts attempts"'
+    }
+
     It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw

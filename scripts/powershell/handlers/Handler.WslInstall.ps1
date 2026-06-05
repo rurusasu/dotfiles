@@ -54,7 +54,7 @@ class WslInstallHandler : SetupHandlerBase {
 
             # 方法1: wsl --install --no-distribution
             $this.Log("wsl --install --no-distribution を実行中...")
-            $output = Invoke-Wsl --install --no-distribution 2>&1
+            $output = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) --install --no-distribution 2>&1
             $output | ForEach-Object { $this.Log("  $_", "Gray") }
 
             if ($LASTEXITCODE -eq 0) {

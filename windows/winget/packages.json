@@ -269,7 +269,13 @@
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
-          "PackageIdentifier": "Microsoft.WSL"
+          "PackageIdentifier": "Microsoft.WSL",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "wsl",
+            "recoveryStrategy": "wingetRepair",
+            "timeoutSeconds": 30
+          }
         },
         {
           "PackageIdentifier": "OpenAI.Codex",

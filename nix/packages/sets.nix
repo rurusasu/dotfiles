@@ -650,6 +650,12 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "codex";
       args = [ "--version" ];
     };
+    "Microsoft.WSL" = {
+      command = "wsl";
+      args = [ "--version" ];
+      timeoutSeconds = 30;
+      recoveryStrategy = "wingetRepair";
+    };
     "Oven-sh.Bun" = {
       command = "bun";
       args = [ "--version" ];

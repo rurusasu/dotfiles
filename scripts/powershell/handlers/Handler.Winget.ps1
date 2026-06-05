@@ -179,6 +179,7 @@ class WingetHandler : SetupHandlerBase {
             $toInstall = @()
             $skipped = 0
             $verified = 0
+            $verifyFailed = 0
             foreach ($pkg in $packages) {
                 if ($pkg.VerifyCommand) {
                     Update-ProcessEnvironmentPath
@@ -193,16 +194,33 @@ class WingetHandler : SetupHandlerBase {
 
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
                     if ($pkg.VerifyCommand) {
-                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
-                        $toInstall += [PSCustomObject]@{
-                            Id            = $pkg.Id
-                            Version       = $pkg.Version
-                            SourceName    = $pkg.SourceName
-                            VerifyCommand = $pkg.VerifyCommand
-                            InstallArgs   = $pkg.InstallArgs
-                            PortableLink  = $pkg.PortableLink
-                            PathEntries   = $pkg.PathEntries
-                            Force         = $true
+                        if (-not [string]::IsNullOrWhiteSpace($this.GetRecoveryStrategy($pkg.VerifyCommand))) {
+                            if ($this.RecoverPackageVerification($pkg)) {
+                                $verified++
+                            }
+                            else {
+                                $this.LogWarning("✗ $($pkg.Id) はインストール済みですが検証に失敗しました")
+                                $verifyFailed++
+                            }
+                            continue
+                        }
+
+                        if ($this.ShouldReinstallOnVerifyFailure($pkg.VerifyCommand)) {
+                            $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
+                            $toInstall += [PSCustomObject]@{
+                                Id            = $pkg.Id
+                                Version       = $pkg.Version
+                                SourceName    = $pkg.SourceName
+                                VerifyCommand = $pkg.VerifyCommand
+                                InstallArgs   = $pkg.InstallArgs
+                                PortableLink  = $pkg.PortableLink
+                                PathEntries   = $pkg.PathEntries
+                                Force         = $true
+                            }
+                        }
+                        else {
+                            $this.LogWarning("✗ $($pkg.Id) はインストール済みですが検証に失敗しました")
+                            $verifyFailed++
                         }
                     }
                     else {
@@ -225,18 +243,22 @@ class WingetHandler : SetupHandlerBase {
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("すべてのパッケージがインストール済みで、検証対象も正常です", "Green")
                 $this.EnsureCargoPath()
                 $parts = @()
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
                 $parts += "$skipped 個スキップ"
+                if ($verifyFailed -gt 0) {
+                    return $this.CreateFailureResult($parts -join ", ")
+                }
+
+                $this.Log("すべてのパッケージがインストール済みで、検証対象も正常です", "Green")
                 return $this.CreateSuccessResult($parts -join ", ")
             }
 
             # 未インストール分をインストール
             $succeeded = 0
             $failed = 0
-            $verifyFailed = 0
 
             foreach ($pkg in $toInstall) {
                 $logSuffix = if ($pkg.Version) { " (v$($pkg.Version))" } else { "" }
@@ -245,7 +267,8 @@ class WingetHandler : SetupHandlerBase {
                     "install", "-e", "--id", $pkg.Id,
                     "--silent",
                     "--accept-package-agreements",
-                    "--accept-source-agreements"
+                    "--accept-source-agreements",
+                    "--disable-interactivity"
                 )
                 # Version が packages.json に書かれていれば --version で固定する。
                 # msstore source は固定 version 指定をサポートしないため除外。
@@ -264,9 +287,36 @@ class WingetHandler : SetupHandlerBase {
                     $installArgs += "--force"
                 }
 
-                Invoke-Winget -Arguments $installArgs | Out-Null
+                $installOutput = @(Invoke-Winget -Arguments $installArgs)
+                $alreadyInstalledInstallFailure = $this.IsAlreadyInstalledInstallFailure($installOutput)
+                foreach ($line in $installOutput) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                        $this.Log("  $line", "Gray")
+                    }
+                }
 
                 if ($LASTEXITCODE -ne 0) {
+                    Update-ProcessEnvironmentPath
+                    $this.EnsurePortableLink($pkg)
+                    $this.EnsurePathEntries($pkg)
+
+                    if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
+                        $verified++
+                        $this.Log("✓ $($pkg.Id) (winget install は失敗扱いでしたが検証済み)", "Green")
+                        continue
+                    }
+
+                    if ($alreadyInstalledInstallFailure -and $pkg.VerifyCommand -and $this.RecoverPackageVerification($pkg)) {
+                        $verified++
+                        continue
+                    }
+
+                    if ($alreadyInstalledInstallFailure -and $pkg.VerifyCommand) {
+                        $verifyFailed++
+                        $this.LogWarning("✗ $($pkg.Id) は既にインストールされていますが検証に失敗しました")
+                        continue
+                    }
+
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました")
                     continue
@@ -310,6 +360,63 @@ class WingetHandler : SetupHandlerBase {
             $this.LogWarning("winget パッケージインストール中に予期しないエラーが発生しました: $($_.Exception.Message)")
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    hidden [bool] IsAlreadyInstalledInstallFailure([object[]]$installOutput) {
+        $text = ($installOutput | ForEach-Object { [string]$_ }) -join "`n"
+        return $text -match '0x80073cfb' -or
+            $text -match 'already installed' -or
+            $text -match '別のバージョンが既にインストールされています'
+    }
+
+    hidden [bool] RecoverPackageVerification([object]$pkg) {
+        $strategy = $this.GetRecoveryStrategy($pkg.VerifyCommand)
+        if ([string]::IsNullOrWhiteSpace($strategy)) {
+            return $false
+        }
+
+        switch ($strategy) {
+            "wingetRepair" {
+                $this.LogWarning("検証に失敗したため winget repair を実行します: $($pkg.Id)")
+                $repairArgs = @(
+                    "repair", "-e", "--id", $pkg.Id,
+                    "--silent",
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                    "--disable-interactivity",
+                    "--force"
+                )
+                if ($pkg.SourceName -eq "winget") {
+                    $repairArgs += "--source"
+                    $repairArgs += "winget"
+                }
+
+                $repairOutput = @(Invoke-Winget -Arguments $repairArgs)
+                foreach ($line in $repairOutput) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                        $this.Log("  $line", "Gray")
+                    }
+                }
+
+                if ($LASTEXITCODE -ne 0) {
+                    $this.LogWarning("winget repair が失敗しました: $($pkg.Id)")
+                }
+
+                Update-ProcessEnvironmentPath
+                if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+                    $this.Log("✓ $($pkg.Id) (repair 後に検証済み)", "Green")
+                    return $true
+                }
+
+                $this.LogWarning("winget repair 後も検証に失敗しました: $($pkg.Id)")
+                return $false
+            }
+            default {
+                $this.LogWarning("未知の recoveryStrategy です: $strategy ($($pkg.Id))")
+                return $false
+            }
+        }
+        return $false
     }
 
     <#
@@ -373,13 +480,76 @@ class WingetHandler : SetupHandlerBase {
         try {
             $command = $verifyCmd.command
             $arguments = if ($verifyCmd.PSObject.Properties.Name -contains "args") { @($verifyCmd.args) } else { @() }
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            $type = if ($verifyCmd.PSObject.Properties.Name -contains "type") { [string]$verifyCmd.type } else { "command" }
+
+            if ($type -eq "commandExists") {
+                return $null -ne (Get-ExternalCommand -Name $command)
+            }
+
+            if ($type -eq "appxPackage") {
+                if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+                    $this.Log("検証コマンド実行エラー: Get-AppxPackage が利用できません", "Yellow")
+                    return $false
+                }
+
+                $appxPackage = Get-AppxPackage -Name $command -ErrorAction SilentlyContinue
+                return $null -ne $appxPackage
+            }
+
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            $output = @(Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+
+            $displayCommand = "$command $($arguments -join ' ')".Trim()
+            $this.Log("検証コマンド失敗 (exit code: $LASTEXITCODE): $displayCommand", "Yellow")
+            foreach ($line in $output) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                    $this.Log("  $line", "Gray")
+                }
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
+    }
+
+    hidden [bool] ShouldReinstallOnVerifyFailure([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("reinstallOnVerifyFailure")) {
+            return [bool]$verifyCmd["reinstallOnVerifyFailure"]
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "reinstallOnVerifyFailure")) {
+            return [bool]$verifyCmd.reinstallOnVerifyFailure
+        }
+        return $true
+    }
+
+    hidden [string] GetRecoveryStrategy([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("recoveryStrategy")) {
+            return [string]$verifyCmd["recoveryStrategy"]
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "recoveryStrategy")) {
+            return [string]$verifyCmd.recoveryStrategy
+        }
+        return ""
+    }
+
+    hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
+        $timeoutSeconds = 15
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+        }
+        elseif ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+        }
+
+        if ($timeoutSeconds -le 0) {
+            return 15
+        }
+        return $timeoutSeconds
     }
 
     hidden [void] EnsurePortableLink([object]$pkg) {

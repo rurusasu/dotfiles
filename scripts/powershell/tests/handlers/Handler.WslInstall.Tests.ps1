@@ -66,6 +66,7 @@ Describe 'WslInstallHandler' {
 
         It 'should run wsl --install --no-distribution' {
             $script:wslInstallCalled = $false
+            Mock Get-WslCheckTimeoutSecond { return 7 }
             Mock Invoke-Wsl {
                 $script:wslInstallCalled = $true
                 $global:LASTEXITCODE = 0
@@ -77,6 +78,11 @@ Describe 'WslInstallHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match '再起動が必要'
             $script:wslInstallCalled | Should -Be $true
+            Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+                $Arguments -contains "--install" -and
+                $Arguments -contains "--no-distribution" -and
+                $TimeoutSeconds -eq 7
+            }
         }
 
         It 'should fallback to dism when wsl --install fails' {

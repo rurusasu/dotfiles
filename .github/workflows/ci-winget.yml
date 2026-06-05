@@ -72,17 +72,41 @@ jobs:
             Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery
             Repair-WinGetPackageManager -AllUsers
           }
-          # Validate winget is functional before proceeding.
-          # source update can return non-zero on transient CDN errors; treat as warning.
-          # Temporarily suspend Stop preference so native command stderr doesn't abort.
-          $ErrorActionPreference = 'Continue'
-          winget source update
-          $sourceUpdateExit = $LASTEXITCODE
-          $ErrorActionPreference = 'Stop'
-          if ($sourceUpdateExit -ne 0) {
-            Write-Warning "winget source update returned $sourceUpdateExit — continuing anyway"
+          function Invoke-WingetSourceUpdate {
+            param([int]$Attempts = 3)
+
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+              Write-Host "winget source update attempt $attempt/$Attempts"
+              $ErrorActionPreference = 'Continue'
+              $sourceOutput = winget source update 2>&1 | ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+              $sourceUpdateExit = $LASTEXITCODE
+              $ErrorActionPreference = 'Stop'
+
+              $sourceText = $sourceOutput -join [Environment]::NewLine
+              if ($sourceUpdateExit -eq 0 -and $sourceText -notmatch '(?im)\bCancelled\b') {
+                return
+              }
+
+              Write-Warning "winget source update did not complete cleanly (exit=$sourceUpdateExit). Retrying after source reset."
+              $ErrorActionPreference = 'Continue'
+              winget source reset --force
+              $ErrorActionPreference = 'Stop'
+              Start-Sleep -Seconds 5
+            }
+
+            throw "winget source update did not complete after $Attempts attempts"
           }
+
+          # Validate winget sources before proceeding. A textual "Cancelled"
+          # with exit 0 still leaves later winget install calls unable to resolve
+          # packages, so detect it explicitly.
+          Invoke-WingetSourceUpdate
           winget --version
+          winget source list
 
       - name: Run install.cmd strict user phase
         shell: pwsh

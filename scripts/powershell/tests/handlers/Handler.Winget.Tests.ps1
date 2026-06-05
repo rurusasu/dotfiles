@@ -328,6 +328,32 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個失敗"
         }
+
+        It 'should stream winget install output to the CLI when install fails' {
+            Mock Write-Host { }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                    return @()
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    return @(
+                        "Found Fail.Package",
+                        "Installer failed with exit code: 1603"
+                    )
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke Write-Host -ParameterFilter {
+                [string]$Object -match 'Installer failed with exit code: 1603'
+            }
+        }
     }
 
     Context 'Apply - import mode: msstore package' {
@@ -975,6 +1001,207 @@ Describe 'WingetHandler' {
             Should -Invoke Invoke-VerifyCommand -Times 1
             Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter {
                 $Path -like "*$($script:toolDir)*"
+            }
+        }
+    }
+
+    Context 'Apply - import mode: Microsoft.WSL verification' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Microsoft.WSL"
+                                    verifyCommand     = [PSCustomObject]@{
+                                        command          = "wsl"
+                                        args             = @("--version")
+                                        timeoutSeconds   = 30
+                                        recoveryStrategy = "wingetRepair"
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        It 'should repair installed Microsoft.WSL and fail when wsl --version still does not exit' {
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 124
+                return "検証コマンドがタイムアウトしました (30s): wsl --version"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    throw "winget install should be skipped when WSL uses repair recovery"
+                }
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                $global:LASTEXITCODE = 0
+                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
+        }
+
+        It 'should install Microsoft.WSL only when it is not installed and then require wsl --version to pass' {
+            $script:verifyAttempts = 0
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 127
+                    throw "wsl not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.3.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                $global:LASTEXITCODE = 1
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
+        }
+
+        It 'should treat winget already-installed failure as verification failure when wsl --version still fails' {
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 124
+                return "検証コマンドがタイムアウトしました (30s): wsl --version"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    return @(
+                        "このアプリケーションの別のバージョンが既にインストールされています。",
+                        "インストーラーが終了コードで失敗しました: 0x80073cfb : The provided package is already installed"
+                    )
+                }
+                $global:LASTEXITCODE = 1
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            $result.Message | Should -Not -Match "1 個失敗"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+        }
+
+        It 'should recover when winget repair makes wsl --version pass' {
+            $script:verifyAttempts = 0
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 124
+                    return "検証コマンドがタイムアウトしました (30s): wsl --version"
+                }
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.3.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    throw "winget install should be skipped when WSL repair succeeds"
+                }
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                $global:LASTEXITCODE = 0
+                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証済み"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+        }
+    }
+
+    Context 'Apply - import mode: verifyCommand timeout' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Slow.Tool"
+                                    verifyCommand     = [PSCustomObject]@{ command = "slow-tool"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 124
+                return "検証コマンドがタイムアウトしました (15s): slow-tool --version"
+            }
+        }
+
+        It 'should pass a timeout to winget verify commands so install.cmd cannot hang indefinitely' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
+                $Command -eq "slow-tool" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 15
             }
         }
     }
