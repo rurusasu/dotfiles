@@ -44,7 +44,9 @@ Describe 'Integration Verification - Windows Environment' {
                     $script:nixosAvailable = $true
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "NixOS availability check failed: $($_.Exception.Message)"
+            }
         }
 
         It "should have <_> installed in NixOS" -ForEach @(
