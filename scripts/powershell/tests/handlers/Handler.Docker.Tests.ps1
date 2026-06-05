@@ -200,7 +200,8 @@ Describe 'DockerHandler' {
                     $script:writableCallCount++
                     if ($script:writableCallCount -le 2) {
                         $global:LASTEXITCODE = 1
-                    } else {
+                    }
+                    else {
                         $global:LASTEXITCODE = 0
                     }
                     return ""
@@ -679,7 +680,8 @@ Describe 'DockerHandler' {
                     $script:proxyTestCount++
                     if ($script:proxyTestCount -lt 2) {
                         $global:LASTEXITCODE = 1  # 失敗
-                    } else {
+                    }
+                    else {
                         $global:LASTEXITCODE = 0  # 成功
                     }
                     return ""

@@ -43,7 +43,8 @@ Describe 'Integration Verification - Windows Environment' {
                 if ($LASTEXITCODE -eq 0 -and ($distros -match 'NixOS')) {
                     $script:nixosAvailable = $true
                 }
-            } catch { }
+            }
+            catch { }
         }
 
         It "should have <_> installed in NixOS" -ForEach @(

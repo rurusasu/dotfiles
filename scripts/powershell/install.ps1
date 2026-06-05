@@ -49,13 +49,13 @@ function Get-PhaseParameters {
     param()
 
     return @{
-        DistroName       = $DistroName
-        InstallDir       = $InstallDir
-        ReleaseTag       = $ReleaseTag
+        DistroName        = $DistroName
+        InstallDir        = $InstallDir
+        ReleaseTag        = $ReleaseTag
         PostInstallScript = $PostInstallScript
-        Options          = $Options
-        SyncMode         = $SyncMode
-        SyncBack         = $SyncBack
+        Options           = $Options
+        SyncMode          = $SyncMode
+        SyncBack          = $SyncBack
     }
 }
 

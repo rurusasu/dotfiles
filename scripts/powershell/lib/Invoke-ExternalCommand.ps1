@@ -74,7 +74,8 @@ function Invoke-Chezmoi {
     )
     if ($ExePath) {
         if ($MergeStderr) { & $ExePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & $ExePath @Arguments }
-    } else {
+    }
+    else {
         if ($MergeStderr) { & chezmoi @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & chezmoi @Arguments }
     }
 }
@@ -106,11 +107,13 @@ function Invoke-NativeCommand {
         & $Command @Arguments 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 $_.Exception.Message
-            } else {
+            }
+            else {
                 $_
             }
         }
-    } finally {
+    }
+    finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 }
@@ -188,7 +191,8 @@ function Invoke-Diskpart {
         if ($result.ExitCode -ne 0) {
             throw "diskpart failed with exit code $($result.ExitCode)"
         }
-    } finally {
+    }
+    finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }
 }
@@ -851,7 +855,8 @@ function Test-WslAvailable {
     try {
         $null = Invoke-Wsl "--status" 2>&1
         return $LASTEXITCODE -eq 0
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -871,7 +876,8 @@ function Test-IsAdminSession {
     try {
         $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
         return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-    } catch {
+    }
+    catch {
         return $false
     }
 }

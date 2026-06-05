@@ -61,7 +61,8 @@ class PnpmHandler : SetupHandlerBase {
                         return $true
                     }
                 }
-            } catch {
+            }
+            catch {
                 $this.Log("corepack での有効化に失敗: $($_.Exception.Message)", "Yellow")
             }
         }
@@ -76,7 +77,8 @@ class PnpmHandler : SetupHandlerBase {
                     $this.Log("npm で pnpm をインストールしました", "Green")
                     return $true
                 }
-            } catch {
+            }
+            catch {
                 $this.Log("npm での pnpm インストールに失敗: $($_.Exception.Message)", "Yellow")
             }
         }
@@ -127,7 +129,8 @@ class PnpmHandler : SetupHandlerBase {
             try {
                 $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
                 if ($LASTEXITCODE -eq 0 -and $rawRoot) { $globalRootForCheck = $rawRoot.Trim() }
-            } catch {
+            }
+            catch {
                 $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
             }
 
@@ -171,9 +174,9 @@ class PnpmHandler : SetupHandlerBase {
                 }
 
                 $this.Log("インストール中: $pkgSpec")
-                $null = Invoke-Pnpm -Arguments (@("add", "-g") + $installArgs + @($pkgSpec))
+                $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only") + $installArgs + @($pkgSpec))
 
-                if ($LASTEXITCODE -ne 0) {
+                if ($pnpmExitCode -ne 0) {
                     $failed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
                     continue
@@ -182,10 +185,12 @@ class PnpmHandler : SetupHandlerBase {
                 if ($verifyCmd -and $this.TestPackageVerification($verifyCmd)) {
                     $succeeded += $pkgSpec
                     $this.Log("✓ $pkgSpec", "Green")
-                } elseif ($verifyCmd) {
+                }
+                elseif ($verifyCmd) {
                     $verifyFailed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールは成功しましたが検証に失敗しました")
-                } else {
+                }
+                else {
                     $succeeded += $pkgSpec
                     $this.Log("✓ $pkgSpec", "Green")
                 }
@@ -194,7 +199,8 @@ class PnpmHandler : SetupHandlerBase {
             # ルート取得済みなら再利用、失敗時は 0-arg 版でリトライ
             if ($globalRootForCheck) {
                 $this.EnsureGeminiCommandShim($globalRootForCheck)
-            } else {
+            }
+            else {
                 $this.EnsureGeminiCommandShim()
             }
 
@@ -245,6 +251,15 @@ class PnpmHandler : SetupHandlerBase {
         }
     }
 
+    hidden [int] InvokePnpmInstall([string[]]$arguments) {
+        Invoke-Pnpm -Arguments $arguments | ForEach-Object {
+            if ($_ -notmatch '^\s*$') {
+                $this.Log("  $_", "Gray")
+            }
+        }
+        return $LASTEXITCODE
+    }
+
     hidden [string] EnsurePnpmSetup() {
         # PNPM_HOME がプロセスに未設定の場合、レジストリから復元
         # （前回の pnpm setup で登録済みだが新規シェルにしか反映されないため）
@@ -276,7 +291,8 @@ class PnpmHandler : SetupHandlerBase {
         $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
         if ($registryPnpmHome) {
             $env:PNPM_HOME = $registryPnpmHome
-        } elseif ($env:LOCALAPPDATA) {
+        }
+        elseif ($env:LOCALAPPDATA) {
             $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
         }
 

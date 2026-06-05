@@ -72,7 +72,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $false }
@@ -89,7 +89,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -109,7 +109,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -180,7 +180,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -233,7 +233,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -286,7 +286,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -325,7 +325,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }
@@ -384,7 +384,7 @@ Describe 'VhdManagerHandler' {
             Mock Get-RegistryValue {
                 return [PSCustomObject]@{
                     DistributionName = "NixOS"
-                    BasePath = "C:\WSL\NixOS"
+                    BasePath         = "C:\WSL\NixOS"
                 }
             }
             Mock Test-PathExist { return $true }

@@ -172,10 +172,12 @@ class NpmHandler : SetupHandlerBase {
                 if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                     $succeeded += $pkg.Spec
                     $this.Log("✓ $($pkg.Spec)", "Green")
-                } elseif ($pkg.VerifyCommand) {
+                }
+                elseif ($pkg.VerifyCommand) {
                     $verifyFailed += $pkg.Spec
                     $this.LogWarning("✗ $($pkg.Spec) のインストールは成功しましたが検証に失敗しました")
-                } else {
+                }
+                else {
                     $succeeded += $pkg.Spec
                     $this.Log("✓ $($pkg.Spec)", "Green")
                 }

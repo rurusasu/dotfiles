@@ -84,7 +84,8 @@ if (-not $pesterV5) {
             throw "インストール後もモジュールが見つかりません"
         }
         Write-Host "Pester v$($pesterV5.Version) をインストールしました" -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Error "Pester v5 の自動インストールに失敗しました: $($_.Exception.Message)"
         Write-Error "手動でインストールしてください: Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force"
         exit 1
@@ -153,7 +154,8 @@ if ($sourceFiles.Count -gt 0 -and $MinimumCoverage -gt 0) {
         $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
         $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
     }
-} else {
+}
+else {
     $pesterConfig.CodeCoverage.Enabled = $false
 }
 
@@ -200,7 +202,8 @@ Write-Host ", " -NoNewline
 
 if ($failedCount -gt 0) {
     Write-Host "$failedCount failed" -ForegroundColor Red -NoNewline
-} else {
+}
+else {
     Write-Host "$failedCount failed" -ForegroundColor Gray -NoNewline
 }
 
@@ -220,7 +223,8 @@ if ($result.CodeCoverage -and $result.CodeCoverage.CoveragePercent) {
 
     if ($coverage -ge $MinimumCoverage) {
         Write-Host "$coverage%" -ForegroundColor Green -NoNewline
-    } else {
+    }
+    else {
         Write-Host "$coverage%" -ForegroundColor Red -NoNewline
     }
 

@@ -225,7 +225,8 @@ Describe 'NixOSWSLHandler' {
                 $script:callCount++
                 if ($Arguments -contains "--status") {
                     $global:LASTEXITCODE = 1
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 0
                 }
             }
@@ -260,7 +261,7 @@ Describe 'NixOSWSLHandler' {
             Mock Invoke-RestMethodSafe {
                 return @{
                     tag_name = "v24.5.1"
-                    assets = @()
+                    assets   = @()
                 }
             }
             Mock Write-Host { }
@@ -277,7 +278,7 @@ Describe 'NixOSWSLHandler' {
             Mock Invoke-RestMethodSafe {
                 return @{
                     tag_name = "v24.5.0"
-                    assets = @()
+                    assets   = @()
                 }
             }
             Mock Write-Host { }
@@ -322,7 +323,7 @@ Describe 'NixOSWSLHandler' {
         It 'should throw exception when no asset is found' {
             $release = @{
                 tag_name = "v1.0.0"
-                assets = @()
+                assets   = @()
             }
 
             { $handler.SelectAsset($release) } | Should -Throw "*利用可能なアーカイブが見つかりません*"
@@ -332,7 +333,7 @@ Describe 'NixOSWSLHandler' {
     Context 'DownloadAsset' {
         It 'should download asset' {
             $asset = @{
-                name = "nixos.wsl"
+                name                 = "nixos.wsl"
                 browser_download_url = "http://example.com/nixos.wsl"
             }
             Mock Invoke-WebRequestSafe { }
@@ -393,7 +394,8 @@ Describe 'NixOSWSLHandler' {
                 $script:callCount++
                 if ($script:callCount -eq 1) {
                     $global:LASTEXITCODE = 1  # --import-in-place fails
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 0  # --import --vhd succeeds
                 }
             }

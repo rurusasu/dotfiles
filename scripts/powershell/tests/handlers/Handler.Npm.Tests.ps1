@@ -20,7 +20,8 @@ Describe 'NpmHandler' {
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
-            } else {
+            }
+            else {
                 $handler.$property | Should -Not -BeNullOrEmpty
             }
         }
@@ -227,7 +228,8 @@ Describe 'NpmHandler' {
                 $script:installCallCount++
                 if ($script:installCallCount -eq 1) {
                     $global:LASTEXITCODE = 0
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 1
                 }
                 return "output"

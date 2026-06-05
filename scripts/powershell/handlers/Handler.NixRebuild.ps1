@@ -218,17 +218,10 @@ class NixRebuildHandler : SetupHandlerBase {
             $this.Log("pnpm グローバルパッケージをインストールしています: $($packageSpecs -join ', ')")
 
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
-            $pnpmOutput = Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g $quotedInstallArgs $quotedPkgs"
-            )
-            $pnpmExitCode = $LASTEXITCODE
-
-            $pnpmOutput | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    $this.Log("  $_", "Gray")
-                }
-            }
+            $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
+                    "-d", $distroName, "-u", "nixos", "--",
+                    "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g --reporter=append-only $quotedInstallArgs $quotedPkgs"
+                ))
 
             if ($pnpmExitCode -ne 0) {
                 $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
@@ -259,6 +252,15 @@ class NixRebuildHandler : SetupHandlerBase {
             $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
             return $false
         }
+    }
+
+    hidden [int] InvokeWslPnpmInstall([string[]]$arguments) {
+        Invoke-Wsl -Arguments $arguments | ForEach-Object {
+            if ($_ -notmatch '^\s*$') {
+                $this.Log("  $_", "Gray")
+            }
+        }
+        return $LASTEXITCODE
     }
 
     hidden [bool] TestPnpmPackageVerificationInWsl([string]$distroName, [object]$verifyCmd) {
@@ -318,7 +320,8 @@ class NixRebuildHandler : SetupHandlerBase {
                 throw "dotfiles のシンボリックリンク作成に失敗しました"
             }
             $this.Log("dotfiles リンク完了: /home/nixos/.dotfiles -> $wslMountPath", "Green")
-        } else {
+        }
+        else {
             throw "dotfiles が見つかりません。Windows パス '$dotfilesPath' が WSL から '$wslMountPath' としてアクセスできません"
         }
     }
@@ -352,7 +355,8 @@ class NixRebuildHandler : SetupHandlerBase {
                     if ($_ -match '^error:') {
                         $this.LogError("  $_")
                         $errorLines.Add([string]$_)
-                    } else {
+                    }
+                    else {
                         $this.Log("  $_", "Gray")
                     }
                 }

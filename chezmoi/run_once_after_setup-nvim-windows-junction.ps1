@@ -12,7 +12,8 @@ if (Test-Path $link) {
     $item = Get-Item $link -Force
     if ($item.LinkType -eq "Junction") {
         Remove-Item $link -Force
-    } else {
+    }
+    else {
         Write-Error "$link exists and is not a junction. Remove it manually."
         exit 1
     }

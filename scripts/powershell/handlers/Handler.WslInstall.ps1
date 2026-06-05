@@ -74,7 +74,8 @@ class WslInstallHandler : SetupHandlerBase {
                 "  dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart`n" +
                 "  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart"
             )
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -100,7 +101,8 @@ class WslInstallHandler : SetupHandlerBase {
             if ($LASTEXITCODE -ne 0) {
                 $this.LogWarning("$feature の有効化に失敗しました (exit=$LASTEXITCODE)")
                 $allSuccess = $false
-            } else {
+            }
+            else {
                 $this.Log("$feature を有効化しました", "Green")
             }
         }

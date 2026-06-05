@@ -77,9 +77,9 @@ Describe 'VscodeServerHandler' {
             }
             Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "abc123" }
@@ -99,9 +99,9 @@ Describe 'VscodeServerHandler' {
             }
             Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code Insiders\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code Insiders\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "def456" }
@@ -207,9 +207,9 @@ Describe 'VscodeServerHandler' {
                 param($Path)
                 if ($Path -like "*Insiders*") { return @() }
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "stable123" }
@@ -244,9 +244,9 @@ Describe 'VscodeServerHandler' {
                 param($Path)
                 if ($Path -notlike "*Insiders*") { return @() }
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code Insiders\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code Insiders\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "insider456" }
@@ -278,9 +278,9 @@ Describe 'VscodeServerHandler' {
             Mock Get-ChildItemSafe {
                 param($Path)
                 return @([PSCustomObject]@{
-                    FullName = "$Path\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "$Path\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 $script:callCount++
@@ -324,9 +324,9 @@ Describe 'VscodeServerHandler' {
             $script:curlCalled = $false
             Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "abc123" }
@@ -415,11 +415,11 @@ Describe 'VscodeServerHandler' {
             Mock Get-ChildItemSafe {
                 return @(
                     [PSCustomObject]@{
-                        FullName = "C:\old\product.json"
+                        FullName      = "C:\old\product.json"
                         LastWriteTime = (Get-Date).AddDays(-10)
                     },
                     [PSCustomObject]@{
-                        FullName = "C:\new\product.json"
+                        FullName      = "C:\new\product.json"
                         LastWriteTime = (Get-Date)
                     }
                 )
@@ -455,9 +455,9 @@ Describe 'VscodeServerHandler' {
             Mock Get-ChildItem {
                 $script:getChildItemCalled = $true
                 return @([PSCustomObject]@{
-                    FullName = "C:\Users\test\AppData\Local\Programs\Microsoft VS Code\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\Users\test\AppData\Local\Programs\Microsoft VS Code\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{ commit = "patterncommit" }
@@ -481,9 +481,9 @@ Describe 'VscodeServerHandler' {
             Mock Test-PathExist { return $true }
             Mock Get-ChildItemSafe {
                 return @([PSCustomObject]@{
-                    FullName = "C:\VS Code\product.json"
-                    LastWriteTime = Get-Date
-                })
+                        FullName      = "C:\VS Code\product.json"
+                        LastWriteTime = Get-Date
+                    })
             }
             Mock Get-JsonContent {
                 throw "JSON パースエラー"

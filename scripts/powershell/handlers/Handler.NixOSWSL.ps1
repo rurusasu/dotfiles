@@ -75,12 +75,13 @@ class NixOSWSLHandler : SetupHandlerBase {
             # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
             $cleanOutput = ($output | ForEach-Object {
                 ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
-            }) -join " "
+                }) -join " "
             if ($cleanOutput -match 'Default|既定|Version|バージョン|Kernel|カーネル') {
                 return $true
             }
             return ($LASTEXITCODE -eq 0)
-        } catch {
+        }
+        catch {
             return $false
         }
     }
@@ -99,7 +100,8 @@ class NixOSWSLHandler : SetupHandlerBase {
             if (Test-Path -LiteralPath $vhdPath) {
                 $this.Log("既存の VHD を検出しました。wsl --import-in-place で再登録します...")
                 $this.ReimportExistingVhd($ctx)
-            } else {
+            }
+            else {
                 # 通常インストール: GitHub からダウンロードしてインポート
                 $releaseTag = $ctx.GetOption("ReleaseTag", "")
                 $release = $this.GetRelease($releaseTag)
@@ -124,7 +126,8 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.EnsureDockerGroup($ctx.DistroName)
 
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -173,7 +176,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         if ($output -match "WSL version:\\s*([0-9\\.]+)") {
             try {
                 return [version]$Matches[1]
-            } catch {
+            }
+            catch {
                 return $null
             }
         }
@@ -207,7 +211,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         $base = "https://api.github.com/repos/nix-community/NixOS-WSL/releases"
         $uri = if ([string]::IsNullOrWhiteSpace($tag)) {
             "$base/latest"
-        } else {
+        }
+        else {
             "$base/tags/$tag"
         }
         return Invoke-RestMethodSafe -Uri $uri -Headers @{ "User-Agent" = "nixos-wsl-installer" }
@@ -260,7 +265,8 @@ class NixOSWSLHandler : SetupHandlerBase {
                 if ($LASTEXITCODE -eq 0) {
                     return
                 }
-            } catch {
+            }
+            catch {
                 # WSL が過渡状態の場合、例外を無視してリトライする
                 $null = $_.Exception
             }
@@ -316,12 +322,14 @@ class NixOSWSLHandler : SetupHandlerBase {
         if ($supportsFromFile) {
             try {
                 $this.InstallFromFile($ctx.DistroName, $archivePath, $ctx.InstallDir)
-            } catch {
+            }
+            catch {
                 $this.LogWarning("wsl --install --from-file に失敗しました。wsl --import にフォールバックします。")
                 $this.LogWarning($_.Exception.Message)
                 $this.ImportDistro($ctx.DistroName, $ctx.InstallDir, $archivePath)
             }
-        } else {
+        }
+        else {
             $this.ImportDistro($ctx.DistroName, $ctx.InstallDir, $archivePath)
         }
     }
@@ -362,7 +370,8 @@ class NixOSWSLHandler : SetupHandlerBase {
             if (Test-Path -LiteralPath $vhdBak) {
                 Rename-Item -LiteralPath $vhdBak -NewName "ext4.vhdx" -Force -ErrorAction SilentlyContinue
             }
-        } catch {
+        }
+        catch {
             if (Test-Path -LiteralPath $vhdBak) {
                 Rename-Item -LiteralPath $vhdBak -NewName "ext4.vhdx" -Force -ErrorAction SilentlyContinue
             }
@@ -459,8 +468,8 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] EnsureWhoamiShim([string]$distroName) {
         $this.Log("whoami シムリンクを作成します...")
         $cmd = "if [ -x /run/current-system/sw/bin/whoami ]; then " +
-               "ln -sf /run/current-system/sw/bin/whoami /bin/whoami; " +
-               "ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami; fi"
+        "ln -sf /run/current-system/sw/bin/whoami /bin/whoami; " +
+        "ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami; fi"
         Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $cmd)
     }
 
@@ -496,7 +505,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $cmd)
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker グループに '$user' を追加しました", "Green")
-        } else {
+        }
+        else {
             $this.LogWarning("docker グループへのユーザー追加に失敗しました (exit code: $LASTEXITCODE)")
         }
     }

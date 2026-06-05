@@ -189,7 +189,8 @@ Describe 'Get-ExternalCommand' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
         }
@@ -220,7 +221,8 @@ Describe 'Get-ProcessSafe' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
         }
@@ -382,7 +384,8 @@ Describe 'Get-RegistryValue' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result.TestValue | Should -Be "TestData"
         }
     }

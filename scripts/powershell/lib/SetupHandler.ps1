@@ -416,7 +416,8 @@ class SetupHandlerBase {
         $json = $null
         try {
             $json = $content | ConvertFrom-Json
-        } catch {
+        }
+        catch {
             Write-Verbose "consent.json の解析に失敗しました: $_"
             return $null
         }
@@ -446,7 +447,8 @@ class SetupHandlerBase {
                     foreach ($prop in $existing.PSObject.Properties) {
                         $json[$prop.Name] = $prop.Value
                     }
-                } catch {
+                }
+                catch {
                     Write-Verbose "consent.json の解析に失敗しました。新規作成します: $_"
                 }
             }
@@ -497,8 +499,8 @@ function Invoke-ConsentPrompt {
 
     # 同意が必要なハンドラーを抽出（ConsentKey があり、フラグ未設定）
     $pending = @($Handlers | Where-Object {
-        $_.NeedsConsent() -and ($null -eq $_.ReadConsentFlag())
-    })
+            $_.NeedsConsent() -and ($null -eq $_.ReadConsentFlag())
+        })
 
     if ($pending.Count -eq 0) { return }
 
@@ -524,13 +526,14 @@ function Invoke-ConsentPrompt {
     $selectedIndices = @()
     if ($answer -ieq "all") {
         $selectedIndices = 0..($pending.Count - 1)
-    } elseif ($answer -ine "none") {
+    }
+    elseif ($answer -ine "none") {
         $selectedIndices = @($answer -split '[,\s]+' | ForEach-Object {
-            $num = 0
-            if ([int]::TryParse($_.Trim(), [ref]$num) -and $num -ge 1 -and $num -le $pending.Count) {
-                $num - 1
-            }
-        })
+                $num = 0
+                if ([int]::TryParse($_.Trim(), [ref]$num) -and $num -ge 1 -and $num -le $pending.Count) {
+                    $num - 1
+                }
+            })
     }
 
     # 選択結果を永続化
@@ -545,9 +548,11 @@ function Invoke-ConsentPrompt {
         $flag = $h.ReadConsentFlag()
         if ($flag -eq $true) {
             Write-Host "  $($h.Name): 有効" -ForegroundColor Green
-        } elseif ($flag -eq $false) {
+        }
+        elseif ($flag -eq $false) {
             Write-Host "  $($h.Name): 無効" -ForegroundColor Gray
-        } else {
+        }
+        else {
             Write-Host "  $($h.Name): 未設定" -ForegroundColor Yellow
         }
     }
@@ -571,8 +576,7 @@ function Invoke-ConsentPrompt {
 .EXAMPLE
     $handlers = Get-SetupHandler -HandlersPath ".\handlers"
 #>
-function Get-SetupHandler
-{
+function Get-SetupHandler {
     param(
         [Parameter(Mandatory)]
         [string]$HandlersPath
@@ -581,16 +585,13 @@ function Get-SetupHandler
     $handlers = @()
     $handlerFiles = Get-ChildItem -Path $HandlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
 
-    if ($handlerFiles.Count -eq 0)
-    {
+    if ($handlerFiles.Count -eq 0) {
         Write-Warning "No handler files found in: $HandlersPath"
         return $handlers
     }
 
-    foreach ($file in $handlerFiles)
-    {
-        try
-        {
+    foreach ($file in $handlerFiles) {
+        try {
             # Dot-source the handler file
             . $file.FullName
 
@@ -603,8 +604,8 @@ function Get-SetupHandler
             $handlers += $instance
 
             Write-Verbose "Loaded handler: $($instance.Name) (Order: $($instance.Order))"
-        } catch
-        {
+        }
+        catch {
             Write-Warning "Failed to load handler: $($file.Name) - $($_.Exception.Message)"
         }
     }
@@ -626,16 +627,14 @@ function Get-SetupHandler
 .EXAMPLE
     $sorted = Select-SetupHandler -Handlers $handlers
 #>
-function Select-SetupHandler
-{
+function Select-SetupHandler {
     param(
         [Parameter(Mandatory)]
         [array]$Handlers
     )
 
     # Sort-Object は PS5.1 で安定ソートが保証されないためインデックスを仸る
-    $indexed = for ($i = 0; $i -lt $Handlers.Count; $i++)
-    {
+    $indexed = for ($i = 0; $i -lt $Handlers.Count; $i++) {
         [PSCustomObject]@{ Idx = $i; Item = $Handlers[$i] }
     }
     return ($indexed | Sort-Object -Property @{ Expression = { $_.Item.Order } }, @{ Expression = { $_.Idx } }) |
@@ -661,8 +660,7 @@ function Select-SetupHandler
 .EXAMPLE
     $results = Invoke-SetupHandler -Handlers $handlers -Context $context
 #>
-function Invoke-SetupHandler
-{
+function Invoke-SetupHandler {
     param(
         [Parameter(Mandatory)]
         [array]$Handlers,
@@ -673,17 +671,14 @@ function Invoke-SetupHandler
 
     $results = @()
 
-    if ($Handlers.Count -eq 0)
-    {
+    if ($Handlers.Count -eq 0) {
         Write-Warning "No handlers to execute"
         return $results
     }
 
-    foreach ($handler in $Handlers)
-    {
+    foreach ($handler in $Handlers) {
         # Skip if in skip list
-        if ($handler.Name -in $SkipHandlers)
-        {
+        if ($handler.Name -in $SkipHandlers) {
             Write-Host "[$($handler.Name)] Skipped (user request)" -ForegroundColor Gray
             continue
         }
@@ -691,11 +686,10 @@ function Invoke-SetupHandler
         # Check if handler can apply (buffer logs during check)
         $canApply = $false
         $handler._bufferLogs = $true
-        try
-        {
+        try {
             $canApply = $handler.CanApply($Context)
-        } catch
-        {
+        }
+        catch {
             $handler._bufferLogs = $false
             $handler.ClearLogBuffer()
             Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
@@ -703,8 +697,7 @@ function Invoke-SetupHandler
         }
         $handler._bufferLogs = $false
 
-        if (-not $canApply)
-        {
+        if (-not $canApply) {
             $handler.ClearLogBuffer()
             continue
         }
@@ -714,24 +707,21 @@ function Invoke-SetupHandler
         Write-Host "[$($handler.Name)] $($handler.Description)" -ForegroundColor Cyan
         $handler.FlushLogBuffer()
 
-        try
-        {
+        try {
             $result = $handler.Apply($Context)
             $results += $result
 
-            if ($result.Success)
-            {
+            if ($result.Success) {
                 # Summary で表示するため OK ログは省略
-            } else
-            {
+            }
+            else {
                 Write-Host "[$($handler.Name)] FAIL $($result.Message)" -ForegroundColor Red
-                if ($result.Error)
-                {
+                if ($result.Error) {
                     Write-Host "[$($handler.Name)] Error: $($result.Error.Message)" -ForegroundColor Red
                 }
             }
-        } catch
-        {
+        }
+        catch {
             $exception = $_.Exception
             $result = [SetupResult]::CreateFailure($handler.Name, "Unhandled exception", $exception)
             $results += $result
@@ -752,8 +742,7 @@ function Invoke-SetupHandler
 .EXAMPLE
     Show-SetupSummary -Results $results
 #>
-function Show-SetupSummary
-{
+function Show-SetupSummary {
     param(
         [Parameter(Mandatory)]
         [AllowNull()]
@@ -767,8 +756,7 @@ function Show-SetupSummary
     Write-Host "========================================" -ForegroundColor White
 
     # Handle null, empty, or non-array results
-    if ($null -eq $Results)
-    {
+    if ($null -eq $Results) {
         Write-Host "No handlers were executed" -ForegroundColor Gray
         return
     }
@@ -777,8 +765,7 @@ function Show-SetupSummary
     $resultsArray = @($Results)
     $totalCount = $resultsArray.Count
 
-    if ($totalCount -eq 0)
-    {
+    if ($totalCount -eq 0) {
         Write-Host "No handlers were executed" -ForegroundColor Gray
         return
     }
@@ -787,24 +774,26 @@ function Show-SetupSummary
     $failureCount = @($resultsArray | Where-Object { -not $_.Success }).Count
 
     Write-Host ""
-    Write-Host "Total: $totalCount | Success: $successCount | Failure: $failureCount" -ForegroundColor $(if ($failureCount -eq 0)
-        { "Green"
-        } else
-        { "Yellow"
+    Write-Host "Total: $totalCount | Success: $successCount | Failure: $failureCount" -ForegroundColor $(if ($failureCount -eq 0) {
+            "Green"
+        }
+        else {
+            "Yellow"
         })
     Write-Host ""
 
-    foreach ($result in $resultsArray)
-    {
-        $color = if ($result.Success)
-        { "Green"
-        } else
-        { "Red"
+    foreach ($result in $resultsArray) {
+        $color = if ($result.Success) {
+            "Green"
         }
-        $status = if ($result.Success)
-        { "✓"
-        } else
-        { "✗"
+        else {
+            "Red"
+        }
+        $status = if ($result.Success) {
+            "✓"
+        }
+        else {
+            "✗"
         }
         Write-Host "  [$status] $($result.HandlerName): $($result.Message)" -ForegroundColor $color
     }

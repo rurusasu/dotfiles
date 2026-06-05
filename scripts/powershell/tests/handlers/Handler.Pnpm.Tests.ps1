@@ -30,7 +30,8 @@ Describe 'PnpmHandler' {
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
-            } else {
+            }
+            else {
                 $handler.$property | Should -Not -BeNullOrEmpty
             }
         }
@@ -646,6 +647,79 @@ Describe 'PnpmHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "2 個インストール"
+        }
+
+        It 'should stream pnpm install output to the CLI' {
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                if ($Arguments -contains "add") {
+                    $global:LASTEXITCODE = 0
+                    return @("Progress: resolved 1", "Done in 1s")
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Progress: resolved 1"
+            } -Times 2
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Done in 1s"
+            } -Times 2
+        }
+
+        It 'should install every configured Windows pnpm tool without timeout' {
+            $script:addCalls = @()
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "@prisma/language-server" },
+                        @{ name = "@agentclientprotocol/claude-agent-acp" },
+                        @{ name = "typescript-language-server" }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                if ($Arguments -contains "add") {
+                    $script:addCalls += , @($Arguments)
+                    $global:LASTEXITCODE = 0
+                    return "installed"
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:addCalls.Count | Should -Be 3
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "@prisma/language-server"
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "@agentclientprotocol/claude-agent-acp"
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "typescript-language-server"
+            foreach ($call in $script:addCalls) {
+                $call | Should -Contain "--reporter=append-only"
+                $call | Should -Not -Contain "timeout"
+            }
         }
     }
 

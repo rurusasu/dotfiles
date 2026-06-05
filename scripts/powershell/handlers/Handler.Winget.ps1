@@ -79,7 +79,8 @@ class WingetHandler : SetupHandlerBase {
                 return $true
             }
             return $false
-        } catch {
+        }
+        catch {
             $this.LogWarning("winget 動作確認中に例外が発生しました: $($_.Exception.Message)")
             return $false
         }
@@ -206,7 +207,8 @@ class WingetHandler : SetupHandlerBase {
                         $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
                         $skipped++
                     }
-                } else {
+                }
+                else {
                     $toInstall += [PSCustomObject]@{
                         Id            = $pkg.Id
                         Version       = $pkg.Version
@@ -276,10 +278,12 @@ class WingetHandler : SetupHandlerBase {
                 if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                     $succeeded++
                     $this.Log("✓ $($pkg.Id)", "Green")
-                } elseif ($pkg.VerifyCommand) {
+                }
+                elseif ($pkg.VerifyCommand) {
                     $verifyFailed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールは成功しましたが検証に失敗しました")
-                } else {
+                }
+                else {
                     $succeeded++
                     $this.Log("✓ $($pkg.Id)", "Green")
                 }
@@ -299,7 +303,8 @@ class WingetHandler : SetupHandlerBase {
                 return $this.CreateFailureResult($message)
             }
             return $this.CreateSuccessResult($message)
-        } catch {
+        }
+        catch {
             $this.LogWarning("winget パッケージインストール中に予期しないエラーが発生しました: $($_.Exception.Message)")
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
@@ -503,12 +508,14 @@ class WingetHandler : SetupHandlerBase {
                 $this.Log("winget export 完了", "Green")
                 $this.Log("git でコミットするのを忘れずに", "Gray")
                 return $this.CreateSuccessResult("パッケージリストをエクスポートしました: $packagesPath")
-            } else {
+            }
+            else {
                 # 一部エクスポートできないパッケージがあっても続行
                 $this.LogWarning("一部のパッケージがエクスポートできなかった可能性があります（正常な動作です）")
                 return $this.CreateSuccessResult("パッケージリストをエクスポートしました（一部除外）: $packagesPath")
             }
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }

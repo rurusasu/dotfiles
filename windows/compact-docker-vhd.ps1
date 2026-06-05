@@ -82,16 +82,19 @@ if (-not $SkipPrune) {
     $dockerRunning = $null
     try {
         $dockerRunning = & docker info --format "{{.ServerVersion}}" 2>$null
-    } catch {}
+    }
+    catch {}
 
     if ($dockerRunning) {
         Write-Host "`nStep 1/4: Pruning unused Docker objects..."
         & docker system prune -a --force
         Write-Host "Prune complete."
-    } else {
+    }
+    else {
         Write-Host "`nStep 1/4: Docker not running, skipping prune."
     }
-} else {
+}
+else {
     Write-Host "`nStep 1/4: Skipping prune (-SkipPrune)."
 }
 
@@ -134,7 +137,8 @@ Set-Content -Path $tempFile -Value $diskpartScript -Encoding ASCII
 try {
     $result = & diskpart /s $tempFile 2>&1
     Write-Host $result
-} finally {
+}
+finally {
     Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
 }
 
@@ -149,10 +153,12 @@ if (-not $SkipRestart) {
     if (Test-Path $dockerExe) {
         Start-Process -FilePath $dockerExe
         Write-Host "Docker Desktop started."
-    } else {
+    }
+    else {
         Write-Host "Docker Desktop executable not found. Please start manually."
     }
-} else {
+}
+else {
     Write-Host "`nDocker Desktop not restarted (-SkipRestart). Start it manually when ready."
 }
 

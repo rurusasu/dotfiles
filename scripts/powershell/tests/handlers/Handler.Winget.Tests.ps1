@@ -21,7 +21,8 @@ Describe 'WingetHandler' {
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
-            } else {
+            }
+            else {
                 $handler.$property | Should -Not -BeNullOrEmpty
             }
         }
@@ -102,7 +103,8 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 0
                 }
             }
@@ -123,7 +125,8 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } elseif ($Arguments -contains "install") {
+                }
+                elseif ($Arguments -contains "install") {
                     $idIndex = [array]::IndexOf($Arguments, "--id") + 1
                     if ($idIndex -gt 0 -and $idIndex -lt $Arguments.Count) {
                         $script:installIds += $Arguments[$idIndex]
@@ -301,7 +304,8 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 1
                 }
             }
@@ -336,7 +340,8 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 0
                 }
             }
@@ -352,7 +357,8 @@ Describe 'WingetHandler' {
                 }
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 0
                 }
             }
@@ -750,7 +756,8 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 1
-                } elseif ($Arguments -contains "install") {
+                }
+                elseif ($Arguments -contains "install") {
                     $idIndex = [array]::IndexOf($Arguments, "--id") + 1
                     $script:installIds += $Arguments[$idIndex]
                     $global:LASTEXITCODE = 0
