@@ -273,7 +273,7 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "wsl",
-            "recoveryStrategy": "wingetRepair",
+            "recoveryStrategy": "wingetRepairThenReinstall",
             "timeoutSeconds": 30
           }
         },

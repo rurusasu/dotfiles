@@ -139,7 +139,32 @@ function Invoke-Winget {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
+
+    $timeoutSeconds = Get-WingetCommandTimeoutSecond
+    if ($timeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+    }
+
     Invoke-NativeCommand -Command "winget" -Arguments $Arguments
+}
+
+function Get-WingetCommandTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 300
+    $rawTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+            if ($parsed -le 0) {
+                return 0
+            }
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
 }
 
 <#

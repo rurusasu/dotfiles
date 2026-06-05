@@ -52,6 +52,7 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'ForEach-Object'
         $wingetWorkflow | Should -Match '\$LASTEXITCODE'
         $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
+        $wingetWorkflow | Should -Match 'DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS:\s*"180"'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
     }
 

@@ -654,7 +654,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "wsl";
       args = [ "--version" ];
       timeoutSeconds = 30;
-      recoveryStrategy = "wingetRepair";
+      recoveryStrategy = "wingetRepairThenReinstall";
     };
     "Oven-sh.Bun" = {
       command = "bun";

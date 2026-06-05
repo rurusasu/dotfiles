@@ -1022,7 +1022,7 @@ Describe 'WingetHandler' {
                                         command          = "wsl"
                                         args             = @("--version")
                                         timeoutSeconds   = 30
-                                        recoveryStrategy = "wingetRepair"
+                                        recoveryStrategy = "wingetRepairThenReinstall"
                                     }
                                 }
                             )
@@ -1032,7 +1032,7 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should repair installed Microsoft.WSL and fail when wsl --version still does not exit' {
+        It 'should repair then reinstall installed Microsoft.WSL and fail when wsl --version still does not exit' {
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 124
                 return "検証コマンドがタイムアウトしました (30s): wsl --version"
@@ -1040,11 +1040,16 @@ Describe 'WingetHandler' {
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "install") {
-                    throw "winget install should be skipped when WSL uses repair recovery"
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
                 }
                 if ($Arguments -contains "repair") {
                     $global:LASTEXITCODE = 0
                     return "修復が完了しました"
+                }
+                if ($Arguments -contains "uninstall") {
+                    $global:LASTEXITCODE = 0
+                    return "アンインストールが完了しました"
                 }
                 $global:LASTEXITCODE = 0
                 return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
@@ -1055,9 +1060,10 @@ Describe 'WingetHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個検証失敗"
-            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
             Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
-            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-VerifyCommand -Times 3 -ParameterFilter {
                 $Command -eq "wsl" -and
                 $Arguments -contains "--version" -and
                 $TimeoutSeconds -eq 30
@@ -1097,7 +1103,7 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should treat winget already-installed failure as verification failure when wsl --version still fails' {
+        It 'should treat winget already-installed failure as verification failure after repair and reinstall still fail' {
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 124
                 return "検証コマンドがタイムアウトしました (30s): wsl --version"
@@ -1108,7 +1114,16 @@ Describe 'WingetHandler' {
                     $global:LASTEXITCODE = 0
                     return "修復が完了しました"
                 }
+                if ($Arguments -contains "uninstall") {
+                    $global:LASTEXITCODE = 0
+                    return "アンインストールが完了しました"
+                }
                 if ($Arguments -contains "install") {
+                    if ($script:installAttempted) {
+                        $global:LASTEXITCODE = 0
+                        return "インストールが完了しました"
+                    }
+                    $script:installAttempted = $true
                     $global:LASTEXITCODE = 1
                     return @(
                         "このアプリケーションの別のバージョンが既にインストールされています。",
@@ -1117,6 +1132,7 @@ Describe 'WingetHandler' {
                 }
                 $global:LASTEXITCODE = 1
             }
+            $script:installAttempted = $false
 
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
@@ -1124,8 +1140,9 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個検証失敗"
             $result.Message | Should -Not -Match "1 個失敗"
-            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 2 -ParameterFilter { $Arguments -contains "install" }
             Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
         }
 
         It 'should recover when winget repair makes wsl --version pass' {
@@ -1159,6 +1176,97 @@ Describe 'WingetHandler' {
             $result.Message | Should -Match "1 個検証済み"
             Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
             Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+        }
+
+        It 'should recover when reinstall after repair makes wsl --version pass' {
+            $script:verifyAttempts = 0
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -lt 3) {
+                    $global:LASTEXITCODE = 124
+                    return "検証コマンドがタイムアウトしました (30s): wsl --version"
+                }
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.3.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                if ($Arguments -contains "uninstall") {
+                    $global:LASTEXITCODE = 0
+                    return "アンインストールが完了しました"
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                $global:LASTEXITCODE = 0
+                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証済み"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-VerifyCommand -Times 3 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
+        }
+
+        It 'should recover with reinstall when a fresh WSL install succeeds but runtime verification still fails' {
+            $script:verifyAttempts = 0
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 127
+                    throw "wsl not found"
+                }
+                if ($script:verifyAttempts -lt 4) {
+                    $global:LASTEXITCODE = 124
+                    return "検証コマンドがタイムアウトしました (30s): wsl --version"
+                }
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.3.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                if ($Arguments -contains "uninstall") {
+                    $global:LASTEXITCODE = 0
+                    return "アンインストールが完了しました"
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                $global:LASTEXITCODE = 1
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証済み"
+            Should -Invoke Invoke-Winget -Times 2 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-VerifyCommand -Times 4 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
         }
     }
 

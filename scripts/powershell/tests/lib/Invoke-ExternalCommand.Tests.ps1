@@ -77,6 +77,50 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
+Describe 'Invoke-Winget' {
+    BeforeEach {
+        $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    }
+
+    AfterEach {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+    }
+
+    It 'should run winget through a timeout wrapper by default' {
+        Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 0
+            return "winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("--version")
+
+        $result | Should -Contain "winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and
+            $Arguments -contains "--version" -and
+            $TimeoutSeconds -eq 300
+        }
+    }
+
+    It 'should allow disabling the winget timeout for tests or debugging' {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "0"
+        Mock Invoke-ExternalCommandWithTimeout { throw "timeout wrapper should be disabled" }
+        Mock Invoke-NativeCommand {
+            $global:LASTEXITCODE = 0
+            return "native winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("--version")
+
+        $result | Should -Contain "native winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
+        Should -Invoke Invoke-NativeCommand -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and $Arguments -contains "--version"
+        }
+    }
+}
+
 Describe 'Invoke-VerifyCommand' {
     BeforeAll {
         $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }

@@ -263,29 +263,7 @@ class WingetHandler : SetupHandlerBase {
             foreach ($pkg in $toInstall) {
                 $logSuffix = if ($pkg.Version) { " (v$($pkg.Version))" } else { "" }
                 $this.Log("インストール中: $($pkg.Id)$logSuffix")
-                $installArgs = @(
-                    "install", "-e", "--id", $pkg.Id,
-                    "--silent",
-                    "--accept-package-agreements",
-                    "--accept-source-agreements",
-                    "--disable-interactivity"
-                )
-                # Version が packages.json に書かれていれば --version で固定する。
-                # msstore source は固定 version 指定をサポートしないため除外。
-                if ($pkg.Version -and $pkg.SourceName -ne "msstore") {
-                    $installArgs += "--version"
-                    $installArgs += $pkg.Version
-                }
-                if ($pkg.SourceName -eq "msstore") {
-                    $installArgs += "--source"
-                    $installArgs += "msstore"
-                }
-                if ($pkg.InstallArgs) {
-                    $installArgs += @($pkg.InstallArgs)
-                }
-                if ($pkg.Force) {
-                    $installArgs += "--force"
-                }
+                $installArgs = $this.NewWingetInstallArguments($pkg, [bool]$pkg.Force)
 
                 $installOutput = @(Invoke-Winget -Arguments $installArgs)
                 $alreadyInstalledInstallFailure = $this.IsAlreadyInstalledInstallFailure($installOutput)
@@ -332,8 +310,13 @@ class WingetHandler : SetupHandlerBase {
                     $this.Log("✓ $($pkg.Id)", "Green")
                 }
                 elseif ($pkg.VerifyCommand) {
-                    $verifyFailed++
-                    $this.LogWarning("✗ $($pkg.Id) のインストールは成功しましたが検証に失敗しました")
+                    if ($this.RecoverPackageVerification($pkg)) {
+                        $verified++
+                    }
+                    else {
+                        $verifyFailed++
+                        $this.LogWarning("✗ $($pkg.Id) のインストールは成功しましたが検証に失敗しました")
+                    }
                 }
                 else {
                     $succeeded++
@@ -369,6 +352,33 @@ class WingetHandler : SetupHandlerBase {
             $text -match '別のバージョンが既にインストールされています'
     }
 
+    hidden [object[]] NewWingetInstallArguments([object]$pkg, [bool]$force) {
+        $installArgs = @(
+            "install", "-e", "--id", $pkg.Id,
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity"
+        )
+        # Version が packages.json に書かれていれば --version で固定する。
+        # msstore source は固定 version 指定をサポートしないため除外。
+        if ($pkg.Version -and $pkg.SourceName -ne "msstore") {
+            $installArgs += "--version"
+            $installArgs += $pkg.Version
+        }
+        if ($pkg.SourceName -eq "msstore") {
+            $installArgs += "--source"
+            $installArgs += "msstore"
+        }
+        if ($pkg.InstallArgs) {
+            $installArgs += @($pkg.InstallArgs)
+        }
+        if ($force) {
+            $installArgs += "--force"
+        }
+        return $installArgs
+    }
+
     hidden [bool] RecoverPackageVerification([object]$pkg) {
         $strategy = $this.GetRecoveryStrategy($pkg.VerifyCommand)
         if ([string]::IsNullOrWhiteSpace($strategy)) {
@@ -377,45 +387,107 @@ class WingetHandler : SetupHandlerBase {
 
         switch ($strategy) {
             "wingetRepair" {
-                $this.LogWarning("検証に失敗したため winget repair を実行します: $($pkg.Id)")
-                $repairArgs = @(
-                    "repair", "-e", "--id", $pkg.Id,
-                    "--silent",
-                    "--accept-package-agreements",
-                    "--accept-source-agreements",
-                    "--disable-interactivity",
-                    "--force"
-                )
-                if ($pkg.SourceName -eq "winget") {
-                    $repairArgs += "--source"
-                    $repairArgs += "winget"
-                }
-
-                $repairOutput = @(Invoke-Winget -Arguments $repairArgs)
-                foreach ($line in $repairOutput) {
-                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
-                        $this.Log("  $line", "Gray")
-                    }
-                }
-
-                if ($LASTEXITCODE -ne 0) {
-                    $this.LogWarning("winget repair が失敗しました: $($pkg.Id)")
-                }
-
-                Update-ProcessEnvironmentPath
-                if ($this.TestPackageVerification($pkg.VerifyCommand)) {
-                    $this.Log("✓ $($pkg.Id) (repair 後に検証済み)", "Green")
+                return $this.RepairPackageAndVerify($pkg)
+            }
+            "wingetRepairThenReinstall" {
+                if ($this.RepairPackageAndVerify($pkg)) {
                     return $true
                 }
 
-                $this.LogWarning("winget repair 後も検証に失敗しました: $($pkg.Id)")
-                return $false
+                $this.LogWarning("winget repair 後も検証に失敗したため再インストールします: $($pkg.Id)")
+                if (-not $this.ReinstallPackageAndVerify($pkg)) {
+                    return $false
+                }
+
+                return $true
             }
             default {
                 $this.LogWarning("未知の recoveryStrategy です: $strategy ($($pkg.Id))")
                 return $false
             }
         }
+        return $false
+    }
+
+    hidden [bool] RepairPackageAndVerify([object]$pkg) {
+        $this.LogWarning("検証に失敗したため winget repair を実行します: $($pkg.Id)")
+        $repairArgs = @(
+            "repair", "-e", "--id", $pkg.Id,
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity",
+            "--force"
+        )
+        if ($pkg.SourceName -eq "winget") {
+            $repairArgs += "--source"
+            $repairArgs += "winget"
+        }
+
+        $repairOutput = @(Invoke-Winget -Arguments $repairArgs)
+        foreach ($line in $repairOutput) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                $this.Log("  $line", "Gray")
+            }
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("winget repair が失敗しました: $($pkg.Id)")
+        }
+
+        Update-ProcessEnvironmentPath
+        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+            $this.Log("✓ $($pkg.Id) (repair 後に検証済み)", "Green")
+            return $true
+        }
+
+        $this.LogWarning("winget repair 後も検証に失敗しました: $($pkg.Id)")
+        return $false
+    }
+
+    hidden [bool] ReinstallPackageAndVerify([object]$pkg) {
+        $uninstallArgs = @(
+            "uninstall", "-e", "--id", $pkg.Id,
+            "--silent",
+            "--accept-source-agreements",
+            "--disable-interactivity",
+            "--force"
+        )
+        if ($pkg.SourceName -eq "winget") {
+            $uninstallArgs += "--source"
+            $uninstallArgs += "winget"
+        }
+
+        $uninstallOutput = @(Invoke-Winget -Arguments $uninstallArgs)
+        foreach ($line in $uninstallOutput) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                $this.Log("  $line", "Gray")
+            }
+        }
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("winget uninstall が失敗しました: $($pkg.Id)")
+            return $false
+        }
+
+        $installArgs = $this.NewWingetInstallArguments($pkg, $true)
+        $installOutput = @(Invoke-Winget -Arguments $installArgs)
+        foreach ($line in $installOutput) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                $this.Log("  $line", "Gray")
+            }
+        }
+        if ($LASTEXITCODE -ne 0) {
+            $this.LogWarning("winget install が失敗しました: $($pkg.Id)")
+            return $false
+        }
+
+        Update-ProcessEnvironmentPath
+        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+            $this.Log("✓ $($pkg.Id) (reinstall 後に検証済み)", "Green")
+            return $true
+        }
+
+        $this.LogWarning("winget reinstall 後も検証に失敗しました: $($pkg.Id)")
         return $false
     }
 
