@@ -91,30 +91,26 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $stdout = Join-Path $env:RUNNER_TEMP 'install-cmd.stdout.log'
-          $stderr = Join-Path $env:RUNNER_TEMP 'install-cmd.stderr.log'
-          $proc = Start-Process -FilePath 'cmd.exe' `
-            -ArgumentList @('/d', '/c', 'install.cmd', '-NoPause', '-UserPhaseOnly', '-WingetVerifyCommandOnly') `
-            -WorkingDirectory $env:GITHUB_WORKSPACE `
-            -RedirectStandardOutput $stdout `
-            -RedirectStandardError $stderr `
-            -WindowStyle Hidden `
-            -PassThru
-
-          if (-not $proc.WaitForExit(60 * 60 * 1000)) {
-            taskkill.exe /PID $proc.Id /T /F | Out-Null
-            if (Test-Path $stdout) { Get-Content $stdout }
-            if (Test-Path $stderr) { Get-Content $stderr }
-            throw 'install.cmd strict user phase timed out before completion'
+          Push-Location $env:GITHUB_WORKSPACE
+          try {
+            $ErrorActionPreference = 'Continue'
+            $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly 2>&1 |
+              ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+            $exitCode = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+          }
+          finally {
+            Pop-Location
           }
 
-          $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { '' }
-          $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { '' }
-          if ($out) { Write-Host $out }
-          if ($err) { Write-Warning $err }
+          $out = $output -join [Environment]::NewLine
 
-          if ($proc.ExitCode -ne 0) {
-            throw "install.cmd strict user phase failed with exit code $($proc.ExitCode)"
+          if ($exitCode -ne 0) {
+            throw "install.cmd strict user phase failed with exit code $exitCode"
           }
           if ($out -notmatch 'User Phase Complete!') {
             throw 'install.cmd did not reach the user phase completion marker'

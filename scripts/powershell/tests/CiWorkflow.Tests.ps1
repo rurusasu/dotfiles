@@ -47,9 +47,11 @@ Describe 'CI workflow configuration' {
     It 'should run install.cmd in CI with timeout and completion marker checks' {
         $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-winget.yml") -Raw
 
-        $wingetWorkflow | Should -Match 'Start-Process -FilePath ''cmd\.exe'''
+        $wingetWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd'
         $wingetWorkflow | Should -Match 'install\.cmd'
-        $wingetWorkflow | Should -Match 'WaitForExit\(60 \* 60 \* 1000\)'
+        $wingetWorkflow | Should -Match 'ForEach-Object'
+        $wingetWorkflow | Should -Match '\$LASTEXITCODE'
+        $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
     }
 
