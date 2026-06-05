@@ -440,6 +440,39 @@ Describe 'Test-DockerDaemon' {
     }
 }
 
+Describe 'Update-ProcessEnvironmentPath' {
+    BeforeEach {
+        $script:originalPath = $env:PATH
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPath
+    }
+
+    It 'should include User PATH entries in the current process PATH' {
+        $uniqueUserPath = "C:\TestUserPath-$([guid]::NewGuid())"
+        Mock Get-UserEnvironmentPath { return $uniqueUserPath }
+
+        $env:PATH = "C:\ExistingPath"
+
+        Update-ProcessEnvironmentPath
+
+        ($env:PATH -split ";") | Should -Contain $uniqueUserPath
+        ($env:PATH -split ";") | Should -Contain "C:\ExistingPath"
+    }
+
+    It 'should remove duplicate entries case-insensitively' {
+        $uniquePath = "C:\DuplicatePath-$([guid]::NewGuid())"
+        Mock Get-UserEnvironmentPath { return $uniquePath }
+
+        $env:PATH = "$uniquePath;$($uniquePath.ToUpperInvariant())"
+
+        Update-ProcessEnvironmentPath
+
+        @($env:PATH -split ";" | Where-Object { $_ -eq $uniquePath -or $_ -eq $uniquePath.ToUpperInvariant() }).Count | Should -Be 1
+    }
+}
+
 Describe 'Test-WslAvailable' {
     It 'should return true when wsl --status succeeds' {
         Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }

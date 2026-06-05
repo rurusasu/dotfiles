@@ -205,6 +205,8 @@ class WingetHandler : SetupHandlerBase {
                     continue
                 }
 
+                Update-ProcessEnvironmentPath
+
                 if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                     $succeeded++
                     $this.Log("✓ $($pkg.Id)", "Green")

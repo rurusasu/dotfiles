@@ -9,6 +9,7 @@ Describe 'WingetHandler' {
     BeforeEach {
         $script:handler = [WingetHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+        Mock Update-ProcessEnvironmentPath { }
     }
 
     Context 'Constructor' {
@@ -134,6 +135,15 @@ Describe 'WingetHandler' {
             $handler.Apply($ctx)
             $script:installIds | Should -Contain "Git.Git"
             $script:installIds | Should -Contain "twpayne.chezmoi"
+        }
+
+        It 'should refresh process PATH after successful installs before verification' {
+            $ctx.Options["WingetMode"] = "import"
+
+            $handler.Apply($ctx)
+
+            Should -Invoke Update-ProcessEnvironmentPath -Times 2
+            Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }
 

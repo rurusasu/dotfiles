@@ -31,9 +31,15 @@ class NixRebuildHandler : SetupHandlerBase {
         }
 
         # NixOS ディストリビューションが存在するか確認
-        $distros = Invoke-Wsl -Arguments @("-l", "-q")
-        if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("WSL が利用できません")
+        try {
+            $distros = Invoke-Wsl -Arguments @("-l", "-q")
+            if ($LASTEXITCODE -ne 0) {
+                $this.LogWarning("WSL が利用できません")
+                return $false
+            }
+        }
+        catch {
+            $this.LogWarning("WSL が利用できません: $($_.Exception.Message)")
             return $false
         }
 

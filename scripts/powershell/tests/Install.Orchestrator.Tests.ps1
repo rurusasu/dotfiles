@@ -27,6 +27,13 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '-Verb RunAs'
     }
 
+    It 'should handle canceled admin elevation without throwing' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'catch \[System\.InvalidOperationException\]'
+        $content | Should -Match 'Admin phase was canceled'
+        $content | Should -Match 'Admin phase skipped'
+    }
+
     It 'should support NoPause switch for non-interactive runs' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'

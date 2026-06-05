@@ -61,6 +61,17 @@ Describe 'NixRebuildHandler' {
             $result | Should -Be $false
         }
 
+        It 'should return false when WSL command throws' {
+            Mock Invoke-Wsl {
+                throw "Wsl/CallMsi/Install/REGDB_E_CLASSNOTREG"
+            }
+            Mock Write-Host { }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
         It 'should return false when distro does not exist' {
             Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 0
