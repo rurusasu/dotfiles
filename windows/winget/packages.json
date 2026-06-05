@@ -169,6 +169,13 @@
           }
         },
         {
+          "PackageIdentifier": "tamasfe.taplo",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "taplo"
+          }
+        },
+        {
           "PackageIdentifier": "astral-sh.ty",
           "verifyCommand": {
             "args": ["--version"],

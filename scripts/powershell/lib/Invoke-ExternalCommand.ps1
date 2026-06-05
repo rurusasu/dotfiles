@@ -81,6 +81,42 @@ function Invoke-Chezmoi {
 
 <#
 .SYNOPSIS
+    外部コマンドを stderr で例外化せずに実行する
+.DESCRIPTION
+    Windows PowerShell 5.1 は native command の stderr を ErrorRecord として扱う。
+    version 表示や warning を stderr に書く正常終了コマンドを失敗扱いしないため、
+    stderr は通常出力へ正規化し、成否は $LASTEXITCODE で判断する。
+.PARAMETER Command
+    実行するコマンド名
+.PARAMETER Arguments
+    コマンドに渡す引数
+#>
+function Invoke-NativeCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Arguments = @()
+    )
+
+    $global:LASTEXITCODE = 127
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Command @Arguments 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $_.Exception.Message
+            } else {
+                $_
+            }
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+<#
+.SYNOPSIS
     winget コマンドを実行する
 .PARAMETER Arguments
     winget に渡す引数
@@ -96,7 +132,7 @@ function Invoke-Winget {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & winget @Arguments
+    Invoke-NativeCommand -Command "winget" -Arguments $Arguments
 }
 
 <#
@@ -545,7 +581,7 @@ function Invoke-Npm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & npm @Arguments
+    Invoke-NativeCommand -Command "npm" -Arguments $Arguments
 }
 
 <#
@@ -565,7 +601,7 @@ function Invoke-Pnpm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & pnpm @Arguments
+    Invoke-NativeCommand -Command "pnpm" -Arguments $Arguments
 }
 
 <#
@@ -585,7 +621,7 @@ function Invoke-Corepack {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & corepack @Arguments
+    Invoke-NativeCommand -Command "corepack" -Arguments $Arguments
 }
 
 <#
@@ -853,7 +889,7 @@ function Invoke-Gemini {
         [Parameter(ValueFromRemainingArguments)]
         [string[]]$Arguments
     )
-    & gemini @Arguments
+    Invoke-NativeCommand -Command "gemini" -Arguments $Arguments
 }
 
 <#
@@ -878,6 +914,6 @@ function Invoke-VerifyCommand {
         [string]$Command,
         [string[]]$Arguments = @()
     )
-    & $Command @Arguments
+    Invoke-NativeCommand -Command $Command -Arguments $Arguments
 }
 

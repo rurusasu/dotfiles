@@ -361,7 +361,7 @@ let
     };
     taplo = {
       pkg = pkgs.taplo;
-      winget = null;
+      winget = "tamasfe.taplo";
       category = "lsp";
     };
     bash-language-server = {
@@ -445,7 +445,6 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   # Cross-platform pnpm global packages
   pnpmGlobal = [
-    "@tobilu/qmd"
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
     "typescript-language-server"
@@ -455,10 +454,6 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Post-install verification commands for pnpm packages.
   # Keys match globalPackages entries. Packages not listed skip verification.
   pnpmVerify = {
-    "@tobilu/qmd" = {
-      command = "qmd";
-      args = [ "status" ];
-    };
     "@prisma/language-server" = {
       command = "prisma-language-server";
       args = [ "--version" ];
@@ -482,9 +477,7 @@ lib.mapAttrs (_: names: resolve names) grouped
   };
 
   # Extra pnpm install arguments for packages that need approved native builds.
-  pnpmInstallArgs = {
-    "@tobilu/qmd" = [ "--allow-build" "better-sqlite3" ];
-  };
+  pnpmInstallArgs = { };
 
   # Post-install verification commands for winget packages.
   # Keys match catalog attr names. GUI-only packages are omitted.
@@ -583,6 +576,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     ty = {
       command = "ty";
+      args = [ "--version" ];
+    };
+    taplo = {
+      command = "taplo";
       args = [ "--version" ];
     };
     opencode = {

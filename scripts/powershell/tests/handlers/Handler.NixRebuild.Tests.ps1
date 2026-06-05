@@ -154,7 +154,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
         It 'should install pnpm global packages after nixos-rebuild' {
             $script:pnpmArgs = ""
             Mock Get-JsonContent {
-                return @{ globalPackages = @("@tobilu/qmd", "@google/gemini-cli") }
+                return @{ globalPackages = @("@example/native-tool", "@google/gemini-cli") }
             }
             Mock Invoke-Wsl {
                 param($Arguments)
@@ -186,9 +186,9 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
                     @{
-                        name          = "@tobilu/qmd"
-                        installArgs   = @("--allow-build", "better-sqlite3")
-                        verifyCommand = @{ command = "qmd"; args = @("status") }
+                        name          = "@example/native-tool"
+                        installArgs   = @("--allow-build", "native-addon")
+                        verifyCommand = @{ command = "native-tool"; args = @("status") }
                     },
                     @{ name = "@google/gemini-cli" }
                 )}
@@ -216,7 +216,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
 
             $script:pnpmArgs | Should -Match "pnpm add -g"
             $script:pnpmArgs | Should -Match "--allow-build"
-            $script:pnpmArgs | Should -Match "better-sqlite3"
+            $script:pnpmArgs | Should -Match "native-addon"
             $script:pnpmArgs | Should -Match "gemini-cli"
             $script:pnpmArgs | Should -Not -Match "@\{name="
         }
@@ -230,7 +230,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
-                    return @("@tobilu/qmd@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "typescript-language-server@4.3.3", "typescript@5.6.3", "@google/gemini-cli@0.32.1")
+                    return @("@example/native-tool@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "typescript-language-server@4.3.3", "typescript@5.6.3", "@google/gemini-cli@0.32.1")
                 }
                 if ($argStr -match "pnpm add") {
                     $script:pnpmAddCalled = $true
@@ -255,7 +255,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:verifyCalls = 0
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
-                    @{ name = "@tobilu/qmd"; verifyCommand = @{ command = "qmd"; args = @("status") } }
+                    @{ name = "@example/native-tool"; verifyCommand = @{ command = "native-tool"; args = @("status") } }
                 )}
             }
             Mock Invoke-Wsl {
@@ -265,13 +265,13 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
-                    return @("@tobilu/qmd@1.0.0")
+                    return @("@example/native-tool@1.0.0")
                 }
-                if ($argStr -match "qmd.*status") {
+                if ($argStr -match "native-tool.*status") {
                     $script:verifyCalls++
                     if ($script:verifyCalls -eq 1) {
                         $global:LASTEXITCODE = 1
-                        return "qmd not found"
+                        return "native-tool not found"
                     }
                     $global:LASTEXITCODE = 0
                     return "ok"

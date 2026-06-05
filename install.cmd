@@ -5,6 +5,11 @@ chcp 65001 >nul
 set "SCRIPT_DIR=%~dp0"
 pushd "%SCRIPT_DIR%" >nul
 
+set "PS7_DIR=%ProgramFiles%\PowerShell\7"
+if exist "%PS7_DIR%\pwsh.exe" (
+  set "PATH=%PS7_DIR%;%PATH%"
+)
+
 set "PS_CMD=pwsh"
 where pwsh >nul 2>&1
 if errorlevel 1 (

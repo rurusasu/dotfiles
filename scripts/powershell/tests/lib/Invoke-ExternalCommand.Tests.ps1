@@ -47,6 +47,36 @@ Describe 'Invoke-Chezmoi' {
     }
 }
 
+Describe 'Invoke-NativeCommand' {
+    BeforeAll {
+        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
+    }
+
+    It 'should not throw when a native command writes stderr and exits 0' {
+        $result = Invoke-NativeCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "[Console]::Error.WriteLine('stderr version output'); exit 0"
+        )
+
+        $result | Should -Contain "stderr version output"
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'should preserve non-zero exit code without throwing on stderr' {
+        $result = Invoke-NativeCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "[Console]::Error.WriteLine('stderr warning output'); exit 23"
+        )
+
+        $result | Should -Contain "stderr warning output"
+        $global:LASTEXITCODE | Should -Be 23
+    }
+}
+
 Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }

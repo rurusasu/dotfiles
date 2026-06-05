@@ -3,14 +3,6 @@
   "description": "pnpm global packages to install on Windows",
   "globalPackages": [
     {
-      "installArgs": ["--allow-build", "better-sqlite3"],
-      "name": "@tobilu/qmd",
-      "verifyCommand": {
-        "args": ["status"],
-        "command": "qmd"
-      }
-    },
-    {
       "name": "@prisma/language-server",
       "verifyCommand": {
         "args": ["--version"],
