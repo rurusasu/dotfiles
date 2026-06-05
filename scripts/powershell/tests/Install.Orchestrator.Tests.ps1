@@ -34,6 +34,12 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match 'Admin phase skipped'
     }
 
+    It 'should exit with failure when admin phase is skipped' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'Setup Incomplete'
+        $content | Should -Match '(?s)Admin phase skipped.*exit 1'
+    }
+
     It 'should support NoPause switch for non-interactive runs' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'

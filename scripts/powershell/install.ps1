@@ -177,8 +177,18 @@ if ($adminRequired) {
 
         if ($null -eq $proc) {
             Write-Host "Admin phase skipped." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "Setup Incomplete" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Warning "Admin-required tasks did not run. Re-run install.cmd and approve the UAC prompt to finish setup."
+            if (-not $NoPause) {
+                Write-Host "Press Enter to close..." -ForegroundColor Gray
+                Read-Host | Out-Null
+            }
+            exit 1
         }
-        if ($null -ne $proc -and $proc.ExitCode -ne 0) {
+        if ($proc.ExitCode -ne 0) {
             throw "Admin phase failed with exit code $($proc.ExitCode)."
         }
     }
