@@ -200,7 +200,8 @@ mcp_servers:
   # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
   # Docs: https://www.kaggle.com/docs/mcp
   - name: kaggle
-    # URL-based MCP (remote, auth handled by mcp-remote on first connect)
+    # URL-based MCP (remote). Codex uses native Streamable HTTP; stdio-only
+    # clients use the mcp-remote bridge below.
     url: "https://www.kaggle.com/mcp"
     # stdio bridge for tools that don't speak HTTP MCP natively
     command: pnpm

@@ -237,6 +237,8 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 {{- if has "codex" .supports }}
 
 {{- if hasKey . "url" }}
+# Codex supports Streamable HTTP natively. Do not emit command/args for
+# URL-based servers, because mixing url with stdio config is invalid.
 [mcp_servers.{{ .name }}]
 url = "{{ .url }}"
 {{- else }}

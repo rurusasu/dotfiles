@@ -301,6 +301,26 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Codex remote MCP テンプレート' {
+        It 'URL-based MCP は native Streamable HTTP として出力し stdio 設定を混ぜないこと' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -Path $templatePath -Raw
+
+            $marker = '{{- if hasKey . "url" }}'
+            $elseMarker = '{{- else }}'
+            $start = $content.IndexOf($marker, [System.StringComparison]::Ordinal)
+            $start | Should -Not -Be -1 -Because "URL-based MCP の分岐が必要"
+
+            $end = $content.IndexOf($elseMarker, $start, [System.StringComparison]::Ordinal)
+            $end | Should -BeGreaterThan $start -Because "URL 分岐と stdio 分岐を分離する必要がある"
+
+            $urlBranch = $content.Substring($start, $end - $start)
+            $urlBranch | Should -Match 'url = "\{\{ \.url \}\}"' -Because "Codex は Streamable HTTP を native URL で扱える"
+            $urlBranch | Should -Not -Match '(?m)^\s*command\s*=' -Because "url と stdio command を混ぜると Codex config load が失敗する"
+            $urlBranch | Should -Not -Match '(?m)^\s*args\s*=' -Because "url と stdio args を混ぜると Codex config load が失敗する"
+        }
+    }
+
     Context 'stdio-only テンプレートで HTTP サーバーに mcp-remote が使われていること' {
         It 'Claude Desktop テンプレートで mcp-remote が含まれていること' {
             $templatePath = Join-Path $script:chezmoiRoot "AppData/Roaming/Claude/claude_desktop_config.json.tmpl"
