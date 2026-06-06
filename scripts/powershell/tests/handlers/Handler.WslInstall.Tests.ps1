@@ -86,13 +86,16 @@ Describe 'WslInstallHandler' {
         }
 
         It 'should fallback to dism when wsl --install fails' {
+            Mock Get-WslInstallTimeoutSecond { return 300 }
             Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
             $script:dismCalls = @()
+            $script:dismTimeouts = @()
             Mock Invoke-Dism {
                 $script:dismCalls += ($Arguments -join " ")
+                $script:dismTimeouts += $TimeoutSeconds
                 $global:LASTEXITCODE = 0
                 return "The operation completed successfully."
             }
@@ -104,6 +107,9 @@ Describe 'WslInstallHandler' {
             $script:dismCalls.Count | Should -Be 2
             $script:dismCalls[0] | Should -Match 'Microsoft-Windows-Subsystem-Linux'
             $script:dismCalls[1] | Should -Match 'VirtualMachinePlatform'
+            $script:dismTimeouts.Count | Should -Be 2
+            $script:dismTimeouts[0] | Should -Be 300
+            $script:dismTimeouts[1] | Should -Be 300
         }
 
         It 'should treat DISM 3010 reboot-required exit code as success' {
@@ -121,6 +127,27 @@ Describe 'WslInstallHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match '再起動が必要'
             Should -Invoke Invoke-Dism -Times 2
+        }
+
+        It 'should suppress garbled native output from WSL install logs' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return @(
+                    "�W�J�C���[�W�̃T�[�r�X�ƊǗ��c�[��",
+                    "Windows �0�0�0�0�0 �0�0�0�0�0�0�0�0�0�0�0�0�0�0W0f0D0~0Y0",
+                    "The operation completed successfully."
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -Times 0 -ParameterFilter {
+                [string]$Object -match '�W�J' -or [string]$Object -match '�0�0'
+            }
+            Should -Invoke Write-Host -Times 1 -ParameterFilter {
+                [string]$Object -match 'The operation completed successfully'
+            }
         }
 
         It 'should return failure when both wsl --install and dism fail' {

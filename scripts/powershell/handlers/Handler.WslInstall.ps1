@@ -55,7 +55,7 @@ class WslInstallHandler : SetupHandlerBase {
             # 方法1: wsl --install --no-distribution
             $this.Log("wsl --install --no-distribution を実行中...")
             $output = Invoke-Wsl -TimeoutSeconds (Get-WslInstallTimeoutSecond) --install --no-distribution 2>&1
-            $output | ForEach-Object { $this.Log("  $_", "Gray") }
+            $this.LogNativeOutput($output)
 
             if ($LASTEXITCODE -eq 0) {
                 return $this.CreateRebootRequiredResult()
@@ -95,8 +95,8 @@ class WslInstallHandler : SetupHandlerBase {
 
         foreach ($feature in $features) {
             $this.Log("dism.exe: $feature を有効化中...")
-            $output = Invoke-Dism /online /enable-feature /featurename:$feature /all /norestart 2>&1
-            $output | ForEach-Object { $this.Log("  $_", "Gray") }
+            $output = Invoke-Dism -TimeoutSeconds (Get-WslInstallTimeoutSecond) /online /enable-feature /featurename:$feature /all /norestart 2>&1
+            $this.LogNativeOutput($output)
 
             $exitCode = $LASTEXITCODE
             if (-not $this.IsSuccessfulDismExitCode($exitCode)) {
@@ -118,6 +118,21 @@ class WslInstallHandler : SetupHandlerBase {
         return $exitCode -eq 0 -or
             $exitCode -eq 3010 -or
             $exitCode -eq 1641
+    }
+
+    hidden [void] LogNativeOutput([object[]]$output) {
+        foreach ($item in @($output)) {
+            $line = [string]$item
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($this.IsGarbledNativeOutput($line)) { continue }
+            $this.Log("  $line", "Gray")
+        }
+    }
+
+    hidden [bool] IsGarbledNativeOutput([string]$line) {
+        return $line -match "`0" -or
+            $line -match '�' -or
+            $line -match '[\x00-\x08\x0B\x0C\x0E-\x1F]'
     }
 
     hidden [SetupResult] CreateRebootRequiredResult() {

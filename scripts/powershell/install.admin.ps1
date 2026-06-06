@@ -145,6 +145,13 @@ if ($CheckOnly) {
 }
 
 $results = Invoke-SetupHandler -Handlers $handlers -Context $context
+$wslInstallRequiresRestart = @(
+    $results | Where-Object {
+        $_.HandlerName -eq "WslInstall" -and
+        $_.Success -and
+        $_.Message -match "再起動が必要"
+    }
+).Count -gt 0
 
 if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host ""
@@ -153,7 +160,10 @@ if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    if (-not (Test-WslAvailable)) {
+    if ($wslInstallRequiresRestart) {
+        Write-Warning "WSL was installed and requires a Windows restart. Re-run install.cmd after restarting to finish WSL-dependent final processing."
+    }
+    elseif (-not (Test-WslAvailable)) {
         Write-Warning "WSL is not available yet. Restart Windows and re-run install.cmd to finish WSL-dependent final processing."
     }
     else {
