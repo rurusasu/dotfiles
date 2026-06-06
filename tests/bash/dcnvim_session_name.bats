@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
-# Unit tests for _dcnvim_session_name from nix/home/dcnvim-session-name.sh.
+# Unit tests for _dcnvim_session_name from scripts/sh/dcnvim.sh.
 # Goal: keep session name in sync with `tm` (Linux): ghq slug basename if
 # the workspace lives under ghq root, otherwise basename of the workspace.
 
 setup() {
-	HELPER="$BATS_TEST_DIRNAME/../../nix/home/dcnvim-session-name.sh"
+	HELPER="$BATS_TEST_DIRNAME/../../scripts/sh/dcnvim.sh"
 	# shellcheck source=/dev/null
 	source "$HELPER"
 }

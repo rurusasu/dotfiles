@@ -136,43 +136,8 @@ __fzf_history_widget() {
 }
 bind -x '"\er": __fzf_history_widget'
 
-# devcontainer: enter the project's devcontainer in a tmux session
-# and start nvim inside it. Terminal-agnostic (works in WezTerm,
-# Windows Terminal, Warp, etc.). Re-running attaches to the existing
-# tmux session so nvim state survives terminal close.
-#
-# Usage: dcnvim [workspace-folder]   # defaults to $PWD
-#
-# Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
-# container to provide nvim + tmux. See bootstrap.sh at repo root.
-dcnvim() {
-  local workspace="${1:-$PWD}"
-  if ! command -v devcontainer >/dev/null 2>&1; then
-    echo "dcnvim: devcontainer CLI not found. Install with: npm i -g @devcontainers/cli" >&2
-    return 127
-  fi
-  if [ ! -d "$workspace/.devcontainer" ] && [ ! -f "$workspace/.devcontainer.json" ]; then
-    echo "dcnvim: no .devcontainer/ or .devcontainer.json under $workspace" >&2
-    return 1
-  fi
-  # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so the
-  # container's just-bootstrapped ~/.local/bin/nvim is found. nvim/tmux
-  # presence is checked explicitly because tmux exits 0 if its child
-  # command is missing, masking the failure to the host.
-  devcontainer exec --workspace-folder "$workspace" -- \
-    bash -lc '
-      export PATH="$HOME/.local/bin:$PATH"
-      command -v nvim >/dev/null 2>&1 || {
-        echo "dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
-        exit 127
-      }
-      command -v tmux >/dev/null 2>&1 || {
-        echo "dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first" >&2
-        exit 127
-      }
-      tmux new -A -s main "nvim ."
-    '
-}
+# dcnvim is shared with Nix/Home Manager zsh.
+[[ -f "$HOME/.dotfiles/scripts/sh/dcnvim.sh" ]] && source "$HOME/.dotfiles/scripts/sh/dcnvim.sh"
 
 # dotf: run task from dotfiles root without changing cwd
 dotf() { (cd ~/.dotfiles && task "$@"); }
