@@ -865,6 +865,11 @@ Describe 'WingetHandler' {
                                 [PSCustomObject]@{
                                     PackageIdentifier = "CLI.Tool"
                                     verifyCommand     = [PSCustomObject]@{ command = "cli-tool"; args = @("--version") }
+                                },
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Volatile.Nightly"
+                                    ciSkipInstall     = $true
+                                    verifyCommand     = [PSCustomObject]@{ command = "volatile"; args = @("--version") }
                                 }
                             )
                         }
@@ -909,6 +914,7 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $script:installIds | Should -Contain "CLI.Tool"
             $script:installIds | Should -Not -Contain "GUI.App"
+            $script:installIds | Should -Not -Contain "Volatile.Nightly"
         }
 
         It 'should skip install when verifyCommand already works even if winget list misses the package' {

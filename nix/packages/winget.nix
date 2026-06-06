@@ -44,6 +44,13 @@ let
     in
     if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
 
+  attachCiSkipInstall =
+    ciSkipInstallMap: key: pkg:
+    let
+      ciSkipInstall = ciSkipInstallMap.${key} or false;
+    in
+    if ciSkipInstall then pkg // { inherit ciSkipInstall; } else pkg;
+
   attachPortableLink =
     portableLinksMap: key: pkg:
     let
@@ -67,10 +74,12 @@ let
 
   attachWingetMetadata =
     key: pkg:
-    attachPathEntries sets.wingetPathEntries key (
-      attachPortableLink sets.wingetPortableLinksById key (
-        attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
-          attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+    attachCiSkipInstall sets.wingetCiSkipInstall key (
+      attachPathEntries sets.wingetPathEntries key (
+        attachPortableLink sets.wingetPortableLinksById key (
+          attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+            attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+          )
         )
       )
     );
