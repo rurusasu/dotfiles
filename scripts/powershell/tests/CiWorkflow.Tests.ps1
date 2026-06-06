@@ -73,6 +73,18 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
 
+    It 'should trigger dcnvim platform tests when dcnvim implementations change' {
+        $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
+        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+
+        $chezmoiWorkflow | Should -Match '"chezmoi/\*\*"'
+        $chezmoiWorkflow | Should -Match '\$pesterConfig\.Run\.Path = "\./tests/chezmoi"'
+        $powershellWorkflow | Should -Match '"scripts/powershell/\*\*"'
+        $devcontainerWorkflow | Should -Match '"scripts/sh/dcnvim\.sh"'
+        $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
+    }
+
     It 'should use a supported Intel macOS runner for devcontainer E2E' {
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
