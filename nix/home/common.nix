@@ -220,6 +220,9 @@ in
 
       # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
       [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
+
+      # GitHub CLI token switching for personal/work repositories.
+      [[ -f "$HOME/.config/shell/gh-token-switch.sh" ]] && source "$HOME/.config/shell/gh-token-switch.sh"
     '';
   };
 

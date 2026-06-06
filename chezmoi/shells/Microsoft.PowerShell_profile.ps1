@@ -308,4 +308,8 @@ if ($HOME) {
     $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"
     if (Test-Path $_secretPs1) { . $_secretPs1 }
     Remove-Variable _secretPs1
+
+    $_ghTokenSwitchPs1 = Join-Path $HOME ".config\shell\gh-token-switch.ps1"
+    if (Test-Path $_ghTokenSwitchPs1) { . $_ghTokenSwitchPs1 }
+    Remove-Variable _ghTokenSwitchPs1
 }

@@ -2,10 +2,10 @@
 # Sourced by PowerShell profile at shell startup.
 #
 # Preferred usage: launch WezTerm via ~/.local/bin/wezterm-launch.cmd
-#   op run --env-file injects GH_TOKEN/TAVILY_API_KEY once at WezTerm startup;
+#   op run --env-file injects GH_TOKEN/TAVILY_API_KEY/GITHUB_WORK_TOKEN once at WezTerm startup;
 #   all tabs inherit them and this guard exits immediately.
 #
 # For standalone pwsh outside WezTerm:
 #   op run --env-file="$env:USERPROFILE\.config\shell\secrets.env" -- pwsh
 
-if ($env:GH_TOKEN -and $env:TAVILY_API_KEY) { return }
+if ($env:GH_TOKEN -and $env:TAVILY_API_KEY -and $env:GITHUB_WORK_TOKEN) { return }
