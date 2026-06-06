@@ -1,4 +1,4 @@
-﻿BeforeAll {
+BeforeAll {
     Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
