@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Dotfiles setup orchestrator.
 
@@ -34,6 +34,14 @@ $ErrorActionPreference = "Stop"
 
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
+
+$libPath = Join-Path $PSScriptRoot "lib"
+. (Join-Path $libPath "WindowsEnvironment.ps1")
+Repair-WindowsSetupEnvironment
+
+if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
+    $InstallDir = Join-Path $env:USERPROFILE "NixOS"
+}
 
 function Test-IsAdminCurrent {
     [CmdletBinding()]

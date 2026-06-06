@@ -93,6 +93,7 @@ TERM = "xterm-256color"
 {{- $home := or (env "HOME") $userProfile }}
 {{- $appData := or (env "APPDATA") (printf "%s\\AppData\\Roaming" $userProfile) }}
 {{- $localAppData := or (env "LOCALAPPDATA") (printf "%s\\AppData\\Local" $userProfile) }}
+{{- $programData := or (env "ProgramData") "C:\\ProgramData" }}
 {{- $temp := or (env "TEMP") (printf "%s\\Temp" $localAppData) }}
 {{- $tmp := or (env "TMP") $temp }}
 # Codex can be launched with a trimmed Windows environment. These variables let
@@ -105,6 +106,7 @@ USERPROFILE = '{{ $userProfile }}'
 HOME = '{{ $home }}'
 APPDATA = '{{ $appData }}'
 LOCALAPPDATA = '{{ $localAppData }}'
+ProgramData = '{{ $programData }}'
 TEMP = '{{ $temp }}'
 TMP = '{{ $tmp }}'
 {{- end }}

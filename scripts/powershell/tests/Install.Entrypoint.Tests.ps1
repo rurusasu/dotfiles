@@ -94,9 +94,12 @@ exit 0
 
         $workDir = Join-Path $TestDrive "install-cmd-orchestrator"
         $scriptDir = Join-Path $workDir "scripts\powershell"
+        $libDir = Join-Path $scriptDir "lib"
         New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\WindowsEnvironment.ps1") -Destination (Join-Path $libDir "WindowsEnvironment.ps1")
 
         $stubUser = @'
 [CmdletBinding()]

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     NixOS-WSL のダウンロードとインストールを管理するハンドラー
 
@@ -455,8 +455,9 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $syncMode = $ctx.GetOption("SyncMode", "link")
         $syncBack = $ctx.GetOption("SyncBack", "lock")
+        $timeoutSeconds = $ctx.GetOption("PostInstallTimeoutSeconds", 1800)
         $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
-        Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
+        Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
         if ($LASTEXITCODE -ne 0) {
             $this.LogWarning("Post-install スクリプトが非ゼロで終了しました (exit code: $LASTEXITCODE)")
         }

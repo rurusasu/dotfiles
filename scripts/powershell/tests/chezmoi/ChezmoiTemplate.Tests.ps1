@@ -256,11 +256,14 @@ Describe 'chezmoi テンプレート バリデーション' {
                     'HOME',
                     'APPDATA',
                     'LOCALAPPDATA',
+                    'ProgramData',
                     'TEMP',
                     'TMP'
                 )) {
                 $content | Should -Match "(?m)^$name\s*=" -Because "$name は op/gh/Windows ツールの設定解決に必要"
             }
+
+            $content | Should -Match 'env "ProgramData"' -Because "Docker Desktop backend は ProgramData が無いと起動に失敗する"
         }
 
         It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {

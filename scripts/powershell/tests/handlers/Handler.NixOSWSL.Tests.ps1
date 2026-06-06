@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -577,6 +577,28 @@ Describe 'NixOSWSLHandler' {
             $handler.ExecutePostInstall($ctx)
 
             $script:execCmd | Should -Match '/mnt/c/test/postinstall\.sh'
+        }
+
+        It 'should run post-install with timeout to avoid indefinite hangs' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $ctx.Options["PostInstallTimeoutSeconds"] = 123
+            $script:timeoutSeconds = 0
+            Mock Invoke-Wsl {
+                param($Arguments, $TimeoutSeconds)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $script:timeoutSeconds = $TimeoutSeconds
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:timeoutSeconds | Should -Be 123
         }
 
         It 'should fall back to /mnt/ path when wslpath call fails' {
