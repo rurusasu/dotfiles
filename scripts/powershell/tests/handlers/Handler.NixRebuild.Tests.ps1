@@ -893,13 +893,13 @@ Describe 'NixRebuildHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return early when dotfiles already exist' {
+        It 'should return early when dotfiles exists as a non-symlink' {
             $script:linkCalled = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "ln -sf") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "__non_symlink__" }
+                if ($argStr -match "ln -sfn") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
 
@@ -908,14 +908,47 @@ Describe 'NixRebuildHandler' {
             $script:linkCalled | Should -Be $false
         }
 
+        It 'should return early when dotfiles symlink already targets the requested path' {
+            $script:linkCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "/mnt/d/ruru/dotfiles" }
+                if ($argStr -match "ln -sfn") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
+
+            $script:linkCalled | Should -Be $false
+        }
+
+        It 'should update dotfiles symlink when it targets a different path' {
+            $script:linkArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "/mnt/d/ruru/dotfiles" }
+                if ($argStr -match "test -d") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ln -sfn") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles-nixrebuild-link-clone")
+
+            $script:linkArgs | Should -Match "ln -sfn"
+            $script:linkArgs | Should -Match "/mnt/d/ruru/dotfiles-nixrebuild-link-clone"
+            $script:linkArgs | Should -Match "/home/nixos/.dotfiles"
+        }
+
         It 'should create symlink when dotfiles missing but WSL mount accessible' {
             $script:linkArgs = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "test -d") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "ln -sf") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "ln -sfn") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
 
@@ -930,7 +963,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "test -d") { $global:LASTEXITCODE = 1; return "" }
                 $global:LASTEXITCODE = 0; return ""
             }
@@ -943,7 +976,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 1; return "" }
+                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "test -d") {
                     # argStr から /mnt/... パスを抽出
                     if ($argStr -match '(/mnt/[^\s"]+)') { $script:mountPath = $Matches[1] }
