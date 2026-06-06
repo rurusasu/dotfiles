@@ -934,6 +934,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments, $TimeoutSeconds)
+                $null = $TimeoutSeconds
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
         }
