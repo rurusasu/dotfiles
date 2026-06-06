@@ -7,6 +7,7 @@
     if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
         function global:Get-AppxPackage {
             param([string]$Name)
+            $null = $Name
             return $null
         }
     }
@@ -452,6 +453,9 @@ Describe 'WingetHandler' {
             $script:getAppxPackageCalls = 0
             Mock Get-AppxPackage {
                 param($Name)
+                if ($Name -ne "OpenAI.Codex") {
+                    return $null
+                }
                 $script:getAppxPackageCalls++
                 if ($script:getAppxPackageCalls -eq 1) {
                     return $null
