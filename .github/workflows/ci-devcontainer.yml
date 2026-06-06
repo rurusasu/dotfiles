@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "scripts/sh/dcnvim.sh"
       - "tests/bash/**"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "scripts/sh/dcnvim.sh"
       - "tests/bash/**"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"

@@ -179,6 +179,12 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
 #
 # Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
 # container to provide nvim + tmux. See bootstrap.sh at repo root.
+function ConvertTo-DcnvimBashSingleQuoted {
+    param([Parameter(Mandatory)][string]$Value)
+
+    return "'" + $Value.Replace("'", "'\''") + "'"
+}
+
 function dcnvim {
     [CmdletBinding()]
     param([string]$Workspace = "")
@@ -191,7 +197,7 @@ function dcnvim {
         if ((Test-Path (Join-Path $cwd ".devcontainer")) -or (Test-Path (Join-Path $cwd ".devcontainer.json"))) {
             $Workspace = $cwd
         }
-        elseif (Get-Command ghq -ErrorAction SilentlyContinue) {
+        elseif ((Get-Command ghq -ErrorAction SilentlyContinue) -and (Get-Command fzf -ErrorAction SilentlyContinue)) {
             $selected = ghq list | fzf --prompt="devcontainer> "
             if (-not $selected) { return }
             $Workspace = Join-Path (ghq root) $selected
@@ -199,6 +205,14 @@ function dcnvim {
         else {
             $Workspace = $cwd
         }
+    }
+
+    try {
+        $Workspace = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    }
+    catch {
+        Write-Error "dcnvim: workspace not found: $Workspace"
+        return
     }
 
     if (-not (Get-Command devcontainer -ErrorAction SilentlyContinue)) {
@@ -250,6 +264,7 @@ function dcnvim {
         $wsAbs = (Resolve-Path -LiteralPath $Workspace).Path
         $sessionName = Split-Path -Leaf $wsAbs.TrimEnd('/', '\')
     }
+    $sessionNameQuoted = ConvertTo-DcnvimBashSingleQuoted $sessionName
 
     # bash -l reads ~/.profile (not ~/.bashrc); export PATH inline so the
     # container's just-bootstrapped ~/.local/bin/nvim is found. nvim/tmux
@@ -267,7 +282,7 @@ command -v tmux >/dev/null 2>&1 || {
   echo 'dcnvim: tmux not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
   exit 127
 }
-tmux new -A -s '$sessionName' 'nvim .'
+tmux new -A -s $sessionNameQuoted 'nvim .'
 "@
 
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
