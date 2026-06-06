@@ -322,6 +322,7 @@
           "PackageIdentifier": "9NT1R1C2HH7J"
         },
         {
+          "ciSkipInstall": true,
           "PackageIdentifier": "9PLM9XGG6VKS",
           "verifyCommand": {
             "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
