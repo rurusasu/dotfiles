@@ -240,6 +240,29 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'codex-docker-mcp\.ps1' -Because "Docker Desktop の自動起動待ち wrapper を使う"
         }
 
+        It 'Codex Windows テンプレートでは最小 Windows 環境を明示していること' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -Path $templatePath -Raw
+
+            $content | Should -Match '\[shell_environment_policy\.set\]' -Because "profile を読まない Codex 子プロセスにも env を渡す"
+            $content | Should -Match 'if eq \.chezmoi\.os "windows"' -Because "Windows 固有のパスは Windows だけに出力する"
+            $content | Should -Match 'env "APPDATA"' -Because "リダイレクトされた AppData パスを尊重する"
+            $content | Should -Match 'env "LOCALAPPDATA"' -Because "リダイレクトされた LocalAppData パスを尊重する"
+            foreach ($name in @(
+                    'SystemRoot',
+                    'WINDIR',
+                    'ComSpec',
+                    'USERPROFILE',
+                    'HOME',
+                    'APPDATA',
+                    'LOCALAPPDATA',
+                    'TEMP',
+                    'TMP'
+                )) {
+                $content | Should -Match "(?m)^$name\s*=" -Because "$name は op/gh/Windows ツールの設定解決に必要"
+            }
+        }
+
         It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {
             $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex-docker-mcp.ps1"
             $content = Get-Content -Path $wrapperPath -Raw
