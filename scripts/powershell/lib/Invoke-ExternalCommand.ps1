@@ -1044,8 +1044,7 @@ function Invoke-ExternalCommandWithTimeout {
     )
 
     $global:LASTEXITCODE = 127
-    $stdoutPath = [System.IO.Path]::GetTempFileName()
-    $stderrPath = [System.IO.Path]::GetTempFileName()
+    $process = $null
 
     try {
         $filePath = $Command
@@ -1057,16 +1056,22 @@ function Invoke-ExternalCommandWithTimeout {
             $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommand.Source) + @($Arguments)
         }
 
-        $startParams = @{
-            FilePath               = $filePath
-            ArgumentList           = $argumentList
-            PassThru               = $true
-            RedirectStandardOutput = $stdoutPath
-            RedirectStandardError  = $stderrPath
-            WindowStyle            = "Hidden"
+        $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $processStartInfo.FileName = $filePath
+        $processStartInfo.UseShellExecute = $false
+        $processStartInfo.CreateNoWindow = $true
+        $processStartInfo.RedirectStandardOutput = $true
+        $processStartInfo.RedirectStandardError = $true
+        foreach ($argument in @($argumentList)) {
+            [void]$processStartInfo.ArgumentList.Add([string]$argument)
         }
 
-        $process = Start-Process @startParams
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $processStartInfo
+
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try {
                 if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
@@ -1082,23 +1087,28 @@ function Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 124
             return "検証コマンドがタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
         }
+        $process.WaitForExit()
 
         $global:LASTEXITCODE = $process.ExitCode
-        $output = @()
-        if (Test-Path -LiteralPath $stdoutPath) {
-            $output += Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue
+        $output = [System.Collections.Generic.List[string]]::new()
+        foreach ($streamText in @($stdoutTask.GetAwaiter().GetResult(), $stderrTask.GetAwaiter().GetResult())) {
+            if ([string]::IsNullOrEmpty($streamText)) { continue }
+            foreach ($line in ($streamText -split "\r?\n")) {
+                if ($line.Length -gt 0) {
+                    $output.Add($line)
+                }
+            }
         }
-        if (Test-Path -LiteralPath $stderrPath) {
-            $output += Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue
-        }
-        return $output
+        return $output.ToArray()
     }
     catch {
         $global:LASTEXITCODE = 127
         throw
     }
     finally {
-        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+        if ($process) {
+            $process.Dispose()
+        }
     }
 }
 

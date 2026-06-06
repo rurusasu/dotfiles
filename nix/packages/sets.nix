@@ -623,6 +623,8 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
     google-cloud-sdk = [
+      "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
+      "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
     ];
     poppler-utils = [

@@ -166,6 +166,30 @@ Describe 'Invoke-VerifyCommand' {
         $result | Should -Match "タイムアウト"
         $global:LASTEXITCODE | Should -Be 124
     }
+
+    It 'should run a ps1 shim from a path containing spaces without splitting the file path' {
+        $tempRoot = Join-Path $env:TEMP "verify shim $(Get-Random)"
+        $binDir = Join-Path $tempRoot "Google Cloud SDK\bin"
+        $shimPath = Join-Path $binDir "gcloud.ps1"
+        $oldPath = $env:PATH
+        try {
+            New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+            Set-Content -LiteralPath $shimPath -Value @'
+Write-Output "shim ok: $($args -join ',')"
+exit 0
+'@
+            $env:PATH = "$binDir;$env:PATH"
+
+            $result = Invoke-VerifyCommand -Command "gcloud" -Arguments @("version") -TimeoutSeconds 5
+
+            $result | Should -Contain "shim ok: version"
+            $global:LASTEXITCODE | Should -Be 0
+        }
+        finally {
+            $env:PATH = $oldPath
+            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe 'Invoke-OpCommand' {
