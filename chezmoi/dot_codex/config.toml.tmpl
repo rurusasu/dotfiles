@@ -81,8 +81,33 @@ show_raw_agent_reasoning = false
 # Windows の DNS/chezmoi/winget は SystemRoot, USERPROFILE, LOCALAPPDATA 等に依存する。
 # core 継承では不足するため、標準の secret 除外を維持しつつ全体を継承する。
 inherit = "all"
-set = { TERM = "xterm-256color" }
 exclude = [ "*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "*CREDENTIAL*" ]
+
+[shell_environment_policy.set]
+TERM = "xterm-256color"
+{{- if eq .chezmoi.os "windows" }}
+{{- $systemRoot := or (env "SystemRoot") (env "WINDIR") "C:\\WINDOWS" }}
+{{- $windir := or (env "WINDIR") $systemRoot }}
+{{- $comSpec := or (env "ComSpec") (printf "%s\\System32\\cmd.exe" $systemRoot) }}
+{{- $userProfile := or (env "USERPROFILE") .chezmoi.homeDir }}
+{{- $home := or (env "HOME") $userProfile }}
+{{- $appData := or (env "APPDATA") (printf "%s\\AppData\\Roaming" $userProfile) }}
+{{- $localAppData := or (env "LOCALAPPDATA") (printf "%s\\AppData\\Local" $userProfile) }}
+{{- $temp := or (env "TEMP") (printf "%s\\Temp" $localAppData) }}
+{{- $tmp := or (env "TMP") $temp }}
+# Codex can be launched with a trimmed Windows environment. These variables let
+# child shells find Windows config directories, 1Password CLI config, DNS, and
+# core system tools even when the parent process did not pass them through.
+SystemRoot = '{{ $systemRoot }}'
+WINDIR = '{{ $windir }}'
+ComSpec = '{{ $comSpec }}'
+USERPROFILE = '{{ $userProfile }}'
+HOME = '{{ $home }}'
+APPDATA = '{{ $appData }}'
+LOCALAPPDATA = '{{ $localAppData }}'
+TEMP = '{{ $temp }}'
+TMP = '{{ $tmp }}'
+{{- end }}
 
 ################################################################################
 # 機能フラグ
