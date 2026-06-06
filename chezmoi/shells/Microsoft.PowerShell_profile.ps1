@@ -1,5 +1,20 @@
 # PowerShell profile managed by chezmoi
 
+# Codex integrated shells can start with a trimmed Windows environment. Repair the
+# minimum variables that Windows DNS, chezmoi, winget, and developer tools expect.
+$_machine_system_root = [Environment]::GetEnvironmentVariable("SystemRoot", "Machine")
+if (-not $_machine_system_root -or $_machine_system_root -like "*%*") { $_machine_system_root = "C:\WINDOWS" }
+if (-not $env:SystemRoot -or $env:SystemRoot -like "*%*") { $env:SystemRoot = $_machine_system_root }
+if (-not $env:WINDIR -or $env:WINDIR -like "*%*") { $env:WINDIR = $_machine_system_root }
+if (-not $env:ComSpec -or $env:ComSpec -like "*%*") { $env:ComSpec = Join-Path $_machine_system_root "System32\cmd.exe" }
+if (-not $env:USERPROFILE) { $env:USERPROFILE = [Environment]::GetFolderPath("UserProfile") }
+if (-not $env:HOME) { $env:HOME = $env:USERPROFILE }
+if (-not $env:LOCALAPPDATA) { $env:LOCALAPPDATA = [Environment]::GetFolderPath("LocalApplicationData") }
+if (-not $env:APPDATA) { $env:APPDATA = [Environment]::GetFolderPath("ApplicationData") }
+if (-not $env:TEMP -or $env:TEMP -eq $env:USERPROFILE) { $env:TEMP = Join-Path $env:LOCALAPPDATA "Temp" }
+if (-not $env:TMP) { $env:TMP = $env:TEMP }
+if (-not $env:TERM -or $env:TERM -eq "dumb") { $env:TERM = "xterm-256color" }
+
 # VS Code Extension Console skips heavy init (starship/zoxide/PSReadLine) to avoid
 # session startup timeout. Basic PowerShell functionality (syntax, completion) still works.
 if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }

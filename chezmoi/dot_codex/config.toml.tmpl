@@ -1,18 +1,26 @@
-# Codex CLI 設定
+# Codex CLI 設定 (project-scoped, coding 特化・自律実行前提)
+# Base: chezmoi/dot_codex/config.toml.tmpl から派生し、本プロジェクトでは
+#       自律的なコーディングタスク実行向けにチューニングしている。
 # 参照: https://developers.openai.com/codex/config-reference/
+
+################################################################################
+# モデル設定
+################################################################################
 
 # 使用するデフォルトモデル
 model = "gpt-5.5"
 
-# モデルの推論努力を制御する
-model_reasoning_effort = "medium"
+# 推論努力: 自律実行ではエラーリカバリと設計判断の質を優先して xhigh
+model_reasoning_effort = "xhigh"
 
-# モデルの推論要約を制御する
+# Plan モードは戦略立案なので最大限の推論を割り当てる
+plan_mode_reasoning_effort = "high"
+
+# モデルの推論要約
 model_reasoning_summary = "auto"
 
-# GPT-5 ファミリー (Responses API) のテキストの冗長性:
-# low | medium | high (デフォルト: medium)
-model_verbosity = "medium"
+# テキストの冗長性: 自律実行ではログを簡潔に保つ
+model_verbosity = "low"
 
 ################################################################################
 # Instruction Overrides
@@ -22,30 +30,30 @@ model_verbosity = "medium"
 project_doc_fallback_filenames = [ "copilot-instructions.md" ]
 
 ################################################################################
-# 通知設定
+# 承認とサンドボックス設定 (自律実行の中核)
 ################################################################################
 
-# コマンドの実行後に通知を表示する
-# notify = [ "bash", "-lc", "afplay /System/Library/Sounds/Ping.aiff" ]
-
-################################################################################
-# 承認とサンドボックス設定
-################################################################################
-
-# 承認ポリシー: "untrusted" (信頼できないコマンドのみ確認), "on-request" (モデルが判断), "never" (常に確認しない - 危険)
+# 自律実行のため承認プロンプトを出さない。
+# 安全性は以下の 2 層で担保する:
+#   1. rules/*.rules (sudo, rm, git rebase 等の破壊的コマンドは forbidden)
+#   2. hooks/ (保護ブランチへの直接コミットを deny)
 approval_policy = "never"
 
-# ツール呼び出しのファイルシステム/ネットワークサンドボックスポリシー:
-# "read-only" (デフォルト), "workspace-write", "danger-full-access" (サンドボックスなし - 極めて危険)
+# Git 操作まで自律実行できるよう、ファイルシステム sandbox は無効化する。
 sandbox_mode = "danger-full-access"
+
+[sandbox_workspace_write]
+# ビルド・テストツール (pytest, npm 等) が一時ディレクトリを使えるようにする
+exclude_slash_tmp = false
+exclude_tmpdir_env_var = false
+# パッケージ取得や API 呼び出しを伴うタスクをサンドボックス内で完結させる
+network_access = true
 
 ################################################################################
 # ウェブ検索
 ################################################################################
 
-# ウェブ検索モード: disabled | cached | live。デフォルト: "cached"
-# cached はウェブ検索キャッシュ（OpenAI が管理するインデックス）から結果を返す。
-# live は最新のデータを取得する。--yolo やフルアクセスサンドボックス使用時は live がデフォルト。
+# 自律実行では最新情報 (ライブラリの API 変更等) の取得が品質に直結する
 web_search = "live"
 
 ################################################################################
@@ -56,12 +64,8 @@ web_search = "live"
 mcp_oauth_credentials_store = "auto"
 
 ################################################################################
-# mcp 周りの設定
+# エージェント出力
 ################################################################################
-
-##########################################################
-# agent 周りの設定
-##########################################################
 
 # 出力から内部的な推論イベントを隠す (デフォルト: false)
 hide_agent_reasoning = false
@@ -70,41 +74,52 @@ hide_agent_reasoning = false
 show_raw_agent_reasoning = false
 
 ################################################################################
-# サンドボックス設定 (詳細)
-################################################################################
-
-[sandbox_workspace_write]
-# /tmp を除外する
-exclude_slash_tmp = true
-# $TMPDIR 環境変数を除外する
-exclude_tmpdir_env_var = true
-
-################################################################################
 # シェル環境ポリシー
 ################################################################################
 
 [shell_environment_policy]
-# 含める環境変数
-include_only = [ "PATH", "HOME", "USER", "SHELL", "TERM" ]
+# Windows の DNS/chezmoi/winget は SystemRoot, USERPROFILE, LOCALAPPDATA 等に依存する。
+# core 継承では不足するため、標準の secret 除外を維持しつつ全体を継承する。
+inherit = "all"
+set = { TERM = "xterm-256color" }
+exclude = [ "*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "*CREDENTIAL*" ]
 
 ################################################################################
-# 特殊な機能
+# 機能フラグ
 ################################################################################
 
 [features]
-# Windows サンドボックスを有効にする
+# Windows サンドボックスを有効にする (workspace-write の前提)
 elevated_windows_sandbox = true
 # 繰り返しコマンドを高速化する
 shell_snapshot = true
 # サブエージェント (Multi-agent mode)
 multi_agent = true
-# ライフサイクルフック
+# ライフサイクルフック (保護ブランチ deny 等)
 hooks = true
+# 統合 exec ツール (旧 experimental_use_unified_exec_tool の後継)
+unified_exec = true
+# ファイル変更の undo スナップショット (自律実行の安全網)
+undo = true
+# セッションをまたいだメモリ
+memories = true
+# 長時間タスク中の OS スリープを防ぐ
+prevent_idle_sleep = true
+# 長いセッションでのリクエスト圧縮
+enable_request_compression = true
 
 # 開発中機能の警告を抑制する
 suppress_unstable_features_warning = true
-# ChatGPT Apps 連携
+# ChatGPT Apps 連携 (コーディング特化のため無効)
 apps = false
+
+################################################################################
+# ツール
+################################################################################
+
+[tools]
+# スクリーンショットや図の確認 (UI 検証タスク向け)
+view_image = true
 
 ################################################################################
 # フック設定
@@ -158,6 +173,11 @@ enabled = true
 [agents]
 # セッションあたりの最大エージェントスレッド数 (デフォルト: 6)
 max_threads = 12
+# サブエージェントのネスト深度 (デフォルト: 1)。fan-out した worker が
+# さらに補助エージェントを起こせるよう 2 にする
+max_depth = 2
+# worker 1 タスクあたりの上限実行時間 (秒)。自律実行の暴走防止
+job_max_runtime_seconds = 3600
 
 # カスタムエージェント: 高速実装用
 [agents.fast_worker]

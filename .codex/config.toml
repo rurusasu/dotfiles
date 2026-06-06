@@ -10,8 +10,8 @@
 # 使用するデフォルトモデル
 model = "gpt-5.5"
 
-# 推論努力: 自律実行ではエラーリカバリと設計判断の質を優先して high
-model_reasoning_effort = "high"
+# 推論努力: 自律実行ではエラーリカバリと設計判断の質を優先して xhigh
+model_reasoning_effort = "xhigh"
 
 # Plan モードは戦略立案なので最大限の推論を割り当てる
 plan_mode_reasoning_effort = "high"
@@ -78,10 +78,10 @@ show_raw_agent_reasoning = false
 ################################################################################
 
 [shell_environment_policy]
-# core: Codex が管理する標準セット (PATH, HOME, TEMP 等) を継承。
-# include_only の固定リストだと Windows の TEMP/USERPROFILE 等が欠けて
-# ビルド・テストが壊れるため、自律実行では core 継承 + 秘匿変数の除外にする
-inherit = "core"
+# Windows の DNS/chezmoi/winget は SystemRoot, USERPROFILE, LOCALAPPDATA 等に依存する。
+# core 継承では不足するため、標準の secret 除外を維持しつつ全体を継承する。
+inherit = "all"
+set = { TERM = "xterm-256color" }
 exclude = [ "*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "*CREDENTIAL*" ]
 
 ################################################################################
