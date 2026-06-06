@@ -796,6 +796,7 @@ class WingetHandler : SetupHandlerBase {
         if (-not $pkg.PathEntries) { return }
 
         $resolvedEntries = [System.Collections.Generic.List[string]]::new()
+        $missingEntries = [System.Collections.Generic.List[string]]::new()
         foreach ($rawEntry in @($pkg.PathEntries)) {
             if ([string]::IsNullOrWhiteSpace([string]$rawEntry)) { continue }
 
@@ -806,7 +807,7 @@ class WingetHandler : SetupHandlerBase {
             }
 
             if ($resolvedMatches.Count -eq 0) {
-                $this.LogWarning("pathEntries のディレクトリが見つかりません: $($pkg.Id) ($rawEntry)")
+                $missingEntries.Add([string]$rawEntry)
                 continue
             }
 
@@ -817,7 +818,12 @@ class WingetHandler : SetupHandlerBase {
             }
         }
 
-        if ($resolvedEntries.Count -eq 0) { return }
+        if ($resolvedEntries.Count -eq 0) {
+            if ($missingEntries.Count -gt 0) {
+                $this.LogWarning("pathEntries の候補ディレクトリが見つかりません: $($pkg.Id) ($($missingEntries -join ', '))")
+            }
+            return
+        }
 
         $userPath = Get-UserEnvironmentPath
         $userPathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }

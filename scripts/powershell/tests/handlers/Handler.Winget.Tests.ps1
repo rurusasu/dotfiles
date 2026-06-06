@@ -1147,6 +1147,66 @@ Describe 'WingetHandler' {
                 $Path -like "*$($script:toolDir)*"
             }
         }
+
+        It 'should not warn when one of multiple path entry candidates exists' {
+            $script:missingToolDir = Join-Path $TestDrive "MissingToolBin"
+            Mock Write-Host { }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Path.Tool"
+                                    pathEntries       = @($script:missingToolDir, $script:toolDir)
+                                    verifyCommand     = [PSCustomObject]@{ command = "path-tool"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $env:PATH -split ";" | Should -Contain $script:toolDir
+            Should -Invoke Write-Host -Times 0 -ParameterFilter {
+                [string]$Object -match 'pathEntries の.*見つかりません'
+            }
+        }
+
+        It 'should warn once when no path entry candidate exists' {
+            $script:missingToolDir = Join-Path $TestDrive "MissingToolBin"
+            Mock Write-Host { }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Path.Tool"
+                                    pathEntries       = @($script:missingToolDir)
+                                    verifyCommand     = [PSCustomObject]@{ command = "path-tool"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -Times 1 -ParameterFilter {
+                [string]$Object -match 'pathEntries の候補ディレクトリが見つかりません' -and
+                [string]$Object -match 'Path.Tool'
+            }
+        }
     }
 
     Context 'Apply - import mode: Microsoft.WSL verification' {
