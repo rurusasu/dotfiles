@@ -14,6 +14,7 @@
 | ------------------ | ------------------- | ------------------------------ |
 | `Ctrl+Shift`       | 移動/ナビゲーション | ペイン移動 (`H/J/K/L`)         |
 | `Ctrl+Alt`         | レイアウト変更      | 分割、ペイン close、ズーム     |
+| `Shift+Enter`      | 複数行入力          | AI CLI / terminal prompt 改行  |
 | `Space` (`Leader`) | ツール機能呼び出し  | 検索、エクスプローラ、タブ操作 |
 | `Alt` (Shell)      | CLI 補助操作        | fzf/zoxide ウィジェット        |
 
@@ -22,11 +23,14 @@
 ### Terminals
 
 - WezTerm
+  - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
   - `Ctrl+Shift+H/J/K/L`: ペイン移動
   - `Ctrl+Alt+H/V/X/W`: 分割/close/ズーム
   - `Leader` (`Ctrl+Space`) + `t/x/h/l/1-9`: タブ操作
   - `Leader` (`Ctrl+Space`) + `c/v`: コピー/ペースト
 - Windows Terminal
+  - `Shift+Enter`: AI CLI / terminal prompt の複数行入力 (`CSI u`)
+  - `Ctrl+Enter`: Windows Terminal 用 fallback (`CSI u`)
   - `Ctrl+Shift+H/J/K/L`: ペイン移動
   - `Ctrl+Alt+H/V/X/W`: 分割/close/ズーム
 - Warp
@@ -48,6 +52,7 @@
   - `Space+du/dc/dd/dt`: Devcontainer up/connect/down/toggle
 - VS Code / Cursor
   - `Vim` 拡張は利用しない
+  - terminal focus の `Shift+Enter`: AI CLI / terminal prompt の複数行入力
   - `Ctrl+Shift+H/J/K/L`: editor group 移動
   - `Ctrl+Alt+H/V/X/W`: split/close/toggle widths
   - それ以外は標準キーバインドを優先
@@ -61,8 +66,15 @@
   - `Alt+Z`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット
 - PowerShell
+  - `Shift+Enter`: PSReadLine `AddLine`
   - `Alt+Z`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット (PSReadLine)
+
+### AI CLI
+
+- Claude Code / Codex / terminal 内 AI prompt の複数行入力は `Shift+Enter` に統一する。
+- Windows Terminal では `Shift+Enter` を `CSI u` sequence として送る。`Ctrl+Enter` は fallback として同じ用途に割り当てる。
+- `Ctrl+J` は押下キーとして使わない。Codex では LF を送る terminal の受信互換としてのみ許可する。
 
 ### zoxide + fzf integration
 
