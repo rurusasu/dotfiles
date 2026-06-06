@@ -185,14 +185,25 @@ class WingetHandler : SetupHandlerBase {
             $skipped = 0
             $verified = 0
             $verifyFailed = 0
+            $deferred = 0
             foreach ($pkg in $packages) {
                 if ($pkg.VerifyCommand) {
                     Update-ProcessEnvironmentPath
                     $this.EnsurePortableLink($pkg)
                     $this.EnsurePathEntries($pkg)
+                    if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx) -and -not (Test-WslAvailable)) {
+                        $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
+                        $deferred++
+                        continue
+                    }
                     if ($this.TestPackageVerification($pkg.VerifyCommand)) {
                         $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
                         $verified++
+                        continue
+                    }
+                    if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
+                        $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
+                        $deferred++
                         continue
                     }
                 }
@@ -254,6 +265,7 @@ class WingetHandler : SetupHandlerBase {
                 $parts = @()
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
                 if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
+                if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
                 $parts += "$skipped 個スキップ"
                 if ($verifyFailed -gt 0) {
                     return $this.CreateFailureResult($parts -join ", ")
@@ -339,6 +351,7 @@ class WingetHandler : SetupHandlerBase {
             if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+            if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
             if ($failed -gt 0 -or $verifyFailed -gt 0) {
@@ -357,6 +370,22 @@ class WingetHandler : SetupHandlerBase {
         return $text -match '0x80073cfb' -or
             $text -match 'already installed' -or
             $text -match '別のバージョンが既にインストールされています'
+    }
+
+    hidden [bool] ShouldDeferWslVerificationToAdminInstall([object]$pkg, [SetupContext]$ctx) {
+        if ($null -eq $pkg -or $pkg.Id -ne "Microsoft.WSL") {
+            return $false
+        }
+        if ($ctx.GetOption("WingetVerifyCommandOnly", $false)) {
+            return $false
+        }
+        if ($ctx.GetOption("UserPhaseOnly", $false)) {
+            return $false
+        }
+        if ($ctx.GetOption("SkipWslInstall", $false)) {
+            return $false
+        }
+        return $true
     }
 
     hidden [object[]] NewWingetInstallArguments([object]$pkg, [bool]$force) {
