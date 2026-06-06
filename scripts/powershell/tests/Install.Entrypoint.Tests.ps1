@@ -78,6 +78,13 @@ exit 0
             $marker | Should -Match "NoPause=True"
             $marker | Should -Match "UserPhaseOnly=True"
             $marker | Should -Match "Sentinel=ok"
+
+            $installBytes = [System.IO.File]::ReadAllBytes((Join-Path $scriptDir "install.ps1"))
+            $hasBom = $installBytes.Length -ge 3 -and
+            $installBytes[0] -eq 0xEF -and
+            $installBytes[1] -eq 0xBB -and
+            $installBytes[2] -eq 0xBF
+            $hasBom | Should -BeFalse
         }
         finally {
             if (-not $process.HasExited) {
