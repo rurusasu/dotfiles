@@ -41,7 +41,20 @@ jobs:
 
       - name: Install devcontainer CLI
         run: |
-          nix profile install 'nixpkgs#devcontainer'
+          for attempt in 1 2 3; do
+            if nix profile install 'nixpkgs#devcontainer'; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "nix profile install devcontainer failed after $attempt attempts" >&2
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 10))
+            echo "nix profile install devcontainer failed; retrying in ${sleep_seconds}s (${attempt}/3)" >&2
+            sleep "$sleep_seconds"
+          done
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
 
       - name: Start devcontainer

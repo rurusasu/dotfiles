@@ -79,4 +79,13 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match 'runs-on:\s+macos-15-intel'
         $devcontainerWorkflow | Should -Not -Match 'runs-on:\s+macos-13'
     }
+
+    It 'should retry Linux devcontainer CLI install when Nix cache downloads fail' {
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+
+        $devcontainerWorkflow | Should -Match 'for attempt in 1 2 3'
+        $devcontainerWorkflow | Should -Match "nix profile install 'nixpkgs#devcontainer'"
+        $devcontainerWorkflow | Should -Match 'nix profile install devcontainer failed after \$attempt attempts'
+        $devcontainerWorkflow | Should -Match 'retrying in \$\{sleep_seconds\}s'
+    }
 }
