@@ -268,7 +268,10 @@ Describe 'Invoke-Wsl' {
         $result | Should -Contain "timeout"
         $global:LASTEXITCODE | Should -Be 124
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
-            $Command -eq "wsl" -and $Arguments -contains "--status" -and $TimeoutSeconds -eq 1
+            $Command -eq "wsl" -and
+            $Arguments -contains "--status" -and
+            $TimeoutSeconds -eq 1 -and
+            $null -ne $OutputEncoding
         }
     }
 }
@@ -288,6 +291,26 @@ Describe 'Invoke-Dism' {
         Invoke-Dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
 
         Should -Invoke dism.exe -Times 1
+    }
+
+    It 'should run dism.exe through timeout wrapper when TimeoutSeconds is specified' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 3010
+            return "The operation completed successfully."
+        }
+
+        $result = Invoke-Dism -TimeoutSeconds 300 /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+
+        $result | Should -Contain "The operation completed successfully."
+        $global:LASTEXITCODE | Should -Be 3010
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "dism.exe" -and
+            $Arguments -contains "/online" -and
+            $Arguments -contains "/enable-feature" -and
+            $Arguments -contains "/featurename:VirtualMachinePlatform" -and
+            $TimeoutSeconds -eq 300 -and
+            $null -ne $OutputEncoding
+        }
     }
 }
 

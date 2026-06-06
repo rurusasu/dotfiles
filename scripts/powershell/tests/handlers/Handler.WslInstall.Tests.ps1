@@ -64,9 +64,9 @@ Describe 'WslInstallHandler' {
             Mock Write-Host { }
         }
 
-        It 'should run wsl --install --no-distribution' {
+        It 'should run wsl --install --no-distribution with install timeout' {
             $script:wslInstallCalled = $false
-            Mock Get-WslCheckTimeoutSecond { return 7 }
+            Mock Get-WslInstallTimeoutSecond { return 300 }
             Mock Invoke-Wsl {
                 $script:wslInstallCalled = $true
                 $global:LASTEXITCODE = 0
@@ -81,18 +81,21 @@ Describe 'WslInstallHandler' {
             Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
                 $Arguments -contains "--install" -and
                 $Arguments -contains "--no-distribution" -and
-                $TimeoutSeconds -eq 7
+                $TimeoutSeconds -eq 300
             }
         }
 
         It 'should fallback to dism when wsl --install fails' {
+            Mock Get-WslInstallTimeoutSecond { return 300 }
             Mock Invoke-Wsl {
                 $global:LASTEXITCODE = 1
                 return "Installation failed"
             }
             $script:dismCalls = @()
+            $script:dismTimeouts = @()
             Mock Invoke-Dism {
                 $script:dismCalls += ($Arguments -join " ")
+                $script:dismTimeouts += $TimeoutSeconds
                 $global:LASTEXITCODE = 0
                 return "The operation completed successfully."
             }
@@ -104,6 +107,47 @@ Describe 'WslInstallHandler' {
             $script:dismCalls.Count | Should -Be 2
             $script:dismCalls[0] | Should -Match 'Microsoft-Windows-Subsystem-Linux'
             $script:dismCalls[1] | Should -Match 'VirtualMachinePlatform'
+            $script:dismTimeouts.Count | Should -Be 2
+            $script:dismTimeouts[0] | Should -Be 300
+            $script:dismTimeouts[1] | Should -Be 300
+        }
+
+        It 'should treat DISM 3010 reboot-required exit code as success' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return "Installation failed"
+            }
+            Mock Invoke-Dism {
+                $global:LASTEXITCODE = 3010
+                return "The operation completed successfully."
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match '再起動が必要'
+            Should -Invoke Invoke-Dism -Times 2
+        }
+
+        It 'should suppress garbled native output from WSL install logs' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return @(
+                    "�W�J�C���[�W�̃T�[�r�X�ƊǗ��c�[��",
+                    "Windows �0�0�0�0�0 �0�0�0�0�0�0�0�0�0�0�0�0�0�0W0f0D0~0Y0",
+                    "The operation completed successfully."
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -Times 0 -ParameterFilter {
+                [string]$Object -match '�W�J' -or [string]$Object -match '�0�0'
+            }
+            Should -Invoke Write-Host -Times 1 -ParameterFilter {
+                [string]$Object -match 'The operation completed successfully'
+            }
         }
 
         It 'should return failure when both wsl --install and dism fail' {

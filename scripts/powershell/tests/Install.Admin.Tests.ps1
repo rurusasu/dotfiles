@@ -46,4 +46,18 @@ Describe 'install.admin.ps1' {
         $content | Should -Match '適用可否を確認しています'
         $content | Should -Match '\$\(\$handler\.Name\)'
     }
+
+    It 'should skip WSL-dependent final processing when WSL is still unavailable' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'Test-WslAvailable'
+        $content | Should -Match 'WSL is not available yet'
+        $content | Should -Match '(?s)elseif \(-not \(Test-WslAvailable\)\).*else.*Invoke-Wsl --set-default'
+    }
+
+    It 'should skip WSL-dependent final processing after WslInstall requires restart' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'wslInstallRequiresRestart'
+        $content | Should -Match 'WSL was installed and requires a Windows restart'
+        $content | Should -Match '(?s)if \(\$wslInstallRequiresRestart\).*elseif \(-not \(Test-WslAvailable\)\).*else.*Invoke-Wsl --set-default'
+    }
 }

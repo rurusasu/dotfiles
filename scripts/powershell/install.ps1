@@ -62,6 +62,9 @@ function Get-PhaseParameters {
 if ($WingetVerifyCommandOnly) {
     $Options["WingetVerifyCommandOnly"] = $true
 }
+if ($UserPhaseOnly) {
+    $Options["UserPhaseOnly"] = $true
+}
 
 $userScriptPath = Join-Path $PSScriptRoot "install.user.ps1"
 $adminScriptPath = Join-Path $PSScriptRoot "install.admin.ps1"

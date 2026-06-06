@@ -145,6 +145,13 @@ if ($CheckOnly) {
 }
 
 $results = Invoke-SetupHandler -Handlers $handlers -Context $context
+$wslInstallRequiresRestart = @(
+    $results | Where-Object {
+        $_.HandlerName -eq "WslInstall" -and
+        $_.Success -and
+        $_.Message -match "再起動が必要"
+    }
+).Count -gt 0
 
 if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host ""
@@ -153,15 +160,23 @@ if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    if ($effectiveOptions["SkipSetDefaultDistro"] -ne $true) {
-        Write-Host "Setting default distro: $DistroName"
-        Invoke-Wsl --set-default $DistroName | Out-Null
+    if ($wslInstallRequiresRestart) {
+        Write-Warning "WSL was installed and requires a Windows restart. Re-run install.cmd after restarting to finish WSL-dependent final processing."
     }
+    elseif (-not (Test-WslAvailable)) {
+        Write-Warning "WSL is not available yet. Restart Windows and re-run install.cmd to finish WSL-dependent final processing."
+    }
+    else {
+        if ($effectiveOptions["SkipSetDefaultDistro"] -ne $true) {
+            Write-Host "Setting default distro: $DistroName"
+            Invoke-Wsl --set-default $DistroName | Out-Null
+        }
 
-    $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"
-    if (Test-Path -LiteralPath $expandDockerVhd) {
-        Write-Host "Expanding Docker Desktop VHDX..."
-        & $expandDockerVhd -Force
+        $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"
+        if (Test-Path -LiteralPath $expandDockerVhd) {
+            Write-Host "Expanding Docker Desktop VHDX..."
+            & $expandDockerVhd -Force
+        }
     }
 }
 

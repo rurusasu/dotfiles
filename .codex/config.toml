@@ -278,9 +278,5 @@ command = "pnpm"
 args = [ "dlx", "@google-cloud/cloud-run-mcp@1.10.0" ]
 startup_timeout_sec = 120
 
-[mcp_servers.mempalace]
-command = "mempalace-mcp"
-args = [  ]
-
 [mcp_servers.kaggle]
 url = "https://www.kaggle.com/mcp"

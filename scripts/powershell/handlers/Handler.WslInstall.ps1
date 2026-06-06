@@ -54,8 +54,8 @@ class WslInstallHandler : SetupHandlerBase {
 
             # 方法1: wsl --install --no-distribution
             $this.Log("wsl --install --no-distribution を実行中...")
-            $output = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) --install --no-distribution 2>&1
-            $output | ForEach-Object { $this.Log("  $_", "Gray") }
+            $output = Invoke-Wsl -TimeoutSeconds (Get-WslInstallTimeoutSecond) --install --no-distribution 2>&1
+            $this.LogNativeOutput($output)
 
             if ($LASTEXITCODE -eq 0) {
                 return $this.CreateRebootRequiredResult()
@@ -95,12 +95,16 @@ class WslInstallHandler : SetupHandlerBase {
 
         foreach ($feature in $features) {
             $this.Log("dism.exe: $feature を有効化中...")
-            $output = Invoke-Dism /online /enable-feature /featurename:$feature /all /norestart 2>&1
-            $output | ForEach-Object { $this.Log("  $_", "Gray") }
+            $output = Invoke-Dism -TimeoutSeconds (Get-WslInstallTimeoutSecond) /online /enable-feature /featurename:$feature /all /norestart 2>&1
+            $this.LogNativeOutput($output)
 
-            if ($LASTEXITCODE -ne 0) {
+            $exitCode = $LASTEXITCODE
+            if (-not $this.IsSuccessfulDismExitCode($exitCode)) {
                 $this.LogWarning("$feature の有効化に失敗しました (exit=$LASTEXITCODE)")
                 $allSuccess = $false
+            }
+            elseif ($exitCode -eq 3010 -or $exitCode -eq 1641) {
+                $this.Log("$feature を有効化しました（再起動が必要）", "Green")
             }
             else {
                 $this.Log("$feature を有効化しました", "Green")
@@ -108,6 +112,27 @@ class WslInstallHandler : SetupHandlerBase {
         }
 
         return $allSuccess
+    }
+
+    hidden [bool] IsSuccessfulDismExitCode([int]$exitCode) {
+        return $exitCode -eq 0 -or
+            $exitCode -eq 3010 -or
+            $exitCode -eq 1641
+    }
+
+    hidden [void] LogNativeOutput([object[]]$output) {
+        foreach ($item in @($output)) {
+            $line = [string]$item
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($this.IsGarbledNativeOutput($line)) { continue }
+            $this.Log("  $line", "Gray")
+        }
+    }
+
+    hidden [bool] IsGarbledNativeOutput([string]$line) {
+        return $line -match "`0" -or
+            $line -match '�' -or
+            $line -match '[\x00-\x08\x0B\x0C\x0E-\x1F]'
     }
 
     hidden [SetupResult] CreateRebootRequiredResult() {

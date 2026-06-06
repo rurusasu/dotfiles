@@ -31,7 +31,11 @@ function Invoke-Wsl {
         [int]$TimeoutSeconds = 0
     )
     if ($TimeoutSeconds -gt 0) {
-        return Invoke-ExternalCommandWithTimeout -Command "wsl" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+        return Invoke-ExternalCommandWithTimeout `
+            -Command "wsl" `
+            -Arguments $Arguments `
+            -TimeoutSeconds $TimeoutSeconds `
+            -OutputEncoding (Get-WindowsNativeOutputEncoding)
     }
     & wsl @Arguments
 }
@@ -47,11 +51,21 @@ function Invoke-Wsl {
     Invoke-Dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
 #>
 function Invoke-Dism {
-    [CmdletBinding()]
+    [CmdletBinding(PositionalBinding = $false)]
     param(
+        [int]$TimeoutSeconds = 0,
         [Parameter(ValueFromRemainingArguments)]
         [string[]]$Arguments
     )
+
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout `
+            -Command "dism.exe" `
+            -Arguments $Arguments `
+            -TimeoutSeconds $TimeoutSeconds `
+            -OutputEncoding (Get-WindowsNativeOutputEncoding)
+    }
+
     & dism.exe @Arguments
 }
 
@@ -952,6 +966,68 @@ function Get-WslCheckTimeoutSecond {
     return $timeoutSeconds
 }
 
+function Get-WslInstallTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 300
+    $rawTimeout = $env:DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+            if ($parsed -le 0) {
+                return 0
+            }
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
+}
+
+function Get-WindowsNativeOutputEncoding {
+    [CmdletBinding()]
+    [OutputType([System.Text.Encoding])]
+    param()
+
+    $rawEncoding = $env:DOTFILES_WINDOWS_NATIVE_OUTPUT_ENCODING
+    if (-not [string]::IsNullOrWhiteSpace($rawEncoding)) {
+        try {
+            return [System.Text.Encoding]::GetEncoding($rawEncoding)
+        }
+        catch {
+            Write-Warning "Invalid DOTFILES_WINDOWS_NATIVE_OUTPUT_ENCODING '$rawEncoding'. Falling back to the Windows OEM code page."
+        }
+    }
+
+    $isWindowsRuntime = $true
+    $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
+    if ($null -ne $isWindowsVariable) {
+        $isWindowsRuntime = [bool]$isWindowsVariable.Value
+    }
+    elseif ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $isWindowsRuntime = $false
+    }
+
+    if (-not $isWindowsRuntime) {
+        return [System.Text.Encoding]::UTF8
+    }
+
+    try {
+        $providerType = [type]::GetType("System.Text.CodePagesEncodingProvider, System.Text.Encoding.CodePages")
+        if ($null -ne $providerType) {
+            $provider = $providerType.GetProperty("Instance").GetValue($null)
+            [System.Text.Encoding]::RegisterProvider($provider)
+        }
+    }
+    catch {
+        Write-Verbose "Code page encoding provider registration was skipped: $($_.Exception.Message)"
+    }
+
+    $codePage = [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage
+    return [System.Text.Encoding]::GetEncoding($codePage)
+}
+
 <#
 .SYNOPSIS
     現在のセッションが管理者権限で実行されているか確認する
@@ -1040,7 +1116,8 @@ function Invoke-ExternalCommandWithTimeout {
         [string]$Command,
         [string[]]$Arguments = @(),
         [Parameter(Mandatory)]
-        [int]$TimeoutSeconds
+        [int]$TimeoutSeconds,
+        [System.Text.Encoding]$OutputEncoding = $null
     )
 
     $global:LASTEXITCODE = 127
@@ -1062,6 +1139,10 @@ function Invoke-ExternalCommandWithTimeout {
         $processStartInfo.CreateNoWindow = $true
         $processStartInfo.RedirectStandardOutput = $true
         $processStartInfo.RedirectStandardError = $true
+        if ($null -ne $OutputEncoding) {
+            $processStartInfo.StandardOutputEncoding = $OutputEncoding
+            $processStartInfo.StandardErrorEncoding = $OutputEncoding
+        }
         foreach ($argument in @($argumentList)) {
             [void]$processStartInfo.ArgumentList.Add([string]$argument)
         }

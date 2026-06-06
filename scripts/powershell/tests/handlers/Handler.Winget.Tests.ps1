@@ -1084,6 +1084,71 @@ Describe 'WingetHandler' {
             }
         }
 
+        It 'should defer Microsoft.WSL verification to admin WSL install during normal install' {
+            Mock Test-WslAvailable { return $false }
+            Mock Invoke-VerifyCommand {
+                throw "wsl --version should be skipped when WSL base install is deferred to admin phase"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install" -or $Arguments -contains "repair" -or $Arguments -contains "uninstall") {
+                    throw "winget install, repair, and uninstall should be skipped when WSL is deferred to admin phase"
+                }
+                $global:LASTEXITCODE = 1
+                return "入力条件に一致するインストール済みのパッケージが見つかりませんでした。"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個管理者フェーズ待ち"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+
+        It 'should repair installed Microsoft.WSL during normal install when WSL is available but wsl --version fails' {
+            Mock Test-WslAvailable { return $true }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 124
+                return "検証コマンドがタイムアウトしました (30s): wsl --version"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "repair") {
+                    $global:LASTEXITCODE = 0
+                    return "修復が完了しました"
+                }
+                if ($Arguments -contains "uninstall") {
+                    $global:LASTEXITCODE = 0
+                    return "アンインストールが完了しました"
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                $global:LASTEXITCODE = 0
+                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            $result.Message | Should -Not -Match "管理者フェーズ待ち"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-VerifyCommand -Times 3 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
+        }
+
         It 'should repair then reinstall installed Microsoft.WSL and fail when wsl --version still does not exit' {
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 124
@@ -1108,6 +1173,7 @@ Describe 'WingetHandler' {
             }
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
@@ -1143,6 +1209,7 @@ Describe 'WingetHandler' {
             }
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -1187,6 +1254,7 @@ Describe 'WingetHandler' {
             $script:installAttempted = $false
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
@@ -1222,6 +1290,7 @@ Describe 'WingetHandler' {
             }
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -1260,6 +1329,7 @@ Describe 'WingetHandler' {
             }
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -1307,6 +1377,7 @@ Describe 'WingetHandler' {
             }
 
             $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["WingetVerifyCommandOnly"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
