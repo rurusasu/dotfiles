@@ -187,6 +187,7 @@ in
   #       pnpm global binaries
   home.sessionPath = [
     "$HOME/.bun/bin"
+    "$HOME/.local/share/pnpm/bin"
     "$HOME/.local/share/pnpm"
   ];
 }

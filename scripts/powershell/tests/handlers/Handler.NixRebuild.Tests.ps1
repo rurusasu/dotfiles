@@ -255,6 +255,7 @@ Describe 'NixRebuildHandler' {
             $script:pnpmArgs | Should -Match "pnpm add -g"
             $script:pnpmArgs | Should -Match "--reporter=append-only"
             $script:pnpmArgs | Should -Match "--yes"
+            $script:pnpmArgs | Should -Match '\$PNPM_HOME/bin:\$PNPM_HOME'
             $script:pnpmArgs | Should -Match "@prisma/language-server"
             $script:pnpmArgs | Should -Match "@agentclientprotocol/claude-agent-acp"
             $script:pnpmArgs | Should -Match "typescript-language-server"
@@ -297,6 +298,7 @@ Describe 'NixRebuildHandler' {
 
             $result.Success | Should -Be $true
             $script:verifyArgs | Should -Match "timeout 30s"
+            $script:verifyArgs | Should -Match '\$PNPM_HOME/bin:\$PNPM_HOME'
             $script:verifyArgs | Should -Match "claude-agent-acp"
             $script:verifyArgs | Should -Match "--version"
             Should -Invoke Write-Host -ParameterFilter {
@@ -322,7 +324,7 @@ Describe 'NixRebuildHandler' {
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
-                if ($argStr -match "timeout 30s command -v") {
+                if ($argStr -match "timeout 30s bash -lc" -and $argStr -match "command -v") {
                     $script:verifyArgs = $argStr
                     $global:LASTEXITCODE = 0
                     return "/home/nixos/.npm-global/bin/claude-agent-acp"
@@ -339,7 +341,8 @@ Describe 'NixRebuildHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            $script:verifyArgs | Should -Match "timeout 30s command -v"
+            $script:verifyArgs | Should -Match "timeout 30s bash -lc"
+            $script:verifyArgs | Should -Match "command -v"
             $script:verifyArgs | Should -Match "claude-agent-acp"
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
@@ -780,14 +783,17 @@ Describe 'NixRebuildHandler' {
         It 'should setup PNPM_HOME when directory does not exist' {
             $script:pnpmSetupCalled = $false
             $script:bashrcUpdated = $false
+            $script:pnpmHomeCheckArgs = ""
+            $script:pnpmSetupArgs = ""
+            $script:bashrcArgs = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
                 if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $script:bashrcUpdated = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $script:pnpmHomeCheckArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $script:pnpmSetupArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $script:bashrcUpdated = $true; $script:bashrcArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
@@ -800,6 +806,9 @@ Describe 'NixRebuildHandler' {
             $result.Success | Should -Be $true
             $script:pnpmSetupCalled | Should -Be $true
             $script:bashrcUpdated | Should -Be $true
+            $script:pnpmHomeCheckArgs | Should -Match '\$PNPM_HOME/bin'
+            $script:pnpmSetupArgs | Should -Match '\$PNPM_HOME/bin'
+            $script:bashrcArgs | Should -Match '\$PNPM_HOME/bin:\$PNPM_HOME'
         }
 
         It 'should skip PNPM_HOME setup when directory already exists' {

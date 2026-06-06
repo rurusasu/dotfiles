@@ -17,6 +17,10 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class NixRebuildHandler : SetupHandlerBase {
     hidden [string] $PnpmHomePath = '$HOME/.local/share/pnpm'
 
+    hidden [string] GetPnpmShellPrefix() {
+        return "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME/bin:`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`""
+    }
+
     NixRebuildHandler() {
         $this.Name = "NixRebuild"
         $this.Description = "nixos-rebuild switch の実行"
@@ -97,7 +101,7 @@ class NixRebuildHandler : SetupHandlerBase {
         # Linux ネイティブの pnpm のみを有効とみなすため /mnt/ 配下を除外して確認する。
         Invoke-Wsl -Arguments @(
             "-d", $distroName, "-u", "nixos", "--",
-            "bash", "-lc", "export PATH=`"`$HOME/.npm-global/bin:`$PATH`"; command -v pnpm 2>/dev/null | grep -qv '^/mnt/'"
+            "bash", "-lc", "$($this.GetPnpmShellPrefix()); command -v pnpm 2>/dev/null | grep -qv '^/mnt/'"
         ) | Out-Null
         if ($LASTEXITCODE -ne 0) {
             $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
@@ -116,20 +120,20 @@ class NixRebuildHandler : SetupHandlerBase {
         # PNPM_HOME が未設定なら pnpm setup を実行してグローバル bin ディレクトリを作成
         $pnpmHomeCheck = Invoke-Wsl -Arguments @(
             "-d", $distroName, "-u", "nixos", "--",
-            "bash", "-lc", "export PATH=`"`$HOME/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); [ -d `"`$PNPM_HOME`" ] && echo exists"
+            "bash", "-lc", "$($this.GetPnpmShellPrefix()); [ -d `"`$PNPM_HOME`" ] && [ -d `"`$PNPM_HOME/bin`" ] && echo exists"
         )
         if (-not $pnpmHomeCheck -or $pnpmHomeCheck -notmatch 'exists') {
             $this.Log("PNPM_HOME を設定しています...")
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PATH=`"`$HOME/.npm-global/bin:`$PATH`"; export PNPM_HOME=$($this.PnpmHomePath); mkdir -p `"`$PNPM_HOME`"; pnpm setup 2>/dev/null || true"
-            )
-            # .bashrc に PNPM_HOME が無ければ追加
-            Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "grep -q PNPM_HOME ~/.bashrc || echo 'export PNPM_HOME=$($this.PnpmHomePath); export PATH=`$PNPM_HOME:`$PATH' >> ~/.bashrc"
+                "bash", "-lc", "$($this.GetPnpmShellPrefix()); mkdir -p `"`$PNPM_HOME`" `"`$PNPM_HOME/bin`"; pnpm setup 2>/dev/null || true"
             )
         }
+        # .bashrc に PNPM_HOME/bin が無ければ追加
+        Invoke-Wsl -Arguments @(
+            "-d", $distroName, "-u", "nixos", "--",
+            "bash", "-lc", "grep -q 'PNPM_HOME/bin' ~/.bashrc || echo 'export PNPM_HOME=$($this.PnpmHomePath); export PATH=`$PNPM_HOME/bin:`$PNPM_HOME:`$PATH' >> ~/.bashrc"
+        )
     }
 
     hidden [bool] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
@@ -152,7 +156,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # インストール済みパッケージを取得してフィルタリング
             $installedOutput = Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm ls -g --depth=0 2>/dev/null"
+                "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm ls -g --depth=0 2>/dev/null"
             )
             $toInstall = @()
             $skipped = 0
@@ -220,7 +224,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
             $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
                     "-d", $distroName, "-u", "nixos", "--",
-                    "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
+                    "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
                 ))
 
             if ($pnpmExitCode -ne 0) {
@@ -290,7 +294,8 @@ class NixRebuildHandler : SetupHandlerBase {
             if ($timeoutSeconds -le 0) { $timeoutSeconds = 30 }
 
             if ($verifyType -eq "commandExists") {
-                $cmdLine = "command -v $($this.QuoteShellArg($command))"
+                $commandExistsLine = "command -v $($this.QuoteShellArg($command))"
+                $cmdLine = "bash -lc $($this.QuoteShellArg($commandExistsLine))"
                 $this.Log("検証中: command -v $command", "Gray")
             }
             else {
@@ -300,7 +305,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; timeout ${timeoutSeconds}s $cmdLine"
+                "bash", "-lc", "$($this.GetPnpmShellPrefix()); timeout ${timeoutSeconds}s $cmdLine"
             ) | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
                     $this.Log("  $_", "Gray")
