@@ -952,6 +952,25 @@ function Get-WslCheckTimeoutSecond {
     return $timeoutSeconds
 }
 
+function Get-WslInstallTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 300
+    $rawTimeout = $env:DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+            if ($parsed -le 0) {
+                return 0
+            }
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
+}
+
 <#
 .SYNOPSIS
     現在のセッションが管理者権限で実行されているか確認する

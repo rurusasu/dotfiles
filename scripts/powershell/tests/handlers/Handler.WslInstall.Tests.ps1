@@ -64,9 +64,9 @@ Describe 'WslInstallHandler' {
             Mock Write-Host { }
         }
 
-        It 'should run wsl --install --no-distribution' {
+        It 'should run wsl --install --no-distribution with install timeout' {
             $script:wslInstallCalled = $false
-            Mock Get-WslCheckTimeoutSecond { return 7 }
+            Mock Get-WslInstallTimeoutSecond { return 300 }
             Mock Invoke-Wsl {
                 $script:wslInstallCalled = $true
                 $global:LASTEXITCODE = 0
@@ -81,7 +81,7 @@ Describe 'WslInstallHandler' {
             Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
                 $Arguments -contains "--install" -and
                 $Arguments -contains "--no-distribution" -and
-                $TimeoutSeconds -eq 7
+                $TimeoutSeconds -eq 300
             }
         }
 
@@ -104,6 +104,23 @@ Describe 'WslInstallHandler' {
             $script:dismCalls.Count | Should -Be 2
             $script:dismCalls[0] | Should -Match 'Microsoft-Windows-Subsystem-Linux'
             $script:dismCalls[1] | Should -Match 'VirtualMachinePlatform'
+        }
+
+        It 'should treat DISM 3010 reboot-required exit code as success' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 1
+                return "Installation failed"
+            }
+            Mock Invoke-Dism {
+                $global:LASTEXITCODE = 3010
+                return "The operation completed successfully."
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match '再起動が必要'
+            Should -Invoke Invoke-Dism -Times 2
         }
 
         It 'should return failure when both wsl --install and dism fail' {

@@ -153,15 +153,20 @@ if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    if ($effectiveOptions["SkipSetDefaultDistro"] -ne $true) {
-        Write-Host "Setting default distro: $DistroName"
-        Invoke-Wsl --set-default $DistroName | Out-Null
+    if (-not (Test-WslAvailable)) {
+        Write-Warning "WSL is not available yet. Restart Windows and re-run install.cmd to finish WSL-dependent final processing."
     }
+    else {
+        if ($effectiveOptions["SkipSetDefaultDistro"] -ne $true) {
+            Write-Host "Setting default distro: $DistroName"
+            Invoke-Wsl --set-default $DistroName | Out-Null
+        }
 
-    $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"
-    if (Test-Path -LiteralPath $expandDockerVhd) {
-        Write-Host "Expanding Docker Desktop VHDX..."
-        & $expandDockerVhd -Force
+        $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"
+        if (Test-Path -LiteralPath $expandDockerVhd) {
+            Write-Host "Expanding Docker Desktop VHDX..."
+            & $expandDockerVhd -Force
+        }
     }
 }
 
