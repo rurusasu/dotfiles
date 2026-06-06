@@ -302,7 +302,7 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Codex remote MCP テンプレート' {
-        It 'URL-based MCP は native Streamable HTTP として出力し stdio 設定を混ぜないこと' {
+        It 'should emit URL-based MCP as native Streamable HTTP without stdio settings' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
             $content = Get-Content -Path $templatePath -Raw
 
