@@ -12,6 +12,7 @@
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
 #   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
+#   - wingetCiSkipInstall → catalog attr name → skip CI winget install smoke test
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
 #
@@ -618,6 +619,12 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
+  };
+
+  # Upstream nightly winget manifests can drift before winget cache catches up.
+  # Keep them in normal installs, but avoid making CI depend on their live installer hash.
+  wingetCiSkipInstall = {
+    wezterm = true;
   };
 
   # Extra PATH directories for installers that do not register CLI commands on PATH.

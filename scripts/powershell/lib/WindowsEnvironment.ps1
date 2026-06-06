@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Repairs the minimum Windows environment expected by setup tools.
 #>

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     winget パッケージ管理ハンドラー
 
@@ -142,6 +142,10 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "installTimeoutSeconds") {
                                     $installTimeoutSeconds = $pkg.installTimeoutSeconds
                                 }
+                                $ciSkipInstall = $false
+                                if ($pkg.PSObject.Properties.Name -contains "ciSkipInstall") {
+                                    $ciSkipInstall = [bool]$pkg.ciSkipInstall
+                                }
                                 $portableLink = $null
                                 if ($pkg.PSObject.Properties.Name -contains "portableLink") {
                                     $portableLink = $pkg.portableLink
@@ -151,14 +155,15 @@ class WingetHandler : SetupHandlerBase {
                                     $pathEntries = @($pkg.pathEntries)
                                 }
                                 $packages += [PSCustomObject]@{
-                                    Id            = $pkg.PackageIdentifier
-                                    Version       = $version
-                                    SourceName    = $sourceName
-                                    VerifyCommand = $verifyCommand
-                                    InstallArgs   = $installArgs
+                                    Id                    = $pkg.PackageIdentifier
+                                    Version               = $version
+                                    SourceName            = $sourceName
+                                    VerifyCommand         = $verifyCommand
+                                    InstallArgs           = $installArgs
                                     InstallTimeoutSeconds = $installTimeoutSeconds
-                                    PortableLink  = $portableLink
-                                    PathEntries   = $pathEntries
+                                    CiSkipInstall         = $ciSkipInstall
+                                    PortableLink          = $portableLink
+                                    PathEntries           = $pathEntries
                                 }
                             }
                         }
@@ -167,8 +172,10 @@ class WingetHandler : SetupHandlerBase {
             }
 
             if ($ctx.GetOption("WingetVerifyCommandOnly", $false)) {
-                $packages = @($packages | Where-Object { $null -ne $_.VerifyCommand })
-                $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個)", "Gray")
+                $ciSkipped = @($packages | Where-Object { $_.CiSkipInstall }).Count
+                $packages = @($packages | Where-Object { $null -ne $_.VerifyCommand -and -not $_.CiSkipInstall })
+                $ciSkipMessage = if ($ciSkipped -gt 0) { ", $ciSkipped 個 CI 対象外" } else { "" }
+                $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個$ciSkipMessage)", "Gray")
             }
 
             if ($packages.Count -eq 0) {
@@ -219,15 +226,16 @@ class WingetHandler : SetupHandlerBase {
                         if ($this.ShouldReinstallOnVerifyFailure($pkg.VerifyCommand)) {
                             $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
                             $toInstall += [PSCustomObject]@{
-                                Id            = $pkg.Id
-                                Version       = $pkg.Version
-                                SourceName    = $pkg.SourceName
-                                VerifyCommand = $pkg.VerifyCommand
-                                InstallArgs   = $pkg.InstallArgs
+                                Id                    = $pkg.Id
+                                Version               = $pkg.Version
+                                SourceName            = $pkg.SourceName
+                                VerifyCommand         = $pkg.VerifyCommand
+                                InstallArgs           = $pkg.InstallArgs
                                 InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
-                                PortableLink  = $pkg.PortableLink
-                                PathEntries   = $pkg.PathEntries
-                                Force         = $true
+                                CiSkipInstall         = $pkg.CiSkipInstall
+                                PortableLink          = $pkg.PortableLink
+                                PathEntries           = $pkg.PathEntries
+                                Force                 = $true
                             }
                         }
                         else {
@@ -242,15 +250,16 @@ class WingetHandler : SetupHandlerBase {
                 }
                 else {
                     $toInstall += [PSCustomObject]@{
-                        Id            = $pkg.Id
-                        Version       = $pkg.Version
-                        SourceName    = $pkg.SourceName
-                        VerifyCommand = $pkg.VerifyCommand
-                        InstallArgs   = $pkg.InstallArgs
+                        Id                    = $pkg.Id
+                        Version               = $pkg.Version
+                        SourceName            = $pkg.SourceName
+                        VerifyCommand         = $pkg.VerifyCommand
+                        InstallArgs           = $pkg.InstallArgs
                         InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
-                        PortableLink  = $pkg.PortableLink
-                        PathEntries   = $pkg.PathEntries
-                        Force         = $false
+                        CiSkipInstall         = $pkg.CiSkipInstall
+                        PortableLink          = $pkg.PortableLink
+                        PathEntries           = $pkg.PathEntries
+                        Force                 = $false
                     }
                 }
             }
@@ -363,8 +372,8 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool] IsAlreadyInstalledInstallFailure([object[]]$installOutput) {
         $text = ($installOutput | ForEach-Object { [string]$_ }) -join "`n"
         return $text -match '0x80073cfb' -or
-            $text -match 'already installed' -or
-            $text -match '別のバージョンが既にインストールされています'
+        $text -match 'already installed' -or
+        $text -match '別のバージョンが既にインストールされています'
     }
 
     hidden [bool] ShouldDeferWslVerificationToAdminInstall([object]$pkg, [SetupContext]$ctx) {

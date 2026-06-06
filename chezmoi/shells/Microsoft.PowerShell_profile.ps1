@@ -9,6 +9,10 @@ if (-not $env:WINDIR -or $env:WINDIR -like "*%*") { $env:WINDIR = $_machine_syst
 if (-not $env:ComSpec -or $env:ComSpec -like "*%*") { $env:ComSpec = Join-Path $_machine_system_root "System32\cmd.exe" }
 if (-not $env:USERPROFILE) { $env:USERPROFILE = [Environment]::GetFolderPath("UserProfile") }
 if (-not $env:HOME) { $env:HOME = $env:USERPROFILE }
+if (-not $env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME = Join-Path $env:HOME ".config" }
+if (-not $env:XDG_CACHE_HOME) { $env:XDG_CACHE_HOME = Join-Path $env:HOME ".cache" }
+if (-not $env:XDG_DATA_HOME) { $env:XDG_DATA_HOME = Join-Path $env:HOME ".local\share" }
+if (-not $env:DIRENV_CONFIG) { $env:DIRENV_CONFIG = Join-Path $env:XDG_CONFIG_HOME "direnv" }
 if (-not $env:LOCALAPPDATA) { $env:LOCALAPPDATA = [Environment]::GetFolderPath("LocalApplicationData") }
 if (-not $env:APPDATA) { $env:APPDATA = [Environment]::GetFolderPath("ApplicationData") }
 if (-not $env:TEMP -or $env:TEMP -eq $env:USERPROFILE) { $env:TEMP = Join-Path $env:LOCALAPPDATA "Temp" }
@@ -76,7 +80,9 @@ else {
 }
 
 # direnv (load .envrc per-directory; must init AFTER prompt hooks above)
-if (Get-Command direnv -ErrorAction SilentlyContinue) {
+# Windows without Nix cannot enter this repository's flake devShell, and
+# Windows direnv evaluates .envrc through Git Bash which mutates PATH.
+if ((Get-Command direnv -ErrorAction SilentlyContinue) -and (Get-Command nix -ErrorAction SilentlyContinue)) {
     Invoke-Expression (& direnv hook pwsh | Out-String)
 }
 

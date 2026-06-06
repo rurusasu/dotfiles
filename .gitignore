@@ -38,6 +38,7 @@ chezmoi/private_dot_claude/settings.local.json
 .wget-hsts
 
 # Tool directories
+.direnv/
 .playwright/
 .playwright-mcp/
 .task/

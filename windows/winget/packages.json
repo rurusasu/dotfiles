@@ -94,6 +94,13 @@
           }
         },
         {
+          "PackageIdentifier": "ImageMagick.ImageMagick",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "magick"
+          }
+        },
+        {
           "PackageIdentifier": "jqlang.jq",
           "verifyCommand": {
             "args": ["--version"],
@@ -140,6 +147,16 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "oxlint"
+          }
+        },
+        {
+          "PackageIdentifier": "oschwartz10612.Poppler",
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
+          ],
+          "verifyCommand": {
+            "args": ["-v"],
+            "command": "pdftoppm"
           }
         },
         {
@@ -200,6 +217,7 @@
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
+          "ciSkipInstall": true,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
           "verifyCommand": {
             "args": ["--version"],
@@ -240,23 +258,6 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "hadolint"
-          }
-        },
-        {
-          "PackageIdentifier": "ImageMagick.ImageMagick",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "magick"
-          }
-        },
-        {
-          "PackageIdentifier": "oschwartz10612.Poppler",
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
-          ],
-          "verifyCommand": {
-            "args": ["-v"],
-            "command": "pdftoppm"
           }
         },
         {

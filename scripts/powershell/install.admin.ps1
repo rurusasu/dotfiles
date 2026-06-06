@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Admin/non-winget setup phase.
 
