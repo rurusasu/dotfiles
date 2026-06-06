@@ -45,10 +45,6 @@
       "command": "pnpm",
       "args": ["dlx", "@google-cloud/cloud-run-mcp@1.10.0"]
     },
-    "mempalace": {
-      "command": "mempalace-mcp",
-      "args": []
-    },
     "kaggle": {
       "command": "pnpm",
       "args": ["dlx", "mcp-remote@0.1.38", "https://www.kaggle.com/mcp"]

@@ -1,3 +1,2 @@
-// DEPRECATED: This file has been replaced by mempalace-observe.js
-// Kept as empty placeholder to avoid chezmoi conflicts.
-// Safe to delete once chezmoi source is updated.
+// Disabled PostToolUse hook placeholder.
+// Kept so Claude settings can reference a no-op local hook without prompting or network access.

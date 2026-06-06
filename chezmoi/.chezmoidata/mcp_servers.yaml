@@ -197,23 +197,6 @@ mcp_servers:
       - cursor
       - gemini
 
-  # MemPalace - Local memory system (stdio via uv tool)
-  # `uv tool install mempalace` で隔離 venv に入るため、system python では
-  # `mempalace.mcp_server` を import できない。uv tool が PATH に出す
-  # 専用エントリポイント `mempalace-mcp` を直接起動する。
-  - name: mempalace
-    command: mempalace-mcp
-    args: []
-    supports:
-      - claude-code
-      - claude-desktop
-      - codex
-      - gemini
-      - cursor
-      - vscode
-      - windsurf
-      - zed
-
   # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
   # Docs: https://www.kaggle.com/docs/mcp
   - name: kaggle
