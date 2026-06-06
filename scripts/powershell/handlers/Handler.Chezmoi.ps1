@@ -77,8 +77,8 @@ class ChezmoiHandler : SetupHandlerBase {
             # winget で同セッション内に新規インストールされたツール（op 等）を検出できるよう
             # レジストリから最新の PATH を読み直す
             $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
-            $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-            $env:PATH    = (@($machinePath, $userPath) | Where-Object { $_ }) -join ";"
+            $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $env:PATH = (@($machinePath, $userPath) | Where-Object { $_ }) -join ";"
 
             # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
             $this.EnsureOnePasswordAvailable()
@@ -126,12 +126,14 @@ class ChezmoiHandler : SetupHandlerBase {
                 $this.Log("chezmoi apply 完了", "Green")
                 $this.Log("Windows Terminal を起動中なら、再起動すると確実に反映されます", "Gray")
                 return $this.CreateSuccessResult("dotfiles を適用しました")
-            } else {
+            }
+            else {
                 $this.LogError("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
                 $this.Log("手動で実行してください: chezmoi --source `"$sourcePath`" apply", "Yellow")
                 return $this.CreateFailureResult("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
             }
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -162,8 +164,8 @@ class ChezmoiHandler : SetupHandlerBase {
         $packagesRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
         if (Test-PathExist -Path $packagesRoot) {
             $pkgDir = Get-ChildItemSafe -Path $packagesRoot -Directory |
-            Where-Object { $_.Name -like 'twpayne.chezmoi*' } |
-            Select-Object -First 1
+                Where-Object { $_.Name -like 'twpayne.chezmoi*' } |
+                Select-Object -First 1
 
             if ($pkgDir) {
                 $exe = Join-Path $pkgDir.FullName "chezmoi.exe"
@@ -196,7 +198,8 @@ class ChezmoiHandler : SetupHandlerBase {
                 return $true
             }
             return $false
-        } catch {
+        }
+        catch {
             # 例外が発生した場合（DLL不足など）
             return $false
         }
@@ -255,6 +258,8 @@ class ChezmoiHandler : SetupHandlerBase {
             return
         }
 
+        $this.Log("1Password CLI: 認証状態を確認しています...", "Gray")
+
         # サインイン済みか確認
         # op whoami はデスクトップアプリ連携環境（特に -File モード）で
         # "account is not signed in" を返す場合がある。
@@ -285,7 +290,8 @@ class ChezmoiHandler : SetupHandlerBase {
         if (Test-IsAdminSession) {
             Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
             Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
-        } else {
+        }
+        else {
             Write-Host "  ヒント: 1Password デスクトップアプリが起動・サインイン済みなら"           -ForegroundColor Gray
             Write-Host "  自動的に認証される場合があります。アプリを確認してください。"             -ForegroundColor Gray
         }
@@ -333,6 +339,14 @@ class ChezmoiHandler : SetupHandlerBase {
     hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
         $accountResult = Invoke-OpAccountList -OpExe $opExe -Account $this.OpAccount
         $outputStr = if ($accountResult.Output) { ($accountResult.Output | Out-String).Trim() } else { '' }
+
+        if ($accountResult.ExitCode -eq 124) {
+            return @(
+                "1Password CLI がタイムアウトしました。"
+                "1Password デスクトップアプリが起動・ロック解除されていることを確認してください。"
+                "CLI 連携を有効にした直後は、1Password アプリを完全終了して再起動してください。"
+            ) -join "`n"
+        }
 
         # op account list 自体が失敗 → デスクトップアプリに接続できない
         if ($accountResult.ExitCode -ne 0) {
@@ -422,7 +436,8 @@ class ChezmoiHandler : SetupHandlerBase {
                             $this.Log("プロファイルをデプロイ: $dest", "Green")
                         }
                     }
-                } catch {
+                }
+                catch {
                     $this.Log("スキップ: $($userDir.FullName) ($($_.Exception.Message))", "Gray")
                 }
             }

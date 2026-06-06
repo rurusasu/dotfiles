@@ -16,14 +16,16 @@ BeforeAll {
         Write-Host "PSScriptAnalyzer 1.22.0 をインストールしています..." -ForegroundColor Yellow
         try {
             Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -ErrorAction Stop
-        } catch {
+        }
+        catch {
             throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force"
         }
     }
 
     try {
         Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force -ErrorAction Stop
-    } catch {
+    }
+    catch {
         throw "PSScriptAnalyzer 1.22.0 のインポートに失敗しました: $($_.Exception.Message)"
     }
 
@@ -44,7 +46,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             "lib\SetupHandler.ps1",
             "lib\Invoke-ExternalCommand.ps1"
         ) {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error,Warning
+            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error, Warning
             $results | Should -BeNullOrEmpty
         }
     }
@@ -54,7 +56,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             (Get-ChildItem -Path "$((Split-Path -Parent $PSScriptRoot))\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue |
                 ForEach-Object { "handlers\$($_.Name)" })
         ) {
-            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error,Warning
+            $results = Invoke-ScriptAnalyzer -Path "$projectRoot\$_" -Settings $settingsPath -Severity Error, Warning
             # TypeNotFound を除外（using module の制限）
             $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
             $results | Should -BeNullOrEmpty
@@ -85,7 +87,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
         It 'should have 0 Error/Warning issues in the entire project' -Skip:($sourceFiles.Count -eq 0) {
             $allResults = @()
             foreach ($file in $sourceFiles) {
-                $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error,Warning
+                $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error, Warning
                 # TypeNotFound を除外（using module の制限）
                 $results = $results | Where-Object { $_.RuleName -ne 'TypeNotFound' }
                 $allResults += $results

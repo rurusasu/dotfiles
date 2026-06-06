@@ -32,8 +32,8 @@ project_doc_fallback_filenames = [ "copilot-instructions.md" ]
 # 承認とサンドボックス設定
 ################################################################################
 
-# 承認ポリシー: "untrusted" (信頼できないコマンドのみ確認), "on-failure" (失敗時のみ確認), "on-request" (モデルが判断), "never" (常に確認しない - 危険)
-approval_policy = "on-request"
+# 承認ポリシー: "untrusted" (信頼できないコマンドのみ確認), "on-request" (モデルが判断), "never" (常に確認しない - 危険)
+approval_policy = "never"
 
 # ツール呼び出しのファイルシステム/ネットワークサンドボックスポリシー:
 # "read-only" (デフォルト), "workspace-write", "danger-full-access" (サンドボックスなし - 極めて危険)

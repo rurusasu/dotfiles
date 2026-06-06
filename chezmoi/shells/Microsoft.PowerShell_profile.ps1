@@ -175,11 +175,13 @@ function dcnvim {
         $cwd = (Get-Location).Path
         if ((Test-Path (Join-Path $cwd ".devcontainer")) -or (Test-Path (Join-Path $cwd ".devcontainer.json"))) {
             $Workspace = $cwd
-        } elseif (Get-Command ghq -ErrorAction SilentlyContinue) {
+        }
+        elseif (Get-Command ghq -ErrorAction SilentlyContinue) {
             $selected = ghq list | fzf --prompt="devcontainer> "
             if (-not $selected) { return }
             $Workspace = Join-Path (ghq root) $selected
-        } else {
+        }
+        else {
             $Workspace = $cwd
         }
     }
@@ -199,7 +201,8 @@ function dcnvim {
     # config), so dotfiles flags must be passed explicitly. Idempotent.
     $dotfilesUrl = if ($env:DOTFILES_REPOSITORY_URL) {
         $env:DOTFILES_REPOSITORY_URL
-    } else {
+    }
+    else {
         'https://github.com/rurusasu/dotfiles'
     }
     & devcontainer up `

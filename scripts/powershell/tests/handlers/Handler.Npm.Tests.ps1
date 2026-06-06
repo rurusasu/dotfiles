@@ -20,7 +20,8 @@ Describe 'NpmHandler' {
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
-            } else {
+            }
+            else {
                 $handler.$property | Should -Not -BeNullOrEmpty
             }
         }
@@ -185,7 +186,7 @@ Describe 'NpmHandler' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "インストール済み"
+            $result.Message | Should -Match "2 個スキップ"
         }
     }
 
@@ -227,18 +228,19 @@ Describe 'NpmHandler' {
                 $script:installCallCount++
                 if ($script:installCallCount -eq 1) {
                     $global:LASTEXITCODE = 0
-                } else {
+                }
+                else {
                     $global:LASTEXITCODE = 1
                 }
                 return "output"
             }
         }
 
-        It 'should return success with partial failure info' {
+        It 'should return failure with partial failure info' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個成功"
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
     }

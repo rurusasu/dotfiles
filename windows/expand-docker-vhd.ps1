@@ -60,7 +60,8 @@ try {
     $vhd = Get-VHD -Path $vhdxPath -ErrorAction Stop
     $currentSizeGB = [math]::Round($vhd.Size / 1GB, 2)
     $hyperVAvailable = $true
-} catch {
+}
+catch {
     # Hyper-V module unavailable - fall back to file size (may underestimate)
     # Resize-VHD will also fail; diskpart will be used directly for expansion.
     $currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
@@ -125,7 +126,8 @@ if ($hyperVAvailable) {
         Resize-VHD -Path $vhdxPath -SizeBytes $targetSizeBytes -ErrorAction Stop
         Write-Host "Resize-VHD succeeded."
         $resizeVhdSucceeded = $true
-    } catch {
+    }
+    catch {
         Write-Host "Resize-VHD failed: $($_.Exception.Message)"
         Write-Host "Falling back to diskpart..."
     }
@@ -142,9 +144,11 @@ exit
     try {
         $result = & diskpart /s $tempFile.FullName 2>&1
         Write-Host $result
-    } catch {
+    }
+    catch {
         Write-Warning "diskpart also failed: $($_.Exception.Message)"
-    } finally {
+    }
+    finally {
         Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
     }
 }
@@ -153,7 +157,8 @@ exit
 $newSizeGB = 0
 try {
     $newSizeGB = [math]::Round((Get-VHD -Path $vhdxPath -ErrorAction Stop).Size / 1GB, 2)
-} catch {
+}
+catch {
     $newSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
 }
 Write-Host "New VHDX size: ${newSizeGB}GB"
@@ -162,7 +167,8 @@ if ($newSizeGB -ge $TargetSizeGB) {
     Write-Host "VHDX expansion successful!"
     Write-Host ""
     Write-Host "Note: The ext4 filesystem inside will auto-expand when Docker starts."
-} else {
+}
+else {
     Write-Warning "VHDX expansion may not have completed successfully."
 }
 
@@ -187,6 +193,7 @@ $dockerExe = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
 if (Test-Path $dockerExe) {
     Start-Process -FilePath $dockerExe
     Write-Host "Docker Desktop started."
-} else {
+}
+else {
     Write-Host "Docker Desktop executable not found. Please start Docker Desktop manually."
 }

@@ -24,11 +24,15 @@
     Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
 #>
 function Invoke-Wsl {
-    [CmdletBinding()]
+    [CmdletBinding(PositionalBinding = $false)]
     param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$Arguments
+        [Parameter(Position = 0, ValueFromRemainingArguments)]
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 0
     )
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout -Command "wsl" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+    }
     & wsl @Arguments
 }
 
@@ -74,8 +78,47 @@ function Invoke-Chezmoi {
     )
     if ($ExePath) {
         if ($MergeStderr) { & $ExePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & $ExePath @Arguments }
-    } else {
+    }
+    else {
         if ($MergeStderr) { & chezmoi @Arguments 2>&1 | ForEach-Object { Write-Host $_ } } else { & chezmoi @Arguments }
+    }
+}
+
+<#
+.SYNOPSIS
+    外部コマンドを stderr で例外化せずに実行する
+.DESCRIPTION
+    Windows PowerShell 5.1 は native command の stderr を ErrorRecord として扱う。
+    version 表示や warning を stderr に書く正常終了コマンドを失敗扱いしないため、
+    stderr は通常出力へ正規化し、成否は $LASTEXITCODE で判断する。
+.PARAMETER Command
+    実行するコマンド名
+.PARAMETER Arguments
+    コマンドに渡す引数
+#>
+function Invoke-NativeCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Arguments = @()
+    )
+
+    $global:LASTEXITCODE = 127
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Command @Arguments 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $_.Exception.Message
+            }
+            else {
+                $_
+            }
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 }
 
@@ -94,9 +137,39 @@ function Invoke-Winget {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string[]]$Arguments
+        [string[]]$Arguments,
+
+        [Parameter()]
+        [int]$TimeoutSeconds = -1
     )
-    & winget @Arguments
+
+    if ($TimeoutSeconds -lt 0) {
+        $TimeoutSeconds = Get-WingetCommandTimeoutSecond
+    }
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+    }
+
+    Invoke-NativeCommand -Command "winget" -Arguments $Arguments
+}
+
+function Get-WingetCommandTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 300
+    $rawTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+            if ($parsed -le 0) {
+                return 0
+            }
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
 }
 
 <#
@@ -152,7 +225,8 @@ function Invoke-Diskpart {
         if ($result.ExitCode -ne 0) {
             throw "diskpart failed with exit code $($result.ExitCode)"
         }
-    } finally {
+    }
+    finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }
 }
@@ -545,7 +619,7 @@ function Invoke-Npm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & npm @Arguments
+    Invoke-NativeCommand -Command "npm" -Arguments $Arguments
 }
 
 <#
@@ -565,7 +639,7 @@ function Invoke-Pnpm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & pnpm @Arguments
+    Invoke-NativeCommand -Command "pnpm" -Arguments $Arguments
 }
 
 <#
@@ -585,7 +659,7 @@ function Invoke-Corepack {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    & corepack @Arguments
+    Invoke-NativeCommand -Command "corepack" -Arguments $Arguments
 }
 
 <#
@@ -648,8 +722,7 @@ function Invoke-OpAccountList {
     )
     $opArgs = @("account", "list")
     if ($Account) { $opArgs += @("--account", $Account) }
-    $output = & $OpExe @opArgs 2>&1
-    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs
 }
 
 <#
@@ -673,8 +746,7 @@ function Invoke-OpWhoAmI {
         [Parameter(Mandatory)]
         [string]$OpExe
     )
-    $output = & $OpExe whoami 2>&1
-    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+    return Invoke-OpCommand -OpExe $OpExe -Arguments @("whoami")
 }
 
 <#
@@ -699,8 +771,7 @@ function Invoke-OpVaultList {
     )
     $opArgs = @("vault", "list", "--format=json")
     if ($Account) { $opArgs += @("--account", $Account) }
-    $output = & $OpExe @opArgs 2>&1
-    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs
 }
 
 <#
@@ -724,8 +795,52 @@ function Invoke-OpSignIn {
     )
     $opArgs = @("signin")
     if ($Account) { $opArgs += @("--account", $Account) }
-    $output = & $OpExe @opArgs 2>&1
+    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs -TimeoutSeconds (Get-OpSignInTimeoutSecond)
+}
+
+function Invoke-OpCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OpExe,
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = (Get-OpCommandTimeoutSecond)
+    )
+
+    $output = Invoke-ExternalCommandWithTimeout -Command $OpExe -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
     return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+function Get-OpCommandTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 15
+    $rawTimeout = $env:DOTFILES_OP_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -gt 0) {
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
+}
+
+function Get-OpSignInTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 120
+    $rawTimeout = $env:DOTFILES_OP_SIGNIN_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -gt 0) {
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
 }
 
 <#
@@ -813,11 +928,28 @@ function Test-WslAvailable {
     param()
 
     try {
-        $null = Invoke-Wsl "--status" 2>&1
+        $null = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) "--status" 2>&1
         return $LASTEXITCODE -eq 0
-    } catch {
+    }
+    catch {
         return $false
     }
+}
+
+function Get-WslCheckTimeoutSecond {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+
+    $timeoutSeconds = 5
+    $rawTimeout = $env:DOTFILES_WSL_CHECK_TIMEOUT_SECONDS
+    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+        $parsed = 0
+        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -gt 0) {
+            $timeoutSeconds = $parsed
+        }
+    }
+    return $timeoutSeconds
 }
 
 <#
@@ -835,7 +967,8 @@ function Test-IsAdminSession {
     try {
         $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
         return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -853,7 +986,7 @@ function Invoke-Gemini {
         [Parameter(ValueFromRemainingArguments)]
         [string[]]$Arguments
     )
-    & gemini @Arguments
+    Invoke-NativeCommand -Command "gemini" -Arguments $Arguments
 }
 
 <#
@@ -876,8 +1009,106 @@ function Invoke-VerifyCommand {
     param(
         [Parameter(Mandatory)]
         [string]$Command,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = 0
     )
-    & $Command @Arguments
+
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-VerifyCommandWithTimeout -Command $Command -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+    }
+
+    Invoke-NativeCommand -Command $Command -Arguments $Arguments
+}
+
+function Invoke-VerifyCommandWithTimeout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory)]
+        [int]$TimeoutSeconds
+    )
+
+    Invoke-ExternalCommandWithTimeout -Command $Command -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+}
+
+function Invoke-ExternalCommandWithTimeout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory)]
+        [int]$TimeoutSeconds
+    )
+
+    $global:LASTEXITCODE = 127
+    $process = $null
+
+    try {
+        $filePath = $Command
+        $argumentList = @($Arguments)
+        $resolvedCommand = Get-Command $Command -ErrorAction SilentlyContinue
+        if ($resolvedCommand -and $resolvedCommand.Source -like "*.ps1") {
+            $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
+            $filePath = $psExe
+            $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommand.Source) + @($Arguments)
+        }
+
+        $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $processStartInfo.FileName = $filePath
+        $processStartInfo.UseShellExecute = $false
+        $processStartInfo.CreateNoWindow = $true
+        $processStartInfo.RedirectStandardOutput = $true
+        $processStartInfo.RedirectStandardError = $true
+        foreach ($argument in @($argumentList)) {
+            [void]$processStartInfo.ArgumentList.Add([string]$argument)
+        }
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $processStartInfo
+
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try {
+                if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
+                    & taskkill.exe /PID $process.Id /T /F | Out-Null
+                }
+                else {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                }
+            }
+            catch {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+            $global:LASTEXITCODE = 124
+            return "検証コマンドがタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
+        }
+        $process.WaitForExit()
+
+        $global:LASTEXITCODE = $process.ExitCode
+        $output = [System.Collections.Generic.List[string]]::new()
+        foreach ($streamText in @($stdoutTask.GetAwaiter().GetResult(), $stderrTask.GetAwaiter().GetResult())) {
+            if ([string]::IsNullOrEmpty($streamText)) { continue }
+            foreach ($line in ($streamText -split "\r?\n")) {
+                if ($line.Length -gt 0) {
+                    $output.Add($line)
+                }
+            }
+        }
+        return $output.ToArray()
+    }
+    catch {
+        $global:LASTEXITCODE = 127
+        throw
+    }
+    finally {
+        if ($process) {
+            $process.Dispose()
+        }
+    }
 }
 

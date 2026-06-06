@@ -54,7 +54,7 @@ class WslInstallHandler : SetupHandlerBase {
 
             # 方法1: wsl --install --no-distribution
             $this.Log("wsl --install --no-distribution を実行中...")
-            $output = Invoke-Wsl --install --no-distribution 2>&1
+            $output = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) --install --no-distribution 2>&1
             $output | ForEach-Object { $this.Log("  $_", "Gray") }
 
             if ($LASTEXITCODE -eq 0) {
@@ -74,7 +74,8 @@ class WslInstallHandler : SetupHandlerBase {
                 "  dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart`n" +
                 "  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart"
             )
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -100,7 +101,8 @@ class WslInstallHandler : SetupHandlerBase {
             if ($LASTEXITCODE -ne 0) {
                 $this.LogWarning("$feature の有効化に失敗しました (exit=$LASTEXITCODE)")
                 $allSuccess = $false
-            } else {
+            }
+            else {
                 $this.Log("$feature を有効化しました", "Green")
             }
         }

@@ -2,6 +2,8 @@
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.ps1"
+    $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $script:cmdTarget = Join-Path $script:repoRoot "install.cmd"
 }
 
 Describe 'install.ps1 (orchestrator)' {
@@ -43,5 +45,21 @@ Describe 'install.ps1 (orchestrator)' {
     It 'should support NoPause switch for non-interactive runs' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'
+    }
+
+    It 'should support CI user-phase package verification switches' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '\[switch\]\$UserPhaseOnly'
+        $content | Should -Match '\[switch\]\$WingetVerifyCommandOnly'
+        $content | Should -Match 'WingetVerifyCommandOnly'
+    }
+
+    It 'install.cmd should prepend the PowerShell 7 MSI directory before resolving pwsh' {
+        $content = Get-Content -LiteralPath $script:cmdTarget -Raw
+        $content | Should -Match 'set "PS7_DIR=%ProgramFiles%\\PowerShell\\7"'
+        $content | Should -Match 'if exist "%PS7_DIR%\\pwsh\.exe"'
+        $content | Should -Match 'set "PATH=%PS7_DIR%;%PATH%"'
+        $content | Should -Match 'where pwsh'
+        $content | Should -Match 'Falling back to Windows PowerShell'
     }
 }

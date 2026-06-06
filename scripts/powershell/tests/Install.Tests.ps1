@@ -230,7 +230,8 @@ Describe 'Show-SetupSummary' {
         $results = @(
             if ($success) {
                 [SetupResult]::CreateSuccess("TestHandler", $message)
-            } else {
+            }
+            else {
                 [SetupResult]::CreateFailure("TestHandler", $message)
             }
         )

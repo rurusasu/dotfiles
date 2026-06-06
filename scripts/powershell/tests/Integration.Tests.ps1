@@ -1,6 +1,13 @@
 #Requires -Module Pester
 
 Describe 'Integration Verification - Windows Environment' {
+    BeforeAll {
+        $machinePath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        $processPath = [Environment]::GetEnvironmentVariable("PATH", "Process")
+        $env:PATH = @($machinePath, $userPath, $processPath) -join ";"
+    }
+
     Context 'GUI Apps Installation' {
         It "should have <_> installed" -ForEach @(
             'Obsidian.Obsidian'
@@ -36,7 +43,10 @@ Describe 'Integration Verification - Windows Environment' {
                 if ($LASTEXITCODE -eq 0 -and ($distros -match 'NixOS')) {
                     $script:nixosAvailable = $true
                 }
-            } catch { }
+            }
+            catch {
+                Write-Verbose "NixOS availability check failed: $($_.Exception.Message)"
+            }
         }
 
         It "should have <_> installed in NixOS" -ForEach @(

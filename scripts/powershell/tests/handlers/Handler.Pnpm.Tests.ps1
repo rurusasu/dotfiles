@@ -30,7 +30,8 @@ Describe 'PnpmHandler' {
         ) {
             if ($checkType -eq "Be") {
                 $handler.$property | Should -Be $expected
-            } else {
+            }
+            else {
                 $handler.$property | Should -Not -BeNullOrEmpty
             }
         }
@@ -230,6 +231,7 @@ Describe 'PnpmHandler' {
     Context 'EnsurePnpmSetup - PNPM_HOME restored from registry' {
         BeforeEach {
             $script:origPnpmHome = $env:PNPM_HOME
+            $script:origRegistryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
             $env:PNPM_HOME = ""
             $script:pnpmBin = Join-Path $TestDrive "pnpm-restored"
             Mock Invoke-Pnpm {
@@ -248,10 +250,7 @@ Describe 'PnpmHandler' {
         }
         AfterEach {
             $env:PNPM_HOME = $script:origPnpmHome
-            # レジストリを元に戻す
-            if ($script:origPnpmHome) {
-                [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origPnpmHome, 'User')
-            }
+            [System.Environment]::SetEnvironmentVariable('PNPM_HOME', $script:origRegistryPnpmHome, 'User')
         }
 
         It 'should restore PNPM_HOME from registry when env is empty' {
@@ -284,10 +283,12 @@ Describe 'PnpmHandler' {
     Context 'AddPnpmBinToPath - already in user PATH' {
         BeforeEach {
             $script:pnpmBin = Join-Path $TestDrive "pnpm-global-bin"
+            $script:pnpmBinChild = Join-Path $script:pnpmBin "bin"
             New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            New-Item $script:pnpmBinChild -ItemType Directory -Force | Out-Null
             $script:origPath = $env:PATH
             $env:PATH = "C:\Windows\System32"
-            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Get-UserEnvironmentPath { return "$script:pnpmBin;$script:pnpmBinChild" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
@@ -303,6 +304,7 @@ Describe 'PnpmHandler' {
         It 'should add bin path to current process PATH' {
             $handler.AddPnpmBinToPath($script:pnpmBin)
             $env:PATH -split ";" | Should -Contain $script:pnpmBin
+            $env:PATH -split ";" | Should -Contain $script:pnpmBinChild
         }
     }
 
@@ -328,6 +330,7 @@ Describe 'PnpmHandler' {
         It 'should add bin path to current process PATH' {
             $handler.AddPnpmBinToPath($script:pnpmBin)
             $env:PATH -split ";" | Should -Contain $script:pnpmBin
+            $env:PATH -split ";" | Should -Contain (Join-Path $script:pnpmBin "bin")
         }
     }
 
@@ -486,18 +489,70 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
         }
         AfterEach { $env:PATH = $script:origPath }
 
         It 'should skip all already-installed packages' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "2 個スキップ"
+            $result.Message | Should -Match "1 個検証済み"
+            $result.Message | Should -Match "1 個スキップ"
         }
 
         It 'should not call pnpm add for installed packages' {
             $handler.Apply($ctx)
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 0
+        }
+    }
+
+    Context 'Apply - installed package verification fails' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:verifyCalls = 0
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
+            New-Item (Join-Path $script:globalRoot "broken-pkg") -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "broken-pkg"; verifyCommand = @{ command = "broken"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") { $global:LASTEXITCODE = 0; return $script:globalRoot }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyCalls++
+                if ($script:verifyCalls -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "broken"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should reinstall when installed package verification fails' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 1
+            Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }
 
@@ -593,6 +648,88 @@ Describe 'PnpmHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "2 個インストール"
         }
+
+        It 'should stream pnpm install output to the CLI' {
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                if ($Arguments -contains "add") {
+                    $global:LASTEXITCODE = 0
+                    return @("Progress: resolved 1", "Done in 1s")
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Progress: resolved 1"
+            } -Times 2
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Done in 1s"
+            } -Times 2
+        }
+
+        It 'should install every configured Windows pnpm tool without timeout' {
+            $script:addCalls = @()
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "@prisma/language-server" },
+                        @{ name = "@agentclientprotocol/claude-agent-acp" },
+                        @{ name = "typescript-language-server" },
+                        @{
+                            name        = "@google/gemini-cli"
+                            installArgs = @("--allow-build=@github/keytar", "--allow-build=node-pty")
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                if ($Arguments -contains "add") {
+                    $script:addCalls += , @($Arguments)
+                    $global:LASTEXITCODE = 0
+                    return "installed"
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:addCalls.Count | Should -Be 4
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "@prisma/language-server"
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "@agentclientprotocol/claude-agent-acp"
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "typescript-language-server"
+            ($script:addCalls | ForEach-Object { $_ -join " " }) -join "`n" | Should -Match "@google/gemini-cli"
+            foreach ($call in $script:addCalls) {
+                $call | Should -Contain "--reporter=append-only"
+                $call | Should -Contain "--yes"
+                $call | Should -Not -Contain "timeout"
+            }
+            $geminiCall = $script:addCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
+            $geminiCall | Should -Contain "--allow-build=@github/keytar"
+            $geminiCall | Should -Contain "--allow-build=node-pty"
+        }
     }
 
     Context 'Apply - empty package list' {
@@ -681,9 +818,9 @@ Describe 'PnpmHandler' {
             $env:PATH = $script:origPath
         }
 
-        It 'should report mixed success/failure counts' {
+        It 'should return failure with mixed success/failure counts' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
@@ -845,7 +982,11 @@ Describe 'PnpmHandler' {
             Mock Get-JsonContent {
                 return @{
                     globalPackages = @(
-                        @{ name = "pkg-with-verify"; verifyCommand = @{ command = "pkg-cmd"; args = @("--version") } }
+                        @{
+                            name          = "pkg-with-verify"
+                            installArgs   = @("--allow-build", "native-addon")
+                            verifyCommand = @{ command = "pkg-cmd"; args = @("--version") }
+                        }
                     )
                 }
             }
@@ -880,8 +1021,24 @@ Describe 'PnpmHandler' {
         It 'should call Invoke-VerifyCommand with correct args' {
             $handler.Apply($ctx)
             Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
-                $Command -eq "pkg-cmd" -and $Arguments -contains "--version"
+                $Command -eq "pkg-cmd" -and $Arguments -contains "--version" -and $TimeoutSeconds -eq 30
             }
+        }
+
+        It 'should log verify command before running it' {
+            $handler.Apply($ctx)
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: pkg-cmd --version"
+            } -Times 1
+        }
+
+        It 'should pass package installArgs to pnpm add' {
+            $handler.Apply($ctx)
+            Should -Invoke Invoke-Pnpm -ParameterFilter {
+                $Arguments -contains "add" -and
+                $Arguments -contains "--allow-build" -and
+                $Arguments -contains "native-addon"
+            } -Times 1
         }
     }
 
@@ -920,11 +1077,131 @@ Describe 'PnpmHandler' {
         }
         AfterEach { $env:PATH = $script:origPath }
 
-        It 'should count as verify failed' {
+        It 'should return failure and count as verify failed' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $result.Message | Should -Match "1 個検証失敗"
             $result.Message | Should -Not -Match "1 個インストール"
+        }
+    }
+
+    Context 'Apply - verifyCommand timeout' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 124
+                return "検証コマンドがタイムアウトしました (30s): claude-agent-acp --version"
+            }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should fail verification clearly instead of hanging indefinitely' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            Should -Invoke Invoke-VerifyCommand -ParameterFilter {
+                $Command -eq "claude-agent-acp" -and $TimeoutSeconds -eq 30
+            } -Times 1
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Yellow" -and ([string]$Object) -match "タイムアウト"
+            } -Times 1
+        }
+    }
+
+    Context 'Apply - verifyCommand commandExists' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                if ($Name -eq "claude-agent-acp") { return @{ Source = (Join-Path $script:pnpmBin "claude-agent-acp.CMD") } }
+                return $null
+            }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ type = "commandExists"; command = "claude-agent-acp"; args = @() } }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand { throw "commandExists should not run the command" }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should verify stdio tools by command existence without executing them' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-VerifyCommand -Times 0
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
+            } -Times 1
+        }
+
+        It 'should fail when commandExists target is missing' {
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                return $null
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個検証失敗"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Yellow" -and ([string]$Object) -match "検証コマンドが見つかりません: claude-agent-acp"
+            } -Times 1
         }
     }
 

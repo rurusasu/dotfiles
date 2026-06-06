@@ -115,50 +115,101 @@ class NpmHandler : SetupHandlerBase {
             # インストール済みパッケージを取得
             $installed = $this.GetInstalledPackages()
 
-            # 未インストールのパッケージをフィルタリング
             $toInstall = @()
+            $skipped = 0
+            $verified = 0
             foreach ($pkg in $packages) {
                 # パッケージ名からバージョンを除去（@scope/name@version → @scope/name）
-                $pkgName = $pkg -replace '@[\d\.]+$', ''
-                if ($installed -notcontains $pkgName) {
-                    $toInstall += $pkg
-                } else {
-                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
+                $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
+                $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
+
+                if ($installed -contains $pkgName) {
+                    if ($verifyCmd) {
+                        if ($this.TestPackageVerification($verifyCmd)) {
+                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                        $skipped++
+                        continue
+                    }
+                }
+
+                $toInstall += [PSCustomObject]@{
+                    Spec          = $pkgSpec
+                    VerifyCommand = $verifyCmd
                 }
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("すべてのパッケージがインストール済みです", "Green")
-                return $this.CreateSuccessResult("インストール済み: $($packages.Count) 個")
+                $this.Log("すべてのパッケージがインストール済みで、検証対象も正常です", "Green")
+                $parts = @()
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                return $this.CreateSuccessResult($parts -join ", ")
             }
 
             $failed = @()
             $succeeded = @()
+            $verifyFailed = @()
 
             foreach ($pkg in $toInstall) {
-                $this.Log("インストール中: $pkg")
-                Invoke-Npm -Arguments @("install", "-g", $pkg) | Out-Null
+                $this.Log("インストール中: $($pkg.Spec)")
+                Invoke-Npm -Arguments @("install", "-g", $pkg.Spec) | Out-Null
 
-                if ($LASTEXITCODE -eq 0) {
-                    $succeeded += $pkg
-                    $this.Log("✓ $pkg", "Green")
+                if ($LASTEXITCODE -ne 0) {
+                    $failed += $pkg.Spec
+                    $this.LogWarning("✗ $($pkg.Spec) のインストールに失敗しました")
+                    continue
+                }
+
+                if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
+                    $succeeded += $pkg.Spec
+                    $this.Log("✓ $($pkg.Spec)", "Green")
+                }
+                elseif ($pkg.VerifyCommand) {
+                    $verifyFailed += $pkg.Spec
+                    $this.LogWarning("✗ $($pkg.Spec) のインストールは成功しましたが検証に失敗しました")
                 }
                 else {
-                    $failed += $pkg
-                    $this.LogWarning("✗ $pkg のインストールに失敗しました")
+                    $succeeded += $pkg.Spec
+                    $this.Log("✓ $($pkg.Spec)", "Green")
                 }
             }
 
-            $skipped = $packages.Count - $toInstall.Count
-            if ($failed.Count -eq 0) {
-                return $this.CreateSuccessResult("$($succeeded.Count) 個インストール, $skipped 個スキップ")
+            $parts = @()
+            if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
+            if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
+            if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+            $parts += "$skipped 個スキップ"
+            $message = $parts -join ", "
+            if ($failed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
+                return $this.CreateFailureResult($message)
             }
-            else {
-                return $this.CreateSuccessResult("$($succeeded.Count) 個成功, $($failed.Count) 個失敗, $skipped 個スキップ")
-            }
+            return $this.CreateSuccessResult($message)
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
+        }
+    }
+
+    hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        try {
+            $command = $verifyCmd.command
+            $arguments = @($verifyCmd.args)
+            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
         }
     }
 

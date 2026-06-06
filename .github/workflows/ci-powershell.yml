@@ -5,11 +5,13 @@ on:
   push:
     branches: [main]
     paths:
+      - "install.cmd"
       - "scripts/powershell/**"
       - ".github/workflows/ci-powershell.yml"
   pull_request:
     branches: [main]
     paths:
+      - "install.cmd"
       - "scripts/powershell/**"
       - ".github/workflows/ci-powershell.yml"
 
@@ -42,9 +44,30 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+
+          function Invoke-WithRetry {
+            param([scriptblock]$Script, [int]$Max = 3)
+            for ($i = 1; $i -le $Max; $i++) {
+              try { & $Script; return } catch {
+                if ($i -eq $Max) { throw }
+                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
+                Start-Sleep -Seconds ($i * 5)
+              }
+            }
+          }
+
+          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          }
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default
+          }
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) {
-            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery
+            Invoke-WithRetry {
+              Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery -SkipPublisherCheck
+            }
           }
 
       - name: Run PSScriptAnalyzer and generate SARIF
@@ -150,6 +173,9 @@ jobs:
             }
           }
 
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default
+          }
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Invoke-WithRetry { Install-Module -Name Pester           -RequiredVersion 5.6.1  -Scope CurrentUser -Force -Repository PSGallery }
           Invoke-WithRetry { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery }

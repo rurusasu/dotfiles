@@ -102,7 +102,8 @@ class DockerHandler : SetupHandlerBase {
             }
 
             return $false
-        } catch {
+        }
+        catch {
             return $false
         }
     }
@@ -154,7 +155,8 @@ class DockerHandler : SetupHandlerBase {
 
                 # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
                 $this.EnsureDockerGroup($distroName)
-            } else {
+            }
+            else {
                 $this.Log("$distroName が WSL に登録されていません。NixOS 連携をスキップします", "Gray")
             }
 
@@ -181,10 +183,12 @@ class DockerHandler : SetupHandlerBase {
 
             if ($success) {
                 return $this.CreateSuccessResult("Docker Desktop 連携を確認しました")
-            } else {
+            }
+            else {
                 return $this.CreateFailureResult("Docker Desktop 連携の確認に $($this.Retries) 回失敗しました")
             }
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -247,7 +251,8 @@ class DockerHandler : SetupHandlerBase {
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "true" | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("診断: '$distroName' は起動していますが /tmp が書き込み不可です。NixOS の systemd 設定を確認してください", "Yellow")
-        } else {
+        }
+        else {
             $this.Log("診断: '$distroName' が起動しないか、コマンドを受け付けません (終了コード: $LASTEXITCODE)", "Yellow")
         }
 
@@ -428,7 +433,8 @@ class DockerHandler : SetupHandlerBase {
 
         if ($LASTEXITCODE -eq 0) {
             $this.Log("docker-desktop-user-distro を修復しました", "Green")
-        } else {
+        }
+        else {
             $this.LogWarning("docker-desktop-user-distro の修復に失敗しました")
         }
     }

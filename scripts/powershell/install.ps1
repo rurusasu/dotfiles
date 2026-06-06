@@ -24,6 +24,8 @@ param(
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
     [string]$SyncBack = "lock",
+    [switch]$UserPhaseOnly,
+    [switch]$WingetVerifyCommandOnly,
     [switch]$NoPause
 )
 
@@ -47,14 +49,18 @@ function Get-PhaseParameters {
     param()
 
     return @{
-        DistroName       = $DistroName
-        InstallDir       = $InstallDir
-        ReleaseTag       = $ReleaseTag
+        DistroName        = $DistroName
+        InstallDir        = $InstallDir
+        ReleaseTag        = $ReleaseTag
         PostInstallScript = $PostInstallScript
-        Options          = $Options
-        SyncMode         = $SyncMode
-        SyncBack         = $SyncBack
+        Options           = $Options
+        SyncMode          = $SyncMode
+        SyncBack          = $SyncBack
     }
+}
+
+if ($WingetVerifyCommandOnly) {
+    $Options["WingetVerifyCommandOnly"] = $true
 }
 
 $userScriptPath = Join-Path $PSScriptRoot "install.user.ps1"
@@ -77,6 +83,18 @@ Write-Host ""
 
 & $userScriptPath @phaseParams
 
+if ($UserPhaseOnly) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "User Phase Complete!" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host ""
+    if (-not $NoPause) {
+        Write-Host "Press Enter to close..." -ForegroundColor Gray
+        Read-Host | Out-Null
+    }
+    exit 0
+}
 
 # Phase 2a: 管理者不要の Phase 2 ハンドラーを非昇格で実行
 # 1Password デスクトップアプリ連携など、UAC 昇格で動かなくなる機能に対応

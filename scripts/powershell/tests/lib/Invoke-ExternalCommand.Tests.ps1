@@ -47,6 +47,191 @@ Describe 'Invoke-Chezmoi' {
     }
 }
 
+Describe 'Invoke-NativeCommand' {
+    BeforeAll {
+        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
+    }
+
+    It 'should not throw when a native command writes stderr and exits 0' {
+        $result = Invoke-NativeCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "[Console]::Error.WriteLine('stderr version output'); exit 0"
+        )
+
+        $result | Should -Contain "stderr version output"
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'should preserve non-zero exit code without throwing on stderr' {
+        $result = Invoke-NativeCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "[Console]::Error.WriteLine('stderr warning output'); exit 23"
+        )
+
+        $result | Should -Contain "stderr warning output"
+        $global:LASTEXITCODE | Should -Be 23
+    }
+}
+
+Describe 'Invoke-Winget' {
+    BeforeEach {
+        $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    }
+
+    AfterEach {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+    }
+
+    It 'should run winget through a timeout wrapper by default' {
+        Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 0
+            return "winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("--version")
+
+        $result | Should -Contain "winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and
+            $Arguments -contains "--version" -and
+            $TimeoutSeconds -eq 300
+        }
+    }
+
+    It 'should allow disabling the winget timeout for tests or debugging' {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "0"
+        Mock Invoke-ExternalCommandWithTimeout { throw "timeout wrapper should be disabled" }
+        Mock Invoke-NativeCommand {
+            $global:LASTEXITCODE = 0
+            return "native winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("--version")
+
+        $result | Should -Contain "native winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
+        Should -Invoke Invoke-NativeCommand -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and $Arguments -contains "--version"
+        }
+    }
+
+    It 'should prefer an explicit timeout over the default environment timeout' {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "180"
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 0
+            return "winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("install", "--id", "Google.CloudSDK") -TimeoutSeconds 900
+
+        $result | Should -Contain "winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and
+            $Arguments -contains "Google.CloudSDK" -and
+            $TimeoutSeconds -eq 900
+        }
+    }
+}
+
+Describe 'Invoke-VerifyCommand' {
+    BeforeAll {
+        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
+    }
+
+    It 'should return output when verify command exits before timeout' {
+        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "Write-Output 'verify ok'; exit 0"
+        ) -TimeoutSeconds 5
+
+        $result | Should -Contain "verify ok"
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'should stop verify command when timeout expires' {
+        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "Start-Sleep -Seconds 5; exit 0"
+        ) -TimeoutSeconds 1
+
+        $result | Should -Match "タイムアウト"
+        $global:LASTEXITCODE | Should -Be 124
+    }
+
+    It 'should run a ps1 shim from a path containing spaces without splitting the file path' {
+        $tempRoot = Join-Path $env:TEMP "verify shim $(Get-Random)"
+        $binDir = Join-Path $tempRoot "Google Cloud SDK\bin"
+        $shimPath = Join-Path $binDir "gcloud.ps1"
+        $oldPath = $env:PATH
+        try {
+            New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+            Set-Content -LiteralPath $shimPath -Value @'
+Write-Output "shim ok: $($args -join ',')"
+exit 0
+'@
+            $env:PATH = "$binDir;$env:PATH"
+
+            $result = Invoke-VerifyCommand -Command "gcloud" -Arguments @("version") -TimeoutSeconds 5
+
+            $result | Should -Contain "shim ok: version"
+            $global:LASTEXITCODE | Should -Be 0
+        }
+        finally {
+            $env:PATH = $oldPath
+            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe 'Invoke-OpCommand' {
+    It 'should run op vault list through timeout wrapper' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+        Mock Get-OpCommandTimeoutSecond { return 3 }
+
+        $result = Invoke-OpVaultList -OpExe "C:\op.exe" -Account "my.1password.com"
+
+        $result.ExitCode | Should -Be 124
+        $result.Output | Should -Contain "timeout"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "C:\op.exe" -and
+            $Arguments -contains "vault" -and
+            $Arguments -contains "list" -and
+            $Arguments -contains "--account" -and
+            $Arguments -contains "my.1password.com" -and
+            $TimeoutSeconds -eq 3
+        }
+    }
+
+    It 'should use a separate timeout for op signin' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+        Mock Get-OpSignInTimeoutSecond { return 7 }
+
+        $result = Invoke-OpSignIn -OpExe "C:\op.exe" -Account "my.1password.com"
+
+        $result.ExitCode | Should -Be 124
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "C:\op.exe" -and
+            $Arguments -contains "signin" -and
+            $TimeoutSeconds -eq 7
+        }
+    }
+}
+
 Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
@@ -70,6 +255,21 @@ Describe 'Invoke-Wsl' {
         Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
 
         Should -Invoke wsl -Times 1
+    }
+
+    It 'should run WSL through timeout wrapper when TimeoutSeconds is specified' {
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+
+        $result = Invoke-Wsl -TimeoutSeconds 1 -Arguments @("--status")
+
+        $result | Should -Contain "timeout"
+        $global:LASTEXITCODE | Should -Be 124
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "wsl" -and $Arguments -contains "--status" -and $TimeoutSeconds -eq 1
+        }
     }
 }
 
@@ -159,7 +359,8 @@ Describe 'Get-ExternalCommand' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
         }
@@ -190,7 +391,8 @@ Describe 'Get-ProcessSafe' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
         }
@@ -352,7 +554,8 @@ Describe 'Get-RegistryValue' {
 
         if ($expectedNull) {
             $result | Should -BeNullOrEmpty
-        } else {
+        }
+        else {
             $result.TestValue | Should -Be "TestData"
         }
     }
@@ -499,5 +702,20 @@ Describe 'Test-WslAvailable' {
         $result = Test-WslAvailable
 
         $result | Should -Be $false
+    }
+
+    It 'should return false when WSL status check times out' {
+        Mock Get-WslCheckTimeoutSecond { return 1 }
+        Mock Invoke-Wsl {
+            $global:LASTEXITCODE = 124
+            return "timeout"
+        }
+
+        $result = Test-WslAvailable
+
+        $result | Should -Be $false
+        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+            $TimeoutSeconds -eq 1 -and $Arguments -contains "--status"
+        }
     }
 }

@@ -61,7 +61,8 @@ class PnpmHandler : SetupHandlerBase {
                         return $true
                     }
                 }
-            } catch {
+            }
+            catch {
                 $this.Log("corepack での有効化に失敗: $($_.Exception.Message)", "Yellow")
             }
         }
@@ -76,7 +77,8 @@ class PnpmHandler : SetupHandlerBase {
                     $this.Log("npm で pnpm をインストールしました", "Green")
                     return $true
                 }
-            } catch {
+            }
+            catch {
                 $this.Log("npm での pnpm インストールに失敗: $($_.Exception.Message)", "Yellow")
             }
         }
@@ -120,13 +122,15 @@ class PnpmHandler : SetupHandlerBase {
             $succeeded = @()
             $verifyFailed = @()
             $skipped = 0
+            $verified = 0
 
             # グローバルルートを一度だけ取得（ループ内で毎回 pnpm root -g を実行しないよう）
             $globalRootForCheck = ""
             try {
                 $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
                 if ($LASTEXITCODE -eq 0 -and $rawRoot) { $globalRootForCheck = $rawRoot.Trim() }
-            } catch {
+            }
+            catch {
                 $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
             }
 
@@ -134,17 +138,45 @@ class PnpmHandler : SetupHandlerBase {
                 $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
                 $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
                 $verifyCmd = if ($pkgEntry -is [string]) { $null } else { $pkgEntry.verifyCommand }
+                $installArgs = @()
+                if ($pkgEntry -isnot [string]) {
+                    if ($pkgEntry -is [System.Collections.IDictionary] -and $pkgEntry.Contains("installArgs")) {
+                        foreach ($arg in @($pkgEntry["installArgs"])) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                    elseif ($pkgEntry.PSObject.Properties.Name -contains "installArgs") {
+                        foreach ($arg in @($pkgEntry.installArgs)) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                }
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
-                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                    $skipped++
-                    continue
+                    if ($verifyCmd) {
+                        if ($this.TestPackageVerification($verifyCmd)) {
+                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                        $skipped++
+                        continue
+                    }
                 }
 
                 $this.Log("インストール中: $pkgSpec")
-                $null = Invoke-Pnpm -Arguments @("add", "-g", $pkgSpec)
+                $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only", "--yes") + $installArgs + @($pkgSpec))
 
-                if ($LASTEXITCODE -ne 0) {
+                if ($pnpmExitCode -ne 0) {
                     $failed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
                     continue
@@ -153,10 +185,12 @@ class PnpmHandler : SetupHandlerBase {
                 if ($verifyCmd -and $this.TestPackageVerification($verifyCmd)) {
                     $succeeded += $pkgSpec
                     $this.Log("✓ $pkgSpec", "Green")
-                } elseif ($verifyCmd) {
+                }
+                elseif ($verifyCmd) {
                     $verifyFailed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールは成功しましたが検証に失敗しました")
-                } else {
+                }
+                else {
                     $succeeded += $pkgSpec
                     $this.Log("✓ $pkgSpec", "Green")
                 }
@@ -165,7 +199,8 @@ class PnpmHandler : SetupHandlerBase {
             # ルート取得済みなら再利用、失敗時は 0-arg 版でリトライ
             if ($globalRootForCheck) {
                 $this.EnsureGeminiCommandShim($globalRootForCheck)
-            } else {
+            }
+            else {
                 $this.EnsureGeminiCommandShim()
             }
 
@@ -173,8 +208,13 @@ class PnpmHandler : SetupHandlerBase {
             if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
-            return $this.CreateSuccessResult($parts -join ", ")
+            $message = $parts -join ", "
+            if ($failed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
+                return $this.CreateFailureResult($message)
+            }
+            return $this.CreateSuccessResult($message)
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
@@ -202,13 +242,73 @@ class PnpmHandler : SetupHandlerBase {
         try {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            $verifyType = $this.GetVerifyType($verifyCmd)
+            if ($verifyType -eq "commandExists") {
+                $this.Log("検証中: command -v $command", "Gray")
+                $cmd = Get-ExternalCommand -Name $command
+                if ($cmd) {
+                    $this.Log("  $($cmd.Source)", "Gray")
+                    return $true
+                }
+                $this.Log("検証コマンドが見つかりません: $command", "Yellow")
+                return $false
+            }
+
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            $displayCommand = (@($command) + $arguments) -join " "
+            $this.Log("検証中: $displayCommand", "Gray")
+
+            $output = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            $output | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -eq 124) {
+                $this.Log("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $displayCommand", "Yellow")
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
+    }
+
+    hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        return 30
+    }
+
+    hidden [string] GetVerifyType([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("type")) {
+            return [string]$verifyCmd["type"]
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "type")) {
+            return [string]$verifyCmd.type
+        }
+        return "command"
+    }
+
+    hidden [int] InvokePnpmInstall([string[]]$arguments) {
+        Invoke-Pnpm -Arguments $arguments | ForEach-Object {
+            if ($_ -notmatch '^\s*$') {
+                $this.Log("  $_", "Gray")
+            }
+        }
+        return $LASTEXITCODE
     }
 
     hidden [string] EnsurePnpmSetup() {
@@ -242,7 +342,8 @@ class PnpmHandler : SetupHandlerBase {
         $registryPnpmHome = [System.Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
         if ($registryPnpmHome) {
             $env:PNPM_HOME = $registryPnpmHome
-        } elseif ($env:LOCALAPPDATA) {
+        }
+        elseif ($env:LOCALAPPDATA) {
             $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
         }
 
@@ -256,27 +357,37 @@ class PnpmHandler : SetupHandlerBase {
                 return
             }
 
-            if (-not (Test-Path -LiteralPath $pnpmBinPath)) {
-                New-Item -ItemType Directory -Path $pnpmBinPath -Force | Out-Null
+            $pathsToAdd = @($pnpmBinPath)
+            $childBinPath = Join-Path $pnpmBinPath "bin"
+            if ($pathsToAdd -notcontains $childBinPath) {
+                $pathsToAdd += $childBinPath
+            }
+
+            foreach ($pathToAdd in $pathsToAdd) {
+                if (-not (Test-Path -LiteralPath $pathToAdd)) {
+                    New-Item -ItemType Directory -Path $pathToAdd -Force | Out-Null
+                }
             }
 
             $userPath = Get-UserEnvironmentPath
-            $pathItems = if ($userPath) { $userPath -split ";" } else { @() }
+            $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
 
-            if ($pathItems -notcontains $pnpmBinPath) {
-                $newPath = ($pnpmBinPath, $userPath | Where-Object { $_ }) -join ";"
+            $missingUserPaths = @($pathsToAdd | Where-Object { $_ -notin $pathItems })
+            if ($missingUserPaths.Count -gt 0) {
+                $newPath = (@($missingUserPaths) + $pathItems) -join ";"
                 Set-UserEnvironmentPath -Path $newPath
-                $this.Log("pnpm bin を USER PATH に追加しました: $pnpmBinPath", "Green")
+                $this.Log("pnpm bin を USER PATH に追加しました: $($missingUserPaths -join ';')", "Green")
             }
             else {
                 $this.Log("pnpm bin は既に PATH に含まれています", "Gray")
             }
 
             # 現プロセスの PATH にも追加（pnpm add -g が同一セッションで動作するよう）
-            $processItems = if ($env:PATH) { $env:PATH -split ";" } else { @() }
-            if ($processItems -notcontains $pnpmBinPath) {
-                $env:PATH = "$pnpmBinPath;$env:PATH"
-                $this.Log("pnpm bin を現プロセス PATH に追加しました", "Gray")
+            $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+            $missingProcessPaths = @($pathsToAdd | Where-Object { $_ -notin $processItems })
+            if ($missingProcessPaths.Count -gt 0) {
+                $env:PATH = (@($missingProcessPaths) + $processItems) -join ";"
+                $this.Log("pnpm bin を現プロセス PATH に追加しました: $($missingProcessPaths -join ';')", "Gray")
             }
         }
         catch {

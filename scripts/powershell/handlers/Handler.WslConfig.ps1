@@ -64,7 +64,8 @@ class WslConfigHandler : SetupHandlerBase {
             $this.Log(".wslconfig をコピーしています: $sourcePath -> $destPath")
             try {
                 Copy-FileSafe -Source $sourcePath -Destination $destPath -Force
-            } catch {
+            }
+            catch {
                 return $this.CreateFailureResult("ファイルコピーに失敗: $($_.Exception.Message)", $_.Exception)
             }
 
@@ -75,7 +76,8 @@ class WslConfigHandler : SetupHandlerBase {
             Invoke-Wsl --terminate $ctx.DistroName
 
             return $this.CreateSuccessResult(".wslconfig を適用しました")
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }

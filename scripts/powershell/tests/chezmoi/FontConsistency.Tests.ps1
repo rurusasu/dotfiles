@@ -73,12 +73,12 @@ Describe 'フォント設定の一貫性' {
 
     Context '新フォント family 名の整合' {
         It 'editor/terminal 設定すべてに "<expected>" が含まれること' -ForEach @(
-            @{ Path = "chezmoi/terminals/wezterm/wezterm.lua";           Expected = $script:expectedFont }
+            @{ Path = "chezmoi/terminals/wezterm/wezterm.lua"; Expected = $script:expectedFont }
             @{ Path = "chezmoi/terminals/windows-terminal/settings.json"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/terminals/warp/settings.toml";             Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/zed/settings.json";                Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/cursor/settings.json";             Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/vscode/settings.json";             Expected = $script:expectedFont }
+            @{ Path = "chezmoi/terminals/warp/settings.toml"; Expected = $script:expectedFont }
+            @{ Path = "chezmoi/editors/zed/settings.json"; Expected = $script:expectedFont }
+            @{ Path = "chezmoi/editors/cursor/settings.json"; Expected = $script:expectedFont }
+            @{ Path = "chezmoi/editors/vscode/settings.json"; Expected = $script:expectedFont }
         ) {
             param($Path, $Expected)
             $full = Join-Path $script:repoRoot $Path

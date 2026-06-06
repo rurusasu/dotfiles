@@ -109,7 +109,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
@@ -134,7 +134,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("buildi
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error: build failed") }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
@@ -154,7 +154,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
         It 'should install pnpm global packages after nixos-rebuild' {
             $script:pnpmArgs = ""
             Mock Get-JsonContent {
-                return @{ globalPackages = @("@tobilu/qmd", "@google/gemini-cli") }
+                return @{ globalPackages = @("@example/native-tool", "@google/gemini-cli") }
             }
             Mock Invoke-Wsl {
                 param($Arguments)
@@ -181,13 +181,216 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             $script:pnpmArgs | Should -Match "gemini-cli"
         }
 
+        It 'should stream WSL pnpm install output to the CLI' {
+            Mock Get-JsonContent {
+                return @{ globalPackages = @("@example/native-tool", "@google/gemini-cli") }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") {
+                    $global:LASTEXITCODE = 0
+                    return @("Progress: resolved 2", "Done in 2s")
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Progress: resolved 2"
+            } -Times 1
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "Done in 2s"
+            } -Times 1
+        }
+
+        It 'should install every configured WSL pnpm tool without timeout' {
+            $script:pnpmArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@prisma/language-server" },
+                        @{ name = "@agentclientprotocol/claude-agent-acp" },
+                        @{ name = "typescript-language-server" },
+                        @{
+                            name        = "@google/gemini-cli"
+                            installArgs = @("--allow-build=@github/keytar", "--allow-build=node-pty")
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") {
+                    $script:pnpmArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "installed"
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:pnpmArgs | Should -Match "pnpm add -g"
+            $script:pnpmArgs | Should -Match "--reporter=append-only"
+            $script:pnpmArgs | Should -Match "--yes"
+            $script:pnpmArgs | Should -Match "@prisma/language-server"
+            $script:pnpmArgs | Should -Match "@agentclientprotocol/claude-agent-acp"
+            $script:pnpmArgs | Should -Match "typescript-language-server"
+            $script:pnpmArgs | Should -Match "@google/gemini-cli"
+            $script:pnpmArgs | Should -Match "--allow-build=@github/keytar"
+            $script:pnpmArgs | Should -Match "--allow-build=node-pty"
+            $script:pnpmArgs | Should -Not -Match "\btimeout\b"
+        }
+
+        It 'should run WSL pnpm verification with visible output and timeout guard' {
+            $script:verifyArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s") {
+                    $script:verifyArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "0.41.0"
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:verifyArgs | Should -Match "timeout 30s"
+            $script:verifyArgs | Should -Match "claude-agent-acp"
+            $script:verifyArgs | Should -Match "--version"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: claude-agent-acp --version"
+            } -Times 1
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "0.41.0"
+            } -Times 1
+        }
+
+        It 'should verify WSL stdio pnpm tools by command existence without executing them' {
+            $script:verifyArgs = ""
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ type = "commandExists"; command = "claude-agent-acp"; args = @() } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s command -v") {
+                    $script:verifyArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "/home/nixos/.npm-global/bin/claude-agent-acp"
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:verifyArgs | Should -Match "timeout 30s command -v"
+            $script:verifyArgs | Should -Match "claude-agent-acp"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
+            } -Times 1
+        }
+
+        It 'should fail WSL pnpm verification clearly when timeout expires' {
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
+                if ($argStr -match "timeout 30s") { $global:LASTEXITCODE = 124; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Yellow" -and ([string]$Object) -match "タイムアウト"
+            } -Times 1
+        }
+
         It 'should install pnpm global packages when entries are objects with name field' {
             $script:pnpmArgs = ""
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
-                    @{ name = "@tobilu/qmd"; verifyCommand = @{ command = "qmd"; args = @("status") } },
-                    @{ name = "@google/gemini-cli" }
-                )}
+                        @{
+                            name          = "@example/native-tool"
+                            installArgs   = @("--allow-build", "native-addon")
+                            verifyCommand = @{ command = "native-tool"; args = @("status") }
+                        },
+                        @{ name = "@google/gemini-cli" }
+                    )
+                }
             }
             Mock Invoke-Wsl {
                 param($Arguments)
@@ -211,6 +414,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             $handler.Apply($ctx)
 
             $script:pnpmArgs | Should -Match "pnpm add -g"
+            $script:pnpmArgs | Should -Match "--allow-build"
+            $script:pnpmArgs | Should -Match "native-addon"
             $script:pnpmArgs | Should -Match "gemini-cli"
             $script:pnpmArgs | Should -Not -Match "@\{name="
         }
@@ -220,11 +425,11 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 1; return @("error:
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") {
                     $global:LASTEXITCODE = 0
-                    return @("@tobilu/qmd@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "typescript-language-server@4.3.3", "typescript@5.6.3", "@google/gemini-cli@0.32.1")
+                    return @("@example/native-tool@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "typescript-language-server@4.3.3", "typescript@5.6.3", "@google/gemini-cli@0.32.1")
                 }
                 if ($argStr -match "pnpm add") {
                     $script:pnpmAddCalled = $true
@@ -244,11 +449,59 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:pnpmAddCalled | Should -Be $false
         }
 
-        It 'should succeed even when pnpm global install fails' {
+        It 'should reinstall installed pnpm package when verifyCommand fails in WSL' {
+            $script:pnpmAddCalled = $false
+            $script:verifyCalls = 0
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        @{ name = "@example/native-tool"; verifyCommand = @{ command = "native-tool"; args = @("status") } }
+                    )
+                }
+            }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") {
+                    $global:LASTEXITCODE = 0
+                    return @("@example/native-tool@1.0.0")
+                }
+                if ($argStr -match "native-tool.*status") {
+                    $script:verifyCalls++
+                    if ($script:verifyCalls -eq 1) {
+                        $global:LASTEXITCODE = 1
+                        return "native-tool not found"
+                    }
+                    $global:LASTEXITCODE = 0
+                    return "ok"
+                }
+                if ($argStr -match "pnpm add") {
+                    $script:pnpmAddCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return @("installed")
+                }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:pnpmAddCalled | Should -Be $true
+            $script:verifyCalls | Should -Be 2
+        }
+
+        It 'should fail when pnpm global install fails' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 1; return @("error") }
@@ -262,8 +515,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             }
             $result = $handler.Apply($ctx)
 
-            # pnpm add 失敗でも Apply 自体は成功とみなす
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージ"
         }
 
         It 'should pass correct arguments to WSL' {
@@ -271,7 +524,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -326,7 +579,7 @@ if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXI
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -348,7 +601,7 @@ if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXI
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") {
@@ -386,7 +639,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -409,7 +662,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -438,7 +691,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
@@ -485,7 +738,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
                 if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
@@ -503,11 +756,11 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             $script:corepakCalled | Should -Be $true
         }
 
-        It 'should succeed even when corepack enable fails' {
+        It 'should fail when pnpm bootstrap fails' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
                 if ($argStr -match "npm install -g pnpm") { $global:LASTEXITCODE = 1; return @("error") }
                 if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
@@ -520,8 +773,8 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             }
             $result = $handler.Apply($ctx)
 
-            # corepack 失敗 → EnsurePnpmAvailable が throw → InstallPnpmGlobalPackages の catch で握りつぶし
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "pnpm グローバルパッケージ"
         }
 
         It 'should setup PNPM_HOME when directory does not exist' {
@@ -530,7 +783,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
@@ -554,7 +807,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
                 if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
@@ -579,7 +832,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
@@ -609,8 +862,7 @@ if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q")
-                {
+                if ($argStr -match "-l -q") {
                     $global:LASTEXITCODE = 0
                     return @("NixOS")
                 }

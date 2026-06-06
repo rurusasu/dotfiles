@@ -57,7 +57,8 @@ function Request-AdminElevation {
         $value = $BoundParameters[$key]
         if ($value -is [switch]) {
             if ($value) { $arguments += "-$key" }
-        } elseif ($value -is [hashtable]) {
+        }
+        elseif ($value -is [hashtable]) {
             # Hashtable parameters need special handling
             $hashtableStr = "@{"
             $pairs = @()
@@ -65,16 +66,19 @@ function Request-AdminElevation {
                 $hValue = $value[$hKey]
                 if ($hValue -is [bool]) {
                     $pairs += "$hKey=`$$hValue"
-                } elseif ($hValue -is [string]) {
+                }
+                elseif ($hValue -is [string]) {
                     $pairs += "$hKey='$hValue'"
-                } else {
+                }
+                else {
                     $pairs += "$hKey=$hValue"
                 }
             }
             $hashtableStr += ($pairs -join ";") + "}"
             $arguments += "-$key"
             $arguments += $hashtableStr
-        } else {
+        }
+        else {
             $arguments += "-$key"
             $arguments += "`"$value`""
         }
@@ -82,7 +86,8 @@ function Request-AdminElevation {
 
     $elevatedShell = if (Get-Command pwsh -ErrorAction SilentlyContinue) {
         "pwsh"
-    } else {
+    }
+    else {
         "powershell.exe"
     }
 
@@ -90,14 +95,17 @@ function Request-AdminElevation {
         $proc = Start-Process $elevatedShell -ArgumentList $arguments -Verb RunAs -PassThru -Wait
         $exitCode = if ($null -ne $proc -and $null -ne $proc.ExitCode) {
             [int]$proc.ExitCode
-        } else {
+        }
+        else {
             1
         }
         Exit-Script -ExitCode $exitCode
-    } catch {
+    }
+    catch {
         if ($_.Exception -is [System.ComponentModel.Win32Exception] -and $_.Exception.NativeErrorCode -eq 1223) {
             Write-Error "UAC prompt was canceled. Setup did not start."
-        } else {
+        }
+        else {
             Write-Error "Failed to start elevated process: $($_.Exception.Message)"
         }
         Exit-Script -ExitCode 1

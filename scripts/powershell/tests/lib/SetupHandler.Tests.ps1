@@ -58,7 +58,8 @@ Describe 'SetupContext' {
             $result = $ctx.GetOption("NonExistentKey", $default)
             if ($null -eq $expected) {
                 $result | Should -BeNullOrEmpty
-            } else {
+            }
+            else {
                 $result | Should -Be $expected
             }
         }

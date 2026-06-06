@@ -308,4 +308,35 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match '"selectedType"' -Because "認証タイプの指定が必要"
         }
     }
+
+    Context 'Gemini Warp extension installer は非対話で終了すること' {
+        BeforeAll {
+            $script:geminiWarpWindows = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_install-gemini-warp_windows.ps1.tmpl"
+            $script:geminiWarpLinux = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_install-gemini-warp_linux.sh.tmpl"
+        }
+
+        It 'Windows 版は trust prompt を避けるため --consent を渡すこと' {
+            $content = Get-Content -Path $script:geminiWarpWindows -Raw
+
+            $content | Should -Match '"--consent"' -Because "Gemini CLI の workspace trust prompt で chezmoi apply がハングしないようにする"
+            $content | Should -Match 'extensions", "install"' -Because "Gemini extension install を明示的に実行する"
+        }
+
+        It 'Windows 版は Gemini CLI のハングを timeout で検出すること' {
+            $content = Get-Content -Path $script:geminiWarpWindows -Raw
+
+            $content | Should -Match 'DOTFILES_GEMINI_WARP_TIMEOUT_SECONDS'
+            $content | Should -Match 'Start-Job'
+            $content | Should -Match 'Stop-Job'
+            $content | Should -Match 'timed out after \$timeoutSeconds seconds'
+            $content | Should -Match 'interactive Gemini trust prompt'
+        }
+
+        It 'Gemini Warp extension install scripts はすべて consent 付きで実行すること' {
+            foreach ($path in @($script:geminiWarpWindows, $script:geminiWarpLinux)) {
+                $content = Get-Content -Path $path -Raw
+                $content | Should -Match '--consent' -Because "$path must not prompt during chezmoi apply"
+            }
+        }
+    }
 }

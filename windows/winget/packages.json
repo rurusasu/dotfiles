@@ -53,7 +53,11 @@
           }
         },
         {
-          "PackageIdentifier": "x-motemen.ghq"
+          "PackageIdentifier": "x-motemen.ghq",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ghq"
+          }
         },
         {
           "PackageIdentifier": "Git.Git",
@@ -78,16 +82,30 @@
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
+          "installTimeoutSeconds": 900,
+          "pathEntries": [
+            "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin",
+            "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin",
+            "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
+          ],
           "verifyCommand": {
             "args": ["version"],
             "command": "gcloud"
           }
         },
         {
-          "PackageIdentifier": "jqlang.jq"
+          "PackageIdentifier": "jqlang.jq",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "jq"
+          }
         },
         {
-          "PackageIdentifier": "JesseDuffield.lazygit"
+          "PackageIdentifier": "JesseDuffield.lazygit",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "lazygit"
+          }
         },
         {
           "PackageIdentifier": "Neovim.Neovim",
@@ -107,13 +125,26 @@
           "PackageIdentifier": "Obsidian.Obsidian"
         },
         {
-          "PackageIdentifier": "SST.opencode"
+          "PackageIdentifier": "SST.opencode",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "opencode"
+          }
         },
         {
-          "PackageIdentifier": "oxc-project.oxlint"
+          "PackageIdentifier": "oxc-project.oxlint",
+          "portableLink": {
+            "linkName": "oxlint.exe",
+            "targetPattern": "oxlint-*.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "oxlint"
+          }
         },
         {
           "PackageIdentifier": "Microsoft.PowerShell",
+          "installArgs": ["--installer-type", "wix"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "pwsh"
@@ -144,7 +175,18 @@
           }
         },
         {
-          "PackageIdentifier": "astral-sh.ty"
+          "PackageIdentifier": "tamasfe.taplo",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "taplo"
+          }
+        },
+        {
+          "PackageIdentifier": "astral-sh.ty",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ty"
+          }
         },
         {
           "PackageIdentifier": "astral-sh.uv",
@@ -157,7 +199,12 @@
           "PackageIdentifier": "Warp.Warp"
         },
         {
-          "PackageIdentifier": "wez.wezterm.nightly"
+          "PackageIdentifier": "wez.wezterm.nightly",
+          "pathEntries": ["%ProgramFiles%\\WezTerm"],
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "wezterm"
+          }
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
@@ -182,13 +229,35 @@
           "PackageIdentifier": "GitHub.Copilot"
         },
         {
-          "PackageIdentifier": "dprint.dprint"
+          "PackageIdentifier": "dprint.dprint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "dprint"
+          }
         },
         {
-          "PackageIdentifier": "hadolint.hadolint"
+          "PackageIdentifier": "hadolint.hadolint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "hadolint"
+          }
         },
         {
-          "PackageIdentifier": "ImageMagick.ImageMagick"
+          "PackageIdentifier": "ImageMagick.ImageMagick",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "magick"
+          }
+        },
+        {
+          "PackageIdentifier": "oschwartz10612.Poppler",
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
+          ],
+          "verifyCommand": {
+            "args": ["-v"],
+            "command": "pdftoppm"
+          }
         },
         {
           "PackageIdentifier": "Google.Chrome"
@@ -206,19 +275,37 @@
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
-          "PackageIdentifier": "Microsoft.WSL"
+          "PackageIdentifier": "Microsoft.WSL",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "wsl",
+            "recoveryStrategy": "wingetRepairThenReinstall",
+            "timeoutSeconds": 30
+          }
         },
         {
-          "PackageIdentifier": "OpenAI.Codex"
+          "PackageIdentifier": "OpenAI.Codex",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "codex"
+          }
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"
         },
         {
-          "PackageIdentifier": "Oven-sh.Bun"
+          "PackageIdentifier": "Oven-sh.Bun",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "bun"
+          }
         },
         {
-          "PackageIdentifier": "zig.zig"
+          "PackageIdentifier": "zig.zig",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "zig"
+          }
         }
       ],
       "SourceDetails": {

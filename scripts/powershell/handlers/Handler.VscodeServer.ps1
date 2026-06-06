@@ -55,7 +55,8 @@ class VscodeServerHandler : SetupHandlerBase {
             try {
                 $stableProduct = $this.GetVscodeProductInfo("stable")
                 $insidersProduct = $this.GetVscodeProductInfo("insider")
-            } catch {
+            }
+            catch {
                 $this.LogWarning("VS Code product.json の読み取りに失敗しました: $($_.Exception.Message)")
                 $stableProduct = $null
                 $insidersProduct = $null
@@ -88,7 +89,8 @@ class VscodeServerHandler : SetupHandlerBase {
             # キャッシュ削除
             if (-not $skipClean) {
                 $this.CleanupVscodeServer($distroName, $user)
-            } else {
+            }
+            else {
                 $this.Log("SkipVscodeServerClean が設定されているためキャッシュ削除をスキップします", "Gray")
             }
 
@@ -98,12 +100,14 @@ class VscodeServerHandler : SetupHandlerBase {
                 if (-not $didPreinstall) {
                     $this.LogWarning("VS Code の product.json が見つからないため、事前インストールをスキップします")
                 }
-            } else {
+            }
+            else {
                 $this.Log("SkipVscodeServerPreinstall が設定されているため事前インストールをスキップします", "Gray")
             }
 
             return $this.CreateSuccessResult("VS Code Server の処理を完了しました")
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -118,9 +122,9 @@ class VscodeServerHandler : SetupHandlerBase {
         $safeUser = $this.EscapeForShell($user)
         $userHome = "/home/$safeUser"
         $cleanup = "rm -rf '$userHome/.vscode-server' '$userHome/.vscode-server-insiders' && " +
-            "rm -rf '$userHome/.vscode-remote-containers' '$userHome/.vscode-remote-wsl' && " +
-            "rm -rf /root/.vscode-server /root/.vscode-server-insiders && " +
-            "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
+        "rm -rf '$userHome/.vscode-remote-containers' '$userHome/.vscode-remote-wsl' && " +
+        "rm -rf /root/.vscode-server /root/.vscode-server-insiders && " +
+        "rm -rf /root/.vscode-remote-containers /root/.vscode-remote-wsl"
 
         Invoke-Wsl "-d" $distroName "-u" "root" "--" "sh" "-lc" $cleanup
         $this.Log("VS Code Server キャッシュを削除しました", "Green")
@@ -159,7 +163,8 @@ class VscodeServerHandler : SetupHandlerBase {
     hidden [void] InstallVscodeServer([string]$distroName, [string]$channel, [string]$commit, [string]$user) {
         $serverRoot = if ($channel -eq "insider") {
             "/home/$user/.vscode-server-insiders"
-        } else {
+        }
+        else {
             "/home/$user/.vscode-server"
         }
 
@@ -213,13 +218,15 @@ class VscodeServerHandler : SetupHandlerBase {
     hidden [object] GetVscodeProductInfo([string]$channel) {
         $roots = if ($channel -eq "insider") {
             @((Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code Insiders"))
-        } else {
+        }
+        else {
             @((Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code"))
         }
 
         $pattern = if ($channel -eq "insider") {
             "C:\Users\*\AppData\Local\Programs\Microsoft VS Code Insiders\*\resources\app\product.json"
-        } else {
+        }
+        else {
             "C:\Users\*\AppData\Local\Programs\Microsoft VS Code\*\resources\app\product.json"
         }
 
@@ -230,7 +237,8 @@ class VscodeServerHandler : SetupHandlerBase {
 
         try {
             return Get-JsonContent -Path $productFile.FullName
-        } catch {
+        }
+        catch {
             return $null
         }
     }
@@ -260,7 +268,8 @@ class VscodeServerHandler : SetupHandlerBase {
                 if ($patternFiles) {
                     $candidates += $patternFiles
                 }
-            } catch [System.Management.Automation.ItemNotFoundException] {
+            }
+            catch [System.Management.Automation.ItemNotFoundException] {
                 # グロブパターン展開時のエラーを無視（VS Code 未インストール時など）
                 Write-Verbose "パターン検索でファイルが見つかりません: $pattern"
             }

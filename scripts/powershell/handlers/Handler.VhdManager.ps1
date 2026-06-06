@@ -75,7 +75,8 @@ class VhdManagerHandler : SetupHandlerBase {
             if ($currentVirtualSizeBytes -le 0) {
                 $this.Log("VHDX 仮想サイズを取得できませんでした。拡張を試行します")
                 $currentVirtualSizeGB = "不明"
-            } else {
+            }
+            else {
                 $currentVirtualSizeGB = [math]::Round($currentVirtualSizeBytes / 1GB, 2)
             }
 
@@ -102,7 +103,8 @@ class VhdManagerHandler : SetupHandlerBase {
                 $result = $this.ManageVhdSize($ctx, $vhdxPath, $currentVirtualSizeBytes, $targetBytes, $targetGB)
                 return $result
 
-            } finally {
+            }
+            finally {
                 # Docker Desktop を再起動
                 if ($dockerWasRunning) {
                     $this.Log("Docker Desktop を再起動します")
@@ -112,7 +114,8 @@ class VhdManagerHandler : SetupHandlerBase {
                     }
                 }
             }
-        } catch {
+        }
+        catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
     }
@@ -131,20 +134,23 @@ class VhdManagerHandler : SetupHandlerBase {
             $this.ResizeFilesystem($ctx)
             return $this.CreateSuccessResult("VHD 拡張を試行しました（サイズ不明のため）")
 
-        } elseif ($targetBytes -gt $currentBytes) {
+        }
+        elseif ($targetBytes -gt $currentBytes) {
             # 拡張
             $this.Log("VHDX を拡張します: ${currentGB}GB -> ${targetGB}GB")
             $this.TryExpandVhd($vhdxPath, $targetMB, $targetGB)
             $this.ResizeFilesystem($ctx)
             return $this.CreateSuccessResult("VHD を ${targetGB}GB へ拡張しました")
 
-        } elseif ($targetBytes -lt $currentBytes) {
+        }
+        elseif ($targetBytes -lt $currentBytes) {
             # 縮小
             $this.Log("VHDX を縮小します: ${currentGB}GB -> ${targetGB}GB")
             $this.ShrinkVhd($ctx, $vhdxPath, $targetBytes)
             return $this.CreateSuccessResult("VHD を ${targetGB}GB へ縮小しました")
 
-        } else {
+        }
+        else {
             # 同じサイズ
             $this.Log("VHDX は既にターゲットサイズです", "Gray")
             return $this.CreateSuccessResult("VHD は既にターゲットサイズです")
@@ -164,10 +170,12 @@ exit
         try {
             Invoke-Diskpart -ScriptContent $diskpartScript
             $this.Log("VHDX を ${targetGB}GB へ拡張しました")
-        } catch {
+        }
+        catch {
             if ($_.Exception.Message -match "パラメーター" -or $_.Exception.Message -match "-2147024809") {
                 $this.Log("VHDX は既にターゲットサイズ以上のため、拡張をスキップしました", "Gray")
-            } else {
+            }
+            else {
                 throw
             }
         }
@@ -184,7 +192,8 @@ exit
                 $vhd = Get-VHD -Path $vhdxPath
                 return $vhd.Size
             }
-        } catch {
+        }
+        catch {
             # Get-VHD が失敗した場合は次の方法を試す
             $null = $_.Exception
         }
@@ -192,7 +201,8 @@ exit
         # 方法2: diskpart で detail vdisk を使用
         try {
             return $this.GetVhdxVirtualSizeViaDiskpart($vhdxPath)
-        } catch {
+        }
+        catch {
             return -1
         }
     }
@@ -229,10 +239,12 @@ exit
                     }
                 }
                 return -1
-            } finally {
+            }
+            finally {
                 Remove-Item -Path $outFile -Force -ErrorAction SilentlyContinue
             }
-        } finally {
+        }
+        finally {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
     }
@@ -306,7 +318,8 @@ exit
             $dev = $dev.Trim()
             $this.Log("ファイルシステムを拡張します: $dev")
             Invoke-Wsl -d $distroName -u root -- sh -lc "resize2fs $dev"
-        } else {
+        }
+        else {
             $this.LogWarning("拡張対象のデバイスを特定できませんでした")
         }
     }

@@ -32,7 +32,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
         # NixOS ディストリビューションが存在するか確認
         try {
-            $distros = Invoke-Wsl -Arguments @("-l", "-q")
+            $distros = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @("-l", "-q")
             if ($LASTEXITCODE -ne 0) {
                 $this.LogWarning("WSL が利用できません")
                 return $false
@@ -132,18 +132,18 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
-    hidden [void] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
+    hidden [bool] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
         try {
             if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
                 $this.Log("pnpm パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
-                return
+                return $true
             }
 
             $json = Get-JsonContent -Path $packagesJsonPath
             $packages = $json.globalPackages
             if (-not $packages -or $packages.Count -eq 0) {
                 $this.Log("インストールする pnpm パッケージがありません", "Gray")
-                return
+                return $true
             }
 
             # pnpm が利用可能か確認し、なければ corepack で有効化
@@ -156,49 +156,169 @@ class NixRebuildHandler : SetupHandlerBase {
             )
             $toInstall = @()
             $skipped = 0
+            $verified = 0
             foreach ($pkg in $packages) {
                 $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
                 $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
+                $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
+                $installArgs = @()
+                if ($pkg -isnot [string]) {
+                    if ($pkg -is [System.Collections.IDictionary] -and $pkg.Contains("installArgs")) {
+                        foreach ($arg in @($pkg["installArgs"])) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                    elseif ($pkg.PSObject.Properties.Name -contains "installArgs") {
+                        foreach ($arg in @($pkg.installArgs)) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
+                                $installArgs += [string]$arg
+                            }
+                        }
+                    }
+                }
                 if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
-                    $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                    $skipped++
-                } else {
-                    $toInstall += $pkgSpec
+                    if ($verifyCmd) {
+                        if ($this.TestPnpmPackageVerificationInWsl($distroName, $verifyCmd)) {
+                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $verified++
+                            continue
+                        }
+
+                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                    }
+                    else {
+                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
+                        $skipped++
+                        continue
+                    }
+                }
+
+                $toInstall += [PSCustomObject]@{
+                    Spec          = $pkgSpec
+                    VerifyCommand = $verifyCmd
+                    InstallArgs   = $installArgs
                 }
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.Log("pnpm グローバルパッケージはすべてインストール済みです ($skipped 個スキップ)", "Gray")
-                return
+                $parts = @()
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                $this.Log("pnpm グローバルパッケージはすべてインストール済みで、検証対象も正常です ($($parts -join ', '))", "Gray")
+                return $true
             }
 
             # シェルメタ文字を含むパッケージ名（@scope/pkg 等）を安全に渡すためクォート
-            $quotedPkgs = ($toInstall | ForEach-Object { "'$($_ -replace "'", "'\\''")'" }) -join " "
-            $this.Log("pnpm グローバルパッケージをインストールしています: $($toInstall -join ', ')")
+            $packageSpecs = @($toInstall | ForEach-Object { $_.Spec })
+            $installArgs = @($toInstall | ForEach-Object { @($_.InstallArgs) } | Where-Object { $_ } | Select-Object -Unique)
+            $quotedInstallArgs = ($installArgs | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
+            $quotedPkgs = ($packageSpecs | ForEach-Object { $this.QuoteShellArg($_) }) -join " "
+            $this.Log("pnpm グローバルパッケージをインストールしています: $($packageSpecs -join ', ')")
 
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
-            $pnpmOutput = Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
-                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g $quotedPkgs"
-            )
-            $pnpmExitCode = $LASTEXITCODE
-
-            $pnpmOutput | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    $this.Log("  $_", "Gray")
-                }
-            }
+            $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
+                    "-d", $distroName, "-u", "nixos", "--",
+                    "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
+                ))
 
             if ($pnpmExitCode -ne 0) {
                 $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
+                return $false
             }
             else {
-                $this.Log("pnpm グローバルパッケージのインストール完了 ($($toInstall.Count) 個インストール, $skipped 個スキップ)", "Green")
+                $verifyFailed = 0
+                foreach ($pkg in $toInstall) {
+                    if ($pkg.VerifyCommand -and -not $this.TestPnpmPackageVerificationInWsl($distroName, $pkg.VerifyCommand)) {
+                        $verifyFailed++
+                        $this.LogWarning("✗ $($pkg.Spec) のインストールは成功しましたが検証に失敗しました")
+                    }
+                }
+
+                $parts = @("$($toInstall.Count) 個インストール")
+                if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
+                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
+                $parts += "$skipped 個スキップ"
+                if ($verifyFailed -gt 0) {
+                    $this.LogWarning("pnpm グローバルパッケージの検証に失敗しました ($($parts -join ', '))")
+                    return $false
+                }
+                $this.Log("pnpm グローバルパッケージのインストール完了 ($($parts -join ', '))", "Green")
+                return $true
             }
         }
         catch {
             $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
+            return $false
         }
+    }
+
+    hidden [int] InvokeWslPnpmInstall([string[]]$arguments) {
+        Invoke-Wsl -Arguments $arguments | ForEach-Object {
+            if ($_ -notmatch '^\s*$') {
+                $this.Log("  $_", "Gray")
+            }
+        }
+        return $LASTEXITCODE
+    }
+
+    hidden [bool] TestPnpmPackageVerificationInWsl([string]$distroName, [object]$verifyCmd) {
+        if (-not $verifyCmd) {
+            return $false
+        }
+
+        try {
+            $command = $null
+            $arguments = @()
+            $timeoutSeconds = 30
+            $verifyType = "command"
+            if ($verifyCmd -is [hashtable]) {
+                if (-not $verifyCmd.ContainsKey("command")) { return $false }
+                $command = [string]$verifyCmd["command"]
+                if ($verifyCmd.ContainsKey("args")) { $arguments = @($verifyCmd["args"]) }
+                if ($verifyCmd.ContainsKey("timeoutSeconds")) { $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"] }
+                if ($verifyCmd.ContainsKey("type")) { $verifyType = [string]$verifyCmd["type"] }
+            }
+            else {
+                if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) { return $false }
+                $command = [string]$verifyCmd.command
+                if ($verifyCmd.PSObject.Properties.Name -contains "args") { $arguments = @($verifyCmd.args) }
+                if ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds") { $timeoutSeconds = [int]$verifyCmd.timeoutSeconds }
+                if ($verifyCmd.PSObject.Properties.Name -contains "type") { $verifyType = [string]$verifyCmd.type }
+            }
+            if ($timeoutSeconds -le 0) { $timeoutSeconds = 30 }
+
+            if ($verifyType -eq "commandExists") {
+                $cmdLine = "command -v $($this.QuoteShellArg($command))"
+                $this.Log("検証中: command -v $command", "Gray")
+            }
+            else {
+                $cmdLine = (@($command) + $arguments | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
+                $this.Log("検証中: $command $($arguments -join ' ')", "Gray")
+            }
+
+            Invoke-Wsl -Arguments @(
+                "-d", $distroName, "-u", "nixos", "--",
+                "bash", "-lc", "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`"; timeout ${timeoutSeconds}s $cmdLine"
+            ) | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+            if ($LASTEXITCODE -eq 124) {
+                $this.Log("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')", "Yellow")
+            }
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
+    }
+
+    hidden [string] QuoteShellArg([string]$value) {
+        return "'" + ($value -replace "'", "'\\''") + "'"
     }
 
     hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {
@@ -221,7 +341,8 @@ class NixRebuildHandler : SetupHandlerBase {
                 throw "dotfiles のシンボリックリンク作成に失敗しました"
             }
             $this.Log("dotfiles リンク完了: /home/nixos/.dotfiles -> $wslMountPath", "Green")
-        } else {
+        }
+        else {
             throw "dotfiles が見つかりません。Windows パス '$dotfilesPath' が WSL から '$wslMountPath' としてアクセスできません"
         }
     }
@@ -255,7 +376,8 @@ class NixRebuildHandler : SetupHandlerBase {
                     if ($_ -match '^error:') {
                         $this.LogError("  $_")
                         $errorLines.Add([string]$_)
-                    } else {
+                    }
+                    else {
                         $this.Log("  $_", "Gray")
                     }
                 }
@@ -270,7 +392,9 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # pnpm グローバルパッケージをインストール（SSOT: all.nix → windows/pnpm/packages.json）
             $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
-            $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)
+            if (-not $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)) {
+                throw "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
+            }
 
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)
