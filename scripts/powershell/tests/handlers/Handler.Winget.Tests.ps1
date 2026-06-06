@@ -1,8 +1,16 @@
-BeforeAll {
+﻿BeforeAll {
     Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Winget.ps1
+
+    if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+        function global:Get-AppxPackage {
+            param([string]$Name)
+            $null = $Name
+            return $null
+        }
+    }
 }
 
 Describe 'WingetHandler' {
@@ -402,6 +410,90 @@ Describe 'WingetHandler' {
             $handler.Apply($ctx)
             $script:capturedArgs | Should -Contain "--source"
             $script:capturedArgs | Should -Contain "msstore"
+        }
+    }
+
+    Context 'Apply - import mode: Codex Desktop msstore package' {
+        BeforeEach {
+            $script:codexInstallLocation = Join-Path $TestDrive "CodexDesktop"
+            New-Item -ItemType Directory -Path $script:codexInstallLocation -Force | Out-Null
+            @'
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+  <Applications>
+    <Application Id="App" Executable="app\Codex.exe" EntryPoint="Windows.FullTrustApplication" />
+  </Applications>
+</Package>
+'@ | Set-Content -LiteralPath (Join-Path $script:codexInstallLocation "AppxManifest.xml") -Encoding utf8
+
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "msstore" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "9PLM9XGG6VKS"
+                                    verifyCommand     = [PSCustomObject]@{
+                                        type    = "appxLaunchTarget"
+                                        command = "OpenAI.Codex"
+                                        args    = @("OpenAI.Codex_2p2nqsd0c76g0!App")
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Get-Command { return [PSCustomObject]@{ Name = "Get-AppxPackage" } } -ParameterFilter {
+                $Name -eq "Get-AppxPackage"
+            }
+            $script:getAppxPackageCalls = 0
+            Mock Get-AppxPackage {
+                param($Name)
+                if ($Name -ne "OpenAI.Codex") {
+                    return $null
+                }
+                $script:getAppxPackageCalls++
+                if ($script:getAppxPackageCalls -eq 1) {
+                    return $null
+                }
+
+                return [PSCustomObject]@{
+                    Name              = "OpenAI.Codex"
+                    PackageFamilyName = "OpenAI.Codex_2p2nqsd0c76g0"
+                    InstallLocation   = $script:codexInstallLocation
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $script:capturedArgs = $Arguments
+                    $global:LASTEXITCODE = 0
+                    return "Installed Codex Desktop"
+                }
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should install Codex Desktop from msstore and verify its AppX launch target' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            $script:capturedArgs | Should -Contain "--id"
+            $script:capturedArgs | Should -Contain "9PLM9XGG6VKS"
+            $script:capturedArgs | Should -Contain "--source"
+            $script:capturedArgs | Should -Contain "msstore"
+            $script:getAppxPackageCalls | Should -Be 2
+            Should -Invoke Get-AppxPackage -Times 2 -ParameterFilter {
+                $Name -eq "OpenAI.Codex"
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -62,6 +62,31 @@ Describe 'Package catalog consistency' {
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin'
             $package.verifyCommand.command | Should -Be 'gcloud'
             @($package.verifyCommand.args) | Should -Contain 'version'
+        }
+    }
+
+    Context 'Codex Desktop Microsoft Store package' {
+        It 'should include Codex Desktop as a Windows-only Microsoft Store package in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?msstore\s*=\s*\[.*?"9PLM9XGG6VKS".*?\]'
+        }
+
+        It 'should define Codex Desktop AppX launch target verification in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)msstoreVerifyById\s*=\s*\{.*?"9PLM9XGG6VKS"\s*=\s*\{.*?type\s*=\s*"appxLaunchTarget".*?command\s*=\s*"OpenAI\.Codex".*?args\s*=\s*\[\s*"OpenAI\.Codex_2p2nqsd0c76g0!App"\s*\]'
+        }
+
+        It 'should generate Codex Desktop under the msstore source with launch target verification' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $msstoreSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
+            $package = @($msstoreSource.Packages | Where-Object { $_.PackageIdentifier -eq '9PLM9XGG6VKS' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.type | Should -Be 'appxLaunchTarget'
+            $package.verifyCommand.command | Should -Be 'OpenAI.Codex'
+            @($package.verifyCommand.args) | Should -Contain 'OpenAI.Codex_2p2nqsd0c76g0!App'
         }
     }
 }

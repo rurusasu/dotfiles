@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     winget パッケージ管理ハンドラー
 
@@ -622,6 +622,10 @@ class WingetHandler : SetupHandlerBase {
                 return $null -ne $appxPackage
             }
 
+            if ($type -eq "appxLaunchTarget") {
+                return $this.TestAppxLaunchTarget($command, $arguments)
+            }
+
             $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
             $output = @(Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
             if ($LASTEXITCODE -eq 0) {
@@ -639,6 +643,65 @@ class WingetHandler : SetupHandlerBase {
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
+    }
+
+    hidden [bool] TestAppxLaunchTarget([string]$packageName, [object[]]$arguments) {
+        if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+            $this.Log("検証コマンド実行エラー: Get-AppxPackage が利用できません", "Yellow")
+            return $false
+        }
+
+        if ($arguments.Count -lt 1 -or [string]::IsNullOrWhiteSpace([string]$arguments[0])) {
+            $this.LogWarning("appxLaunchTarget 検証には AppUserModelID を args[0] に指定してください")
+            return $false
+        }
+
+        $appUserModelId = [string]$arguments[0]
+        $appxPackage = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $appxPackage) {
+            return $false
+        }
+
+        $packageFamilyName = [string]$appxPackage.PackageFamilyName
+        if ([string]::IsNullOrWhiteSpace($packageFamilyName)) {
+            $this.LogWarning("AppX PackageFamilyName が取得できません: $packageName")
+            return $false
+        }
+
+        $expectedPrefix = "$packageFamilyName!"
+        if (-not $appUserModelId.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $this.LogWarning("AppUserModelID が PackageFamilyName と一致しません: $appUserModelId")
+            return $false
+        }
+
+        $applicationId = $appUserModelId.Substring($expectedPrefix.Length)
+        if ([string]::IsNullOrWhiteSpace($applicationId)) {
+            $this.LogWarning("AppUserModelID に Application ID が含まれていません: $appUserModelId")
+            return $false
+        }
+
+        $installLocation = [string]$appxPackage.InstallLocation
+        if ([string]::IsNullOrWhiteSpace($installLocation)) {
+            $this.LogWarning("AppX InstallLocation が取得できません: $packageName")
+            return $false
+        }
+
+        $manifestPath = Join-Path $installLocation "AppxManifest.xml"
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            $this.LogWarning("AppX manifest が見つかりません: $manifestPath")
+            return $false
+        }
+
+        try {
+            [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
+            $match = Select-Xml -Xml $manifest -XPath "//*[local-name()='Application' and @Id='$applicationId']" |
+                Select-Object -First 1
+            return $null -ne $match
+        }
+        catch {
+            $this.LogWarning("AppX manifest の読み込みに失敗しました: $($_.Exception.Message)")
             return $false
         }
     }
