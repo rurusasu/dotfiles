@@ -145,9 +145,9 @@ apps = false
 ################################################################################
 
 [tui.keymap.editor]
-# Claude Code と同じ Shift+Enter でプロンプト内改行する。
-# Windows Terminal の sendInput "\n" は Ctrl+J として届くため併用する。
-insert_newline = [ "shift-enter", "ctrl-j" ]
+# ユーザー操作は Shift+Enter に統一する。
+# Windows Terminal の Ctrl+Enter fallback と、LF を送る terminal の Ctrl+J 互換も受ける。
+insert_newline = [ "shift-enter", "ctrl-enter", "ctrl-j" ]
 
 ################################################################################
 # ツール

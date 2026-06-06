@@ -59,8 +59,12 @@
       "id": "User.moveFocus.left"
     },
     {
-      "command": { "action": "sendInput", "input": "\n" },
-      "id": "User.sendInput.DFCDAF06"
+      "command": { "action": "sendInput", "input": "\u001b[13;2u" },
+      "id": "User.sendInput.ShiftEnter"
+    },
+    {
+      "command": { "action": "sendInput", "input": "\u001b[13;5u" },
+      "id": "User.sendInput.CtrlEnter"
     },
     {
       "command": { "action": "newTab" },
@@ -104,7 +108,8 @@
     { "id": "User.prevTab", "keys": "ctrl+shift+tab" },
     { "id": "User.copy", "keys": "ctrl+c" },
     { "id": null, "keys": "alt+z" },
-    { "id": "User.sendInput.DFCDAF06", "keys": "shift+enter" },
+    { "id": "User.sendInput.ShiftEnter", "keys": "shift+enter" },
+    { "id": "User.sendInput.CtrlEnter", "keys": "ctrl+enter" },
     { "id": null, "keys": "ctrl+plus" },
     { "id": null, "keys": "ctrl+minus" },
     { "id": null, "keys": "ctrl+0" },
