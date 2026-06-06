@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.admin.ps1"
@@ -39,6 +39,13 @@ Describe 'install.admin.ps1' {
     It 'should filter handlers by Phase 2' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\$_\.Phase -eq 2'
+    }
+
+    It 'should repair Windows environment variables before computing default paths' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'WindowsEnvironment\.ps1'
+        $content | Should -Match 'Repair-WindowsSetupEnvironment'
+        $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
     }
 
     It 'should print preflight handler names before Phase 2 apply checks' {

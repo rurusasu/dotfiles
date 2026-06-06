@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -456,7 +456,7 @@ Describe 'DockerHandler' {
             Mock Copy-FileSafe { }
         }
 
-        It 'should succeed and start Docker Desktop when NixOS is not registered' {
+        It 'should succeed and defer Docker Desktop when NixOS is not registered' {
             $script:startCalled = $false
             Mock Start-ProcessSafe { $script:startCalled = $true }
             Mock Invoke-Wsl {
@@ -472,8 +472,8 @@ Describe 'DockerHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "Docker Desktop"
-            $script:startCalled | Should -Be $true
+            $result.Message | Should -Match "延期"
+            $script:startCalled | Should -Be $false
         }
 
         It 'should not run WSL write check when NixOS is not registered' {
@@ -575,6 +575,25 @@ Describe 'DockerHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Match "連携を確認しました"
+        }
+
+        It 'should defer Docker Desktop startup when NixOS is not registered yet' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "-l -q") {
+                    return @("docker-desktop", "docker-desktop-data")
+                }
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "延期"
+            Should -Invoke Stop-ProcessSafe -Times 0 -Exactly
+            Should -Invoke Start-ProcessSafe -Times 0 -Exactly
+            Should -Invoke Copy-FileSafe -Times 0 -Exactly
         }
 
         It 'should create Docker Desktop distribution when it does not exist' {
@@ -1362,6 +1381,25 @@ Describe 'DockerHandler' {
 
             $script:sleepCalledWith30 | Should -Be $false
         }
+
+        It 'should not stop build helper while Docker Desktop backend is running' {
+            Mock Get-ProcessSafe {
+                param($Name)
+                if ($Name -eq "com.docker.backend") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                if ($Name -eq "com.docker.build") {
+                    return [PSCustomObject]@{ Name = $Name }
+                }
+                return $null
+            }
+            Mock Stop-Process { }
+
+            $result = $handler.StopLingeringDockerProcesses()
+
+            $result | Should -Be $false
+            Should -Invoke Stop-Process -Times 0 -Exactly
+        }
     }
 
     Context 'TestDockerDesktopProxy - failure path' {
@@ -1486,7 +1524,7 @@ Describe 'DockerHandler' {
                     return ""
                 }
                 if ($argStr -match "-l -q") {
-                    return @("docker-desktop", "docker-desktop-data")
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
                 }
                 $global:LASTEXITCODE = 0
                 return ""
@@ -1510,7 +1548,7 @@ Describe 'DockerHandler' {
                     $script:copyCalled = $true
                 }
                 if ($argStr -match "-l -q") {
-                    return @("docker-desktop", "docker-desktop-data")
+                    return @("docker-desktop", "docker-desktop-data", "NixOS")
                 }
                 $global:LASTEXITCODE = 0
                 return ""

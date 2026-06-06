@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Docker Desktop と WSL の連携を管理するハンドラー
 
@@ -120,6 +120,10 @@ class DockerHandler : SetupHandlerBase {
             # StopLingeringDockerProcesses の後では WSL が一時的に不安定になり
             # wsl -l -q が空を返してディストリビューションを見逃すことがある。
             $nixosRegistered = $this.TestWslDistroExists($distroName)
+            if (-not $nixosRegistered) {
+                $this.Log("$distroName が WSL に登録されていません。Docker Desktop の起動を初回 NixOS セットアップ後まで延期します", "Gray")
+                return $this.CreateSuccessResult("NixOS 未登録のため Docker Desktop 連携を延期しました")
+            }
 
             # 残留プロセスをクリーンアップ（Lingering processes対策）
             $hadLingering = $this.StopLingeringDockerProcesses()
@@ -132,33 +136,28 @@ class DockerHandler : SetupHandlerBase {
                 Start-SleepSafe -Seconds 30
             }
 
-            if ($nixosRegistered) {
-                # NixOS への操作は Docker Desktop 起動より先に行う。
-                # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
-                # その後に書き込みチェックをすると NixOS 再起動待ちになるため。
-                if (-not $this.WaitForWslWritable($distroName)) {
-                    $this.LogWarning("WSL が書き込み不可のため、NixOS 連携をスキップします")
-                    $this.StartDockerDesktopIfNeeded()
-                    $this.EnsureDockerDesktopDistros()
-                    $this.StartDockerDesktopIfNeeded()
-                    return $this.CreateSuccessResult("WSL が書き込み不可のため NixOS 連携をスキップしました")
-                }
-
-                # 空き容量チェック
-                if (-not $this.TestWslFreeSpace($distroName)) {
-                    $this.LogWarning("WSL の空き容量が不足しているため、NixOS 連携をスキップします")
-                    $this.StartDockerDesktopIfNeeded()
-                    $this.EnsureDockerDesktopDistros()
-                    $this.StartDockerDesktopIfNeeded()
-                    return $this.CreateSuccessResult("WSL の空き容量不足のため NixOS 連携をスキップしました")
-                }
-
-                # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
-                $this.EnsureDockerGroup($distroName)
+            # NixOS への操作は Docker Desktop 起動より先に行う。
+            # Docker Desktop の初期化が wsl --shutdown を呼ぶ場合があり、
+            # その後に書き込みチェックをすると NixOS 再起動待ちになるため。
+            if (-not $this.WaitForWslWritable($distroName)) {
+                $this.LogWarning("WSL が書き込み不可のため、NixOS 連携をスキップします")
+                $this.StartDockerDesktopIfNeeded()
+                $this.EnsureDockerDesktopDistros()
+                $this.StartDockerDesktopIfNeeded()
+                return $this.CreateSuccessResult("WSL が書き込み不可のため NixOS 連携をスキップしました")
             }
-            else {
-                $this.Log("$distroName が WSL に登録されていません。NixOS 連携をスキップします", "Gray")
+
+            # 空き容量チェック
+            if (-not $this.TestWslFreeSpace($distroName)) {
+                $this.LogWarning("WSL の空き容量が不足しているため、NixOS 連携をスキップします")
+                $this.StartDockerDesktopIfNeeded()
+                $this.EnsureDockerDesktopDistros()
+                $this.StartDockerDesktopIfNeeded()
+                return $this.CreateSuccessResult("WSL の空き容量不足のため NixOS 連携をスキップしました")
             }
+
+            # docker グループにユーザーを追加（NixOS が起動している今のうちに実施）
+            $this.EnsureDockerGroup($distroName)
 
             # NixOS の有無に関わらず Docker Desktop を起動する
             $this.StartDockerDesktopIfNeeded()
@@ -168,10 +167,6 @@ class DockerHandler : SetupHandlerBase {
 
             # Docker Desktop を起動（必要に応じて）
             $this.StartDockerDesktopIfNeeded()
-
-            if (-not $nixosRegistered) {
-                return $this.CreateSuccessResult("Docker Desktop を起動しました（NixOS 連携なし）")
-            }
 
             # Docker Desktop の健全性チェック
             if (-not $this.TestDockerDesktopHealth()) {
@@ -496,6 +491,10 @@ class DockerHandler : SetupHandlerBase {
         Docker Desktop本体も終了させて完全にリセットする。
     #>
     hidden [bool] StopLingeringDockerProcesses() {
+        if ((Get-ProcessSafe -Name "Docker Desktop") -or (Get-ProcessSafe -Name "com.docker.backend")) {
+            return $false
+        }
+
         # 残留プロセス（Docker Desktop本体なしで動いているプロセス）をチェック
         $lingeringProcessNames = @(
             "com.docker.build",

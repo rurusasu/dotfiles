@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.ps1"
@@ -52,6 +52,13 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\[switch\]\$UserPhaseOnly'
         $content | Should -Match '\[switch\]\$WingetVerifyCommandOnly'
         $content | Should -Match 'WingetVerifyCommandOnly'
+    }
+
+    It 'should repair Windows environment variables before computing default paths' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match 'WindowsEnvironment\.ps1'
+        $content | Should -Match 'Repair-WindowsSetupEnvironment'
+        $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
     }
 
     It 'install.cmd should prepend the PowerShell 7 MSI directory before resolving pwsh' {

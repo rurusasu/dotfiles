@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     User-scope setup phase (no elevation).
 
@@ -26,8 +26,15 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
 
-$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 $libPath = Join-Path $PSScriptRoot "lib"
+. (Join-Path $libPath "WindowsEnvironment.ps1")
+Repair-WindowsSetupEnvironment
+
+if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
+    $InstallDir = Join-Path $env:USERPROFILE "NixOS"
+}
+
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 
