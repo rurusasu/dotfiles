@@ -201,11 +201,6 @@ class WingetHandler : SetupHandlerBase {
                         $verified++
                         continue
                     }
-                    if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
-                        $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
-                        $deferred++
-                        continue
-                    }
                 }
 
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
