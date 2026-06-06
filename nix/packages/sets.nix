@@ -9,6 +9,7 @@
 #   - pnpmVerify         → package name → { command, args } for post-install verification
 #   - pnpmInstallArgs    → package name → extra pnpm add -g arguments
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
+#   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
 #   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
@@ -676,6 +677,16 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
   };
 
+  # Post-install verification commands for Windows-only Microsoft Store packages.
+  # Keys match Microsoft Store Product ID values because these packages have no catalog attr.
+  msstoreVerifyById = {
+    "9PLM9XGG6VKS" = {
+      type = "appxLaunchTarget";
+      command = "OpenAI.Codex";
+      args = [ "OpenAI.Codex_2p2nqsd0c76g0!App" ];
+    };
+  };
+
   # Windows-only packages (no nix equivalent)
   windowsOnly = {
     winget = [
@@ -699,6 +710,7 @@ lib.mapAttrs (_: names: resolve names) grouped
     ];
     msstore = [
       "9NT1R1C2HH7J"
+      "9PLM9XGG6VKS"
     ];
     pnpm = [
       "@google/gemini-cli"

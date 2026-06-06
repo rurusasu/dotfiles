@@ -91,7 +91,9 @@ let
 
   wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
-  msstorePackages = map (id: { PackageIdentifier = id; }) sets.windowsOnly.msstore;
+  msstorePackages = map (
+    id: attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+  ) sets.windowsOnly.msstore;
 
   # --- pnpm ---
   pnpmFromGlobal = map (
