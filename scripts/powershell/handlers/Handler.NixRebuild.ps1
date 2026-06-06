@@ -331,9 +331,16 @@ class NixRebuildHandler : SetupHandlerBase {
         $driveLetter = $dotfilesPath.Substring(0, 1).ToLower()
         $wslMountPath = '/mnt/' + $driveLetter + ($dotfilesPath.Substring(2) -replace '\\', '/')
 
-        # /home/nixos/.dotfiles が存在するか確認
-        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "test -e /home/nixos/.dotfiles") | Out-Null
-        if ($LASTEXITCODE -eq 0) {
+        $dotfilesLinkPath = "/home/nixos/.dotfiles"
+        $existingTarget = Invoke-Wsl -Arguments @(
+            "-d", $distroName, "-u", "nixos", "--",
+            "bash", "-lc", "if [ -L $dotfilesLinkPath ]; then readlink -f $dotfilesLinkPath 2>/dev/null; elif [ -e $dotfilesLinkPath ]; then printf '__non_symlink__'; fi"
+        )
+        $existingTargetText = if ($existingTarget) { ([string]($existingTarget | Select-Object -First 1)).Trim() } else { "" }
+        if ($existingTargetText -eq $wslMountPath) {
+            return
+        }
+        if ($existingTargetText -eq "__non_symlink__") {
             return
         }
 
@@ -341,11 +348,11 @@ class NixRebuildHandler : SetupHandlerBase {
         Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "test -d `"$wslMountPath`"") | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("dotfiles を WSL マウント経由でリンクします: $wslMountPath")
-            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "ln -sf `"$wslMountPath`" /home/nixos/.dotfiles")
+            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "ln -sfn `"$wslMountPath`" $dotfilesLinkPath")
             if ($LASTEXITCODE -ne 0) {
                 throw "dotfiles のシンボリックリンク作成に失敗しました"
             }
-            $this.Log("dotfiles リンク完了: /home/nixos/.dotfiles -> $wslMountPath", "Green")
+            $this.Log("dotfiles リンク完了: $dotfilesLinkPath -> $wslMountPath", "Green")
         }
         else {
             throw "dotfiles が見つかりません。Windows パス '$dotfilesPath' が WSL から '$wslMountPath' としてアクセスできません"
