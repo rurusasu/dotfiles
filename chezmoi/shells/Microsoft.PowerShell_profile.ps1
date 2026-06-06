@@ -167,7 +167,7 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
 
 # devcontainer: enter the project's devcontainer in a tmux session
 # and start nvim inside it. Terminal-agnostic mirror of the zsh/bash
-# `dcnvim` defined in nix/home/common.nix.
+# POSIX `dcnvim` defined in scripts/sh/dcnvim.sh.
 # Re-running attaches to the existing tmux session so nvim state
 # survives terminal close.
 #
@@ -231,7 +231,7 @@ function dcnvim {
 
     # Resolve session name. ghq slug basename if under ghq root, else
     # workspace basename. Mirrors _dcnvim_session_name in
-    # nix/home/dcnvim-session-name.sh.
+    # scripts/sh/dcnvim.sh.
     $sessionName = $null
     if (Get-Command ghq -ErrorAction SilentlyContinue) {
         $ghqRoot = (& ghq root 2>$null | Select-Object -First 1)

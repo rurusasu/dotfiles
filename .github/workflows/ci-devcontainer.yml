@@ -152,7 +152,9 @@ jobs:
       - name: Validate devcontainer config
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           devcontainer read-configuration `
             --config .devcontainer/ci/devcontainer.json `
             --workspace-folder . | ConvertFrom-Json | Out-Null
           Write-Host "OK  devcontainer config is valid"
+          exit 0
