@@ -28,6 +28,7 @@ class DockerHandler : SetupHandlerBase {
     # NixOS-WSL (systemd) は wsl --terminate 後の再起動に 20-120 秒かかるため
     # デフォルト 15 回 (最大待機: 3+6+9+...+42 = 315 秒)
     [int]$WslWritableMaxAttempts = 15
+    [int]$DockerEngineCheckTimeoutSeconds = 15
 
     DockerHandler() {
         $this.Name = "Docker"
@@ -49,6 +50,7 @@ class DockerHandler : SetupHandlerBase {
         $this.Retries = $ctx.GetOption("DockerIntegrationRetries", 5)
         $this.RetryDelaySeconds = $ctx.GetOption("DockerIntegrationRetryDelaySeconds", 5)
         $this.WslWritableMaxAttempts = $ctx.GetOption("WslWritableMaxAttempts", 15)
+        $this.DockerEngineCheckTimeoutSeconds = $ctx.GetOption("DockerEngineCheckTimeoutSeconds", 15)
 
         if ($this.Retries -le 0) {
             $this.Log("リトライ回数が 0 のためスキップします", "Gray")
@@ -355,6 +357,9 @@ class DockerHandler : SetupHandlerBase {
         }
 
         if ($running) {
+            # 起動済みでも Docker Desktop が共有 proxy を 0 バイトで残すことがある。
+            # その状態では install.cmd が再実行されても起動処理に入らないため、ここでも修復する。
+            $this.RepairWslProxyBinary()
             return
         }
 
@@ -680,6 +685,14 @@ class DockerHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
+        Docker Engine が実際に応答しているか確認する
+    #>
+    hidden [bool] TestDockerEngineReady() {
+        return Test-DockerDaemon -TimeoutSeconds $this.DockerEngineCheckTimeoutSeconds
+    }
+
+    <#
+    .SYNOPSIS
         Docker Desktop 連携をリトライする
     #>
     hidden [bool] RetryDockerIntegration([string]$distroName) {
@@ -696,9 +709,13 @@ class DockerHandler : SetupHandlerBase {
             Start-SleepSafe -Seconds $this.RetryDelaySeconds
             $this.SetupDockerBindMounts()
 
-            if ($this.TestDockerDesktopProxy($distroName)) {
+            $engineReady = $this.TestDockerEngineReady()
+            if ($engineReady -and $this.TestDockerDesktopProxy($distroName)) {
                 $this.Log("Docker Desktop 連携の確認に成功しました", "Green")
                 return $true
+            }
+            if (-not $engineReady) {
+                $this.LogWarning("Docker Engine が応答しません")
             }
 
             if (-not $restarted) {

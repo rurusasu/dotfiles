@@ -91,9 +91,11 @@ let
 
   wingetFromWindowsOnly = map (
     id:
-    attachPathEntries sets.wingetPathEntries id (
-      attachPortableLink sets.wingetPortableLinksById id (
-        attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+    attachCiSkipInstall sets.wingetCiSkipInstall id (
+      attachPathEntries sets.wingetPathEntries id (
+        attachPortableLink sets.wingetPortableLinksById id (
+          attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+        )
       )
     )
   ) sets.windowsOnly.winget;
@@ -101,7 +103,10 @@ let
   wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
   msstorePackages = map (
-    id: attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+    id:
+    attachCiSkipInstall sets.wingetCiSkipInstall id (
+      attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+    )
   ) sets.windowsOnly.msstore;
 
   # --- pnpm ---

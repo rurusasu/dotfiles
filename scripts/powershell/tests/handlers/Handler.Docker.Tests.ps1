@@ -19,6 +19,7 @@ Describe 'DockerHandler' {
     BeforeEach {
         $script:handler = [DockerHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+        Mock Test-DockerDaemon { return $true }
     }
 
     Context 'Constructor' {
@@ -30,6 +31,7 @@ Describe 'DockerHandler' {
             @{ property = "Retries"; expected = 5 }
             @{ property = "RetryDelaySeconds"; expected = 5 }
             @{ property = "WslWritableMaxAttempts"; expected = 15 }
+            @{ property = "DockerEngineCheckTimeoutSeconds"; expected = 15 }
         ) {
             $handler.$property | Should -Be $expected
         }
@@ -117,6 +119,14 @@ Describe 'DockerHandler' {
             $handler.CanApply($ctx)
 
             $handler.WslWritableMaxAttempts | Should -Be 12
+        }
+
+        It 'should read DockerEngineCheckTimeoutSeconds from Options' {
+            $ctx.Options["DockerEngineCheckTimeoutSeconds"] = 7
+
+            $handler.CanApply($ctx)
+
+            $handler.DockerEngineCheckTimeoutSeconds | Should -Be 7
         }
 
         It 'should default WslWritableMaxAttempts to 15' {
@@ -1494,6 +1504,29 @@ Describe 'DockerHandler' {
             # タイムアウトは成功扱い
             $result.Success | Should -Be $true
         }
+
+        It 'should fail when Docker Engine does not respond even if proxy times out' {
+            Mock Test-DockerDaemon { return $false }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "wsl-write-test") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "df -Pk") { return "50000" }
+                if ($argStr -match "-l -q") { return @("docker-desktop", "docker-desktop-data", "NixOS") }
+                if ($argStr -match "componentsVersion") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "\[ -x.*docker-desktop-user-distro") { $global:LASTEXITCODE = 0 }
+                if ($argStr -match "proxy --distro-name") { $global:LASTEXITCODE = 124 }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+            $handler.Retries = 1
+            $handler.RetryDelaySeconds = 0
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke Test-DockerDaemon -Times 1
+        }
     }
 
     Context 'RepairWslProxyBinary' {
@@ -1557,6 +1590,39 @@ Describe 'DockerHandler' {
             $handler.Apply($ctx)
 
             $script:copyCalled | Should -Be $false
+        }
+
+        It 'should repair 0-byte proxy binary when Docker Desktop is already running' {
+            $script:copyCalled = $false
+            Mock Get-ProcessSafe {
+                param($Name)
+                if ($Name -eq "Docker Desktop") { return [PSCustomObject]@{ Name = $Name } }
+                return $null
+            }
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "stat -c") {
+                    $global:LASTEXITCODE = 0
+                    return "0"
+                }
+                if ($argStr -match "cp /docker-desktop-user-distro") {
+                    $script:copyCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                if ($argStr -match "chmod") {
+                    $global:LASTEXITCODE = 0
+                    return ""
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.StartDockerDesktopIfNeeded()
+
+            $script:copyCalled | Should -Be $true
+            Should -Invoke Start-ProcessSafe -Times 0
         }
 
         It 'should skip repair when docker-desktop distro is not available' {

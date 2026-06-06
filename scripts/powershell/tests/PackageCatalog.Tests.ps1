@@ -78,12 +78,19 @@ Describe 'Package catalog consistency' {
             $sets | Should -Match '(?s)msstoreVerifyById\s*=\s*\{.*?"9PLM9XGG6VKS"\s*=\s*\{.*?type\s*=\s*"appxLaunchTarget".*?command\s*=\s*"OpenAI\.Codex".*?args\s*=\s*\[\s*"OpenAI\.Codex_2p2nqsd0c76g0!App"\s*\]'
         }
 
+        It 'should skip Codex Desktop live Store install in the CI smoke test' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"9PLM9XGG6VKS"\s*=\s*true;'
+        }
+
         It 'should generate Codex Desktop under the msstore source with launch target verification' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $msstoreSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
             $package = @($msstoreSource.Packages | Where-Object { $_.PackageIdentifier -eq '9PLM9XGG6VKS' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
+            $package.ciSkipInstall | Should -BeTrue
             $package.verifyCommand.type | Should -Be 'appxLaunchTarget'
             $package.verifyCommand.command | Should -Be 'OpenAI.Codex'
             @($package.verifyCommand.args) | Should -Contain 'OpenAI.Codex_2p2nqsd0c76g0!App'

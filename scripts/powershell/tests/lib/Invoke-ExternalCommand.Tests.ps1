@@ -646,23 +646,74 @@ Describe 'Start-SleepSafe' {
 }
 
 Describe 'Test-DockerDaemon' {
-    It 'should return true when docker info succeeds' {
+    It 'should return true when docker version succeeds' {
         Mock Invoke-Docker { $global:LASTEXITCODE = 0 }
 
         $result = Test-DockerDaemon
 
         $result | Should -Be $true
         Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
-            "$Arguments" -match 'info'
+            $Arguments -contains "--context" -and
+            $Arguments -contains "desktop-linux" -and
+            "$Arguments" -match 'version' -and
+            $TimeoutSeconds -eq 15
         }
     }
 
-    It 'should return false when docker info fails' {
+    It 'should return false when docker version fails' {
         Mock Invoke-Docker { $global:LASTEXITCODE = 1 }
 
         $result = Test-DockerDaemon
 
         $result | Should -Be $false
+    }
+
+    It 'should pass custom timeout to docker version' {
+        Mock Invoke-Docker { $global:LASTEXITCODE = 0 }
+
+        Test-DockerDaemon -TimeoutSeconds 3
+
+        Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
+            $TimeoutSeconds -eq 3
+        }
+    }
+
+    It 'should ignore ambient Docker context environment variables during the Desktop check' {
+        $originalDockerHost = $env:DOCKER_HOST
+        $originalDockerContext = $env:DOCKER_CONTEXT
+        try {
+            $env:DOCKER_HOST = "tcp://example.invalid:2375"
+            $env:DOCKER_CONTEXT = "remote"
+            $script:dockerHostDuringCheck = $null
+            $script:dockerContextDuringCheck = $null
+            Mock Invoke-Docker {
+                $script:dockerHostDuringCheck = $env:DOCKER_HOST
+                $script:dockerContextDuringCheck = $env:DOCKER_CONTEXT
+                $global:LASTEXITCODE = 0
+            }
+
+            Test-DockerDaemon | Should -Be $true
+
+            $script:dockerHostDuringCheck | Should -BeNullOrEmpty
+            $script:dockerContextDuringCheck | Should -BeNullOrEmpty
+            $env:DOCKER_HOST | Should -Be "tcp://example.invalid:2375"
+            $env:DOCKER_CONTEXT | Should -Be "remote"
+        }
+        finally {
+            if ($null -eq $originalDockerHost) {
+                Remove-Item Env:\DOCKER_HOST -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOCKER_HOST = $originalDockerHost
+            }
+
+            if ($null -eq $originalDockerContext) {
+                Remove-Item Env:\DOCKER_CONTEXT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOCKER_CONTEXT = $originalDockerContext
+            }
+        }
     }
 }
 

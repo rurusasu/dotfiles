@@ -691,8 +691,12 @@ function Invoke-Docker {
     [CmdletBinding()]
     param(
         [Parameter(ValueFromRemainingArguments)]
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 0
     )
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout -Command "docker" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+    }
     & docker @Arguments
 }
 
@@ -700,16 +704,41 @@ function Invoke-Docker {
 .SYNOPSIS
     Docker デーモンへの接続性を確認する
 .DESCRIPTION
-    docker info を実行してデーモンが応答するかチェックする。
+    Docker Desktop の Linux engine が応答するかチェックする。
     Pester でモック可能にするためラッパーとして提供。
 .OUTPUTS
     [bool] デーモン接続可能なら $true
 #>
 function Test-DockerDaemon {
     [CmdletBinding()]
-    param()
-    Invoke-Docker -Arguments @("info") | Out-Null
-    return $LASTEXITCODE -eq 0
+    param(
+        [int]$TimeoutSeconds = 15
+    )
+
+    $originalDockerHost = $env:DOCKER_HOST
+    $originalDockerContext = $env:DOCKER_CONTEXT
+    try {
+        Remove-Item Env:\DOCKER_HOST -ErrorAction SilentlyContinue
+        Remove-Item Env:\DOCKER_CONTEXT -ErrorAction SilentlyContinue
+
+        Invoke-Docker -Arguments @("--context", "desktop-linux", "version", "--format", "{{.Server.Version}}") -TimeoutSeconds $TimeoutSeconds | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+    finally {
+        if ($null -eq $originalDockerHost) {
+            Remove-Item Env:\DOCKER_HOST -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOCKER_HOST = $originalDockerHost
+        }
+
+        if ($null -eq $originalDockerContext) {
+            Remove-Item Env:\DOCKER_CONTEXT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOCKER_CONTEXT = $originalDockerContext
+        }
+    }
 }
 
 <#
