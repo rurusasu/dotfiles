@@ -10,6 +10,7 @@
 #   - pnpmInstallArgs    → package name → extra pnpm add -g arguments
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
+#   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
 #
@@ -614,9 +615,16 @@ lib.mapAttrs (_: names: resolve names) grouped
     ];
   };
 
+  wingetInstallTimeoutSeconds = {
+    google-cloud-sdk = 900;
+  };
+
   # Extra PATH directories for installers that do not register CLI commands on PATH.
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
+    google-cloud-sdk = [
+      "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
+    ];
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];

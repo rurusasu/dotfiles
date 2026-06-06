@@ -138,6 +138,10 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "installArgs") {
                                     $installArgs = @($pkg.installArgs)
                                 }
+                                $installTimeoutSeconds = $null
+                                if ($pkg.PSObject.Properties.Name -contains "installTimeoutSeconds") {
+                                    $installTimeoutSeconds = $pkg.installTimeoutSeconds
+                                }
                                 $portableLink = $null
                                 if ($pkg.PSObject.Properties.Name -contains "portableLink") {
                                     $portableLink = $pkg.portableLink
@@ -152,6 +156,7 @@ class WingetHandler : SetupHandlerBase {
                                     SourceName    = $sourceName
                                     VerifyCommand = $verifyCommand
                                     InstallArgs   = $installArgs
+                                    InstallTimeoutSeconds = $installTimeoutSeconds
                                     PortableLink  = $portableLink
                                     PathEntries   = $pathEntries
                                 }
@@ -213,6 +218,7 @@ class WingetHandler : SetupHandlerBase {
                                 SourceName    = $pkg.SourceName
                                 VerifyCommand = $pkg.VerifyCommand
                                 InstallArgs   = $pkg.InstallArgs
+                                InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
                                 PortableLink  = $pkg.PortableLink
                                 PathEntries   = $pkg.PathEntries
                                 Force         = $true
@@ -235,6 +241,7 @@ class WingetHandler : SetupHandlerBase {
                         SourceName    = $pkg.SourceName
                         VerifyCommand = $pkg.VerifyCommand
                         InstallArgs   = $pkg.InstallArgs
+                        InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
                         PortableLink  = $pkg.PortableLink
                         PathEntries   = $pkg.PathEntries
                         Force         = $false
@@ -265,7 +272,7 @@ class WingetHandler : SetupHandlerBase {
                 $this.Log("インストール中: $($pkg.Id)$logSuffix")
                 $installArgs = $this.NewWingetInstallArguments($pkg, [bool]$pkg.Force)
 
-                $installOutput = @(Invoke-Winget -Arguments $installArgs)
+                $installOutput = $this.InvokeWingetInstall($pkg, $installArgs)
                 $alreadyInstalledInstallFailure = $this.IsAlreadyInstalledInstallFailure($installOutput)
                 foreach ($line in $installOutput) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
@@ -379,6 +386,29 @@ class WingetHandler : SetupHandlerBase {
         return $installArgs
     }
 
+    hidden [object[]] InvokeWingetInstall([object]$pkg, [object[]]$installArgs) {
+        $installTimeoutSeconds = $this.GetInstallTimeoutSeconds($pkg)
+        if ($installTimeoutSeconds -gt 0) {
+            return @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
+        }
+        return @(Invoke-Winget -Arguments $installArgs)
+    }
+
+    hidden [int] GetInstallTimeoutSeconds([object]$pkg) {
+        if ($null -eq $pkg -or -not ($pkg.PSObject.Properties.Name -contains "InstallTimeoutSeconds")) {
+            return 0
+        }
+        $rawTimeout = $pkg.InstallTimeoutSeconds
+        if ($null -eq $rawTimeout) {
+            return 0
+        }
+        $timeoutSeconds = 0
+        if ([int]::TryParse([string]$rawTimeout, [ref]$timeoutSeconds) -and $timeoutSeconds -gt 0) {
+            return $timeoutSeconds
+        }
+        return 0
+    }
+
     hidden [bool] RecoverPackageVerification([object]$pkg) {
         $strategy = $this.GetRecoveryStrategy($pkg.VerifyCommand)
         if ([string]::IsNullOrWhiteSpace($strategy)) {
@@ -470,7 +500,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         $installArgs = $this.NewWingetInstallArguments($pkg, $true)
-        $installOutput = @(Invoke-Winget -Arguments $installArgs)
+        $installOutput = $this.InvokeWingetInstall($pkg, $installArgs)
         foreach ($line in $installOutput) {
             if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                 $this.Log("  $line", "Gray")

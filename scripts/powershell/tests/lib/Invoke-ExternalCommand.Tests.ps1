@@ -119,6 +119,23 @@ Describe 'Invoke-Winget' {
             $Command -eq "winget" -and $Arguments -contains "--version"
         }
     }
+
+    It 'should prefer an explicit timeout over the default environment timeout' {
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "180"
+        Mock Invoke-ExternalCommandWithTimeout {
+            $global:LASTEXITCODE = 0
+            return "winget ok"
+        }
+
+        $result = Invoke-Winget -Arguments @("install", "--id", "Google.CloudSDK") -TimeoutSeconds 900
+
+        $result | Should -Contain "winget ok"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+            $Command -eq "winget" -and
+            $Arguments -contains "Google.CloudSDK" -and
+            $TimeoutSeconds -eq 900
+        }
+    }
 }
 
 Describe 'Invoke-VerifyCommand' {

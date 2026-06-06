@@ -900,6 +900,57 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'Apply - import mode: package installTimeoutSeconds' {
+        BeforeEach {
+            $script:verifyAttempts = 0
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier     = "Google.CloudSDK"
+                                    installTimeoutSeconds = 900
+                                    pathEntries           = @("%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin")
+                                    verifyCommand         = [PSCustomObject]@{ command = "gcloud"; args = @("version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "gcloud not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "Google Cloud SDK 1.2.3"
+            }
+            Mock Invoke-Winget {
+                param($Arguments, $TimeoutSeconds)
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+        }
+
+        It 'should pass package install timeout to winget install' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter {
+                $Arguments -contains "install" -and
+                $Arguments -contains "Google.CloudSDK" -and
+                $TimeoutSeconds -eq 900
+            }
+        }
+    }
+
     Context 'Apply - import mode: package portableLink' {
         BeforeEach {
             $script:origLocalAppData = $env:LOCALAPPDATA

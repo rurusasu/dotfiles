@@ -37,6 +37,13 @@ let
     in
     if installArgs == null then pkg else pkg // { inherit installArgs; };
 
+  attachInstallTimeout =
+    installTimeoutMap: key: pkg:
+    let
+      installTimeoutSeconds = installTimeoutMap.${key} or null;
+    in
+    if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
+
   attachPortableLink =
     portableLinksMap: key: pkg:
     let
@@ -62,7 +69,9 @@ let
     key: pkg:
     attachPathEntries sets.wingetPathEntries key (
       attachPortableLink sets.wingetPortableLinksById key (
-        attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+        attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+          attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+        )
       )
     );
 

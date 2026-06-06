@@ -82,6 +82,8 @@
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"],
           "verifyCommand": {
             "args": ["version"],
             "command": "gcloud"

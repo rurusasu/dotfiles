@@ -137,12 +137,17 @@ function Invoke-Winget {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string[]]$Arguments
+        [string[]]$Arguments,
+
+        [Parameter()]
+        [int]$TimeoutSeconds = -1
     )
 
-    $timeoutSeconds = Get-WingetCommandTimeoutSecond
-    if ($timeoutSeconds -gt 0) {
-        return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+    if ($TimeoutSeconds -lt 0) {
+        $TimeoutSeconds = Get-WingetCommandTimeoutSecond
+    }
+    if ($TimeoutSeconds -gt 0) {
+        return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
     }
 
     Invoke-NativeCommand -Command "winget" -Arguments $Arguments
