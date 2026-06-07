@@ -73,10 +73,10 @@ if (Get-Command eza -ErrorAction SilentlyContinue) {
         eza @EzaArgs @RemainingArgs
     }
 
-    function ls { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
-    function ll { Invoke-DotfilesEza -EzaArgs @("-lha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
-    function la { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
-    function l { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function ls { Invoke-DotfilesEza -EzaArgs @("-lhaT", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function ll { Invoke-DotfilesEza -EzaArgs @("-lhaT", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function la { Invoke-DotfilesEza -EzaArgs @("-lhaT", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function l { Invoke-DotfilesEza -EzaArgs @("-lhaT", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
 }
 
 # OSC 7 support (advises terminal of current working directory)

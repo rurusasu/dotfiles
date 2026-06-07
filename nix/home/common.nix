@@ -29,10 +29,10 @@ in
     shellAliases = {
       find = "fd";
       grep = "rg";
-      l = "eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      la = "eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      ll = "eza -lha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      ls = "eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      l = "eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      la = "eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      ll = "eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      ls = "eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
     };
 
     initContent = ''
