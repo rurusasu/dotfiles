@@ -10,9 +10,16 @@ shopt -s histappend
 shopt -s checkwinsize
 
 # Aliases
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias ll='eza -lha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias la='eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias l='eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+else
+  alias ll='ls -alF'
+  alias la='ls -A'
+  alias l='ls -CF'
+fi
 alias grep='rg'
 alias find='fd'
 # warp-terminal is installed as "warp-terminal" on NixOS; alias to match Windows naming
@@ -47,8 +54,8 @@ if command -v zoxide >/dev/null 2>&1; then
   eval "$(zoxide init bash)"
 fi
 
-# Color support for ls
-if [ -x /usr/bin/dircolors ]; then
+# Color support for GNU ls fallback
+if ! command -v eza >/dev/null 2>&1 && [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   alias ls='ls --color=auto'
 fi

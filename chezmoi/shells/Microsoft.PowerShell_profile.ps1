@@ -37,6 +37,13 @@ if (Get-Command rg -ErrorAction SilentlyContinue) {
 if (Get-Command fd -ErrorAction SilentlyContinue) {
     Set-Alias -Name find -Value fd -Scope Global
 }
+if (Get-Command eza -ErrorAction SilentlyContinue) {
+    Remove-Item Alias:ls -Force -ErrorAction SilentlyContinue
+    function ls { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
+    function ll { eza -lha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
+    function la { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
+    function l { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
+}
 
 # OSC 7 support (advises terminal of current working directory)
 function Write-Osc7CurrentDirectory {
