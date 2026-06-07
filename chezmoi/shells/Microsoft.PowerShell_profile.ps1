@@ -39,10 +39,44 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
 }
 if (Get-Command eza -ErrorAction SilentlyContinue) {
     Remove-Item Alias:ls -Force -ErrorAction SilentlyContinue
-    function ls { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
-    function ll { eza -lha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
-    function la { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
-    function l { eza -ha --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto @args }
+    function Test-DotfilesNonFileSystemPath {
+        param([object[]]$Arguments)
+
+        foreach ($argument in $Arguments) {
+            if ($argument -isnot [string] -or $argument.StartsWith("-")) { continue }
+            if ($argument -notmatch '^[^\\/:\s]+:') { continue }
+
+            try {
+                $resolvedPaths = $ExecutionContext.SessionState.Path.GetResolvedPSPathFromPSPath($argument)
+                foreach ($resolvedPath in $resolvedPaths) {
+                    if ($resolvedPath.Provider.Name -ne "FileSystem") { return $true }
+                }
+            }
+            catch {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    function Invoke-DotfilesEza {
+        param(
+            [string[]]$EzaArgs,
+            [object[]]$RemainingArgs
+        )
+
+        if (Test-DotfilesNonFileSystemPath -Arguments $RemainingArgs) {
+            Get-ChildItem @RemainingArgs
+            return
+        }
+
+        eza @EzaArgs @RemainingArgs
+    }
+
+    function ls { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function ll { Invoke-DotfilesEza -EzaArgs @("-lha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function la { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
+    function l { Invoke-DotfilesEza -EzaArgs @("-ha", "--total-size", "--icons=auto", "--hyperlink", "-F", "--group-directories-first", "--color=auto") -RemainingArgs $args }
 }
 
 # OSC 7 support (advises terminal of current working directory)
