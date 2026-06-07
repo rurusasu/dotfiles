@@ -30,6 +30,57 @@ $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [En
 # Tell snacks.nvim to use WezTerm's Kitty graphics protocol for image preview.
 $env:SNACKS_WEZTERM = "true"
 
+function Reset-DotfilesTerminalInputMode {
+    $escape = [char]27
+    $host.UI.Write(
+        "$escape[?1000l$escape[?1002l$escape[?1003l$escape[?1004l" +
+        "$escape[?1005l$escape[?1006l$escape[?1015l$escape[?2004l" +
+        "$escape[<u$escape[>4;0m"
+    )
+}
+
+function Invoke-CodexCli {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+
+    $hadTerm = Test-Path Env:\TERM
+    $previousTerm = $env:TERM
+    $hadKeyboardEnhancement = Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+    $previousKeyboardEnhancement = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+
+    try {
+        $env:TERM = "xterm-256color"
+        $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = "1"
+        Reset-DotfilesTerminalInputMode
+        & codex.exe @Arguments
+    }
+    finally {
+        $codexExitCode = $global:LASTEXITCODE
+
+        if ($hadTerm) {
+            $env:TERM = $previousTerm
+        }
+        else {
+            Remove-Item Env:\TERM -ErrorAction SilentlyContinue
+        }
+
+        if ($hadKeyboardEnhancement) {
+            $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = $previousKeyboardEnhancement
+        }
+        else {
+            Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue
+        }
+
+        Reset-DotfilesTerminalInputMode
+        $global:LASTEXITCODE = $codexExitCode
+    }
+}
+
+Set-Alias -Name codex -Value Invoke-CodexCli -Scope Global
+
 # Aliases
 if (Get-Command rg -ErrorAction SilentlyContinue) {
     Set-Alias -Name grep -Value rg -Scope Global

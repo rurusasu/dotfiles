@@ -3,6 +3,7 @@
 BeforeAll {
     $script:repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../../../..")).Path
     $script:profilePath = Join-Path $script:repoRoot "chezmoi/shells/Microsoft.PowerShell_profile.ps1"
+    $script:profileContent = Get-Content -LiteralPath $script:profilePath -Raw
 
     $tokens = $null
     $parseErrors = $null
@@ -16,7 +17,7 @@ BeforeAll {
     }
 
     $script:functionScriptBlockByName = @{}
-    foreach ($name in @("ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
+    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
         $functionAst = $profileAst.Find(
             {
                 param($node)
@@ -33,6 +34,12 @@ BeforeAll {
 
     function Import-DcnvimProfileFunction {
         foreach ($name in @("ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
+            Set-Item -Path "Function:\global:$name" -Value $script:functionScriptBlockByName[$name]
+        }
+    }
+
+    function Import-CodexProfileFunction {
+        foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli")) {
             Set-Item -Path "Function:\global:$name" -Value $script:functionScriptBlockByName[$name]
         }
     }
@@ -56,6 +63,75 @@ BeforeAll {
 
         New-Item -ItemType Directory -Path (Join-Path $Path ".devcontainer") -Force | Out-Null
         return (Resolve-Path -LiteralPath $Path).Path
+    }
+}
+
+Describe 'PowerShell codex profile wrapper' {
+    BeforeEach {
+        Import-CodexProfileFunction
+
+        $script:codexArgs = $null
+        $script:termDuringCodex = $null
+        $script:keyboardEnhancementDuringCodex = $null
+        $script:resetCalls = 0
+        $script:oldTermExists = Test-Path Env:\TERM
+        $script:oldTerm = $env:TERM
+        $script:oldKeyboardEnhancementExists = Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+        $script:oldKeyboardEnhancement = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+
+        function global:codex.exe {
+            $script:codexArgs = [string[]]$args
+            $script:termDuringCodex = $env:TERM
+            $script:keyboardEnhancementDuringCodex = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+            $global:LASTEXITCODE = 7
+        }
+
+        function global:Reset-DotfilesTerminalInputMode {
+            $script:resetCalls++
+        }
+    }
+
+    AfterEach {
+        foreach ($functionName in @(
+                "Invoke-CodexCli",
+                "Reset-DotfilesTerminalInputMode",
+                "codex.exe"
+            )) {
+            Remove-Item "Function:\$functionName" -ErrorAction SilentlyContinue
+        }
+
+        if ($script:oldTermExists) {
+            $env:TERM = $script:oldTerm
+        }
+        else {
+            Remove-Item Env:\TERM -ErrorAction SilentlyContinue
+        }
+
+        if ($script:oldKeyboardEnhancementExists) {
+            $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = $script:oldKeyboardEnhancement
+        }
+        else {
+            Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'should alias codex to the compatibility wrapper' {
+        $script:profileContent | Should -Match 'Set-Alias\s+-Name\s+codex\s+-Value\s+Invoke-CodexCli'
+    }
+
+    It 'should run codex.exe with conservative terminal input settings and restore the environment' {
+        $env:TERM = "wezterm"
+        Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue
+
+        Invoke-CodexCli resume --last
+
+        $script:codexArgs | Should -Be @("resume", "--last")
+        $script:termDuringCodex | Should -Be "xterm-256color"
+        $script:keyboardEnhancementDuringCodex | Should -Be "1"
+        $env:TERM | Should -Be "wezterm"
+        Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT | Should -BeFalse
+        $script:resetCalls | Should -Be 2
+        $global:LASTEXITCODE | Should -Be 7
     }
 }
 
