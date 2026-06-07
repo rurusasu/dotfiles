@@ -103,7 +103,14 @@ fi
 # Alt+q: zoxide interactive (history-based directory jump)
 __zoxide_zi_widget() {
   local result
-  result="$(zoxide query -i)" && cd "$result"
+  result="$(zoxide query -i)" || return
+  cd "$result" || return
+
+  # Show cwd change immediately even if prompt redraw is delayed.
+  printf '\n%s\n' "$PWD"
+
+  READLINE_LINE=""
+  READLINE_POINT=0
 }
 bind -x '"\eq": __zoxide_zi_widget'
 

@@ -199,6 +199,7 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
         if ($result) {
             Set-Location -Path $result
             [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
+            [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
         }
     }
 
