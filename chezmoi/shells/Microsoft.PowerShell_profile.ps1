@@ -40,12 +40,7 @@ function Reset-DotfilesTerminalInputMode {
 }
 
 function Invoke-CodexCli {
-    [CmdletBinding()]
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
-    )
-
+    $codexArgs = [string[]]$args
     $hadTerm = Test-Path Env:\TERM
     $previousTerm = $env:TERM
     $hadKeyboardEnhancement = Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
@@ -55,7 +50,7 @@ function Invoke-CodexCli {
         $env:TERM = "xterm-256color"
         $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = "1"
         Reset-DotfilesTerminalInputMode
-        & codex.exe @Arguments
+        & codex.exe @codexArgs
     }
     finally {
         $codexExitCode = $global:LASTEXITCODE

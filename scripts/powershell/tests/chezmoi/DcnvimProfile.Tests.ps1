@@ -133,6 +133,16 @@ Describe 'PowerShell codex profile wrapper' {
         $script:resetCalls | Should -Be 2
         $global:LASTEXITCODE | Should -Be 7
     }
+
+    It 'should forward short Codex flags without PowerShell common parameter binding' {
+        $env:TERM = "wezterm"
+
+        Invoke-CodexCli -V
+
+        $script:codexArgs | Should -Be @("-V")
+        $script:termDuringCodex | Should -Be "xterm-256color"
+        $env:TERM | Should -Be "wezterm"
+    }
 }
 
 Describe 'PowerShell dcnvim profile function' {
