@@ -11,10 +11,10 @@ shopt -s checkwinsize
 
 # Aliases
 if command -v eza >/dev/null 2>&1; then
-  alias ls='eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
-  alias ll='eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
-  alias la='eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
-  alias l='eza -lhaT --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias ls='eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias ll='eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias la='eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
+  alias l='eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto'
 else
   alias ll='ls -alF'
   alias la='ls -A'
