@@ -11,6 +11,7 @@
 #>
 
 BeforeAll {
+    $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
     $script:chezmoiRoot = Join-Path $PSScriptRoot "../../../../chezmoi"
     $script:templateFiles = Get-ChildItem -Path $script:chezmoiRoot -Filter "*.tmpl" -Recurse
 }
@@ -264,6 +265,22 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
 
             $content | Should -Match 'env "ProgramData"' -Because "Docker Desktop backend は ProgramData が無いと起動に失敗する"
+        }
+
+        It 'should enable Codex apps for plugin-bundled connectors' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -Path $templatePath -Raw
+
+            $content | Should -Match '(?m)^apps\s*=\s*true\s*$' -Because "Gmail や Google Calendar などの app connector は features.apps が無効だと露出しない"
+            $content | Should -Not -Match '(?m)^apps\s*=\s*false\s*$' -Because "chezmoi 再適用で connector 利用を無効化しない"
+        }
+
+        It 'should keep Codex project config apps enabled' {
+            $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
+            $content = Get-Content -Path $projectConfigPath -Raw
+
+            $content | Should -Match '(?m)^apps\s*=\s*true\s*$' -Because "project-scoped config が global/chezmoi の apps=true を上書きしない"
+            $content | Should -Not -Match '(?m)^apps\s*=\s*false\s*$' -Because "この repo で connector tool が露出しなくなる"
         }
 
         It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {
