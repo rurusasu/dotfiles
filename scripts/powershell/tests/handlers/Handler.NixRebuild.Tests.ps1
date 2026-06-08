@@ -425,6 +425,17 @@ Describe 'NixRebuildHandler' {
 
         It 'should skip already installed pnpm packages' {
             $script:pnpmAddCalled = $false
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                        "@example/native-tool",
+                        "@prisma/language-server",
+                        "@agentclientprotocol/claude-agent-acp",
+                        "typescript-language-server",
+                        "typescript",
+                        "@google/gemini-cli"
+                    )
+                }
+            }
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
