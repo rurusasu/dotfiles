@@ -220,7 +220,7 @@ mcp_servers:
       - windsurf
       - zed
 
-  # Playwright - Browser automation MCP (VS Code only; used via Copilot chat)
+  # Playwright - Browser automation MCP (Codex and VS Code)
   # --isolated: セッションごとに独立したブラウザを起動し、複数セッション間の競合を防ぐ
   - name: playwright
     command: pnpm
@@ -230,6 +230,7 @@ mcp_servers:
       - "--isolated"
     startup_timeout_sec: 60
     supports:
+      - codex
       - vscode
 
   # SuperLocalMemory - Local-only memory service (HTTP, machine-local)

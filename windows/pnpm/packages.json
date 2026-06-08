@@ -18,6 +18,13 @@
       }
     },
     {
+      "name": "@playwright/cli",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "playwright-cli"
+      }
+    },
+    {
       "name": "typescript-language-server",
       "verifyCommand": {
         "args": ["--version"],
