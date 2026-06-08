@@ -450,6 +450,7 @@ lib.mapAttrs (_: names: resolve names) grouped
   pnpmGlobal = [
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
+    "@playwright/cli"
     "typescript-language-server"
     "typescript"
   ];
@@ -477,6 +478,10 @@ lib.mapAttrs (_: names: resolve names) grouped
       type = "commandExists";
       command = "claude-agent-acp";
       args = [ ];
+    };
+    "@playwright/cli" = {
+      command = "playwright-cli";
+      args = [ "--version" ];
     };
   };
 
