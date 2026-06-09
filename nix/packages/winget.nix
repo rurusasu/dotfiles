@@ -5,9 +5,13 @@
 #   nix build .#winget-export
 #   cp result/winget/packages.json windows/winget/packages.json
 #   cp result/pnpm/packages.json windows/pnpm/packages.json
-{ pkgs, lib }:
+{
+  pkgs,
+  lib,
+  gwqSrc ? null,
+}:
 let
-  sets = import ./sets.nix { inherit pkgs lib; };
+  sets = import ./sets.nix { inherit pkgs lib gwqSrc; };
 
   # Attach verifyCommand to a package object if defined in verifyMap
   attachVerify =

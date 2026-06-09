@@ -19,6 +19,7 @@ let
         config.allowUnfree = true;
         overlays = [ workmuxOverlay ];
       };
+      extraSpecialArgs = { inherit inputs; };
       modules = [ ../home/common.nix ];
     };
 in

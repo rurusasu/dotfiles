@@ -20,7 +20,11 @@
 #   - nix/flakes/packages.nix → perSystem buildEnv outputs
 #   - nix/home/packages.nix   → home.packages
 #   - nix/packages/winget.nix → winget/pnpm JSON generation
-{ pkgs, lib }:
+{
+  pkgs,
+  lib,
+  gwqSrc ? null,
+}:
 let
   catalog = {
     # ── core ──────────────────────────────────────────────
@@ -122,7 +126,9 @@ let
       category = "dev";
     };
     gwq = {
-      pkg = import ./gwq/default.nix { inherit pkgs; };
+      pkg = import ./gwq/default.nix (
+        { inherit pkgs; } // lib.optionalAttrs (gwqSrc != null) { src = gwqSrc; }
+      );
       winget = null;
       category = "dev";
     };
@@ -620,10 +626,14 @@ lib.mapAttrs (_: names: resolve names) grouped
       "--installer-type"
       "wix"
     ];
+    wezterm = [
+      "--ignore-security-hash"
+    ];
   };
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
+    warp-terminal = 900;
   };
 
   # Upstream nightly winget manifests and Microsoft Store installs can drift or

@@ -213,11 +213,13 @@
           }
         },
         {
-          "PackageIdentifier": "Warp.Warp"
+          "PackageIdentifier": "Warp.Warp",
+          "installTimeoutSeconds": 900
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
           "ciSkipInstall": true,
+          "installArgs": ["--ignore-security-hash"],
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
           "verifyCommand": {
             "args": ["--version"],

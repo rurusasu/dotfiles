@@ -299,6 +299,10 @@ else
   echo "Skipping (exists): $HOST_HW_PATH"
 fi
 
+# Update flake inputs so first install uses the latest Nix sources.
+NIX_CONFIG="experimental-features = nix-command flakes" \
+  nix flake update "$TARGET_DIR"
+
 # Run nixos-rebuild
 NIX_CONFIG="experimental-features = nix-command flakes" \
   nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME"

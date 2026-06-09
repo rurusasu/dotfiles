@@ -2,6 +2,7 @@
   lib,
   pkgs,
   config,
+  inputs ? null,
   ...
 }:
 let
@@ -11,7 +12,10 @@ let
     mkMerge
     types
     ;
-  sets = import ../../packages/sets.nix { inherit pkgs lib; };
+  sets = import ../../packages/sets.nix {
+    inherit pkgs lib;
+    gwqSrc = if inputs == null then null else inputs.gwq-src;
+  };
 in
 {
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {

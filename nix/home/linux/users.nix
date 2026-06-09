@@ -8,7 +8,7 @@
 
       # NixOS rebuild shortcuts (also defined in wsl/users.nix for WSL context)
       programs.zsh.shellAliases = {
-        nrs = "sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
+        nrs = "nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
         nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
       };

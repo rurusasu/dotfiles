@@ -493,16 +493,16 @@ Describe 'PnpmHandler' {
         }
         AfterEach { $env:PATH = $script:origPath }
 
-        It 'should skip all already-installed packages' {
+        It 'should install all already-installed packages so pnpm selects latest' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個検証済み"
-            $result.Message | Should -Match "1 個スキップ"
+            $result.Message | Should -Match "2 個インストール"
         }
 
-        It 'should not call pnpm add for installed packages' {
+        It 'should call pnpm add for installed packages' {
             $handler.Apply($ctx)
-            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 0
+            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 2
         }
     }
 

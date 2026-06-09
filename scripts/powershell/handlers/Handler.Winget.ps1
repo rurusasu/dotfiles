@@ -187,13 +187,16 @@ class WingetHandler : SetupHandlerBase {
             # 正規表現で検出できないパッケージ（ARP エントリ等）は個別チェックにフォールバック
             $installedIds = $this.GetInstalledPackageIds()
 
-            # 未インストール、または検証に失敗したパッケージをフィルタリング
+            # 通常実行ではインストール済みも含めて winget install を流し、
+            # winget 側の install-or-upgrade 動作で latest を選ばせる。
+            $verifyCommandOnly = $ctx.GetOption("WingetVerifyCommandOnly", $false)
             $toInstall = @()
             $skipped = 0
             $verified = 0
             $verifyFailed = 0
             $deferred = 0
             foreach ($pkg in $packages) {
+                $verificationPassed = $false
                 if ($pkg.VerifyCommand) {
                     Update-ProcessEnvironmentPath
                     $this.EnsurePortableLink($pkg)
@@ -204,14 +207,31 @@ class WingetHandler : SetupHandlerBase {
                         continue
                     }
                     if ($this.TestPackageVerification($pkg.VerifyCommand)) {
-                        $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
+                        $verificationPassed = $true
                         $verified++
-                        continue
+                        if ($verifyCommandOnly) {
+                            $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
+                            continue
+                        }
                     }
                 }
 
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
-                    if ($pkg.VerifyCommand) {
+                    if ($pkg.VerifyCommand -and $verificationPassed) {
+                        $toInstall += [PSCustomObject]@{
+                            Id                    = $pkg.Id
+                            Version               = $pkg.Version
+                            SourceName            = $pkg.SourceName
+                            VerifyCommand         = $pkg.VerifyCommand
+                            InstallArgs           = $pkg.InstallArgs
+                            InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
+                            CiSkipInstall         = $pkg.CiSkipInstall
+                            PortableLink          = $pkg.PortableLink
+                            PathEntries           = $pkg.PathEntries
+                            Force                 = $false
+                        }
+                    }
+                    elseif ($pkg.VerifyCommand) {
                         if (-not [string]::IsNullOrWhiteSpace($this.GetRecoveryStrategy($pkg.VerifyCommand))) {
                             if ($this.RecoverPackageVerification($pkg)) {
                                 $verified++
@@ -244,8 +264,18 @@ class WingetHandler : SetupHandlerBase {
                         }
                     }
                     else {
-                        $this.Log("スキップ (インストール済み): $($pkg.Id)", "Gray")
-                        $skipped++
+                        $toInstall += [PSCustomObject]@{
+                            Id                    = $pkg.Id
+                            Version               = $pkg.Version
+                            SourceName            = $pkg.SourceName
+                            VerifyCommand         = $pkg.VerifyCommand
+                            InstallArgs           = $pkg.InstallArgs
+                            InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
+                            CiSkipInstall         = $pkg.CiSkipInstall
+                            PortableLink          = $pkg.PortableLink
+                            PathEntries           = $pkg.PathEntries
+                            Force                 = $false
+                        }
                     }
                 }
                 else {
@@ -279,13 +309,12 @@ class WingetHandler : SetupHandlerBase {
                 return $this.CreateSuccessResult($parts -join ", ")
             }
 
-            # 未インストール分をインストール
+            # 対象パッケージをインストール/更新
             $succeeded = 0
             $failed = 0
 
             foreach ($pkg in $toInstall) {
-                $logSuffix = if ($pkg.Version) { " (v$($pkg.Version))" } else { "" }
-                $this.Log("インストール中: $($pkg.Id)$logSuffix")
+                $this.Log("インストール/更新中: $($pkg.Id)")
                 $installArgs = $this.NewWingetInstallArguments($pkg, [bool]$pkg.Force)
 
                 $installOutput = $this.InvokeWingetInstall($pkg, $installArgs)
@@ -304,6 +333,12 @@ class WingetHandler : SetupHandlerBase {
                     if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                         $verified++
                         $this.Log("✓ $($pkg.Id) (winget install は失敗扱いでしたが検証済み)", "Green")
+                        continue
+                    }
+
+                    if ($alreadyInstalledInstallFailure -and -not $pkg.VerifyCommand) {
+                        $succeeded++
+                        $this.Log("✓ $($pkg.Id) (winget install は no-op でした)", "Green")
                         continue
                     }
 
@@ -372,6 +407,7 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool] IsAlreadyInstalledInstallFailure([object[]]$installOutput) {
         $text = ($installOutput | ForEach-Object { [string]$_ }) -join "`n"
         return $text -match '0x80073cfb' -or
+        $text -match 'No applicable update found' -or
         $text -match 'already installed' -or
         $text -match '別のバージョンが既にインストールされています'
     }
@@ -400,12 +436,6 @@ class WingetHandler : SetupHandlerBase {
             "--accept-source-agreements",
             "--disable-interactivity"
         )
-        # Version が packages.json に書かれていれば --version で固定する。
-        # msstore source は固定 version 指定をサポートしないため除外。
-        if ($pkg.Version -and $pkg.SourceName -ne "msstore") {
-            $installArgs += "--version"
-            $installArgs += $pkg.Version
-        }
         if ($pkg.SourceName -eq "msstore") {
             $installArgs += "--source"
             $installArgs += "msstore"

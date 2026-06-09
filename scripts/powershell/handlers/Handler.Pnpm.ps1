@@ -159,21 +159,19 @@ class PnpmHandler : SetupHandlerBase {
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd)) {
-                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
                             $verified++
-                            continue
                         }
-
-                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        else {
+                            $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        }
                     }
                     else {
-                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                        $skipped++
-                        continue
+                        $this.Log("インストール済み。latest を確認します: $pkgName", "Gray")
                     }
                 }
 
-                $this.Log("インストール中: $pkgSpec")
+                $this.Log("インストール/更新中: $pkgSpec")
                 $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only", "--yes") + $installArgs + @($pkgSpec))
 
                 if ($pnpmExitCode -ne 0) {

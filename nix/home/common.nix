@@ -7,10 +7,14 @@
 {
   pkgs,
   lib,
+  inputs ? null,
   ...
 }:
 let
-  sets = import ../packages/sets.nix { inherit pkgs lib; };
+  sets = import ../packages/sets.nix {
+    inherit pkgs lib;
+    gwqSrc = if inputs == null then null else inputs.gwq-src;
+  };
   user = builtins.getEnv "USER";
   home = builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";

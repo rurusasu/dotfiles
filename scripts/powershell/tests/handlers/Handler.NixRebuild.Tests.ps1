@@ -423,7 +423,7 @@ Describe 'NixRebuildHandler' {
             $script:pnpmArgs | Should -Not -Match "@\{name="
         }
 
-        It 'should skip already installed pnpm packages' {
+        It 'should install already installed pnpm packages so they can update to latest' {
             $script:pnpmAddCalled = $false
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
@@ -460,7 +460,7 @@ Describe 'NixRebuildHandler' {
             }
             $handler.Apply($ctx)
 
-            $script:pnpmAddCalled | Should -Be $false
+            $script:pnpmAddCalled | Should -Be $true
         }
 
         It 'should reinstall installed pnpm package when verifyCommand fails in WSL' {
@@ -556,6 +556,39 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-u root"
             $script:wslArgs | Should -Match "cd /home/nixos/.dotfiles"
             $script:wslArgs | Should -Match "nixos-rebuild switch --flake"
+        }
+
+        It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
+            $script:flakeUpdateCalled = $false
+            $script:rebuildCalled = $false
+            $script:flakeUpdateCalledFirst = $false
+            $script:flakeUpdateArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nix flake update") {
+                    $script:flakeUpdateArgs = $argStr
+                    $script:flakeUpdateCalled = $true
+                    if (-not $script:rebuildCalled) { $script:flakeUpdateCalledFirst = $true }
+                    $global:LASTEXITCODE = 0; return @("updated lock file")
+                }
+                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
+                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            $handler.Apply($ctx)
+
+            $script:flakeUpdateCalled | Should -Be $true
+            $script:flakeUpdateCalledFirst | Should -Be $true
+            $script:flakeUpdateArgs | Should -Match "-u nixos"
         }
 
         It 'should set git safe.directory before nixos-rebuild as root' {

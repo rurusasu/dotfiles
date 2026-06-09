@@ -77,7 +77,7 @@ tasks:
   rebuild:
     desc: Run nixos-rebuild switch
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && sudo nixos-rebuild switch --flake . --impure"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure"'
 
   build:
     desc: Dry build NixOS configuration

@@ -200,14 +200,14 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should skip and return success' {
+        It 'should run winget install for installed packages to pick up the latest installer' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個スキップ"
+            $result.Message | Should -Match "1 個インストール"
         }
 
-        It 'should not call winget install' {
+        It 'should call winget install even when winget list reports the package is installed' {
             $script:installCalled = $false
             Mock Invoke-Winget {
                 param($Arguments)
@@ -226,7 +226,32 @@ Describe 'WingetHandler' {
             }
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
-            $script:installCalled | Should -Be $false
+            $script:installCalled | Should -Be $true
+        }
+
+        It 'should treat already-latest no-op installs without verifyCommand as success' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    return @("No applicable update found")
+                }
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name          Id         Version  Source",
+                        "-------------------------------------------",
+                        "Git           Git.Git    2.43.0   winget"
+                    )
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
         }
     }
 
@@ -528,7 +553,7 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should skip without calling install' {
+        It 'should call winget install so Microsoft Store packages can upgrade to latest' {
             $script:installCalled = $false
             Mock Invoke-Winget {
                 param($Arguments)
@@ -547,7 +572,7 @@ Describe 'WingetHandler' {
             }
             $ctx.Options["WingetMode"] = "import"
             $handler.Apply($ctx)
-            $script:installCalled | Should -Be $false
+            $script:installCalled | Should -Be $true
         }
     }
 
@@ -995,6 +1020,39 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $script:capturedArgs | Should -Contain "--installer-type"
             $script:capturedArgs | Should -Contain "wix"
+        }
+
+        It 'should ignore package Version metadata so winget selects the latest installer' {
+            $script:capturedArgs = $null
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Versioned.Tool"
+                                    Version           = "1.2.3"
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $script:capturedArgs = $Arguments
+                }
+                if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:capturedArgs | Should -Not -Contain "--version"
+            $script:capturedArgs | Should -Not -Contain "1.2.3"
         }
     }
 
@@ -1653,11 +1711,11 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should install packages without verifyCommand and skip verified CLI packages' {
+        It 'should install packages with and without verifyCommand so both can upgrade to latest' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
+            $result.Message | Should -Match "2 個インストール"
             $result.Message | Should -Match "1 個検証済み"
         }
 

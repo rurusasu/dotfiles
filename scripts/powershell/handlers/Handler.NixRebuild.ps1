@@ -185,17 +185,15 @@ class NixRebuildHandler : SetupHandlerBase {
                 if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
                     if ($verifyCmd) {
                         if ($this.TestPnpmPackageVerificationInWsl($distroName, $verifyCmd)) {
-                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
                             $verified++
-                            continue
                         }
-
-                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        else {
+                            $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        }
                     }
                     else {
-                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                        $skipped++
-                        continue
+                        $this.Log("インストール済み。latest を確認します: $pkgName", "Gray")
                     }
                 }
 
@@ -365,6 +363,26 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
+
+            $this.Log("nix flake update を実行しています...")
+            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nix flake update 2>&1")
+            $flakeUpdateExitCode = $LASTEXITCODE
+            $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
+            $flakeUpdateOutput | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    if ($_ -match '^error:') {
+                        $this.LogError("  $_")
+                        $flakeUpdateErrors.Add([string]$_)
+                    }
+                    else {
+                        $this.Log("  $_", "Gray")
+                    }
+                }
+            }
+            if ($flakeUpdateExitCode -ne 0) {
+                $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
+                throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
+            }
 
             $this.Log("nixos-rebuild switch を実行しています...")
 
