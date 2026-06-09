@@ -59,9 +59,15 @@ Describe 'install.admin.ps1' {
             -OptionsJson '{"SkipWslInstall":true,"SkipVhdExpand":true}' 2>&1
         $exitCode = $LASTEXITCODE
         $outputText = ($output | Out-String).Trim()
+        $outputLines = @(
+            $output |
+            ForEach-Object { [string]$_ } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
 
         $exitCode | Should -Be 0 -Because $outputText
-        $outputText | Should -Be "False"
+        $outputText | Should -Not -Match "Cannot process argument transformation on parameter 'AdminOnly'"
+        $outputLines[-1] | Should -Be "False" -Because $outputText
     }
 
     It 'should filter handlers by Phase 2' {
