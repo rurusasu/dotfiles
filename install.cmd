@@ -5,7 +5,11 @@ chcp 65001 >nul
 set "SCRIPT_DIR=%~dp0"
 pushd "%SCRIPT_DIR%" >nul
 
-set "PS7_DIR=%ProgramFiles%\PowerShell\7"
+if defined DOTFILES_PS7_DIR (
+  set "PS7_DIR=%DOTFILES_PS7_DIR%"
+) else (
+  set "PS7_DIR=%ProgramFiles%\PowerShell\7"
+)
 if exist "%PS7_DIR%\pwsh.exe" (
   set "PATH=%PS7_DIR%;%PATH%"
 )

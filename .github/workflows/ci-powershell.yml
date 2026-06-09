@@ -60,15 +60,32 @@ jobs:
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default
-          }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) {
-            Invoke-WithRetry {
-              Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery -SkipPublisherCheck
+
+          function Install-GalleryModuleArchive {
+            param([string]$Name, [string]$Version)
+
+            $modulePath = Join-Path $moduleRoot "$Name\$Version"
+            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
+              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$Version.zip"
+              if (Test-Path -LiteralPath $modulePath) {
+                Remove-Item -LiteralPath $modulePath -Recurse -Force
+              }
+              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
+              $downloadParams = @{
+                Uri             = "https://www.powershellgallery.com/api/v2/package/$Name/$Version"
+                OutFile         = $packagePath
+                UseBasicParsing = $true
+              }
+              Invoke-WithRetry {
+                Invoke-WebRequest @downloadParams
+              }
+              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
             }
+
+            Import-Module -Name $Name -RequiredVersion $Version -Force
           }
+
+          Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
 
       - name: Run PSScriptAnalyzer and generate SARIF
         shell: pwsh
@@ -173,12 +190,37 @@ jobs:
             }
           }
 
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default
+          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Invoke-WithRetry { Install-Module -Name Pester           -RequiredVersion 5.6.1  -Scope CurrentUser -Force -Repository PSGallery }
-          Invoke-WithRetry { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery }
+
+          function Install-GalleryModuleArchive {
+            param([string]$Name, [string]$Version)
+
+            $modulePath = Join-Path $moduleRoot "$Name\$Version"
+            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
+              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$Version.zip"
+              if (Test-Path -LiteralPath $modulePath) {
+                Remove-Item -LiteralPath $modulePath -Recurse -Force
+              }
+              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
+              $downloadParams = @{
+                Uri             = "https://www.powershellgallery.com/api/v2/package/$Name/$Version"
+                OutFile         = $packagePath
+                UseBasicParsing = $true
+              }
+              Invoke-WithRetry {
+                Invoke-WebRequest @downloadParams
+              }
+              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
+            }
+
+            Import-Module -Name $Name -RequiredVersion $Version -Force
+          }
+
+          Install-GalleryModuleArchive -Name Pester -Version '5.6.1'
+          Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
 
       - name: Run tests
         shell: pwsh
@@ -238,3 +280,158 @@ jobs:
             scripts/powershell/coverage.xml
           retention-days: 30
           if-no-files-found: warn
+
+  test-windows-powershell:
+    name: Test (Windows PowerShell 5.1 compatibility)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Cache Windows PowerShell modules
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~\Documents\WindowsPowerShell\Modules
+          key: ${{ runner.os }}-windows-powershell-pester-5.6.1
+
+      - name: Install Pester for Windows PowerShell
+        shell: powershell
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Invoke-WithRetry {
+            param([scriptblock]$Script, [int]$Max = 3)
+            for ($i = 1; $i -le $Max; $i++) {
+              try { & $Script; return } catch {
+                if ($i -eq $Max) { throw }
+                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
+                Start-Sleep -Seconds ($i * 5)
+              }
+            }
+          }
+
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+          $moduleRoot = Join-Path $HOME 'Documents\WindowsPowerShell\Modules'
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          }
+
+          $pesterVersion = '5.6.1'
+          $pesterPath = Join-Path $moduleRoot "Pester\$pesterVersion"
+          if (-not (Test-Path -LiteralPath (Join-Path $pesterPath 'Pester.psd1'))) {
+            $packagePath = Join-Path $env:RUNNER_TEMP "Pester.$pesterVersion.zip"
+            if (Test-Path -LiteralPath $pesterPath) {
+              Remove-Item -LiteralPath $pesterPath -Recurse -Force
+            }
+            New-Item -ItemType Directory -Force -Path $pesterPath | Out-Null
+            $downloadParams = @{
+              Uri             = "https://www.powershellgallery.com/api/v2/package/Pester/$pesterVersion"
+              OutFile         = $packagePath
+              UseBasicParsing = $true
+            }
+            Invoke-WithRetry {
+              Invoke-WebRequest @downloadParams
+            }
+            Expand-Archive -LiteralPath $packagePath -DestinationPath $pesterPath -Force
+          }
+
+          Import-Module Pester -RequiredVersion $pesterVersion -Force
+
+      - name: Run Invoke-ExternalCommand tests on Windows PowerShell
+        shell: powershell
+        working-directory: scripts/powershell/tests
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $runner = [scriptblock]::Create((Get-Content -LiteralPath .\Invoke-Tests.ps1 -Raw -Encoding UTF8))
+          & $runner -Path .\lib\Invoke-ExternalCommand.Tests.ps1 -MinimumCoverage 0
+
+      - name: Run install.cmd fallback without pwsh
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $workDir = Join-Path $env:RUNNER_TEMP 'install-cmd-fallback'
+          $scriptDir = Join-Path $workDir 'scripts\powershell'
+          if (Test-Path -LiteralPath $workDir) {
+            Remove-Item -LiteralPath $workDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $scriptDir | Out-Null
+          Copy-Item -LiteralPath install.cmd -Destination (Join-Path $workDir 'install.cmd')
+
+          $stubInstall = @(
+            '[CmdletBinding()]'
+            'param('
+            '  [switch]$NoPause,'
+            '  [switch]$UserPhaseOnly'
+            ')'
+            ''
+            'Write-Host "STUB_INSTALL_COMPLETE NoPause=$NoPause UserPhaseOnly=$UserPhaseOnly"'
+            'Write-Host "User Phase Complete!"'
+            'exit 0'
+          ) -join [Environment]::NewLine
+          [System.IO.File]::WriteAllText(
+            (Join-Path $scriptDir 'install.ps1'),
+            $stubInstall,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
+          $oldPath = $env:PATH
+          $missingPs7Dir = Join-Path $env:RUNNER_TEMP 'NoPowerShell7Dir'
+          New-Item -ItemType Directory -Force -Path $missingPs7Dir | Out-Null
+
+          try {
+            $env:DOTFILES_PS7_DIR = $missingPs7Dir
+            $env:PATH = @(
+              Join-Path $env:SystemRoot 'System32'
+              Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'
+              $env:SystemRoot
+            ) -join ';'
+
+            Push-Location $workDir
+            try {
+              $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly 2>&1 | ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+              $exitCode = $LASTEXITCODE
+            }
+            finally {
+              Pop-Location
+            }
+          }
+          finally {
+            if ($null -eq $oldDotfilesPs7Dir) {
+              Remove-Item Env:\DOTFILES_PS7_DIR -ErrorAction SilentlyContinue
+            }
+            else {
+              $env:DOTFILES_PS7_DIR = $oldDotfilesPs7Dir
+            }
+            $env:PATH = $oldPath
+          }
+
+          $out = $output -join [Environment]::NewLine
+          if ($exitCode -ne 0) {
+            throw "install.cmd fallback failed with exit code $exitCode"
+          }
+          if ($out -notmatch 'Falling back to Windows PowerShell') {
+            throw 'install.cmd did not exercise the Windows PowerShell fallback path'
+          }
+          if ($out -notmatch 'STUB_INSTALL_COMPLETE') {
+            throw 'install.cmd fallback did not execute the stub install script'
+          }
+          if ($out -notmatch 'User Phase Complete!') {
+            throw 'install.cmd fallback did not reach the user phase completion marker'
+          }

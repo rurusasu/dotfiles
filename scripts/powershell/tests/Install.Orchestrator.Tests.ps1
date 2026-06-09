@@ -63,6 +63,8 @@ Describe 'install.ps1 (orchestrator)' {
 
     It 'install.cmd should prepend the PowerShell 7 MSI directory before resolving pwsh' {
         $content = Get-Content -LiteralPath $script:cmdTarget -Raw
+        $content | Should -Match 'if defined DOTFILES_PS7_DIR'
+        $content | Should -Match 'set "PS7_DIR=%DOTFILES_PS7_DIR%"'
         $content | Should -Match 'set "PS7_DIR=%ProgramFiles%\\PowerShell\\7"'
         $content | Should -Match 'if exist "%PS7_DIR%\\pwsh\.exe"'
         $content | Should -Match 'set "PATH=%PS7_DIR%;%PATH%"'
