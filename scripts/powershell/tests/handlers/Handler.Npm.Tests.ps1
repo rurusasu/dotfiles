@@ -153,12 +153,11 @@ Describe 'NpmHandler' {
             }
         }
 
-        It 'should skip already installed packages' {
+        It 'should install already installed packages so they can update to latest' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
-            $result.Message | Should -Match "1 個スキップ"
+            $result.Message | Should -Match "2 個インストール"
         }
     }
 
@@ -182,11 +181,11 @@ Describe 'NpmHandler' {
             }
         }
 
-        It 'should return success with all installed message' {
+        It 'should reinstall all installed packages so npm selects latest' {
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "2 個スキップ"
+            $result.Message | Should -Match "2 個インストール"
         }
     }
 

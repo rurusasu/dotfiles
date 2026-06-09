@@ -5,7 +5,7 @@
 #   nix profile install .#full      (everything, unfree allowed)
 #   nix profile install .#core      (individual set)
 #   nix build .#winget-export       (generate Windows package JSON)
-{ ... }:
+{ inputs, ... }:
 {
   perSystem =
     {
@@ -29,10 +29,12 @@
       sets = import ../packages/sets.nix {
         pkgs = pkgs.extend workmuxOverlay;
         inherit lib;
+        gwqSrc = inputs.gwq-src;
       };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
+        gwqSrc = inputs.gwq-src;
       };
     in
     {
@@ -78,7 +80,10 @@
         };
 
         # Windows package export
-        winget-export = import ../packages/winget.nix { inherit pkgs lib; };
+        winget-export = import ../packages/winget.nix {
+          inherit pkgs lib;
+          gwqSrc = inputs.gwq-src;
+        };
       };
     };
 }

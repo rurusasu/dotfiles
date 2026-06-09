@@ -127,17 +127,15 @@ class NpmHandler : SetupHandlerBase {
                 if ($installed -contains $pkgName) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd)) {
-                            $this.Log("スキップ (検証済み): $pkgName", "Gray")
+                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
                             $verified++
-                            continue
                         }
-
-                        $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        else {
+                            $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
+                        }
                     }
                     else {
-                        $this.Log("スキップ (インストール済み): $pkgName", "Gray")
-                        $skipped++
-                        continue
+                        $this.Log("インストール済み。latest を確認します: $pkgName", "Gray")
                     }
                 }
 
@@ -160,7 +158,7 @@ class NpmHandler : SetupHandlerBase {
             $verifyFailed = @()
 
             foreach ($pkg in $toInstall) {
-                $this.Log("インストール中: $($pkg.Spec)")
+                $this.Log("インストール/更新中: $($pkg.Spec)")
                 Invoke-Npm -Arguments @("install", "-g", $pkg.Spec) | Out-Null
 
                 if ($LASTEXITCODE -ne 0) {

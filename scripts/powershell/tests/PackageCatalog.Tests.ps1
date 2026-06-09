@@ -7,6 +7,73 @@ BeforeAll {
 }
 
 Describe 'Package catalog consistency' {
+    Context 'Latest package policy' {
+        It 'should not pin winget package versions in generated packages.json' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $versionedPackages = @(
+                $json.Sources |
+                    ForEach-Object { $_.Packages } |
+                    Where-Object { $_.PSObject.Properties.Name -contains 'Version' }
+            )
+
+            $versionedPackages.Count | Should -Be 0
+        }
+
+        It 'should allow WezTerm nightly to use the latest installer even when the live hash drifts' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?wezterm\s*=\s*\[.*?"--ignore-security-hash"'
+        }
+
+        It 'should generate WezTerm nightly with ignore-security-hash install args' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            @($package.installArgs) | Should -Contain '--ignore-security-hash'
+        }
+
+        It 'should give Warp a longer install timeout because the live installer can be slow' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.installTimeoutSeconds | Should -Be 900
+        }
+
+        It 'should update flake inputs in the Nix rebuild aliases before applying the system' {
+            $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl/users.nix") -Raw
+            $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux/users.nix") -Raw
+
+            $wslUsers | Should -Match 'nrs\s*=\s*"nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+            $linuxUsers | Should -Match 'nrs\s*=\s*"nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+        }
+
+        It 'should update flake inputs before every scripted NixOS rebuild entry point' {
+            $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "Taskfile.yml") -Raw
+            $updateScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/update.sh") -Raw
+            $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+
+            $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
+            $updateScript | Should -Match 'nix flake update ~/.dotfiles'
+            $postInstallScript | Should -Match 'nix flake update "\$TARGET_DIR"'
+        }
+
+        It 'should source gwq from a flake input so nix flake update can move it forward' {
+            $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $gwqPackage = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/packages/gwq/default.nix") -Raw
+
+            $flake | Should -Match 'gwq-src\s*=\s*\{'
+            $flake | Should -Match 'url\s*=\s*"github:d-kuro/gwq"'
+            $sets | Should -Match 'gwqSrc \? null'
+            $sets | Should -Match 'src = gwqSrc'
+            $gwqPackage | Should -Match 'version = if src == null then "0\.1\.1" else "unstable"'
+        }
+    }
+
     Context 'Windows-only WSL package' {
         It 'should include Microsoft.WSL as a Windows-only winget package in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
