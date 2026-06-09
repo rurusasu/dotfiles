@@ -2,6 +2,13 @@
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.admin.ps1"
+    $script:runsOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+    $script:windowsPowerShell = if ($script:runsOnWindows) {
+        (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
+    }
+    else {
+        $null
+    }
 }
 
 Describe 'install.admin.ps1' {
@@ -34,6 +41,27 @@ Describe 'install.admin.ps1' {
         finally {
             $env:DOTFILES_WSL_CHECK_TIMEOUT_SECONDS = $oldTimeout
         }
+    }
+
+    It 'should accept AdminOnly when invoked through powershell.exe -File like the elevated admin phase' {
+        if (-not $script:windowsPowerShell) {
+            Set-ItResult -Skipped -Because "Windows PowerShell is required to verify the elevated -File argument boundary"
+            return
+        }
+
+        $output = & $script:windowsPowerShell `
+            -NoLogo `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $script:target `
+            -CheckOnly `
+            "-AdminOnly:$true" `
+            -OptionsJson '{"SkipWslInstall":true,"SkipVhdExpand":true}' 2>&1
+        $exitCode = $LASTEXITCODE
+        $outputText = ($output | Out-String).Trim()
+
+        $exitCode | Should -Be 0 -Because $outputText
+        $outputText | Should -Be "False"
     }
 
     It 'should filter handlers by Phase 2' {
