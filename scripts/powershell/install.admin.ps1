@@ -23,7 +23,7 @@ param(
     [string]$SyncBack = "lock",
     [switch]$CheckOnly,
     [string]$LogFile = "",
-    [Nullable[bool]]$AdminOnly = $null
+    [object]$AdminOnly = $null
 )
 
 Set-StrictMode -Version Latest
@@ -54,6 +54,40 @@ function Test-IsAdminCurrent {
     return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
 }
 
+function ConvertTo-AdminOnlyFilter {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [bool]) {
+        return [bool]$Value
+    }
+
+    if ($Value -is [System.Management.Automation.SwitchParameter]) {
+        return [bool]$Value
+    }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    switch -Regex ($text) {
+        '^\$?true$' { return $true }
+        '^\$?false$' { return $false }
+        '^1$' { return $true }
+        '^0$' { return $false }
+    }
+
+    throw "AdminOnly must be true, false, 1, 0, or omitted. Received: $Value"
+}
+
 function Merge-Options {
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -82,6 +116,7 @@ function Merge-Options {
 }
 
 $effectiveOptions = Merge-Options -BaseOptions $Options -JsonOptions $OptionsJson
+$adminOnlyFilter = ConvertTo-AdminOnlyFilter -Value $AdminOnly
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $libPath "SetupHandler.ps1")
@@ -114,8 +149,8 @@ $handlers = @($handlers | Where-Object { $_.Phase -eq 2 })
 # $true = 管理者必須のみ（UAC 昇格プロセス用）
 # $false = 管理者不要のみ（非昇格プロセス用、1Password 連携などが動作する）
 # $null = 全て（後方互換）
-if ($null -ne $AdminOnly) {
-    $handlers = @($handlers | Where-Object { $_.RequiresAdmin -eq $AdminOnly })
+if ($null -ne $adminOnlyFilter) {
+    $handlers = @($handlers | Where-Object { $_.RequiresAdmin -eq $adminOnlyFilter })
 }
 
 # standalone 実行時にも同意プロンプトが走るようにする
@@ -125,7 +160,7 @@ Invoke-ConsentPrompt -Handlers $handlers
 $applicableCount = 0
 foreach ($handler in $handlers) {
     # AdminOnly フィルタ未使用時（後方互換）: 管理者必須のみカウント
-    if ($null -eq $AdminOnly -and -not $handler.RequiresAdmin) {
+    if ($null -eq $adminOnlyFilter -and -not $handler.RequiresAdmin) {
         continue
     }
 
