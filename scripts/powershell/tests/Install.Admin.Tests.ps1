@@ -2,9 +2,13 @@
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.admin.ps1"
-    $script:runsOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
-    $script:windowsPowerShell = if ($script:runsOnWindows) {
-        (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    $windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    $script:fileBoundaryShell = if ($pwsh) {
+        $pwsh.Source
+    }
+    elseif ($windowsPowerShell) {
+        $windowsPowerShell.Source
     }
     else {
         $null
@@ -43,13 +47,13 @@ Describe 'install.admin.ps1' {
         }
     }
 
-    It 'should accept AdminOnly when invoked through powershell.exe -File like the elevated admin phase' {
-        if (-not $script:windowsPowerShell) {
-            Set-ItResult -Skipped -Because "Windows PowerShell is required to verify the elevated -File argument boundary"
+    It 'should accept AdminOnly when invoked through a PowerShell -File boundary like the elevated admin phase' {
+        if (-not $script:fileBoundaryShell) {
+            Set-ItResult -Skipped -Because "PowerShell is required to verify the elevated -File argument boundary"
             return
         }
 
-        $output = & $script:windowsPowerShell `
+        $output = & $script:fileBoundaryShell `
             -NoLogo `
             -NoProfile `
             -ExecutionPolicy Bypass `
