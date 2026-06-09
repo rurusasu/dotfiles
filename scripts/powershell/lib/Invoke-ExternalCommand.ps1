@@ -1138,6 +1138,52 @@ function Invoke-VerifyCommandWithTimeout {
     Invoke-ExternalCommandWithTimeout -Command $Command -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
 }
 
+function ConvertTo-WindowsCommandLineArgument {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$Argument
+    )
+
+    if ($null -eq $Argument) {
+        return '""'
+    }
+
+    if ($Argument -notmatch '[\s"]' -and $Argument.Length -gt 0) {
+        return $Argument
+    }
+
+    $builder = [System.Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $backslashCount = 0
+
+    foreach ($char in $Argument.ToCharArray()) {
+        if ($char -eq '\') {
+            $backslashCount++
+            continue
+        }
+
+        if ($char -eq '"') {
+            [void]$builder.Append('\' * (($backslashCount * 2) + 1))
+            [void]$builder.Append('"')
+            $backslashCount = 0
+            continue
+        }
+
+        if ($backslashCount -gt 0) {
+            [void]$builder.Append('\' * $backslashCount)
+            $backslashCount = 0
+        }
+        [void]$builder.Append($char)
+    }
+
+    if ($backslashCount -gt 0) {
+        [void]$builder.Append('\' * ($backslashCount * 2))
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
 function Invoke-ExternalCommandWithTimeout {
     [CmdletBinding()]
     param(
@@ -1172,8 +1218,14 @@ function Invoke-ExternalCommandWithTimeout {
             $processStartInfo.StandardOutputEncoding = $OutputEncoding
             $processStartInfo.StandardErrorEncoding = $OutputEncoding
         }
-        foreach ($argument in @($argumentList)) {
-            [void]$processStartInfo.ArgumentList.Add([string]$argument)
+        if ($processStartInfo.GetType().GetProperty("ArgumentList")) {
+            foreach ($argument in @($argumentList)) {
+                [void]$processStartInfo.ArgumentList.Add([string]$argument)
+            }
+        }
+        else {
+            $processStartInfo.Arguments = (@($argumentList) |
+                    ForEach-Object { ConvertTo-WindowsCommandLineArgument -Argument ([string]$_) }) -join " "
         }
 
         $process = [System.Diagnostics.Process]::new()

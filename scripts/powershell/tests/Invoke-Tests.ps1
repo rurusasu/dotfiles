@@ -60,7 +60,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$scriptRoot = $PSScriptRoot
+if ($PSScriptRoot) {
+    $scriptRoot = $PSScriptRoot
+}
+else {
+    $scriptRoot = (Get-Location).ProviderPath
+}
 $projectRoot = Split-Path -Parent $scriptRoot
 
 # Pester v3 が自動ロードされるのを防ぐ

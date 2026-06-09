@@ -26,7 +26,10 @@ Describe 'CI workflow configuration' {
 
         $workflow | Should -Match 'function Invoke-WithRetry'
         $workflow | Should -Match '\$env:PSModulePath = "\$moduleRoot;\$env:PSModulePath"'
-        $workflow | Should -Match 'Install-Module -Name PSScriptAnalyzer .* -SkipPublisherCheck'
+        $workflow | Should -Match 'function Install-GalleryModuleArchive'
+        $workflow | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/\$Name/\$Version'
+        $workflow | Should -Match "Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1\.22\.0'"
+        $workflow | Should -Not -Match 'Register-PSRepository -Default'
     }
 
     It 'should preserve CRLF and UTF-8 no BOM when treefmt formats PowerShell scripts' {
@@ -54,6 +57,38 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
         $wingetWorkflow | Should -Match 'DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS:\s*"180"'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
+    }
+
+    It 'should cover Windows PowerShell 5.1 timeout wrapper compatibility in CI' {
+        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
+        $windowsPowerShellInstall = [regex]::Match(
+            $powershellWorkflow,
+            '(?s)- name: Install Pester for Windows PowerShell.*?- name: Run Invoke-ExternalCommand tests on Windows PowerShell'
+        ).Value
+
+        $powershellWorkflow | Should -Match 'name:\s+Test \(Windows PowerShell 5\.1 compatibility\)'
+        $powershellWorkflow | Should -Match 'shell:\s+powershell'
+        $powershellWorkflow | Should -Match 'Get-Content -LiteralPath \.\\Invoke-Tests\.ps1 -Raw -Encoding UTF8'
+        $powershellWorkflow | Should -Match '& \$runner -Path \.\\lib\\Invoke-ExternalCommand\.Tests\.ps1 -MinimumCoverage 0'
+        $powershellWorkflow | Should -Not -Match '\$pesterConfig\.Filter\.FullName = "\*Invoke-VerifyCommand\*"'
+        $windowsPowerShellInstall | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/Pester/\$pesterVersion'
+        $windowsPowerShellInstall | Should -Match 'Expand-Archive -LiteralPath \$packagePath -DestinationPath \$pesterPath'
+        $windowsPowerShellInstall | Should -Match 'Import-Module Pester -RequiredVersion \$pesterVersion -Force'
+        $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository'
+        $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository -Default'
+    }
+
+    It 'should smoke test install.cmd when pwsh is absent from PATH' {
+        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
+
+        $powershellWorkflow | Should -Match 'Run install\.cmd fallback without pwsh'
+        $powershellWorkflow | Should -Match 'DOTFILES_PS7_DIR'
+        $powershellWorkflow | Should -Match 'NoPowerShell7Dir'
+        $powershellWorkflow | Should -Match '\$env:PATH = @\('
+        $powershellWorkflow | Should -Match 'System32\\WindowsPowerShell\\v1\.0'
+        $powershellWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly'
+        $powershellWorkflow | Should -Match 'Falling back to Windows PowerShell'
+        $powershellWorkflow | Should -Match 'User Phase Complete!'
     }
 
     It 'should retry winget source update when the runner reports Cancelled' {
