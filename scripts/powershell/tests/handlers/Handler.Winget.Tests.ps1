@@ -1379,6 +1379,51 @@ Describe 'WingetHandler' {
             Should -Invoke Invoke-VerifyCommand -Times 0
         }
 
+        It 'should keep Microsoft.WSL active during user-phase-only installs because no admin phase follows' {
+            $script:wslVerifyAttempts = 0
+            Mock Test-WslAvailable { return $false }
+            Mock Invoke-VerifyCommand {
+                $script:wslVerifyAttempts++
+                if ($script:wslVerifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 127
+                    throw "wsl not found"
+                }
+
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.8.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                if ($Arguments -contains "list" -and $Arguments -contains "--id") {
+                    $global:LASTEXITCODE = 1
+                    return "入力条件に一致するインストール済みのパッケージが見つかりませんでした。"
+                }
+
+                $global:LASTEXITCODE = 0
+                return "Name Id Version Source"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["UserPhaseOnly"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            $result.Message | Should -Not -Match "管理者フェーズ待ち"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter {
+                $Arguments -contains "install" -and $Arguments -contains "Microsoft.WSL"
+            }
+            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
+                $Command -eq "wsl" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            }
+        }
+
         It 'should repair then reinstall installed Microsoft.WSL and fail when wsl --version still does not exit' {
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 124

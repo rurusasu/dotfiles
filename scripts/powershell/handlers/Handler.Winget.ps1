@@ -454,6 +454,9 @@ class WingetHandler : SetupHandlerBase {
         if ($ctx.GetOption("WingetVerifyCommandOnly", $false)) {
             return $false
         }
+        if ($ctx.GetOption("UserPhaseOnly", $false)) {
+            return $false
+        }
         if ($ctx.GetOption("SkipWslInstall", $false)) {
             return $false
         }
