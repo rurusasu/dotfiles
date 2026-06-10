@@ -19,28 +19,40 @@ Describe 'Package catalog consistency' {
             $versionedPackages.Count | Should -Be 0
         }
 
-        It 'should allow WezTerm nightly to use the latest installer even when the live hash drifts' {
+        It 'should not require InstallerHashOverride for WezTerm nightly' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?wezterm\s*=\s*\[.*?"--ignore-security-hash"'
+            $sets | Should -Not -Match '(?s)wingetInstallArgs\s*=\s*\{.*?wezterm\s*=\s*\[.*?"--ignore-security-hash"'
         }
 
-        It 'should generate WezTerm nightly with ignore-security-hash install args' {
+        It 'should generate WezTerm nightly without ignore-security-hash install args' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
-            @($package.installArgs) | Should -Contain '--ignore-security-hash'
+            @($package.installArgs) | Should -Not -Contain '--ignore-security-hash'
         }
 
-        It 'should give Warp a longer install timeout because the live installer can be slow' {
+        It 'should define volatile terminal packages as manual winget installs in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetSkipInstall\s*=\s*\{.*?wezterm\s*='
+            $sets | Should -Match '(?s)wingetSkipInstall\s*=\s*\{.*?warp-terminal\s*='
+        }
+
+        It 'should generate skipInstall metadata for volatile terminal packages' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+            $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
 
-            $package | Should -Not -BeNullOrEmpty
-            $package.installTimeoutSeconds | Should -Be 900
+            $warp | Should -Not -BeNullOrEmpty
+            $warp.skipInstall | Should -BeTrue
+            $warp.skipReason | Should -Not -BeNullOrEmpty
+            $wezterm | Should -Not -BeNullOrEmpty
+            $wezterm.skipInstall | Should -BeTrue
+            $wezterm.skipReason | Should -Not -BeNullOrEmpty
         }
 
         It 'should update flake inputs in the Nix rebuild aliases before applying the system' {

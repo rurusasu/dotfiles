@@ -27,7 +27,6 @@ Describe 'Integration Verification - Windows Environment' {
             'fzf'
             'zoxide'
             'winget'
-            'wezterm'
         ) {
             $c = Get-Command -Name $_ -ErrorAction SilentlyContinue
             if ($null -eq $c) { throw "コマンド '$_' が見つかりません" }

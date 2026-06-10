@@ -154,6 +154,14 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "pathEntries") {
                                     $pathEntries = @($pkg.pathEntries)
                                 }
+                                $skipInstall = $false
+                                if ($pkg.PSObject.Properties.Name -contains "skipInstall") {
+                                    $skipInstall = [bool]$pkg.skipInstall
+                                }
+                                $skipReason = $null
+                                if ($pkg.PSObject.Properties.Name -contains "skipReason") {
+                                    $skipReason = [string]$pkg.skipReason
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id                    = $pkg.PackageIdentifier
                                     Version               = $version
@@ -164,6 +172,8 @@ class WingetHandler : SetupHandlerBase {
                                     CiSkipInstall         = $ciSkipInstall
                                     PortableLink          = $portableLink
                                     PathEntries           = $pathEntries
+                                    SkipInstall           = $skipInstall
+                                    SkipReason            = $skipReason
                                 }
                             }
                         }
@@ -201,7 +211,7 @@ class WingetHandler : SetupHandlerBase {
                     Update-ProcessEnvironmentPath
                     $this.EnsurePortableLink($pkg)
                     $this.EnsurePathEntries($pkg)
-                    if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx) -and -not (Test-WslAvailable)) {
+                    if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
                         $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
                         $deferred++
                         continue
@@ -214,6 +224,17 @@ class WingetHandler : SetupHandlerBase {
                             continue
                         }
                     }
+                }
+
+                if ($pkg.SkipInstall) {
+                    if ($verificationPassed) {
+                        $this.Log("スキップ (検証済み/手動対象): $($pkg.Id)", "Gray")
+                        continue
+                    }
+
+                    $this.LogSkippedInstall($pkg)
+                    $skipped++
+                    continue
                 }
 
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
@@ -408,8 +429,22 @@ class WingetHandler : SetupHandlerBase {
         $text = ($installOutput | ForEach-Object { [string]$_ }) -join "`n"
         return $text -match '0x80073cfb' -or
         $text -match 'No applicable update found' -or
+        $text -match 'No available upgrade found' -or
+        $text -match 'No newer package versions are available' -or
         $text -match 'already installed' -or
+        $text -match '既にインストールされています' -or
+        $text -match '利用可能なアップグレードが見つかりませんでした' -or
+        $text -match '新しいパッケージ バージョンはありません' -or
+        $text -match 'バージョン番号を特定できません' -or
         $text -match '別のバージョンが既にインストールされています'
+    }
+
+    hidden [void] LogSkippedInstall([object]$pkg) {
+        $reason = ""
+        if ($pkg.PSObject.Properties.Name -contains "SkipReason" -and -not [string]::IsNullOrWhiteSpace($pkg.SkipReason)) {
+            $reason = " - $($pkg.SkipReason)"
+        }
+        $this.Log("スキップ (手動対象): $($pkg.Id)$reason", "Yellow")
     }
 
     hidden [bool] ShouldDeferWslVerificationToAdminInstall([object]$pkg, [SetupContext]$ctx) {

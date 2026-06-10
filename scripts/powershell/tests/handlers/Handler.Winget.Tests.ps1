@@ -253,6 +253,35 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
         }
+
+        It 'should treat localized already-latest no-op installs without verifyCommand as success' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    return @(
+                        "既存のパッケージが既にインストールされています。インストールされているパッケージ...をアップグレードしようとしています",
+                        "利用可能なアップグレードが見つかりませんでした。",
+                        "構成されたソースから入手できる新しいパッケージ バージョンはありません。"
+                    )
+                }
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name          Id         Version  Source",
+                        "-------------------------------------------",
+                        "Git           Git.Git    2.43.0   winget"
+                    )
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+        }
     }
 
     Context 'Apply - import mode: installed package verification fails' {
@@ -1325,25 +1354,15 @@ Describe 'WingetHandler' {
             Should -Invoke Invoke-VerifyCommand -Times 0
         }
 
-        It 'should repair installed Microsoft.WSL during normal install when WSL is available but wsl --version fails' {
+        It 'should defer Microsoft.WSL even when WSL is available during normal install' {
             Mock Test-WslAvailable { return $true }
             Mock Invoke-VerifyCommand {
-                $global:LASTEXITCODE = 124
-                return "検証コマンドがタイムアウトしました (30s): wsl --version"
+                throw "wsl --version should be skipped in the non-admin winget phase"
             }
             Mock Invoke-Winget {
                 param($Arguments)
-                if ($Arguments -contains "repair") {
-                    $global:LASTEXITCODE = 0
-                    return "修復が完了しました"
-                }
-                if ($Arguments -contains "uninstall") {
-                    $global:LASTEXITCODE = 0
-                    return "アンインストールが完了しました"
-                }
-                if ($Arguments -contains "install") {
-                    $global:LASTEXITCODE = 0
-                    return "インストールが完了しました"
+                if ($Arguments -contains "install" -or $Arguments -contains "repair" -or $Arguments -contains "uninstall") {
+                    throw "winget install, repair, and uninstall should be skipped when WSL is deferred to admin phase"
                 }
                 $global:LASTEXITCODE = 0
                 return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
@@ -1352,13 +1371,53 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "1 個検証失敗"
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個管理者フェーズ待ち"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "repair" }
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "uninstall" }
+            Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+
+        It 'should keep Microsoft.WSL active during user-phase-only installs because no admin phase follows' {
+            $script:wslVerifyAttempts = 0
+            Mock Test-WslAvailable { return $false }
+            Mock Invoke-VerifyCommand {
+                $script:wslVerifyAttempts++
+                if ($script:wslVerifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 127
+                    throw "wsl not found"
+                }
+
+                $global:LASTEXITCODE = 0
+                return "WSL version: 2.7.8.0"
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 0
+                    return "インストールが完了しました"
+                }
+                if ($Arguments -contains "list" -and $Arguments -contains "--id") {
+                    $global:LASTEXITCODE = 1
+                    return "入力条件に一致するインストール済みのパッケージが見つかりませんでした。"
+                }
+
+                $global:LASTEXITCODE = 0
+                return "Name Id Version Source"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $ctx.Options["UserPhaseOnly"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Not -Match "管理者フェーズ待ち"
-            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "repair" }
-            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "uninstall" }
-            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
-            Should -Invoke Invoke-VerifyCommand -Times 3 -ParameterFilter {
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter {
+                $Arguments -contains "install" -and $Arguments -contains "Microsoft.WSL"
+            }
+            Should -Invoke Invoke-VerifyCommand -Times 2 -ParameterFilter {
                 $Command -eq "wsl" -and
                 $Arguments -contains "--version" -and
                 $TimeoutSeconds -eq 30
@@ -1683,6 +1742,89 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+    }
+
+    Context 'Apply - import mode: skipInstall package' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
+        }
+
+        It 'should skip manual packages instead of invoking winget install' {
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Warp.Warp"
+                                    skipInstall       = $true
+                                    skipReason        = "installer hangs in non-interactive winget"
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    throw "winget install should be skipped"
+                }
+                $global:LASTEXITCODE = 1
+            }
+            Mock Write-Host { }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個スキップ"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Write-Host -ParameterFilter {
+                [string]$Object -match 'スキップ \(手動対象\): Warp\.Warp'
+            }
+        }
+
+        It 'should skip manual packages when verification is unavailable' {
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "wez.wezterm.nightly"
+                                    skipInstall       = $true
+                                    skipReason        = "nightly hash drifts"
+                                    verifyCommand     = [PSCustomObject]@{ command = "wezterm"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "install") {
+                    throw "winget install should be skipped"
+                }
+                $global:LASTEXITCODE = 1
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 127
+                throw "wezterm not found"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個スキップ"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
         }
     }
 

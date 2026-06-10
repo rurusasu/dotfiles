@@ -214,13 +214,15 @@
         },
         {
           "PackageIdentifier": "Warp.Warp",
-          "installTimeoutSeconds": 900
+          "skipInstall": true,
+          "skipReason": "Warp installer can hang under non-interactive winget"
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
           "ciSkipInstall": true,
-          "installArgs": ["--ignore-security-hash"],
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
+          "skipInstall": true,
+          "skipReason": "WezTerm nightly can require InstallerHashOverride when the live hash drifts",
           "verifyCommand": {
             "args": ["--version"],
             "command": "wezterm"
