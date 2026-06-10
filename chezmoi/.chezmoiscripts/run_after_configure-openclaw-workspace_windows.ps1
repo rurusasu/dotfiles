@@ -207,7 +207,11 @@ $config = Read-OpenClawConfig -ConfigPath $configPath
 $agents = Get-JsonObjectProperty -Object $config -Name "agents"
 $defaults = Get-JsonObjectProperty -Object $agents -Name "defaults"
 Set-JsonProperty -Object $defaults -Name "workspace" -Value $lifelogRoot
+$browser = Get-JsonObjectProperty -Object $config -Name "browser"
+Set-JsonProperty -Object $browser -Name "enabled" -Value $true
 Write-OpenClawConfig -Config $config -ConfigPath $configPath
 
 Write-Host "OpenClaw agents.defaults.workspace: $lifelogRoot"
+Write-Host "OpenClaw browser.enabled: true"
+Write-Host "If browser commands report a scope upgrade, run: openclaw devices list; openclaw devices approve <requestId>"
 Restart-OpenClawGateway

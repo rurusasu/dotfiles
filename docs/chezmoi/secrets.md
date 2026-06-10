@@ -1,92 +1,83 @@
 # シークレット管理
 
-chezmoi でのシークレット（秘密情報）の管理方法。
+この dotfiles では、実シークレットを repository に保存しない。source of truth は
+1Password に置き、dotfiles には `op://...` 参照、非秘密設定、取得手順だけを置く。
 
-## 概要
+## 基本方針
 
-chezmoi は age または gpg を使って暗号化されたファイルを管理できます。
+1. 実シークレット、token、API key、cookie、pairing token はコミットしない。
+2. `chezmoi/*.tmpl` では `onepasswordRead` を呼ばない。
+3. 1Password が必要な deploy script は、実行時に `op read --account ...` を呼ぶ。
+4. `op read` は timeout 付きにし、失敗時は警告または skip で `chezmoi apply` を止めない。
+5. Shell に常時必要な値は `op run --env-file ...` で注入する。
+6. 複数 1Password account があるため、`--account` を明示する。
 
-## セットアップ
+## 配置
 
-### 1. 暗号化キーの準備
+- `chezmoi/secret/secrets.env`
+  - `op run --env-file` 用。値は `op://...` 参照のみ。
+- `chezmoi/secret/env.sh`
+  - WSL / Linux の fallback loader。`op inject --account ...` を実行時に呼ぶ。
+- `chezmoi/secret/env.ps1`
+  - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取る。
+- `chezmoi/.chezmoidata/mcp_servers.yaml`
+  - MCP の `op_env` 参照を置く。client template は失敗しても env fallback を使う。
+- `chezmoi/.chezmoiscripts/**`
+  - どうしてもファイル配置が必要なものだけ、runtime `op read --account ...` で取得する。
 
-**age を使用する場合（推奨）:**
+## OpenClaw
 
-```bash
-# age キーの生成
-age-keygen -o ~/.config/chezmoi/key.txt
+OpenClaw は local state に pairing 情報と device token を持つ。これらは端末ごとに承認されるため、
+dotfiles へ実体を保存しない。
+
+dotfiles 側で管理するもの:
+
+- `agents.defaults.workspace`
+- `browser.enabled`
+- 再セットアップ時の手順
+
+1Password 側へ控えてよいもの:
+
+- Gateway token: `op://openclaw/openclaw/gateway token`
+- OpenClaw 用 provider API keys
+  - `op://openclaw/ExaUsedOpenclawPAT/credential`
+  - `op://openclaw/TavilyUsedOpenclawPAT/credential`
+  - `op://openclaw/FirecrawlUsedOpenclawPAT/credential`
+
+新しい端末、初期化後、または browser scope が追加された後は、端末ごとに pairing / scope
+upgrade を承認する。
+
+```powershell
+openclaw devices list
+openclaw devices approve <requestId>
+openclaw browser status
+openclaw browser start
+openclaw browser open https://example.com
+openclaw browser snapshot
 ```
 
-**gpg を使用する場合:**
+`openclaw devices approve --latest` は最新 request を表示して明示コマンドを案内する確認用として扱う。
+承認は表示された requestId を `openclaw devices approve <requestId>` で実行する。
 
-```bash
-# 既存の GPG キーを使用
-gpg --list-keys
+## パターン
+
+PowerShell deploy script で値を取得する場合:
+
+```powershell
+$account = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+$secretRef = "op://Private/Example/credential"
+op read --account $account $secretRef
 ```
 
-### 2. chezmoi 設定
+Shell 起動時に環境変数として渡す場合:
 
-`~/.config/chezmoi/chezmoi.toml` を作成:
-
-**age の場合:**
-
-```toml
-encryption = "age"
-[age]
-  identity = "~/.config/chezmoi/key.txt"
-  recipient = "age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```powershell
+op run --env-file="$env:USERPROFILE\.config\shell\secrets.env" -- pwsh
 ```
 
-**gpg の場合:**
+## 検証
 
-```toml
-encryption = "gpg"
-[gpg]
-  recipient = "your-email@example.com"
-```
-
-## シークレットの追加
-
-### 暗号化ファイルの追加
-
-```bash
-chezmoi add --encrypt ~/.ssh/id_rsa
-chezmoi add --encrypt ~/.config/secret.json
-```
-
-これにより、ソースディレクトリに `encrypted_` プレフィックス付きのファイルが作成されます。
-
-### テンプレートでのシークレット
-
-`.tmpl` ファイル内で 1Password, Bitwarden, pass などからシークレットを取得できます:
-
-```
-# 1Password
-{{ onepassword "item-name" }}
-
-# Bitwarden
-{{ bitwarden "item-name" }}
-
-# pass
-{{ pass "path/to/secret" }}
-```
-
-## ベストプラクティス
-
-1. **暗号化キーをリポジトリにコミットしない**
-2. **キーのバックアップを取る** - キーを紛失するとファイルを復号できなくなる
-3. **`.gitignore` でキーファイルを除外**
-
-## 確認
-
-暗号化されたファイルの一覧:
-
-```bash
-chezmoi managed --include=encrypted
-```
-
-復号テスト:
-
-```bash
-chezmoi cat ~/.ssh/id_rsa
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/chezmoi/OpenClawWorkspace.Tests.ps1
 ```

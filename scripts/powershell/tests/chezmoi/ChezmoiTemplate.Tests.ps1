@@ -36,6 +36,16 @@ Describe 'chezmoi テンプレート バリデーション' {
             )
         }
 
+        It 'should not recommend template-time 1Password lookup in secret docs' {
+            $secretsDocPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
+            $content = Get-Content -LiteralPath $secretsDocPath -Raw
+
+            $content | Should -Not -Match '\{\{\s*onepassword(Read)?\b' -Because 'docs must not recommend template-time 1Password lookups'
+            $content | Should -Match 'op read --account' -Because 'docs should describe explicit-account runtime reads'
+            $content | Should -Match 'op run --env-file' -Because 'docs should describe the official env-file injection pattern'
+            $content | Should -Match 'OpenClaw' -Because 'OpenClaw tokens and browser scope approval are part of the current secret policy'
+        }
+
     }
 
     Context 'mcp_servers.yaml の op_env は env キーと一致すること' {
