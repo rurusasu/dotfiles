@@ -22,10 +22,71 @@ Describe 'OpenClaw workspace chezmoi script' {
     It 'passes LIFELOG_ROOT through chezmoi scriptEnv without a default path' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl") -Raw
 
-        $content | Should -Match 'promptString\s+"LIFELOG_ROOT"' -Because 'chezmoi init should persist the explicit lifelog root supplied by the caller'
+        $content | Should -Match 'OPENCLAW_LIFELOG_ROOT_FOR_INIT' -Because 'the setup script needs a no-prompt channel that cannot be masked by an old scriptEnv entry'
+        $content | Should -Not -Match 'promptString\s+"LIFELOG_ROOT"' -Because 'CI renders templates without a TTY'
         $content | Should -Match '(?m)^\s*LIFELOG_ROOT\s*=\s*\{\{\s*\$lifelogRoot\s*\|\s*quote\s*\}\}' -Because 'scriptEnv should receive the explicit lifelog root'
         $content | Should -Not -Match 'D:\\\\lifelog|D:/lifelog' -Because 'the source config must not define a default lifelog root'
         $content | Should -Not -Match '(?m)^\s*LIFELOG_ROOT\s*=\s*""' -Because 'an empty active config entry would mask the real environment variable'
+    }
+
+    It 'renders without prompting when LIFELOG_ROOT is missing' {
+        $oldLifelogRoot = $env:LIFELOG_ROOT
+        $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
+        try {
+            Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
+            Remove-Item Env:\OPENCLAW_LIFELOG_ROOT_FOR_INIT -ErrorAction SilentlyContinue
+
+            $result = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl") -Raw |
+                chezmoi --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
+
+            $LASTEXITCODE | Should -Be 0
+            ($result | Out-String) | Should -Not -Match '(?m)^\s*LIFELOG_ROOT\s*='
+        }
+        finally {
+            if ($null -eq $oldLifelogRoot) {
+                Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:LIFELOG_ROOT = $oldLifelogRoot
+            }
+
+            if ($null -eq $oldSetupRoot) {
+                Remove-Item Env:\OPENCLAW_LIFELOG_ROOT_FOR_INIT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = $oldSetupRoot
+            }
+        }
+    }
+
+    It 'renders setup-provided LIFELOG_ROOT without prompting' {
+        $oldLifelogRoot = $env:LIFELOG_ROOT
+        $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
+        try {
+            Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
+            $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = "X:\explicit\lifelog"
+
+            $result = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl") -Raw |
+                chezmoi --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
+
+            $LASTEXITCODE | Should -Be 0
+            ($result | Out-String) | Should -Match 'LIFELOG_ROOT = "X:\\\\explicit\\\\lifelog"'
+        }
+        finally {
+            if ($null -eq $oldLifelogRoot) {
+                Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:LIFELOG_ROOT = $oldLifelogRoot
+            }
+
+            if ($null -eq $oldSetupRoot) {
+                Remove-Item Env:\OPENCLAW_LIFELOG_ROOT_FOR_INIT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = $oldSetupRoot
+            }
+        }
     }
 
     It 'fails when LIFELOG_ROOT is missing' {

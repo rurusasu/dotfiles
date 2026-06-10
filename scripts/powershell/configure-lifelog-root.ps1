@@ -122,15 +122,28 @@ function Invoke-ChezmoiRefresh {
         throw "Chezmoi source directory does not exist: $ChezmoiSource"
     }
 
-    Invoke-CheckedCommand `
-        -Command $ChezmoiCommand `
-        -Arguments @("init", "--source", $ChezmoiSource, "--promptString", "LIFELOG_ROOT=$Root") `
-        -Description "chezmoi init" | Out-Null
+    $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
+    try {
+        $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = $Root
 
-    Invoke-CheckedCommand `
-        -Command $ChezmoiCommand `
-        -Arguments @("apply", "--source", $ChezmoiSource, "--force") `
-        -Description "chezmoi apply" | Out-Null
+        Invoke-CheckedCommand `
+            -Command $ChezmoiCommand `
+            -Arguments @("init", "--source", $ChezmoiSource) `
+            -Description "chezmoi init" | Out-Null
+
+        Invoke-CheckedCommand `
+            -Command $ChezmoiCommand `
+            -Arguments @("apply", "--source", $ChezmoiSource, "--force") `
+            -Description "chezmoi apply" | Out-Null
+    }
+    finally {
+        if ($null -eq $oldSetupRoot) {
+            Remove-Item Env:\OPENCLAW_LIFELOG_ROOT_FOR_INIT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = $oldSetupRoot
+        }
+    }
 
     Write-Host "chezmoi init/apply completed with LIFELOG_ROOT: $Root"
 }

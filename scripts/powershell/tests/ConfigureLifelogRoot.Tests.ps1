@@ -61,7 +61,7 @@ exit /b 1
 
         Set-Content -LiteralPath $chezmoiStub -Encoding UTF8 -Value @'
 @echo off
->> "%CONFIGURE_LIFELOG_TEST_LOG%" echo chezmoi %* LIFELOG_ROOT=%LIFELOG_ROOT%
+>> "%CONFIGURE_LIFELOG_TEST_LOG%" echo chezmoi %* LIFELOG_ROOT=%LIFELOG_ROOT% OPENCLAW_LIFELOG_ROOT_FOR_INIT=%OPENCLAW_LIFELOG_ROOT_FOR_INIT%
 exit /b 0
 '@
 
@@ -81,9 +81,10 @@ exit /b 0
             ($calls -join "`n") | Should -Match 'git .*rev-parse --git-dir'
             ($calls -join "`n") | Should -Match 'git .*remote get-url origin'
             ($calls -join "`n") | Should -Match 'chezmoi .*init .*--source'
-            ($calls -join "`n") | Should -Match ('--promptString LIFELOG_ROOT=' + [regex]::Escape($env:CONFIGURE_LIFELOG_TEST_ROOT))
+            ($calls -join "`n") | Should -Not -Match '--promptString' -Because 'chezmoi init must not prompt in CI or bootstrap contexts'
             ($calls -join "`n") | Should -Match 'chezmoi .*apply .*--source'
             ($calls -join "`n") | Should -Match ('LIFELOG_ROOT=' + [regex]::Escape($env:CONFIGURE_LIFELOG_TEST_ROOT))
+            ($calls -join "`n") | Should -Match ('OPENCLAW_LIFELOG_ROOT_FOR_INIT=' + [regex]::Escape($env:CONFIGURE_LIFELOG_TEST_ROOT))
         }
         finally {
             Remove-Item Env:\CONFIGURE_LIFELOG_TEST_LOG -ErrorAction SilentlyContinue
