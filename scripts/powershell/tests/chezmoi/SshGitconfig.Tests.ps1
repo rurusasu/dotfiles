@@ -17,8 +17,8 @@ BeforeAll {
     $script:sshConfigTmpl = Join-Path $script:chezmoiRoot "ssh/config.tmpl"
     $script:gitconfigTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig.tmpl"
     $script:gitconfigWorkTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig-work.tmpl"
-    $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_onchange_deploy.ps1.tmpl"
-    $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_onchange_deploy.sh.tmpl"
+    $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl"
+    $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
 }
 
@@ -163,21 +163,10 @@ Describe 'SSH deploy スクリプト' {
             $script:ps1Content | Should -Match 'Deploy-Content.*\\\.ssh\\config'
         }
 
-        It 'onepasswordRead が lookPath "op" でガードされていること' {
-            $lines = Get-Content -Path $script:sshDeployPs1
-            $inOpGuard = $false
-            $violations = @()
-            $lineNum = 0
-
-            foreach ($line in $lines) {
-                $lineNum++
-                if ($line -match '\{\{-?\s*if\s+[^}]*(lookPath\s+"op[^"]*"|\$hasOp|\$hasPersonalAccount|\$hasWorkAccount|\$opPersonal)\b') { $inOpGuard = $true }
-                if ($line -match 'onepasswordRead' -and -not $inOpGuard -and $line -notmatch '^\s*#') {
-                    $violations += "line $lineNum"
-                }
-                if ($line -match '\{\{-?\s*end\s*\}\}' -and $inOpGuard) { $inOpGuard = $false }
-            }
-            $violations | Should -BeNullOrEmpty
+        It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
+            $script:ps1Content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
+            $script:ps1Content | Should -Match '\bread\s+\$Reference\b' -Because "op read should happen at script runtime"
+            $script:ps1Content | Should -Match 'skipping \$Label|no SSH public keys deployed' -Because "runtime 1Password failures should be non-fatal"
         }
     }
 
@@ -194,21 +183,10 @@ Describe 'SSH deploy スクリプト' {
             $script:shContent | Should -Match 'chmod 600.*\.ssh/config' -Because "SSH config は所有者のみ読み書き可能にする必要がある"
         }
 
-        It 'onepasswordRead が lookPath "op" でガードされていること' {
-            $lines = Get-Content -Path $script:sshDeploySh
-            $inOpGuard = $false
-            $violations = @()
-            $lineNum = 0
-
-            foreach ($line in $lines) {
-                $lineNum++
-                if ($line -match '\{\{-?\s*if\s+[^}]*(lookPath\s+"op[^"]*"|\$hasOp|\$hasPersonalAccount|\$hasWorkAccount|\$opPersonal)\b') { $inOpGuard = $true }
-                if ($line -match 'onepasswordRead' -and -not $inOpGuard -and $line -notmatch '^\s*#') {
-                    $violations += "line $lineNum"
-                }
-                if ($line -match '\{\{-?\s*end\s*\}\}' -and $inOpGuard) { $inOpGuard = $false }
-            }
-            $violations | Should -BeNullOrEmpty
+        It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
+            $script:shContent | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
+            $script:shContent | Should -Match 'read "\$reference"' -Because "op read should happen at script runtime"
+            $script:shContent | Should -Match 'skipping \$label' -Because "runtime 1Password failures should be non-fatal"
         }
     }
 }

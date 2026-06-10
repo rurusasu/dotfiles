@@ -1,0 +1,96 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy SSH configuration for Windows
+# hash: {{ include "ssh/config.tmpl" | sha256sum }}
+$ErrorActionPreference = "Stop"
+
+$HomeDir = $env:USERPROFILE
+$PersonalAccount = "{{ .op_account_personal }}"
+$WorkAccount = "{{ .op_account_work }}"
+$PersonalPubkeyRef = "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key"
+$WorkPubkeyRef = "op://Employee/GitHub Work/public key"
+
+function Deploy-Content {
+  param(
+    [string]$Content,
+    [string]$Destination
+  )
+
+  $destDir = Split-Path -Parent $Destination
+  if (-not (Test-Path -LiteralPath $destDir)) {
+    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+  }
+  Set-Content -Path $Destination -Value $Content -NoNewline -Force
+  Write-Host "Deployed: $Destination"
+}
+
+function Get-OpCommand {
+  $opCmd = Get-Command op -ErrorAction SilentlyContinue
+  if (-not $opCmd) {
+    $opCmd = Get-Command op.exe -ErrorAction SilentlyContinue
+  }
+  return $opCmd
+}
+
+function Read-OpSecret {
+  param(
+    [string]$Reference,
+    [string]$Account,
+    [string]$Label
+  )
+
+  $opCmd = Get-OpCommand
+  if (-not $opCmd) {
+    Write-Host "WARNING: 1Password CLI not found, skipping $Label"
+    return $null
+  }
+
+  $output = @(& $opCmd.Source read $Reference --account $Account 2>&1)
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) {
+    Write-Host "WARNING: 1Password is not available, skipping $Label"
+    foreach ($line in $output) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+        Write-Host "  $line"
+      }
+    }
+    return $null
+  }
+
+  $secret = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+  if ([string]::IsNullOrWhiteSpace($secret)) {
+    Write-Host "WARNING: 1Password returned an empty value, skipping $Label"
+    return $null
+  }
+  return $secret
+}
+
+Write-Host "Deploying SSH configuration..."
+
+# Render ssh/config.tmpl inline (chezmoi template engine resolves this at apply time)
+$sshConfig = @'
+{{ include "ssh/config.tmpl" }}
+'@
+Deploy-Content $sshConfig "$HomeDir\.ssh\config"
+
+$deployedPubkeys = 0
+
+# Personal SSH public key (from rurusasu's Private vault).
+$personalPubkey = Read-OpSecret -Reference $PersonalPubkeyRef -Account $PersonalAccount -Label "personal SSH public key"
+if ($personalPubkey) {
+  Deploy-Content $personalPubkey "$HomeDir\.ssh\signing_key.pub"
+  $deployedPubkeys++
+}
+
+# Work SSH public key (from kohei-miki-im8's Employee vault on the work account).
+$workPubkey = Read-OpSecret -Reference $WorkPubkeyRef -Account $WorkAccount -Label "work SSH public key"
+if ($workPubkey) {
+  Deploy-Content $workPubkey "$HomeDir\.ssh\github_work.pub"
+  $deployedPubkeys++
+}
+
+if ($deployedPubkeys -eq 0) {
+  Write-Host "WARNING: no SSH public keys deployed because 1Password is unavailable"
+}
+
+Write-Host "SSH configuration deployed."
+{{ end -}}

@@ -80,7 +80,8 @@ class ChezmoiHandler : SetupHandlerBase {
             $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
             $env:PATH = (@($machinePath, $userPath) | Where-Object { $_ }) -join ";"
 
-            # 1Password CLI のセットアップ確認（chezmoi テンプレートで op を使用するため）
+            # 1Password CLI のセットアップ確認は任意。secret が取れない場合も
+            # chezmoi テンプレート側で既定値に fallback して apply を継続する。
             $this.EnsureOnePasswordAvailable()
 
             # chezmoi 内部の op signin に複数アカウント環境でアカウントを指定する
@@ -245,87 +246,52 @@ class ChezmoiHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
-        1Password CLI のサインイン状態を確認し、未設定なら案内して待つ
+        1Password CLI のサインイン状態を確認する
     .DESCRIPTION
-        chezmoi テンプレートが onepasswordRead を使用するため、
-        op CLI がサインイン済みである必要がある。
-        デスクトップアプリ連携が有効なら自動で通過する。
+        1Password secret はテンプレート展開時の必須条件ではない。
+        op CLI が使えない場合は警告だけ出し、chezmoi apply は fallback 値で続行する。
     #>
     hidden [void] EnsureOnePasswordAvailable() {
         $opExe = $this.FindOpExe()
         if (-not $opExe) {
-            $this.LogWarning("1Password CLI (op) が見つかりません。chezmoi テンプレートが失敗する可能性があります")
+            $this.LogWarning("1Password CLI (op) が見つかりません。secret は既定値で続行します")
             return
         }
 
         $this.Log("1Password CLI: 認証状態を確認しています...", "Gray")
 
-        # サインイン済みか確認
-        # op whoami はデスクトップアプリ連携環境（特に -File モード）で
-        # "account is not signed in" を返す場合がある。
-        # op vault list は認証済みなら exit 0 を返し、より信頼性が高い。
-        $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
+        $result = $null
+        try {
+            # op whoami はデスクトップアプリ連携環境（特に -File モード）で
+            # "account is not signed in" を返す場合がある。
+            # op vault list は認証済みなら exit 0 を返し、より信頼性が高い。
+            $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
+        }
+        catch {
+            $this.LogWarning("1Password CLI の確認に失敗しました。secret は既定値で続行します: $($_.Exception.Message)")
+            return
+        }
+
         if ($result.ExitCode -eq 0) {
             $this.Log("1Password CLI: サインイン済み", "Gray")
             return
         }
 
-        # 原因を診断して具体的なエラーメッセージを構築
-        $diagnosis = $this.DiagnoseOpAuthFailure($opExe)
-
-        # 非対話環境では Read-Host がハングするため対話的サインインをスキップ
-        # ただし chezmoi apply は確実に失敗するため、例外で停止する
-        if (-not (Test-InteractiveEnvironment)) {
-            throw $diagnosis
+        $diagnosis = try {
+            $this.DiagnoseOpAuthFailure($opExe)
+        }
+        catch {
+            $_.Exception.Message
         }
 
-        # 1Password CLI が未認証 → ログイン画面を表示して待機
-        Write-Host ""
-        Write-Host "========================================"  -ForegroundColor Yellow
-        Write-Host "[Chezmoi] 1Password CLI の認証が必要です" -ForegroundColor Yellow
-        Write-Host "========================================"  -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  $diagnosis" -ForegroundColor Cyan
-        Write-Host ""
-        if (Test-IsAdminSession) {
-            Write-Host "  管理者昇格プロセスでは 1Password デスクトップアプリ連携が使えないため、" -ForegroundColor Cyan
-            Write-Host "  op signin による対話認証を試みます。"                                     -ForegroundColor Cyan
-        }
-        else {
-            Write-Host "  ヒント: 1Password デスクトップアプリが起動・サインイン済みなら"           -ForegroundColor Gray
-            Write-Host "  自動的に認証される場合があります。アプリを確認してください。"             -ForegroundColor Gray
-        }
-        Write-Host ""
-
-        $maxRetries = 3
-        for ($i = 1; $i -le $maxRetries; $i++) {
-            $this.Log("1Password CLI: サインインを試行中 ($i/$maxRetries)...")
-            Invoke-OpSignIn -OpExe $opExe -Account $this.OpAccount | Out-Null
-
-            # signin 後に whoami で確認
-            $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
-            if ($result.ExitCode -eq 0) {
-                $this.Log("1Password CLI: サインイン完了", "Green")
-                return
-            }
-
-            if ($i -lt $maxRetries) {
-                $this.LogWarning("1Password CLI のサインインを確認できませんでした")
-                Write-Host ""
-                Write-Host "  1Password デスクトップアプリでサインインしてから Enter を押してください ($i/$maxRetries)..." -ForegroundColor Yellow -NoNewline
-                Read-Host | Out-Null
-
-                # デスクトップアプリ連携が有効になった可能性があるため whoami で再確認
-                $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
-                if ($result.ExitCode -eq 0) {
-                    $this.Log("1Password CLI: サインイン完了（デスクトップアプリ連携）", "Green")
-                    return
+        $this.LogWarning("1Password CLI を利用できません。secret は既定値で続行します")
+        if (-not [string]::IsNullOrWhiteSpace($diagnosis)) {
+            foreach ($line in ($diagnosis -split "`r?`n")) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) {
+                    $this.LogWarning($line)
                 }
             }
         }
-
-        # 全リトライ失敗 → chezmoi apply に進んでも確実に失敗するため例外で停止
-        throw "1Password CLI のサインインに失敗しました。1Password デスクトップアプリでサインインしてから再実行してください。"
     }
 
     <#

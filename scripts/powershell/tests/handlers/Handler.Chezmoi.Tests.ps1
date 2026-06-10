@@ -710,169 +710,129 @@ Describe 'ChezmoiHandler' {
             $env:OP_ACCOUNT | Should -Be $script:expectedOpAccount
         }
 
-        It 'should attempt op signin when op whoami fails and throw after max retries' {
+        It 'should warn and continue when op auth fails' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 0 }
-            }
+            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 0 } }
             Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
-            $script:instructionsShown = $false
+            $script:warningShown = $false
             Mock Write-Host {
                 param($Object)
-                if ($Object -match '認証が必要') { $script:instructionsShown = $true }
+                if ($Object -match 'secret は既定値で続行') { $script:warningShown = $true }
             }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            $script:instructionsShown | Should -Be $true
-            Should -Invoke Invoke-OpSignIn -Times 3
-            # --account パラメータが正しく渡されていること
-            Should -Invoke Invoke-OpSignIn -ParameterFilter {
-                $Account -eq $script:expectedOpAccount
-            }
+            $result.Success | Should -Be $true
+            $script:warningShown | Should -Be $true
+            Should -Invoke Invoke-OpSignIn -Times 0
+            Should -Invoke Read-Host -Times 0
             Should -Invoke Invoke-OpVaultList -ParameterFilter {
                 $Account -eq $script:expectedOpAccount
             }
-            # 全リトライ失敗時は例外で停止し、失敗結果を返す
-            $result.Success | Should -Be $false
         }
 
-        It 'should sign in and log success after op signin succeeds' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            $script:vaultListCallCount = 0
-            Mock Invoke-OpVaultList {
-                $script:vaultListCallCount++
-                # 2回目で成功（op signin 後）
-                if ($script:vaultListCallCount -ge 2) {
-                    return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
-                }
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 0 }
-            }
-            Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
-            $script:signedInLogged = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'サインイン完了') { $script:signedInLogged = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $handler.Apply($ctx)
-
-            $script:signedInLogged | Should -Be $true
-        }
-
-        It 'should throw and return failure after max retries exhausted' {
+        It 'should not prompt even in an interactive session when op auth fails' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
+            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 0 } }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            # 全リトライ失敗時は throw → catch で CreateFailureResult が返る
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match 'サインインに失敗'
-            Should -Invoke Read-Host -Times 2
+            $result.Success | Should -Be $true
+            Should -Invoke Invoke-OpSignIn -Times 0
+            Should -Invoke Read-Host -Times 0
         }
 
-        It 'should show desktop app hint in non-admin session' {
+        It 'should continue after repeated auth failures would have exhausted retries before' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
+            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
             Mock Read-Host { return '' }
             Mock Test-InteractiveEnvironment { return $true }
+            $handler.CanApply($ctx)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Invoke-OpSignIn -Times 0
+            Should -Invoke Read-Host -Times 0
+        }
+
+        It 'should log fallback warning in non-admin session without interactive signin text' {
+            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
+            Mock Invoke-OpVaultList {
+                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
+            }
             Mock Test-IsAdminSession { return $false }
-            $script:hintShown = $false
-            $script:adminMsg = $false
+            $script:fallbackShown = $false
+            $script:interactiveText = $false
             Mock Write-Host {
                 param($Object)
-                if ($Object -match 'デスクトップアプリが起動') { $script:hintShown = $true }
-                if ($Object -match '管理者昇格プロセス') { $script:adminMsg = $true }
+                if ($Object -match 'secret は既定値で続行') { $script:fallbackShown = $true }
+                if ($Object -match 'Enter を押してください|認証が必要') { $script:interactiveText = $true }
             }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
-            $script:hintShown | Should -Be $true -Because '非管理者セッションではデスクトップアプリのヒントが表示されるべき'
-            $script:adminMsg | Should -Be $false -Because '非管理者セッションでは管理者用メッセージは出ないべき'
+            $result.Success | Should -Be $true
+            $script:fallbackShown | Should -Be $true
+            $script:interactiveText | Should -Be $false
         }
 
-        It 'should show admin-specific message in admin session' {
+        It 'should not require admin-specific op signin in admin session' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
+            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
             Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
             Mock Test-IsAdminSession { return $true }
             $script:adminMsg = $false
-            $script:nonAdminHint = $false
             Mock Write-Host {
                 param($Object)
                 if ($Object -match '管理者昇格プロセス') { $script:adminMsg = $true }
-                if ($Object -match 'デスクトップアプリが起動') { $script:nonAdminHint = $true }
             }
             $handler.CanApply($ctx)
 
-            $handler.Apply($ctx)
+            $result = $handler.Apply($ctx)
 
-            $script:adminMsg | Should -Be $true -Because '管理者セッションでは管理者用メッセージが出るべき'
-            $script:nonAdminHint | Should -Be $false -Because '管理者セッションでは非管理者ヒントは出ないべき'
+            $result.Success | Should -Be $true
+            $script:adminMsg | Should -Be $false
+            Should -Invoke Invoke-OpSignIn -Times 0
         }
 
-        It 'should succeed when user signs in via desktop app after Read-Host wait' {
+        It 'should continue without waiting for desktop app sign-in' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             $script:vaultListCount = 0
             Mock Invoke-OpVaultList {
                 $script:vaultListCount++
-                # 1: 初回チェック=失敗, 2: signin後=失敗, 3: ReadHost後デスクトップアプリ連携=成功
-                if ($script:vaultListCount -ge 3) {
-                    return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
-                }
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
             }
-            Mock Invoke-OpSignIn {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
+            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
             Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
-            $script:desktopAppSuccess = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'デスクトップアプリ連携') { $script:desktopAppSuccess = $true }
-            }
             Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
 
             $handler.CanApply($ctx)
             $result = $handler.Apply($ctx)
 
-            $script:desktopAppSuccess | Should -Be $true -Because 'デスクトップアプリ連携での成功メッセージが出るべき'
             $result.Success | Should -Be $true
+            $script:vaultListCount | Should -Be 1
+            Should -Invoke Read-Host -Times 0
         }
 
-        It 'should throw in non-interactive environment when op is not authenticated' {
+        It 'should continue in non-interactive environment when op is not authenticated' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -882,11 +842,10 @@ Describe 'ChezmoiHandler' {
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match '1Password'
+            $result.Success | Should -Be $true
         }
 
-        It 'should fail clearly when 1Password CLI commands time out' {
+        It 'should warn and continue when 1Password CLI commands time out' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
@@ -895,15 +854,20 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
             }
             Mock Test-InteractiveEnvironment { return $false }
+            $script:warningText = ''
+            Mock Write-Host {
+                param($Object)
+                $script:warningText += "`n$Object"
+            }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match '1Password CLI がタイムアウト'
+            $result.Success | Should -Be $true
+            $script:warningText | Should -Match '1Password CLI がタイムアウト'
         }
 
-        It 'should show CLI integration hint when no accounts registered' {
+        It 'should warn with CLI integration hint when no accounts are registered and continue' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -912,20 +876,25 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
             }
             Mock Test-InteractiveEnvironment { return $false }
+            $script:warningText = ''
+            Mock Write-Host {
+                param($Object)
+                $script:warningText += "`n$Object"
+            }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match 'アカウントが登録されていません'
-            $result.Message | Should -Match 'Biometric unlock for 1Password CLI'
+            $result.Success | Should -Be $true
+            $script:warningText | Should -Match 'アカウントが登録されていません'
+            $script:warningText | Should -Match 'Biometric unlock for 1Password CLI'
             # DiagnoseOpAuthFailure 内でも --account が渡されていること
             Should -Invoke Invoke-OpAccountList -ParameterFilter {
                 $Account -eq $script:expectedOpAccount
             }
         }
 
-        It 'should show generic auth error when accounts exist but not authenticated' {
+        It 'should warn with generic auth error when accounts exist but are not authenticated and continue' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -934,16 +903,21 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = '[{"url":"my.1password.com"}]'; ExitCode = 0 }
             }
             Mock Test-InteractiveEnvironment { return $false }
+            $script:warningText = ''
+            Mock Write-Host {
+                param($Object)
+                $script:warningText += "`n$Object"
+            }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match '1Password CLI が未認証です'
-            $result.Message | Should -Match 'ロック解除'
+            $result.Success | Should -Be $true
+            $script:warningText | Should -Match '1Password CLI が未認証です'
+            $script:warningText | Should -Match 'ロック解除'
         }
 
-        It 'should show restart hint when desktop app connection fails' {
+        It 'should warn with restart hint when desktop app connection fails and continue' {
             Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
             Mock Invoke-OpVaultList {
                 return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
@@ -952,13 +926,18 @@ Describe 'ChezmoiHandler' {
                 return [PSCustomObject]@{ Output = 'cannot connect to 1Password app, make sure it is running'; ExitCode = 1 }
             }
             Mock Test-InteractiveEnvironment { return $false }
+            $script:warningText = ''
+            Mock Write-Host {
+                param($Object)
+                $script:warningText += "`n$Object"
+            }
             $handler.CanApply($ctx)
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match '接続できません'
-            $result.Message | Should -Match '再起動'
+            $result.Success | Should -Be $true
+            $script:warningText | Should -Match '接続できません'
+            $script:warningText | Should -Match '再起動'
         }
     }
 

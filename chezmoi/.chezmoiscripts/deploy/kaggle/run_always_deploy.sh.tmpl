@@ -1,0 +1,44 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy Kaggle API credentials for Linux/macOS
+set -euo pipefail
+
+OP_ACCOUNT="{{ .op_account_personal }}"
+SECRET_REF="op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
+
+if command -v op >/dev/null 2>&1; then
+  OP_CMD="$(command -v op)"
+elif command -v op.exe >/dev/null 2>&1; then
+  OP_CMD="$(command -v op.exe)"
+else
+  echo "WARNING: 1Password CLI not found, skipping Kaggle API credentials deployment"
+  exit 0
+fi
+
+echo "Deploying Kaggle API credentials..."
+
+ERR_FILE="$(mktemp)"
+trap 'rm -f "$ERR_FILE"' EXIT
+
+if ! TOKEN="$("$OP_CMD" read "$SECRET_REF" --account "$OP_ACCOUNT" 2>"$ERR_FILE")"; then
+  echo "WARNING: 1Password is not available, skipping Kaggle API credentials deployment"
+  sed 's/^/  /' "$ERR_FILE" || true
+  exit 0
+fi
+
+if [ -z "$TOKEN" ]; then
+  echo "WARNING: Kaggle API credential is empty, skipping deployment"
+  exit 0
+fi
+
+HOME_DIR="${HOME:-/home/$(whoami)}"
+KAGGLE_DIR="$HOME_DIR/.kaggle"
+
+mkdir -p "$KAGGLE_DIR"
+
+# New API Token method: ~/.kaggle/access_token
+printf '%s' "$TOKEN" > "$KAGGLE_DIR/access_token"
+chmod 600 "$KAGGLE_DIR/access_token"
+
+echo "Deployed: $KAGGLE_DIR/access_token"
+{{ end -}}

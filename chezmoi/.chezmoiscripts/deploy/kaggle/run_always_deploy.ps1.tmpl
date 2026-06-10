@@ -1,0 +1,46 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Deploy Kaggle API credentials for Windows
+$ErrorActionPreference = "Stop"
+
+$KaggleDir = "$env:USERPROFILE\.kaggle"
+$OpAccount = "{{ .op_account_personal }}"
+$SecretRef = "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
+
+$opCmd = Get-Command op -ErrorAction SilentlyContinue
+if (-not $opCmd) {
+  $opCmd = Get-Command op.exe -ErrorAction SilentlyContinue
+}
+
+if (-not $opCmd) {
+  Write-Host "WARNING: 1Password CLI not found, skipping Kaggle API credentials deployment"
+  return
+}
+
+Write-Host "Deploying Kaggle API credentials..."
+
+$output = @(& $opCmd.Source read $SecretRef --account $OpAccount 2>&1)
+$exitCode = $LASTEXITCODE
+if ($exitCode -ne 0) {
+  Write-Host "WARNING: 1Password is not available, skipping Kaggle API credentials deployment"
+  foreach ($line in $output) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+      Write-Host "  $line"
+    }
+  }
+  return
+}
+
+$token = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+if ([string]::IsNullOrWhiteSpace($token)) {
+  Write-Host "WARNING: Kaggle API credential is empty, skipping deployment"
+  return
+}
+
+if (-not (Test-Path -LiteralPath $KaggleDir)) {
+  New-Item -ItemType Directory -Path $KaggleDir -Force | Out-Null
+}
+
+# New API Token method: ~/.kaggle/access_token
+Set-Content -Path "$KaggleDir\access_token" -Value $token -NoNewline -Force
+Write-Host "Deployed: $KaggleDir\access_token"
+{{ end -}}

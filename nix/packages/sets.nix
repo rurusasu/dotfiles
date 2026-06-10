@@ -12,6 +12,7 @@
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
 #   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
+#   - wingetDirectInstallers → catalog attr name or winget ID → direct installer metadata
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
@@ -631,7 +632,19 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
-    warp-terminal = 900;
+  };
+
+  wingetDirectInstallers = {
+    warp-terminal = {
+      type = "warpInnoLatest";
+      timeoutSeconds = 900;
+      installerArgs = [
+        "/VERYSILENT"
+        "/SUPPRESSMSGBOXES"
+        "/NORESTART"
+        "/CURRENTUSER"
+      ];
+    };
   };
 
   # Packages kept in the catalog but skipped by the normal Windows installer.
