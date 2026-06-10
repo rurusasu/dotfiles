@@ -5,12 +5,38 @@ $script:hasChezmoi = $null -ne (Get-Command chezmoi -ErrorAction SilentlyContinu
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
-    $script:scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_configure-openclaw-workspace_windows.ps1"
+    $script:scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_configure-openclaw-workspace_windows.ps1.tmpl"
+    $script:renderOpenClawWorkspaceScript = {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$DestinationDirectory,
+            [Parameter(Mandatory = $true)]
+            [string]$TemplatePath,
+            [Parameter(Mandatory = $true)]
+            [string]$SourceRoot
+        )
+
+        $renderedPath = Join-Path $DestinationDirectory "run_after_configure-openclaw-workspace_windows.ps1"
+        $content = Get-Content -LiteralPath $TemplatePath -Raw
+        $useChezmoi = $null -ne (Get-Command chezmoi -ErrorAction SilentlyContinue)
+
+        if ($useChezmoi) {
+            $output = $content | chezmoi --source $SourceRoot execute-template --init --no-tty 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to render OpenClaw workspace script template: $($output | Out-String)"
+            }
+            $content = $output -join [Environment]::NewLine
+        }
+
+        Set-Content -LiteralPath $renderedPath -Value $content -Encoding UTF8
+        return $renderedPath
+    }
 }
 
 Describe 'OpenClaw workspace chezmoi script' {
     It 'is managed as a chezmoi script' {
         Test-Path -LiteralPath $script:scriptPath -PathType Leaf | Should -BeTrue
+        $script:scriptPath | Should -Match '\.ps1\.tmpl$' -Because 'chezmoi-managed PowerShell scripts should be templates, not raw .ps1 files'
     }
 
     It 'requires an explicit LIFELOG_ROOT and does not search default paths' {
@@ -126,8 +152,9 @@ Describe 'OpenClaw workspace chezmoi script' {
         try {
             Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
             $env:OPENCLAW_CONFIG = Join-Path $TestDrive "openclaw.json"
+            $renderedScriptPath = & $script:renderOpenClawWorkspaceScript -DestinationDirectory $TestDrive -TemplatePath $script:scriptPath -SourceRoot $script:chezmoiRoot
 
-            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath 2>&1
+            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $renderedScriptPath 2>&1
             $LASTEXITCODE | Should -Not -Be 0
             ($result | Out-String) | Should -Match 'LIFELOG_ROOT'
         }
@@ -202,8 +229,9 @@ Describe 'OpenClaw workspace chezmoi script' {
             ) -Encoding ASCII
             $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $restartCommandPath
             $env:restartLogPath = $restartLogPath
+            $renderedScriptPath = & $script:renderOpenClawWorkspaceScript -DestinationDirectory $TestDrive -TemplatePath $script:scriptPath -SourceRoot $script:chezmoiRoot
 
-            & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath | Out-Null
+            & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $renderedScriptPath | Out-Null
             $LASTEXITCODE | Should -Be 0
 
             $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
@@ -264,8 +292,9 @@ Describe 'OpenClaw workspace chezmoi script' {
             $env:LIFELOG_ROOT = $lifelogRoot
             $env:OPENCLAW_CONFIG = $configPath
             $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $restartCommandPath
+            $renderedScriptPath = & $script:renderOpenClawWorkspaceScript -DestinationDirectory $TestDrive -TemplatePath $script:scriptPath -SourceRoot $script:chezmoiRoot
 
-            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath 2>&1
+            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $renderedScriptPath 2>&1
             $LASTEXITCODE | Should -Not -Be 0
             ($result | Out-String) | Should -Match 'OpenClaw gateway restart'
         }
