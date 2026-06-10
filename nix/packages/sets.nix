@@ -12,6 +12,7 @@
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
 #   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
+#   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
@@ -626,19 +627,21 @@ lib.mapAttrs (_: names: resolve names) grouped
       "--installer-type"
       "wix"
     ];
-    wezterm = [
-      "--ignore-security-hash"
-    ];
   };
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
-    warp-terminal = 900;
+  };
+
+  # Packages kept in the catalog but skipped by the non-interactive Windows
+  # installer because upstream live installers are not reliable in that mode.
+  wingetSkipInstall = {
+    wezterm = "WezTerm nightly can require InstallerHashOverride when the live hash drifts";
+    warp-terminal = "Warp installer can hang under non-interactive winget";
   };
 
   # Upstream nightly winget manifests and Microsoft Store installs can drift or
-  # hang in CI. Keep them in normal installs, but avoid making CI depend on
-  # their live installer behavior.
+  # hang in CI. Avoid making CI depend on their live installer behavior.
   wingetCiSkipInstall = {
     wezterm = true;
     "9PLM9XGG6VKS" = true;

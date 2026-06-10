@@ -48,6 +48,20 @@ let
     in
     if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
 
+  attachSkipInstall =
+    skipInstallMap: key: pkg:
+    let
+      skipReason = skipInstallMap.${key} or null;
+    in
+    if skipReason == null then
+      pkg
+    else
+      pkg
+      // {
+        skipInstall = true;
+        inherit skipReason;
+      };
+
   attachCiSkipInstall =
     ciSkipInstallMap: key: pkg:
     let
@@ -78,11 +92,13 @@ let
 
   attachWingetMetadata =
     key: pkg:
-    attachCiSkipInstall sets.wingetCiSkipInstall key (
-      attachPathEntries sets.wingetPathEntries key (
-        attachPortableLink sets.wingetPortableLinksById key (
-          attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
-            attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+    attachSkipInstall sets.wingetSkipInstall key (
+      attachCiSkipInstall sets.wingetCiSkipInstall key (
+        attachPathEntries sets.wingetPathEntries key (
+          attachPortableLink sets.wingetPortableLinksById key (
+            attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+              attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+            )
           )
         )
       )
@@ -95,10 +111,12 @@ let
 
   wingetFromWindowsOnly = map (
     id:
-    attachCiSkipInstall sets.wingetCiSkipInstall id (
-      attachPathEntries sets.wingetPathEntries id (
-        attachPortableLink sets.wingetPortableLinksById id (
-          attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+    attachSkipInstall sets.wingetSkipInstall id (
+      attachCiSkipInstall sets.wingetCiSkipInstall id (
+        attachPathEntries sets.wingetPathEntries id (
+          attachPortableLink sets.wingetPortableLinksById id (
+            attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+          )
         )
       )
     )
@@ -108,8 +126,10 @@ let
 
   msstorePackages = map (
     id:
-    attachCiSkipInstall sets.wingetCiSkipInstall id (
-      attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+    attachSkipInstall sets.wingetSkipInstall id (
+      attachCiSkipInstall sets.wingetCiSkipInstall id (
+        attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+      )
     )
   ) sets.windowsOnly.msstore;
 
