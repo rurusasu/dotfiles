@@ -65,12 +65,24 @@ Describe 'Package catalog consistency' {
             $wezterm.ciSkipInstall | Should -BeTrue
         }
 
-        It 'should cap Warp install time so install.cmd cannot hang indefinitely' {
+        It 'should cap Warp direct installer time so install.cmd cannot hang indefinitely' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
 
-            $warp.installTimeoutSeconds | Should -Be 900
+            $warp.directInstaller.timeoutSeconds | Should -Be 900
+        }
+
+        It 'should install Warp through the direct user-scope Inno installer during normal winget runs' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+
+            $sets | Should -Match '(?s)wingetDirectInstallers\s*=\s*\{.*?warp-terminal\s*=\s*\{.*?type\s*=\s*"warpInnoLatest"'
+            $warp.directInstaller.type | Should -Be 'warpInnoLatest'
+            @($warp.directInstaller.installerArgs) | Should -Contain '/CURRENTUSER'
+            @($warp.directInstaller.installerArgs) | Should -Contain '/VERYSILENT'
         }
 
         It 'should update flake inputs in the Nix rebuild aliases before applying the system' {

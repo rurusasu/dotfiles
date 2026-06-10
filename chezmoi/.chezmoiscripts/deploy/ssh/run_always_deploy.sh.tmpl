@@ -1,0 +1,117 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/bash
+# Deploy SSH configuration for Linux/macOS
+# hash: {{ include "ssh/config.tmpl" | sha256sum }}
+set -euo pipefail
+
+PERSONAL_ACCOUNT="{{ .op_account_personal }}"
+WORK_ACCOUNT="{{ .op_account_work }}"
+PERSONAL_PUBKEY_REF="op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key"
+WORK_PUBKEY_REF="op://Employee/GitHub Work/public key"
+OP_READ_TIMEOUT_SECONDS=10
+
+HOME_DIR="${HOME:-/home/$(whoami)}"
+
+deploy_content() {
+  local content="$1"
+  local dst="$2"
+
+  mkdir -p "$(dirname "$dst")"
+  printf '%s' "$content" > "$dst"
+  echo "Deployed: $dst"
+}
+
+find_op() {
+  if command -v op >/dev/null 2>&1; then
+    command -v op
+  elif command -v op.exe >/dev/null 2>&1; then
+    command -v op.exe
+  else
+    return 1
+  fi
+}
+
+find_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    command -v timeout
+  elif command -v gtimeout >/dev/null 2>&1; then
+    command -v gtimeout
+  else
+    return 1
+  fi
+}
+
+read_op_secret() {
+  local reference="$1"
+  local account="$2"
+  local label="$3"
+  local op_cmd
+  local timeout_cmd
+  local err_file
+
+  if ! op_cmd="$(find_op)"; then
+    echo "WARNING: 1Password CLI not found, skipping $label" >&2
+    return 1
+  fi
+  if ! timeout_cmd="$(find_timeout)"; then
+    echo "WARNING: timeout command not found, skipping $label" >&2
+    return 1
+  fi
+
+  err_file="$(mktemp)"
+  local output
+  local exit_code
+  if output="$("$timeout_cmd" "${OP_READ_TIMEOUT_SECONDS}s" "$op_cmd" read "$reference" --account "$account" 2>"$err_file")"; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    if [ "$exit_code" -eq 124 ]; then
+      echo "WARNING: 1Password read timed out after $OP_READ_TIMEOUT_SECONDS seconds, skipping $label" >&2
+    else
+      echo "WARNING: 1Password is not available, skipping $label" >&2
+    fi
+    sed 's/^/  /' "$err_file" >&2 || true
+    rm -f "$err_file"
+    return 1
+  fi
+  if [ -s "$err_file" ]; then
+    echo "WARNING: 1Password is not available, skipping $label" >&2
+    sed 's/^/  /' "$err_file" >&2 || true
+    rm -f "$err_file"
+    return 1
+  fi
+  printf '%s' "$output"
+  rm -f "$err_file"
+}
+
+echo "Deploying SSH configuration..."
+
+# Render ssh/config.tmpl inline (chezmoi template engine resolves this at apply time)
+SSH_CONFIG='{{ include "ssh/config.tmpl" }}'
+deploy_content "$SSH_CONFIG" "$HOME_DIR/.ssh/config"
+chmod 600 "$HOME_DIR/.ssh/config"
+
+DEPLOYED_PUBKEYS=0
+
+# Personal SSH public key (from rurusasu's Private vault).
+if PERSONAL_PUBKEY="$(read_op_secret "$PERSONAL_PUBKEY_REF" "$PERSONAL_ACCOUNT" "personal SSH public key")" && [ -n "$PERSONAL_PUBKEY" ]; then
+  deploy_content "$PERSONAL_PUBKEY" "$HOME_DIR/.ssh/signing_key.pub"
+  chmod 644 "$HOME_DIR/.ssh/signing_key.pub"
+  DEPLOYED_PUBKEYS=$((DEPLOYED_PUBKEYS + 1))
+fi
+
+# Work SSH public key (from kohei-miki-im8's Employee vault on the work account).
+if WORK_PUBKEY="$(read_op_secret "$WORK_PUBKEY_REF" "$WORK_ACCOUNT" "work SSH public key")" && [ -n "$WORK_PUBKEY" ]; then
+  deploy_content "$WORK_PUBKEY" "$HOME_DIR/.ssh/github_work.pub"
+  chmod 644 "$HOME_DIR/.ssh/github_work.pub"
+  DEPLOYED_PUBKEYS=$((DEPLOYED_PUBKEYS + 1))
+fi
+
+if [ "$DEPLOYED_PUBKEYS" -eq 0 ]; then
+  echo "WARNING: no SSH public keys deployed because 1Password is unavailable"
+fi
+
+echo "SSH configuration deployed."
+{{ end -}}

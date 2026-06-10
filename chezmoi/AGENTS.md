@@ -13,8 +13,8 @@
 ## 変更時の必須確認
 
 1. `.chezmoiignore.tmpl` がターゲット名ベースで正しく除外されること。
-2. `onepasswordRead` を使う箇所は `lookPath "op"` でガードすること。
-3. `onepasswordRead` には 2 引数目で account を明示すること（`.op_account_personal` / `.op_account_work`）。chezmoi 2.70.x で `[onepassword] account` flat 形式は黙って無視される。
+2. `.tmpl` では `onepasswordRead` を直接呼ばないこと。1Password app 連携が一時的に使えないだけで `chezmoi apply` が失敗する。
+3. 1Password の値が必要な場合は deploy スクリプト実行時に `op read --account ...` で取得し、取得失敗時は警告または既定値 fallback で続行すること。
 4. `.chezmoi.toml.tmpl` を変更したら `chezmoi init` で再生成すること。`[data]` 追加が反映されず `map has no entry for key` で apply が止まる。
 5. `AGENTS.md`/`README.md` は deploy 対象にしないこと。
 6. `.tmpl` ファイルを deploy スクリプトから参照する場合は `include` でインライン展開すること（ファイルコピーでは未展開のまま配置される）。

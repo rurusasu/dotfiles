@@ -230,16 +230,8 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 ################################################################################
 
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
-{{- $opPersonal := false }}
-{{- $opAccounts := "" }}
-{{- if $opCmd }}
-{{- if eq .chezmoi.os "windows" }}
-{{- $opAccounts = output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "& '%s' account list 2>$null; exit 0" $opCmd) }}
-{{- else }}
-{{- $opAccounts = output "sh" "-c" (printf "'%s' account list 2>/dev/null || true" $opCmd) }}
-{{- end }}
-{{- end }}
-{{- $opPersonal = contains .op_account_personal $opAccounts }}
+{{- $opReadFailed := false }}
+{{- $opReadTimeoutSeconds := 5 }}
 [mcp_servers]
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
@@ -264,15 +256,20 @@ startup_timeout_sec = {{ .startup_timeout_sec }}
 {{- end }}
 {{- if hasKey . "env" }}
 [mcp_servers.{{ .name }}.env]
-{{- $hasOp := and (hasKey . "op_env") $opPersonal }}
 {{- $opEnv := dict }}
 {{- if hasKey . "op_env" }}{{ $opEnv = .op_env }}{{ end }}
 {{- range $key, $value := .env }}
-{{- if and $hasOp (hasKey $opEnv $key) }}
-{{ $key }} = "{{ onepasswordRead (index $opEnv $key) $.op_account_personal }}"
+{{- $envValue := $value }}
+{{- if and $opCmd (not $opReadFailed) (hasKey $opEnv $key) }}
+{{- $secret := "" }}
+{{- if eq $.chezmoi.os "windows" }}
+{{- $secret = (output "pwsh" "-NoLogo" "-NoProfile" "-NonInteractive" "-Command" (printf "$ErrorActionPreference = 'SilentlyContinue'; $stdout = [System.IO.Path]::GetTempFileName(); $stderr = [System.IO.Path]::GetTempFileName(); try { $process = Start-Process -FilePath '%s' -ArgumentList @('read', '%s', '--account', '%s') -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr; if ($process.WaitForExit(%d000) -and $process.ExitCode -eq 0) { Get-Content -LiteralPath $stdout -Raw -ErrorAction SilentlyContinue } else { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } } finally { Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue }; exit 0" $opCmd (index $opEnv $key) $.op_account_personal $opReadTimeoutSeconds) | trim) }}
 {{- else }}
-{{ $key }} = "{{ $value }}"
+{{- $secret = (output "sh" "-c" (printf "( '%s' read '%s' --account '%s' 2>/dev/null ) & pid=$!; ( sleep %d; kill \"$pid\" 2>/dev/null ) & watcher=$!; if wait \"$pid\"; then kill \"$watcher\" 2>/dev/null; fi || true" $opCmd (index $opEnv $key) $.op_account_personal $opReadTimeoutSeconds) | trim) }}
 {{- end }}
+{{- if $secret }}{{ $envValue = $secret }}{{ else }}{{ $opReadFailed = true }}{{ end }}
+{{- end }}
+{{ $key }} = "{{ $envValue }}"
 {{- end }}
 {{- end }}
 {{- end }}

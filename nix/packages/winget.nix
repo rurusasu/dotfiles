@@ -48,6 +48,13 @@ let
     in
     if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
 
+  attachDirectInstaller =
+    directInstallersMap: key: pkg:
+    let
+      directInstaller = directInstallersMap.${key} or null;
+    in
+    if directInstaller == null then pkg else pkg // { inherit directInstaller; };
+
   attachSkipInstall =
     skipInstallMap: key: pkg:
     let
@@ -96,8 +103,10 @@ let
       attachCiSkipInstall sets.wingetCiSkipInstall key (
         attachPathEntries sets.wingetPathEntries key (
           attachPortableLink sets.wingetPortableLinksById key (
-            attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
-              attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+            attachDirectInstaller sets.wingetDirectInstallers key (
+              attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+                attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+              )
             )
           )
         )
@@ -115,7 +124,9 @@ let
       attachCiSkipInstall sets.wingetCiSkipInstall id (
         attachPathEntries sets.wingetPathEntries id (
           attachPortableLink sets.wingetPortableLinksById id (
-            attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+            attachDirectInstaller sets.wingetDirectInstallers id (
+              attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+            )
           )
         )
       )

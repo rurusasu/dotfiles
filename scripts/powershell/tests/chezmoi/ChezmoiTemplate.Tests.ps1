@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     AGENTS.md のルールに基づき、テンプレートの安全性を静的に検証する:
-    - onepasswordRead は lookPath "op" でガードされているか
+    - onepasswordRead がテンプレート展開中に呼ばれないか
     - 主要テンプレートに必須セクションが含まれているか
 #>
 
@@ -17,75 +17,25 @@ BeforeAll {
 }
 
 Describe 'chezmoi テンプレート バリデーション' {
-    Context 'onepasswordRead には lookPath "op" ガードが必須' {
-        It 'すべての .tmpl ファイルで onepasswordRead が lookPath "op" でガードされていること' {
+    Context 'onepasswordRead はテンプレート展開中に呼ばない' {
+        It 'すべての .tmpl ファイルで onepasswordRead を呼ばないこと' {
             $violations = @()
 
             foreach ($file in $script:templateFiles) {
                 $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
                 if (-not $content) { continue }
 
-                # テンプレート展開 ({{...}}) 内の onepasswordRead 呼び出しのみが対象。
-                # コメント内の言及やドキュメント記述は除外する。
-                if ($content -match '\{\{[^}]*onepasswordRead' -and $content -notmatch 'lookPath\s+"op"') {
+                if ($content -match '\{\{[^}]*onepasswordRead') {
                     $violations += $file.FullName
                 }
             }
 
             $violations | Should -BeNullOrEmpty -Because (
-                "AGENTS.md ルール: onepasswordRead を使う箇所は lookPath `"op`" でガードすること。" +
-                " 違反ファイル: $($violations -join ', ')"
+                "1Password app integration failures must not abort chezmoi template rendering. " +
+                "Use non-failing runtime op read instead. Violations: $($violations -join ', ')"
             )
         }
 
-        It 'onepasswordRead の各呼び出しが個別に op ガードブロック内にあること' {
-            foreach ($file in $script:templateFiles) {
-                $lines = Get-Content -Path $file.FullName -ErrorAction SilentlyContinue
-                if (-not $lines) { continue }
-
-                # op に由来するガード変数を収集する。lookPath / op アカウント /
-                # 既存の op 変数から派生したものだけを「ガード」として認める。
-                #   $opCmd      := or (lookPath "op") (lookPath "op.exe")        ← lookPath 由来
-                #   $opPersonal  = contains .op_account_personal (output $opCmd ...) ← account 由来
-                #   $hasOp      := and (hasKey . "op_env") $opPersonal           ← op 変数派生
-                #   $hasPersonalAccount = contains .op_account_personal $accounts
-                $opVars = [System.Collections.Generic.HashSet[string]]::new()
-                foreach ($line in $lines) {
-                    if ($line -match '\$(\w+)\s*:?=\s*.*lookPath\s+"op') {
-                        [void]$opVars.Add($Matches[1])
-                    }
-                    elseif ($line -match '\$(\w+)\s*:?=\s*.*op_account') {
-                        [void]$opVars.Add($Matches[1])
-                    }
-                    elseif ($line -match '\$(\w+)\s*:?=\s*.*\$(\w+)' -and $opVars.Contains($Matches[2])) {
-                        [void]$opVars.Add($Matches[1])
-                    }
-                }
-
-                $inOpGuard = $false
-                $lineNum = 0
-                foreach ($line in $lines) {
-                    $lineNum++
-
-                    # ガードブロック開始: {{ if ... }} が lookPath "op" か op 由来変数を参照
-                    if ($line -match '\{\{-?\s*if\s+[^}]*lookPath\s+"op"') {
-                        $inOpGuard = $true
-                    }
-                    elseif ($line -match '\{\{-?\s*if\b[^}]*?\$(\w+)' -and $opVars.Contains($Matches[1])) {
-                        $inOpGuard = $true
-                    }
-
-                    # テンプレート展開 ({{...}}) 内の呼び出しのみを対象とする。
-                    # コメント (`# For onepasswordRead, ...`) やドキュメント記述は除外。
-                    if ($line -match '\{\{[^}]*onepasswordRead' -and -not $inOpGuard) {
-                        "$($file.Name):$lineNum should be inside an op guard block (lookPath `"op`" / `$opPersonal / etc.)" |
-                            Should -BeNullOrEmpty
-                    }
-
-                    if ($line -match '\{\{-?\s*end\s*\}\}' -and $inOpGuard) { $inOpGuard = $false }
-                }
-            }
-        }
     }
 
     Context 'mcp_servers.yaml の op_env は env キーと一致すること' {
@@ -142,6 +92,41 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
 
             $violations | Should -BeNullOrEmpty -Because "op_env のキーは env にも定義されている必要がある"
+        }
+    }
+
+    Context 'MCP client templates の op_env secret lookup' {
+        BeforeAll {
+            $script:mcpClientTemplates = @(
+                "AppData/Roaming/Claude/claude_desktop_config.json.tmpl",
+                "dot_claude/dot_claude.json.tmpl",
+                "dot_codeium/windsurf/mcp_config.json.tmpl",
+                "dot_codex/config.toml.tmpl",
+                "dot_cursor/cli-config.json.tmpl",
+                "dot_gemini/settings.json.tmpl"
+            ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
+        }
+
+        It 'should not call onepasswordRead during template rendering' {
+            foreach ($path in $script:mcpClientTemplates) {
+                $content = Get-Content -LiteralPath $path -Raw
+                $content | Should -Not -Match 'onepasswordRead' -Because "$path must not fail chezmoi apply when 1Password app integration is unavailable"
+            }
+        }
+
+        It 'should use non-failing op read and fall back to the configured env value' {
+            foreach ($path in $script:mcpClientTemplates) {
+                $content = Get-Content -LiteralPath $path -Raw
+                $content | Should -Match '\$envValue := \$value' -Because "$path should keep the mcp_servers.yaml env value as fallback"
+                $content | Should -Match '\bread\b.*--account' -Because "$path should resolve op_env secrets with op read"
+                $content | Should -Match 'exit 0' -Because "$path should not abort template rendering on Windows op read failures"
+                $content | Should -Match '\|\| true' -Because "$path should not abort template rendering on Unix op read failures"
+                $content | Should -Match '\$opReadFailed' -Because "$path should stop repeated op attempts after the first failed lookup"
+                $content | Should -Match 'WaitForExit\(%d000\)' -Because "$path should timeout Windows op read calls"
+                $content | Should -Match 'Stop-Process -Id \$process\.Id -Force' -Because "$path should terminate timed-out Windows op read calls"
+                $content | Should -Match 'sleep %d; kill' -Because "$path should timeout Unix op read calls"
+                $content | Should -Match 'if \$secret' -Because "$path should only replace fallback values when op returns a secret"
+            }
         }
     }
 
@@ -369,6 +354,43 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content = Get-Content -Path $script:geminiTemplate -Raw
             $content | Should -Match '"security"' -Because "Gemini CLI の OAuth 認証設定が必要"
             $content | Should -Match '"selectedType"' -Because "認証タイプの指定が必要"
+        }
+    }
+
+    Context 'Kaggle credentials deploy script' {
+        BeforeAll {
+            $script:kaggleDeployWindows = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_always_deploy.ps1.tmpl"
+            $script:kaggleDeployLinux = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_always_deploy.sh.tmpl"
+            $script:kaggleOldWindows = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_onchange_deploy.ps1.tmpl"
+            $script:kaggleOldLinux = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_onchange_deploy.sh.tmpl"
+        }
+
+        It 'should retry on every apply instead of one-time onchange when 1Password is temporarily unavailable' {
+            Test-Path -LiteralPath $script:kaggleDeployWindows | Should -BeTrue
+            Test-Path -LiteralPath $script:kaggleDeployLinux | Should -BeTrue
+            Test-Path -LiteralPath $script:kaggleOldWindows | Should -BeFalse
+            Test-Path -LiteralPath $script:kaggleOldLinux | Should -BeFalse
+        }
+
+        It 'should not call onepasswordRead during template rendering' {
+            foreach ($path in @($script:kaggleDeployWindows, $script:kaggleDeployLinux)) {
+                $content = Get-Content -LiteralPath $path -Raw
+                $content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
+                $content | Should -Match 'ArgumentList\.Add\("read"\)|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
+                $content | Should -Match 'skipping Kaggle API credentials deployment' -Because "runtime 1Password failures should be non-fatal"
+            }
+        }
+
+        It 'should bound runtime op reads with a timeout' {
+            $windowsContent = Get-Content -LiteralPath $script:kaggleDeployWindows -Raw
+            $linuxContent = Get-Content -LiteralPath $script:kaggleDeployLinux -Raw
+
+            $windowsContent | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $windowsContent | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
+            $windowsContent | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
+            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $linuxContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
+            $linuxContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout failures should be reported as non-fatal skips"
         }
     }
 

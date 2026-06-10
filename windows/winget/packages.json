@@ -214,7 +214,11 @@
         },
         {
           "ciSkipInstall": true,
-          "installTimeoutSeconds": 900,
+          "directInstaller": {
+            "installerArgs": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER"],
+            "timeoutSeconds": 900,
+            "type": "warpInnoLatest"
+          },
           "PackageIdentifier": "Warp.Warp"
         },
         {
