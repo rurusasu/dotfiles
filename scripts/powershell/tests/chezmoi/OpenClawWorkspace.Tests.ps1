@@ -148,7 +148,15 @@ Describe 'OpenClaw workspace chezmoi script' {
         }
     }
 
-    It 'writes agents.defaults.workspace while preserving existing config values' {
+    It 'should not manage OpenClaw secrets or pairing tokens' {
+        $content = Get-Content -LiteralPath $script:scriptPath -Raw
+
+        $content | Should -Not -Match 'op://|onepasswordRead|op\s+read' -Because 'OpenClaw config patching must not resolve or write secrets'
+        $content | Should -Not -Match 'gateway\.auth\.token|OPENCLAW_GATEWAY_TOKEN|apiKey|botToken|appToken' -Because 'tokens and API keys must stay in local OpenClaw state or 1Password'
+        $content | Should -Match 'scope upgrade' -Because 'device pairing scope upgrades remain an explicit per-device approval step'
+    }
+
+    It 'should write agents.defaults.workspace and enable browser while preserving existing config values' {
         $oldLifelogRoot = $env:LIFELOG_ROOT
         $oldOpenClawConfig = $env:OPENCLAW_CONFIG
         $oldGatewayRestartCommand = $env:OPENCLAW_GATEWAY_RESTART_COMMAND
@@ -164,6 +172,15 @@ Describe 'OpenClaw workspace chezmoi script' {
                     defaults = @{
                         model = @{
                             primary = "openai/gpt-5.5"
+                        }
+                    }
+                }
+                browser = @{
+                    defaultProfile = "openclaw"
+                    profiles = @{
+                        openclaw = @{
+                            cdpPort = 18800
+                            color = "#FF4500"
                         }
                     }
                 }
@@ -192,6 +209,9 @@ Describe 'OpenClaw workspace chezmoi script' {
             $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
             $config.agents.defaults.workspace | Should -Be ([System.IO.Path]::GetFullPath($lifelogRoot).TrimEnd("\"))
             $config.agents.defaults.model.primary | Should -Be "openai/gpt-5.5"
+            $config.browser.enabled | Should -BeTrue
+            $config.browser.defaultProfile | Should -Be "openclaw"
+            $config.browser.profiles.openclaw.cdpPort | Should -Be 18800
             $config.gateway.auth.token | Should -Be "preserve-me"
             Get-Content -LiteralPath $restartLogPath -Raw | Should -Match 'restarted'
         }

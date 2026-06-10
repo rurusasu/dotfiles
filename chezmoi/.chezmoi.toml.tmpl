@@ -7,11 +7,10 @@
 #    ("config file template has changed, run chezmoi init to regenerate
 #    config file") but does not block the apply.
 #
-# ⚠️ For `onepasswordRead`, always pass the account as the 2nd argument
-#    (e.g. `onepasswordRead "op://Private/..." .op_account_personal`).
-#    chezmoi 2.70.x silently ignores `[onepassword] account = "..."` in
-#    its flat form, so this is the only reliable way to disambiguate
-#    multi-account 1Password setups. See LIF-210.
+# ⚠️ Do not call `onepasswordRead` from .tmpl files. Runtime deploy scripts
+#    should use bounded, non-fatal `op read --account ...` calls, or shell
+#    launchers should use `op run --env-file ...`. This keeps `chezmoi apply`
+#    usable when 1Password CLI integration is temporarily unavailable.
 
 sourceDir = {{ .chezmoi.sourceDir | quote }}
 
@@ -26,11 +25,9 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
     command = "op"
 {{- end }}
 
-# Account UUIDs exposed as template data so onepasswordRead "op://..." can
-# pass the account explicitly as its 2nd argument. chezmoi's flat
-# [onepassword] account field is silently ignored in 2.70.x, so this is the
-# only reliable way to disambiguate when multiple 1Password accounts are
-# signed in. See LIF-210.
+# Account UUIDs exposed as template data for runtime deploy scripts. Always
+# pass the account explicitly to `op read --account ...` in multi-account
+# setups instead of relying on chezmoi's [onepassword] account default.
 [data]
     op_account_personal = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
     op_account_work = "FXVKKR2KWFCMHGMEA7HQYK6XRE"
