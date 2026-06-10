@@ -43,7 +43,8 @@ BeforeAll {
     $script:nixCatalog = "nix/packages/sets.nix"
 
     # Windows font installer template
-    $script:windowsInstaller = "chezmoi/.chezmoiscripts/setup/fonts/run_onchange_setup.ps1.tmpl"
+    $script:windowsInstallerDir = "chezmoi/.chezmoiscripts/setup/fonts"
+    $script:windowsInstaller = "chezmoi/.chezmoiscripts/setup/fonts/run_onchange_before_00-install-udev-gothic.ps1.tmpl"
 }
 
 Describe 'フォント設定の一貫性' {
@@ -103,6 +104,18 @@ Describe 'フォント設定の一貫性' {
     }
 
     Context 'Windows font installer の整合性' {
+        It 'installer は chezmoi apply のファイル更新前に実行されること' {
+            $fullDir = Join-Path $script:repoRoot $script:windowsInstallerDir
+            $installers = @(Get-ChildItem -LiteralPath $fullDir -Filter "run_*.ps1.tmpl" -File)
+
+            $installers.Name | Should -Contain "run_onchange_before_00-install-udev-gothic.ps1.tmpl" -Because (
+                "フォントは terminal/editor 設定より前に入れておくと初回 apply 中の後続処理で欠落しにくい"
+            )
+            $installers.Name | Should -Not -Contain "run_onchange_setup.ps1.tmpl" -Because (
+                "before 属性なしの installer は chezmoi の通常エントリ順に依存する"
+            )
+        }
+
         It 'installer が UDEV Gothic NF の zip URL を参照していること' {
             $full = Join-Path $script:repoRoot $script:windowsInstaller
             $content = Get-Content -LiteralPath $full -Raw
@@ -122,6 +135,27 @@ Describe 'フォント設定の一貫性' {
             # Test-FontInstalled の Where-Object パターンが新フォントを検出するパターンであること
             $content | Should -Match 'UDEVGothic\*NF\*' -Because (
                 "installer の Test-FontInstalled が UDEVGothic*NF* を検出するパターンになっていない"
+            )
+        }
+
+        It 'installer の WM_FONTCHANGE 通知はハングしないよう timeout 付きで送ること' {
+            $full = Join-Path $script:repoRoot $script:windowsInstaller
+            $content = Get-Content -LiteralPath $full -Raw
+
+            $content | Should -Match 'SendMessageTimeout' -Because (
+                "HWND_BROADCAST への同期 SendMessage は応答しないウィンドウで install.cmd をハングさせる"
+            )
+            $content | Should -Match 'SMTO_ABORTIFHUNG' -Because (
+                "応答しないウィンドウを待ち続けないフラグが必要"
+            )
+            $content | Should -Match '\$FontBroadcastTimeoutMilliseconds\s*=\s*[1-9]\d*' -Because (
+                "timeout は 0 ではなく明示する"
+            )
+            $content | Should -Match '\[IntPtr\]0xffff' -Because (
+                "HWND_BROADCAST は -1 ではなく Win32 の 0xffff を明示する"
+            )
+            $content | Should -Not -Match '::SendMessage\(' -Because (
+                "timeout なしの同期 SendMessage は使用しない"
             )
         }
     }
