@@ -31,15 +31,42 @@ Describe 'OpenClaw workspace chezmoi script' {
         $content | Should -Not -Match '(?m)^\s*LIFELOG_ROOT\s*=\s*""' -Because 'an empty active config entry would mask the real environment variable'
     }
 
+    It 'matches only concrete OpenClaw gateway process commands' {
+        $content = Get-Content -LiteralPath $script:scriptPath -Raw
+        $match = [regex]::Match(
+            $content,
+            "\`$runsOpenClawGateway\s*=\s*\`$commandLine\s+-match\s+'([^']+)'"
+        )
+        $match.Success | Should -BeTrue
+        $gatewayPattern = $match.Groups[1].Value
+
+        $gatewayPattern | Should -Match 'node_modules'
+        @(
+            '"C:\Program Files\nodejs\node.exe" C:\Users\rurus\AppData\Roaming\npm\node_modules\openclaw\dist\index.js gateway --port 18789',
+            '"C:\Program Files\nodejs\node.exe" "C:\Users\rurus\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs" gateway --port 18789'
+        ) | ForEach-Object {
+            $_ | Should -Match $gatewayPattern
+        }
+
+        @(
+            'kubectl logs -n openclaw deployment/openclaw-gateway -f',
+            'pwsh -Command "openclaw gateway diagnostics"'
+        ) | ForEach-Object {
+            $_ | Should -Not -Match $gatewayPattern
+        }
+    }
+
     It 'renders without prompting when LIFELOG_ROOT is missing' -Skip:(-not $script:hasChezmoi) {
         $oldLifelogRoot = $env:LIFELOG_ROOT
         $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
         try {
             Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
             Remove-Item Env:\OPENCLAW_LIFELOG_ROOT_FOR_INIT -ErrorAction SilentlyContinue
+            $emptyConfig = Join-Path $TestDrive "empty-chezmoi.toml"
+            "" | Set-Content -LiteralPath $emptyConfig -Encoding UTF8
 
             $result = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl") -Raw |
-                chezmoi --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
+                chezmoi --config $emptyConfig --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
 
             $LASTEXITCODE | Should -Be 0
             ($result | Out-String) | Should -Not -Match '(?m)^\s*LIFELOG_ROOT\s*='
@@ -67,9 +94,11 @@ Describe 'OpenClaw workspace chezmoi script' {
         try {
             Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
             $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT = "X:\explicit\lifelog"
+            $emptyConfig = Join-Path $TestDrive "empty-chezmoi.toml"
+            "" | Set-Content -LiteralPath $emptyConfig -Encoding UTF8
 
             $result = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl") -Raw |
-                chezmoi --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
+                chezmoi --config $emptyConfig --source $script:chezmoiRoot execute-template --init --no-tty 2>&1
 
             $LASTEXITCODE | Should -Be 0
             ($result | Out-String) | Should -Match 'LIFELOG_ROOT = "X:\\\\explicit\\\\lifelog"'
@@ -122,6 +151,7 @@ Describe 'OpenClaw workspace chezmoi script' {
     It 'writes agents.defaults.workspace while preserving existing config values' {
         $oldLifelogRoot = $env:LIFELOG_ROOT
         $oldOpenClawConfig = $env:OPENCLAW_CONFIG
+        $oldGatewayRestartCommand = $env:OPENCLAW_GATEWAY_RESTART_COMMAND
         try {
             $lifelogRoot = Join-Path $TestDrive "custom-lifelog"
             New-Item -ItemType Directory -Path $lifelogRoot -Force | Out-Null
@@ -147,6 +177,14 @@ Describe 'OpenClaw workspace chezmoi script' {
 
             $env:LIFELOG_ROOT = $lifelogRoot
             $env:OPENCLAW_CONFIG = $configPath
+            $restartLogPath = Join-Path $TestDrive "gateway-restart.log"
+            $restartCommandPath = Join-Path $TestDrive "restart-gateway.cmd"
+            Set-Content -LiteralPath $restartCommandPath -Value @(
+                "@echo off"
+                "echo restarted>%restartLogPath%"
+            ) -Encoding ASCII
+            $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $restartCommandPath
+            $env:restartLogPath = $restartLogPath
 
             & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath | Out-Null
             $LASTEXITCODE | Should -Be 0
@@ -155,6 +193,7 @@ Describe 'OpenClaw workspace chezmoi script' {
             $config.agents.defaults.workspace | Should -Be ([System.IO.Path]::GetFullPath($lifelogRoot).TrimEnd("\"))
             $config.agents.defaults.model.primary | Should -Be "openai/gpt-5.5"
             $config.gateway.auth.token | Should -Be "preserve-me"
+            Get-Content -LiteralPath $restartLogPath -Raw | Should -Match 'restarted'
         }
         finally {
             if ($null -eq $oldLifelogRoot) {
@@ -169,6 +208,67 @@ Describe 'OpenClaw workspace chezmoi script' {
             }
             else {
                 $env:OPENCLAW_CONFIG = $oldOpenClawConfig
+            }
+
+            if ($null -eq $oldGatewayRestartCommand) {
+                Remove-Item Env:\OPENCLAW_GATEWAY_RESTART_COMMAND -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $oldGatewayRestartCommand
+            }
+
+            Remove-Item Env:\restartLogPath -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'fails when OpenClaw gateway restart fails' {
+        $oldLifelogRoot = $env:LIFELOG_ROOT
+        $oldOpenClawConfig = $env:OPENCLAW_CONFIG
+        $oldGatewayRestartCommand = $env:OPENCLAW_GATEWAY_RESTART_COMMAND
+        try {
+            $lifelogRoot = Join-Path $TestDrive "custom-lifelog"
+            New-Item -ItemType Directory -Path $lifelogRoot -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $lifelogRoot "AGENTS.md") -Value "# lifelog" -Encoding UTF8
+
+            $configPath = Join-Path $TestDrive ".openclaw/openclaw.json"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $configPath) -Force | Out-Null
+            "{}" | Set-Content -LiteralPath $configPath -Encoding UTF8
+
+            $restartCommandPath = Join-Path $TestDrive "restart-gateway-fail.cmd"
+            Set-Content -LiteralPath $restartCommandPath -Value @(
+                "@echo off"
+                "echo restart failed"
+                "exit /b 42"
+            ) -Encoding ASCII
+
+            $env:LIFELOG_ROOT = $lifelogRoot
+            $env:OPENCLAW_CONFIG = $configPath
+            $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $restartCommandPath
+
+            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath 2>&1
+            $LASTEXITCODE | Should -Not -Be 0
+            ($result | Out-String) | Should -Match 'OpenClaw gateway restart'
+        }
+        finally {
+            if ($null -eq $oldLifelogRoot) {
+                Remove-Item Env:\LIFELOG_ROOT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:LIFELOG_ROOT = $oldLifelogRoot
+            }
+
+            if ($null -eq $oldOpenClawConfig) {
+                Remove-Item Env:\OPENCLAW_CONFIG -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:OPENCLAW_CONFIG = $oldOpenClawConfig
+            }
+
+            if ($null -eq $oldGatewayRestartCommand) {
+                Remove-Item Env:\OPENCLAW_GATEWAY_RESTART_COMMAND -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:OPENCLAW_GATEWAY_RESTART_COMMAND = $oldGatewayRestartCommand
             }
         }
     }
