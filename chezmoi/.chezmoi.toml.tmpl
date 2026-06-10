@@ -42,6 +42,12 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [scriptEnv]
     OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+{{- $lifelogRoot := promptString "LIFELOG_ROOT" (env "LIFELOG_ROOT") }}
+{{- if $lifelogRoot }}
+    # Explicit lifelog root for OpenClaw. No default path is baked in; set
+    # LIFELOG_ROOT via scripts/powershell/configure-lifelog-root.ps1.
+    LIFELOG_ROOT = {{ $lifelogRoot | quote }}
+{{- end }}
 
 [interpreters.ps1]
     command = "pwsh"
