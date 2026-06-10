@@ -1,5 +1,7 @@
 #Requires -Module Pester
 
+$script:hasChezmoi = $null -ne (Get-Command chezmoi -ErrorAction SilentlyContinue)
+
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
@@ -29,7 +31,7 @@ Describe 'OpenClaw workspace chezmoi script' {
         $content | Should -Not -Match '(?m)^\s*LIFELOG_ROOT\s*=\s*""' -Because 'an empty active config entry would mask the real environment variable'
     }
 
-    It 'renders without prompting when LIFELOG_ROOT is missing' {
+    It 'renders without prompting when LIFELOG_ROOT is missing' -Skip:(-not $script:hasChezmoi) {
         $oldLifelogRoot = $env:LIFELOG_ROOT
         $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
         try {
@@ -59,7 +61,7 @@ Describe 'OpenClaw workspace chezmoi script' {
         }
     }
 
-    It 'renders setup-provided LIFELOG_ROOT without prompting' {
+    It 'renders setup-provided LIFELOG_ROOT without prompting' -Skip:(-not $script:hasChezmoi) {
         $oldLifelogRoot = $env:LIFELOG_ROOT
         $oldSetupRoot = $env:OPENCLAW_LIFELOG_ROOT_FOR_INIT
         try {
