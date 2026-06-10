@@ -1789,7 +1789,9 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should skip manual packages when verification is unavailable' {
+        It 'should install packages when verification is unavailable and skipInstall is absent' {
+            $script:installInvoked = $false
+            $script:weztermDir = Join-Path $TestDrive "WezTerm"
             Mock Get-JsonContent {
                 return [PSCustomObject]@{
                     Sources = @(
@@ -1798,8 +1800,7 @@ Describe 'WingetHandler' {
                             Packages      = @(
                                 [PSCustomObject]@{
                                     PackageIdentifier = "wez.wezterm.nightly"
-                                    skipInstall       = $true
-                                    skipReason        = "nightly hash drifts"
+                                    pathEntries       = @($script:weztermDir)
                                     verifyCommand     = [PSCustomObject]@{ command = "wezterm"; args = @("--version") }
                                 }
                             )
@@ -1807,14 +1808,22 @@ Describe 'WingetHandler' {
                     )
                 }
             }
+            Mock Write-Host { }
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "install") {
-                    throw "winget install should be skipped"
+                    $script:installInvoked = $true
+                    New-Item -ItemType Directory -Path $script:weztermDir -Force | Out-Null
+                    $global:LASTEXITCODE = 0
+                    return "installed wezterm"
                 }
                 $global:LASTEXITCODE = 1
             }
             Mock Invoke-VerifyCommand {
+                if ($script:installInvoked) {
+                    $global:LASTEXITCODE = 0
+                    return "wezterm 20260607"
+                }
                 $global:LASTEXITCODE = 127
                 throw "wezterm not found"
             }
@@ -1823,8 +1832,11 @@ Describe 'WingetHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個スキップ"
-            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-Winget -Times 1 -ParameterFilter { $Arguments -contains "install" }
+            Should -Invoke Write-Host -Times 0 -ParameterFilter {
+                [string]$Object -match '検証コマンド実行エラー|pathEntries の候補ディレクトリが見つかりません'
+            }
         }
     }
 
