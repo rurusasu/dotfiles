@@ -8,6 +8,7 @@ $PersonalAccount = "{{ .op_account_personal }}"
 $WorkAccount = "{{ .op_account_work }}"
 $PersonalPubkeyRef = "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key"
 $WorkPubkeyRef = "op://Employee/GitHub Work/public key"
+$OpReadTimeoutSeconds = 10
 
 function Deploy-Content {
   param(
@@ -44,11 +45,33 @@ function Read-OpSecret {
     return $null
   }
 
-  $output = @(& $opCmd.Source read $Reference --account $Account 2>&1)
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $opCmd.Source
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $null = $psi.ArgumentList.Add("read")
+  $null = $psi.ArgumentList.Add($Reference)
+  $null = $psi.ArgumentList.Add("--account")
+  $null = $psi.ArgumentList.Add($Account)
+
+  $process = [System.Diagnostics.Process]::Start($psi)
+  $timeoutMs = [Math]::Max(1, $OpReadTimeoutSeconds) * 1000
+  if (-not $process.WaitForExit($timeoutMs)) {
+    try {
+      $process.Kill($true)
+    } catch {
+      $process.Kill()
+    }
+    Write-Host "WARNING: 1Password read timed out after $OpReadTimeoutSeconds seconds, skipping $Label"
+    return $null
+  }
+
+  $stdout = $process.StandardOutput.ReadToEnd()
+  $stderr = $process.StandardError.ReadToEnd()
+  if ($process.ExitCode -ne 0) {
     Write-Host "WARNING: 1Password is not available, skipping $Label"
-    foreach ($line in $output) {
+    foreach ($line in (($stderr + "`n" + $stdout) -split "`r?`n")) {
       if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
         Write-Host "  $line"
       }
@@ -56,7 +79,7 @@ function Read-OpSecret {
     return $null
   }
 
-  $secret = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+  $secret = $stdout.Trim()
   if ([string]::IsNullOrWhiteSpace($secret)) {
     Write-Host "WARNING: 1Password returned an empty value, skipping $Label"
     return $null

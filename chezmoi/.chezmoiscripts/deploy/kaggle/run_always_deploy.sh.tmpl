@@ -5,6 +5,7 @@ set -euo pipefail
 
 OP_ACCOUNT="{{ .op_account_personal }}"
 SECRET_REF="op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
+OP_READ_TIMEOUT_SECONDS=10
 
 if command -v op >/dev/null 2>&1; then
   OP_CMD="$(command -v op)"
@@ -15,13 +16,31 @@ else
   exit 0
 fi
 
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="$(command -v timeout)"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="$(command -v gtimeout)"
+else
+  echo "WARNING: timeout command not found, skipping Kaggle API credentials deployment"
+  exit 0
+fi
+
 echo "Deploying Kaggle API credentials..."
 
 ERR_FILE="$(mktemp)"
 trap 'rm -f "$ERR_FILE"' EXIT
 
-if ! TOKEN="$("$OP_CMD" read "$SECRET_REF" --account "$OP_ACCOUNT" 2>"$ERR_FILE")"; then
-  echo "WARNING: 1Password is not available, skipping Kaggle API credentials deployment"
+if TOKEN="$("$TIMEOUT_CMD" "${OP_READ_TIMEOUT_SECONDS}s" "$OP_CMD" read "$SECRET_REF" --account "$OP_ACCOUNT" 2>"$ERR_FILE")"; then
+  EXIT_CODE=0
+else
+  EXIT_CODE=$?
+fi
+if [ "$EXIT_CODE" -ne 0 ]; then
+  if [ "$EXIT_CODE" -eq 124 ]; then
+    echo "WARNING: 1Password read timed out after $OP_READ_TIMEOUT_SECONDS seconds, skipping Kaggle API credentials deployment"
+  else
+    echo "WARNING: 1Password is not available, skipping Kaggle API credentials deployment"
+  fi
   sed 's/^/  /' "$ERR_FILE" || true
   exit 0
 fi

@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $KaggleDir = "$env:USERPROFILE\.kaggle"
 $OpAccount = "{{ .op_account_personal }}"
 $SecretRef = "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
+$OpReadTimeoutSeconds = 10
 
 $opCmd = Get-Command op -ErrorAction SilentlyContinue
 if (-not $opCmd) {
@@ -18,11 +19,33 @@ if (-not $opCmd) {
 
 Write-Host "Deploying Kaggle API credentials..."
 
-$output = @(& $opCmd.Source read $SecretRef --account $OpAccount 2>&1)
-$exitCode = $LASTEXITCODE
-if ($exitCode -ne 0) {
+$psi = [System.Diagnostics.ProcessStartInfo]::new()
+$psi.FileName = $opCmd.Source
+$psi.UseShellExecute = $false
+$psi.RedirectStandardOutput = $true
+$psi.RedirectStandardError = $true
+$null = $psi.ArgumentList.Add("read")
+$null = $psi.ArgumentList.Add($SecretRef)
+$null = $psi.ArgumentList.Add("--account")
+$null = $psi.ArgumentList.Add($OpAccount)
+
+$process = [System.Diagnostics.Process]::Start($psi)
+$timeoutMs = [Math]::Max(1, $OpReadTimeoutSeconds) * 1000
+if (-not $process.WaitForExit($timeoutMs)) {
+  try {
+    $process.Kill($true)
+  } catch {
+    $process.Kill()
+  }
+  Write-Host "WARNING: 1Password read timed out after $OpReadTimeoutSeconds seconds, skipping Kaggle API credentials deployment"
+  return
+}
+
+$stdout = $process.StandardOutput.ReadToEnd()
+$stderr = $process.StandardError.ReadToEnd()
+if ($process.ExitCode -ne 0) {
   Write-Host "WARNING: 1Password is not available, skipping Kaggle API credentials deployment"
-  foreach ($line in $output) {
+  foreach ($line in (($stderr + "`n" + $stdout) -split "`r?`n")) {
     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
       Write-Host "  $line"
     }
@@ -30,7 +53,7 @@ if ($exitCode -ne 0) {
   return
 }
 
-$token = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+$token = $stdout.Trim()
 if ([string]::IsNullOrWhiteSpace($token)) {
   Write-Host "WARNING: Kaggle API credential is empty, skipping deployment"
   return

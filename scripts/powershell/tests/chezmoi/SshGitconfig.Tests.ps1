@@ -165,8 +165,16 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
             $script:ps1Content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
-            $script:ps1Content | Should -Match '\bread\s+\$Reference\b' -Because "op read should happen at script runtime"
+            $script:ps1Content | Should -Match 'ArgumentList\.Add\("read"\)' -Because "op read should happen at script runtime"
+            $script:ps1Content | Should -Match 'ArgumentList\.Add\(\$Reference\)' -Because "op read should happen at script runtime"
             $script:ps1Content | Should -Match 'skipping \$Label|no SSH public keys deployed' -Because "runtime 1Password failures should be non-fatal"
+        }
+
+        It '1Password 実行時読み込みに timeout があること' {
+            $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always deploy should not hang when 1Password prompts or stalls"
+            $script:ps1Content | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
+            $script:ps1Content | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
+            $script:ps1Content | Should -Match 'timed out after \$OpReadTimeoutSeconds seconds' -Because "timeout should take the non-fatal skip path"
         }
     }
 
@@ -187,6 +195,12 @@ Describe 'SSH deploy スクリプト' {
             $script:shContent | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
             $script:shContent | Should -Match 'read "\$reference"' -Because "op read should happen at script runtime"
             $script:shContent | Should -Match 'skipping \$label' -Because "runtime 1Password failures should be non-fatal"
+        }
+
+        It '1Password 実行時読み込みに timeout があること' {
+            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always deploy should not hang when 1Password prompts or stalls"
+            $script:shContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
+            $script:shContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout should take the non-fatal skip path"
         }
     }
 }

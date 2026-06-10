@@ -376,9 +376,21 @@ Describe 'chezmoi テンプレート バリデーション' {
             foreach ($path in @($script:kaggleDeployWindows, $script:kaggleDeployLinux)) {
                 $content = Get-Content -LiteralPath $path -Raw
                 $content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
-                $content | Should -Match '\bread\s+\$SecretRef\b|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
+                $content | Should -Match 'ArgumentList\.Add\("read"\)|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
                 $content | Should -Match 'skipping Kaggle API credentials deployment' -Because "runtime 1Password failures should be non-fatal"
             }
+        }
+
+        It 'should bound runtime op reads with a timeout' {
+            $windowsContent = Get-Content -LiteralPath $script:kaggleDeployWindows -Raw
+            $linuxContent = Get-Content -LiteralPath $script:kaggleDeployLinux -Raw
+
+            $windowsContent | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $windowsContent | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
+            $windowsContent | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
+            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $linuxContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
+            $linuxContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout failures should be reported as non-fatal skips"
         }
     }
 
