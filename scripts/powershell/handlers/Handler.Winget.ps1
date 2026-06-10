@@ -210,14 +210,24 @@ class WingetHandler : SetupHandlerBase {
                 if ($pkg.VerifyCommand) {
                     Update-ProcessEnvironmentPath
                     $this.EnsurePortableLink($pkg)
-                    $this.EnsurePathEntries($pkg)
+                    if ($verifyCommandOnly) {
+                        $this.EnsurePathEntries($pkg)
+                    }
+                    else {
+                        $this.EnsurePathEntriesQuiet($pkg)
+                    }
                     if ($this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
                         $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
                         $deferred++
                         continue
                     }
-                    if ($this.TestPackageVerification($pkg.VerifyCommand)) {
-                        $verificationPassed = $true
+                    $verificationPassed = if ($verifyCommandOnly) {
+                        $this.TestPackageVerification($pkg.VerifyCommand)
+                    }
+                    else {
+                        $this.TestPackageVerificationQuiet($pkg.VerifyCommand)
+                    }
+                    if ($verificationPassed) {
                         $verified++
                         if ($verifyCommandOnly) {
                             $this.Log("スキップ (検証済み): $($pkg.Id)", "Gray")
@@ -673,8 +683,18 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [bool] TestPackageVerification([object]$verifyCmd) {
+        return $this.TestPackageVerificationInternal($verifyCmd, $false)
+    }
+
+    hidden [bool] TestPackageVerificationQuiet([object]$verifyCmd) {
+        return $this.TestPackageVerificationInternal($verifyCmd, $true)
+    }
+
+    hidden [bool] TestPackageVerificationInternal([object]$verifyCmd, [bool]$quiet) {
         if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) {
-            $this.LogWarning("verifyCommand に 'command' フィールドがありません")
+            if (-not $quiet) {
+                $this.LogWarning("verifyCommand に 'command' フィールドがありません")
+            }
             return $false
         }
         try {
@@ -707,16 +727,20 @@ class WingetHandler : SetupHandlerBase {
             }
 
             $displayCommand = "$command $($arguments -join ' ')".Trim()
-            $this.Log("検証コマンド失敗 (exit code: $LASTEXITCODE): $displayCommand", "Yellow")
-            foreach ($line in $output) {
-                if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
-                    $this.Log("  $line", "Gray")
+            if (-not $quiet) {
+                $this.Log("検証コマンド失敗 (exit code: $LASTEXITCODE): $displayCommand", "Yellow")
+                foreach ($line in $output) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                        $this.Log("  $line", "Gray")
+                    }
                 }
             }
             return $LASTEXITCODE -eq 0
         }
         catch {
-            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            if (-not $quiet) {
+                $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            }
             return $false
         }
     }
@@ -867,6 +891,14 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePathEntries([object]$pkg) {
+        $this.EnsurePathEntriesInternal($pkg, $false)
+    }
+
+    hidden [void] EnsurePathEntriesQuiet([object]$pkg) {
+        $this.EnsurePathEntriesInternal($pkg, $true)
+    }
+
+    hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet) {
         if (-not $pkg.PathEntries) { return }
 
         $resolvedEntries = [System.Collections.Generic.List[string]]::new()
@@ -893,7 +925,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         if ($resolvedEntries.Count -eq 0) {
-            if ($missingEntries.Count -gt 0) {
+            if ($missingEntries.Count -gt 0 -and -not $quiet) {
                 $this.LogWarning("pathEntries の候補ディレクトリが見つかりません: $($pkg.Id) ($($missingEntries -join ', '))")
             }
             return

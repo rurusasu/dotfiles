@@ -631,19 +631,17 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
+    warp-terminal = 900;
   };
 
-  # Packages kept in the catalog but skipped by the non-interactive Windows
-  # installer because upstream live installers are not reliable in that mode.
-  wingetSkipInstall = {
-    wezterm = "WezTerm nightly can require InstallerHashOverride when the live hash drifts";
-    warp-terminal = "Warp installer can hang under non-interactive winget";
-  };
+  # Packages kept in the catalog but skipped by the normal Windows installer.
+  wingetSkipInstall = { };
 
   # Upstream nightly winget manifests and Microsoft Store installs can drift or
   # hang in CI. Avoid making CI depend on their live installer behavior.
   wingetCiSkipInstall = {
     wezterm = true;
+    warp-terminal = true;
     "9PLM9XGG6VKS" = true;
   };
 

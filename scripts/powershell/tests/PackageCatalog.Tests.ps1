@@ -34,25 +34,43 @@ Describe 'Package catalog consistency' {
             @($package.installArgs) | Should -Not -Contain '--ignore-security-hash'
         }
 
-        It 'should define volatile terminal packages as manual winget installs in the SSOT' {
+        It 'should keep terminal packages installable during normal winget runs' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)wingetSkipInstall\s*=\s*\{.*?wezterm\s*='
-            $sets | Should -Match '(?s)wingetSkipInstall\s*=\s*\{.*?warp-terminal\s*='
+            $sets | Should -Not -Match '(?ms)^\s*wingetSkipInstall\s*=\s*\{[^}]*^\s*wezterm\s*='
+            $sets | Should -Not -Match '(?ms)^\s*wingetSkipInstall\s*=\s*\{[^}]*^\s*warp-terminal\s*='
         }
 
-        It 'should generate skipInstall metadata for volatile terminal packages' {
+        It 'should generate terminal packages without normal-run skipInstall metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
             $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
 
             $warp | Should -Not -BeNullOrEmpty
-            $warp.skipInstall | Should -BeTrue
-            $warp.skipReason | Should -Not -BeNullOrEmpty
+            $warp.PSObject.Properties.Name | Should -Not -Contain 'skipInstall'
+            $warp.PSObject.Properties.Name | Should -Not -Contain 'skipReason'
             $wezterm | Should -Not -BeNullOrEmpty
-            $wezterm.skipInstall | Should -BeTrue
-            $wezterm.skipReason | Should -Not -BeNullOrEmpty
+            $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipInstall'
+            $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipReason'
+        }
+
+        It 'should keep volatile terminal installers out of CI-only winget verification' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+            $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
+
+            $warp.ciSkipInstall | Should -BeTrue
+            $wezterm.ciSkipInstall | Should -BeTrue
+        }
+
+        It 'should cap Warp install time so install.cmd cannot hang indefinitely' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
+
+            $warp.installTimeoutSeconds | Should -Be 900
         }
 
         It 'should update flake inputs in the Nix rebuild aliases before applying the system' {
