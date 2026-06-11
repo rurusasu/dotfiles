@@ -333,6 +333,54 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Codex agent role files' {
+        BeforeAll {
+            $script:codexAgentFiles = Get-ChildItem -Path (Join-Path $script:chezmoiRoot "dot_codex/agents") -Filter "*.toml"
+        }
+
+        It 'should define required role metadata for Codex CLI' {
+            foreach ($file in $script:codexAgentFiles) {
+                $content = Get-Content -LiteralPath $file.FullName -Raw
+
+                $content | Should -Match '(?m)^name\s*=\s*"[^"]+"\s*$' -Because "$($file.Name) must define a non-empty name"
+                $content | Should -Match '(?ms)^developer_instructions\s*=\s*""".+?"""\s*$' -Because "$($file.Name) must define developer_instructions"
+            }
+        }
+
+        It 'project-scoped config should not hardcode repo-local Codex paths' {
+            $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
+            $content = Get-Content -LiteralPath $projectConfigPath -Raw
+
+            $content | Should -Not -Match '(?i)[A-Z]:[\\/].*\.codex[\\/](agents|hooks)' -Because "project config must be portable across checkout paths"
+            $content | Should -Match '(?m)^config_file\s*=\s*"agents/fast_worker\.toml"\s*$' -Because "agent role files should be resolved relative to .codex/config.toml"
+            $content | Should -Match '(?m)^config_file\s*=\s*"agents/python_coding\.toml"\s*$' -Because "agent role files should be resolved relative to .codex/config.toml"
+            $content | Should -Match 'git rev-parse --show-toplevel' -Because "repo-local hooks should resolve from the current git root"
+        }
+    }
+
+    Context 'Codex MCP startup defaults' {
+        BeforeAll {
+            $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
+        }
+
+        It 'should not auto-start auth or API-key MCP servers in Codex' {
+            $content = Get-Content -LiteralPath $script:mcpServersPath -Raw
+            $serverBlocks = [regex]::Matches($content, '(?ms)-\s+name:\s+(\S+).*?(?=^\s+-\s+name:|\z)')
+            $codexDisabled = @('linear', 'tavily', 'exa', 'firecrawl', 'sentry', 'cloud-run', 'kaggle')
+            $violations = @()
+
+            foreach ($block in $serverBlocks) {
+                $serverName = $block.Groups[1].Value
+                if ($serverName -notin $codexDisabled) { continue }
+                if ($block.Value -match '(?m)^\s+-\s+codex\s*$') {
+                    $violations += $serverName
+                }
+            }
+
+            $violations | Should -BeNullOrEmpty -Because "these servers require OAuth, API keys, or local cloud auth and should not warn during Codex startup"
+        }
+    }
+
     Context 'stdio-only テンプレートで HTTP サーバーに mcp-remote が使われていること' {
         It 'Claude Desktop テンプレートで mcp-remote が含まれていること' {
             $templatePath = Join-Path $script:chezmoiRoot "AppData/Roaming/Claude/claude_desktop_config.json.tmpl"

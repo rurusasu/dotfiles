@@ -11,7 +11,6 @@ mcp_servers:
       - "dlx"
       - "@upstash/context7-mcp@2.2.3"
     startup_timeout_sec: 30
-    # Supported by: codex, claude-code
     supports:
       - codex
       - claude-code
@@ -30,8 +29,9 @@ mcp_servers:
       - "dlx"
       - "mcp-remote@0.1.38"
       - "https://mcp.linear.app/mcp"
+    # Codex starts configured MCP servers at session startup. Keep OAuth-based
+    # remote servers out of Codex by default to avoid login warnings.
     supports:
-      - codex
       - claude-code
       - cursor
       - gemini
@@ -85,8 +85,9 @@ mcp_servers:
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
     op_env:
       TAVILY_API_KEY: "op://openclaw/TavilyUsedOpenclawPAT/credential"
+    # API-key Docker MCP servers fail Codex startup when the local env vars are
+    # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -110,8 +111,9 @@ mcp_servers:
       EXA_API_KEY: "${EXA_API_KEY}"
     op_env:
       EXA_API_KEY: "op://openclaw/ExaUsedOpenclawPAT/credential"
+    # API-key Docker MCP servers fail Codex startup when the local env vars are
+    # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -135,8 +137,9 @@ mcp_servers:
       FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY}"
     op_env:
       FIRECRAWL_API_KEY: "op://openclaw/FirecrawlUsedOpenclawPAT/credential"
+    # API-key Docker MCP servers fail Codex startup when the local env vars are
+    # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -173,8 +176,9 @@ mcp_servers:
       - "mcp-remote@0.1.38"
       - "https://mcp.sentry.dev/mcp"
     startup_timeout_sec: 30
+    # Codex starts configured MCP servers at session startup. Keep OAuth-based
+    # remote servers out of Codex by default to avoid login warnings.
     supports:
-      - codex
       - claude-code
       - cursor
       - gemini
@@ -187,8 +191,9 @@ mcp_servers:
       - "dlx"
       - "@google-cloud/cloud-run-mcp@1.10.0"
     startup_timeout_sec: 120
+    # Cloud Run MCP depends on local Google Cloud auth and currently exits
+    # before the MCP handshake in Codex startup.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -213,7 +218,6 @@ mcp_servers:
     supports:
       - claude-code
       - claude-desktop
-      - codex
       - cursor
       - gemini
       - vscode

@@ -1,153 +1,68 @@
-# Codex CLI 設定 (project-scoped, coding 特化・自律実行前提)
-# Base: chezmoi/dot_codex/config.toml.tmpl から派生し、本プロジェクトでは
-#       自律的なコーディングタスク実行向けにチューニングしている。
-# 参照: https://developers.openai.com/codex/config-reference/
-
-################################################################################
-# モデル設定
-################################################################################
-
-# 使用するデフォルトモデル
 model = "gpt-5.5"
-
-# 推論努力: 自律実行ではエラーリカバリと設計判断の質を優先して xhigh
 model_reasoning_effort = "xhigh"
-
-# Plan モードは戦略立案なので最大限の推論を割り当てる
 plan_mode_reasoning_effort = "high"
-
-# モデルの推論要約
 model_reasoning_summary = "auto"
-
-# テキストの冗長性: 自律実行ではログを簡潔に保つ
 model_verbosity = "low"
-
-################################################################################
-# Instruction Overrides
-################################################################################
-
-# カスタム指示ファイルの読み込み (Copilot と統一)
 project_doc_fallback_filenames = [ "copilot-instructions.md" ]
-
-################################################################################
-# 承認とサンドボックス設定 (自律実行の中核)
-################################################################################
-
-# 自律実行のため承認プロンプトを出さない。
-# 安全性は以下の 2 層で担保する:
-#   1. rules/*.rules (sudo, rm, git rebase 等の破壊的コマンドは forbidden)
-#   2. hooks/ (保護ブランチへの直接コミットを deny)
 approval_policy = "never"
-
-# Git 操作まで自律実行できるよう、ファイルシステム sandbox は無効化する。
 sandbox_mode = "danger-full-access"
 
 [sandbox_workspace_write]
-# ビルド・テストツール (pytest, npm 等) が一時ディレクトリを使えるようにする
 exclude_slash_tmp = false
 exclude_tmpdir_env_var = false
-# パッケージ取得や API 呼び出しを伴うタスクをサンドボックス内で完結させる
 network_access = true
-
-################################################################################
-# ウェブ検索
-################################################################################
-
-# 自律実行では最新情報 (ライブラリの API 変更等) の取得が品質に直結する
 web_search = "live"
-
-################################################################################
-# 認証設定
-################################################################################
-
-# MCP OAuth 認証情報の優先保存先: auto (デフォルト) | file | keyring
 mcp_oauth_credentials_store = "auto"
-
-################################################################################
-# エージェント出力
-################################################################################
-
-# 出力から内部的な推論イベントを隠す (デフォルト: false)
 hide_agent_reasoning = false
-
-# 利用可能な場合、生の推論コンテンツを表示する (デフォルト: false)
 show_raw_agent_reasoning = false
 
-################################################################################
-# シェル環境ポリシー
-################################################################################
-
 [shell_environment_policy]
-# Windows の DNS/chezmoi/winget は SystemRoot, USERPROFILE, LOCALAPPDATA 等に依存する。
-# core 継承では不足するため、標準の secret 除外を維持しつつ全体を継承する。
 inherit = "all"
-set = { TERM = "xterm-256color" }
-exclude = [ "*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "*CREDENTIAL*" ]
+exclude = [
+  "*KEY*",
+  "*TOKEN*",
+  "*SECRET*",
+  "*PASSWORD*",
+  "*CREDENTIAL*",
+]
 
-################################################################################
-# 機能フラグ
-################################################################################
+[shell_environment_policy.set]
+TERM = "xterm-256color"
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
 
 [features]
-# Windows サンドボックスを有効にする (workspace-write の前提)
 elevated_windows_sandbox = true
-# 繰り返しコマンドを高速化する
 shell_snapshot = true
-# サブエージェント (Multi-agent mode)
 multi_agent = true
-# ライフサイクルフック (保護ブランチ deny 等)
 hooks = true
-# 統合 exec ツール (旧 experimental_use_unified_exec_tool の後継)
 unified_exec = true
-# ファイル変更の undo スナップショット (自律実行の安全網)
 undo = true
-# セッションをまたいだメモリ
 memories = true
-# 長時間タスク中の OS スリープを防ぐ
 prevent_idle_sleep = true
-# 長いセッションでのリクエスト圧縮
 enable_request_compression = true
-
-# 開発中機能の警告を抑制する
 suppress_unstable_features_warning = true
-# Gmail / Google Calendar などの app connector を Codex に露出する
 apps = true
 
-################################################################################
-# ツール
-################################################################################
-
 [tools]
-# スクリーンショットや図の確認 (UI 検証タスク向け)
 view_image = true
-
-################################################################################
-# フック設定
-################################################################################
 
 [[hooks.PreToolUse]]
 matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = 'python3 "D:/ruru/dotfiles/.codex/hooks/claude_permission_policy.py"'
-command_windows = 'python "D:/ruru/dotfiles/.codex/hooks/claude_permission_policy.py"'
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/claude_permission_policy.py"'
+command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/claude_permission_policy.py')\""
 timeout = 30
 statusMessage = "Checking Claude-aligned Bash policy"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = 'python3 "D:/ruru/dotfiles/.codex/hooks/deny_protected_branch_commit.py"'
-command_windows = 'python "D:/ruru/dotfiles/.codex/hooks/deny_protected_branch_commit.py"'
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/deny_protected_branch_commit.py"'
+command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/deny_protected_branch_commit.py')\""
 timeout = 30
 statusMessage = "Checking protected branch policy"
 
-################################################################################
-# スキル設定
-################################################################################
-
-# スキルは `~/.codex/skills/<skill-name>/SKILL.md` を基準に解決される。
-# この repo では chezmoi 管理で配布する前提で、config 側に明示登録する。
 [[skills.config]]
 name = "python-clean-architecture"
 path = "~/.codex/skills/python-clean-architecture"
@@ -158,125 +73,67 @@ name = "python-docstring"
 path = "~/.codex/skills/python-docstring"
 enabled = true
 
-################################################################################
-# エージェント設定
-################################################################################
-
-# この repo では chezmoi を source of truth としてエージェントを共有する。
-# 追加手順:
-# 1) `chezmoi/dot_codex/agents/<role>.toml` を作成
-# 2) 下記に `[agents.<role>]` を追加し、`description` と `config_file` を必ず設定
-# 3) `config_file` は絶対パスで指定すること
-#    ※ Windows で Codex CLI が `~` を展開しないため絶対パスが必要
-# 4) スキル依存がある場合は `[[skills.config]]` もこのファイルで管理する
-# 詳細: `chezmoi/dot_codex/agents/AGENTS.md`
 [agents]
-# セッションあたりの最大エージェントスレッド数 (デフォルト: 6)
 max_threads = 12
-# サブエージェントのネスト深度 (デフォルト: 1)。fan-out した worker が
-# さらに補助エージェントを起こせるよう 2 にする
 max_depth = 2
-# worker 1 タスクあたりの上限実行時間 (秒)。自律実行の暴走防止
 job_max_runtime_seconds = 3600
 
-# カスタムエージェント: 高速実装用
 [agents.fast_worker]
 description = "Fast scoped implementation agent."
-config_file = "D:/ruru/dotfiles/.codex/agents/fast_worker.toml"
+config_file = "agents/fast_worker.toml"
 
-# カスタムエージェント: Python 実装専任
 [agents.python_coding]
 description = "Python implementation-only agent (no test execution)."
-config_file = "D:/ruru/dotfiles/.codex/agents/python_coding.toml"
-
-################################################################################
-# MCP サーバー設定 (Generated from .chezmoidata/mcp_servers.yaml)
-################################################################################
-[mcp_servers]
+config_file = "agents/python_coding.toml"
 
 [mcp_servers.context7]
 command = "pnpm"
-args = [ "dlx", "@upstash/context7-mcp@2.2.3" ]
+args = [
+  "dlx",
+  "@upstash/context7-mcp@2.2.3",
+]
 startup_timeout_sec = 30
 
-[mcp_servers.linear]
-url = "https://mcp.linear.app/mcp"
+# [mcp_servers.linear]
+# url = "https://mcp.linear.app/mcp"
+# command = "pnpm"
+# args = [
+#     "dlx",
+#     "mcp-remote@0.1.38",
+#     "https://mcp.linear.app/mcp",
+# ]
 
-[mcp_servers.deepwiki]
-url = "https://mcp.deepwiki.com/mcp"
-
-[mcp_servers.tavily]
-command = "pwsh"
-args = [
-  "-NoLogo",
-  "-NoProfile",
-  "-ExecutionPolicy",
-  "Bypass",
-  "-File",
-  "D:/ruru/dotfiles/.codex/bin/codex-docker-mcp.ps1",
-  "run",
-  "-i",
-  "--rm",
-  "-e",
-  "TAVILY_API_KEY",
-  "mcp/tavily",
-]
-startup_timeout_sec = 300
-[mcp_servers.tavily.env]
-TAVILY_API_KEY = "${TAVILY_API_KEY}"
-
-[mcp_servers.exa]
-command = "pwsh"
-args = [
-  "-NoLogo",
-  "-NoProfile",
-  "-ExecutionPolicy",
-  "Bypass",
-  "-File",
-  "D:/ruru/dotfiles/.codex/bin/codex-docker-mcp.ps1",
-  "run",
-  "-i",
-  "--rm",
-  "-e",
-  "EXA_API_KEY",
-  "mcp/exa",
-]
-startup_timeout_sec = 300
-[mcp_servers.exa.env]
-EXA_API_KEY = "${EXA_API_KEY}"
-
-[mcp_servers.firecrawl]
-command = "pwsh"
-args = [
-  "-NoLogo",
-  "-NoProfile",
-  "-ExecutionPolicy",
-  "Bypass",
-  "-File",
-  "D:/ruru/dotfiles/.codex/bin/codex-docker-mcp.ps1",
-  "run",
-  "-i",
-  "--rm",
-  "-e",
-  "FIRECRAWL_API_KEY",
-  "mcp/firecrawl",
-]
-startup_timeout_sec = 300
-[mcp_servers.firecrawl.env]
-FIRECRAWL_API_KEY = "${FIRECRAWL_API_KEY}"
+# [mcp_servers.deepwiki]
+# url = "https://mcp.deepwiki.com/mcp"
+# command = "pnpm"
+# args = [
+#     "dlx",
+#     "mcp-remote@0.1.38",
+#     "https://mcp.deepwiki.com/mcp",
+# ]
 
 [mcp_servers.drawio]
 command = "pnpm"
-args = [ "dlx", "@drawio/mcp@1.2.6" ]
+args = [
+  "dlx",
+  "@drawio/mcp@1.2.6",
+]
 startup_timeout_sec = 30
 
-[mcp_servers.sentry]
-url = "https://mcp.sentry.dev/mcp"
+# [mcp_servers.sentry]
+# url = "https://mcp.sentry.dev/mcp"
+# command = "pnpm"
+# args = [
+#     "dlx",
+#     "mcp-remote@0.1.38",
+#     "https://mcp.sentry.dev/mcp",
+# ]
 
-[mcp_servers.cloud-run]
-command = "pnpm"
-args = [ "dlx", "@google-cloud/cloud-run-mcp@1.10.0" ]
-startup_timeout_sec = 120
-
-[mcp_servers.kaggle]
-url = "https://www.kaggle.com/mcp"
+# [mcp_servers.kaggle]
+# url = "https://www.kaggle.com/mcp"
+# command = "pnpm"
+# args = [
+#     "dlx",
+#     "mcp-remote@0.1.38",
+#     "https://www.kaggle.com/mcp",
+# ]
