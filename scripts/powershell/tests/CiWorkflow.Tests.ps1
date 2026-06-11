@@ -73,10 +73,11 @@ Describe 'CI workflow configuration' {
         $script = Get-Content -LiteralPath $scriptPath -Raw
 
         $workflow | Should -Match 'runs-on:\s+windows-2025'
-        $workflow | Should -Match 'Ubuntu/WSL/\.github/actions/wsl-install@c23a4a0b03292618a19966ec299b799417d25580'
+        $workflow | Should -Match 'winget install --id Microsoft\.WSL --exact'
         $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
         $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
+        $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'

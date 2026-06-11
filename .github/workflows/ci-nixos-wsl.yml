@@ -43,18 +43,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install WSL application
-        uses: Ubuntu/WSL/.github/actions/wsl-install@c23a4a0b03292618a19966ec299b799417d25580 # main 2026-06-11
-        with:
-          distro: ""
-
-      - name: Verify WSL2 support
+      - name: Prepare WSL2
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
 
           $env:WSL_UTF8 = "1"
+          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+            winget install --id Microsoft.WSL --exact --accept-source-agreements --accept-package-agreements --silent
+          }
+
           wsl --version
           wsl --set-default-version 2
           wsl --status
