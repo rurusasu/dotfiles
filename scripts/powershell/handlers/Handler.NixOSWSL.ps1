@@ -445,7 +445,14 @@ class NixOSWSLHandler : SetupHandlerBase {
         # wslpath にバックスラッシュを渡すと WSL がエスケープシーケンスとして解釈して消失する
         # フォワードスラッシュに変換してから渡す
         $resolvedForWsl = $resolved.Replace('\', '/')
-        $wslPath = Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "--", "wslpath", "-a", $resolvedForWsl)
+        $wslPathOutput = @(
+            Invoke-Wsl -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "wslpath", "-a", $resolvedForWsl)
+        )
+        $wslPath = $wslPathOutput | ForEach-Object {
+            ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
+        } | Where-Object {
+            $_ -match '^/'
+        } | Select-Object -First 1
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslPath)) {
             $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd(":\")
             $rest = $resolved.Substring(2) -replace "\\", "/"
@@ -457,9 +464,17 @@ class NixOSWSLHandler : SetupHandlerBase {
         $syncBack = $ctx.GetOption("SyncBack", "lock")
         $timeoutSeconds = $ctx.GetOption("PostInstallTimeoutSeconds", 1800)
         $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
-        Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
-        if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("Post-install スクリプトが非ゼロで終了しました (exit code: $LASTEXITCODE)")
+        $output = @(
+            Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
+        )
+        $exitCode = $LASTEXITCODE
+        foreach ($line in $output) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                Write-Host "  $line"
+            }
+        }
+        if ($exitCode -ne 0) {
+            throw "Post-install script failed with exit code $exitCode"
         }
     }
 
@@ -498,7 +513,14 @@ class NixOSWSLHandler : SetupHandlerBase {
     #>
     hidden [void] EnsureDockerGroup([string]$distroName) {
         $this.Log("Docker グループにユーザーを追加します...")
-        $user = Invoke-Wsl -Arguments @("-d", $distroName, "--", "sh", "-lc", "whoami") | Select-Object -First 1
+        $userOutput = @(
+            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", "getent passwd 1000 | cut -d: -f1 || true")
+        )
+        $user = $userOutput | ForEach-Object {
+            ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
+        } | Where-Object {
+            $_ -match '^[a-z_][a-z0-9_-]*[$]?$'
+        } | Select-Object -First 1
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($user)) {
             $user = "nixos"
         }

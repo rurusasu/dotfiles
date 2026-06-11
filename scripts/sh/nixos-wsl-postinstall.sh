@@ -301,7 +301,7 @@ fi
 
 # Update flake inputs so first install uses the latest Nix sources.
 NIX_CONFIG="experimental-features = nix-command flakes" \
-  nix flake update "$TARGET_DIR"
+  nix flake update --flake "$TARGET_DIR"
 
 # Run nixos-rebuild
 NIX_CONFIG="experimental-features = nix-command flakes" \

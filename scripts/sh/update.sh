@@ -46,7 +46,7 @@ fi
 
 # NixOS rebuild
 info "Nix flake inputs を更新しています..."
-nix flake update ~/.dotfiles
+nix flake update --flake ~/.dotfiles
 
 info "NixOS 設定をビルドしています..."
 echo ""
@@ -109,5 +109,5 @@ echo ""
 success "Dotfiles が正常にインストールされました"
 echo ""
 echo "次回以降の更新は:"
-echo "  nrs  # または: nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure"
+echo "  nrs  # または: nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure"
 echo ""

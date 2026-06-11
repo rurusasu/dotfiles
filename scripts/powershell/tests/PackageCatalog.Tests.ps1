@@ -89,8 +89,8 @@ Describe 'Package catalog consistency' {
             $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl/users.nix") -Raw
             $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux/users.nix") -Raw
 
-            $wslUsers | Should -Match 'nrs\s*=\s*"nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
-            $linuxUsers | Should -Match 'nrs\s*=\s*"nix flake update ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+            $wslUsers | Should -Match 'nrs\s*=\s*"nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+            $linuxUsers | Should -Match 'nrs\s*=\s*"nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
         }
 
         It 'should update flake inputs before every scripted NixOS rebuild entry point' {
@@ -99,8 +99,8 @@ Describe 'Package catalog consistency' {
             $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
 
             $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
-            $updateScript | Should -Match 'nix flake update ~/.dotfiles'
-            $postInstallScript | Should -Match 'nix flake update "\$TARGET_DIR"'
+            $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
+            $postInstallScript | Should -Match 'nix flake update --flake "\$TARGET_DIR"'
         }
 
         It 'should source gwq from a flake input so nix flake update can move it forward' {
