@@ -1079,6 +1079,8 @@ Describe 'PnpmHandler' {
             }
             Mock Invoke-VerifyCommand {
                 param($Command, $Arguments, $TimeoutSeconds)
+                $null = $Command
+                $null = $TimeoutSeconds
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains "install") { return "Chromium installed" }
                 return "1.0.0"
@@ -1149,6 +1151,8 @@ Describe 'PnpmHandler' {
             }
             Mock Invoke-VerifyCommand {
                 param($Command, $Arguments, $TimeoutSeconds)
+                $null = $Command
+                $null = $TimeoutSeconds
                 if ($Arguments -contains "install") {
                     $global:LASTEXITCODE = 1
                     throw "download failed"

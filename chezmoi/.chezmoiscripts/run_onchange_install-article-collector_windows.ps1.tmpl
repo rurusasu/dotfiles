@@ -1,0 +1,77 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$repo = "rurusasu/article-collector"
+$tag = "article-collector-v0.2.1"
+$assetName = "article-collector-windows-amd64.exe"
+$expectedSha256 = "B6E4D2EADE6F8015D2A58DE6ED11F5FD8916FDA285BBEB1CAC28FD0884A57333"
+
+$localBin = Join-Path $env:USERPROFILE ".local\bin"
+$destination = Join-Path $localBin "article-collector.exe"
+
+function Test-ArticleCollectorInstalled {
+  if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+    return $false
+  }
+
+  $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+  return $hash -eq $expectedSha256
+}
+
+function Add-UserPathEntry {
+  param([Parameter(Mandatory = $true)][string]$PathEntry)
+
+  $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+  $items = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+  if ($items -contains $PathEntry) {
+    return
+  }
+
+  $newUserPath = (@($PathEntry) + $items) -join ";"
+  [System.Environment]::SetEnvironmentVariable("PATH", $newUserPath, "User")
+}
+
+if (Test-ArticleCollectorInstalled) {
+  Write-Host "[article-collector] Already installed: $destination"
+  Add-UserPathEntry -PathEntry $localBin
+  return
+}
+
+$tempDir = Join-Path $env:TEMP ("article-collector-install-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+try {
+  $downloadPath = Join-Path $tempDir $assetName
+  $gh = Get-Command gh -ErrorAction SilentlyContinue
+
+  if ($gh) {
+    & $gh.Source release download $tag --repo $repo --pattern $assetName --dir $tempDir
+    if ($LASTEXITCODE -ne 0) {
+      throw "gh release download failed with exit code $LASTEXITCODE"
+    }
+  } else {
+    $uri = "https://github.com/$repo/releases/download/$tag/$assetName"
+    Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $downloadPath
+  }
+
+  if (-not (Test-Path -LiteralPath $downloadPath -PathType Leaf)) {
+    throw "Downloaded asset not found: $downloadPath"
+  }
+
+  $actualSha256 = (Get-FileHash -LiteralPath $downloadPath -Algorithm SHA256).Hash
+  if ($actualSha256 -ne $expectedSha256) {
+    throw "SHA256 mismatch for $assetName. Expected $expectedSha256, got $actualSha256."
+  }
+
+  New-Item -ItemType Directory -Path $localBin -Force | Out-Null
+  Copy-Item -LiteralPath $downloadPath -Destination $destination -Force
+  Add-UserPathEntry -PathEntry $localBin
+
+  Write-Host "[article-collector] Installed: $destination"
+} finally {
+  if (Test-Path -LiteralPath $tempDir) {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force
+  }
+}
+{{ end -}}
