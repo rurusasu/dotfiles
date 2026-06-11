@@ -1,6 +1,7 @@
 # Python Coding Agent - Python実装専任エージェント
 # 実装・修正・変更・置換・継続作業を担当し、テスト実行は行わない
 
+name = "python_coding"
 model = "gpt-5.3-codex"
 model_reasoning_effort = "medium"
 model_verbosity = "medium"

@@ -4,50 +4,13 @@
       "command": "pnpm",
       "args": ["dlx", "@upstash/context7-mcp@2.2.3"]
     },
-    "linear": {
-      "command": "pnpm",
-      "args": ["dlx", "mcp-remote@0.1.38", "https://mcp.linear.app/mcp"]
-    },
     "deepwiki": {
       "command": "pnpm",
       "args": ["dlx", "mcp-remote@0.1.38", "https://mcp.deepwiki.com/mcp"]
     },
-    "tavily": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "TAVILY_API_KEY", "mcp/tavily"],
-      "env": {
-        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
-      }
-    },
-    "exa": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "EXA_API_KEY", "mcp/exa"],
-      "env": {
-        "EXA_API_KEY": "${EXA_API_KEY}"
-      }
-    },
-    "firecrawl": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "FIRECRAWL_API_KEY", "mcp/firecrawl"],
-      "env": {
-        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
-      }
-    },
     "drawio": {
       "command": "pnpm",
       "args": ["dlx", "@drawio/mcp@1.2.6"]
-    },
-    "sentry": {
-      "command": "pnpm",
-      "args": ["dlx", "mcp-remote@0.1.38", "https://mcp.sentry.dev/mcp"]
-    },
-    "cloud-run": {
-      "command": "pnpm",
-      "args": ["dlx", "@google-cloud/cloud-run-mcp@1.10.0"]
-    },
-    "kaggle": {
-      "command": "pnpm",
-      "args": ["dlx", "mcp-remote@0.1.38", "https://www.kaggle.com/mcp"]
     }
   }
 }

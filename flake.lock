@@ -52,6 +52,22 @@
         "type": "github"
       }
     },
+    "gwq-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777696904,
+        "narHash": "sha256-MfCYFbODWnfPxx+6sLlcMT6tqghgILHB13+ccYqVjBA=",
+        "owner": "d-kuro",
+        "repo": "gwq",
+        "rev": "c4247734968bc3f66addd1e088c19b962c27cfc1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "d-kuro",
+        "repo": "gwq",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -190,6 +206,7 @@
     "root": {
       "inputs": {
         "flake-parts": "flake-parts",
+        "gwq-src": "gwq-src",
         "home-manager": "home-manager",
         "nixos-vscode-server": "nixos-vscode-server",
         "nixos-wsl": "nixos-wsl",
