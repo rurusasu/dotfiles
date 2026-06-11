@@ -103,14 +103,8 @@ startup_timeout_sec = 30
 #     "https://mcp.linear.app/mcp",
 # ]
 
-# [mcp_servers.deepwiki]
-# url = "https://mcp.deepwiki.com/mcp"
-# command = "pnpm"
-# args = [
-#     "dlx",
-#     "mcp-remote@0.1.38",
-#     "https://mcp.deepwiki.com/mcp",
-# ]
+[mcp_servers.deepwiki]
+url = "https://mcp.deepwiki.com/mcp"
 
 [mcp_servers.drawio]
 command = "pnpm"
