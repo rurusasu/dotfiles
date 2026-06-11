@@ -59,6 +59,29 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'User Phase Complete!'
     }
 
+    It 'should build the NixOS WSL system on hosted Nix CI' {
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+
+        $nixWorkflow | Should -Match 'Build NixOS WSL system'
+        $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
+    }
+
+    It 'should run nixos-rebuild switch in a self-hosted WSL2 E2E workflow' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nixos-wsl.yml"
+        $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $script = Get-Content -LiteralPath $scriptPath -Raw
+
+        $workflow | Should -Match 'runs-on:\s+\[self-hosted, windows, x64, WSL2\]'
+        $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
+        $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
+        $script | Should -Match 'SyncMode"\] = "repo"'
+        $script | Should -Match 'SyncBack"\] = "none"'
+        $script | Should -Match 'Welcome to your new NixOS-WSL system'
+        $script | Should -Match 'nixos-rebuild list-generations'
+        $script | Should -Match 'Remove-TemporaryDistro'
+    }
+
     It 'should cover Windows PowerShell 5.1 timeout wrapper compatibility in CI' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $windowsPowerShellInstall = [regex]::Match(

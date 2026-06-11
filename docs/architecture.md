@@ -269,6 +269,7 @@ flowchart TD
     PR["Pull Request"]
 
     PR -->|"nix/** flake.*"| NX
+    PR -->|"nix/** flake.*\npostinstall"| NW
     PR -->|"windows/winget/packages.json\nnix/packages/sets.nix"| WG
     PR -->|"nix/packages/** windows/winget/**"| CO
     PR -->|"scripts/powershell/**"| PS
@@ -276,9 +277,18 @@ flowchart TD
     subgraph NX["test-nix.yml (ubuntu-latest)"]
         N1["① nix flake check\n評価エラー検知"]
         N2["② nix build .#default\n実ビルド"]
-        N3["③ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf unzip"]
-        N4["④ nix fmt\nフォーマット確認"]
-        N1 --> N2 --> N3 --> N4
+        N3["③ nix build .#nixosConfigurations.nixos...\nWSL system toplevel 実ビルド"]
+        N4["④ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf unzip"]
+        N5["⑤ nix fmt\nフォーマット確認"]
+        N1 --> N2 --> N3 --> N4 --> N5
+    end
+
+    subgraph NW["ci-nixos-wsl.yml (self-hosted Windows + WSL2)"]
+        NW1["① 一時 NixOS-WSL distro 作成"]
+        NW2["② postinstall 実行"]
+        NW3["③ nixos-rebuild switch 検証\nwelcome banner 消滅確認"]
+        NW4["④ distro unregister"]
+        NW1 --> NW2 --> NW3 --> NW4
     end
 
     subgraph WG["test-winget.yml (windows-2025)"]
@@ -302,23 +312,26 @@ flowchart TD
 
 ### ワークフロー詳細
 
-| Workflow               | ランナー      | 何を保証するか                                       | トリガー                                                |
-| ---------------------- | ------------- | ---------------------------------------------------- | ------------------------------------------------------- |
-| `test-nix.yml`         | ubuntu-latest | Nix 式が評価でき、バイナリがビルドでき、ツールが動く | `nix/**`, `flake.*`                                     |
-| `test-winget.yml`      | windows-2025  | winget パッケージがインストールでき、ツールが動く    | `windows/winget/packages.json`, `nix/packages/sets.nix` |
-| `test-consistency.yml` | ubuntu-latest | Nix 定義と `windows/winget/packages.json` が一致     | `nix/packages/**`, `windows/winget/**`                  |
-| `test-powershell.yml`  | windows-2025  | PowerShell ハンドラーのロジックが正しく動く          | `scripts/powershell/**`                                 |
+| Workflow               | ランナー                   | 何を保証するか                                                        | トリガー                                                |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `test-nix.yml`         | ubuntu-latest              | Nix 式・NixOS WSL toplevel が評価/ビルドでき、ツールが動く            | `nix/**`, `flake.*`                                     |
+| `ci-nixos-wsl.yml`     | self-hosted Windows + WSL2 | 一時 NixOS-WSL distro で postinstall と `nixos-rebuild switch` が通る | `nix/**`, `flake.*`, `nixos-wsl-postinstall.sh`         |
+| `test-winget.yml`      | windows-2025               | winget パッケージがインストールでき、ツールが動く                     | `windows/winget/packages.json`, `nix/packages/sets.nix` |
+| `test-consistency.yml` | ubuntu-latest              | Nix 定義と `windows/winget/packages.json` が一致                      | `nix/packages/**`, `windows/winget/**`                  |
+| `test-powershell.yml`  | windows-2025               | PowerShell ハンドラーのロジックが正しく動く                           | `scripts/powershell/**`                                 |
 
 ### テストレベルの判断基準
 
-| レベル           | 対象                          | 方法                              | ワークフロー     |
-| ---------------- | ----------------------------- | --------------------------------- | ---------------- |
-| Static Analysis  | Nix 構文、フォーマット        | `nix flake check`, `nix fmt`      | test-nix         |
-| Unit Test        | PowerShell ハンドラー         | Pester + モック                   | test-powershell  |
-| Consistency Test | SSOT ↔ 生成 JSON              | winget-export diff                | test-consistency |
-| Build Test       | Nix package sets              | `nix build .#default`（実ビルド） | test-nix         |
-| Smoke Test       | core CLI ツール（Nix 側）     | `nix shell` + `--version`         | test-nix         |
-| Smoke Test       | core CLI ツール（Windows 側） | `winget import` + `--version`     | test-winget      |
+| レベル           | 対象                          | 方法                                                                 | ワークフロー     |
+| ---------------- | ----------------------------- | -------------------------------------------------------------------- | ---------------- |
+| Static Analysis  | Nix 構文、フォーマット        | `nix flake check`, `nix fmt`                                         | test-nix         |
+| Unit Test        | PowerShell ハンドラー         | Pester + モック                                                      | test-powershell  |
+| Consistency Test | SSOT ↔ 生成 JSON              | winget-export diff                                                   | test-consistency |
+| Build Test       | Nix package sets              | `nix build .#default`（実ビルド）                                    | test-nix         |
+| Build Test       | NixOS WSL system              | `nix build .#nixosConfigurations.nixos.config.system.build.toplevel` | test-nix         |
+| E2E Test         | NixOS-WSL 初回反映            | 一時 distro + `nixos-rebuild switch` + welcome 消滅確認              | ci-nixos-wsl     |
+| Smoke Test       | core CLI ツール（Nix 側）     | `nix shell` + `--version`                                            | test-nix         |
+| Smoke Test       | core CLI ツール（Windows 側） | `winget import` + `--version`                                        | test-winget      |
 
 ### 検証ツール一覧
 
@@ -340,7 +353,7 @@ flowchart TD
 ### CI で意図的に実行しないもの
 
 - **Windows GUI アプリの E2E**: VS Code, Docker Desktop 等は UAC・GUI インストーラーが自動化非対応
-- **WSL 内 nixos-rebuild switch**: GitHub Actions runner はネスト仮想化非対応
+- **GitHub-hosted runner 上の WSL 内 `nixos-rebuild switch`**: 標準 hosted runner では WSL2/nested virtualization が不安定なため、hosted では toplevel build、実 switch は `self-hosted, windows, x64, WSL2` ラベルの runner で実行する
 - **NixOS VM test (`nixosTest`)**: systemd サービスのテストが必要になった時点で追加
 
 ### GitHub Actions（public repo）

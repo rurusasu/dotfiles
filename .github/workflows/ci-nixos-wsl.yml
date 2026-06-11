@@ -1,0 +1,58 @@
+name: NixOS WSL E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "scripts/sh/nixos-wsl-postinstall.sh"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/lib/**"
+      - ".github/workflows/ci-nixos-wsl.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "scripts/sh/nixos-wsl-postinstall.sh"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/lib/**"
+      - ".github/workflows/ci-nixos-wsl.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  switch:
+    name: Switch (self-hosted Windows WSL2)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, windows, x64, WSL2]
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run isolated NixOS-WSL switch
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $distroName = "NixOS-CI-${{ github.run_id }}-${{ github.run_attempt }}"
+          $installDir = Join-Path $env:RUNNER_TEMP $distroName
+
+          pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+            -File scripts/powershell/ci/Invoke-NixosWslE2E.ps1 `
+            -DistroName $distroName `
+            -InstallDir $installDir
