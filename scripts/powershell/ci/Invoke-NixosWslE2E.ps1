@@ -3,8 +3,8 @@
     Run an isolated NixOS-WSL install and nixos-rebuild switch E2E check.
 
 .DESCRIPTION
-    This script is intended for a self-hosted Windows GitHub Actions runner with
-    WSL2 enabled. It creates a temporary NixOS-WSL distro, runs the repository
+    This script is intended for a Windows GitHub Actions runner with WSL2
+    enabled. It creates a temporary NixOS-WSL distro, runs the repository
     post-install flow, verifies that nixos-rebuild switch removed the first-run
     welcome banner, and unregisters the temporary distro unless -KeepDistro is set.
 #>

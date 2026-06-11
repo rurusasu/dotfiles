@@ -283,7 +283,7 @@ flowchart TD
         N1 --> N2 --> N3 --> N4 --> N5
     end
 
-    subgraph NW["ci-nixos-wsl.yml (self-hosted Windows + WSL2)"]
+    subgraph NW["ci-nixos-wsl.yml (windows-2025 + WSL2)"]
         NW1["① 一時 NixOS-WSL distro 作成"]
         NW2["② postinstall 実行"]
         NW3["③ nixos-rebuild switch 検証\nwelcome banner 消滅確認"]
@@ -312,13 +312,13 @@ flowchart TD
 
 ### ワークフロー詳細
 
-| Workflow               | ランナー                   | 何を保証するか                                                        | トリガー                                                |
-| ---------------------- | -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
-| `test-nix.yml`         | ubuntu-latest              | Nix 式・NixOS WSL toplevel が評価/ビルドでき、ツールが動く            | `nix/**`, `flake.*`                                     |
-| `ci-nixos-wsl.yml`     | self-hosted Windows + WSL2 | 一時 NixOS-WSL distro で postinstall と `nixos-rebuild switch` が通る | `nix/**`, `flake.*`, `nixos-wsl-postinstall.sh`         |
-| `test-winget.yml`      | windows-2025               | winget パッケージがインストールでき、ツールが動く                     | `windows/winget/packages.json`, `nix/packages/sets.nix` |
-| `test-consistency.yml` | ubuntu-latest              | Nix 定義と `windows/winget/packages.json` が一致                      | `nix/packages/**`, `windows/winget/**`                  |
-| `test-powershell.yml`  | windows-2025               | PowerShell ハンドラーのロジックが正しく動く                           | `scripts/powershell/**`                                 |
+| Workflow               | ランナー      | 何を保証するか                                                        | トリガー                                                |
+| ---------------------- | ------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `test-nix.yml`         | ubuntu-latest | Nix 式・NixOS WSL toplevel が評価/ビルドでき、ツールが動く            | `nix/**`, `flake.*`                                     |
+| `ci-nixos-wsl.yml`     | windows-2025  | 一時 NixOS-WSL distro で postinstall と `nixos-rebuild switch` が通る | `nix/**`, `flake.*`, `nixos-wsl-postinstall.sh`         |
+| `test-winget.yml`      | windows-2025  | winget パッケージがインストールでき、ツールが動く                     | `windows/winget/packages.json`, `nix/packages/sets.nix` |
+| `test-consistency.yml` | ubuntu-latest | Nix 定義と `windows/winget/packages.json` が一致                      | `nix/packages/**`, `windows/winget/**`                  |
+| `test-powershell.yml`  | windows-2025  | PowerShell ハンドラーのロジックが正しく動く                           | `scripts/powershell/**`                                 |
 
 ### テストレベルの判断基準
 
@@ -353,7 +353,6 @@ flowchart TD
 ### CI で意図的に実行しないもの
 
 - **Windows GUI アプリの E2E**: VS Code, Docker Desktop 等は UAC・GUI インストーラーが自動化非対応
-- **GitHub-hosted runner 上の WSL 内 `nixos-rebuild switch`**: 標準 hosted runner では WSL2/nested virtualization が不安定なため、hosted では toplevel build、実 switch は `self-hosted, windows, x64, WSL2` ラベルの runner で実行する
 - **NixOS VM test (`nixosTest`)**: systemd サービスのテストが必要になった時点で追加
 
 ### GitHub Actions（public repo）

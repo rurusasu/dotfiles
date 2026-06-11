@@ -66,13 +66,15 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
-    It 'should run nixos-rebuild switch in a self-hosted WSL2 E2E workflow' {
+    It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nixos-wsl.yml"
         $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $script = Get-Content -LiteralPath $scriptPath -Raw
 
-        $workflow | Should -Match 'runs-on:\s+\[self-hosted, windows, x64, WSL2\]'
+        $workflow | Should -Match 'runs-on:\s+windows-2025'
+        $workflow | Should -Match 'Ubuntu/WSL/\.github/actions/wsl-install@c23a4a0b03292618a19966ec299b799417d25580'
+        $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
         $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
         $script | Should -Match 'SyncMode"\] = "repo"'
