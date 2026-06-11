@@ -215,6 +215,9 @@ jobs:
           nix build .#default
           nix build .#full
 
+      - name: Build NixOS WSL system
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link
+
       - name: Install full profile and smoke test tools
         run: |
           set -euo pipefail

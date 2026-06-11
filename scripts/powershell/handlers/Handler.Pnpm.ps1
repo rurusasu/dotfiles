@@ -121,6 +121,7 @@ class PnpmHandler : SetupHandlerBase {
             $failed = @()
             $succeeded = @()
             $verifyFailed = @()
+            $postInstallFailed = @()
             $skipped = 0
             $verified = 0
 
@@ -137,24 +138,9 @@ class PnpmHandler : SetupHandlerBase {
             foreach ($pkgEntry in $packages) {
                 $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
                 $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
-                $verifyCmd = if ($pkgEntry -is [string]) { $null } else { $pkgEntry.verifyCommand }
-                $installArgs = @()
-                if ($pkgEntry -isnot [string]) {
-                    if ($pkgEntry -is [System.Collections.IDictionary] -and $pkgEntry.Contains("installArgs")) {
-                        foreach ($arg in @($pkgEntry["installArgs"])) {
-                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
-                                $installArgs += [string]$arg
-                            }
-                        }
-                    }
-                    elseif ($pkgEntry.PSObject.Properties.Name -contains "installArgs") {
-                        foreach ($arg in @($pkgEntry.installArgs)) {
-                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
-                                $installArgs += [string]$arg
-                            }
-                        }
-                    }
-                }
+                $verifyCmd = $this.GetPackageProperty($pkgEntry, "verifyCommand")
+                $postInstallCmd = $this.GetPackageProperty($pkgEntry, "postInstallCommand")
+                $installArgs = $this.GetPackageStringArray($pkgEntry, "installArgs")
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
@@ -177,6 +163,12 @@ class PnpmHandler : SetupHandlerBase {
                 if ($pnpmExitCode -ne 0) {
                     $failed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
+                    continue
+                }
+
+                if ($postInstallCmd -and -not $this.InvokePackagePostInstall($postInstallCmd)) {
+                    $postInstallFailed += $pkgSpec
+                    $this.LogWarning("✗ $pkgSpec の post-install に失敗しました")
                     continue
                 }
 
@@ -204,12 +196,13 @@ class PnpmHandler : SetupHandlerBase {
 
             $parts = @()
             if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
+            if ($postInstallFailed.Count -gt 0) { $parts += "$($postInstallFailed.Count) 個post-install失敗" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
-            if ($failed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
+            if ($failed.Count -gt 0 -or $postInstallFailed.Count -gt 0 -or $verifyFailed.Count -gt 0) {
                 return $this.CreateFailureResult($message)
             }
             return $this.CreateSuccessResult($message)
@@ -234,6 +227,56 @@ class PnpmHandler : SetupHandlerBase {
         if (-not $globalRoot) { return $false }
         $pkgPath = Join-Path $globalRoot $pkgName
         return (Test-Path -LiteralPath $pkgPath -PathType Container)
+    }
+
+    hidden [object] GetPackageProperty([object]$pkgEntry, [string]$propertyName) {
+        if ($pkgEntry -is [string] -or -not $pkgEntry) { return $null }
+        if ($pkgEntry -is [System.Collections.IDictionary] -and $pkgEntry.Contains($propertyName)) {
+            return $pkgEntry[$propertyName]
+        }
+
+        $property = $pkgEntry.PSObject.Properties[$propertyName]
+        if ($property) {
+            return $property.Value
+        }
+        return $null
+    }
+
+    hidden [string[]] GetPackageStringArray([object]$pkgEntry, [string]$propertyName) {
+        $values = @()
+        $propertyValue = $this.GetPackageProperty($pkgEntry, $propertyName)
+        foreach ($value in @($propertyValue)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+                $values += [string]$value
+            }
+        }
+        return $values
+    }
+
+    hidden [bool] InvokePackagePostInstall([object]$postInstallCmd) {
+        try {
+            $command = $postInstallCmd.command
+            $arguments = @($postInstallCmd.args)
+            $timeoutSeconds = $this.GetCommandTimeoutSeconds($postInstallCmd, 600)
+            $displayCommand = (@($command) + $arguments) -join " "
+            $this.Log("post-install 実行中: $displayCommand", "Gray")
+
+            $output = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            $output | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    $this.Log("  $_", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -eq 124) {
+                $this.Log("post-install コマンドがタイムアウトしました (${timeoutSeconds}s): $displayCommand", "Yellow")
+            }
+            return $LASTEXITCODE -eq 0
+        }
+        catch {
+            $this.Log("post-install コマンド実行エラー: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
     }
 
     hidden [bool] TestPackageVerification([object]$verifyCmd) {
@@ -275,19 +318,23 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
-        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
-            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+        return $this.GetCommandTimeoutSeconds($verifyCmd, 30)
+    }
+
+    hidden [int] GetCommandTimeoutSeconds([object]$commandSpec, [int]$defaultSeconds) {
+        if ($commandSpec -is [hashtable] -and $commandSpec.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$commandSpec["timeoutSeconds"]
             if ($timeoutSeconds -gt 0) {
                 return $timeoutSeconds
             }
         }
-        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
-            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+        if ($commandSpec -and ($commandSpec.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$commandSpec.timeoutSeconds
             if ($timeoutSeconds -gt 0) {
                 return $timeoutSeconds
             }
         }
-        return 30
+        return $defaultSeconds
     }
 
     hidden [string] GetVerifyType([object]$verifyCmd) {

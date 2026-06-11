@@ -7,6 +7,7 @@
 #   - wingetMap          → nix attr name → winget PackageIdentifier
 #   - pnpmGlobal         → cross-platform pnpm global package names
 #   - pnpmVerify         → package name → { command, args } for post-install verification
+#   - pnpmPostInstall    → package name → { command, args } to run after pnpm add -g
 #   - pnpmInstallArgs    → package name → extra pnpm add -g arguments
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
@@ -458,7 +459,8 @@ lib.mapAttrs (_: names: resolve names) grouped
   pnpmGlobal = [
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
-    "@playwright/cli"
+    "@playwright/cli@0.1.13"
+    "playwright@1.60.0"
     "typescript-language-server"
     "typescript"
   ];
@@ -490,6 +492,25 @@ lib.mapAttrs (_: names: resolve names) grouped
     "@playwright/cli" = {
       command = "playwright-cli";
       args = [ "--version" ];
+    };
+    "playwright" = {
+      command = "playwright";
+      args = [ "--version" ];
+    };
+  };
+
+  # Post-install commands for pnpm packages.
+  # Playwright keeps browser binaries outside node_modules by default
+  # (%LOCALAPPDATA%/ms-playwright on Windows); this ensures the pnpm-managed
+  # CLI also provisions the Chromium runtime used by automation scripts.
+  pnpmPostInstall = {
+    "playwright" = {
+      command = "playwright";
+      args = [
+        "install"
+        "chromium"
+      ];
+      timeoutSeconds = 600;
     };
   };
 

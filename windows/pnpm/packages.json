@@ -18,10 +18,22 @@
       }
     },
     {
-      "name": "@playwright/cli",
+      "name": "@playwright/cli@0.1.13",
       "verifyCommand": {
         "args": ["--version"],
         "command": "playwright-cli"
+      }
+    },
+    {
+      "name": "playwright@1.60.0",
+      "postInstallCommand": {
+        "args": ["install", "chromium"],
+        "command": "playwright",
+        "timeoutSeconds": 600
+      },
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "playwright"
       }
     },
     {

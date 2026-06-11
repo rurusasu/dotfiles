@@ -1042,6 +1042,142 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'Apply - postInstallCommand succeeds' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name               = "playwright@1.60.0"
+                            postInstallCommand = @{
+                                command        = "playwright"
+                                args           = @("install", "chromium")
+                                timeoutSeconds = 600
+                            }
+                            verifyCommand      = @{ command = "playwright"; args = @("--version") }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $null = $Command
+                $null = $TimeoutSeconds
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains "install") { return "Chromium installed" }
+                return "1.0.0"
+            }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should run post-install before verification' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            $result.Message | Should -Not -Match "post-install失敗"
+            Should -Invoke Invoke-VerifyCommand -ParameterFilter {
+                $Command -eq "playwright" -and
+                $Arguments -contains "install" -and
+                $Arguments -contains "chromium" -and
+                $TimeoutSeconds -eq 600
+            } -Times 1
+            Should -Invoke Invoke-VerifyCommand -ParameterFilter {
+                $Command -eq "playwright" -and
+                $Arguments -contains "--version" -and
+                $TimeoutSeconds -eq 30
+            } -Times 1
+            Should -Invoke Write-Host -ParameterFilter {
+                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "post-install 実行中: playwright install chromium"
+            } -Times 1
+        }
+    }
+
+    Context 'Apply - postInstallCommand fails' {
+        BeforeEach {
+            $script:origPath = $env:PATH
+            $script:pnpmBin = Join-Path $TestDrive "pnpm-bin"
+            New-Item $script:pnpmBin -ItemType Directory -Force | Out-Null
+            Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name               = "playwright@1.60.0"
+                            postInstallCommand = @{
+                                command        = "playwright"
+                                args           = @("install", "chromium")
+                                timeoutSeconds = 600
+                            }
+                            verifyCommand      = @{ command = "playwright"; args = @("--version") }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return (Join-Path $TestDrive "nonexistent-root")
+                }
+                if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
+                if ($Arguments -contains "add") { $global:LASTEXITCODE = 0; return "installed" }
+                $global:LASTEXITCODE = 0; return ""
+            }
+            Mock Test-Path { return $false } -ParameterFilter {
+                ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $null = $Command
+                $null = $TimeoutSeconds
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    throw "download failed"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
+            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
+            Mock Write-Host { }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+        }
+        AfterEach { $env:PATH = $script:origPath }
+
+        It 'should fail without running verification' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個post-install失敗"
+            $result.Message | Should -Not -Match "1 個インストール"
+            Should -Invoke Invoke-VerifyCommand -ParameterFilter {
+                $Command -eq "playwright" -and $Arguments -contains "--version"
+            } -Times 0
+        }
+    }
+
     Context 'Apply - verifyCommand fails' {
         BeforeEach {
             $script:origPath = $env:PATH

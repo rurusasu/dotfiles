@@ -1,0 +1,92 @@
+name: NixOS WSL E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "scripts/sh/nixos-wsl-postinstall.sh"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/lib/**"
+      - ".github/workflows/ci-nixos-wsl.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "scripts/sh/nixos-wsl-postinstall.sh"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/lib/**"
+      - ".github/workflows/ci-nixos-wsl.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  switch:
+    name: Switch (Windows WSL2)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-2025
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Prepare WSL2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $env:WSL_UTF8 = "1"
+          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+            winget install --id Microsoft.WSL --exact --accept-source-agreements --accept-package-agreements --silent
+          }
+
+          wsl --version
+          wsl --set-default-version 2
+          wsl --status
+
+      - name: Run isolated NixOS-WSL switch
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $refName = "${{ github.head_ref }}"
+          if ([string]::IsNullOrWhiteSpace($refName)) {
+            $refName = "${{ github.ref_name }}"
+          }
+          $safeRef = $refName -replace "[^A-Za-z0-9_.-]", "-"
+          if ([string]::IsNullOrWhiteSpace($safeRef)) {
+            $safeRef = "ref"
+          }
+          if ($safeRef.Length -gt 48) {
+            $safeRef = $safeRef.Substring(0, 48).TrimEnd("-", ".", "_")
+          }
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $refHashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($refName))
+          }
+          finally {
+            $sha256.Dispose()
+          }
+          $refHash = (-join ($refHashBytes | ForEach-Object { $_.ToString("x2") })).Substring(0, 8)
+          $distroName = "NixOS-CI-$safeRef-$refHash"
+          $installDir = Join-Path $env:RUNNER_TEMP $distroName
+
+          pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+            -File scripts/powershell/ci/Invoke-NixosWslE2E.ps1 `
+            -DistroName $distroName `
+            -InstallDir $installDir

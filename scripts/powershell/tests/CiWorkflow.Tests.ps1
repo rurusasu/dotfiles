@@ -59,6 +59,36 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'User Phase Complete!'
     }
 
+    It 'should build the NixOS WSL system on hosted Nix CI' {
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+
+        $nixWorkflow | Should -Match 'Build NixOS WSL system'
+        $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
+    }
+
+    It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nixos-wsl.yml"
+        $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $script = Get-Content -LiteralPath $scriptPath -Raw
+
+        $workflow | Should -Match 'runs-on:\s+windows-2025'
+        $workflow | Should -Match 'winget install --id Microsoft\.WSL --exact'
+        $workflow | Should -Match 'wsl --set-default-version 2'
+        $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
+        $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
+        $workflow | Should -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
+        $workflow | Should -Match '\$distroName = "NixOS-CI-\$safeRef-\$refHash"'
+        $workflow | Should -Not -Match '\$distroName = "NixOS-CI-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}"'
+        $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
+        $script | Should -Match 'SyncMode"\] = "repo"'
+        $script | Should -Match 'SyncBack"\] = "none"'
+        $script | Should -Not -Match 'SkipFlakeUpdate"\] = \$true'
+        $script | Should -Match 'Welcome to your new NixOS-WSL system'
+        $script | Should -Match 'nixos-rebuild list-generations'
+        $script | Should -Match 'Remove-TemporaryDistro'
+    }
+
     It 'should cover Windows PowerShell 5.1 timeout wrapper compatibility in CI' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $windowsPowerShellInstall = [regex]::Match(

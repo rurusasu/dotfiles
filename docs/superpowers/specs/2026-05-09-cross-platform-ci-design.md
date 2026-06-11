@@ -30,6 +30,7 @@ winget CI は個人 dotfiles では前例がほぼない。`windows-latest` runn
 **Approach A+B の組み合わせ:**
 
 - **Nix 側（B）**: `nix build` 実ビルド + `nix shell` でクロスプラットフォームツール全検証
+- **NixOS WSL 側**: hosted CI で system toplevel を実ビルドし、self-hosted Windows/WSL2 runner で一時 distro の `nixos-rebuild switch` を実行
 - **Windows 側（A）**: winget import + core ツールの `--version` スモークテスト
 - **既存の整合性チェック**: `test-consistency.yml` は変更なし
 
@@ -44,11 +45,13 @@ flowchart LR
     subgraph CI["GitHub Actions CI"]
         direction TB
         CNX["test-nix.yml\n(ubuntu-latest)\n① flake check\n② nix build .#default\n③ nix shell smoke test"]
+        CWSL["ci-nixos-wsl.yml\n(self-hosted Windows + WSL2)\n① temporary NixOS-WSL\n② nixos-rebuild switch"]
         CWG["test-winget.yml\n(windows-latest)\n① winget import\n② core tools smoke test"]
         CCO["test-consistency.yml\n(ubuntu-latest)\n① nix build .#winget-export\n② JSON diff"]
     end
 
     SSOT --> CNX
+    SSOT --> CWSL
     SSOT --> CWG
     SSOT --> CCO
 ```
@@ -59,10 +62,11 @@ flowchart LR
 
 **トリガー**: `nix/**`, `flake.nix`, `flake.lock`
 
-| ステップ           | 変更前      | 変更後                                               |
-| ------------------ | ----------- | ---------------------------------------------------- |
-| Build package sets | `--dry-run` | 実ビルド                                             |
-| Smoke test         | なし        | **追加**: `nix shell .#default` で core ツール全検証 |
+| ステップ           | 変更前      | 変更後                                                                                   |
+| ------------------ | ----------- | ---------------------------------------------------------------------------------------- |
+| Build package sets | `--dry-run` | 実ビルド                                                                                 |
+| Build NixOS WSL    | なし        | **追加**: `nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link` |
+| Smoke test         | なし        | **追加**: `nix shell .#default` で core ツール全検証                                     |
 
 **検証ツール**: chezmoi, git, gh, fd, rg, bat, jq, eza, zoxide, fzf
 
@@ -76,6 +80,19 @@ flowchart LR
 
 **検証ツール（winget ID あり）**: chezmoi, git, gh, fd, rg, jq, eza, zoxide, fzf
 （bat/unzip/p7zip は winget ID なしのため対象外）
+
+### ci-nixos-wsl.yml（新規）
+
+**トリガー**: `nix/**`, `flake.nix`, `flake.lock`, `scripts/sh/nixos-wsl-postinstall.sh`
+
+**ランナー**: `self-hosted, windows, x64, WSL2`
+
+1. 一時ディストリ名 `NixOS-CI-<run_id>-<run_attempt>` を作成
+2. NixOS-WSL を import/install
+3. `scripts/sh/nixos-wsl-postinstall.sh --sync-mode repo --sync-back none` を実行
+4. `nixos-rebuild switch` 後に初回 welcome banner が消えていることを検証
+5. `zsh`, `chezmoi`, `task`, `git` の存在を確認
+6. 成否にかかわらず一時 distro を unregister
 
 ### test-consistency.yml（変更なし）
 
@@ -94,4 +111,4 @@ JSON 整合性チェックのみ。
 
 - bat, unzip, p7zip: winget ID なし → Windows インストール検証不可
 - Windows-only パッケージ（VS Code 等）: GUI インストーラーが CI 非対応
-- WSL 内での nixos-rebuild switch: runner がネスト仮想化非対応
+- GitHub-hosted runner 上の WSL 内 `nixos-rebuild switch`: 標準 hosted runner ではネスト仮想化が不安定なため、実 switch は self-hosted Windows/WSL2 runner に分離

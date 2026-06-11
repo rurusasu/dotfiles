@@ -579,6 +579,27 @@ Describe 'NixOSWSLHandler' {
             $script:execCmd | Should -Match '/mnt/c/test/postinstall\.sh'
         }
 
+        It 'should ignore first-run welcome text in wslpath output' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return @("Welcome to your new NixOS-WSL system!", "/mnt/c/test/postinstall.sh")
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match 'bash "/mnt/c/test/postinstall\.sh"'
+        }
+
         It 'should run post-install with timeout to avoid indefinite hangs' {
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null
@@ -601,6 +622,28 @@ Describe 'NixOSWSLHandler' {
             $script:timeoutSeconds | Should -Be 123
         }
 
+        It 'should pass skip-flake-update when requested' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $ctx.Options["SkipFlakeUpdate"] = $true
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match '--skip-flake-update'
+        }
+
         It 'should fall back to /mnt/ path when wslpath call fails' {
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null
@@ -621,6 +664,24 @@ Describe 'NixOSWSLHandler' {
 
             $script:execCmd | Should -Match '/mnt/[a-z]/'
         }
+
+        It 'should throw when post-install exits non-zero' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $global:LASTEXITCODE = 1
+                return "boom"
+            }
+            Mock Write-Host { }
+
+            { $handler.ExecutePostInstall($ctx) } | Should -Throw "*Post-install script failed with exit code 1*"
+        }
     }
 
     Context 'EnsureDockerGroup' {
@@ -633,7 +694,7 @@ Describe 'NixOSWSLHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "whoami") {
+                if ($argStr -match "getent passwd 1000") {
                     $global:LASTEXITCODE = 0
                     return "nixos"
                 }
@@ -648,12 +709,31 @@ Describe 'NixOSWSLHandler' {
             $script:wslCmd | Should -Match "usermod -aG docker 'nixos'"
         }
 
-        It 'should fall back to nixos user when whoami fails' {
+        It 'should ignore welcome text while detecting docker user' {
             $script:wslCmd = ""
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "whoami") {
+                if ($argStr -match "getent passwd 1000") {
+                    $global:LASTEXITCODE = 0
+                    return @("Welcome to your new NixOS-WSL system!", "nixos")
+                }
+                $script:wslCmd = $argStr
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.EnsureDockerGroup("NixOS")
+
+            $script:wslCmd | Should -Match "usermod -aG docker 'nixos'"
+        }
+
+        It 'should fall back to nixos user when default-user lookup fails' {
+            $script:wslCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "getent passwd 1000") {
                     $global:LASTEXITCODE = 1
                     return ""
                 }

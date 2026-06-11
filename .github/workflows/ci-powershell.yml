@@ -7,12 +7,16 @@ on:
     paths:
       - "install.cmd"
       - "scripts/powershell/**"
+      - ".github/workflows/ci-nix.yml"
+      - ".github/workflows/ci-nixos-wsl.yml"
       - ".github/workflows/ci-powershell.yml"
   pull_request:
     branches: [main]
     paths:
       - "install.cmd"
       - "scripts/powershell/**"
+      - ".github/workflows/ci-nix.yml"
+      - ".github/workflows/ci-nixos-wsl.yml"
       - ".github/workflows/ci-powershell.yml"
 
 concurrency:
