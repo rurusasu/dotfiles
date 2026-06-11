@@ -464,6 +464,9 @@ class NixOSWSLHandler : SetupHandlerBase {
         $syncBack = $ctx.GetOption("SyncBack", "lock")
         $timeoutSeconds = $ctx.GetOption("PostInstallTimeoutSeconds", 1800)
         $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
+        if ($ctx.GetOption("SkipFlakeUpdate", $false)) {
+            $cmd += " --skip-flake-update"
+        }
         $output = @(
             Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
         )

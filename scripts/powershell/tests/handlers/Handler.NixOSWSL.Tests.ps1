@@ -622,6 +622,28 @@ Describe 'NixOSWSLHandler' {
             $script:timeoutSeconds | Should -Be 123
         }
 
+        It 'should pass skip-flake-update when requested' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $ctx.Options["SkipFlakeUpdate"] = $true
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match '--skip-flake-update'
+        }
+
         It 'should fall back to /mnt/ path when wslpath call fails' {
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null

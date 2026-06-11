@@ -13,6 +13,7 @@ Options:
   --sync-mode <mode>   Sync mode: link|repo|nix|none (default: link)
   --sync-source <path> Source dir for sync (default: script repo root)
   --sync-back <mode>   Sync back: lock|none (default: lock when sync-mode=link)
+  --skip-flake-update  Do not update flake inputs before nixos-rebuild
   --force              Allow non-empty repo dir (no deletion)
   -h, --help           Show help
 USAGE
@@ -31,6 +32,7 @@ FORCE=0
 SYNC_MODE="link"
 SYNC_SOURCE=""
 SYNC_BACK=""
+SKIP_FLAKE_UPDATE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,6 +63,10 @@ while [[ $# -gt 0 ]]; do
   --sync-back)
     SYNC_BACK="${2:-}"
     shift 2
+    ;;
+  --skip-flake-update)
+    SKIP_FLAKE_UPDATE=1
+    shift
     ;;
   --force)
     FORCE=1
@@ -299,9 +305,13 @@ else
   echo "Skipping (exists): $HOST_HW_PATH"
 fi
 
-# Update flake inputs so first install uses the latest Nix sources.
-NIX_CONFIG="experimental-features = nix-command flakes" \
-  nix flake update --flake "$TARGET_DIR"
+if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
+  # Update flake inputs so first install uses the latest Nix sources.
+  NIX_CONFIG="experimental-features = nix-command flakes" \
+    nix flake update --flake "$TARGET_DIR"
+else
+  echo "Skipping flake update."
+fi
 
 # Run nixos-rebuild
 NIX_CONFIG="experimental-features = nix-command flakes" \
