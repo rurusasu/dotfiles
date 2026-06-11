@@ -179,7 +179,6 @@ try {
         $context.Options["PostInstallTimeoutSeconds"] = $PostInstallTimeoutSeconds
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
-        $context.Options["SkipFlakeUpdate"] = $true
 
         $handler = [NixOSWSLHandler]::new()
         $createdDistro = $true

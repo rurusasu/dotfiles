@@ -97,6 +97,37 @@ let
     in
     if installArgs == null then pkg else pkg // { inherit installArgs; };
 
+  pnpmPackageKey =
+    spec:
+    let
+      scoped = builtins.match "(@[^@]+/[^@]+)@.*" spec;
+      unscoped = builtins.match "([^@]+)@.*" spec;
+    in
+    if scoped != null then
+      builtins.elemAt scoped 0
+    else if unscoped != null then
+      builtins.elemAt unscoped 0
+    else
+      spec;
+
+  attachPnpmPostInstall =
+    postInstallMap: key: pkg:
+    let
+      postInstall = postInstallMap.${key} or null;
+    in
+    if postInstall == null then
+      pkg
+    else
+      pkg
+      // {
+        postInstallCommand = {
+          inherit (postInstall) command args;
+        }
+        // lib.optionalAttrs (postInstall ? timeoutSeconds) {
+          inherit (postInstall) timeoutSeconds;
+        };
+      };
+
   attachWingetMetadata =
     key: pkg:
     attachSkipInstall sets.wingetSkipInstall key (
@@ -146,16 +177,22 @@ let
 
   # --- pnpm ---
   pnpmFromGlobal = map (
-    name:
-    attachPnpmInstallArgs sets.pnpmInstallArgs name (
-      attachVerify sets.pnpmVerify name { inherit name; }
+    spec:
+    let
+      key = pnpmPackageKey spec;
+    in
+    attachPnpmInstallArgs sets.pnpmInstallArgs key (
+      attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
     )
   ) sets.pnpmGlobal;
 
   pnpmFromWindowsOnly = map (
-    name:
-    attachPnpmInstallArgs sets.pnpmInstallArgs name (
-      attachVerify sets.pnpmVerify name { inherit name; }
+    spec:
+    let
+      key = pnpmPackageKey spec;
+    in
+    attachPnpmInstallArgs sets.pnpmInstallArgs key (
+      attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
     )
   ) sets.windowsOnly.pnpm;
 
