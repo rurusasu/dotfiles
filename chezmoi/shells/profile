@@ -14,3 +14,10 @@ if [ -d "$HOME/.bun/bin" ]; then
 fi
 
 export PATH
+
+# Load interactive bash settings for login bash shells.
+if [ -n "${BASH_VERSION:-}" ] && [ -f "$HOME/.bashrc" ]; then
+  case $- in
+    *i*) . "$HOME/.bashrc" ;;
+  esac
+fi

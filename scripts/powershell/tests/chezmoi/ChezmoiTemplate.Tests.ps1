@@ -141,6 +141,27 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell keybindings' {
+        It 'should source bashrc from profile for interactive login bash' {
+            $profileContent = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
+
+            $profileContent | Should -Match '\$\{BASH_VERSION:-\}' -Because "profile is read by multiple POSIX shells and should guard bash-specific startup"
+            $profileContent | Should -Match '\$HOME/\.bashrc' -Because "login bash must load the managed bash aliases"
+            $profileContent | Should -Match '\*i\*\)' -Because "non-interactive login shells should not load interactive bashrc"
+        }
+
+        It 'should not calculate total directory size in eza aliases by default' {
+            $shellFiles = @(
+                Join-Path $script:chezmoiRoot "shells/bashrc"
+                Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
+                Join-Path $script:repoRoot "nix/home/common.nix"
+            )
+
+            foreach ($path in $shellFiles) {
+                $content = Get-Content -LiteralPath $path -Raw
+                $content | Should -Not -Match '--total-size' -Because "$path default ls aliases must stay fast on large WSL-mounted Windows directories"
+            }
+        }
+
         It 'zoxide interactive jump should use Alt+Z consistently' {
             $bashrc = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/bashrc") -Raw
             $powershellProfile = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw

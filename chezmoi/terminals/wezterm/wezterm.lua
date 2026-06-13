@@ -28,7 +28,7 @@ config.cell_width = 1.0
 config.use_ime = true
 
 -- Window appearance
-config.window_background_opacity = 0.85
+config.window_background_opacity = 0.75
 config.window_decorations = "TITLE|RESIZE"
 config.window_padding = {
     left = 8,
