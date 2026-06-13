@@ -11,6 +11,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "windows/winget/packages.json"
+      - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
   pull_request:
@@ -22,6 +23,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "windows/winget/packages.json"
+      - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
 
@@ -57,6 +59,10 @@ jobs:
           diff \
             <(jq -S "$normalize" /tmp/winget-export/winget/packages.json) \
             <(jq -S "$normalize" windows/winget/packages.json)
+
+      - name: Verify npm packages.json is in sync
+        shell: bash
+        run: diff <(jq -S . /tmp/winget-export/npm/packages.json) <(jq -S . windows/npm/packages.json)
 
       - name: Verify pnpm packages.json is in sync
         shell: bash

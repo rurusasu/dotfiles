@@ -9,7 +9,7 @@
 1. **Nix (Home Manager) がパッケージの Single Source of Truth (SSOT)**
    - 全 CLI ツールは `nix/packages/sets.nix` に一元定義
    - Linux/macOS: Home Manager が `home.packages` としてインストール
-   - Windows: `nix build .#winget-export` で winget/pnpm の JSON を導出
+   - Windows: `nix build .#winget-export` で winget/npm/pnpm の JSON を導出
 2. **chezmoi が設定ファイルの SSOT**
    - 全 OS 共通の dotfiles をテンプレートで管理
    - OS 固有の差分は `.chezmoiignore.tmpl` とテンプレート分岐で吸収
@@ -24,7 +24,7 @@ dotfiles/
 ├── nix/                    # NixOS/Home Manager configuration
 │   ├── packages/
 │   │   ├── sets.nix        # ★ SSOT: catalog (全パッケージ + winget + category)
-│   │   └── winget.nix      # winget/pnpm JSON 生成 derivation
+│   │   └── winget.nix      # winget/npm/pnpm JSON 生成 derivation
 │   ├── home/               # Home Manager 設定
 │   │   ├── packages.nix    # sets.nix → home.packages
 │   │   └── wsl/users.nix   # WSL ユーザー HM 設定
@@ -69,14 +69,14 @@ install.ps1
 
 ## 役割分担
 
-| 役割                  | ツール       | 説明                                         |
-| --------------------- | ------------ | -------------------------------------------- |
-| パッケージ定義 (SSOT) | Nix          | `nix/packages/sets.nix` に全ツールを一元定義 |
-| パッケージ (Linux)    | Home Manager | `home.packages` で宣言的インストール         |
-| パッケージ (Windows)  | winget/pnpm  | nix から生成した JSON でインストール         |
-| ユーザー設定          | chezmoi      | dotfiles (shell, git, terminal, editor)      |
-| システム設定          | NixOS        | OS レベルの設定 (nix gc, Docker, WSL)        |
-| タスク実行            | Taskfile     | Windows から WSL コマンドを実行              |
+| 役割                  | ツール          | 説明                                         |
+| --------------------- | --------------- | -------------------------------------------- |
+| パッケージ定義 (SSOT) | Nix             | `nix/packages/sets.nix` に全ツールを一元定義 |
+| パッケージ (Linux)    | Home Manager    | `home.packages` で宣言的インストール         |
+| パッケージ (Windows)  | winget/npm/pnpm | nix から生成した JSON でインストール         |
+| ユーザー設定          | chezmoi         | dotfiles (shell, git, terminal, editor)      |
+| システム設定          | NixOS           | OS レベルの設定 (nix gc, Docker, WSL)        |
+| タスク実行            | Taskfile        | Windows から WSL コマンドを実行              |
 
 ## パッケージ管理フロー
 
@@ -90,9 +90,10 @@ nix/packages/sets.nix (SSOT)
 │
 ├── wingetMap        ─── nix/packages/winget.nix ── nix build .#winget-export
 │   (自動導出)           └── windows/winget/packages.json (generated)
+│                        └── windows/npm/packages.json    (generated)
 │                        └── windows/pnpm/packages.json  (generated)
 │
-└── windowsOnly      ─── Windows 専用 GUI アプリ (winget/msstore/pnpm)
+└── windowsOnly      ─── Windows 専用パッケージ (winget/msstore/npm/pnpm)
     (nix対応なし)
 ```
 
@@ -103,7 +104,7 @@ nix/packages/sets.nix (SSOT)
    mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
    ```
    Set `winget = null` if there is no Windows equivalent.
-2. `nix build .#winget-export` で winget/pnpm JSON を再生成
+2. `nix build .#winget-export` で winget/npm/pnpm JSON を再生成
 3. `nixos-rebuild switch` で Linux 反映、`winget import` で Windows 反映
 
 ### Windows 専用アプリの追加

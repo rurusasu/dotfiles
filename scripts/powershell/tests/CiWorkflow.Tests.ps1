@@ -130,6 +130,14 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'throw "winget source update did not complete after \$Attempts attempts"'
     }
 
+    It 'should verify generated npm package catalog consistency' {
+        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
+
+        $consistencyWorkflow | Should -Match '"windows/npm/packages\.json"'
+        $consistencyWorkflow | Should -Match '/tmp/winget-export/npm/packages\.json'
+        $consistencyWorkflow | Should -Match 'windows/npm/packages\.json'
+    }
+
     It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw

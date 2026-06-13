@@ -1,11 +1,13 @@
 # Single Source of Truth for all packages across platforms.
-# Each entry defines: nix derivation, winget ID (null if none), category.
+# Each entry defines: nix derivation, optional Windows package IDs, category.
 #
 # Exported attributes:
 #   - catalog categories (core, dev, terminal, editors, llm, …) → lists of derivations
 #   - all                → flat list of all derivations
 #   - wingetMap          → nix attr name → winget PackageIdentifier
+#   - npmMap             → nix attr name → npm package spec
 #   - pnpmGlobal         → cross-platform pnpm global package names
+#   - npmVerify          → catalog attr name → { command, args } for npm verification
 #   - pnpmVerify         → package name → { command, args } for post-install verification
 #   - pnpmPostInstall    → package name → { command, args } to run after pnpm add -g
 #   - pnpmInstallArgs    → package name → extra pnpm add -g arguments
@@ -17,12 +19,12 @@
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
-#   - windowsOnly        → packages with no nix equivalent (winget/msstore/pnpm)
+#   - windowsOnly        → packages with no nix equivalent (winget/msstore/npm/pnpm)
 #
 # Imported by:
 #   - nix/flakes/packages.nix → perSystem buildEnv outputs
 #   - nix/home/packages.nix   → home.packages
-#   - nix/packages/winget.nix → winget/pnpm JSON generation
+#   - nix/packages/winget.nix → winget/npm/pnpm JSON generation
 {
   pkgs,
   lib,
@@ -148,6 +150,7 @@ let
     devcontainer = {
       pkg = pkgs.devcontainer;
       winget = null;
+      npm = "@devcontainers/cli";
       category = "dev";
     };
     lazygit = {
@@ -444,6 +447,7 @@ let
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget) catalog);
+  npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
 in
 # Category-resolved package lists (auto-derived from catalog)
@@ -453,7 +457,16 @@ lib.mapAttrs (_: names: resolve names) grouped
   all = resolve (lib.attrNames catalog);
 
   # Windows: nix attr name → winget PackageIdentifier
-  inherit wingetMap;
+  inherit wingetMap npmMap;
+
+  # Post-install verification commands for npm packages.
+  # Keys match catalog attr names from npmMap.
+  npmVerify = {
+    devcontainer = {
+      command = "devcontainer";
+      args = [ "--version" ];
+    };
+  };
 
   # Cross-platform pnpm global packages
   pnpmGlobal = [
@@ -771,6 +784,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "9NT1R1C2HH7J"
       "9PLM9XGG6VKS"
     ];
+    npm = [ ];
     pnpm = [
       "@google/gemini-cli"
     ];

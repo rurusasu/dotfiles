@@ -1,5 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "npm global packages to install on Windows",
-  "globalPackages": []
+  "globalPackages": [
+    {
+      "name": "@devcontainers/cli",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "devcontainer"
+      }
+    }
+  ]
 }
