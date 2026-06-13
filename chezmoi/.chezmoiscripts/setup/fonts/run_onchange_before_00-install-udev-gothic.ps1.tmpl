@@ -37,7 +37,15 @@ $HWND_BROADCAST = [IntPtr]0xffff
 function Test-FontInstalled {
   $key = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
   if ($null -eq $key) { return $false }
-  return ($key.PSObject.Properties.Name | Where-Object { $_ -like "*UDEVGothic*NF*" }).Count -gt 0
+  $installedEntries = @(
+    $key.PSObject.Properties | Where-Object {
+      $fontPath = [string]$_.Value
+      $_.Name -like "*UDEVGothic*NF*" -and
+      -not [string]::IsNullOrWhiteSpace($fontPath) -and
+      (Test-Path -LiteralPath $fontPath -PathType Leaf)
+    }
+  )
+  return $installedEntries.Count -gt 0
 }
 
 function Remove-TempFontDirectory {
@@ -76,6 +84,9 @@ try {
   if (-not (Test-Path -LiteralPath $FontsDir)) {
     New-Item -ItemType Directory -Path $FontsDir -Force | Out-Null
   }
+  if (-not (Test-Path -LiteralPath $RegistryPath)) {
+    New-Item -Path $RegistryPath -Force | Out-Null
+  }
 
   Get-ChildItem -LiteralPath $TempDir -Filter "*.ttf" -Recurse | ForEach-Object {
     $destPath = Join-Path $FontsDir $_.Name
@@ -106,6 +117,10 @@ try {
     Write-Warning "Font change broadcast timed out or failed (lastError=$lastError). Restart terminals/editors if the font is not visible yet."
   } else {
     Write-Host "Font change broadcasted to all windows."
+  }
+
+  if (-not (Test-FontInstalled)) {
+    throw "$FontName installation verification failed: no matching registry entry points to an existing font file."
   }
 } finally {
   Remove-TempFontDirectory

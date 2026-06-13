@@ -66,6 +66,35 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
+    It 'should build the font package set on hosted Nix CI' {
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+
+        $nixWorkflow | Should -Match 'nix build \.#fonts'
+    }
+
+    It 'should free hosted runner disk space before Nix package builds' {
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+
+        $nixWorkflow | Should -Match 'Free runner disk space'
+        $nixWorkflow | Should -Match '/usr/share/dotnet'
+        $nixWorkflow | Should -Match '/usr/local/lib/android'
+        $nixWorkflow | Should -Match '/usr/local/share/boost'
+        $nixWorkflow | Should -Match '/opt/ghc'
+        $nixWorkflow | Should -Match '/opt/hostedtoolcache'
+        $nixWorkflow | Should -Match 'docker image prune --all --force'
+    }
+
+    It 'should smoke test the Windows UDEV Gothic NF installer in chezmoi CI' {
+        $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
+
+        $chezmoiWorkflow | Should -Match 'Font install smoke \(Windows\)'
+        $chezmoiWorkflow | Should -Match 'run_onchange_before_00-install-udev-gothic\.ps1\.tmpl'
+        $chezmoiWorkflow | Should -Match '& pwsh -NoProfile -File \$scriptPath'
+        $chezmoiWorkflow | Should -Match 'UDEVGothic\*NF\*'
+        $chezmoiWorkflow | Should -Match 'Test-Path -LiteralPath \$fontPath -PathType Leaf'
+        $chezmoiWorkflow | Should -Match 'needs: \[lint, fmt, font-install\]'
+    }
+
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nixos-wsl.yml"
         $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
@@ -86,6 +115,8 @@ Describe 'CI workflow configuration' {
         $script | Should -Not -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
+        $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
+        $script | Should -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
         $script | Should -Match 'Remove-TemporaryDistro'
     }
 

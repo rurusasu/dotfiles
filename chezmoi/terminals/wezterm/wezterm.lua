@@ -20,7 +20,7 @@ config.color_scheme = "Catppuccin Mocha"
 
 -- Font settings
 config.font = wezterm.font("UDEV Gothic NF")
-config.font_size = 11.0
+config.font_size = 10.0
 config.line_height = 1.0
 config.cell_width = 1.0
 

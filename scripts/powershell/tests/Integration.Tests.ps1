@@ -95,9 +95,14 @@ Describe 'Integration Verification - Windows Environment' {
             $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
             $key = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
             if ($null -eq $key) { throw "フォント 'UDEVGothic NF' がインストールされていません。chezmoi apply を実行してください。" }
-            $found = @($key.PSObject.Properties | Where-Object { $_.Name -like "UDEVGothic*NF*" })
+            $found = @($key.PSObject.Properties | Where-Object {
+                    $fontPath = [string]$_.Value
+                    $_.Name -like "UDEVGothic*NF*" -and
+                    -not [string]::IsNullOrWhiteSpace($fontPath) -and
+                    (Test-Path -LiteralPath $fontPath -PathType Leaf)
+                })
             if ($found.Count -eq 0) {
-                throw "フォント 'UDEVGothic NF' がインストールされていません。chezmoi apply を実行してください。"
+                throw "フォント 'UDEVGothic NF' のレジストリエントリと実ファイルが揃っていません。chezmoi apply を実行してください。"
             }
             Write-Host "確認完了: フォント '$($found[0].Name)' がインストール済み ($($found.Count) 件)"
         }

@@ -128,13 +128,21 @@ Describe 'フォント設定の一貫性' {
             )
         }
 
-        It 'installer のレジストリ検出パターンが UDEV Gothic NF を捉えること' {
+        It 'installer のインストール済み判定はレジストリと実ファイルの両方を確認すること' {
             $full = Join-Path $script:repoRoot $script:windowsInstaller
             $content = Get-Content -LiteralPath $full -Raw
 
-            # Test-FontInstalled の Where-Object パターンが新フォントを検出するパターンであること
             $content | Should -Match 'UDEVGothic\*NF\*' -Because (
                 "installer の Test-FontInstalled が UDEVGothic*NF* を検出するパターンになっていない"
+            )
+            $content | Should -Match 'Test-Path -LiteralPath \$fontPath -PathType Leaf' -Because (
+                "registry だけでなく実ファイルの存在も確認しないと、壊れたインストールを見逃す"
+            )
+            $content | Should -Match 'installation verification failed' -Because (
+                "インストール後に registry/file の検証が失敗したら CI と chezmoi apply で失敗させる"
+            )
+            $content | Should -Match 'New-Item -Path \$RegistryPath -Force' -Because (
+                "fresh user profile でも HKCU font registry path を作成できる必要がある"
             )
         }
 

@@ -29,8 +29,9 @@
   "theme": {
     "mode": "dark",
     "dark": "Catppuccin Mocha",
-    "light": "Catppuccin Latte"
+    "light": "Catppuccin Mocha"
   },
+  "ui_font_family": "UDEV Gothic NF",
   "ui_font_size": 10,
   "buffer_font_size": 10,
   "buffer_font_family": "UDEV Gothic NF",
@@ -71,6 +72,7 @@
     "shell": {
       "program": "pwsh"
     },
+    "font_family": "UDEV Gothic NF",
     "font_size": 10,
     "line_height": "comfortable",
     "copy_on_select": false,
