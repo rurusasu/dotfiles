@@ -183,7 +183,7 @@ if (Get-Command fd -ErrorAction SilentlyContinue) {
     $env:FZF_DEFAULT_COMMAND = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . ."
 }
 
-# Interactive widgets (Alt+Z / Alt+D / Alt+T / Alt+R)
+# Interactive widgets (Alt+Q / Alt+D / Alt+T / Alt+R)
 # PSReadLine is bundled with the standard PS7 installer; skip the slow -ListAvailable scan.
 # On PS7, load failure is unexpected and should surface as an error, not be silently swallowed.
 if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -234,7 +234,7 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
         }
     }
 
-    Set-PSReadLineKeyHandler -Chord Alt+z -ScriptBlock { Invoke-ZoxideInteractive }
+    Set-PSReadLineKeyHandler -Chord Alt+q -ScriptBlock { Invoke-ZoxideInteractive }
     Set-PSReadLineKeyHandler -Chord Alt+d -ScriptBlock { Invoke-FzfDirectory }
     Set-PSReadLineKeyHandler -Chord Alt+t -ScriptBlock { Invoke-FzfInsertFile }
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }

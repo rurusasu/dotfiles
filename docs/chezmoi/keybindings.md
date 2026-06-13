@@ -60,14 +60,14 @@
 ### Shells
 
 - zsh
-  - `Alt+Z`: zoxide interactive jump (`zoxide query -i`)
+  - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット
 - bash
-  - `Alt+Z`: zoxide interactive jump (`zoxide query -i`)
+  - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット
 - PowerShell
   - `Shift+Enter`: PSReadLine `AddLine`
-  - `Alt+Z`: zoxide interactive jump (`zoxide query -i`)
+  - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット (PSReadLine)
 
 ### AI CLI
@@ -78,7 +78,7 @@
 
 ### zoxide + fzf integration
 
-- `Alt+Z` は各 shell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
+- `Alt+Q` は各 shell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
 - `Alt+D` は `fd --absolute-path` + `fzf` でディレクトリ検索して `cd`
 - `Alt+T` は `fd` + `fzf` でファイル/ディレクトリを選択してコマンドラインへ挿入
 - `Alt+R` は履歴を `fzf` で選択してコマンドラインへ反映
