@@ -33,10 +33,10 @@ in
     shellAliases = {
       find = "fd";
       grep = "rg";
-      l = "eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      la = "eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      ll = "eza -lhaT --level=2 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
-      ls = "eza -lhaT --level=1 --total-size --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      l = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      la = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      ll = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
+      ls = "eza -lhaT --level=1 --icons=auto --hyperlink -F --group-directories-first --color=auto";
     };
 
     initContent = ''
