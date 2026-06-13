@@ -1,9 +1,11 @@
-# Generate windows/winget/packages.json and windows/pnpm/packages.json
+# Generate windows/winget/packages.json, windows/npm/packages.json,
+# and windows/pnpm/packages.json
 # from the SSOT (sets.nix).
 #
 # Usage:
 #   nix build .#winget-export
 #   cp result/winget/packages.json windows/winget/packages.json
+#   cp result/npm/packages.json windows/npm/packages.json
 #   cp result/pnpm/packages.json windows/pnpm/packages.json
 {
   pkgs,
@@ -198,7 +200,28 @@ let
 
   pnpmPackages = pnpmFromGlobal ++ pnpmFromWindowsOnly;
 
+  # --- npm ---
+  npmFromMap = lib.mapAttrsToList (
+    name: spec: attachVerify sets.npmVerify name { name = spec; }
+  ) sets.npmMap;
+
+  npmFromWindowsOnly = map (
+    spec:
+    let
+      key = pnpmPackageKey spec;
+    in
+    attachVerify sets.npmVerify key { name = spec; }
+  ) sets.windowsOnly.npm;
+
+  npmPackages = npmFromMap ++ npmFromWindowsOnly;
+
   # --- outputs ---
+  npmOutput = {
+    "$schema" = "https://json.schemastore.org/package.json";
+    description = "npm global packages to install on Windows";
+    globalPackages = npmPackages;
+  };
+
   pnpmOutput = {
     "$schema" = "https://json.schemastore.org/package.json";
     description = "pnpm global packages to install on Windows";
@@ -232,11 +255,13 @@ let
   };
 
   wingetJson = builtins.toJSON wingetOutput;
+  npmJson = builtins.toJSON npmOutput;
   pnpmJson = builtins.toJSON pnpmOutput;
 
 in
 pkgs.runCommand "winget-export" { } ''
-  mkdir -p $out/winget $out/pnpm
+  mkdir -p $out/winget $out/npm $out/pnpm
   echo '${wingetJson}' | ${pkgs.jq}/bin/jq . > $out/winget/packages.json
+  echo '${npmJson}' | ${pkgs.jq}/bin/jq . > $out/npm/packages.json
   echo '${pnpmJson}' | ${pkgs.jq}/bin/jq . > $out/pnpm/packages.json
 ''

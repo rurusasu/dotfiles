@@ -7,10 +7,11 @@
 
 ```
 nix/packages/sets.nix
-├── catalog        → { pkg, winget, category } の attrset
+├── catalog        → { pkg, winget, npm, category } の attrset
 ├── packages       → Home Manager で Linux/macOS にインストール
 ├── wingetMap      → nix attr → winget PackageIdentifier の対応表
-└── windowsOnly    → Windows 専用アプリ (winget/msstore/pnpm)
+├── npmMap         → nix attr → npm package spec の対応表
+└── windowsOnly    → Windows 専用アプリ (winget/msstore/npm/pnpm)
 ```
 
 ## パッケージ追加
@@ -57,10 +58,11 @@ sudo nixos-rebuild switch --flake ~/.dotfiles#nixos
 # WSL 上で実行
 nix build .#winget-export -o /tmp/winget-export
 cp /tmp/winget-export/winget/packages.json /mnt/d/ruru/dotfiles/windows/winget/packages.json
+cp /tmp/winget-export/npm/packages.json /mnt/d/ruru/dotfiles/windows/npm/packages.json
 cp /tmp/winget-export/pnpm/packages.json /mnt/d/ruru/dotfiles/windows/pnpm/packages.json
 
 # Windows 上で反映
-winget import -i windows/winget/packages.json --accept-package-agreements
+pwsh -File scripts/powershell/install.ps1 -UserPhaseOnly -NoPause
 ```
 
 ## ファイル構成
@@ -86,13 +88,13 @@ winget import -i windows/winget/packages.json --accept-package-agreements
 
 `test-consistency.yml` が以下を検証:
 
-1. `nix build .#winget-export` で winget JSON を生成
-2. `windows/winget/packages.json` との diff をチェック
+1. `nix build .#winget-export` で Windows package JSON を生成
+2. `windows/winget/packages.json`, `windows/npm/packages.json`, `windows/pnpm/packages.json` との diff をチェック
 3. 差分があれば CI が失敗 → `nix build .#winget-export` の再実行を促す
 
 ## 注意点
 
-- `windows/winget/packages.json` と `windows/pnpm/packages.json` は **生成ファイル**。直接編集しない
+- `windows/winget/packages.json`, `windows/npm/packages.json`, `windows/pnpm/packages.json` は **生成ファイル**。直接編集しない
 - WSL では `flake.lock` が `~/.dotfiles` に作られる
 - `allowUnfree` は NixOS config (`nix/modules/host/default.nix`) で設定済み
 - `nix profile install .#default` で使える package sets は `nix/flakes/packages.nix` の perSystem で定義

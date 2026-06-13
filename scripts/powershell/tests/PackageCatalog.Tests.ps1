@@ -4,6 +4,7 @@ BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $script:setsPath = Join-Path $script:repoRoot "nix/packages/sets.nix"
     $script:wingetJsonPath = Join-Path $script:repoRoot "windows/winget/packages.json"
+    $script:npmJsonPath = Join-Path $script:repoRoot "windows/npm/packages.json"
 }
 
 Describe 'Package catalog consistency' {
@@ -203,6 +204,32 @@ Describe 'Package catalog consistency' {
             $package.verifyCommand.type | Should -Be 'appxLaunchTarget'
             $package.verifyCommand.command | Should -Be 'OpenAI.Codex'
             @($package.verifyCommand.args) | Should -Contain 'OpenAI.Codex_2p2nqsd0c76g0!App'
+        }
+    }
+
+    Context 'Devcontainer CLI package' {
+        It 'should define devcontainer with both Nix and Windows npm package mappings in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)devcontainer\s*=\s*\{.*?pkg\s*=\s*pkgs\.devcontainer;.*?npm\s*=\s*"@devcontainers/cli"'
+            $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?devcontainer\s*=\s*\{.*?command\s*=\s*"devcontainer".*?args\s*=\s*\[\s*"--version"\s*\]'
+        }
+
+        It 'should generate @devcontainers/cli into the Windows npm package catalog with verification' {
+            $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $package = @($json.globalPackages | Where-Object { $_.name -eq '@devcontainers/cli' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'devcontainer'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+
+        It 'should have winget-export generate npm packages.json from the SSOT' {
+            $exporter = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/packages/winget.nix") -Raw
+
+            $exporter | Should -Match 'windows/npm/packages\.json'
+            $exporter | Should -Match 'npmFromMap'
+            $exporter | Should -Match '\$out/npm/packages\.json'
         }
     }
 }
