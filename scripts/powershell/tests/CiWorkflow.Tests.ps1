@@ -72,6 +72,18 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#fonts'
     }
 
+    It 'should free hosted runner disk space before Nix package builds' {
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+
+        $nixWorkflow | Should -Match 'Free runner disk space'
+        $nixWorkflow | Should -Match '/usr/share/dotnet'
+        $nixWorkflow | Should -Match '/usr/local/lib/android'
+        $nixWorkflow | Should -Match '/usr/local/share/boost'
+        $nixWorkflow | Should -Match '/opt/ghc'
+        $nixWorkflow | Should -Match '/opt/hostedtoolcache'
+        $nixWorkflow | Should -Match 'docker image prune --all --force'
+    }
+
     It 'should smoke test the Windows UDEV Gothic NF installer in chezmoi CI' {
         $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
 
