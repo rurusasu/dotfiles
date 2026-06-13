@@ -116,7 +116,8 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
-        $script | Should -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
+        $script | Should -Match ([regex]::Escape('rg "\"\^\[q\" __zoxide_zi_widget"'))
+        $script | Should -Not -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
         $script | Should -Match 'Remove-TemporaryDistro'
     }
 

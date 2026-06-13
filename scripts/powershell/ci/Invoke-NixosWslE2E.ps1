@@ -225,7 +225,7 @@ try {
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "nixos", "--",
             "bash", "-lc",
-            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[z\" __zoxide_zi_widget"'
+            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
         ) -TimeoutSeconds 300 | Out-Null
     }
     finally {
