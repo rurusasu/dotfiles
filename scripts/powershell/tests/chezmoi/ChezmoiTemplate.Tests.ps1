@@ -140,6 +140,21 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Shell keybindings' {
+        It 'zoxide interactive jump should use Alt+Z consistently' {
+            $bashrc = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/bashrc") -Raw
+            $powershellProfile = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
+            $homeManagerZsh = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/common.nix") -Raw
+
+            $bashrc | Should -Match 'bind -x ''"\\ez": __zoxide_zi_widget'''
+            $bashrc | Should -Not -Match 'bind -x ''"\\eq": __zoxide_zi_widget'''
+            $powershellProfile | Should -Match 'Set-PSReadLineKeyHandler -Chord Alt\+z -ScriptBlock \{ Invoke-ZoxideInteractive \}'
+            $powershellProfile | Should -Not -Match 'Set-PSReadLineKeyHandler -Chord Alt\+q -ScriptBlock \{ Invoke-ZoxideInteractive \}'
+            $homeManagerZsh | Should -Match "bindkey '\^\[z' __zoxide_zi_widget"
+            $homeManagerZsh | Should -Not -Match "bindkey '\^\[q' __zoxide_zi_widget"
+        }
+    }
+
     Context 'Docker MCP SDK サーバーの設定整合性' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"

@@ -221,6 +221,12 @@ try {
             "bash", "-lc",
             "command -v zsh && command -v chezmoi && command -v task && command -v git"
         ) -TimeoutSeconds 300 | Out-Null
+
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "nixos", "--",
+            "bash", "-lc",
+            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[z\" __zoxide_zi_widget"'
+        ) -TimeoutSeconds 300 | Out-Null
     }
     finally {
         Complete-CiSection

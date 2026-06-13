@@ -100,7 +100,7 @@ if ! nc -z localhost 22 2>/dev/null; then
   eval "$(ssh-agent -s)" > /dev/null
 fi
 
-# Alt+q: zoxide interactive (history-based directory jump)
+# Alt+Z: zoxide interactive (history-based directory jump)
 __zoxide_zi_widget() {
   local result
   result="$(zoxide query -i)" || return
@@ -112,7 +112,7 @@ __zoxide_zi_widget() {
   READLINE_LINE=""
   READLINE_POINT=0
 }
-bind -x '"\eq": __zoxide_zi_widget'
+bind -x '"\ez": __zoxide_zi_widget'
 
 # Alt+D: fzf directory search and cd
 __fzf_cd_widget() {
