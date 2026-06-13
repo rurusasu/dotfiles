@@ -141,15 +141,15 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell keybindings' {
-        It 'profile should source bashrc for interactive login bash' {
-            $profile = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
+        It 'should source bashrc from profile for interactive login bash' {
+            $profileContent = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
 
-            $profile | Should -Match '\$\{BASH_VERSION:-\}' -Because "profile is read by multiple POSIX shells and should guard bash-specific startup"
-            $profile | Should -Match '\$HOME/\.bashrc' -Because "login bash must load the managed bash aliases"
-            $profile | Should -Match '\*i\*\)' -Because "non-interactive login shells should not load interactive bashrc"
+            $profileContent | Should -Match '\$\{BASH_VERSION:-\}' -Because "profile is read by multiple POSIX shells and should guard bash-specific startup"
+            $profileContent | Should -Match '\$HOME/\.bashrc' -Because "login bash must load the managed bash aliases"
+            $profileContent | Should -Match '\*i\*\)' -Because "non-interactive login shells should not load interactive bashrc"
         }
 
-        It 'eza aliases should not calculate total directory size by default' {
+        It 'should not calculate total directory size in eza aliases by default' {
             $shellFiles = @(
                 Join-Path $script:chezmoiRoot "shells/bashrc"
                 Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
