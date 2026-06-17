@@ -7,7 +7,9 @@ local config = wezterm.config_builder()
 local function focus_adjacent_window(direction)
     return wezterm.action_callback(function(window, pane)
         local wins = wezterm.gui.gui_windows()
-        table.sort(wins, function(a, b) return a:window_id() < b:window_id() end)
+        table.sort(wins, function(a, b)
+            return a:window_id() < b:window_id()
+        end)
         if #wins > 1 then
             for i, w in ipairs(wins) do
                 if w:window_id() == window:window_id() then
@@ -21,10 +23,10 @@ local function focus_adjacent_window(direction)
         local ps = table.concat({
             "Add-Type -TypeDef 'using System;using System.Runtime.InteropServices;",
             "public class U{",
-            "[DllImport(\"user32\")]public static extern IntPtr GetForegroundWindow();",
-            "[DllImport(\"user32\")]public static extern bool SetForegroundWindow(IntPtr h);",
-            "[DllImport(\"user32\")]public static extern bool ShowWindow(IntPtr h,int n);",
-            "[DllImport(\"user32\")]public static extern bool IsIconic(IntPtr h);}';",
+            '[DllImport("user32")]public static extern IntPtr GetForegroundWindow();',
+            '[DllImport("user32")]public static extern bool SetForegroundWindow(IntPtr h);',
+            '[DllImport("user32")]public static extern bool ShowWindow(IntPtr h,int n);',
+            '[DllImport("user32")]public static extern bool IsIconic(IntPtr h);}\';',
             "$d=" .. offset .. ";",
             "$p=@(Get-Process wezterm-gui -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Sort-Object Id);",
             "if($p.Count -lt 2){exit};",
