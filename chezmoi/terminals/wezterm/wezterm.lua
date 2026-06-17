@@ -2,6 +2,43 @@ local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
 
+-- Window focus: h=left, l=right
+-- Same-process: WezTerm native. Cross-process: Win32 SetForegroundWindow via PowerShell.
+local function focus_adjacent_window(direction)
+    return wezterm.action_callback(function(window, pane)
+        local wins = wezterm.gui.gui_windows()
+        table.sort(wins, function(a, b) return a:window_id() < b:window_id() end)
+        if #wins > 1 then
+            for i, w in ipairs(wins) do
+                if w:window_id() == window:window_id() then
+                    local ni = direction == "left" and ((i - 2) % #wins) + 1 or (i % #wins) + 1
+                    window:perform_action(act.ActivateWindow(ni - 1), pane)
+                    return
+                end
+            end
+        end
+        local offset = direction == "right" and "1" or "-1"
+        local ps = table.concat({
+            "Add-Type -TypeDef 'using System;using System.Runtime.InteropServices;",
+            "public class U{",
+            "[DllImport(\"user32\")]public static extern IntPtr GetForegroundWindow();",
+            "[DllImport(\"user32\")]public static extern bool SetForegroundWindow(IntPtr h);",
+            "[DllImport(\"user32\")]public static extern bool ShowWindow(IntPtr h,int n);}';",
+            "$d=" .. offset .. ";",
+            "$p=@(Get-Process wezterm-gui -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Sort-Object Id);",
+            "if($p.Count -lt 2){exit};",
+            "$h=@($p|ForEach-Object{[IntPtr]$_.MainWindowHandle});",
+            "$c=[U]::GetForegroundWindow();",
+            "$i=[Array]::IndexOf($h,$c);",
+            "if($i -lt 0){exit};",
+            "$n=(($i+$d)%$p.Count+$p.Count)%$p.Count;",
+            "[U]::ShowWindow($h[$n],9);",
+            "[void][U]::SetForegroundWindow($h[$n])",
+        })
+        wezterm.run_child_process({ "pwsh.exe", "-NoProfile", "-NonInteractive", "-Command", ps })
+    end)
+end
+
 -- Detect Windows for default shell
 local is_windows = wezterm.target_triple:find("windows") ~= nil
 if is_windows then
@@ -82,6 +119,10 @@ config.keys = {
     { key = "j", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Down") },
     { key = "k", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Up") },
     { key = "l", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Right") },
+
+    -- Window focus (Ctrl+Alt+Shift + H/L)
+    { key = "h", mods = "CTRL|ALT|SHIFT", action = focus_adjacent_window("left") },
+    { key = "l", mods = "CTRL|ALT|SHIFT", action = focus_adjacent_window("right") },
 
     -- Pane resize (Ctrl+Alt + Arrow)
     { key = "LeftArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Left", 5 }) },
