@@ -23,7 +23,8 @@ local function focus_adjacent_window(direction)
             "public class U{",
             "[DllImport(\"user32\")]public static extern IntPtr GetForegroundWindow();",
             "[DllImport(\"user32\")]public static extern bool SetForegroundWindow(IntPtr h);",
-            "[DllImport(\"user32\")]public static extern bool ShowWindow(IntPtr h,int n);}';",
+            "[DllImport(\"user32\")]public static extern bool ShowWindow(IntPtr h,int n);",
+            "[DllImport(\"user32\")]public static extern bool IsIconic(IntPtr h);}';",
             "$d=" .. offset .. ";",
             "$p=@(Get-Process wezterm-gui -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Sort-Object Id);",
             "if($p.Count -lt 2){exit};",
@@ -32,7 +33,7 @@ local function focus_adjacent_window(direction)
             "$i=[Array]::IndexOf($h,$c);",
             "if($i -lt 0){exit};",
             "$n=(($i+$d)%$p.Count+$p.Count)%$p.Count;",
-            "[U]::ShowWindow($h[$n],9);",
+            "if([U]::IsIconic($h[$n])){[U]::ShowWindow($h[$n],9)};",
             "[void][U]::SetForegroundWindow($h[$n])",
         })
         wezterm.run_child_process({ "pwsh.exe", "-NoProfile", "-NonInteractive", "-Command", ps })
