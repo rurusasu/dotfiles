@@ -4,6 +4,7 @@ BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../../"
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
     $script:helperPath = Join-Path $script:chezmoiRoot "dot_config/shell/gh-token-switch.ps1"
+    $script:secretLoaderPath = Join-Path $script:chezmoiRoot "secret/env.ps1"
     $script:weztermLaunch = Join-Path $script:chezmoiRoot "secret/wezterm-launch.cmd"
 }
 
@@ -12,6 +13,144 @@ AfterAll {
     Remove-Item Function:\Invoke-DotfilesGitHubCli -ErrorAction SilentlyContinue
     Remove-Item Function:\Resolve-DotfilesGitHubCli -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-DotfilesWorkGitHubRepository -ErrorAction SilentlyContinue
+}
+
+Describe 'PowerShell secret loader' {
+    BeforeEach {
+        $script:previousGhToken = [Environment]::GetEnvironmentVariable('GH_TOKEN', 'Process')
+        $script:previousTavilyApiKey = [Environment]::GetEnvironmentVariable('TAVILY_API_KEY', 'Process')
+        $script:previousWorkToken = [Environment]::GetEnvironmentVariable('GITHUB_WORK_TOKEN', 'Process')
+        $script:previousOpBin = [Environment]::GetEnvironmentVariable('DOTFILES_OP_BIN', 'Process')
+        $script:previousSecretTimeout = [Environment]::GetEnvironmentVariable('DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS', 'Process')
+        $script:previousForceSecretLoad = [Environment]::GetEnvironmentVariable('DOTFILES_FORCE_SECRET_LOAD', 'Process')
+
+        Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:GITHUB_WORK_TOKEN -ErrorAction SilentlyContinue
+        $env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = '3'
+        $env:DOTFILES_FORCE_SECRET_LOAD = '1'
+    }
+
+    AfterEach {
+        if ($null -eq $script:previousGhToken) {
+            Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GH_TOKEN = $script:previousGhToken
+        }
+
+        if ($null -eq $script:previousTavilyApiKey) {
+            Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:TAVILY_API_KEY = $script:previousTavilyApiKey
+        }
+
+        if ($null -eq $script:previousWorkToken) {
+            Remove-Item Env:GITHUB_WORK_TOKEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GITHUB_WORK_TOKEN = $script:previousWorkToken
+        }
+
+        if ($null -eq $script:previousOpBin) {
+            Remove-Item Env:DOTFILES_OP_BIN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_OP_BIN = $script:previousOpBin
+        }
+
+        if ($null -eq $script:previousSecretTimeout) {
+            Remove-Item Env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = $script:previousSecretTimeout
+        }
+
+        if ($null -eq $script:previousForceSecretLoad) {
+            Remove-Item Env:DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_FORCE_SECRET_LOAD = $script:previousForceSecretLoad
+        }
+    }
+
+    It '環境変数が未設定なら op inject から PowerShell process 環境に読み込むこと' {
+        $fakeOp = Join-Path $TestDrive 'op.cmd'
+        Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
+@echo off
+if "%1"=="inject" if "%2"=="--in-file" if exist "%3" if "%4"=="--account" if "%5"=="EJLA3HRAVZBCXIQ7SRSFGQBTNU" (
+  echo GH_TOKEN=personal-token
+  echo TAVILY_API_KEY=tavily-token
+  exit /b 0
+)
+if "%1"=="inject" if "%2"=="--in-file" if exist "%3" if "%4"=="--account" if "%5"=="aimatecoltd.1password.com" (
+  echo GITHUB_WORK_TOKEN=work-token
+  exit /b 0
+)
+exit /b 1
+'@
+        $env:DOTFILES_OP_BIN = $fakeOp
+
+        . $script:secretLoaderPath
+
+        $env:GH_TOKEN | Should -Be 'personal-token'
+        $env:TAVILY_API_KEY | Should -Be 'tavily-token'
+        $env:GITHUB_WORK_TOKEN | Should -Be 'work-token'
+    }
+
+    It 'op inject が失敗しても shell 起動を例外で止めないこと' {
+        $fakeOp = Join-Path $TestDrive 'op-fail.cmd'
+        Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
+@echo off
+exit /b 42
+'@
+        $env:DOTFILES_OP_BIN = $fakeOp
+
+        $previousWarningPreference = $WarningPreference
+        try {
+            $WarningPreference = 'SilentlyContinue'
+            { . $script:secretLoaderPath } | Should -Not -Throw
+        }
+        finally {
+            $WarningPreference = $previousWarningPreference
+        }
+
+        $env:GH_TOKEN | Should -BeNullOrEmpty
+        $env:GITHUB_WORK_TOKEN | Should -BeNullOrEmpty
+    }
+
+    It 'pwsh -Command では force 未設定なら fallback を起動しないこと' {
+        $fakeOp = Join-Path $TestDrive 'op-marker.cmd'
+        $marker = Join-Path $TestDrive 'op-called.txt'
+        Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @"
+@echo off
+echo called>"$marker"
+echo GH_TOKEN=personal-token
+echo TAVILY_API_KEY=tavily-token
+echo GITHUB_WORK_TOKEN=work-token
+exit /b 0
+"@
+        Remove-Item Env:DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+
+        $loader = $script:secretLoaderPath.Replace("'", "''")
+        $fakeOpLiteral = $fakeOp.Replace("'", "''")
+        $command = @"
+`$env:DOTFILES_OP_BIN = '$fakeOpLiteral'
+`$env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = '3'
+Remove-Item Env:DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:GITHUB_WORK_TOKEN -ErrorAction SilentlyContinue
+. '$loader'
+[Console]::WriteLine('gh=' + [bool]`$env:GH_TOKEN)
+"@
+
+        $output = & pwsh -NoLogo -NoProfile -Command $command
+
+        $output | Should -Contain 'gh=False'
+        Test-Path -LiteralPath $marker | Should -BeFalse
+    }
 }
 
 Describe 'GitHub token switching helper (PowerShell)' {

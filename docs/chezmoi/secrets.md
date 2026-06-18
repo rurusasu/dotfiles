@@ -19,7 +19,7 @@
 - `chezmoi/secret/env.sh`
   - WSL / Linux の fallback loader。`op inject --account ...` を実行時に呼ぶ。
 - `chezmoi/secret/env.ps1`
-  - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取る。
+  - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取り、未設定なら timeout 付きで `op inject --account ...` を呼ぶ。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`
   - MCP の `op_env` 参照を置く。client template は失敗しても env fallback を使う。
 - `chezmoi/.chezmoiscripts/**`
