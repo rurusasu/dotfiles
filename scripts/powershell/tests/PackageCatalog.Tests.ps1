@@ -254,7 +254,7 @@ Describe 'Package catalog consistency' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
             $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"Microsoft\.VisualStudio\.2022\.BuildTools".*?\]'
-            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*\[.*?"--override".*?"--add Microsoft\.VisualStudio\.Workload\.VCTools --includeRecommended --passive --norestart"'
+            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*\[.*?"--override".*?"--add Microsoft\.VisualStudio\.Workload\.VCTools --includeRecommended --passive --wait --norestart"'
             $sets | Should -Match '(?s)wingetInstallTimeoutSeconds\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*1800'
         }
 
@@ -265,7 +265,7 @@ Describe 'Package catalog consistency' {
 
             $package | Should -Not -BeNullOrEmpty
             @($package.installArgs) | Should -Contain '--override'
-            @($package.installArgs) | Should -Contain '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart'
+            @($package.installArgs) | Should -Contain '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart'
             $package.installTimeoutSeconds | Should -Be 1800
         }
     }

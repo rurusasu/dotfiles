@@ -664,7 +664,7 @@ lib.mapAttrs (_: names: resolve names) grouped
   wingetInstallArgs = {
     "Microsoft.VisualStudio.2022.BuildTools" = [
       "--override"
-      "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart"
+      "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
     ];
     powershell = [
       "--installer-type"
