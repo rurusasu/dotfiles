@@ -55,6 +55,26 @@ if vim.fn.has("wsl") == 1 then
     }
 end
 
+-- Windows: use PowerShell for :terminal, :!, and shell-backed plugin commands.
+if vim.fn.has("win32") == 1 then
+    local shell = vim.fn.executable("pwsh.exe") == 1 and "pwsh.exe" or "powershell.exe"
+    opt.shell = shell
+    opt.shelltemp = false
+
+    local shellcmdflag = "-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command "
+        .. "[Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();"
+        .. "$PSDefaultParameterValues['Out-File:Encoding']='utf8';"
+    if shell == "pwsh.exe" then
+        shellcmdflag = shellcmdflag .. "$PSStyle.OutputRendering='PlainText';"
+    end
+
+    opt.shellcmdflag = shellcmdflag
+    opt.shellpipe = "> %s 2>&1"
+    opt.shellredir = "> %s 2>&1"
+    opt.shellquote = ""
+    opt.shellxquote = ""
+end
+
 -- Undo persistence
 opt.undofile = true
 opt.undolevels = 10000

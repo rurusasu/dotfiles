@@ -37,9 +37,6 @@ local function save_ratio()
 end
 
 local function default_shell()
-    if vim.fn.has("win32") == 1 then
-        return "pwsh.exe"
-    end
     return vim.o.shell
 end
 
