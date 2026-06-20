@@ -617,6 +617,49 @@ return {
                 end,
             })
 
+            local format_on_save_clients = {
+                python = { ruff = true },
+                rust = { rust_analyzer = true },
+            }
+
+            vim.api.nvim_create_autocmd("BufWritePre", {
+                group = vim.api.nvim_create_augroup("DotfilesFormatOnSave", { clear = true }),
+                pattern = { "*.py", "*.rs" },
+                callback = function(args)
+                    local ft = vim.bo[args.buf].filetype
+                    local allowed_clients = format_on_save_clients[ft]
+                    if not allowed_clients then
+                        return
+                    end
+
+                    local has_formatter = false
+                    for _, client in
+                        ipairs(vim.lsp.get_clients({
+                            bufnr = args.buf,
+                            method = "textDocument/formatting",
+                        }))
+                    do
+                        if allowed_clients[client.name] then
+                            has_formatter = true
+                            break
+                        end
+                    end
+
+                    if not has_formatter then
+                        return
+                    end
+
+                    vim.lsp.buf.format({
+                        bufnr = args.buf,
+                        async = false,
+                        timeout_ms = 3000,
+                        filter = function(client)
+                            return allowed_clients[client.name] == true
+                        end,
+                    })
+                end,
+            })
+
             -- Defaults applied to every server via the '*' wildcard.
             vim.lsp.config("*", {
                 capabilities = capabilities,

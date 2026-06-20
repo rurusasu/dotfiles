@@ -182,6 +182,32 @@
           }
         },
         {
+          "PackageIdentifier": "astral-sh.ruff",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ruff"
+          }
+        },
+        {
+          "PackageIdentifier": "Rustlang.rust-analyzer",
+          "verifyCommand": {
+            "args": [
+              "-NoProfile",
+              "-Command",
+              "& (Join-Path $env:LOCALAPPDATA Microsoft/WinGet/Links/rust-analyzer.exe) --version"
+            ],
+            "command": "pwsh"
+          }
+        },
+        {
+          "PackageIdentifier": "Rustlang.Rustup",
+          "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "rustup"
+          }
+        },
+        {
           "PackageIdentifier": "SlackTechnologies.Slack"
         },
         {

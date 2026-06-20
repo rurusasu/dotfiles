@@ -94,6 +94,15 @@ opt.backup = false
 -- winget installs to versioned dirs that may not reach nvim when launched from a shell
 -- whose profile has not yet rebuilt PATH from the registry.
 if vim.fn.has("win32") == 1 then
+    local function prepend_path(dir)
+        if vim.fn.isdirectory(dir) == 1 then
+            vim.env.PATH = dir .. ";" .. vim.env.PATH
+        end
+    end
+
+    prepend_path(vim.fn.expand("$LOCALAPPDATA") .. "/Microsoft/WinGet/Links")
+    prepend_path(vim.fn.expand("$USERPROFILE") .. "/.cargo/bin")
+
     if vim.fn.executable("magick") == 0 then
         for _, dir in ipairs(vim.fn.glob("C:/Program Files/ImageMagick*", false, true)) do
             if vim.fn.isdirectory(dir) == 1 then
