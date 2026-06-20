@@ -7,7 +7,7 @@ BeforeAll {
 }
 
 Describe 'Neovim shell configuration' {
-    It 'uses PowerShell for Windows terminal commands' {
+    It 'should use PowerShell for Windows terminal commands' {
         $script:optionsContent | Should -Match 'vim\.fn\.has\("win32"\) == 1'
         $script:optionsContent | Should -Match 'opt\.shell = '
         $script:optionsContent | Should -Match 'pwsh\.exe'
