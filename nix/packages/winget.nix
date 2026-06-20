@@ -158,7 +158,11 @@ let
         attachPathEntries sets.wingetPathEntries id (
           attachPortableLink sets.wingetPortableLinksById id (
             attachDirectInstaller sets.wingetDirectInstallers id (
-              attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                attachInstallArgs sets.wingetInstallArgs id (
+                  attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+                )
+              )
             )
           )
         )

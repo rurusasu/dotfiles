@@ -213,13 +213,13 @@
           }
         },
         {
+          "PackageIdentifier": "Warp.Warp",
           "ciSkipInstall": true,
           "directInstaller": {
             "installerArgs": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER"],
             "timeoutSeconds": 900,
             "type": "warpInnoLatest"
-          },
-          "PackageIdentifier": "Warp.Warp"
+          }
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
@@ -276,6 +276,14 @@
           "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
         },
         {
+          "PackageIdentifier": "Microsoft.VisualStudio.2022.BuildTools",
+          "installArgs": [
+            "--override",
+            "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
+          ],
+          "installTimeoutSeconds": 1800
+        },
+        {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
         },
         {
@@ -328,8 +336,8 @@
           "PackageIdentifier": "9NT1R1C2HH7J"
         },
         {
-          "ciSkipInstall": true,
           "PackageIdentifier": "9PLM9XGG6VKS",
+          "ciSkipInstall": true,
           "verifyCommand": {
             "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
             "command": "OpenAI.Codex",
