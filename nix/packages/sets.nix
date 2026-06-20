@@ -462,6 +462,10 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Post-install verification commands for npm packages.
   # Keys match catalog attr names from npmMap.
   npmVerify = {
+    "agent-browser" = {
+      command = "agent-browser";
+      args = [ "--version" ];
+    };
     devcontainer = {
       command = "devcontainer";
       args = [ "--version" ];
@@ -658,6 +662,10 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   # Extra winget install arguments for packages that need a specific installer.
   wingetInstallArgs = {
+    "Microsoft.VisualStudio.2022.BuildTools" = [
+      "--override"
+      "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart"
+    ];
     powershell = [
       "--installer-type"
       "wix"
@@ -666,6 +674,7 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   wingetInstallTimeoutSeconds = {
     google-cloud-sdk = 900;
+    "Microsoft.VisualStudio.2022.BuildTools" = 1800;
   };
 
   wingetDirectInstallers = {
@@ -772,6 +781,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "Google.Chrome"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
+      "Microsoft.VisualStudio.2022.BuildTools"
       "Microsoft.VisualStudioCode"
       "Microsoft.WindowsTerminal"
       "Microsoft.WSL"
@@ -784,7 +794,9 @@ lib.mapAttrs (_: names: resolve names) grouped
       "9NT1R1C2HH7J"
       "9PLM9XGG6VKS"
     ];
-    npm = [ ];
+    npm = [
+      "agent-browser@0.19.0"
+    ];
     pnpm = [
       "@google/gemini-cli"
     ];

@@ -76,6 +76,79 @@ function Invoke-CodexCli {
 
 Set-Alias -Name codex -Value Invoke-CodexCli -Scope Global
 
+function Import-MsvcDevEnvironment {
+    [CmdletBinding()]
+    param(
+        [ValidateSet("x64", "x86", "arm64")]
+        [string]$Arch = "x64",
+
+        [ValidateSet("x64", "x86")]
+        [string]$HostArch = "x64"
+    )
+
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not $programFilesX86) {
+        $programFilesX86 = Join-Path $env:SystemDrive "Program Files (x86)"
+    }
+
+    $installPath = $null
+    $vswhere = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+        $installPath = & $vswhere `
+            -all `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath 2>$null |
+            Select-Object -First 1
+    }
+
+    if (-not $installPath) {
+        $candidate = Join-Path $programFilesX86 "Microsoft Visual Studio\2022\BuildTools"
+        if (Test-Path -LiteralPath (Join-Path $candidate "Common7\Tools\VsDevCmd.bat") -PathType Leaf) {
+            $installPath = $candidate
+        }
+    }
+
+    if (-not $installPath) {
+        throw "MSVC Build Tools not found. Install Microsoft.VisualStudio.2022.BuildTools with the VCTools workload."
+    }
+
+    $vsDevCmd = Join-Path $installPath "Common7\Tools\VsDevCmd.bat"
+    if (-not (Test-Path -LiteralPath $vsDevCmd -PathType Leaf)) {
+        throw "VsDevCmd.bat not found: $vsDevCmd"
+    }
+
+    $cmdLine = "call `"$vsDevCmd`" -arch=$Arch -host_arch=$HostArch >nul && set"
+    $envLines = & cmd.exe /d /v:on /c $cmdLine
+    if ($LASTEXITCODE -ne 0) {
+        throw "VsDevCmd.bat failed with exit code $LASTEXITCODE"
+    }
+
+    foreach ($line in $envLines) {
+        $text = [string]$line
+        $separatorIndex = $text.IndexOf("=")
+        if ($separatorIndex -le 0) { continue }
+
+        $name = $text.Substring(0, $separatorIndex)
+        $value = $text.Substring($separatorIndex + 1)
+        Set-Item -Path "Env:\$name" -Value $value
+    }
+}
+
+Set-Alias -Name msvcdev -Value Import-MsvcDevEnvironment -Scope Global
+
+function cargo-msvc {
+    $cargoArgs = [string[]]$args
+    Import-MsvcDevEnvironment
+    & cargo @cargoArgs
+}
+
+function nvim-msvc {
+    $nvimArgs = [string[]]$args
+    Import-MsvcDevEnvironment
+    & nvim @nvimArgs
+}
+
 # Aliases
 if (Get-Command rg -ErrorAction SilentlyContinue) {
     Set-Alias -Name grep -Value rg -Scope Global

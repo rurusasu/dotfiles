@@ -17,7 +17,7 @@ BeforeAll {
     }
 
     $script:functionScriptBlockByName = @{}
-    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
+    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli", "Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
         $functionAst = $profileAst.Find(
             {
                 param($node)
@@ -44,6 +44,12 @@ BeforeAll {
         }
     }
 
+    function Import-MsvcProfileFunction {
+        foreach ($name in @("Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc")) {
+            Set-Item -Path "Function:\global:$name" -Value $script:functionScriptBlockByName[$name]
+        }
+    }
+
     function Get-ArgumentValue {
         param(
             [Parameter(Mandatory)][object[]]$Arguments,
@@ -63,6 +69,100 @@ BeforeAll {
 
         New-Item -ItemType Directory -Path (Join-Path $Path ".devcontainer") -Force | Out-Null
         return (Resolve-Path -LiteralPath $Path).Path
+    }
+}
+
+Describe 'PowerShell MSVC dev environment helpers' {
+    BeforeEach {
+        Import-MsvcProfileFunction
+
+        $script:oldProgramFilesX86 = ${env:ProgramFiles(x86)}
+        $script:oldPath = $env:PATH
+        $script:oldLibExists = Test-Path Env:\LIB
+        $script:oldLib = $env:LIB
+        $script:oldIncludeExists = Test-Path Env:\INCLUDE
+        $script:oldInclude = $env:INCLUDE
+        $script:oldVscmdExists = Test-Path Env:\VSCMD_VER
+        $script:oldVscmd = $env:VSCMD_VER
+        $script:cmdArgs = $null
+        $script:cargoArgs = $null
+        $script:nvimArgs = $null
+
+        ${env:ProgramFiles(x86)} = $TestDrive
+        $toolsDir = Join-Path $TestDrive "Microsoft Visual Studio\2022\BuildTools\Common7\Tools"
+        New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+        New-Item -ItemType File -Path (Join-Path $toolsDir "VsDevCmd.bat") -Force | Out-Null
+
+        function global:cmd.exe {
+            $script:cmdArgs = [string[]]$args
+            $global:LASTEXITCODE = 0
+            @(
+                "PATH=C:\msvc\bin;C:\Windows\System32",
+                "LIB=C:\msvc\lib;C:\sdk\lib",
+                "INCLUDE=C:\msvc\include;C:\sdk\include",
+                "VSCMD_VER=17.14.35",
+                "VALUE_WITH_EQUALS=left=right"
+            )
+        }
+
+        function global:cargo {
+            $script:cargoArgs = [string[]]$args
+            $global:LASTEXITCODE = 11
+        }
+
+        function global:nvim {
+            $script:nvimArgs = [string[]]$args
+            $global:LASTEXITCODE = 12
+        }
+    }
+
+    AfterEach {
+        foreach ($functionName in @(
+                "Import-MsvcDevEnvironment",
+                "cargo-msvc",
+                "nvim-msvc",
+                "cmd.exe",
+                "cargo",
+                "nvim"
+            )) {
+            Remove-Item "Function:\$functionName" -ErrorAction SilentlyContinue
+        }
+
+        ${env:ProgramFiles(x86)} = $script:oldProgramFilesX86
+        $env:PATH = $script:oldPath
+
+        if ($script:oldLibExists) { $env:LIB = $script:oldLib } else { Remove-Item Env:\LIB -ErrorAction SilentlyContinue }
+        if ($script:oldIncludeExists) { $env:INCLUDE = $script:oldInclude } else { Remove-Item Env:\INCLUDE -ErrorAction SilentlyContinue }
+        if ($script:oldVscmdExists) { $env:VSCMD_VER = $script:oldVscmd } else { Remove-Item Env:\VSCMD_VER -ErrorAction SilentlyContinue }
+        Remove-Item Env:\VALUE_WITH_EQUALS -ErrorAction SilentlyContinue
+    }
+
+    It 'should import MSVC developer environment variables into the current PowerShell process' {
+        Import-MsvcDevEnvironment
+
+        $script:cmdArgs | Should -Contain "/d"
+        $script:cmdArgs | Should -Contain "/v:on"
+        ($script:cmdArgs -join " ") | Should -Match "VsDevCmd\.bat"
+        ($script:cmdArgs -join " ") | Should -Match "-arch=x64"
+        $env:PATH | Should -Be "C:\msvc\bin;C:\Windows\System32"
+        $env:LIB | Should -Be "C:\msvc\lib;C:\sdk\lib"
+        $env:INCLUDE | Should -Be "C:\msvc\include;C:\sdk\include"
+        $env:VSCMD_VER | Should -Be "17.14.35"
+        $env:VALUE_WITH_EQUALS | Should -Be "left=right"
+    }
+
+    It 'should run cargo and nvim through the MSVC developer environment wrappers' {
+        cargo-msvc test --locked
+        $script:cargoArgs | Should -Be @("test", "--locked")
+        $global:LASTEXITCODE | Should -Be 11
+
+        nvim-msvc .
+        $script:nvimArgs | Should -Be @(".")
+        $global:LASTEXITCODE | Should -Be 12
+    }
+
+    It 'should expose an msvcdev alias for loading the current shell' {
+        $script:profileContent | Should -Match 'Set-Alias\s+-Name\s+msvcdev\s+-Value\s+Import-MsvcDevEnvironment'
     }
 }
 

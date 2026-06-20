@@ -232,4 +232,41 @@ Describe 'Package catalog consistency' {
             $exporter | Should -Match '\$out/npm/packages\.json'
         }
     }
+
+    Context 'Windows native Rust browser automation tools' {
+        It 'should manage agent-browser as a Windows npm global package with verification' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.19\.0".*?\]'
+            $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?"agent-browser"\s*=\s*\{.*?command\s*=\s*"agent-browser".*?args\s*=\s*\[\s*"--version"\s*\]'
+        }
+
+        It 'should generate agent-browser into the Windows npm package catalog with verification' {
+            $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.19.0' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'agent-browser'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+
+        It 'should include Visual Studio Build Tools with C++ workload install metadata in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"Microsoft\.VisualStudio\.2022\.BuildTools".*?\]'
+            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*\[.*?"--override".*?"--add Microsoft\.VisualStudio\.Workload\.VCTools --includeRecommended --passive --norestart"'
+            $sets | Should -Match '(?s)wingetInstallTimeoutSeconds\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*1800'
+        }
+
+        It 'should generate Visual Studio Build Tools with C++ workload install metadata' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Microsoft.VisualStudio.2022.BuildTools' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            @($package.installArgs) | Should -Contain '--override'
+            @($package.installArgs) | Should -Contain '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart'
+            $package.installTimeoutSeconds | Should -Be 1800
+        }
+    }
 }
