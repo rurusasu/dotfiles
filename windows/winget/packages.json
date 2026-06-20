@@ -182,6 +182,32 @@
           }
         },
         {
+          "PackageIdentifier": "astral-sh.ruff",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ruff"
+          }
+        },
+        {
+          "PackageIdentifier": "Rustlang.rust-analyzer",
+          "verifyCommand": {
+            "args": [
+              "-NoProfile",
+              "-Command",
+              "& (Join-Path $env:LOCALAPPDATA Microsoft/WinGet/Links/rust-analyzer.exe) --version"
+            ],
+            "command": "pwsh"
+          }
+        },
+        {
+          "PackageIdentifier": "Rustlang.Rustup",
+          "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "rustup"
+          }
+        },
+        {
           "PackageIdentifier": "SlackTechnologies.Slack"
         },
         {
@@ -213,13 +239,13 @@
           }
         },
         {
+          "PackageIdentifier": "Warp.Warp",
           "ciSkipInstall": true,
           "directInstaller": {
             "installerArgs": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER"],
             "timeoutSeconds": 900,
             "type": "warpInnoLatest"
-          },
-          "PackageIdentifier": "Warp.Warp"
+          }
         },
         {
           "PackageIdentifier": "wez.wezterm.nightly",
@@ -328,8 +354,8 @@
           "PackageIdentifier": "9NT1R1C2HH7J"
         },
         {
-          "ciSkipInstall": true,
           "PackageIdentifier": "9PLM9XGG6VKS",
+          "ciSkipInstall": true,
           "verifyCommand": {
             "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
             "command": "OpenAI.Codex",

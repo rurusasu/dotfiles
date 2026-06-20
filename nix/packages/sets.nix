@@ -115,6 +115,11 @@ let
       winget = "GoLang.Go";
       category = "dev";
     };
+    rustup = {
+      pkg = pkgs.rustup;
+      winget = "Rustlang.Rustup";
+      category = "dev";
+    };
     gnumake = {
       pkg = pkgs.gnumake;
       winget = null;
@@ -366,7 +371,7 @@ let
     };
     ruff = {
       pkg = pkgs.ruff;
-      winget = null;
+      winget = "astral-sh.ruff";
       category = "lsp";
     };
     yaml-language-server = {
@@ -405,7 +410,12 @@ let
       category = "lsp";
     };
     rust-analyzer = {
-      pkg = pkgs.rust-analyzer;
+      pkg = lib.hiPrio pkgs.rust-analyzer;
+      winget = "Rustlang.rust-analyzer";
+      category = "lsp";
+    };
+    rustfmt = {
+      pkg = lib.hiPrio pkgs.rustfmt;
       winget = null;
       category = "lsp";
     };
@@ -610,6 +620,10 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "go";
       args = [ "version" ];
     };
+    rustup = {
+      command = "rustup";
+      args = [ "--version" ];
+    };
     ghq = {
       command = "ghq";
       args = [ "--version" ];
@@ -634,9 +648,21 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "ty";
       args = [ "--version" ];
     };
+    ruff = {
+      command = "ruff";
+      args = [ "--version" ];
+    };
     taplo = {
       command = "taplo";
       args = [ "--version" ];
+    };
+    rust-analyzer = {
+      command = "pwsh";
+      args = [
+        "-NoProfile"
+        "-Command"
+        "& (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links/rust-analyzer.exe') --version"
+      ];
     };
     opencode = {
       command = "opencode";
@@ -703,6 +729,7 @@ lib.mapAttrs (_: names: resolve names) grouped
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];
+    rustup = [ "%USERPROFILE%\\.cargo\\bin" ];
     wezterm = [ "%ProgramFiles%\\WezTerm" ];
   };
 
