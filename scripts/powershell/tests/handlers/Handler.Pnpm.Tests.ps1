@@ -1053,7 +1053,7 @@ Describe 'PnpmHandler' {
                 return @{
                     globalPackages = @(
                         @{
-                            name               = "playwright@1.60.0"
+                            name               = "playwright@1.61.0"
                             postInstallCommand = @{
                                 command        = "playwright"
                                 args           = @("install", "chromium")
@@ -1125,7 +1125,7 @@ Describe 'PnpmHandler' {
                 return @{
                     globalPackages = @(
                         @{
-                            name               = "playwright@1.60.0"
+                            name               = "playwright@1.61.0"
                             postInstallCommand = @{
                                 command        = "playwright"
                                 args           = @("install", "chromium")

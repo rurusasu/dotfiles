@@ -486,8 +486,8 @@ lib.mapAttrs (_: names: resolve names) grouped
   pnpmGlobal = [
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
-    "@playwright/cli@0.1.13"
-    "playwright@1.60.0"
+    "@playwright/cli@0.1.14"
+    "playwright@1.61.0"
     "typescript-language-server"
     "typescript"
   ];
@@ -822,7 +822,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "9PLM9XGG6VKS"
     ];
     npm = [
-      "agent-browser@0.19.0"
+      "agent-browser@0.29.1"
     ];
     pnpm = [
       "@google/gemini-cli"
