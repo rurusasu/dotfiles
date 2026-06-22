@@ -237,13 +237,13 @@ Describe 'Package catalog consistency' {
         It 'should manage agent-browser as a Windows npm global package with verification' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.19\.0".*?\]'
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.29\.1".*?\]'
             $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?"agent-browser"\s*=\s*\{.*?command\s*=\s*"agent-browser".*?args\s*=\s*\[\s*"--version"\s*\]'
         }
 
         It 'should generate agent-browser into the Windows npm package catalog with verification' {
             $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
-            $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.19.0' }) | Select-Object -First 1
+            $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.29.1' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
             $package.verifyCommand.command | Should -Be 'agent-browser'
