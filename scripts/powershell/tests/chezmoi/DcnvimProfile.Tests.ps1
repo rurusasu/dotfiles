@@ -263,7 +263,9 @@ Describe 'PowerShell dcnvim profile function' {
         $script:fzfExitCode = 0
         $script:fzfCallCount = 0
         $script:oldDotfilesRepositoryUrl = $env:DOTFILES_REPOSITORY_URL
+        $script:oldDotfilesRepositoryRef = $env:DOTFILES_REPOSITORY_REF
         Remove-Item Env:\DOTFILES_REPOSITORY_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:\DOTFILES_REPOSITORY_REF -ErrorAction SilentlyContinue
 
         function global:Get-Command {
             [CmdletBinding()]
@@ -392,11 +394,19 @@ Describe 'PowerShell dcnvim profile function' {
         else {
             $env:DOTFILES_REPOSITORY_URL = $script:oldDotfilesRepositoryUrl
         }
+
+        if ($null -eq $script:oldDotfilesRepositoryRef) {
+            Remove-Item Env:\DOTFILES_REPOSITORY_REF -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_REPOSITORY_REF = $script:oldDotfilesRepositoryRef
+        }
     }
 
     It 'should quote tmux session names for bash payloads' {
         ConvertTo-DcnvimBashSingleQuoted "plain" | Should -Be "'plain'"
         ConvertTo-DcnvimBashSingleQuoted "team's repo" | Should -Be "'team'\''s repo'"
+        ConvertTo-DcnvimBashSingleQuoted "" | Should -Be "''"
     }
 
     It 'should run plain devcontainer up then bootstrap before nvim tmux payload' {
@@ -423,11 +433,16 @@ Describe 'PowerShell dcnvim profile function' {
         Get-ArgumentValue $exec.Args "--workspace-folder" | Should -Be $workspace
         $exec.Payload | Should -Match ([regex]::Escape('export PATH="$HOME/.local/bin:$PATH"'))
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://github.com/rurusasu/dotfiles'"))
+        $exec.Payload | Should -Match ([regex]::Escape("dotfiles_ref=''"))
         $exec.Payload | Should -Match ([regex]::Escape('dotfiles_dir="$HOME/.dotfiles"'))
-        $exec.Payload | Should -Match ([regex]::Escape('dotfiles_needs_bootstrap=0'))
+        $exec.Payload | Should -Not -Match ([regex]::Escape('HOME/dotfiles'))
+        $exec.Payload | Should -Not -Match 'dotfiles_needs_bootstrap'
+        $exec.Payload | Should -Match ([regex]::Escape('if [ -L "$dotfiles_dir" ] || [ ! -d "$dotfiles_dir/.git" ]; then'))
         $exec.Payload | Should -Match ([regex]::Escape('git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'))
-        $exec.Payload | Should -Match ([regex]::Escape('dotfiles_needs_bootstrap=1'))
-        $exec.Payload | Should -Match ([regex]::Escape('if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim'))
+        $exec.Payload | Should -Match ([regex]::Escape('current_url="$(git -C "$dotfiles_dir" config --get remote.origin.url || true)"'))
+        $exec.Payload | Should -Match ([regex]::Escape('if [ "$current_url" != "$dotfiles_url" ]; then'))
+        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" fetch --depth=1 origin'))
+        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" pull --ff-only --depth=1'))
         $exec.Payload | Should -Match ([regex]::Escape('"$dotfiles_dir/bootstrap.sh"'))
         $exec.Payload | Should -Match "command -v nvim"
         $exec.Payload | Should -Match "command -v tmux"
@@ -444,6 +459,18 @@ Describe 'PowerShell dcnvim profile function' {
         $exec = $script:devcontainerCalls[1]
         Get-ArgumentValue $up.Args "--dotfiles-repository" | Should -BeNullOrEmpty
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://example.invalid/dotfiles.git'"))
+    }
+
+    It 'should use custom dotfiles repo ref in bootstrap payload' {
+        $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")
+        $env:DOTFILES_REPOSITORY_REF = "feature/test-ref"
+
+        dcnvim -Workspace $workspace
+
+        $exec = $script:devcontainerCalls[1]
+        $exec.Payload | Should -Match ([regex]::Escape("dotfiles_ref='feature/test-ref'"))
+        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" fetch --depth=1 origin "$dotfiles_ref"'))
+        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" checkout --force FETCH_HEAD'))
     }
 
     It 'should use ghq and fzf picker when cwd has no devcontainer config' {
