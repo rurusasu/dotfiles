@@ -69,15 +69,14 @@ dcnvim() {
     return 1
   fi
 
-  # Bring container up + inject dotfiles. CLI does not read
-  # ~/.config/devcontainer/devcontainer.json (that's a VS Code extension
-  # config), so dotfiles flags must be passed explicitly. Idempotent: skips
-  # on a container already up.
+  # Bring the project container up first. Dotfiles are bootstrapped explicitly
+  # below because the devcontainers CLI dotfiles marker path can fail on
+  # Windows/zsh with "numeric argument required" before exec is reached.
   local dotfiles_url="${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles}"
+  local dotfiles_url_quoted
+  dotfiles_url_quoted="$(_dcnvim_shell_quote "$dotfiles_url")"
   devcontainer up \
     --workspace-folder "$workspace" \
-    --dotfiles-repository "$dotfiles_url" \
-    --dotfiles-install-command bootstrap.sh \
     >/dev/null || {
     echo "dcnvim: devcontainer up failed" >&2
     return 1
@@ -96,7 +95,27 @@ dcnvim() {
   # masking the failure to the host.
   devcontainer exec --workspace-folder "$workspace" -- \
     bash -lc "
+      set -e
       export PATH=\"\$HOME/.local/bin:\$PATH\"
+      dotfiles_url=$dotfiles_url_quoted
+      dotfiles_dir=\"\$HOME/.dotfiles\"
+      dotfiles_needs_bootstrap=0
+      if [ ! -e \"\$dotfiles_dir\" ] && [ ! -L \"\$dotfiles_dir\" ] && [ -x \"\$HOME/dotfiles/bootstrap.sh\" ]; then
+        ln -s \"\$HOME/dotfiles\" \"\$dotfiles_dir\"
+        dotfiles_needs_bootstrap=1
+      fi
+      if [ ! -x \"\$dotfiles_dir/bootstrap.sh\" ]; then
+        command -v git >/dev/null 2>&1 || {
+          echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
+          exit 127
+        }
+        rm -rf \"\$dotfiles_dir\"
+        git clone --depth=1 \"\$dotfiles_url\" \"\$dotfiles_dir\"
+        dotfiles_needs_bootstrap=1
+      fi
+      if [ \"\$dotfiles_needs_bootstrap\" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
+        \"\$dotfiles_dir/bootstrap.sh\"
+      fi
       command -v nvim >/dev/null 2>&1 || {
         echo 'dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
         exit 127
