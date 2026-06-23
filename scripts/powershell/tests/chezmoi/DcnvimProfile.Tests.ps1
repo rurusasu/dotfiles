@@ -436,13 +436,15 @@ Describe 'PowerShell dcnvim profile function' {
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_ref=''"))
         $exec.Payload | Should -Match ([regex]::Escape('dotfiles_dir="$HOME/.dotfiles"'))
         $exec.Payload | Should -Not -Match ([regex]::Escape('HOME/dotfiles'))
-        $exec.Payload | Should -Not -Match 'dotfiles_needs_bootstrap'
+        $exec.Payload | Should -Match 'dotfiles_needs_bootstrap=0'
         $exec.Payload | Should -Match ([regex]::Escape('if [ -L "$dotfiles_dir" ] || [ ! -d "$dotfiles_dir/.git" ]; then'))
         $exec.Payload | Should -Match ([regex]::Escape('git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'))
         $exec.Payload | Should -Match ([regex]::Escape('current_url="$(git -C "$dotfiles_dir" config --get remote.origin.url || true)"'))
         $exec.Payload | Should -Match ([regex]::Escape('if [ "$current_url" != "$dotfiles_url" ]; then'))
-        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" fetch --depth=1 origin'))
-        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" pull --ff-only --depth=1'))
+        $exec.Payload | Should -Match ([regex]::Escape('if git -C "$dotfiles_dir" fetch --depth=1 origin; then'))
+        $exec.Payload | Should -Match ([regex]::Escape('if git -C "$dotfiles_dir" pull --ff-only --depth=1; then'))
+        $exec.Payload | Should -Match ([regex]::Escape('dcnvim: warning: failed to update dotfiles repository; using existing checkout'))
+        $exec.Payload | Should -Match ([regex]::Escape('if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then'))
         $exec.Payload | Should -Match ([regex]::Escape('"$dotfiles_dir/bootstrap.sh"'))
         $exec.Payload | Should -Match "command -v nvim"
         $exec.Payload | Should -Match "command -v tmux"
@@ -469,8 +471,21 @@ Describe 'PowerShell dcnvim profile function' {
 
         $exec = $script:devcontainerCalls[1]
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_ref='feature/test-ref'"))
-        $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" fetch --depth=1 origin "$dotfiles_ref"'))
+        $exec.Payload | Should -Match ([regex]::Escape('if git -C "$dotfiles_dir" fetch --depth=1 origin "$dotfiles_ref" &&'))
         $exec.Payload | Should -Match ([regex]::Escape('git -C "$dotfiles_dir" checkout --force FETCH_HEAD'))
+        $exec.Payload | Should -Match ([regex]::Escape('dcnvim: warning: failed to fetch dotfiles ref; using existing checkout'))
+    }
+
+    It 'should make dotfiles update failures best effort when checkout already exists' {
+        $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")
+
+        dcnvim -Workspace $workspace
+
+        $exec = $script:devcontainerCalls[1]
+        $exec.Payload | Should -Match ([regex]::Escape('if git -C "$dotfiles_dir" fetch --depth=1 origin; then'))
+        $exec.Payload | Should -Match ([regex]::Escape('dcnvim: warning: failed to update dotfiles repository; using existing checkout'))
+        $exec.Payload | Should -Match ([regex]::Escape('if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then'))
+        $exec.Payload | Should -Match ([regex]::Escape("tmux new -A -s 'repo' 'nvim .'"))
     }
 
     It 'should use ghq and fzf picker when cwd has no devcontainer config' {

@@ -102,6 +102,7 @@ dcnvim() {
       dotfiles_url=$dotfiles_url_quoted
       dotfiles_ref=$dotfiles_ref_quoted
       dotfiles_dir=\"\$HOME/.dotfiles\"
+      dotfiles_needs_bootstrap=0
       command -v git >/dev/null 2>&1 || {
         echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
         exit 127
@@ -109,29 +110,44 @@ dcnvim() {
       if [ -L \"\$dotfiles_dir\" ] || [ ! -d \"\$dotfiles_dir/.git\" ]; then
         rm -rf \"\$dotfiles_dir\"
         git clone --depth=1 \"\$dotfiles_url\" \"\$dotfiles_dir\"
+        dotfiles_needs_bootstrap=1
       fi
       current_url=\"\$(git -C \"\$dotfiles_dir\" config --get remote.origin.url || true)\"
       if [ \"\$current_url\" != \"\$dotfiles_url\" ]; then
         rm -rf \"\$dotfiles_dir\"
         git clone --depth=1 \"\$dotfiles_url\" \"\$dotfiles_dir\"
+        dotfiles_needs_bootstrap=1
       fi
       if [ ! -x \"\$dotfiles_dir/bootstrap.sh\" ]; then
         echo 'dcnvim: bootstrap.sh not found in dotfiles repository' >&2
         exit 127
       fi
       if [ -n \"\$dotfiles_ref\" ]; then
-        git -C \"\$dotfiles_dir\" fetch --depth=1 origin \"\$dotfiles_ref\"
-        git -C \"\$dotfiles_dir\" checkout --force FETCH_HEAD
+        if git -C \"\$dotfiles_dir\" fetch --depth=1 origin \"\$dotfiles_ref\" &&
+          git -C \"\$dotfiles_dir\" checkout --force FETCH_HEAD; then
+          dotfiles_needs_bootstrap=1
+        else
+          echo 'dcnvim: warning: failed to fetch dotfiles ref; using existing checkout' >&2
+        fi
       else
-        git -C \"\$dotfiles_dir\" fetch --depth=1 origin
-        if ! git -C \"\$dotfiles_dir\" pull --ff-only --depth=1; then
-          default_ref=\"\$(git -C \"\$dotfiles_dir\" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)\"
-          if [ -n \"\$default_ref\" ]; then
-            git -C \"\$dotfiles_dir\" reset --hard \"\$default_ref\"
+        if git -C \"\$dotfiles_dir\" fetch --depth=1 origin; then
+          if git -C \"\$dotfiles_dir\" pull --ff-only --depth=1; then
+            dotfiles_needs_bootstrap=1
+          else
+            default_ref=\"\$(git -C \"\$dotfiles_dir\" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)\"
+            if [ -n \"\$default_ref\" ] && git -C \"\$dotfiles_dir\" reset --hard \"\$default_ref\"; then
+              dotfiles_needs_bootstrap=1
+            else
+              echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
+            fi
           fi
+        else
+          echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
         fi
       fi
-      \"\$dotfiles_dir/bootstrap.sh\"
+      if [ \"\$dotfiles_needs_bootstrap\" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
+        \"\$dotfiles_dir/bootstrap.sh\"
+      fi
       command -v nvim >/dev/null 2>&1 || {
         echo 'dcnvim: nvim not installed in container — run ~/.dotfiles/bootstrap.sh first' >&2
         exit 127
