@@ -446,6 +446,8 @@ function dcnvim {
     # command is missing, masking the failure to the host.
     # Use double-quoted here-string so $sessionName interpolates; escape
     # bash variables with backtick so they stay literal for the shell.
+    # Strip CR before bash -lc: Windows here-strings use CRLF, and bash
+    # treats "set -e`r" as an invalid option.
     $payload = @"
 set -e
 export PATH="`$HOME/.local/bin:`$PATH"
@@ -508,6 +510,7 @@ command -v tmux >/dev/null 2>&1 || {
 }
 tmux new -A -s $sessionNameQuoted 'nvim .'
 "@
+    $payload = $payload -replace "`r", ""
 
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
 }

@@ -431,6 +431,7 @@ Describe 'PowerShell dcnvim profile function' {
 
         $exec.Command | Should -Be "exec"
         Get-ArgumentValue $exec.Args "--workspace-folder" | Should -Be $workspace
+        $exec.Payload.Contains("`r") | Should -BeFalse
         $exec.Payload | Should -Match ([regex]::Escape('export PATH="$HOME/.local/bin:$PATH"'))
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://github.com/rurusasu/dotfiles'"))
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_ref=''"))
