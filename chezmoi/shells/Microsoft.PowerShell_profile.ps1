@@ -444,8 +444,10 @@ set -e
 export PATH="`$HOME/.local/bin:`$PATH"
 dotfiles_url=$dotfilesUrlQuoted
 dotfiles_dir="`$HOME/.dotfiles"
+dotfiles_needs_bootstrap=0
 if [ ! -e "`$dotfiles_dir" ] && [ ! -L "`$dotfiles_dir" ] && [ -x "`$HOME/dotfiles/bootstrap.sh" ]; then
   ln -s "`$HOME/dotfiles" "`$dotfiles_dir"
+  dotfiles_needs_bootstrap=1
 fi
 if [ ! -x "`$dotfiles_dir/bootstrap.sh" ]; then
   command -v git >/dev/null 2>&1 || {
@@ -454,8 +456,9 @@ if [ ! -x "`$dotfiles_dir/bootstrap.sh" ]; then
   }
   rm -rf "`$dotfiles_dir"
   git clone --depth=1 "`$dotfiles_url" "`$dotfiles_dir"
+  dotfiles_needs_bootstrap=1
 fi
-if ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
+if [ "`$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
   "`$dotfiles_dir/bootstrap.sh"
 fi
 command -v nvim >/dev/null 2>&1 || {

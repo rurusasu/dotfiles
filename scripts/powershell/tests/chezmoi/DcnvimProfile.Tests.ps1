@@ -424,7 +424,10 @@ Describe 'PowerShell dcnvim profile function' {
         $exec.Payload | Should -Match ([regex]::Escape('export PATH="$HOME/.local/bin:$PATH"'))
         $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://github.com/rurusasu/dotfiles'"))
         $exec.Payload | Should -Match ([regex]::Escape('dotfiles_dir="$HOME/.dotfiles"'))
+        $exec.Payload | Should -Match ([regex]::Escape('dotfiles_needs_bootstrap=0'))
         $exec.Payload | Should -Match ([regex]::Escape('git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'))
+        $exec.Payload | Should -Match ([regex]::Escape('dotfiles_needs_bootstrap=1'))
+        $exec.Payload | Should -Match ([regex]::Escape('if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim'))
         $exec.Payload | Should -Match ([regex]::Escape('"$dotfiles_dir/bootstrap.sh"'))
         $exec.Payload | Should -Match "command -v nvim"
         $exec.Payload | Should -Match "command -v tmux"
