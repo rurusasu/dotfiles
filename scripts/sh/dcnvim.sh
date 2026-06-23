@@ -73,8 +73,10 @@ dcnvim() {
   # below because the devcontainers CLI dotfiles marker path can fail on
   # Windows/zsh with "numeric argument required" before exec is reached.
   local dotfiles_url="${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles}"
-  local dotfiles_url_quoted
+  local dotfiles_ref="${DOTFILES_REPOSITORY_REF:-}"
+  local dotfiles_url_quoted dotfiles_ref_quoted
   dotfiles_url_quoted="$(_dcnvim_shell_quote "$dotfiles_url")"
+  dotfiles_ref_quoted="$(_dcnvim_shell_quote "$dotfiles_ref")"
   devcontainer up \
     --workspace-folder "$workspace" \
     >/dev/null || {
@@ -98,20 +100,50 @@ dcnvim() {
       set -e
       export PATH=\"\$HOME/.local/bin:\$PATH\"
       dotfiles_url=$dotfiles_url_quoted
+      dotfiles_ref=$dotfiles_ref_quoted
       dotfiles_dir=\"\$HOME/.dotfiles\"
       dotfiles_needs_bootstrap=0
-      if [ ! -e \"\$dotfiles_dir\" ] && [ ! -L \"\$dotfiles_dir\" ] && [ -x \"\$HOME/dotfiles/bootstrap.sh\" ]; then
-        ln -s \"\$HOME/dotfiles\" \"\$dotfiles_dir\"
-        dotfiles_needs_bootstrap=1
-      fi
-      if [ ! -x \"\$dotfiles_dir/bootstrap.sh\" ]; then
-        command -v git >/dev/null 2>&1 || {
-          echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
-          exit 127
-        }
+      command -v git >/dev/null 2>&1 || {
+        echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
+        exit 127
+      }
+      if [ -L \"\$dotfiles_dir\" ] || [ ! -d \"\$dotfiles_dir/.git\" ]; then
         rm -rf \"\$dotfiles_dir\"
         git clone --depth=1 \"\$dotfiles_url\" \"\$dotfiles_dir\"
         dotfiles_needs_bootstrap=1
+      fi
+      current_url=\"\$(git -C \"\$dotfiles_dir\" config --get remote.origin.url || true)\"
+      if [ \"\$current_url\" != \"\$dotfiles_url\" ]; then
+        rm -rf \"\$dotfiles_dir\"
+        git clone --depth=1 \"\$dotfiles_url\" \"\$dotfiles_dir\"
+        dotfiles_needs_bootstrap=1
+      fi
+      if [ ! -x \"\$dotfiles_dir/bootstrap.sh\" ]; then
+        echo 'dcnvim: bootstrap.sh not found in dotfiles repository' >&2
+        exit 127
+      fi
+      if [ -n \"\$dotfiles_ref\" ]; then
+        if git -C \"\$dotfiles_dir\" fetch --depth=1 origin \"\$dotfiles_ref\" &&
+          git -C \"\$dotfiles_dir\" checkout --force FETCH_HEAD; then
+          dotfiles_needs_bootstrap=1
+        else
+          echo 'dcnvim: warning: failed to fetch dotfiles ref; using existing checkout' >&2
+        fi
+      else
+        if git -C \"\$dotfiles_dir\" fetch --depth=1 origin; then
+          if git -C \"\$dotfiles_dir\" pull --ff-only --depth=1; then
+            dotfiles_needs_bootstrap=1
+          else
+            default_ref=\"\$(git -C \"\$dotfiles_dir\" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)\"
+            if [ -n \"\$default_ref\" ] && git -C \"\$dotfiles_dir\" reset --hard \"\$default_ref\"; then
+              dotfiles_needs_bootstrap=1
+            else
+              echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
+            fi
+          fi
+        else
+          echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
+        fi
       fi
       if [ \"\$dotfiles_needs_bootstrap\" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
         \"\$dotfiles_dir/bootstrap.sh\"

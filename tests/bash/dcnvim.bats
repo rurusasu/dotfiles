@@ -98,11 +98,18 @@ printf "%s\n" "$FZF_SELECTED"
 	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
 	[[ "$payload" == *'export PATH="$HOME/.local/bin:$PATH"'* ]]
 	[[ "$payload" == *"dotfiles_url='https://github.com/rurusasu/dotfiles'"* ]]
+	[[ "$payload" == *"dotfiles_ref=''"* ]]
 	[[ "$payload" == *'dotfiles_dir="$HOME/.dotfiles"'* ]]
+	[[ "$payload" != *'HOME/dotfiles'* ]]
 	[[ "$payload" == *"dotfiles_needs_bootstrap=0"* ]]
+	[[ "$payload" == *'if [ -L "$dotfiles_dir" ] || [ ! -d "$dotfiles_dir/.git" ]; then'* ]]
 	[[ "$payload" == *'git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'* ]]
-	[[ "$payload" == *'dotfiles_needs_bootstrap=1'* ]]
-	[[ "$payload" == *'if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim'* ]]
+	[[ "$payload" == *'current_url="$(git -C "$dotfiles_dir" config --get remote.origin.url || true)"'* ]]
+	[[ "$payload" == *'if [ "$current_url" != "$dotfiles_url" ]; then'* ]]
+	[[ "$payload" == *'if git -C "$dotfiles_dir" fetch --depth=1 origin; then'* ]]
+	[[ "$payload" == *'if git -C "$dotfiles_dir" pull --ff-only --depth=1; then'* ]]
+	[[ "$payload" == *"dcnvim: warning: failed to update dotfiles repository; using existing checkout"* ]]
+	[[ "$payload" == *'if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then'* ]]
 	[[ "$payload" == *'"$dotfiles_dir/bootstrap.sh"'* ]]
 	[[ "$payload" == *"command -v nvim"* ]]
 	[[ "$payload" == *"command -v tmux"* ]]
@@ -145,6 +152,37 @@ printf "%s\n" "$FZF_SELECTED"
 	[[ "$log" != *"arg=https://example.invalid/dotfiles.git"* ]]
 	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
 	[[ "$payload" == *"dotfiles_url='https://example.invalid/dotfiles.git'"* ]]
+}
+
+@test "custom dotfiles repository ref is checked out by bootstrap payload" {
+	workspace="$BATS_TEST_TMPDIR/project"
+	mkdir -p "$workspace/.devcontainer"
+	export DOTFILES_REPOSITORY_REF="feature/test-ref"
+	write_devcontainer_stub
+
+	run dcnvim "$workspace"
+
+	[ "$status" -eq 0 ]
+	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
+	[[ "$payload" == *"dotfiles_ref='feature/test-ref'"* ]]
+	[[ "$payload" == *'if git -C "$dotfiles_dir" fetch --depth=1 origin "$dotfiles_ref" &&'* ]]
+	[[ "$payload" == *'git -C "$dotfiles_dir" checkout --force FETCH_HEAD'* ]]
+	[[ "$payload" == *"dcnvim: warning: failed to fetch dotfiles ref; using existing checkout"* ]]
+}
+
+@test "dotfiles update failures are best effort when checkout already exists" {
+	workspace="$BATS_TEST_TMPDIR/project"
+	mkdir -p "$workspace/.devcontainer"
+	write_devcontainer_stub
+
+	run dcnvim "$workspace"
+
+	[ "$status" -eq 0 ]
+	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
+	[[ "$payload" == *'if git -C "$dotfiles_dir" fetch --depth=1 origin; then'* ]]
+	[[ "$payload" == *"dcnvim: warning: failed to update dotfiles repository; using existing checkout"* ]]
+	[[ "$payload" == *'if [ "$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then'* ]]
+	[[ "$payload" == *"tmux new -A -s 'project' 'nvim .'"* ]]
 }
 
 @test "missing devcontainer config fails before devcontainer up" {

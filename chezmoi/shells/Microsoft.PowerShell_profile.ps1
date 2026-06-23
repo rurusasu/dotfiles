@@ -348,7 +348,7 @@ if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
 # Requires: @devcontainers/cli on host; bootstrap.sh ran inside the
 # container to provide nvim + tmux. See bootstrap.sh at repo root.
 function ConvertTo-DcnvimBashSingleQuoted {
-    param([Parameter(Mandatory)][string]$Value)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
 
     return "'" + $Value.Replace("'", "'\''") + "'"
 }
@@ -402,7 +402,14 @@ function dcnvim {
     else {
         'https://github.com/rurusasu/dotfiles'
     }
+    $dotfilesRef = if ($env:DOTFILES_REPOSITORY_REF) {
+        $env:DOTFILES_REPOSITORY_REF
+    }
+    else {
+        ''
+    }
     $dotfilesUrlQuoted = ConvertTo-DcnvimBashSingleQuoted $dotfilesUrl
+    $dotfilesRefQuoted = ConvertTo-DcnvimBashSingleQuoted $dotfilesRef
     & devcontainer up `
         --workspace-folder $Workspace | Out-Null
     if ($LASTEXITCODE -ne 0) {
@@ -439,24 +446,56 @@ function dcnvim {
     # command is missing, masking the failure to the host.
     # Use double-quoted here-string so $sessionName interpolates; escape
     # bash variables with backtick so they stay literal for the shell.
+    # Strip CR before bash -lc: Windows here-strings use CRLF, and bash
+    # treats "set -e`r" as an invalid option.
     $payload = @"
 set -e
 export PATH="`$HOME/.local/bin:`$PATH"
 dotfiles_url=$dotfilesUrlQuoted
+dotfiles_ref=$dotfilesRefQuoted
 dotfiles_dir="`$HOME/.dotfiles"
 dotfiles_needs_bootstrap=0
-if [ ! -e "`$dotfiles_dir" ] && [ ! -L "`$dotfiles_dir" ] && [ -x "`$HOME/dotfiles/bootstrap.sh" ]; then
-  ln -s "`$HOME/dotfiles" "`$dotfiles_dir"
-  dotfiles_needs_bootstrap=1
-fi
-if [ ! -x "`$dotfiles_dir/bootstrap.sh" ]; then
-  command -v git >/dev/null 2>&1 || {
-    echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
-    exit 127
-  }
+command -v git >/dev/null 2>&1 || {
+  echo 'dcnvim: git not installed in container; cannot clone dotfiles' >&2
+  exit 127
+}
+if [ -L "`$dotfiles_dir" ] || [ ! -d "`$dotfiles_dir/.git" ]; then
   rm -rf "`$dotfiles_dir"
   git clone --depth=1 "`$dotfiles_url" "`$dotfiles_dir"
   dotfiles_needs_bootstrap=1
+fi
+current_url="`$(git -C "`$dotfiles_dir" config --get remote.origin.url || true)"
+if [ "`$current_url" != "`$dotfiles_url" ]; then
+  rm -rf "`$dotfiles_dir"
+  git clone --depth=1 "`$dotfiles_url" "`$dotfiles_dir"
+  dotfiles_needs_bootstrap=1
+fi
+if [ ! -x "`$dotfiles_dir/bootstrap.sh" ]; then
+  echo 'dcnvim: bootstrap.sh not found in dotfiles repository' >&2
+  exit 127
+fi
+if [ -n "`$dotfiles_ref" ]; then
+  if git -C "`$dotfiles_dir" fetch --depth=1 origin "`$dotfiles_ref" &&
+    git -C "`$dotfiles_dir" checkout --force FETCH_HEAD; then
+    dotfiles_needs_bootstrap=1
+  else
+    echo 'dcnvim: warning: failed to fetch dotfiles ref; using existing checkout' >&2
+  fi
+else
+  if git -C "`$dotfiles_dir" fetch --depth=1 origin; then
+    if git -C "`$dotfiles_dir" pull --ff-only --depth=1; then
+      dotfiles_needs_bootstrap=1
+    else
+      default_ref="`$(git -C "`$dotfiles_dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+      if [ -n "`$default_ref" ] && git -C "`$dotfiles_dir" reset --hard "`$default_ref"; then
+        dotfiles_needs_bootstrap=1
+      else
+        echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
+      fi
+    fi
+  else
+    echo 'dcnvim: warning: failed to update dotfiles repository; using existing checkout' >&2
+  fi
 fi
 if [ "`$dotfiles_needs_bootstrap" -eq 1 ] || ! command -v nvim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
   "`$dotfiles_dir/bootstrap.sh"
@@ -471,6 +510,7 @@ command -v tmux >/dev/null 2>&1 || {
 }
 tmux new -A -s $sessionNameQuoted 'nvim .'
 "@
+    $payload = $payload -replace "`r", ""
 
     & devcontainer exec --workspace-folder $Workspace -- bash -lc $payload
 }
