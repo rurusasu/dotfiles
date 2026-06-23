@@ -80,7 +80,7 @@ printf "%s\n" "$FZF_SELECTED"
 '
 }
 
-@test "explicit workspace runs devcontainer up and exec with nvim tmux payload" {
+@test "explicit workspace runs plain devcontainer up then bootstraps before nvim tmux payload" {
 	workspace="$BATS_TEST_TMPDIR/project"
 	mkdir -p "$workspace/.devcontainer"
 	write_devcontainer_stub
@@ -92,13 +92,15 @@ printf "%s\n" "$FZF_SELECTED"
 	[[ "$log" == *"arg=up"* ]]
 	[[ "$log" == *"arg=--workspace-folder"* ]]
 	[[ "$log" == *"arg=$workspace"* ]]
-	[[ "$log" == *"arg=--dotfiles-repository"* ]]
-	[[ "$log" == *"arg=https://github.com/rurusasu/dotfiles"* ]]
-	[[ "$log" == *"arg=--dotfiles-install-command"* ]]
-	[[ "$log" == *"arg=bootstrap.sh"* ]]
+	[[ "$log" != *"arg=--dotfiles-repository"* ]]
+	[[ "$log" != *"arg=--dotfiles-install-command"* ]]
 
 	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
 	[[ "$payload" == *'export PATH="$HOME/.local/bin:$PATH"'* ]]
+	[[ "$payload" == *"dotfiles_url='https://github.com/rurusasu/dotfiles'"* ]]
+	[[ "$payload" == *'dotfiles_dir="$HOME/.dotfiles"'* ]]
+	[[ "$payload" == *'git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'* ]]
+	[[ "$payload" == *'"$dotfiles_dir/bootstrap.sh"'* ]]
 	[[ "$payload" == *"command -v nvim"* ]]
 	[[ "$payload" == *"command -v tmux"* ]]
 	[[ "$payload" == *"tmux new -A -s 'project' 'nvim .'"* ]]
@@ -127,7 +129,7 @@ printf "%s\n" "$FZF_SELECTED"
 	[[ "$payload" == *"tmux new -A -s 'bar' 'nvim .'"* ]]
 }
 
-@test "custom dotfiles repository url is passed to devcontainer up" {
+@test "custom dotfiles repository url is used by bootstrap payload" {
 	workspace="$BATS_TEST_TMPDIR/project"
 	mkdir -p "$workspace/.devcontainer"
 	export DOTFILES_REPOSITORY_URL="https://example.invalid/dotfiles.git"
@@ -137,7 +139,9 @@ printf "%s\n" "$FZF_SELECTED"
 
 	[ "$status" -eq 0 ]
 	log="$(cat "$DEVCONTAINER_LOG")"
-	[[ "$log" == *"arg=https://example.invalid/dotfiles.git"* ]]
+	[[ "$log" != *"arg=https://example.invalid/dotfiles.git"* ]]
+	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
+	[[ "$payload" == *"dotfiles_url='https://example.invalid/dotfiles.git'"* ]]
 }
 
 @test "missing devcontainer config fails before devcontainer up" {

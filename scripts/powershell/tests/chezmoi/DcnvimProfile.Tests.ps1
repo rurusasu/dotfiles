@@ -399,7 +399,7 @@ Describe 'PowerShell dcnvim profile function' {
         ConvertTo-DcnvimBashSingleQuoted "team's repo" | Should -Be "'team'\''s repo'"
     }
 
-    It 'should run devcontainer up and exec for explicit workspace using absolute paths' {
+    It 'should run plain devcontainer up then bootstrap before nvim tmux payload' {
         $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")
 
         Push-Location $TestDrive
@@ -416,25 +416,31 @@ Describe 'PowerShell dcnvim profile function' {
 
         $up.Command | Should -Be "up"
         Get-ArgumentValue $up.Args "--workspace-folder" | Should -Be $workspace
-        Get-ArgumentValue $up.Args "--dotfiles-repository" | Should -Be "https://github.com/rurusasu/dotfiles"
-        Get-ArgumentValue $up.Args "--dotfiles-install-command" | Should -Be "bootstrap.sh"
+        Get-ArgumentValue $up.Args "--dotfiles-repository" | Should -BeNullOrEmpty
+        Get-ArgumentValue $up.Args "--dotfiles-install-command" | Should -BeNullOrEmpty
 
         $exec.Command | Should -Be "exec"
         Get-ArgumentValue $exec.Args "--workspace-folder" | Should -Be $workspace
         $exec.Payload | Should -Match ([regex]::Escape('export PATH="$HOME/.local/bin:$PATH"'))
+        $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://github.com/rurusasu/dotfiles'"))
+        $exec.Payload | Should -Match ([regex]::Escape('dotfiles_dir="$HOME/.dotfiles"'))
+        $exec.Payload | Should -Match ([regex]::Escape('git clone --depth=1 "$dotfiles_url" "$dotfiles_dir"'))
+        $exec.Payload | Should -Match ([regex]::Escape('"$dotfiles_dir/bootstrap.sh"'))
         $exec.Payload | Should -Match "command -v nvim"
         $exec.Payload | Should -Match "command -v tmux"
         $exec.Payload | Should -Match ([regex]::Escape("tmux new -A -s 'repo' 'nvim .'"))
     }
 
-    It 'should pass custom dotfiles repo URL' {
+    It 'should use custom dotfiles repo URL in bootstrap payload' {
         $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")
         $env:DOTFILES_REPOSITORY_URL = "https://example.invalid/dotfiles.git"
 
         dcnvim -Workspace $workspace
 
         $up = $script:devcontainerCalls[0]
-        Get-ArgumentValue $up.Args "--dotfiles-repository" | Should -Be "https://example.invalid/dotfiles.git"
+        $exec = $script:devcontainerCalls[1]
+        Get-ArgumentValue $up.Args "--dotfiles-repository" | Should -BeNullOrEmpty
+        $exec.Payload | Should -Match ([regex]::Escape("dotfiles_url='https://example.invalid/dotfiles.git'"))
     }
 
     It 'should use ghq and fzf picker when cwd has no devcontainer config' {
