@@ -245,6 +245,25 @@ Describe 'PowerShell codex profile wrapper' {
     }
 }
 
+Describe 'PowerShell VS Code lightweight profile path' {
+    It 'should expose CLI wrappers before the VS Code lightweight return' {
+        $returnIndex = $script:profileContent.IndexOf('if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }')
+        ($returnIndex -ge 0) | Should -BeTrue
+
+        $pathIndex = $script:profileContent.IndexOf('$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")')
+        $codexAliasIndex = $script:profileContent.IndexOf('Set-Alias -Name codex -Value Invoke-CodexCli')
+        $claudeWrapperIndex = $script:profileContent.IndexOf('function claude')
+
+        ($pathIndex -ge 0) | Should -BeTrue
+        ($codexAliasIndex -ge 0) | Should -BeTrue
+        ($claudeWrapperIndex -ge 0) | Should -BeTrue
+
+        $pathIndex | Should -BeLessThan $returnIndex
+        $codexAliasIndex | Should -BeLessThan $returnIndex
+        $claudeWrapperIndex | Should -BeLessThan $returnIndex
+    }
+}
+
 Describe 'PowerShell dcnvim profile function' {
     BeforeEach {
         Import-DcnvimProfileFunction
