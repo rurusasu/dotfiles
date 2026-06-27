@@ -19,10 +19,6 @@ if (-not $env:TEMP -or $env:TEMP -eq $env:USERPROFILE) { $env:TEMP = Join-Path $
 if (-not $env:TMP) { $env:TMP = $env:TEMP }
 if (-not $env:TERM -or $env:TERM -eq "dumb") { $env:TERM = "xterm-256color" }
 
-# VS Code Extension Console skips heavy init (starship/zoxide/PSReadLine) to avoid
-# session startup timeout. Basic PowerShell functionality (syntax, completion) still works.
-if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }
-
 # Rebuild PATH from registry to ensure User PATH is available in elevated sessions.
 # Windows Terminal with "elevate: true" may not inherit User-scope PATH entries.
 $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -75,6 +71,28 @@ function Invoke-CodexCli {
 }
 
 Set-Alias -Name codex -Value Invoke-CodexCli -Scope Global
+
+# claude: intercept `claude update` to run pnpm install + postinstall.
+# pnpm v10 blocks build scripts by default, so the native binary postinstall
+# never runs when using `claude update` directly, leaving a stub exe.
+function claude {
+    if ($args[0] -eq 'update') {
+        pnpm install -g "@anthropic-ai/claude-code@latest"
+        if ($LASTEXITCODE -eq 0) {
+            $pkgDir = Join-Path (pnpm root -g).Trim() "@anthropic-ai\claude-code"
+            Push-Location $pkgDir
+            try { node install.cjs } finally { Pop-Location }
+        }
+        return
+    }
+    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue | Where-Object { $_.Source -like '*\pnpm\*' } | Select-Object -First 1
+    if ($ps1) { & $ps1.Source @args } else { & claude.exe @args }
+}
+
+# VS Code sets VSCODE_PID in integrated terminals as well as extension consoles.
+# Keep PATH repair and CLI wrappers above this return, then skip heavy init
+# (starship/zoxide/PSReadLine) to avoid extension-console startup timeouts.
+if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }
 
 function Import-MsvcDevEnvironment {
     [CmdletBinding()]
@@ -540,23 +558,6 @@ function dotf {
     $dotfilesDir = Split-Path -Parent (chezmoi source-path)
     Push-Location $dotfilesDir
     try { task @args } finally { Pop-Location }
-}
-
-# claude: intercept `claude update` to run pnpm install + postinstall.
-# pnpm v10 blocks build scripts by default, so the native binary postinstall
-# never runs when using `claude update` directly, leaving a stub exe.
-function claude {
-    if ($args[0] -eq 'update') {
-        pnpm install -g "@anthropic-ai/claude-code@latest"
-        if ($LASTEXITCODE -eq 0) {
-            $pkgDir = Join-Path (pnpm root -g).Trim() "@anthropic-ai\claude-code"
-            Push-Location $pkgDir
-            try { node install.cjs } finally { Pop-Location }
-        }
-        return
-    }
-    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue | Where-Object { $_.Source -like '*\pnpm\*' } | Select-Object -First 1
-    if ($ps1) { & $ps1.Source @args } else { & claude.exe @args }
 }
 
 # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
