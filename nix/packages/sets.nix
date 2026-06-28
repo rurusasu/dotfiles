@@ -730,6 +730,8 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Extra PATH directories for installers that do not register CLI commands on PATH.
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
+    _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    "AgileBits.1Password.CLI" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     google-cloud-sdk = [
       "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
@@ -744,6 +746,14 @@ lib.mapAttrs (_: names: resolve names) grouped
 
   # Portable winget packages whose package exe name does not match the command name.
   wingetPortableLinksById = {
+    _1password-cli = {
+      linkName = "op.exe";
+      targetPattern = "op.exe";
+    };
+    "AgileBits.1Password.CLI" = {
+      linkName = "op.exe";
+      targetPattern = "op.exe";
+    };
     oxlint = {
       linkName = "oxlint.exe";
       targetPattern = "oxlint-*.exe";
