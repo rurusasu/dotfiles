@@ -175,6 +175,28 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context '1Password CLI package' {
+        It 'should define op shim metadata in the SSOT before winget verification' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?_1password-cli\s*=\s*\[.*?%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Links'
+            $sets | Should -Match '(?s)wingetPortableLinksById\s*=\s*\{.*?_1password-cli\s*=\s*\{.*?linkName\s*=\s*"op\.exe".*?targetPattern\s*=\s*"op\.exe"'
+        }
+
+        It 'should generate op portable link metadata into winget packages.json' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'AgileBits.1Password.CLI' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+            $package.portableLink.linkName | Should -Be 'op.exe'
+            $package.portableLink.targetPattern | Should -Be 'op.exe'
+            $package.verifyCommand.command | Should -Be 'op'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
     Context 'Codex Desktop Microsoft Store package' {
         It 'should include Codex Desktop as a Windows-only Microsoft Store package in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
