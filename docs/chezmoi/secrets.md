@@ -91,7 +91,7 @@ Hermes Agent から OpenAI Codex provider を使う場合は、Codex CLI の `~/
 refresh token の競合を避けるため、Hermes 側で別 OAuth session を作る。
 
 ```powershell
-docker exec -it hermes /opt/hermes/.venv/bin/hermes auth add openai-codex
+docker exec -it hermes hermes auth add openai-codex
 ```
 
 ## パターン
