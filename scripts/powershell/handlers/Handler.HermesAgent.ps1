@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     - docker/hermes-agent/compose.yml を使って Hermes gateway/dashboard を起動
-    - ~/.hermes/.env に dashboard Basic Auth を初期化
-    - 生成した dashboard password は ~/.hermes/dashboard-basic-auth-password.txt に保存
+    - 1Password の保存済み credential を優先して ~/.hermes/.env に dashboard Basic Auth を初期化
+    - 1Password が使えない場合は credential を生成し、password を ~/.hermes/dashboard-basic-auth-password.txt に保存
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot
@@ -77,7 +77,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
-            $authCreated = $this.EnsureDashboardAuth($envPath, $infoFilePath)
+            $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
 
             $composeArgs = @("compose", "-f", $composeFile, "up", "-d")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
@@ -90,7 +90,10 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Agent コンテナの起動に失敗しました: $message")
             }
 
-            if ($authCreated) {
+            if ($authResult.Changed -and $authResult.Source -eq "1Password") {
+                $this.Log("Dashboard Basic Auth を 1Password から設定しました", "Green")
+            }
+            elseif ($authResult.Changed) {
                 $this.Log("Dashboard Basic Auth を生成しました: $infoFilePath", "Green")
             }
             else {
@@ -179,17 +182,42 @@ class HermesAgentHandler : SetupHandlerBase {
         }
     }
 
-    hidden [bool] EnsureDashboardAuth([string]$envPath, [string]$infoFilePath) {
+    hidden [pscustomobject] EnsureDashboardAuth([SetupContext]$ctx, [string]$envPath, [string]$infoFilePath) {
         $lines = @()
         if (Test-Path -LiteralPath $envPath) {
             $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
         }
 
+        $onePasswordCredentials = $this.GetOnePasswordDashboardCredentials($ctx)
+        if ($null -ne $onePasswordCredentials) {
+            $secureSecret = $this.NewSecureString([string]$onePasswordCredentials.Password)
+            $dashboardCredential = [System.Management.Automation.PSCredential]::new(
+                [string]$onePasswordCredentials.Username,
+                $secureSecret
+            )
+            $credentials = $this.NewDashboardCredentialsFromCredential($dashboardCredential)
+            $this.WriteDashboardAuth($envPath, $lines, $credentials)
+            if (Test-Path -LiteralPath $infoFilePath) {
+                Remove-Item -LiteralPath $infoFilePath -Force
+            }
+            return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
+        }
+
         if ($this.HasDashboardAuth($lines)) {
-            return $false
+            return [PSCustomObject]@{ Changed = $false; Source = "Existing" }
         }
 
         $credentials = $this.NewDashboardCredentials()
+        $this.WriteDashboardAuth($envPath, $lines, $credentials)
+        Set-Content -LiteralPath $infoFilePath -Encoding UTF8 -Value @(
+            "url=http://127.0.0.1:9119",
+            "username=$($credentials.Username)",
+            "password=$($credentials.Password)"
+        )
+        return [PSCustomObject]@{ Changed = $true; Source = "Generated" }
+    }
+
+    hidden [void] WriteDashboardAuth([string]$envPath, [string[]]$lines, [pscustomobject]$credentials) {
         $filteredLines = @(
             $lines | Where-Object {
                 $_ -notmatch '^\s*HERMES_DASHBOARD_BASIC_AUTH_(USERNAME|PASSWORD|PASSWORD_HASH|SECRET)\s*='
@@ -205,12 +233,6 @@ class HermesAgentHandler : SetupHandlerBase {
         $filteredLines += "HERMES_DASHBOARD_BASIC_AUTH_SECRET=$($credentials.Secret)"
 
         Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
-        Set-Content -LiteralPath $infoFilePath -Encoding UTF8 -Value @(
-            "url=http://127.0.0.1:9119",
-            "username=$($credentials.Username)",
-            "password=$($credentials.Password)"
-        )
-        return $true
     }
 
     hidden [bool] HasDashboardAuth([string[]]$lines) {
@@ -236,6 +258,101 @@ class HermesAgentHandler : SetupHandlerBase {
             }
         }
         return $true
+    }
+
+    hidden [pscustomobject] GetOnePasswordDashboardCredentials([SetupContext]$ctx) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgent1PasswordEnabled", $true))) {
+            return $null
+        }
+
+        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequire1Password", $false))
+        $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if (-not $opCommand) {
+            if ($required) {
+                throw "1Password CLI (op) が見つかりません"
+            }
+            $this.Log("1Password CLI が見つからないため Hermes dashboard credential の自動取得をスキップします", "Gray")
+            return $null
+        }
+
+        $opExe = [string]$opCommand.Source
+        if ([string]::IsNullOrWhiteSpace($opExe) -and $opCommand.PSObject.Properties.Name -contains "Path") {
+            $opExe = [string]$opCommand.Path
+        }
+        if ([string]::IsNullOrWhiteSpace($opExe)) {
+            $opExe = "op"
+        }
+
+        $account = [string]$ctx.GetOption("HermesAgent1PasswordAccount", "my.1password.com")
+        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "Private")
+        $item = [string]$ctx.GetOption("HermesAgent1PasswordItem", "Hermes Agent Dashboard")
+        $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
+        $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
+        if ($result.ExitCode -ne 0) {
+            if ($required) {
+                throw "1Password から Hermes dashboard credential を取得できません"
+            }
+            $this.Log("1Password から Hermes dashboard credential を取得できないためローカル生成にフォールバックします", "Gray")
+            return $null
+        }
+
+        try {
+            $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
+            $username = $this.GetOnePasswordFieldValue($itemJson, "USERNAME", @("username", "user name"))
+            $password = $this.GetOnePasswordFieldValue($itemJson, "PASSWORD", @("password"))
+            if ([string]::IsNullOrWhiteSpace($username) -or [string]::IsNullOrWhiteSpace($password)) {
+                if ($required) {
+                    throw "1Password item に username/password がありません"
+                }
+                $this.Log("1Password item に username/password がないためローカル生成にフォールバックします", "Gray")
+                return $null
+            }
+
+            return [PSCustomObject]@{
+                Username = $username
+                Password = $password
+            }
+        }
+        catch {
+            if ($required) {
+                throw
+            }
+            $this.Log("1Password item を読めないためローカル生成にフォールバックします", "Gray")
+            return $null
+        }
+    }
+
+    hidden [string] GetOnePasswordFieldValue([pscustomobject]$item, [string]$purpose, [string[]]$names) {
+        $fields = @($item.fields)
+        foreach ($field in $fields) {
+            $fieldPurpose = ([string]$field.purpose).Trim()
+            if ($fieldPurpose -eq $purpose -and -not [string]::IsNullOrWhiteSpace([string]$field.value)) {
+                return [string]$field.value
+            }
+        }
+
+        $normalizedNames = @($names | ForEach-Object { $_.ToLowerInvariant() })
+        foreach ($field in $fields) {
+            $candidates = @([string]$field.id, [string]$field.label) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                ForEach-Object { $_.Trim().ToLowerInvariant() }
+            foreach ($candidate in $candidates) {
+                if ($candidate -in $normalizedNames -and -not [string]::IsNullOrWhiteSpace([string]$field.value)) {
+                    return [string]$field.value
+                }
+            }
+        }
+
+        return $null
+    }
+
+    hidden [securestring] NewSecureString([string]$value) {
+        $secure = [securestring]::new()
+        foreach ($char in $value.ToCharArray()) {
+            $secure.AppendChar($char)
+        }
+        $secure.MakeReadOnly()
+        return $secure
     }
 
     hidden [pscustomobject] NewDashboardCredentials() {
@@ -275,6 +392,60 @@ print(hash_password(password))
             Password     = [string]$nonEmpty[0]
             PasswordHash = [string]$nonEmpty[1]
             Secret       = $this.NewTokenSecret()
+        }
+    }
+
+    hidden [pscustomobject] NewDashboardCredentialsFromCredential([System.Management.Automation.PSCredential]$credential) {
+        return [PSCustomObject]@{
+            Username     = $credential.UserName
+            PasswordHash = $this.NewDashboardAuthHash($credential.Password)
+            Secret       = $this.NewTokenSecret()
+        }
+    }
+
+    hidden [string] NewDashboardAuthHash([securestring]$secret) {
+        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "hermes-dashboard-auth-$([guid]::NewGuid().ToString('N'))"
+        $passwordPath = Join-Path $tempDir "password"
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+        $plainSecret = [System.Net.NetworkCredential]::new("", $secret).Password
+        Set-Content -LiteralPath $passwordPath -Value $plainSecret -NoNewline -Encoding UTF8
+
+        try {
+            $python = @'
+from pathlib import Path
+from plugins.dashboard_auth.basic import hash_password
+
+password = Path("/run/secrets/hermes_dashboard_password").read_text(encoding="utf-8")
+print(hash_password(password))
+'@
+            $runArgs = @(
+                "run",
+                "--rm",
+                "--mount",
+                "type=bind,source=$passwordPath,target=/run/secrets/hermes_dashboard_password,readonly",
+                "--entrypoint",
+                "/opt/hermes/.venv/bin/python",
+                "-w",
+                "/opt/hermes",
+                $this.Image,
+                "-c",
+                $python
+            )
+            $output = @(Invoke-Docker -Arguments $runArgs -TimeoutSeconds $this.DockerRunTimeoutSeconds)
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0) {
+                throw "dashboard password hash generation failed (exit code $exitCode): $(($output -join "`n").Trim())"
+            }
+
+            $hash = @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) | Select-Object -First 1
+            if ([string]::IsNullOrWhiteSpace([string]$hash)) {
+                throw "dashboard password hash generation returned incomplete output"
+            }
+            return [string]$hash
+        }
+        finally {
+            $plainSecret = $null
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 

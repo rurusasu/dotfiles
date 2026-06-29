@@ -59,6 +59,21 @@ openclaw browser snapshot
 `openclaw devices approve --latest` は最新 request を表示して明示コマンドを案内する確認用として扱う。
 承認は表示された requestId を `openclaw devices approve <requestId>` で実行する。
 
+## Hermes Agent
+
+Hermes Agent dashboard の Basic Auth は install 時に 1Password から取得する。
+
+- account: `my.1password.com`
+- vault: `Private`
+- item: `Hermes Agent Dashboard`
+
+`Handler.HermesAgent.ps1` は取得した password を Hermes Docker image 内で hash 化し、
+`~/.hermes/.env` には username / password hash / secret だけを書く。1Password から取得できた場合は
+`~/.hermes/dashboard-basic-auth-password.txt` を残さない。
+
+1Password CLI が未導入または未認証の場合は、install を止めずにローカル credential を生成する。厳密に
+1Password 必須にしたい場合は setup option `HermesAgentRequire1Password=true` を使う。
+
 ## パターン
 
 PowerShell deploy script で値を取得する場合:
