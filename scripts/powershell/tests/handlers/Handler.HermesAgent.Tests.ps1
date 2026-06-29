@@ -21,6 +21,7 @@ Describe 'HermesAgentHandler' {
         $script:dockerCalls = @()
 
         $script:ctx.Options["NixRebuildApplied"] = $true
+        $script:ctx.Options["HermesAgent1PasswordEnabled"] = $false
         Remove-Item -LiteralPath $script:userProfile -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
@@ -184,6 +185,35 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain "-d"
         }
 
+        It 'should fall back to generated dashboard auth when 1Password CLI is unavailable' {
+            $ctx.Options.Remove("HermesAgent1PasswordEnabled")
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $envPath = Join-Path $script:userProfile ".hermes\.env"
+            $passwordPath = Join-Path $script:userProfile ".hermes\dashboard-basic-auth-password.txt"
+            $envContent = Get-Content -LiteralPath $envPath -Raw
+            $passwordContent = Get-Content -LiteralPath $passwordPath -Raw
+
+            $envContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin"
+            $envContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt$hash'))
+            $passwordContent | Should -Match "generated-password"
+        }
+
+        It 'should fail before compose when 1Password is required but unavailable' {
+            $ctx.Options.Remove("HermesAgent1PasswordEnabled")
+            $ctx.Options["HermesAgentRequire1Password"] = $true
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1Password CLI"
+            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
+        }
+
         It 'should preserve existing dashboard auth without regenerating the password' {
             $dataDir = Join-Path $script:userProfile ".hermes"
             New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
@@ -215,6 +245,87 @@ Describe 'HermesAgentHandler' {
             $envContent | Should -Match "OTHER=value"
             $envContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=existing$hash'))
             Test-Path -LiteralPath (Join-Path $dataDir "dashboard-basic-auth-password.txt") | Should -Be $false
+        }
+
+        It 'should prefer 1Password dashboard auth and avoid writing a plaintext password file' {
+            $ctx.Options["HermesAgent1PasswordEnabled"] = $true
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+            $envPath = Join-Path $dataDir ".env"
+            $passwordPath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
+            Set-Content -LiteralPath $envPath -Encoding UTF8 -Value @(
+                "OTHER=value",
+                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=local-admin",
+                'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=local$hash',
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET=local-secret"
+            )
+            Set-Content -LiteralPath $passwordPath -Encoding UTF8 -Value "stale-local-password"
+            $onePasswordItemJson = @{
+                fields = @(
+                    @{
+                        id      = "username"
+                        label   = "username"
+                        purpose = "USERNAME"
+                        value   = "admin"
+                    },
+                    @{
+                        id      = "password"
+                        label   = "password"
+                        purpose = "PASSWORD"
+                        value   = "shared-password"
+                    }
+                )
+            } | ConvertTo-Json -Compress
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $Arguments
+                $null = $TimeoutSeconds
+                return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
+            }
+            Mock Invoke-Docker {
+                param(
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $TimeoutSeconds
+                $script:dockerCalls += ,@($Arguments)
+                if ($Arguments[0] -eq "run") {
+                    $global:LASTEXITCODE = 0
+                    return @('scrypt$onepassword')
+                }
+                $global:LASTEXITCODE = 0
+                return @("started")
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $envContent = Get-Content -LiteralPath $envPath -Raw
+            $envContent | Should -Match "OTHER=value"
+            $envContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin"
+            $envContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt$onepassword'))
+            $envContent | Should -Not -Match "local-admin"
+            $envContent | Should -Not -Match "local-secret"
+            Test-Path -LiteralPath $passwordPath | Should -Be $false
+            Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
+                $OpExe -eq "C:\op.exe" -and
+                $Arguments[0] -eq "item" -and
+                $Arguments[1] -eq "get" -and
+                $Arguments -contains "Hermes Agent Dashboard" -and
+                $Arguments -contains "--account" -and
+                $Arguments -contains "my.1password.com" -and
+                $Arguments -contains "--vault" -and
+                $Arguments -contains "Private"
+            }
         }
 
         It 'should remove legacy plaintext dashboard auth when rotating credentials' {
