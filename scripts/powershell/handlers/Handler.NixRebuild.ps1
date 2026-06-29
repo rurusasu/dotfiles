@@ -358,6 +358,10 @@ class NixRebuildHandler : SetupHandlerBase {
     }
 
     [SetupResult] Apply([SetupContext]$ctx) {
+        if ($ctx.Options.ContainsKey("NixRebuildApplied")) {
+            $ctx.Options.Remove("NixRebuildApplied")
+        }
+
         try {
             $distroName = $ctx.DistroName
 
@@ -429,6 +433,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)
 
+            $ctx.Options["NixRebuildApplied"] = $true
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }
         catch {

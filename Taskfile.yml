@@ -4,6 +4,7 @@ version: "3"
 vars:
   DISTRO: NixOS
   DOTFILES_PATH: ~/.dotfiles
+  HERMES_COMPOSE_FILE: docker/hermes-agent/compose.yml
   # OS は go-task の特殊変数なのでドット無しで参照する（`.OS` は常に空になり、
   # Windows から実行しても WSL プレフィックスが付かず失敗する）。
   WSL: '{{if eq OS "windows"}}wsl -d {{.DISTRO}} -- {{end}}'
@@ -160,6 +161,75 @@ tasks:
     desc: Register weekly Windows Scheduled Task to auto-compact Docker VHDX (requires admin)
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File windows/register-docker-compact-task.ps1
+
+  hermes:setup:
+    desc: Run Hermes Agent setup wizard in Docker
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
+
+  hermes:pull:
+    desc: Pull the latest Hermes Agent Docker image
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} pull
+
+  hermes:up:
+    desc: Start Hermes Agent gateway and dashboard in Docker
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d
+
+  hermes:down:
+    desc: Stop Hermes Agent Docker container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} down
+
+  hermes:restart:
+    desc: Restart Hermes Agent Docker container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart hermes
+
+  hermes:logs:
+    desc: Follow Hermes Agent Docker logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hermes
+
+  hermes:ps:
+    desc: Show Hermes Agent Docker container status
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps
+
+  hermes:upgrade:
+    desc: Pull and recreate Hermes Agent Docker container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - task: hermes:pull
+      - task: hermes:up
 
   # ===========================================
   # Git Hooks

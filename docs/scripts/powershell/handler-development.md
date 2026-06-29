@@ -251,6 +251,8 @@ install.ps1 は 3 ステップでハンドラーを実行します:
 | Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携    |
 | VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
 | NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
+| NixRebuild   | [Handler.NixRebuild.ps1](../../../scripts/powershell/handlers/Handler.NixRebuild.ps1)     | [Handler.NixRebuild.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixRebuild.Tests.ps1)     | NixOS 設定適用         |
+| HermesAgent  | [Handler.HermesAgent.ps1](../../../scripts/powershell/handlers/Handler.HermesAgent.ps1)   | [Handler.HermesAgent.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1)   | Docker コンテナ起動    |
 
 ### 関連ドキュメント
 

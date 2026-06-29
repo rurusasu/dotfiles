@@ -29,6 +29,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'function Install-GalleryModuleArchive'
         $workflow | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/\$Name/\$Version'
         $workflow | Should -Match "Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1\.22\.0'"
+        $workflow | Should -Match ([regex]::Escape('$_.RuleName -ne ''TypeNotFound'''))
         $workflow | Should -Not -Match 'Register-PSRepository -Default'
     }
 
@@ -175,6 +176,7 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $powershellWorkflow | Should -Match '"install\.cmd"'
+        $powershellWorkflow | Should -Match '"docker/hermes-agent/\*\*"'
         $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
 
