@@ -116,6 +116,28 @@ Describe 'CodexHandler' {
         }
     }
 
+    Context 'CanApply - link is matching copy instead of symlink' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            # 現行 exe と一致するコピーでも、winget upgrade 後に陳腐化する。
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = ""; Length = 246156592; LastWriteTimeUtc = [datetime]'2024-06-01' }
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
+            Mock Write-Host { }
+        }
+
+        It 'should return true so the copy is replaced with a symlink' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
+        }
+    }
+
     Context 'CanApply - link is current but PATH not configured' {
         BeforeEach {
             Set-CodexPackageInstalled
@@ -218,7 +240,7 @@ Describe 'CodexHandler' {
         }
     }
 
-    Context 'Apply - fallback to copy when symlink fails' {
+    Context 'Apply - fails when symlink cannot be created' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
@@ -238,10 +260,13 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should fallback to copy and return success' {
+        It 'should not fallback to hardlink or copy' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            Should -Invoke Copy-Item -Times 1
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "シンボリックリンク"
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 

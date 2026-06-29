@@ -47,7 +47,7 @@ class CodexHandler : SetupHandlerBase {
         # リンクが最新でも PATH 設定が欠けていれば適用する。
         # (winget upgrade 後の陳腐化, copy フォールバック後, 過去の部分実行を想定。)
         if (
-            $this.IsPortableLinkCurrent($linkPath, $codexExe) -and
+            $this.IsCodexSymlinkCurrent($linkPath, $codexExe) -and
             $this.IsPathInUserPath($linksPath) -and
             $this.IsPathInUserPath($localBin)
         ) {
@@ -76,10 +76,10 @@ class CodexHandler : SetupHandlerBase {
 
             $linkPath = Join-Path $linksPath "codex.exe"
 
-            # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
-            # winget upgrade 後に Links\codex.exe が旧バージョンを指す問題への対処。
-            if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
-                $this.CreatePortableLink($linkPath, $codexExe)
+            # Codex CLI は更新頻度が高いため、copy/hardlink は許可しない。
+            # Links\codex.exe が本体への symlink でない場合は必ず貼り直す。
+            if (-not $this.IsCodexSymlinkCurrent($linkPath, $codexExe)) {
+                $this.CreateCodexSymlink($linkPath, $codexExe)
             }
             else {
                 $this.Log("codex.exe リンクは最新です", "Gray")
@@ -95,7 +95,45 @@ class CodexHandler : SetupHandlerBase {
             return $this.CreateSuccessResult("codex.exe リンクと MCP PATH を設定しました")
         }
         catch {
-            return $this.CreateFailureResult("Codex 設定に失敗しました", $_)
+            return $this.CreateFailureResult("Codex シンボリックリンク設定に失敗しました", $_.Exception)
+        }
+    }
+
+    <#
+    .SYNOPSIS
+        Links\codex.exe が現行 Codex 実行ファイルへのシンボリックリンクか判定する
+    .DESCRIPTION
+        copy/hardlink は一時的に本体と一致していても winget upgrade 後に陳腐化するため、
+        Codex では current とみなさない。
+    #>
+    hidden [bool] IsCodexSymlinkCurrent([string]$linkPath, [string]$targetExe) {
+        if (-not (Test-Path -LiteralPath $linkPath)) { return $false }
+
+        $link = Get-Item -LiteralPath $linkPath -Force
+        if ($link.LinkType -ne "SymbolicLink") { return $false }
+
+        return $this.NormalizePathForComparison(@($link.Target)[0]) -eq
+        $this.NormalizePathForComparison($targetExe)
+    }
+
+    <#
+    .SYNOPSIS
+        Codex CLI 用のシンボリックリンクを作成する
+    .DESCRIPTION
+        hardlink/copy fallback は使わない。symlink を作れない環境では失敗させ、
+        古いコピーが PATH 上に残る状態を防ぐ。
+    #>
+    hidden [void] CreateCodexSymlink([string]$linkPath, [string]$targetExe) {
+        if (Test-Path -LiteralPath $linkPath) {
+            Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+        }
+
+        try {
+            New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
+            $this.Log("codex.exe シンボリックリンクを作成しました: $linkPath -> $targetExe", "Green")
+        }
+        catch {
+            throw "codex.exe のシンボリックリンク作成に失敗しました。Windows の開発者モードを有効化するか、シンボリックリンク作成可能な権限で再実行してください: $($_.Exception.Message)"
         }
     }
 
