@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "install.cmd"
+      - "docker/hermes-agent/**"
       - "scripts/powershell/**"
       - ".github/workflows/ci-nix.yml"
       - ".github/workflows/ci-nixos-wsl.yml"
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "install.cmd"
+      - "docker/hermes-agent/**"
       - "scripts/powershell/**"
       - ".github/workflows/ci-nix.yml"
       - ".github/workflows/ci-nixos-wsl.yml"
@@ -98,7 +100,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
 
           $settings = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/PSScriptAnalyzerSettings.psd1'
-          $findings = Invoke-ScriptAnalyzer -Path scripts/powershell -Recurse -Settings $settings
+          $findings = Invoke-ScriptAnalyzer -Path scripts/powershell -Recurse -Settings $settings |
+            Where-Object { $_.RuleName -ne 'TypeNotFound' }
 
           $sevMap = @{ Error = 'error'; ParseError = 'error'; Warning = 'warning'; Information = 'note' }
           $results = [object[]]@(

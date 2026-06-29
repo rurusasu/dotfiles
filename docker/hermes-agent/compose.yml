@@ -1,0 +1,19 @@
+name: hermes-agent
+
+services:
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    shm_size: 1g
+    command: gateway run
+    ports:
+      - "127.0.0.1:${HERMES_API_PORT:-8642}:8642"
+      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
+    volumes:
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+        target: /opt/data
+    environment:
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: "0.0.0.0"

@@ -125,6 +125,7 @@ Describe 'NixRebuildHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Be "NixOS 設定を適用しました"
+            $ctx.Options["NixRebuildApplied"] | Should -Be $true
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
             } -Times 1
@@ -144,6 +145,7 @@ Describe 'NixRebuildHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
+            $ctx.Options.ContainsKey("NixRebuildApplied") | Should -Be $false
             $result.Message | Should -Match "nixos-rebuild switch が失敗しました"
             $result.Message | Should -Match "error: build failed"
             Should -Invoke Write-Host -ParameterFilter {
