@@ -186,6 +186,84 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain "-d"
         }
 
+        It 'should configure the default Codex model in config.yaml' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configPath = Join-Path $script:userProfile ".hermes\config.yaml"
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+
+            $configContent | Should -Match "(?m)^model:\r?\n  provider: openai-codex\r?\n  default: gpt-5\.5"
+        }
+
+        It 'should replace stale Hermes model config while preserving other settings' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+            $configPath = Join-Path $dataDir "config.yaml"
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model:",
+                "  default: anthropic/claude-opus-4.6",
+                "  provider: auto",
+                "  base_url: https://openrouter.ai/api/v1",
+                "terminal:",
+                "  backend: local"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^model:\r?\n  provider: openai-codex\r?\n  default: gpt-5\.5"
+            $configContent | Should -Not -Match "claude-opus-4\.6|openrouter|model\.default|model\.provider"
+            $configContent | Should -Match "(?m)^terminal:\r?\n  backend: local"
+        }
+
+        It 'should preserve nested model settings while replacing only the top-level model config' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+            $configPath = Join-Path $dataDir "config.yaml"
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "auxiliary:",
+                "  vision:",
+                "    model: local-vision-model",
+                "    provider: local-provider",
+                "model:",
+                "  default: stale-main-model",
+                "  provider: auto",
+                "agent:",
+                "  max_turns: 60"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^auxiliary:\r?\n  vision:\r?\n    model: local-vision-model\r?\n    provider: local-provider"
+            $configContent | Should -Match "(?m)^model:\r?\n  provider: openai-codex\r?\n  default: gpt-5\.5"
+            $configContent | Should -Not -Match "stale-main-model"
+        }
+
+        It 'should normalize scalar and literal model keys from manual config edits' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+            $configPath = Join-Path $dataDir "config.yaml"
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model: gpt-5.5",
+                "model.default: gpt-5.5",
+                "model.provider: openai-codex",
+                "agent:",
+                "  max_turns: 60"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^model:\r?\n  provider: openai-codex\r?\n  default: gpt-5\.5"
+            $configContent | Should -Not -Match "(?m)^model\.(default|provider):"
+            $configContent | Should -Match "(?m)^agent:\r?\n  max_turns: 60"
+        }
+
         It 'should fall back to generated dashboard auth when 1Password CLI is unavailable' {
             $ctx.Options.Remove("HermesAgent1PasswordEnabled")
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }

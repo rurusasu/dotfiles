@@ -4,6 +4,7 @@
 
 .DESCRIPTION
     - docker/hermes-agent/compose.yml を使って Hermes gateway/dashboard を起動
+    - ~/.hermes/config.yaml の model provider/default を初期化
     - 1Password の保存済み credential を優先して ~/.hermes/.env に dashboard Basic Auth と Slack 接続情報を初期化
     - 1Password が使えない場合は credential を生成し、password を ~/.hermes/dashboard-basic-auth-password.txt に保存
 #>
@@ -74,6 +75,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
             $dataDir = $this.GetDataDir()
             $this.EnsureDirectory($dataDir)
+            $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
 
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
@@ -99,6 +101,13 @@ class HermesAgentHandler : SetupHandlerBase {
             }
             else {
                 $this.Log("Dashboard Basic Auth は既に設定済みです", "Gray")
+            }
+
+            if ($modelResult.Changed) {
+                $this.Log("Hermes model 設定を $($modelResult.Provider)/$($modelResult.Model) に設定しました", "Green")
+            }
+            elseif ($modelResult.Source -eq "Config") {
+                $this.Log("Hermes model 設定は既に設定済みです", "Gray")
             }
 
             if ($slackResult.Changed -and $slackResult.Source -eq "1Password") {
@@ -188,6 +197,103 @@ class HermesAgentHandler : SetupHandlerBase {
         if (-not (Test-Path -LiteralPath $path -PathType Container)) {
             New-Item -ItemType Directory -Path $path -Force | Out-Null
         }
+    }
+
+    hidden [pscustomobject] EnsureModelConfiguration([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentModelConfigEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Provider = ""; Model = "" }
+        }
+
+        $provider = ([string]$ctx.GetOption("HermesAgentModelProvider", "openai-codex")).Trim()
+        if ([string]::IsNullOrWhiteSpace($provider)) {
+            $provider = "openai-codex"
+        }
+
+        $model = ([string]$ctx.GetOption("HermesAgentModelDefault", "gpt-5.5")).Trim()
+        if ([string]::IsNullOrWhiteSpace($model)) {
+            $model = "gpt-5.5"
+        }
+
+        $configPath = Join-Path $dataDir "config.yaml"
+        $existingLines = @()
+        if (Test-Path -LiteralPath $configPath) {
+            $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+        }
+
+        $desiredLines = @(
+            "model:",
+            "  provider: $provider",
+            "  default: $model"
+        )
+        $updatedLines = $this.SetModelConfigLines($existingLines, $desiredLines)
+        $changed = -not $this.LinesEqual($existingLines, $updatedLines)
+        if ($changed) {
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+        }
+
+        return [PSCustomObject]@{ Changed = $changed; Source = "Config"; Provider = $provider; Model = $model }
+    }
+
+    hidden [string[]] SetModelConfigLines([string[]]$lines, [string[]]$desiredLines) {
+        $cleanedLines = @(
+            $lines | Where-Object {
+                $_ -notmatch '^model\.(default|provider)\s*:'
+            }
+        )
+
+        if ($cleanedLines.Count -eq 0) {
+            return $desiredLines
+        }
+
+        $modelStart = -1
+        for ($index = 0; $index -lt $cleanedLines.Count; $index++) {
+            if ($cleanedLines[$index] -match '^model\s*:') {
+                $modelStart = $index
+                break
+            }
+        }
+
+        if ($modelStart -lt 0) {
+            $result = @()
+            $result += $desiredLines
+            if (-not [string]::IsNullOrWhiteSpace($cleanedLines[0])) {
+                $result += ""
+            }
+            $result += $cleanedLines
+            return $result
+        }
+
+        $modelEnd = $modelStart + 1
+        while ($modelEnd -lt $cleanedLines.Count) {
+            $line = $cleanedLines[$modelEnd]
+            if ($line -match '^\S[^:]*\s*:') {
+                break
+            }
+            $modelEnd++
+        }
+
+        $result = @()
+        if ($modelStart -gt 0) {
+            $result += $cleanedLines[0..($modelStart - 1)]
+        }
+        $result += $desiredLines
+        if ($modelEnd -lt $cleanedLines.Count) {
+            $result += $cleanedLines[$modelEnd..($cleanedLines.Count - 1)]
+        }
+        return $result
+    }
+
+    hidden [bool] LinesEqual([string[]]$left, [string[]]$right) {
+        if ($left.Count -ne $right.Count) {
+            return $false
+        }
+
+        for ($index = 0; $index -lt $left.Count; $index++) {
+            if ($left[$index] -ne $right[$index]) {
+                return $false
+            }
+        }
+        return $true
     }
 
     hidden [pscustomobject] EnsureDashboardAuth([SetupContext]$ctx, [string]$envPath, [string]$infoFilePath) {
