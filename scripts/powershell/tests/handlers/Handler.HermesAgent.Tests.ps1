@@ -22,6 +22,7 @@ Describe 'HermesAgentHandler' {
 
         $script:ctx.Options["NixRebuildApplied"] = $true
         $script:ctx.Options["HermesAgent1PasswordEnabled"] = $false
+        $script:ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
         Remove-Item -LiteralPath $script:userProfile -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
@@ -324,8 +325,82 @@ Describe 'HermesAgentHandler' {
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "Private"
+                $Arguments -contains "openclaw"
             }
+        }
+
+        It 'should configure Slack environment from the openclaw 1Password item' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            $onePasswordItemJson = @{
+                fields = @(
+                    @{
+                        id      = "bot_token"
+                        label   = "bot_token"
+                        purpose = ""
+                        value   = "xoxb-test-bot-token"
+                    },
+                    @{
+                        id      = "app_level_token"
+                        label   = "app_level_token"
+                        purpose = ""
+                        value   = "xapp-test-app-token"
+                    },
+                    @{
+                        id      = "SLACK_ALLOWED_USERS"
+                        label   = "SLACK_ALLOWED_USERS"
+                        purpose = ""
+                        value   = "U04BDJU87KJ"
+                    }
+                )
+            } | ConvertTo-Json -Compress
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $TimeoutSeconds
+                if ($Arguments -contains "SlackBot-OpenClaw") {
+                    return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
+                }
+                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $envPath = Join-Path $script:userProfile ".hermes\.env"
+            $envContent = Get-Content -LiteralPath $envPath -Raw
+            $envContent | Should -Match "SLACK_BOT_TOKEN=xoxb-test-bot-token"
+            $envContent | Should -Match "SLACK_APP_TOKEN=xapp-test-app-token"
+            $envContent | Should -Match "SLACK_ALLOWED_USERS=U04BDJU87KJ"
+            Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
+                $OpExe -eq "C:\op.exe" -and
+                $Arguments[0] -eq "item" -and
+                $Arguments[1] -eq "get" -and
+                $Arguments -contains "SlackBot-OpenClaw" -and
+                $Arguments -contains "--account" -and
+                $Arguments -contains "my.1password.com" -and
+                $Arguments -contains "--vault" -and
+                $Arguments -contains "openclaw"
+            }
+        }
+
+        It 'should fail before compose when Slack integration is required but unavailable' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            $ctx.Options["HermesAgentRequireSlack"] = $true
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Slack"
+            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
         }
 
         It 'should remove legacy plaintext dashboard auth when rotating credentials' {

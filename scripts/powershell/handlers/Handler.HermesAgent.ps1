@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     - docker/hermes-agent/compose.yml を使って Hermes gateway/dashboard を起動
-    - 1Password の保存済み credential を優先して ~/.hermes/.env に dashboard Basic Auth を初期化
+    - 1Password の保存済み credential を優先して ~/.hermes/.env に dashboard Basic Auth と Slack 接続情報を初期化
     - 1Password が使えない場合は credential を生成し、password を ~/.hermes/dashboard-basic-auth-password.txt に保存
 #>
 
@@ -78,6 +78,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
             $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
+            $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
 
             $composeArgs = @("compose", "-f", $composeFile, "up", "-d")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
@@ -98,6 +99,13 @@ class HermesAgentHandler : SetupHandlerBase {
             }
             else {
                 $this.Log("Dashboard Basic Auth は既に設定済みです", "Gray")
+            }
+
+            if ($slackResult.Changed -and $slackResult.Source -eq "1Password") {
+                $this.Log("Slack 接続情報を 1Password から設定しました", "Green")
+            }
+            elseif (-not $slackResult.Changed -and $slackResult.Source -eq "Existing") {
+                $this.Log("Slack 接続情報は既に設定済みです", "Gray")
             }
 
             return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
@@ -217,6 +225,25 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $true; Source = "Generated" }
     }
 
+    hidden [pscustomobject] EnsureSlackEnvironment([SetupContext]$ctx, [string]$envPath) {
+        $lines = @()
+        if (Test-Path -LiteralPath $envPath) {
+            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+        }
+
+        $slackEnvironment = $this.GetOnePasswordSlackEnvironment($ctx)
+        if ($null -ne $slackEnvironment) {
+            $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment)
+            return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
+        }
+
+        if ($this.HasSlackEnvironment($lines)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Existing" }
+        }
+
+        return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
+    }
+
     hidden [void] WriteDashboardAuth([string]$envPath, [string[]]$lines, [pscustomobject]$credentials) {
         $filteredLines = @(
             $lines | Where-Object {
@@ -235,11 +262,54 @@ class HermesAgentHandler : SetupHandlerBase {
         Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
     }
 
+    hidden [void] WriteSlackEnvironment([string]$envPath, [string[]]$lines, [pscustomobject]$environment) {
+        $filteredLines = @(
+            $lines | Where-Object {
+                $_ -notmatch '^\s*SLACK_(BOT_TOKEN|APP_TOKEN|ALLOWED_USERS)\s*='
+            }
+        )
+
+        if ($filteredLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($filteredLines[-1])) {
+            $filteredLines += ""
+        }
+
+        $filteredLines += "SLACK_BOT_TOKEN=$($environment.BotToken)"
+        $filteredLines += "SLACK_APP_TOKEN=$($environment.AppToken)"
+        $filteredLines += "SLACK_ALLOWED_USERS=$($environment.AllowedUsers)"
+
+        Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+    }
+
     hidden [bool] HasDashboardAuth([string[]]$lines) {
         $required = @{
             HERMES_DASHBOARD_BASIC_AUTH_USERNAME      = $false
             HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = $false
             HERMES_DASHBOARD_BASIC_AUTH_SECRET        = $false
+        }
+
+        foreach ($line in $lines) {
+            if ($line -match '^\s*([^#=\s]+)\s*=(.*)$') {
+                $key = $Matches[1]
+                $value = $Matches[2]
+                if ($required.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace($value)) {
+                    $required[$key] = $true
+                }
+            }
+        }
+
+        foreach ($key in $required.Keys) {
+            if (-not $required[$key]) {
+                return $false
+            }
+        }
+        return $true
+    }
+
+    hidden [bool] HasSlackEnvironment([string[]]$lines) {
+        $required = @{
+            SLACK_BOT_TOKEN     = $false
+            SLACK_APP_TOKEN     = $false
+            SLACK_ALLOWED_USERS = $false
         }
 
         foreach ($line in $lines) {
@@ -284,7 +354,7 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $account = [string]$ctx.GetOption("HermesAgent1PasswordAccount", "my.1password.com")
-        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "Private")
+        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "openclaw")
         $item = [string]$ctx.GetOption("HermesAgent1PasswordItem", "Hermes Agent Dashboard")
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
@@ -322,12 +392,82 @@ class HermesAgentHandler : SetupHandlerBase {
         }
     }
 
+    hidden [pscustomobject] GetOnePasswordSlackEnvironment([SetupContext]$ctx) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSlack1PasswordEnabled", $true))) {
+            return $null
+        }
+
+        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireSlack", $false))
+        $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if (-not $opCommand) {
+            if ($required) {
+                throw "Slack 接続用の 1Password CLI (op) が見つかりません"
+            }
+            $this.Log("1Password CLI が見つからないため Hermes Slack 接続情報の自動取得をスキップします", "Gray")
+            return $null
+        }
+
+        $opExe = [string]$opCommand.Source
+        if ([string]::IsNullOrWhiteSpace($opExe) -and $opCommand.PSObject.Properties.Name -contains "Path") {
+            $opExe = [string]$opCommand.Path
+        }
+        if ([string]::IsNullOrWhiteSpace($opExe)) {
+            $opExe = "op"
+        }
+
+        $account = [string]$ctx.GetOption("HermesAgentSlack1PasswordAccount", "my.1password.com")
+        $vault = [string]$ctx.GetOption("HermesAgentSlack1PasswordVault", "openclaw")
+        $item = [string]$ctx.GetOption("HermesAgentSlack1PasswordItem", "SlackBot-OpenClaw")
+        $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
+        $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
+        if ($result.ExitCode -ne 0) {
+            if ($required) {
+                throw "1Password から Hermes Slack 接続情報を取得できません"
+            }
+            $this.Log("1Password から Hermes Slack 接続情報を取得できないため Slack 自動設定をスキップします", "Gray")
+            return $null
+        }
+
+        try {
+            $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
+            $botToken = $this.GetOnePasswordFieldValue($itemJson, "", @("SLACK_BOT_TOKEN", "bot_token", "bot token"))
+            $appToken = $this.GetOnePasswordFieldValue($itemJson, "", @("SLACK_APP_TOKEN", "app_level_token", "app token", "app-level token"))
+            $allowedUsers = $this.GetOnePasswordFieldValue($itemJson, "", @("SLACK_ALLOWED_USERS", "allowed_users", "allowed users", "allowFrom", "allow_from"))
+            if (
+                [string]::IsNullOrWhiteSpace($botToken) -or
+                [string]::IsNullOrWhiteSpace($appToken) -or
+                [string]::IsNullOrWhiteSpace($allowedUsers)
+            ) {
+                if ($required) {
+                    throw "1Password item に Slack token または allowed users がありません"
+                }
+                $this.Log("1Password item に Slack token または allowed users がないため Slack 自動設定をスキップします", "Gray")
+                return $null
+            }
+
+            return [PSCustomObject]@{
+                BotToken     = $botToken
+                AppToken     = $appToken
+                AllowedUsers = $allowedUsers
+            }
+        }
+        catch {
+            if ($required) {
+                throw
+            }
+            $this.Log("1Password item を読めないため Slack 自動設定をスキップします", "Gray")
+            return $null
+        }
+    }
+
     hidden [string] GetOnePasswordFieldValue([pscustomobject]$item, [string]$purpose, [string[]]$names) {
         $fields = @($item.fields)
-        foreach ($field in $fields) {
-            $fieldPurpose = ([string]$field.purpose).Trim()
-            if ($fieldPurpose -eq $purpose -and -not [string]::IsNullOrWhiteSpace([string]$field.value)) {
-                return [string]$field.value
+        if (-not [string]::IsNullOrWhiteSpace($purpose)) {
+            foreach ($field in $fields) {
+                $fieldPurpose = ([string]$field.purpose).Trim()
+                if ($fieldPurpose -eq $purpose -and -not [string]::IsNullOrWhiteSpace([string]$field.value)) {
+                    return [string]$field.value
+                }
             }
         }
 
