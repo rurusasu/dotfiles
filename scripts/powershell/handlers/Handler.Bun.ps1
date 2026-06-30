@@ -5,8 +5,8 @@
 .DESCRIPTION
     winget の Oven-sh.Bun パッケージは portable archive 形式で、
     実行ファイルが bun-windows-x64\bun.exe というサブディレクトリに配置される。
-    winget は自動で PATH も Links shim も作らないため、このハンドラーで
-    WinGet\Links に bun.exe シンボリックリンクを作成し、Links を USER PATH に追加する。
+    実行ファイル名は bun.exe のままなので、shim は作らず実体ディレクトリを
+    USER PATH に追加する。
 
 .NOTES
     Order = 8 (Codex の後、Docker の前)
@@ -18,7 +18,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class BunHandler : SetupHandlerBase {
     BunHandler() {
         $this.Name = "Bun"
-        $this.Description = "Bun シンボリックリンク作成"
+        $this.Description = "Bun PATH 設定"
         $this.Order = 8
         $this.RequiresAdmin = $false
         $this.Phase = 1
@@ -31,13 +31,11 @@ class BunHandler : SetupHandlerBase {
             return $false
         }
 
-        $linksPath = $this.GetLinksPath()
-        $linkPath = Join-Path $linksPath "bun.exe"
+        $bunBinDir = Split-Path -Parent $bunExe
+        $linkPath = Join-Path $this.GetLinksPath() "bun.exe"
 
-        # リンクが最新でも Links パスが USER PATH に無い場合は適用する。
-        # (winget upgrade 後の陳腐化, 手動 shim, 過去の部分実行, copy フォールバック後を想定。)
-        if ($this.IsPortableLinkCurrent($linkPath, $bunExe) -and $this.IsLinksInUserPath($linksPath)) {
-            $this.Log("bun.exe リンクと PATH 設定は既に完了しています", "Gray")
+        if ($this.IsPathInUserPath($bunBinDir) -and -not (Test-Path -LiteralPath $linkPath)) {
+            $this.Log("Bun 実体 PATH は既に設定されています", "Gray")
             return $false
         }
 
@@ -51,36 +49,13 @@ class BunHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Bun 実行ファイルが見つかりません")
             }
 
-            $linksPath = $this.GetLinksPath()
-            if (-not (Test-Path $linksPath)) {
-                New-Item -ItemType Directory -Path $linksPath -Force | Out-Null
-            }
+            $this.RemoveLegacyShim((Join-Path $this.GetLinksPath() "bun.exe"))
+            $this.EnsureUserPathEntry((Split-Path -Parent $bunExe), "Bun executable directory")
 
-            $linkPath = Join-Path $linksPath "bun.exe"
-
-            # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
-            # winget upgrade 後に Links\bun.exe が旧バージョンを指す問題への対処。
-            if (-not $this.IsPortableLinkCurrent($linkPath, $bunExe)) {
-                $this.CreatePortableLink($linkPath, $bunExe)
-            }
-            else {
-                $this.Log("bun.exe リンクは最新です", "Gray")
-            }
-
-            # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
-            if (-not $this.IsLinksInUserPath($linksPath)) {
-                $this.Log("PATH に Links フォルダを追加しています...")
-                $userPath = Get-UserEnvironmentPath
-                $newPath = if ($userPath) { "$userPath;$linksPath" } else { $linksPath }
-                Set-UserEnvironmentPath -Path $newPath
-                $env:Path = "$env:Path;$linksPath"
-                $this.Log("PATH を更新しました", "Green")
-            }
-
-            return $this.CreateSuccessResult("bun.exe リンクと PATH を設定しました")
+            return $this.CreateSuccessResult("Bun PATH を設定しました")
         }
         catch {
-            return $this.CreateFailureResult("Bun 設定に失敗しました", $_)
+            return $this.CreateFailureResult("Bun 設定に失敗しました", $_.Exception)
         }
     }
 
@@ -105,9 +80,48 @@ class BunHandler : SetupHandlerBase {
         return Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
     }
 
-    hidden [bool] IsLinksInUserPath([string]$linksPath) {
+    hidden [void] RemoveLegacyShim([string]$linkPath) {
+        if (Test-Path -LiteralPath $linkPath) {
+            Remove-Item -LiteralPath $linkPath -Force
+            $this.Log("旧 bun.exe shim を削除しました: $linkPath", "Green")
+        }
+    }
+
+    hidden [bool] IsPathInUserPath([string]$targetPath) {
         $userPath = Get-UserEnvironmentPath
         if (-not $userPath) { return $false }
-        return $userPath -like "*$linksPath*"
+        $normalizedTarget = $this.NormalizePathForComparison($targetPath)
+        foreach ($item in @($userPath -split ";" | Where-Object { $_ })) {
+            if ($this.NormalizePathForComparison($item) -eq $normalizedTarget) {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    hidden [void] EnsureUserPathEntry([string]$targetPath, [string]$label) {
+        if ($this.IsPathInUserPath($targetPath)) {
+            $this.Log("$label は既に USER PATH に含まれています", "Gray")
+        }
+        else {
+            $userPath = Get-UserEnvironmentPath
+            $userItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
+            Set-UserEnvironmentPath -Path (($userItems + @($targetPath)) -join ";")
+            $this.Log("USER PATH に $label を追加しました: $targetPath", "Green")
+        }
+
+        $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
+        foreach ($item in $processItems) {
+            if ($this.NormalizePathForComparison($item) -eq $this.NormalizePathForComparison($targetPath)) {
+                return
+            }
+        }
+        $env:PATH = if ($env:PATH) { "$env:PATH;$targetPath" } else { $targetPath }
+    }
+
+    hidden [string] NormalizePathForComparison([string]$path) {
+        if (-not $path) { return "" }
+        $trimChars = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+        return $path.Trim('"').TrimEnd($trimChars).ToLowerInvariant()
     }
 }

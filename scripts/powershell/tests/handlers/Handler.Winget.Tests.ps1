@@ -1314,6 +1314,8 @@ Describe 'WingetHandler' {
             Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
             Mock Set-UserEnvironmentPath { }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Mock Copy-Item { }
         }
         AfterEach {
             $env:LOCALAPPDATA = $script:origLocalAppData
@@ -1325,9 +1327,25 @@ Describe 'WingetHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\oxlint.exe" | Should -Exist
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
             Should -Invoke Invoke-VerifyCommand -Times 1
             Should -Invoke Set-UserEnvironmentPath -Times 1
+        }
+
+        It 'should fail instead of falling back to hardlink or copy when symlink creation fails' {
+            Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
+            Mock Copy-Item { throw "copy fallback must not be used" }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 

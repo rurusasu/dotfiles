@@ -116,7 +116,7 @@ Describe 'CodexHandler' {
         }
     }
 
-    Context 'CanApply - link is matching portable link instead of symlink' {
+    Context 'CanApply - link is matching non-symlink portable link' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
@@ -124,7 +124,7 @@ Describe 'CodexHandler' {
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
-            # 現行 exe と一致する hardlink/copy は、非昇格環境での fallback 結果として許可する。
+            # hardlink/copy は winget upgrade に追従しないため、現時点で一致していても置き換える。
             Mock Get-Item {
                 return [PSCustomObject]@{ LinkType = ""; Length = 246156592; LastWriteTimeUtc = [datetime]'2024-06-01' }
             }
@@ -132,9 +132,9 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return false when the portable link and PATH are current' {
+        It 'should return true so the non-symlink link is replaced with a symlink' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
+            $result | Should -Be $true
         }
     }
 
@@ -240,7 +240,7 @@ Describe 'CodexHandler' {
         }
     }
 
-    Context 'Apply - fallback to hardlink when symlink cannot be created' {
+    Context 'Apply - no hardlink fallback when symlink cannot be created' {
         BeforeEach {
             Set-CodexPackageInstalled
             $script:newItemTypes = @()
@@ -269,11 +269,41 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should fallback to hardlink and return success' {
+        It 'should fail without creating hardlink or copy fallbacks' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
+            $result.Success | Should -Be $false
             $script:newItemTypes | Should -Contain "SymbolicLink"
-            $script:newItemTypes | Should -Contain "HardLink"
+            $script:newItemTypes | Should -Not -Contain "HardLink"
+            Should -Invoke Copy-Item -Times 0
+        }
+    }
+
+    Context 'Apply - symlink creation fails' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($Path -like "*Links") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $false }
+                return $false
+            }
+            Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Remove-Item { }
+            Mock Copy-Item { throw "copy fallback must not be used" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should fail instead of creating a hardlink or copy fallback' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Codex 設定に失敗しました"
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
             Should -Invoke Copy-Item -Times 0
         }
     }
@@ -297,17 +327,54 @@ Describe 'CodexHandler' {
             Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
+            Mock Move-Item { }
             Mock Copy-Item { }
             Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should remove the stale link and recreate it' {
+        It 'should replace the stale link after creating the new symlink' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            Should -Invoke Remove-Item -Times 1 -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke Move-Item -Times 2
+            Should -Invoke Remove-Item -Times 0 -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+        }
+    }
+
+    Context 'Apply - symlink creation fails with existing stale link' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($Path -like "*Links") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = ""; Length = 174106600; LastWriteTimeUtc = [datetime]'2024-01-01' }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Remove-Item { }
+            Mock Move-Item { throw "old link should not be moved before symlink creation succeeds" }
+            Mock Copy-Item { throw "copy fallback must not be used" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should fail without removing or moving the existing link' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke Move-Item -Times 0
+            Should -Invoke Remove-Item -Times 0 -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 

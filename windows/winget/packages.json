@@ -5,11 +5,7 @@
       "Packages": [
         {
           "PackageIdentifier": "AgileBits.1Password.CLI",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "portableLink": {
-            "linkName": "op.exe",
-            "targetPattern": "op.exe"
-          },
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "op"

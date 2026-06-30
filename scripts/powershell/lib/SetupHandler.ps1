@@ -271,13 +271,10 @@ class SetupHandlerBase {
     .SYNOPSIS
         WinGet\Links 配下の shim が現行 exe を指しているか判定する
     .DESCRIPTION
-        winget portable パッケージは安定したパッケージディレクトリ内で in-place 更新される。
-        Links\<name>.exe がシンボリックリンクなら更新を自動追従するが、
-        シンボリックリンク作成に失敗してハードリンク/コピーへフォールバックしていると、
-        winget upgrade 後も旧バージョンの実体を指したまま陳腐化する。
-        - シンボリックリンク: ターゲットが現行 exe と一致すれば最新
-        - ハードリンク/コピー: サイズと更新日時を現行 exe と比較して同一性を判定
-        ダングリング（ターゲット消失）や未作成は最新ではないとみなす。
+        Links\<name>.exe はシンボリックリンクだけを有効な portable link とみなす。
+        ハードリンク/コピーは winget upgrade 後に旧バージョンの実体を保持し得るため、
+        常に陳腐化として扱い、次回 Apply でシンボリックリンクへ置き換える。
+        ダングリング（ターゲット消失）や未作成も最新ではないとみなす。
     .PARAMETER linkPath
         Links 配下の shim パス
     .PARAMETER targetExe
@@ -293,51 +290,53 @@ class SetupHandlerBase {
             return (@($link.Target)[0]) -eq $targetExe
         }
 
-        # ハードリンク/コピーは内容で比較する。
-        # winget の更新でサイズと更新日時の双方が変わるため陳腐化を検出できる。
-        $src = Get-Item -LiteralPath $targetExe -Force
-        return ($link.Length -eq $src.Length) -and ($link.LastWriteTimeUtc -eq $src.LastWriteTimeUtc)
+        return $false
     }
 
     <#
     .SYNOPSIS
-        WinGet\Links 配下に shim を作成する（symlink→hardlink→copy フォールバック）
+        WinGet\Links 配下にシンボリックリンク shim を作成する
     .DESCRIPTION
-        Windows ではシンボリックリンク作成に管理者権限または開発者モードが必要なため、
-        失敗時はハードリンク、それも失敗ならコピーへフォールバックする。
-        既存 shim は事前に削除し、確実に現行 exe へ貼り直す。
+        既存 shim は一時シンボリックリンクの作成成功後に置き換える。
+        ハードリンク/コピーは winget upgrade に追従しないため使用しない。
     .PARAMETER linkPath
         作成する shim パス
     .PARAMETER targetExe
         リンク先の実行ファイル
     #>
     [void] CreatePortableLink([string]$linkPath, [string]$targetExe) {
-        if (Test-Path -LiteralPath $linkPath) {
-            Remove-Item -LiteralPath $linkPath -Force
-        }
-
-        $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
-
-        try {
+        if (-not (Test-Path -LiteralPath $linkPath)) {
+            $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
             New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
             $this.Log("シンボリックリンクを作成しました", "Green")
             return
         }
-        catch {
-            $this.LogWarning("シンボリックリンク作成失敗: $($_.Exception.Message)")
-        }
+
+        $parentDir = Split-Path -Parent $linkPath
+        $linkName = Split-Path -Leaf $linkPath
+        $suffix = [System.Guid]::NewGuid().ToString("N")
+        $tempLinkPath = Join-Path $parentDir ".$linkName.$suffix.tmp"
+        $backupPath = Join-Path $parentDir ".$linkName.$suffix.backup"
+        $oldMoved = $false
 
         try {
-            New-Item -ItemType HardLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
-            $this.Log("ハードリンクを作成しました", "Green")
-            return
+            $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
+            New-Item -ItemType SymbolicLink -Path $tempLinkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
+            Move-Item -LiteralPath $linkPath -Destination $backupPath -Force -ErrorAction Stop
+            $oldMoved = $true
+            Move-Item -LiteralPath $tempLinkPath -Destination $linkPath -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            $this.Log("シンボリックリンクを作成しました", "Green")
         }
         catch {
-            $this.LogWarning("ハードリンク作成失敗: $($_.Exception.Message)")
+            if ($oldMoved -and -not (Test-Path -LiteralPath $linkPath) -and (Test-Path -LiteralPath $backupPath)) {
+                Move-Item -LiteralPath $backupPath -Destination $linkPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $tempLinkPath) {
+                Remove-Item -LiteralPath $tempLinkPath -Force -ErrorAction SilentlyContinue
+            }
+            throw
         }
-
-        Copy-Item -Path $targetExe -Destination $linkPath -Force
-        $this.Log("ファイルをコピーしました", "Green")
     }
 
     <#
