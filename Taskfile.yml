@@ -174,12 +174,12 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
   hermes:pull:
-    desc: Pull the latest Hermes Agent Docker image
+    desc: Rebuild the Hermes Agent Docker image with the latest base image
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} pull
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
@@ -223,7 +223,7 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} ps
 
   hermes:upgrade:
-    desc: Pull and recreate Hermes Agent Docker container
+    desc: Rebuild and recreate Hermes Agent Docker container
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."

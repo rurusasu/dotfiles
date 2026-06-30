@@ -2,7 +2,10 @@ name: hermes-agent
 
 services:
   hermes:
-    image: nousresearch/hermes-agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/hermes-agent-gh:latest
     container_name: hermes
     restart: unless-stopped
     shm_size: 1g
@@ -14,6 +17,10 @@ services:
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
         target: /opt/data
+    env_file:
+      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env
+        format: raw
+        required: false
     environment:
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
