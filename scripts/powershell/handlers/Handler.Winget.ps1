@@ -393,6 +393,12 @@ class WingetHandler : SetupHandlerBase {
                         continue
                     }
 
+                    if ($pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)) {
+                        $succeeded++
+                        $this.Log("✓ $($pkg.Id) (direct installer は失敗扱いでしたが最新版検証済み)", "Green")
+                        continue
+                    }
+
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました")
                     continue
@@ -531,6 +537,54 @@ class WingetHandler : SetupHandlerBase {
         }
 
         return @()
+    }
+
+    hidden [bool] TestDirectInstallerCurrent([object]$pkg) {
+        $type = $this.GetDirectInstallerType($pkg.DirectInstaller)
+        switch ($type) {
+            "warpInnoLatest" {
+                return $this.TestWarpInstalledLatest($pkg.Id)
+            }
+            default {
+                return $false
+            }
+        }
+
+        return $false
+    }
+
+    hidden [bool] TestWarpInstalledLatest([string]$packageId) {
+        try {
+            $latestVersion = $this.GetWarpLatestVersion()
+            $installedVersion = $this.GetWingetInstalledPackageVersion($packageId)
+            return -not [string]::IsNullOrWhiteSpace($installedVersion) -and $installedVersion -eq $latestVersion
+        }
+        catch {
+            $this.LogWarning("Warp.Warp のインストール済みバージョン検証に失敗しました: $($_.Exception.Message)")
+            return $false
+        }
+    }
+
+    hidden [string] GetWingetInstalledPackageVersion([string]$packageId) {
+        $output = @(Invoke-Winget -Arguments @("list", "-e", "--id", $packageId, "--accept-source-agreements") -TimeoutSeconds 60)
+        if ($LASTEXITCODE -ne 0) {
+            return ""
+        }
+
+        foreach ($line in $output) {
+            $text = ([string]$line).Trim()
+            if ($text -notmatch [regex]::Escape($packageId)) {
+                continue
+            }
+
+            $tokens = @($text -split "\s+" | Where-Object { $_ })
+            $idIndex = [array]::IndexOf($tokens, $packageId)
+            if ($idIndex -ge 0 -and ($idIndex + 1) -lt $tokens.Count) {
+                return [string]$tokens[$idIndex + 1]
+            }
+        }
+
+        return ""
     }
 
     hidden [object[]] InvokeWarpInnoLatestInstaller([object]$pkg) {
