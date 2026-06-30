@@ -331,6 +331,10 @@
         },
         {
           "PackageIdentifier": "OpenAI.Codex",
+          "portableLink": {
+            "linkName": "codex.exe",
+            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
+          },
           "verifyCommand": {
             "args": ["--version"],
             "command": "codex"

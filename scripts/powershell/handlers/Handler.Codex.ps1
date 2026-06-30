@@ -5,7 +5,7 @@
 .DESCRIPTION
     winget の OpenAI.Codex パッケージは portable インストーラーで
     実行ファイル名が codex-x86_64-pc-windows-msvc.exe となっている。
-    このハンドラーは WinGet\Links に codex.exe シンボリックリンクを作成する。
+    このハンドラーは WinGet\Links に codex.exe shim を作成する。
     また、Codex MCP から uv tool のエントリポイント（mempalace-mcp 等）を
     起動できるよう ~/.local/bin を USER PATH に追加する。
 
@@ -19,7 +19,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class CodexHandler : SetupHandlerBase {
     CodexHandler() {
         $this.Name = "Codex"
-        $this.Description = "Codex CLI シンボリックリンクと MCP PATH 設定"
+        $this.Description = "Codex CLI shim と MCP PATH 設定"
         $this.Order = 6
         $this.RequiresAdmin = $false
         $this.Phase = 1
@@ -47,11 +47,11 @@ class CodexHandler : SetupHandlerBase {
         # リンクが最新でも PATH 設定が欠けていれば適用する。
         # (winget upgrade 後の陳腐化, copy フォールバック後, 過去の部分実行を想定。)
         if (
-            $this.IsCodexSymlinkCurrent($linkPath, $codexExe) -and
+            $this.IsPortableLinkCurrent($linkPath, $codexExe) -and
             $this.IsPathInUserPath($linksPath) -and
             $this.IsPathInUserPath($localBin)
         ) {
-            $this.Log("codex.exe リンクと PATH 設定は既に完了しています", "Gray")
+            $this.Log("codex.exe shim と PATH 設定は既に完了しています", "Gray")
             return $false
         }
 
@@ -60,7 +60,7 @@ class CodexHandler : SetupHandlerBase {
 
     <#
     .SYNOPSIS
-        codex.exe シンボリックリンクを作成する
+        codex.exe shim を作成する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
@@ -76,13 +76,13 @@ class CodexHandler : SetupHandlerBase {
 
             $linkPath = Join-Path $linksPath "codex.exe"
 
-            # Codex CLI は更新頻度が高いため、copy/hardlink は許可しない。
-            # Links\codex.exe が本体への symlink でない場合は必ず貼り直す。
-            if (-not $this.IsCodexSymlinkCurrent($linkPath, $codexExe)) {
-                $this.CreateCodexSymlink($linkPath, $codexExe)
+            # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
+            # 非昇格環境では symlink が失敗するため、共通 portable shim fallback を使う。
+            if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
+                $this.CreatePortableLink($linkPath, $codexExe)
             }
             else {
-                $this.Log("codex.exe リンクは最新です", "Gray")
+                $this.Log("codex.exe shim は最新です", "Gray")
             }
 
             # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
@@ -92,48 +92,10 @@ class CodexHandler : SetupHandlerBase {
             # uv tool が作成する mempalace-mcp.exe 等を解決できるようにする。
             $this.EnsureUserPathEntry($this.GetLocalBinPath(), $true, "~/.local/bin")
 
-            return $this.CreateSuccessResult("codex.exe リンクと MCP PATH を設定しました")
+            return $this.CreateSuccessResult("codex.exe shim と MCP PATH を設定しました")
         }
         catch {
-            return $this.CreateFailureResult("Codex シンボリックリンク設定に失敗しました", $_.Exception)
-        }
-    }
-
-    <#
-    .SYNOPSIS
-        Links\codex.exe が現行 Codex 実行ファイルへのシンボリックリンクか判定する
-    .DESCRIPTION
-        copy/hardlink は一時的に本体と一致していても winget upgrade 後に陳腐化するため、
-        Codex では current とみなさない。
-    #>
-    hidden [bool] IsCodexSymlinkCurrent([string]$linkPath, [string]$targetExe) {
-        if (-not (Test-Path -LiteralPath $linkPath)) { return $false }
-
-        $link = Get-Item -LiteralPath $linkPath -Force
-        if ($link.LinkType -ne "SymbolicLink") { return $false }
-
-        return $this.NormalizePathForComparison(@($link.Target)[0]) -eq
-        $this.NormalizePathForComparison($targetExe)
-    }
-
-    <#
-    .SYNOPSIS
-        Codex CLI 用のシンボリックリンクを作成する
-    .DESCRIPTION
-        hardlink/copy fallback は使わない。symlink を作れない環境では失敗させ、
-        古いコピーが PATH 上に残る状態を防ぐ。
-    #>
-    hidden [void] CreateCodexSymlink([string]$linkPath, [string]$targetExe) {
-        if (Test-Path -LiteralPath $linkPath) {
-            Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
-        }
-
-        try {
-            New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
-            $this.Log("codex.exe シンボリックリンクを作成しました: $linkPath -> $targetExe", "Green")
-        }
-        catch {
-            throw "codex.exe のシンボリックリンク作成に失敗しました。Windows の開発者モードを有効化するか、シンボリックリンク作成可能な権限で再実行してください: $($_.Exception.Message)"
+            return $this.CreateFailureResult("Codex 設定に失敗しました", $_.Exception)
         }
     }
 

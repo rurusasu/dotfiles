@@ -116,7 +116,7 @@ Describe 'CodexHandler' {
         }
     }
 
-    Context 'CanApply - link is matching copy instead of symlink' {
+    Context 'CanApply - link is matching portable link instead of symlink' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
@@ -124,7 +124,7 @@ Describe 'CodexHandler' {
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
-            # 現行 exe と一致するコピーでも、winget upgrade 後に陳腐化する。
+            # 現行 exe と一致する hardlink/copy は、非昇格環境での fallback 結果として許可する。
             Mock Get-Item {
                 return [PSCustomObject]@{ LinkType = ""; Length = 246156592; LastWriteTimeUtc = [datetime]'2024-06-01' }
             }
@@ -132,9 +132,9 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true so the copy is replaced with a symlink' {
+        It 'should return false when the portable link and PATH are current' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $true
+            $result | Should -Be $false
         }
     }
 
@@ -240,17 +240,26 @@ Describe 'CodexHandler' {
         }
     }
 
-    Context 'Apply - fails when symlink cannot be created' {
+    Context 'Apply - fallback to hardlink when symlink cannot be created' {
         BeforeEach {
             Set-CodexPackageInstalled
+            $script:newItemTypes = @()
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
             }
-            Mock New-Item { throw "Administrator privilege required" } -ParameterFilter {
-                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            Mock New-Item {
+                $script:newItemTypes += $ItemType
+                throw "Administrator privilege required"
+            } -ParameterFilter {
+                $ItemType -eq "SymbolicLink"
+            }
+            Mock New-Item {
+                $script:newItemTypes += $ItemType
+            } -ParameterFilter {
+                $ItemType -eq "HardLink"
             }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
@@ -260,12 +269,11 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should not fallback to hardlink or copy' {
+        It 'should fallback to hardlink and return success' {
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "シンボリックリンク"
-            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
+            $result.Success | Should -Be $true
+            $script:newItemTypes | Should -Contain "SymbolicLink"
+            $script:newItemTypes | Should -Contain "HardLink"
             Should -Invoke Copy-Item -Times 0
         }
     }
@@ -365,6 +373,32 @@ Describe 'CodexHandler' {
             Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "$script:expectedLocalBin*" }
             Should -Invoke Copy-Item -Times 0
             Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
+        }
+    }
+
+    Context 'Apply - PATH update throws' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($Path -like "*Links") { return $true }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { throw [InvalidOperationException]::new("PATH write failed") }
+            Mock Write-Host { }
+        }
+
+        It 'should return a failure result instead of throwing an overload error' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Codex 設定に失敗しました"
+            $result.Error | Should -Match "PATH write failed"
         }
     }
 }

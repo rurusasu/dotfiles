@@ -197,6 +197,26 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'Codex CLI package' {
+        It 'should define Codex portable link metadata in the SSOT before winget verification' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetPortableLinksById\s*=\s*\{.*?"OpenAI\.Codex"\s*=\s*\{.*?linkName\s*=\s*"codex\.exe".*?targetPattern\s*=\s*"codex-x86_64-pc-windows-msvc\.exe"'
+        }
+
+        It 'should generate Codex portable link metadata into winget packages.json' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'OpenAI.Codex' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.portableLink.linkName | Should -Be 'codex.exe'
+            $package.portableLink.targetPattern | Should -Be 'codex-x86_64-pc-windows-msvc.exe'
+            $package.verifyCommand.command | Should -Be 'codex'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
     Context 'Codex Desktop Microsoft Store package' {
         It 'should include Codex Desktop as a Windows-only Microsoft Store package in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw

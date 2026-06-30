@@ -754,6 +754,10 @@ lib.mapAttrs (_: names: resolve names) grouped
       linkName = "op.exe";
       targetPattern = "op.exe";
     };
+    "OpenAI.Codex" = {
+      linkName = "codex.exe";
+      targetPattern = "codex-x86_64-pc-windows-msvc.exe";
+    };
     oxlint = {
       linkName = "oxlint.exe";
       targetPattern = "oxlint-*.exe";

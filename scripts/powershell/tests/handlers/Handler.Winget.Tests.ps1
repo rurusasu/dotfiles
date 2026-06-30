@@ -1219,6 +1219,61 @@ Describe 'WingetHandler' {
             $script:installerArguments | Should -Contain "/VERYSILENT"
             $script:installerTimeoutSeconds | Should -Be 900
         }
+
+        It 'should treat a failed Warp direct installer as success when the latest version is already installed' {
+            Mock Invoke-Winget {
+                param($Arguments, $TimeoutSeconds)
+                if ($Arguments -contains "install") {
+                    $script:wingetInstallCalls++
+                    throw "winget install should not be used for Warp direct installer"
+                }
+                if ($Arguments -contains "show" -and $Arguments -contains "--versions") {
+                    $TimeoutSeconds | Should -Be 60
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "見つかりました Warp [Warp.Warp]",
+                        "バージョン",
+                        "-----------------------------",
+                        "v0.2026.06.03.09.49.stable_02",
+                        "v0.2026.06.03.09.49.stable_01"
+                    )
+                }
+                if ($Arguments -contains "list" -and $Arguments -contains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "名前 ID        バージョン                    ソース",
+                        "----------------------------------------------------",
+                        "Warp Warp.Warp v0.2026.06.03.09.49.stable_02 winget"
+                    )
+                }
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name Id Version Source",
+                        "Warp Warp.Warp v0.2026.06.03.09.49.stable_02 winget"
+                    )
+                }
+
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+            Mock Invoke-ExternalCommandWithTimeout {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:installerCommand = $Command
+                $script:installerArguments = @($Arguments)
+                $script:installerTimeoutSeconds = $TimeoutSeconds
+                $global:LASTEXITCODE = 1
+                return "installer exited with code 1"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            $script:wingetInstallCalls | Should -Be 0
+            $script:installerCommand | Should -Be $script:downloadOutFile
+        }
     }
 
     Context 'Apply - import mode: package portableLink' {
