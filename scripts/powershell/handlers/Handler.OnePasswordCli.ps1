@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    1Password CLI の host-side shim 設定ハンドラー
+    1Password CLI の host-side PATH 設定ハンドラー
 
 .DESCRIPTION
     VS Code Dev Containers の initializeCommand は Windows 側の cmd.exe から
-    `op` を解決する。起動済み Code.exe は PATH 更新を拾わないため、既定で
-    PATH に入りやすい WindowsApps と WinGet Links に op.exe shim を作成する。
+    `op` を解決する。op.exe は winget パッケージ内の実体名とコマンド名が
+    一致しているため、shim は作らず実体ディレクトリを USER PATH に追加する。
 
 .NOTES
     Order = 9 (Winget/Codex/Bun の後、Chezmoi の前)
@@ -17,7 +17,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class OnePasswordCliHandler : SetupHandlerBase {
     OnePasswordCliHandler() {
         $this.Name = "OnePasswordCli"
-        $this.Description = "1Password CLI op.exe shim 作成"
+        $this.Description = "1Password CLI PATH 設定"
         $this.Order = 9
         $this.RequiresAdmin = $false
         $this.Phase = 1
@@ -30,18 +30,16 @@ class OnePasswordCliHandler : SetupHandlerBase {
             return $false
         }
 
-        $windowsApps = $this.GetWindowsAppsPath()
-        $linksPath = $this.GetLinksPath()
-        $windowsAppsShim = Join-Path $windowsApps "op.exe"
-        $linksShim = Join-Path $linksPath "op.exe"
+        $packageDir = Split-Path -Parent $opExe
+        $windowsAppsShim = Join-Path $this.GetWindowsAppsPath() "op.exe"
+        $linksShim = Join-Path $this.GetLinksPath() "op.exe"
 
         if (
-            $this.IsPortableLinkCurrent($windowsAppsShim, $opExe) -and
-            $this.IsPortableLinkCurrent($linksShim, $opExe) -and
-            $this.IsPathInUserPath($windowsApps) -and
-            $this.IsPathInUserPath($linksPath)
+            $this.IsPathInUserPath($packageDir) -and
+            -not (Test-Path -LiteralPath $windowsAppsShim) -and
+            -not (Test-Path -LiteralPath $linksShim)
         ) {
-            $this.Log("op.exe shim と PATH 設定は既に完了しています", "Gray")
+            $this.Log("1Password CLI 実体 PATH は既に設定されています", "Gray")
             return $false
         }
 
@@ -55,36 +53,21 @@ class OnePasswordCliHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("1Password CLI 実行ファイルが見つかりません")
             }
 
-            $windowsApps = $this.GetWindowsAppsPath()
-            $linksPath = $this.GetLinksPath()
-            $this.EnsureDirectory($windowsApps)
-            $this.EnsureDirectory($linksPath)
+            $this.RemoveLegacyShim((Join-Path $this.GetWindowsAppsPath() "op.exe"))
+            $this.RemoveLegacyShim((Join-Path $this.GetLinksPath() "op.exe"))
+            $this.EnsureUserPathEntry((Split-Path -Parent $opExe), "1Password CLI package directory")
 
-            $this.EnsureShimCurrent((Join-Path $windowsApps "op.exe"), $opExe)
-            $this.EnsureShimCurrent((Join-Path $linksPath "op.exe"), $opExe)
-
-            $this.EnsureUserPathEntry($windowsApps, "WindowsApps")
-            $this.EnsureUserPathEntry($linksPath, "WinGet Links")
-
-            return $this.CreateSuccessResult("op.exe shim と PATH を設定しました")
+            return $this.CreateSuccessResult("1Password CLI PATH を設定しました")
         }
         catch {
-            return $this.CreateFailureResult("1Password CLI shim 設定に失敗しました", $_)
+            return $this.CreateFailureResult("1Password CLI PATH 設定に失敗しました", $_.Exception)
         }
     }
 
-    hidden [void] EnsureShimCurrent([string]$linkPath, [string]$targetExe) {
-        if (-not $this.IsPortableLinkCurrent($linkPath, $targetExe)) {
-            $this.CreatePortableLink($linkPath, $targetExe)
-        }
-        else {
-            $this.Log("op.exe shim は最新です: $linkPath", "Gray")
-        }
-    }
-
-    hidden [void] EnsureDirectory([string]$path) {
-        if (-not (Test-Path -LiteralPath $path -PathType Container)) {
-            New-Item -ItemType Directory -Path $path -Force | Out-Null
+    hidden [void] RemoveLegacyShim([string]$linkPath) {
+        if (Test-Path -LiteralPath $linkPath) {
+            Remove-Item -LiteralPath $linkPath -Force
+            $this.Log("旧 op.exe shim を削除しました: $linkPath", "Green")
         }
     }
 

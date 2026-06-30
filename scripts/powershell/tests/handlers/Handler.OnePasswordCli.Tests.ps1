@@ -58,27 +58,24 @@ Describe 'OnePasswordCliHandler' {
         }
     }
 
-    Context 'CanApply - shims are current and PATH configured' {
+    Context 'CanApply - package directory PATH configured' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*op.exe") { return $true }
-                if ($LiteralPath -like "*op.exe") { return $true }
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                if ($LiteralPath -like "*op.exe") { return $false }
                 return $false
             }
-            Mock Get-Item {
-                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:opExe }
-            } -ParameterFilter { $LiteralPath -like "*op.exe" }
-            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedWindowsApps;$script:expectedLinks" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:opPkgDir" }
             Mock Write-Host { }
         }
 
-        It 'should return false when both shims and PATH are already set' {
+        It 'should return false without requiring command shims' {
             $handler.CanApply($ctx) | Should -Be $false
         }
     }
 
-    Context 'CanApply - WindowsApps shim missing' {
+    Context 'CanApply - package directory PATH missing' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
             Mock Test-Path {
@@ -94,12 +91,29 @@ Describe 'OnePasswordCliHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true so old VS Code processes can resolve op through WindowsApps' {
+        It 'should return true so Apply can switch to package directory PATH' {
             $handler.CanApply($ctx) | Should -Be $true
         }
     }
 
-    Context 'CanApply - link is stale copy from old version' {
+    Context 'CanApply - package directory is already on PATH' {
+        BeforeEach {
+            Set-OnePasswordCliPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                if ($LiteralPath -like "*op.exe") { return $false }
+                return $false
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:opPkgDir" }
+            Mock Write-Host { }
+        }
+
+        It 'should return false without requiring WindowsApps or WinGet Links shims' {
+            $handler.CanApply($ctx) | Should -Be $false
+        }
+    }
+
+    Context 'CanApply - legacy shim is stale copy from old version' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
             Mock Test-Path {
@@ -117,12 +131,12 @@ Describe 'OnePasswordCliHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true so stale shims are refreshed after winget upgrade' {
+        It 'should return true so stale shims are removed after winget upgrade' {
             $handler.CanApply($ctx) | Should -Be $true
         }
     }
 
-    Context 'Apply - creates WindowsApps and WinGet Links shims' {
+    Context 'Apply - adds package directory PATH' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
             Mock Test-Path {
@@ -132,22 +146,58 @@ Describe 'OnePasswordCliHandler' {
                 if ($LiteralPath -like "*op.exe") { return $false }
                 return $false
             }
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "HardLink" }
+            Mock New-Item { throw "op should not create command shims" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
-            Mock Copy-Item { }
+            Mock Copy-Item { throw "op should not copy command shims" }
             Mock Get-UserEnvironmentPath { return "C:\Windows" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should create both shims and add stable PATH entries' {
+        It 'should add the package directory without creating shims' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            Should -Invoke New-Item -Times 2 -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Should -Invoke Set-UserEnvironmentPath -Times 2
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
+        }
+    }
+
+    Context 'Apply - direct package directory PATH' {
+        BeforeEach {
+            Set-OnePasswordCliPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                if ($Path -like "*WindowsApps") { return $true }
+                if ($Path -like "*WinGet\Links") { return $true }
+                if ($LiteralPath -like "*op.exe") { return $true }
+                return $false
+            }
+            Mock New-Item { throw "op should not create command shims" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
+            Mock Remove-Item { }
+            Mock Copy-Item { throw "op should not copy command shims" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should add the package directory and remove old shims without recreating them' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Remove-Item -Times 2 -ParameterFilter { $LiteralPath -like "*op.exe" }
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 
@@ -175,11 +225,12 @@ Describe 'OnePasswordCliHandler' {
             Mock Write-Host { }
         }
 
-        It 'should only add PATH entries without recreating shims' {
+        It 'should remove shims and add only the package directory PATH' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            Should -Invoke Set-UserEnvironmentPath -Times 2
+            Should -Invoke Remove-Item -Times 2 -ParameterFilter { $LiteralPath -like "*op.exe" }
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
             Should -Invoke New-Item -Times 0 -ParameterFilter {
                 $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
             }

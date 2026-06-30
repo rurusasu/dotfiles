@@ -63,29 +63,26 @@ Describe 'BunHandler' {
         }
     }
 
-    Context 'CanApply - link is current AND PATH already configured' {
+    Context 'CanApply - executable directory PATH already configured' {
         BeforeEach {
             Set-BunPackageInstalled
             Mock Test-Path {
                 if ($Path -like "*bun-windows-x64\bun.exe") { return $true }
-                if ($LiteralPath -like "*Links\bun.exe") { return $true }
+                if ($LiteralPath -like "*Links\bun.exe") { return $false }
                 return $false
             }
-            Mock Get-Item {
-                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:bunExe }
-            } -ParameterFilter { $LiteralPath -like "*Links\bun.exe" }
-            $script:expectedLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
-            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
+            $script:bunBinDir = Split-Path -Parent $script:bunExe
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:bunBinDir" }
             Mock Write-Host { }
         }
 
-        It 'should return false when both link and PATH are set' {
+        It 'should return false without requiring a WinGet Links shim' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $false
         }
     }
 
-    Context 'CanApply - link is stale copy from old version (winget upgrade)' {
+    Context 'CanApply - legacy shim is stale copy from old version (winget upgrade)' {
         BeforeEach {
             Set-BunPackageInstalled
             Mock Test-Path {
@@ -104,13 +101,13 @@ Describe 'BunHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true so the stale link is refreshed' {
+        It 'should return true so the stale shim is removed' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
     }
 
-    Context 'CanApply - link is current but PATH not configured' {
+    Context 'CanApply - legacy shim exists but PATH not configured' {
         BeforeEach {
             Set-BunPackageInstalled
             Mock Test-Path {
@@ -125,7 +122,7 @@ Describe 'BunHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true so Apply can add PATH' {
+        It 'should return true so Apply can remove the shim and add PATH' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
         }
@@ -149,6 +146,25 @@ Describe 'BunHandler' {
         }
     }
 
+    Context 'CanApply - Bun executable directory is already on PATH' {
+        BeforeEach {
+            Set-BunPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*bun-windows-x64\bun.exe") { return $true }
+                if ($LiteralPath -like "*Links\bun.exe") { return $false }
+                return $false
+            }
+            $script:bunBinDir = Split-Path -Parent $script:bunExe
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:bunBinDir" }
+            Mock Write-Host { }
+        }
+
+        It 'should return false without requiring a WinGet Links shim' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $false
+        }
+    }
+
     Context 'Apply - executable not found' {
         BeforeEach {
             Mock Get-ChildItem { return $null } -ParameterFilter {
@@ -165,35 +181,40 @@ Describe 'BunHandler' {
         }
     }
 
-    Context 'Apply - creates link when missing' {
+    Context 'Apply - adds executable directory when PATH is missing' {
         BeforeEach {
             Set-BunPackageInstalled
+            $script:bunBinDir = Split-Path -Parent $script:bunExe
             Mock Test-Path {
                 if ($Path -like "*bun-windows-x64\bun.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\bun.exe") { return $false }
                 return $false
             }
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Mock New-Item { } -ParameterFilter { $ItemType -eq "HardLink" }
+            Mock New-Item { throw "Bun should not create shims" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
-            Mock Copy-Item { }
+            Mock Copy-Item { throw "Bun should not copy shims" }
             Mock Get-UserEnvironmentPath { return "C:\Windows" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should create symlink and return success' {
+        It 'should add bun-windows-x64 to PATH without creating a shim' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:bunBinDir*" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 
-    Context 'Apply - fallback to copy when symlink fails' {
+    Context 'Apply - no copy fallback when PATH is missing' {
         BeforeEach {
             Set-BunPackageInstalled
+            $script:bunBinDir = Split-Path -Parent $script:bunExe
             Mock Test-Path {
                 if ($Path -like "*bun-windows-x64\bun.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
@@ -211,10 +232,45 @@ Describe 'BunHandler' {
             Mock Write-Host { }
         }
 
-        It 'should fallback to copy and return success' {
+        It 'should add PATH directly and never copy a command shim' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
-            Should -Invoke Copy-Item -Times 1
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:bunBinDir*" }
+            Should -Invoke Copy-Item -Times 0
+        }
+    }
+
+    Context 'Apply - direct executable directory PATH' {
+        BeforeEach {
+            Set-BunPackageInstalled
+            $script:bunBinDir = Split-Path -Parent $script:bunExe
+            Mock Test-Path {
+                if ($Path -like "*bun-windows-x64\bun.exe") { return $true }
+                if ($Path -like "*Links") { return $true }
+                if ($LiteralPath -like "*Links\bun.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = ""; Length = 100; LastWriteTimeUtc = [datetime]'2024-01-01' }
+            } -ParameterFilter { $LiteralPath -like "*Links\bun.exe" }
+            Mock New-Item { throw "Bun should not create command shims" } -ParameterFilter {
+                $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink"
+            }
+            Mock Remove-Item { }
+            Mock Copy-Item { throw "Bun should not copy command shims" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should add the real bun directory and remove old shims without recreating them' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke Remove-Item -Times 1 -ParameterFilter { $LiteralPath -like "*Links\bun.exe" }
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:bunBinDir*" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
+            Should -Invoke Copy-Item -Times 0
         }
     }
 
@@ -243,11 +299,11 @@ Describe 'BunHandler' {
             Mock Write-Host { }
         }
 
-        It 'should remove the stale link and recreate it' {
+        It 'should remove the stale link without recreating it' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Remove-Item -Times 1 -ParameterFilter { $LiteralPath -like "*Links\bun.exe" }
-            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
         }
     }
 
@@ -275,10 +331,11 @@ Describe 'BunHandler' {
             Mock Write-Host { }
         }
 
-        It 'should add Links to PATH without recreating the link' {
+        It 'should remove the old shim and add the executable directory to PATH' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Set-UserEnvironmentPath -Times 1
+            Should -Invoke Remove-Item -Times 1 -ParameterFilter { $LiteralPath -like "*Links\bun.exe" }
             Should -Invoke Copy-Item -Times 0
             Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" -or $ItemType -eq "HardLink" }
         }
