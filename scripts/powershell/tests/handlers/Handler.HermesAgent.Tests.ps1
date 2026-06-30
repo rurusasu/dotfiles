@@ -23,6 +23,7 @@ Describe 'HermesAgentHandler' {
         $script:ctx.Options["NixRebuildApplied"] = $true
         $script:ctx.Options["HermesAgent1PasswordEnabled"] = $false
         $script:ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
+        $script:ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $false
         Remove-Item -LiteralPath $script:userProfile -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
@@ -73,6 +74,46 @@ Describe 'HermesAgentHandler' {
         It 'should run after NixOS setup handlers' {
             $handler.Order | Should -BeGreaterThan ([NixOSWSLHandler]::new().Order)
             $handler.Order | Should -BeGreaterThan ([NixRebuildHandler]::new().Order)
+        }
+    }
+
+    Context 'Compose file' {
+        It 'should build a Hermes image with GitHub CLI installed' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
+            $dockerfilePath = Join-Path $repoRoot "docker\hermes-agent\Dockerfile"
+            $composeContent = Get-Content -LiteralPath $composePath -Raw
+
+            $composeContent | Should -Match "(?m)^\s*build:"
+            $composeContent | Should -Match "(?m)^\s*context:\s*\."
+            $composeContent | Should -Match "(?m)^\s*dockerfile:\s*Dockerfile"
+            $dockerfilePath | Should -Exist
+
+            $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
+            $dockerfileContent | Should -Match "nousresearch/hermes-agent:latest"
+            $dockerfileContent | Should -Match "apt-get"
+            $dockerfileContent | Should -Match "(?m)\bgh\b"
+            $dockerfileContent | Should -Match "gh --version"
+        }
+
+        It 'should pass the Hermes env file into the container without Compose interpolation' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
+            $composeContent = Get-Content -LiteralPath $composePath -Raw
+
+            $composeContent | Should -Match "(?m)^\s*env_file:"
+            $composeContent | Should -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env'))
+            $composeContent | Should -Match "(?m)^\s*format:\s*raw\s*$"
+            $composeContent | Should -Match "(?m)^\s*required:\s*false\s*$"
+        }
+
+        It 'should rebuild the local Hermes image instead of pulling it from a registry' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
+            $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
+
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes"
+            $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} pull"
         }
     }
 
@@ -148,7 +189,7 @@ Describe 'HermesAgentHandler' {
                     [int]$TimeoutSeconds
                 )
                 $null = $TimeoutSeconds
-                $script:dockerCalls += ,@($Arguments)
+                $script:dockerCalls += , @($Arguments)
 
                 if ($Arguments[0] -eq "run") {
                     $global:LASTEXITCODE = 0
@@ -184,6 +225,7 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain $script:composeFile
             $composeCall | Should -Contain "up"
             $composeCall | Should -Contain "-d"
+            $composeCall | Should -Contain "--build"
         }
 
         It 'should configure the default Codex model in config.yaml' {
@@ -309,7 +351,7 @@ Describe 'HermesAgentHandler' {
                     [int]$TimeoutSeconds
                 )
                 $null = $TimeoutSeconds
-                $script:dockerCalls += ,@($Arguments)
+                $script:dockerCalls += , @($Arguments)
                 if ($Arguments[0] -eq "run") {
                     throw "password hash should not be regenerated"
                 }
@@ -376,7 +418,7 @@ Describe 'HermesAgentHandler' {
                     [int]$TimeoutSeconds
                 )
                 $null = $TimeoutSeconds
-                $script:dockerCalls += ,@($Arguments)
+                $script:dockerCalls += , @($Arguments)
                 if ($Arguments[0] -eq "run") {
                     $global:LASTEXITCODE = 0
                     return @('scrypt$onepassword')
@@ -469,6 +511,104 @@ Describe 'HermesAgentHandler' {
             }
         }
 
+        It 'should configure OpenClaw API environment from 1Password items' {
+            $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
+            $items = @{
+                "GitHubUsedOpenClawPAT"    = "github-token"
+                "openclaw"                 = "gateway-token"
+                "ExaUsedOpenclawPAT"       = "exa-token"
+                "TavilyUsedOpenclawPAT"    = "tavily-token"
+                "FirecrawlUsedOpenclawPAT" = "firecrawl-token"
+                "OpenClawGeminiAPI"        = "gemini-token"
+                "HuggingFace"              = "hf-token"
+                "TelegramBot"              = "telegram-token"
+                "XUsedOpenClaw"            = "xai-token"
+                "AutoCLI"                  = "autocli-token"
+            }
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $TimeoutSeconds
+                $itemName = $Arguments[2]
+                if ($items.ContainsKey($itemName)) {
+                    $fieldId = "credential"
+                    $fieldLabel = "認証情報"
+                    if ($itemName -eq "openclaw") {
+                        $fieldId = "password"
+                        $fieldLabel = "gateway token"
+                    }
+
+                    return [PSCustomObject]@{
+                        Output   = @(@{
+                                fields = @(
+                                    @{
+                                        id      = $fieldId
+                                        label   = $fieldLabel
+                                        purpose = ""
+                                        value   = $items[$itemName]
+                                    }
+                                )
+                            } | ConvertTo-Json -Compress)
+                        ExitCode = 0
+                    }
+                }
+                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $envPath = Join-Path $script:userProfile ".hermes\.env"
+            $envContent = Get-Content -LiteralPath $envPath -Raw
+            $envContent | Should -Match "GITHUB_TOKEN=github-token"
+            $envContent | Should -Match "GH_TOKEN=github-token"
+            $envContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
+            $envContent | Should -Match "OPENCLAW_GATEWAY_TOKEN=gateway-token"
+            $envContent | Should -Match "EXA_API_KEY=exa-token"
+            $envContent | Should -Match "TAVILY_API_KEY=tavily-token"
+            $envContent | Should -Match "FIRECRAWL_API_KEY=firecrawl-token"
+            $envContent | Should -Match "GEMINI_API_KEY=gemini-token"
+            $envContent | Should -Match "GOOGLE_API_KEY=gemini-token"
+            $envContent | Should -Match "HF_TOKEN=hf-token"
+            $envContent | Should -Match "HUGGINGFACEHUB_API_TOKEN=hf-token"
+            $envContent | Should -Match "TELEGRAM_BOT_TOKEN=telegram-token"
+            $envContent | Should -Match "XAI_API_KEY=xai-token"
+            $envContent | Should -Match "AUTOCLI_API_KEY=autocli-token"
+        }
+
+        It 'should remove the GitHub MCP server from config.yaml' {
+            $configDir = Join-Path $script:userProfile ".hermes"
+            $configPath = Join-Path $configDir "config.yaml"
+            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model:",
+                "  provider: openai-codex",
+                "mcp_servers:",
+                "  github:",
+                "    command: npx",
+                '    args: ["-y", "@modelcontextprotocol/server-github"]',
+                "  local:",
+                "    command: local-tool"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^mcp_servers:"
+            $configContent | Should -Not -Match "(?m)^\s{2}github:"
+            $configContent | Should -Not -Match "@modelcontextprotocol/server-github"
+            $configContent | Should -Match "(?m)^\s{2}local:"
+        }
+
         It 'should fail before compose when Slack integration is required but unavailable' {
             $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
             $ctx.Options["HermesAgentRequireSlack"] = $true
@@ -511,7 +651,7 @@ Describe 'HermesAgentHandler' {
                     [int]$TimeoutSeconds
                 )
                 $null = $TimeoutSeconds
-                $script:dockerCalls += ,@($Arguments)
+                $script:dockerCalls += , @($Arguments)
                 if ($Arguments[0] -eq "run") {
                     $global:LASTEXITCODE = 1
                     return @("hash failed")
@@ -533,7 +673,7 @@ Describe 'HermesAgentHandler' {
                     [int]$TimeoutSeconds
                 )
                 $null = $TimeoutSeconds
-                $script:dockerCalls += ,@($Arguments)
+                $script:dockerCalls += , @($Arguments)
                 if ($Arguments[0] -eq "run") {
                     $global:LASTEXITCODE = 0
                     return @("generated-password", 'scrypt$hash')

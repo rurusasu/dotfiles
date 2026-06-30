@@ -81,8 +81,10 @@ class HermesAgentHandler : SetupHandlerBase {
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
             $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
+            $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $envPath)
+            $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
 
-            $composeArgs = @("compose", "-f", $composeFile, "up", "-d")
+            $composeArgs = @("compose", "-f", $composeFile, "up", "-d", "--build")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
@@ -115,6 +117,17 @@ class HermesAgentHandler : SetupHandlerBase {
             }
             elseif (-not $slackResult.Changed -and $slackResult.Source -eq "Existing") {
                 $this.Log("Slack 接続情報は既に設定済みです", "Gray")
+            }
+
+            if ($openClawApiResult.Changed -and $openClawApiResult.Count -gt 0) {
+                $this.Log("OpenClaw API token を Hermes .env に設定しました ($($openClawApiResult.Count) keys)", "Green")
+            }
+            elseif (-not $openClawApiResult.Changed -and $openClawApiResult.Source -eq "Disabled") {
+                $this.Log("OpenClaw API token の自動設定は無効化されています", "Gray")
+            }
+
+            if ($mcpResult.Changed) {
+                $this.Log("Hermes GitHub MCP server 設定を削除しました", "Green")
             }
 
             return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
@@ -234,6 +247,70 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $changed; Source = "Config"; Provider = $provider; Model = $model }
     }
 
+    hidden [pscustomobject] EnsureMcpConfiguration([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentMcpConfigEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
+        }
+
+        $configPath = Join-Path $dataDir "config.yaml"
+        $existingLines = @()
+        if (Test-Path -LiteralPath $configPath) {
+            $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+        }
+
+        $updatedLines = $this.RemoveGithubMcpConfigLines($existingLines)
+        $changed = -not $this.LinesEqual($existingLines, $updatedLines)
+        if ($changed) {
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+        }
+
+        return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [string[]] RemoveGithubMcpConfigLines([string[]]$lines) {
+        if ($lines.Count -eq 0) {
+            return $lines
+        }
+
+        $result = @()
+        $index = 0
+        while ($index -lt $lines.Count) {
+            if ($lines[$index] -match '^mcp_servers\s*:') {
+                $mcpHeader = $lines[$index]
+                $mcpLines = @()
+                $index++
+
+                while ($index -lt $lines.Count -and $lines[$index] -notmatch '^\S') {
+                    if ($lines[$index] -match '^\s{2}github\s*:') {
+                        $index++
+                        while (
+                            $index -lt $lines.Count `
+                                -and $lines[$index] -notmatch '^\S' `
+                                -and $lines[$index] -notmatch '^\s{2}\S[^:]*\s*:'
+                        ) {
+                            $index++
+                        }
+                        continue
+                    }
+
+                    $mcpLines += $lines[$index]
+                    $index++
+                }
+
+                if ($mcpLines.Count -gt 0) {
+                    $result += $mcpHeader
+                    $result += $mcpLines
+                }
+                continue
+            }
+
+            $result += $lines[$index]
+            $index++
+        }
+
+        return $result
+    }
+
     hidden [string[]] SetModelConfigLines([string[]]$lines, [string[]]$desiredLines) {
         $cleanedLines = @(
             $lines | Where-Object {
@@ -350,6 +427,25 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
     }
 
+    hidden [pscustomobject] EnsureOpenClawApiEnvironment([SetupContext]$ctx, [string]$envPath) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentOpenClawSecrets1PasswordEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0 }
+        }
+
+        $lines = @()
+        if (Test-Path -LiteralPath $envPath) {
+            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+        }
+
+        $environment = $this.GetOnePasswordOpenClawApiEnvironment($ctx)
+        if ($environment.Count -eq 0) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0 }
+        }
+
+        $this.WriteNamedEnvironment($envPath, $lines, $environment)
+        return [PSCustomObject]@{ Changed = $true; Source = "1Password"; Count = $environment.Count }
+    }
+
     hidden [void] WriteDashboardAuth([string]$envPath, [string[]]$lines, [pscustomobject]$credentials) {
         $filteredLines = @(
             $lines | Where-Object {
@@ -382,6 +478,31 @@ class HermesAgentHandler : SetupHandlerBase {
         $filteredLines += "SLACK_BOT_TOKEN=$($environment.BotToken)"
         $filteredLines += "SLACK_APP_TOKEN=$($environment.AppToken)"
         $filteredLines += "SLACK_ALLOWED_USERS=$($environment.AllowedUsers)"
+
+        Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+    }
+
+    hidden [void] WriteNamedEnvironment([string]$envPath, [string[]]$lines, [hashtable]$environment) {
+        $keys = @($environment.Keys | Sort-Object)
+        if ($keys.Count -eq 0) {
+            return
+        }
+
+        $escapedKeys = @($keys | ForEach-Object { [regex]::Escape([string]$_) })
+        $pattern = '^\s*(' + ($escapedKeys -join '|') + ')\s*='
+        $filteredLines = @(
+            $lines | Where-Object {
+                $_ -notmatch $pattern
+            }
+        )
+
+        if ($filteredLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($filteredLines[-1])) {
+            $filteredLines += ""
+        }
+
+        foreach ($key in $keys) {
+            $filteredLines += "$key=$($environment[$key])"
+        }
 
         Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
     }
@@ -564,6 +685,122 @@ class HermesAgentHandler : SetupHandlerBase {
             $this.Log("1Password item を読めないため Slack 自動設定をスキップします", "Gray")
             return $null
         }
+    }
+
+    hidden [hashtable] GetOnePasswordOpenClawApiEnvironment([SetupContext]$ctx) {
+        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireOpenClawSecrets", $false))
+        $environment = @{}
+        $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if (-not $opCommand) {
+            if ($required) {
+                throw "OpenClaw API token 用の 1Password CLI (op) が見つかりません"
+            }
+            $this.Log("1Password CLI が見つからないため OpenClaw API token の自動取得をスキップします", "Gray")
+            return $environment
+        }
+
+        $opExe = [string]$opCommand.Source
+        if ([string]::IsNullOrWhiteSpace($opExe) -and $opCommand.PSObject.Properties.Name -contains "Path") {
+            $opExe = [string]$opCommand.Path
+        }
+        if ([string]::IsNullOrWhiteSpace($opExe)) {
+            $opExe = "op"
+        }
+
+        $account = [string]$ctx.GetOption("HermesAgentOpenClawSecrets1PasswordAccount", "my.1password.com")
+        $vault = [string]$ctx.GetOption("HermesAgentOpenClawSecrets1PasswordVault", "openclaw")
+        $specs = @(
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentGitHub1PasswordItem", "GitHubUsedOpenClawPAT")
+                Field    = @("credential", "認証情報", "token", "PAT")
+                EnvNames = @("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentOpenClawGateway1PasswordItem", "openclaw")
+                Field    = @("password", "gateway token", "credential", "認証情報", "token")
+                EnvNames = @("OPENCLAW_GATEWAY_TOKEN")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentExa1PasswordItem", "ExaUsedOpenclawPAT")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("EXA_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentTavily1PasswordItem", "TavilyUsedOpenclawPAT")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("TAVILY_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentFirecrawl1PasswordItem", "FirecrawlUsedOpenclawPAT")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("FIRECRAWL_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentGemini1PasswordItem", "OpenClawGeminiAPI")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("GEMINI_API_KEY", "GOOGLE_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentHuggingFace1PasswordItem", "HuggingFace")
+                Field    = @("PAT", "credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentTelegram1PasswordItem", "TelegramBot")
+                Field    = @("credential", "認証情報", "bot token", "bot_token", "token")
+                EnvNames = @("TELEGRAM_BOT_TOKEN")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentXai1PasswordItem", "XUsedOpenClaw")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("XAI_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentAutoCli1PasswordItem", "AutoCLI")
+                Field    = @("credential", "認証情報", "api key", "api_key", "token")
+                EnvNames = @("AUTOCLI_API_KEY")
+            }
+        )
+
+        foreach ($spec in $specs) {
+            if ([string]::IsNullOrWhiteSpace($spec.Item)) {
+                continue
+            }
+
+            $arguments = @("item", "get", $spec.Item, "--account", $account, "--vault", $vault, "--format", "json")
+            $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
+            if ($result.ExitCode -ne 0) {
+                if ($required) {
+                    throw "1Password から OpenClaw API token を取得できません: $($spec.Item)"
+                }
+                $this.Log("1Password item が読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")
+                continue
+            }
+
+            try {
+                $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
+                $value = $this.GetOnePasswordFieldValue($itemJson, "", $spec.Field)
+                if ([string]::IsNullOrWhiteSpace($value)) {
+                    if ($required) {
+                        throw "1Password item に OpenClaw API token がありません: $($spec.Item)"
+                    }
+                    $this.Log("1Password item に OpenClaw API token がないためスキップします: $($spec.Item)", "Gray")
+                    continue
+                }
+
+                foreach ($envName in $spec.EnvNames) {
+                    $environment[$envName] = $value
+                }
+            }
+            catch {
+                if ($required) {
+                    throw
+                }
+                $this.Log("1Password item を読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")
+            }
+        }
+
+        return $environment
     }
 
     hidden [string] GetOnePasswordFieldValue([pscustomobject]$item, [string]$purpose, [string[]]$names) {
