@@ -77,7 +77,7 @@ class CodexHandler : SetupHandlerBase {
             $linkPath = Join-Path $linksPath "codex.exe"
 
             # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
-            # 非昇格環境では symlink が失敗するため、共通 portable shim fallback を使う。
+            # 既存リンクは、現行 exe への symlink 作成に成功してから置き換える。
             if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
                 $this.CreatePortableLink($linkPath, $codexExe)
             }

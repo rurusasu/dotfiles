@@ -297,7 +297,7 @@ class SetupHandlerBase {
     .SYNOPSIS
         WinGet\Links 配下にシンボリックリンク shim を作成する
     .DESCRIPTION
-        既存 shim は事前に削除し、現行 exe へのシンボリックリンクへ貼り直す。
+        既存 shim は一時シンボリックリンクの作成成功後に置き換える。
         ハードリンク/コピーは winget upgrade に追従しないため使用しない。
     .PARAMETER linkPath
         作成する shim パス
@@ -305,13 +305,38 @@ class SetupHandlerBase {
         リンク先の実行ファイル
     #>
     [void] CreatePortableLink([string]$linkPath, [string]$targetExe) {
-        if (Test-Path -LiteralPath $linkPath) {
-            Remove-Item -LiteralPath $linkPath -Force
+        if (-not (Test-Path -LiteralPath $linkPath)) {
+            $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
+            New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
+            $this.Log("シンボリックリンクを作成しました", "Green")
+            return
         }
 
-        $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
-        New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
-        $this.Log("シンボリックリンクを作成しました", "Green")
+        $parentDir = Split-Path -Parent $linkPath
+        $linkName = Split-Path -Leaf $linkPath
+        $suffix = [System.Guid]::NewGuid().ToString("N")
+        $tempLinkPath = Join-Path $parentDir ".$linkName.$suffix.tmp"
+        $backupPath = Join-Path $parentDir ".$linkName.$suffix.backup"
+        $oldMoved = $false
+
+        try {
+            $this.Log("シンボリックリンクを作成しています: $linkPath -> $targetExe")
+            New-Item -ItemType SymbolicLink -Path $tempLinkPath -Target $targetExe -Force -ErrorAction Stop | Out-Null
+            Move-Item -LiteralPath $linkPath -Destination $backupPath -Force -ErrorAction Stop
+            $oldMoved = $true
+            Move-Item -LiteralPath $tempLinkPath -Destination $linkPath -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            $this.Log("シンボリックリンクを作成しました", "Green")
+        }
+        catch {
+            if ($oldMoved -and -not (Test-Path -LiteralPath $linkPath) -and (Test-Path -LiteralPath $backupPath)) {
+                Move-Item -LiteralPath $backupPath -Destination $linkPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $tempLinkPath) {
+                Remove-Item -LiteralPath $tempLinkPath -Force -ErrorAction SilentlyContinue
+            }
+            throw
+        }
     }
 
     <#
