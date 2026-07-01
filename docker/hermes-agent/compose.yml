@@ -37,7 +37,7 @@ services:
     container_name: hermes-researcher
     restart: unless-stopped
     shm_size: 1g
-    command: -p researcher gateway run
+    command: hermes -p researcher gateway run
     ports:
       - "127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642"
       - "127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119"

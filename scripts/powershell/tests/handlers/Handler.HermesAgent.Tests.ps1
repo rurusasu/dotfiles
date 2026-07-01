@@ -140,7 +140,7 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^\s{2}researcher:"
             $composeContent | Should -Match "(?m)^\s{4}container_name:\s*hermes-researcher"
             $composeContent | Should -Match "(?m)^\s{4}restart:\s*unless-stopped"
-            $composeContent | Should -Match "(?m)^\s{4}command:\s*-p researcher gateway run"
+            $composeContent | Should -Match "(?m)^\s{4}command:\s*hermes -p researcher gateway run"
             $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642'))
             $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119'))
             $composeContent | Should -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher/.env'))
