@@ -75,12 +75,15 @@ class HermesAgentHandler : SetupHandlerBase {
 
             $dataDir = $this.GetDataDir()
             $this.EnsureDirectory($dataDir)
+            $this.EnsureDirectory((Join-Path $dataDir ".xurl"))
+            $homeRepositoryResult = $this.EnsureHomeRepositoryLayout($ctx, $dataDir)
             $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
 
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
             $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
+            $researcherSlackResult = $this.EnsureResearcherSlackEnvironment($ctx, $dataDir)
             $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $envPath)
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
 
@@ -119,6 +122,14 @@ class HermesAgentHandler : SetupHandlerBase {
                 $this.Log("Slack 接続情報は既に設定済みです", "Gray")
             }
 
+            if ($researcherSlackResult.Changed -and $researcherSlackResult.Source -eq "1Password") {
+                $this.Log("researcher Slack 接続情報を 1Password から設定しました", "Green")
+            }
+
+            if ($homeRepositoryResult.Changed) {
+                $this.Log("Hermes home/profile Git 管理ポリシーを更新しました", "Green")
+            }
+
             if ($openClawApiResult.Changed -and $openClawApiResult.Count -gt 0) {
                 $this.Log("OpenClaw API token を Hermes .env に設定しました ($($openClawApiResult.Count) keys)", "Green")
             }
@@ -127,7 +138,7 @@ class HermesAgentHandler : SetupHandlerBase {
             }
 
             if ($mcpResult.Changed) {
-                $this.Log("Hermes GitHub MCP server 設定を削除しました", "Green")
+                $this.Log("Hermes MCP server 設定を更新しました", "Green")
             }
 
             return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
@@ -212,6 +223,295 @@ class HermesAgentHandler : SetupHandlerBase {
         }
     }
 
+    hidden [pscustomobject] EnsureHomeRepositoryLayout([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentHomeRepositoryLayoutEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
+        }
+
+        $changed = $false
+        $changed = $this.EnsureGitignoreEntry(
+            (Join-Path $dataDir ".gitignore"),
+            "profiles/",
+            "Profile homes are separate Git repositories/distributions."
+        ) -or $changed
+
+        $docsDir = Join-Path $dataDir "docs"
+        $this.EnsureDirectory($docsDir)
+        $changed = $this.EnsureFileLines(
+            (Join-Path $docsDir "profile-home-layout.md"),
+            $this.GetSharedHomeLayoutDocLines()
+        ) -or $changed
+
+        $changed = $this.EnsureManagedBlock(
+            (Join-Path $dataDir "SOUL.md"),
+            "HERMES_HOME_REPOSITORY_POLICY",
+            @(
+                "## Home Repository Policy",
+                "",
+                "Before changing Hermes home/profile layout, read /opt/data/docs/profile-home-layout.md.",
+                "Runtime state such as .env, auth.json, memories/, sessions/, logs/, and state.db* stays out of Git."
+            )
+        ) -or $changed
+
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $changed = $this.EnsureProfileRepositoryLayout($dataDir, $profileName) -or $changed
+        }
+
+        return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [bool] EnsureProfileRepositoryLayout([string]$dataDir, [string]$profileName) {
+        $profileDir = Join-Path (Join-Path $dataDir "profiles") $profileName
+        if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
+            return $false
+        }
+
+        $changed = $false
+        $changed = $this.EnsureFileLines(
+            (Join-Path $profileDir ".gitignore"),
+            $this.GetProfileGitignoreLines()
+        ) -or $changed
+
+        $profileDocsDir = Join-Path $profileDir "docs"
+        $this.EnsureDirectory($profileDocsDir)
+        $changed = $this.EnsureFileLines(
+            (Join-Path $profileDocsDir "profile-home-layout.md"),
+            $this.GetProfileHomeLayoutDocLines($profileName)
+        ) -or $changed
+
+        $changed = $this.EnsureManagedBlock(
+            (Join-Path $profileDir "SOUL.md"),
+            "HERMES_PROFILE_REPOSITORY_POLICY",
+            @(
+                "## Profile Repository Policy",
+                "",
+                "Before changing this profile home, read /opt/data/docs/profile-home-layout.md and /opt/data/profiles/$profileName/docs/profile-home-layout.md.",
+                "Keep profile runtime state out of Git; track only declarative profile configuration, docs, curated skills, and cron definitions."
+            )
+        ) -or $changed
+
+        return $changed
+    }
+
+    hidden [string[]] GetManagedProfileNames([SetupContext]$ctx) {
+        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher")
+        if ($value -is [array]) {
+            return @($value | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+
+        return @(
+            ([string]$value).Split(",") |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
+    }
+
+    hidden [bool] EnsureGitignoreEntry([string]$path, [string]$entry, [string]$comment) {
+        $lines = @()
+        if (Test-Path -LiteralPath $path) {
+            $lines = @(Get-Content -LiteralPath $path -ErrorAction Stop)
+        }
+
+        if ($lines -contains $entry) {
+            return $false
+        }
+
+        if ($lines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($lines[-1])) {
+            $lines += ""
+        }
+        $lines += "# $comment"
+        $lines += $entry
+        $this.EnsureDirectory((Split-Path -Parent $path))
+        Set-Content -LiteralPath $path -Encoding UTF8 -Value $lines
+        return $true
+    }
+
+    hidden [bool] EnsureFileLines([string]$path, [string[]]$desiredLines) {
+        $existingLines = @()
+        if (Test-Path -LiteralPath $path) {
+            $existingLines = @(Get-Content -LiteralPath $path -ErrorAction Stop)
+        }
+
+        if ($this.LinesEqual($existingLines, $desiredLines)) {
+            return $false
+        }
+
+        $this.EnsureDirectory((Split-Path -Parent $path))
+        Set-Content -LiteralPath $path -Encoding UTF8 -Value $desiredLines
+        return $true
+    }
+
+    hidden [bool] EnsureManagedBlock([string]$path, [string]$name, [string[]]$blockLines) {
+        $begin = "<!-- BEGIN $name -->"
+        $end = "<!-- END $name -->"
+        $existingLines = @()
+        if (Test-Path -LiteralPath $path) {
+            $existingLines = @(Get-Content -LiteralPath $path -ErrorAction Stop)
+        }
+
+        $desiredBlock = @($begin) + $blockLines + @($end)
+        $updatedLines = @()
+        $index = 0
+        $found = $false
+        while ($index -lt $existingLines.Count) {
+            if ($existingLines[$index] -eq $begin) {
+                $found = $true
+                $updatedLines += $desiredBlock
+                $index++
+                while ($index -lt $existingLines.Count -and $existingLines[$index] -ne $end) {
+                    $index++
+                }
+                if ($index -lt $existingLines.Count) {
+                    $index++
+                }
+                continue
+            }
+
+            $updatedLines += $existingLines[$index]
+            $index++
+        }
+
+        if (-not $found) {
+            if ($updatedLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($updatedLines[-1])) {
+                $updatedLines += ""
+            }
+            $updatedLines += $desiredBlock
+        }
+
+        if ($this.LinesEqual($existingLines, $updatedLines)) {
+            return $false
+        }
+
+        $this.EnsureDirectory((Split-Path -Parent $path))
+        Set-Content -LiteralPath $path -Encoding UTF8 -Value $updatedLines
+        return $true
+    }
+
+    hidden [string[]] GetSharedHomeLayoutDocLines() {
+        return @(
+            "# Hermes Home Repository Layout",
+            "",
+            "This home is Git-managed as a profile distribution. Keep Git focused on declarative configuration and keep live runtime state ignored.",
+            "",
+            "## Directory Model",
+            "",
+            "- `/opt/data` is the default Hermes home and root Git repository.",
+            "- `/opt/data/profiles/researcher` is the researcher profile home and should be managed as its own Git repository/distribution.",
+            "- `/opt/data/profiles/` is ignored by the root repository so profile repositories do not become nested untracked trees.",
+            "",
+            "## Track In Git",
+            "",
+            "- `config.yaml`, `SOUL.md`, profile metadata, curated skills, declarative cron jobs, and docs.",
+            "- Shared operational docs such as this file.",
+            "- Project-specific guidance in repository `AGENTS.md` files.",
+            "",
+            "## Do Not Track",
+            "",
+            "- .env, .env.*, auth.json, tokens, and secrets.",
+            "- memories/, sessions/, logs/, state.db*, gateway state, channel directories, locks, pids, caches, workspaces, and generated usage files.",
+            "",
+            "## Shared Knowledge",
+            "",
+            "- Do not share profile memories/ through Git.",
+            "- Put durable shared guidance in docs or AGENTS.md; use Slack, Kanban, GitHub issues, or Linear for cross-agent work state.",
+            "- If a shared memory backend is introduced later, namespace by user, app, and profile."
+        )
+    }
+
+    hidden [string[]] GetProfileHomeLayoutDocLines([string]$profileName) {
+        $titleProfileName = $profileName.Substring(0, 1).ToUpperInvariant() + $profileName.Substring(1)
+        return @(
+            "# $titleProfileName Profile Home",
+            "",
+            "Read `/opt/data/docs/profile-home-layout.md` before changing this profile home.",
+            "",
+            "## Repository Role",
+            "",
+            "- This directory is the $profileName profile home.",
+            "- Manage this profile as a separate Git repository/distribution from /opt/data.",
+            "- Track profile-specific config.yaml, SOUL.md, profile.yaml, curated skills, cron definitions, and docs.",
+            "",
+            "## Runtime State",
+            "",
+            "- Keep .env, memories/, sessions/, logs/, state.db*, cache directories, and generated usage files out of Git.",
+            "- Use a dedicated Slack app and 1Password item such as SlackBot-Researcher; do not reuse the default gateway Slack tokens.",
+            "",
+            "## Shared Reading",
+            "",
+            "- Use /opt/data/docs/profile-home-layout.md for cross-profile home layout rules.",
+            "- Use repository AGENTS.md and docs for project-specific instructions instead of copying project memory into this profile."
+        )
+    }
+
+    hidden [string[]] GetProfileGitignoreLines() {
+        return @(
+            "# Secrets and credentials",
+            ".env",
+            ".env.*",
+            "!.env.example",
+            "auth.json",
+            "*.pem",
+            "*.key",
+            "*token*",
+            "*secret*",
+            "",
+            "# Live memory and conversation state",
+            "memories/",
+            "sessions/",
+            "logs/",
+            "state.db*",
+            "*.db",
+            "*.sqlite",
+            "*.sqlite3",
+            "gateway_state.json",
+            "gateway.pid",
+            "gateway.lock",
+            "channel_directory.json",
+            "",
+            "# Runtime locks and generated files",
+            "*.lock",
+            "*.pid",
+            "*-shm",
+            "*-wal",
+            ".skills_prompt_snapshot.json",
+            "context_length_cache.yaml",
+            "models_dev_cache.json",
+            "ollama_cloud_models_cache.json",
+            "provider_models_cache.json",
+            "config.yaml.bak*",
+            "",
+            "# Caches and generated dependencies",
+            "cache/",
+            "audio_cache/",
+            "image_cache/",
+            ".cache/",
+            ".local/",
+            ".npm/",
+            "lazy-packages/",
+            "node_modules/",
+            "bin/",
+            "lsp/",
+            "__pycache__/",
+            "*.pyc",
+            "*.pyo",
+            "*.log",
+            "*.tmp",
+            "*.bak",
+            "*.bak-*",
+            "",
+            "# Local workspaces and transient user files",
+            "home/",
+            "workspace/",
+            "plans/",
+            "pairing/",
+            "sandboxes/",
+            "",
+            "# Generated skill state; keep curated skill content tracked separately.",
+            "skills/.usage.json*",
+            "skills/.curator_state"
+        )
+    }
+
     hidden [pscustomobject] EnsureModelConfiguration([SetupContext]$ctx, [string]$dataDir) {
         if (-not $this.IsTruthy($ctx.GetOption("HermesAgentModelConfigEnabled", $true))) {
             return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Provider = ""; Model = "" }
@@ -258,13 +558,77 @@ class HermesAgentHandler : SetupHandlerBase {
             $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
         }
 
-        $updatedLines = $this.RemoveGithubMcpConfigLines($existingLines)
+        $updatedLines = $this.SetMcpConfigLines($existingLines)
         $changed = -not $this.LinesEqual($existingLines, $updatedLines)
         if ($changed) {
             Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
         }
 
         return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [string[]] SetMcpConfigLines([string[]]$lines) {
+        $managedServerNames = @("github", "xapi", "x-docs")
+        $desiredLines = @(
+            "  xapi:",
+            "    command: /usr/local/bin/hermes-xapi-mcp",
+            "    connect_timeout: 300",
+            "    env:",
+            '      X_API_CLIENT_ID: ${X_API_CLIENT_ID}',
+            '      X_API_CLIENT_SECRET: ${X_API_CLIENT_SECRET}',
+            "  x-docs:",
+            "    url: https://docs.x.com/mcp",
+            "    connect_timeout: 60"
+        )
+        $result = @()
+        $index = 0
+        $foundMcpServers = $false
+        while ($index -lt $lines.Count) {
+            if ($lines[$index] -match '^mcp_servers\s*:') {
+                $foundMcpServers = $true
+                $mcpHeader = $lines[$index]
+                $mcpLines = @()
+                $index++
+
+                while ($index -lt $lines.Count -and $lines[$index] -notmatch '^\S') {
+                    if ($lines[$index] -match '^\s{2}(\S[^:]*)\s*:') {
+                        $serverName = $Matches[1]
+                        if ($serverName -in $managedServerNames) {
+                            $index++
+                            while (
+                                $index -lt $lines.Count `
+                                    -and $lines[$index] -notmatch '^\S' `
+                                    -and $lines[$index] -notmatch '^\s{2}\S[^:]*\s*:'
+                            ) {
+                                $index++
+                            }
+                            continue
+                        }
+                    }
+
+                    $mcpLines += $lines[$index]
+                    $index++
+                }
+
+                $result += $mcpHeader
+                $result += $mcpLines
+                $result += $desiredLines
+                continue
+            }
+
+            $result += $lines[$index]
+            $index++
+        }
+
+        if (-not $foundMcpServers) {
+            if ($result.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($result[-1])) {
+                $result += ""
+            }
+            $result += "mcp_servers:"
+            $result += $desiredLines
+        }
+
+        return $result
     }
 
     hidden [string[]] RemoveGithubMcpConfigLines([string[]]$lines) {
@@ -415,6 +779,40 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $slackEnvironment = $this.GetOnePasswordSlackEnvironment($ctx)
+        if ($null -ne $slackEnvironment) {
+            $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment)
+            return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
+        }
+
+        if ($this.HasSlackEnvironment($lines)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Existing" }
+        }
+
+        return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
+    }
+
+    hidden [pscustomobject] EnsureResearcherSlackEnvironment([SetupContext]$ctx, [string]$dataDir) {
+        $defaultEnabled = $this.IsTruthy($ctx.GetOption("HermesAgentSlack1PasswordEnabled", $true))
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentResearcherSlack1PasswordEnabled", $defaultEnabled))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
+        }
+
+        $envPath = Join-Path $dataDir "profiles\researcher\.env"
+        if (-not (Test-Path -LiteralPath $envPath)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "MissingProfile" }
+        }
+
+        $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+        $slackEnvironment = $this.GetOnePasswordSlackEnvironmentForItem(
+            $ctx,
+            "HermesAgentResearcherSlack1PasswordEnabled",
+            $true,
+            "HermesAgentRequireResearcherSlack",
+            "HermesAgentResearcherSlack1PasswordAccount",
+            "HermesAgentResearcherSlack1PasswordVault",
+            "HermesAgentResearcherSlack1PasswordItem",
+            "SlackBot-Researcher"
+        )
         if ($null -ne $slackEnvironment) {
             $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment)
             return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
@@ -620,11 +1018,33 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [pscustomobject] GetOnePasswordSlackEnvironment([SetupContext]$ctx) {
-        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSlack1PasswordEnabled", $true))) {
+        return $this.GetOnePasswordSlackEnvironmentForItem(
+            $ctx,
+            "HermesAgentSlack1PasswordEnabled",
+            $true,
+            "HermesAgentRequireSlack",
+            "HermesAgentSlack1PasswordAccount",
+            "HermesAgentSlack1PasswordVault",
+            "HermesAgentSlack1PasswordItem",
+            "SlackBot-OpenClaw"
+        )
+    }
+
+    hidden [pscustomobject] GetOnePasswordSlackEnvironmentForItem(
+        [SetupContext]$ctx,
+        [string]$enabledOption,
+        [bool]$enabledDefault,
+        [string]$requiredOption,
+        [string]$accountOption,
+        [string]$vaultOption,
+        [string]$itemOption,
+        [string]$defaultItem
+    ) {
+        if (-not $this.IsTruthy($ctx.GetOption($enabledOption, $enabledDefault))) {
             return $null
         }
 
-        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireSlack", $false))
+        $required = $this.IsTruthy($ctx.GetOption($requiredOption, $false))
         $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
         if (-not $opCommand) {
             if ($required) {
@@ -642,16 +1062,16 @@ class HermesAgentHandler : SetupHandlerBase {
             $opExe = "op"
         }
 
-        $account = [string]$ctx.GetOption("HermesAgentSlack1PasswordAccount", "my.1password.com")
-        $vault = [string]$ctx.GetOption("HermesAgentSlack1PasswordVault", "openclaw")
-        $item = [string]$ctx.GetOption("HermesAgentSlack1PasswordItem", "SlackBot-OpenClaw")
+        $account = [string]$ctx.GetOption($accountOption, "my.1password.com")
+        $vault = [string]$ctx.GetOption($vaultOption, "openclaw")
+        $item = [string]$ctx.GetOption($itemOption, $defaultItem)
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
         if ($result.ExitCode -ne 0) {
             if ($required) {
                 throw "1Password から Hermes Slack 接続情報を取得できません"
             }
-            $this.Log("1Password から Hermes Slack 接続情報を取得できないため Slack 自動設定をスキップします", "Gray")
+            $this.Log("1Password から Hermes Slack 接続情報を取得できないため Slack 自動設定をスキップします: $item", "Gray")
             return $null
         }
 
@@ -668,7 +1088,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 if ($required) {
                     throw "1Password item に Slack token または allowed users がありません"
                 }
-                $this.Log("1Password item に Slack token または allowed users がないため Slack 自動設定をスキップします", "Gray")
+                $this.Log("1Password item に Slack token または allowed users がないため Slack 自動設定をスキップします: $item", "Gray")
                 return $null
             }
 
@@ -682,7 +1102,7 @@ class HermesAgentHandler : SetupHandlerBase {
             if ($required) {
                 throw
             }
-            $this.Log("1Password item を読めないため Slack 自動設定をスキップします", "Gray")
+            $this.Log("1Password item を読めないため Slack 自動設定をスキップします: $item", "Gray")
             return $null
         }
     }
@@ -759,6 +1179,18 @@ class HermesAgentHandler : SetupHandlerBase {
                 Item     = [string]$ctx.GetOption("HermesAgentAutoCli1PasswordItem", "AutoCLI")
                 Field    = @("credential", "認証情報", "api key", "api_key", "token")
                 EnvNames = @("AUTOCLI_API_KEY")
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentXApiMcp1PasswordItem", "XApiMcp")
+                Field    = @("CLIENT_ID", "client_id", "client id", "oauth client id", "OAuth 2.0 Client ID")
+                EnvNames = @("X_API_CLIENT_ID")
+                Required = $false
+            },
+            [PSCustomObject]@{
+                Item     = [string]$ctx.GetOption("HermesAgentXApiMcp1PasswordItem", "XApiMcp")
+                Field    = @("CLIENT_SECRET", "client_secret", "client secret", "oauth client secret", "OAuth 2.0 Client Secret")
+                EnvNames = @("X_API_CLIENT_SECRET")
+                Required = $false
             }
         )
 
@@ -770,7 +1202,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $arguments = @("item", "get", $spec.Item, "--account", $account, "--vault", $vault, "--format", "json")
             $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
             if ($result.ExitCode -ne 0) {
-                if ($required) {
+                if ($required -and $spec.Required -ne $false) {
                     throw "1Password から OpenClaw API token を取得できません: $($spec.Item)"
                 }
                 $this.Log("1Password item が読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")
@@ -781,7 +1213,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
                 $value = $this.GetOnePasswordFieldValue($itemJson, "", $spec.Field)
                 if ([string]::IsNullOrWhiteSpace($value)) {
-                    if ($required) {
+                    if ($required -and $spec.Required -ne $false) {
                         throw "1Password item に OpenClaw API token がありません: $($spec.Item)"
                     }
                     $this.Log("1Password item に OpenClaw API token がないためスキップします: $($spec.Item)", "Gray")
@@ -793,7 +1225,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 }
             }
             catch {
-                if ($required) {
+                if ($required -and $spec.Required -ne $false) {
                     throw
                 }
                 $this.Log("1Password item を読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")

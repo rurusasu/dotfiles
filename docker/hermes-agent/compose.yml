@@ -17,8 +17,39 @@ services:
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
         target: /opt/data
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
+        target: /root/.xurl
     env_file:
       - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env
+        format: raw
+        required: false
+    environment:
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: "0.0.0.0"
+
+  researcher:
+    profiles: ["researcher"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/hermes-agent-gh:latest
+    container_name: hermes-researcher
+    restart: unless-stopped
+    shm_size: 1g
+    command: -p researcher gateway run
+    ports:
+      - "127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642"
+      - "127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119"
+    volumes:
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+        target: /opt/data
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
+        target: /root/.xurl
+    env_file:
+      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher/.env
         format: raw
         required: false
     environment:

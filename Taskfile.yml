@@ -214,6 +214,64 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hermes
 
+  hermes:profile:init:
+    desc: Initialize a Hermes profile home as a separate Git repository
+    vars:
+      PROFILE: '{{.CLI_ARGS | default "researcher"}}'
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - >
+        docker exec hermes sh -lc
+        'set -eu;
+        profile="{{.PROFILE}}";
+        dir="/opt/data/profiles/$profile";
+        test -d "$dir" || { echo "Hermes profile not found: $profile" >&2; exit 1; };
+        if [ -d "$dir/.git" ]; then chown -R hermes:hermes "$dir/.git"; fi'
+      - >
+        docker exec --user hermes hermes sh -lc
+        'set -eu;
+        profile="{{.PROFILE}}";
+        dir="/opt/data/profiles/$profile";
+        test -d "$dir" || { echo "Hermes profile not found: $profile" >&2; exit 1; };
+        cd "$dir";
+        if [ ! -d .git ]; then git init -b main >/dev/null 2>&1 || git init >/dev/null; fi;
+        git status --short --branch'
+
+  hermes:researcher:up:
+    desc: Start researcher Hermes profile gateway in Docker
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build researcher
+
+  hermes:researcher:down:
+    desc: Stop researcher Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop researcher
+
+  hermes:researcher:restart:
+    desc: Restart researcher Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart researcher
+
+  hermes:researcher:logs:
+    desc: Follow researcher Hermes gateway logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 researcher
+
   hermes:ps:
     desc: Show Hermes Agent Docker container status
     preconditions:
