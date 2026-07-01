@@ -1,0 +1,16 @@
+{
+  "name": "dotfiles",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal dotfiles and machine provisioning configuration.",
+  "keywords": [],
+  "homepage": "https://github.com/rurusasu/dotfiles#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rurusasu/dotfiles.git"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "test": "task test:powershell"
+  }
+}

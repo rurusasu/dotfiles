@@ -272,6 +272,72 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 researcher
 
+  hermes:rick:up:
+    desc: Start Rick Hermes profile gateway in Docker
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build rick
+
+  hermes:rick:down:
+    desc: Stop Rick Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop rick
+
+  hermes:rick:restart:
+    desc: Restart Rick Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart rick
+
+  hermes:rick:logs:
+    desc: Follow Rick Hermes gateway logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 rick
+
+  hermes:hoffman:up:
+    desc: Start Hoffman Hermes profile gateway in Docker
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build hoffman
+
+  hermes:hoffman:down:
+    desc: Stop Hoffman Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hoffman
+
+  hermes:hoffman:restart:
+    desc: Restart Hoffman Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart hoffman
+
+  hermes:hoffman:logs:
+    desc: Follow Hoffman Hermes gateway logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hoffman
+
   hermes:ps:
     desc: Show Hermes Agent Docker container status
     preconditions:

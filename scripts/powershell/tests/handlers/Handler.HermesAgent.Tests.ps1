@@ -132,20 +132,32 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^\s*target:\s*/root/\.xurl\s*$"
         }
 
-        It 'should define an isolated researcher gateway service' {
+        It 'should define isolated managed profile gateway services' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
-            $composeContent | Should -Match "(?m)^\s{2}researcher:"
-            $composeContent | Should -Match "(?m)^\s{4}container_name:\s*hermes-researcher"
-            $composeContent | Should -Match "(?m)^\s{4}restart:\s*unless-stopped"
-            $composeContent | Should -Match "(?m)^\s{4}command:\s*gateway run"
-            $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642'))
-            $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119'))
-            $composeContent | Should -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher'))
+            $profiles = @(
+                @{ Name = "researcher"; Container = "hermes-researcher"; Api = "HERMES_RESEARCHER_API_PORT:-8643"; Dashboard = "HERMES_RESEARCHER_DASHBOARD_PORT:-9120" },
+                @{ Name = "rick"; Container = "hermes-rick"; Api = "HERMES_RICK_API_PORT:-8644"; Dashboard = "HERMES_RICK_DASHBOARD_PORT:-9121" },
+                @{ Name = "hoffman"; Container = "hermes-hoffman"; Api = "HERMES_HOFFMAN_API_PORT:-8645"; Dashboard = "HERMES_HOFFMAN_DASHBOARD_PORT:-9122" }
+            )
+
+            foreach ($profile in $profiles) {
+                $composeContent | Should -Match "(?m)^\s{2}$($profile.Name):"
+                $composeContent | Should -Match "(?m)^\s{4}container_name:\s*$($profile.Container)"
+                $composeContent | Should -Match "(?m)^\s{4}restart:\s*unless-stopped"
+                $composeContent | Should -Match "(?m)^\s{4}command:\s*gateway run"
+                $composeContent | Should -Match ([regex]::Escape("127.0.0.1:`$`{$($profile.Api)`}:8642"))
+                $composeContent | Should -Match ([regex]::Escape("127.0.0.1:`$`{$($profile.Dashboard)`}:9119"))
+                $composeContent | Should -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$($profile.Name)"))
+                $composeContent | Should -Match ([regex]::Escape("path: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$($profile.Name)/.env"))
+            }
+
             $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data\s*$"
-            $composeContent | Should -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher/.env'))
+            $composeContent | Should -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/docs'))
+            $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data/docs\s*$"
+            $composeContent | Should -Match "(?m)^\s*read_only:\s*true\s*$"
         }
 
         It 'should rebuild the local Hermes image instead of pulling it from a registry' {
@@ -157,7 +169,7 @@ Describe 'HermesAgentHandler' {
             $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} pull"
         }
 
-        It 'should expose researcher gateway lifecycle tasks' {
+        It 'should expose managed profile gateway lifecycle tasks' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
             $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
@@ -166,12 +178,15 @@ Describe 'HermesAgentHandler' {
             $taskfileContent | Should -Match "PROFILE: '{{.CLI_ARGS | default `"researcher`"}}'"
             $taskfileContent | Should -Match "docker exec hermes sh -lc"
             $taskfileContent | Should -Match "git init -b main"
-            $taskfileContent | Should -Match "(?m)^\s{2}hermes:researcher:up:"
-            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build researcher"
-            $taskfileContent | Should -Match "(?m)^\s{2}hermes:researcher:down:"
-            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} stop researcher"
-            $taskfileContent | Should -Match "(?m)^\s{2}hermes:researcher:logs:"
-            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 researcher"
+
+            foreach ($profile in @("researcher", "rick", "hoffman")) {
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:up:"
+                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build $profile"
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:down:"
+                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} stop $profile"
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:logs:"
+                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 $profile"
+            }
         }
     }
 
@@ -364,6 +379,48 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "(?m)^agent:\r?\n  max_turns: 60"
         }
 
+        It 'should configure Slack channel messages to respond without explicit mentions and bot messages only when mentioned' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $rickDir = Join-Path $dataDir "profiles\rick"
+            $hoffmanDir = Join-Path $dataDir "profiles\hoffman"
+            New-Item -ItemType Directory -Path $rickDir, $hoffmanDir -Force | Out-Null
+            $rootConfigPath = Join-Path $dataDir "config.yaml"
+            $rickConfigPath = Join-Path $rickDir "config.yaml"
+            $hoffmanConfigPath = Join-Path $hoffmanDir "config.yaml"
+            Set-Content -LiteralPath $rootConfigPath -Encoding UTF8 -Value @(
+                "agent:",
+                "  max_turns: 60"
+            )
+            Set-Content -LiteralPath $rickConfigPath -Encoding UTF8 -Value @(
+                "slack:",
+                "  require_mention: true",
+                "  allow_bots: none",
+                "  allowed_channels: C04AHA0CE4W",
+                "display:",
+                "  tool_progress: none"
+            )
+            Set-Content -LiteralPath $hoffmanConfigPath -Encoding UTF8 -Value @(
+                "model:",
+                "  provider: openai-codex"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $rootConfig = Get-Content -LiteralPath $rootConfigPath -Raw
+            $rootConfig | Should -Match "(?m)^slack:\r?\n  require_mention: false\r?\n  allow_bots: mentions"
+            $rootConfig | Should -Match "(?m)^agent:\r?\n  max_turns: 60"
+
+            $rickConfig = Get-Content -LiteralPath $rickConfigPath -Raw
+            $rickConfig | Should -Match "(?m)^slack:\r?\n  require_mention: false\r?\n  allow_bots: mentions\r?\n  allowed_channels: C04AHA0CE4W"
+            $rickConfig | Should -Not -Match "require_mention: true"
+            $rickConfig | Should -Not -Match "allow_bots: none"
+            $rickConfig | Should -Match "(?m)^display:\r?\n  tool_progress: none"
+
+            $hoffmanConfig = Get-Content -LiteralPath $hoffmanConfigPath -Raw
+            $hoffmanConfig | Should -Match "(?m)^slack:\r?\n  require_mention: false\r?\n  allow_bots: mentions"
+        }
+
         It 'should fall back to generated dashboard auth when 1Password CLI is unavailable' {
             $ctx.Options.Remove("HermesAgent1PasswordEnabled")
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
@@ -424,6 +481,41 @@ Describe 'HermesAgentHandler' {
             $envContent | Should -Match "OTHER=value"
             $envContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=existing$hash'))
             Test-Path -LiteralPath (Join-Path $dataDir "dashboard-basic-auth-password.txt") | Should -Be $false
+        }
+
+        It 'should sync dashboard auth into managed profile env files without replacing profile secrets' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $rickDir = Join-Path $dataDir "profiles\rick"
+            $hoffmanDir = Join-Path $dataDir "profiles\hoffman"
+            New-Item -ItemType Directory -Path $rickDir, $hoffmanDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $rickDir ".env") -Encoding UTF8 -Value @(
+                "SLACK_BOT_TOKEN=xoxb-rick-token",
+                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=old",
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=old-plaintext",
+                'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=old$hash',
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET=old-secret"
+            )
+            Set-Content -LiteralPath (Join-Path $hoffmanDir ".env") -Encoding UTF8 -Value @(
+                "SLACK_APP_TOKEN=xapp-hoffman-token"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $rickEnvContent = Get-Content -LiteralPath (Join-Path $rickDir ".env") -Raw
+            $rickEnvContent | Should -Match "SLACK_BOT_TOKEN=xoxb-rick-token"
+            $rickEnvContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin"
+            $rickEnvContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt$hash'))
+            $rickEnvContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_SECRET="
+            $rickEnvContent | Should -Not -Match "old-plaintext"
+            $rickEnvContent | Should -Not -Match ([regex]::Escape('old$hash'))
+            $rickEnvContent | Should -Not -Match "old-secret"
+
+            $hoffmanEnvContent = Get-Content -LiteralPath (Join-Path $hoffmanDir ".env") -Raw
+            $hoffmanEnvContent | Should -Match "SLACK_APP_TOKEN=xapp-hoffman-token"
+            $hoffmanEnvContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin"
+            $hoffmanEnvContent | Should -Match ([regex]::Escape('HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt$hash'))
+            $hoffmanEnvContent | Should -Match "HERMES_DASHBOARD_BASIC_AUTH_SECRET="
         }
 
         It 'should prefer 1Password dashboard auth and avoid writing a plaintext password file' {
@@ -668,9 +760,17 @@ Describe 'HermesAgentHandler' {
             $sharedDocPath = Join-Path $dataDir "docs\profile-home-layout.md"
             $sharedDocPath | Should -Exist
             $sharedDoc = Get-Content -LiteralPath $sharedDocPath -Raw
-            $sharedDoc | Should -Match "/opt/data/profiles/researcher"
+            $sharedDoc | Should -Match "Hermes profile homes should keep the filesystem layout"
+            $sharedDoc | Should -Match "hermes profile create <name>"
+            $sharedDoc | Should -Match "Do not delete or flatten this physical layout"
+            $sharedDoc | Should -Match "read-only"
+            $sharedDoc | Should -Match "do not copy the shared root layout doc"
             $sharedDoc | Should -Match "memories/"
             $sharedDoc | Should -Match "auth\.json"
+            $sharedDoc | Should -Match "Dedicated Gateway Runtime Secrets"
+            $sharedDoc | Should -Match "model-provider auth"
+            $sharedDoc | Should -Match "profile\.yaml"
+            $sharedDoc | Should -Match "slack-manifest\.json"
             $sharedDoc | Should -Match "AGENTS.md"
             $sharedDoc | Should -Not -Match ([string][char]7)
 
@@ -690,16 +790,12 @@ Describe 'HermesAgentHandler' {
             $researcherGitignore | Should -Match "(?m)^skills/\.usage\.json\*\r?$"
 
             $profileDocPath = Join-Path $researcherDir "docs\profile-home-layout.md"
-            $profileDocPath | Should -Exist
-            $profileDoc = Get-Content -LiteralPath $profileDocPath -Raw
-            $profileDoc | Should -Match "/opt/data/docs/profile-home-layout.md"
-            $profileDoc | Should -Match "researcher profile home"
-            $profileDoc | Should -Not -Match "\`$profileName"
-            $profileDoc | Should -Match "SlackBot-Researcher"
+            Test-Path -LiteralPath (Split-Path -Parent $profileDocPath) | Should -Be $true
+            Test-Path -LiteralPath $profileDocPath | Should -Be $false
 
             $profileSoul = Get-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
-            $profileSoul | Should -Match "/opt/data/profiles/researcher/docs/profile-home-layout.md"
+            $profileSoul | Should -Match "standard filesystem layout"
         }
 
         It 'should configure OpenClaw API environment from 1Password items' {
