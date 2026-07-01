@@ -82,10 +82,12 @@ class HermesAgentHandler : SetupHandlerBase {
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
             $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
+            $profileDashboardAuthResult = $this.SyncDashboardAuthToManagedProfileEnvironments($ctx, $dataDir, $envPath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
             $researcherSlackResult = $this.EnsureResearcherSlackEnvironment($ctx, $dataDir)
             $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $envPath)
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
+            $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
             $composeArgs = @("compose", "-f", $composeFile, "up", "-d", "--build")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
@@ -106,6 +108,10 @@ class HermesAgentHandler : SetupHandlerBase {
             }
             else {
                 $this.Log("Dashboard Basic Auth は既に設定済みです", "Gray")
+            }
+
+            if ($profileDashboardAuthResult.Changed -and $profileDashboardAuthResult.Count -gt 0) {
+                $this.Log("Managed profile dashboard Basic Auth を同期しました ($($profileDashboardAuthResult.Count) profiles)", "Green")
             }
 
             if ($modelResult.Changed) {
@@ -139,6 +145,10 @@ class HermesAgentHandler : SetupHandlerBase {
 
             if ($mcpResult.Changed) {
                 $this.Log("Hermes MCP server 設定を更新しました", "Green")
+            }
+
+            if ($slackMentionResult.Changed -and $slackMentionResult.Count -gt 0) {
+                $this.Log("Slack 無メンション応答設定を更新しました ($($slackMentionResult.Count) configs)", "Green")
             }
 
             return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
@@ -274,10 +284,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
         $profileDocsDir = Join-Path $profileDir "docs"
         $this.EnsureDirectory($profileDocsDir)
-        $changed = $this.EnsureFileLines(
-            (Join-Path $profileDocsDir "profile-home-layout.md"),
-            $this.GetProfileHomeLayoutDocLines($profileName)
-        ) -or $changed
+        $changed = $this.RemoveDuplicatedProfileLayoutDoc($profileDir) -or $changed
 
         $changed = $this.EnsureManagedBlock(
             (Join-Path $profileDir "SOUL.md"),
@@ -285,16 +292,31 @@ class HermesAgentHandler : SetupHandlerBase {
             @(
                 "## Profile Repository Policy",
                 "",
-                "Before changing this profile home, read /opt/data/docs/profile-home-layout.md and /opt/data/profiles/$profileName/docs/profile-home-layout.md.",
-                "Keep profile runtime state out of Git; track only declarative profile configuration, docs, curated skills, and cron definitions."
+                "Before changing this profile home, read /opt/data/docs/profile-home-layout.md.",
+                "Keep Hermes' standard filesystem layout intact; use Git ignore rules to keep runtime state and secrets out of the profile distribution."
             )
         ) -or $changed
 
         return $changed
     }
 
+    hidden [bool] RemoveDuplicatedProfileLayoutDoc([string]$profileDir) {
+        $profileLayoutDocPath = Join-Path (Join-Path $profileDir "docs") "profile-home-layout.md"
+        if (-not (Test-Path -LiteralPath $profileLayoutDocPath -PathType Leaf)) {
+            return $false
+        }
+
+        $existingLines = @(Get-Content -LiteralPath $profileLayoutDocPath -ErrorAction Stop)
+        if (-not $this.LinesEqual($existingLines, $this.GetSharedHomeLayoutDocLines())) {
+            return $false
+        }
+
+        Remove-Item -LiteralPath $profileLayoutDocPath -Force
+        return $true
+    }
+
     hidden [string[]] GetManagedProfileNames([SetupContext]$ctx) {
-        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher")
+        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher,rick,hoffman")
         if ($value -is [array]) {
             return @($value | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         }
@@ -304,6 +326,77 @@ class HermesAgentHandler : SetupHandlerBase {
                 ForEach-Object { $_.Trim() } |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
         )
+    }
+
+    hidden [pscustomobject] SyncDashboardAuthToManagedProfileEnvironments(
+        [SetupContext]$ctx,
+        [string]$dataDir,
+        [string]$sourceEnvPath
+    ) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSyncDashboardAuthToProfiles", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Profiles = @() }
+        }
+
+        if (-not (Test-Path -LiteralPath $sourceEnvPath -PathType Leaf)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "MissingSource"; Count = 0; Profiles = @() }
+        }
+
+        $sourceLines = @(Get-Content -LiteralPath $sourceEnvPath -ErrorAction Stop)
+        $dashboardAuthLines = $this.GetDashboardAuthEnvLines($sourceLines)
+        if (-not $this.HasDashboardAuth($dashboardAuthLines)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "MissingAuth"; Count = 0; Profiles = @() }
+        }
+
+        $profilesDir = Join-Path $dataDir "profiles"
+        $changedProfiles = @()
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path $profilesDir $profileName
+            if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
+                continue
+            }
+
+            $profileEnvPath = Join-Path $profileDir ".env"
+            $profileLines = @()
+            if (Test-Path -LiteralPath $profileEnvPath -PathType Leaf) {
+                $profileLines = @(Get-Content -LiteralPath $profileEnvPath -ErrorAction Stop)
+            }
+
+            $updatedLines = $this.SetDashboardAuthEnvLines($profileLines, $dashboardAuthLines)
+            if (-not $this.LinesEqual($profileLines, $updatedLines)) {
+                Set-Content -LiteralPath $profileEnvPath -Encoding UTF8 -Value $updatedLines
+                $changedProfiles += $profileName
+            }
+        }
+
+        return [PSCustomObject]@{
+            Changed  = $changedProfiles.Count -gt 0
+            Source   = "Synced"
+            Count    = $changedProfiles.Count
+            Profiles = $changedProfiles
+        }
+    }
+
+    hidden [string[]] GetDashboardAuthEnvLines([string[]]$lines) {
+        return @(
+            $lines | Where-Object {
+                $_ -match '^\s*HERMES_DASHBOARD_BASIC_AUTH_(USERNAME|PASSWORD_HASH|SECRET)\s*='
+            }
+        )
+    }
+
+    hidden [string[]] SetDashboardAuthEnvLines([string[]]$lines, [string[]]$dashboardAuthLines) {
+        $filteredLines = @(
+            $lines | Where-Object {
+                $_ -notmatch '^\s*HERMES_DASHBOARD_BASIC_AUTH_(USERNAME|PASSWORD|PASSWORD_HASH|SECRET)\s*='
+            }
+        )
+
+        if ($filteredLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($filteredLines[-1])) {
+            $filteredLines += ""
+        }
+
+        $filteredLines += $dashboardAuthLines
+        return $filteredLines
     }
 
     hidden [bool] EnsureGitignoreEntry([string]$path, [string]$entry, [string]$comment) {
@@ -389,57 +482,83 @@ class HermesAgentHandler : SetupHandlerBase {
 
     hidden [string[]] GetSharedHomeLayoutDocLines() {
         return @(
-            "# Hermes Home Repository Layout",
-            "",
-            "This home is Git-managed as a profile distribution. Keep Git focused on declarative configuration and keep live runtime state ignored.",
-            "",
-            "## Directory Model",
-            "",
-            "- `/opt/data` is the default Hermes home and root Git repository.",
-            "- `/opt/data/profiles/researcher` is the researcher profile home and should be managed as its own Git repository/distribution.",
-            "- `/opt/data/profiles/` is ignored by the root repository so profile repositories do not become nested untracked trees.",
-            "",
-            "## Track In Git",
-            "",
-            "- `config.yaml`, `SOUL.md`, profile metadata, curated skills, declarative cron jobs, and docs.",
-            "- Shared operational docs such as this file.",
-            "- Project-specific guidance in repository `AGENTS.md` files.",
-            "",
-            "## Do Not Track",
-            "",
-            "- .env, .env.*, auth.json, tokens, and secrets.",
-            "- memories/, sessions/, logs/, state.db*, gateway state, channel directories, locks, pids, caches, workspaces, and generated usage files.",
-            "",
-            "## Shared Knowledge",
-            "",
-            "- Do not share profile memories/ through Git.",
-            "- Put durable shared guidance in docs or AGENTS.md; use Slack, Kanban, GitHub issues, or Linear for cross-agent work state.",
-            "- If a shared memory backend is introduced later, namespace by user, app, and profile."
-        )
-    }
-
-    hidden [string[]] GetProfileHomeLayoutDocLines([string]$profileName) {
-        $titleProfileName = $profileName.Substring(0, 1).ToUpperInvariant() + $profileName.Substring(1)
-        return @(
-            "# $titleProfileName Profile Home",
-            "",
-            "Read `/opt/data/docs/profile-home-layout.md` before changing this profile home.",
-            "",
-            "## Repository Role",
-            "",
-            "- This directory is the $profileName profile home.",
-            "- Manage this profile as a separate Git repository/distribution from /opt/data.",
-            "- Track profile-specific config.yaml, SOUL.md, profile.yaml, curated skills, cron definitions, and docs.",
-            "",
-            "## Runtime State",
-            "",
-            "- Keep .env, memories/, sessions/, logs/, state.db*, cache directories, and generated usage files out of Git.",
-            "- Use a dedicated Slack app and 1Password item such as SlackBot-Researcher; do not reuse the default gateway Slack tokens.",
-            "",
-            "## Shared Reading",
-            "",
-            "- Use /opt/data/docs/profile-home-layout.md for cross-profile home layout rules.",
-            "- Use repository AGENTS.md and docs for project-specific instructions instead of copying project memory into this profile."
+            '# Hermes Agent Home/Profile Layout',
+            '',
+            'Hermes profile homes should keep the filesystem layout that Hermes expects, while Git tracks only the declarative distribution files.',
+            '',
+            '## Runtime Mounts',
+            '',
+            '- The default gateway mounts `~/.hermes` as `/opt/data`.',
+            '- A dedicated profile gateway mounts `~/.hermes/profiles/<profile>` as `/opt/data`.',
+            '- A dedicated profile gateway mounts the root shared docs directory `~/.hermes/docs` onto `/opt/data/docs` read-only.',
+            '- From the default gateway, profile homes are visible under `/opt/data/profiles/<profile>`.',
+            '',
+            '## Standard Profile Filesystem',
+            '',
+            '`hermes profile create <name>` scaffolds a usable profile home. Depending on flags and runtime activity, a profile home may contain files and directories such as:',
+            '',
+            '```text',
+            '~/.hermes/profiles/<profile>/',
+            '  .env',
+            '  .gitignore',
+            '  .no-bundled-skills',
+            '  config.yaml',
+            '  SOUL.md',
+            '  profile.yaml',
+            '  slack-manifest.json',
+            '  assets/',
+            '  docs/',
+            '  cron/',
+            '  home/',
+            '  logs/',
+            '  memories/',
+            '  plans/',
+            '  sessions/',
+            '  skills/',
+            '  skins/',
+            '  workspace/',
+            '  state.db*',
+            '```',
+            '',
+            'Do not delete or flatten this physical layout just to make Git status smaller. Hermes and its gateway may recreate runtime directories as needed.',
+            '',
+            '## Git-Tracked Distribution',
+            '',
+            'Track durable, declarative profile content:',
+            '',
+            '- `config.yaml`',
+            '- `SOUL.md`',
+            '- `profile.yaml`',
+            '- `.gitignore`',
+            '- `.no-bundled-skills` when the profile intentionally has no bundled skills',
+            '- `slack-manifest.json` when the profile has a Slack app',
+            '- `assets/` for durable profile images and icons',
+            '- `docs/` for profile-specific docs only; do not copy the shared root layout doc into each profile',
+            '- curated profile-specific `skills/`, if intentionally maintained',
+            '- declarative `cron/` definitions only, not cron output, locks, or tick files',
+            '',
+            '## Dedicated Gateway Runtime Secrets',
+            '',
+            'A profile that runs its own gateway still needs runtime credentials inside that profile home. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.',
+            '',
+            '## Ignored Runtime State',
+            '',
+            'Ignore secrets and live state:',
+            '',
+            '- `.env`, `.env.*`, `auth.json`, tokens, and secrets',
+            '- `memories/`, `sessions/`, `logs/`, `state.db*`, gateway state, channel directories, locks, pids, caches, generated usage files, local workspaces, and transient cron output',
+            '- default profile state copied by `--clone-all` unless it has been intentionally curated into the profile distribution',
+            '',
+            '## Profile Creation Notes',
+            '',
+            '- `hermes profile create <name>` creates a standard scaffold.',
+            '- `hermes profile create --clone <name>` copies `config.yaml`, `.env`, `SOUL.md`, and `skills` from the source profile.',
+            '- `hermes profile create --clone-all <name>` copies broader state and is not recommended for clean Git-managed distributions.',
+            '- If a profile does not need bundled skills, use or keep `.no-bundled-skills` instead of tracking an empty `skills/` tree.',
+            '',
+            '## Shared Knowledge',
+            '',
+            'Do not share profile `memories/` through Git. Put durable shared guidance in `docs/` or repository `AGENTS.md` files, and use Slack, Hermes Kanban, GitHub issues, or Linear for cross-agent work state. If a shared memory backend is introduced later, namespace it by user, app, and profile.'
         )
     }
 
@@ -479,6 +598,10 @@ class HermesAgentHandler : SetupHandlerBase {
             "ollama_cloud_models_cache.json",
             "provider_models_cache.json",
             "config.yaml.bak*",
+            "cron/output/",
+            "cron/.jobs.lock",
+            "cron/.tick.lock",
+            "cron/ticker_*",
             "",
             "# Caches and generated dependencies",
             "cache/",
@@ -565,6 +688,98 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [pscustomobject] EnsureSlackMentionConfiguration([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSlackRespondWithoutMention", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Paths = @() }
+        }
+
+        $configPaths = @((Join-Path $dataDir "config.yaml"))
+        $profilesDir = Join-Path $dataDir "profiles"
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileConfigPath = Join-Path (Join-Path $profilesDir $profileName) "config.yaml"
+            if (Test-Path -LiteralPath $profileConfigPath -PathType Leaf) {
+                $configPaths += $profileConfigPath
+            }
+        }
+
+        $changedPaths = @()
+        foreach ($configPath in $configPaths) {
+            $existingLines = @()
+            if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+                $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+            }
+
+            $updatedLines = $this.SetSlackMentionConfigLines($existingLines)
+            if (-not $this.LinesEqual($existingLines, $updatedLines)) {
+                $this.EnsureDirectory((Split-Path -Parent $configPath))
+                Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+                $changedPaths += $configPath
+            }
+        }
+
+        return [PSCustomObject]@{
+            Changed = $changedPaths.Count -gt 0
+            Source  = "Config"
+            Count   = $changedPaths.Count
+            Paths   = $changedPaths
+        }
+    }
+
+    hidden [string[]] SetSlackMentionConfigLines([string[]]$lines) {
+        $managedLines = @(
+            "  require_mention: false",
+            "  allow_bots: mentions"
+        )
+        $desiredBlock = @("slack:") + $managedLines
+
+        if ($lines.Count -eq 0) {
+            return $desiredBlock
+        }
+
+        $slackStart = -1
+        for ($index = 0; $index -lt $lines.Count; $index++) {
+            if ($lines[$index] -match '^slack\s*:') {
+                $slackStart = $index
+                break
+            }
+        }
+
+        if ($slackStart -lt 0) {
+            $result = @($lines)
+            if ($result.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($result[-1])) {
+                $result += ""
+            }
+            $result += $desiredBlock
+            return $result
+        }
+
+        $slackEnd = $slackStart + 1
+        while ($slackEnd -lt $lines.Count) {
+            if ($lines[$slackEnd] -match '^\S[^:]*\s*:') {
+                break
+            }
+            $slackEnd++
+        }
+
+        $existingBlock = @($lines[$slackStart..($slackEnd - 1)])
+        $preservedChildLines = @(
+            $existingBlock |
+                Select-Object -Skip 1 |
+                Where-Object { $_ -notmatch '^\s{2}(require_mention|allow_bots)\s*:' }
+        )
+
+        $newBlock = @("slack:") + $managedLines + $preservedChildLines
+        $result = @()
+        if ($slackStart -gt 0) {
+            $result += $lines[0..($slackStart - 1)]
+        }
+        $result += $newBlock
+        if ($slackEnd -lt $lines.Count) {
+            $result += $lines[$slackEnd..($lines.Count - 1)]
+        }
+        return $result
     }
 
     hidden [string[]] SetMcpConfigLines([string[]]$lines) {
