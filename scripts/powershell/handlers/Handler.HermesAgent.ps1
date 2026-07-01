@@ -814,7 +814,7 @@ class HermesAgentHandler : SetupHandlerBase {
             "SlackBot-Researcher"
         )
         if ($null -ne $slackEnvironment) {
-            $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment)
+            $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment, $true)
             return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
         }
 
@@ -863,9 +863,14 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [void] WriteSlackEnvironment([string]$envPath, [string[]]$lines, [pscustomobject]$environment) {
+        $this.WriteSlackEnvironment($envPath, $lines, $environment, $false)
+    }
+
+    hidden [void] WriteSlackEnvironment([string]$envPath, [string[]]$lines, [pscustomobject]$environment, [bool]$removeSharedPlatformSecrets) {
         $filteredLines = @(
             $lines | Where-Object {
-                $_ -notmatch '^\s*SLACK_(BOT_TOKEN|APP_TOKEN|ALLOWED_USERS)\s*='
+                $_ -notmatch '^\s*SLACK_(BOT_TOKEN|APP_TOKEN|ALLOWED_USERS)\s*=' -and
+                (-not $removeSharedPlatformSecrets -or -not $this.IsSharedPlatformSecretLine($_))
             }
         )
 
@@ -878,6 +883,10 @@ class HermesAgentHandler : SetupHandlerBase {
         $filteredLines += "SLACK_ALLOWED_USERS=$($environment.AllowedUsers)"
 
         Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+    }
+
+    hidden [bool] IsSharedPlatformSecretLine([string]$line) {
+        return $line -match '^\s*(TELEGRAM_BOT_TOKEN|DISCORD_BOT_TOKEN|DISCORD_TOKEN|WHATSAPP_[A-Z0-9_]+|SIGNAL_[A-Z0-9_]+|TEAMS_[A-Z0-9_]+|QQBOT_[A-Z0-9_]+|YUANBAO_[A-Z0-9_]+|HOMEASSISTANT_[A-Z0-9_]+)\s*='
     }
 
     hidden [void] WriteNamedEnvironment([string]$envPath, [string[]]$lines, [hashtable]$environment) {

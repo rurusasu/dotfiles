@@ -103,8 +103,10 @@ Slack メッセージを拒否する。
 
 `researcher` profile 作成直後の `.env` は default profile から clone されるため、`SlackBot-Researcher` に差し替える前に
 researcher gateway を起動しない。default と researcher が同じ Slack token を待ち受けると、同じ Slack event に二重応答する。
+researcher profile は Slack 専用 gateway として使い、clone 由来の `TELEGRAM_BOT_TOKEN` など他 platform token は残さない。
 
 `researcher` gateway は Docker Compose の別 service として起動する。host ports は default と衝突しないように分ける。
+Docker service は `profiles/researcher` を `/opt/data` として mount し、default home の gateway state や supervised process を拾わない。
 
 ```powershell
 task hermes:researcher:up
