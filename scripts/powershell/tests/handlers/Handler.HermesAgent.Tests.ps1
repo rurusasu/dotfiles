@@ -140,9 +140,11 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^\s{2}researcher:"
             $composeContent | Should -Match "(?m)^\s{4}container_name:\s*hermes-researcher"
             $composeContent | Should -Match "(?m)^\s{4}restart:\s*unless-stopped"
-            $composeContent | Should -Match "(?m)^\s{4}command:\s*hermes -p researcher gateway run"
+            $composeContent | Should -Match "(?m)^\s{4}command:\s*gateway run"
             $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642'))
             $composeContent | Should -Match ([regex]::Escape('127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119'))
+            $composeContent | Should -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher'))
+            $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data\s*$"
             $composeContent | Should -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher/.env'))
         }
 
@@ -576,6 +578,8 @@ Describe 'HermesAgentHandler' {
             New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
             Set-Content -LiteralPath $researcherEnvPath -Encoding UTF8 -Value @(
                 "OTHER=value",
+                "GEMINI_API_KEY=shared-api-key",
+                "TELEGRAM_BOT_TOKEN=cloned-telegram-token",
                 "SLACK_BOT_TOKEN=xoxb-cloned-default",
                 "SLACK_APP_TOKEN=xapp-cloned-default",
                 "SLACK_ALLOWED_USERS=UDEFAULT"
@@ -625,10 +629,13 @@ Describe 'HermesAgentHandler' {
             $result.Success | Should -Be $true
             $envContent = Get-Content -LiteralPath $researcherEnvPath -Raw
             $envContent | Should -Match "OTHER=value"
+            $envContent | Should -Match "GEMINI_API_KEY=shared-api-key"
             $envContent | Should -Match "SLACK_BOT_TOKEN=xoxb-researcher-bot-token"
             $envContent | Should -Match "SLACK_APP_TOKEN=xapp-researcher-app-token"
             $envContent | Should -Match "SLACK_ALLOWED_USERS=URESEARCHER"
             $envContent | Should -Not -Match "xoxb-cloned-default"
+            $envContent | Should -Not -Match "TELEGRAM_BOT_TOKEN"
+            $envContent | Should -Not -Match "cloned-telegram-token"
             Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
                 $OpExe -eq "C:\op.exe" -and
                 $Arguments[0] -eq "item" -and

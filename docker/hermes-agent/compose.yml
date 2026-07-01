@@ -37,13 +37,13 @@ services:
     container_name: hermes-researcher
     restart: unless-stopped
     shm_size: 1g
-    command: hermes -p researcher gateway run
+    command: gateway run
     ports:
       - "127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642"
       - "127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119"
     volumes:
       - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher
         target: /opt/data
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
