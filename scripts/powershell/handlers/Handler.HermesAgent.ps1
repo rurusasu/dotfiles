@@ -77,6 +77,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $this.EnsureDirectory($dataDir)
             $this.EnsureDirectory((Join-Path $dataDir ".xurl"))
             $homeRepositoryResult = $this.EnsureHomeRepositoryLayout($ctx, $dataDir)
+            $lifelogCoreResult = $this.EnsureLifelogCore($ctx, $dataDir)
             $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
 
             $envPath = Join-Path $dataDir ".env"
@@ -89,7 +90,11 @@ class HermesAgentHandler : SetupHandlerBase {
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
             $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
-            $composeArgs = @("compose", "-f", $composeFile, "up", "-d", "--build")
+            $composeArgs = @("compose", "-f", $composeFile)
+            foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+                $composeArgs += @("--profile", $profileName)
+            }
+            $composeArgs += @("up", "-d", "--build")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
@@ -98,6 +103,11 @@ class HermesAgentHandler : SetupHandlerBase {
                     $message = "exit code $exitCode"
                 }
                 return $this.CreateFailureResult("Hermes Agent コンテナの起動に失敗しました: $message")
+            }
+
+            $lifelogBootstrapResult = $this.InvokeLifelogCoreBootstrap($ctx)
+            if (-not $lifelogBootstrapResult.Success) {
+                return $this.CreateFailureResult($lifelogBootstrapResult.Message)
             }
 
             if ($authResult.Changed -and $authResult.Source -eq "1Password") {
@@ -134,6 +144,13 @@ class HermesAgentHandler : SetupHandlerBase {
 
             if ($homeRepositoryResult.Changed) {
                 $this.Log("Hermes home/profile Git 管理ポリシーを更新しました", "Green")
+            }
+
+            if ($lifelogCoreResult.Changed) {
+                $this.Log("Hermes lifelog core 設定を更新しました", "Green")
+            }
+            if ($lifelogBootstrapResult.Changed) {
+                $this.Log("Hermes lifelog core を同期しました", "Green")
             }
 
             if ($openClawApiResult.Changed -and $openClawApiResult.Count -gt 0) {
@@ -271,6 +288,342 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [pscustomobject] EnsureLifelogCore([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentLifelogCoreEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
+        }
+
+        $changed = $false
+        $coreDir = Join-Path $dataDir "core"
+        $this.EnsureDirectory($coreDir)
+
+        $changed = $this.EnsureGitignoreEntry(
+            (Join-Path $dataDir ".gitignore"),
+            "core/",
+            "Shared lifelog core is a separate Git repository cloned at runtime."
+        ) -or $changed
+
+        $scriptsDir = Join-Path $dataDir "scripts"
+        $this.EnsureDirectory($scriptsDir)
+        $changed = $this.EnsureFileLinesLf(
+            (Join-Path $scriptsDir "lifelog_sync.sh"),
+            $this.GetLifelogCoreSyncScriptLines()
+        ) -or $changed
+
+        $changed = $this.EnsureLifelogCronJob($dataDir) -or $changed
+
+        $changed = $this.EnsureManagedBlock(
+            (Join-Path $dataDir "SOUL.md"),
+            "HERMES_LIFELOG_CORE_POLICY",
+            $this.GetLifelogCorePolicyBlockLines()
+        ) -or $changed
+
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path (Join-Path $dataDir "profiles") $profileName
+            if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
+                continue
+            }
+            $changed = $this.EnsureManagedBlock(
+                (Join-Path $profileDir "SOUL.md"),
+                "HERMES_LIFELOG_CORE_POLICY",
+                $this.GetLifelogCorePolicyBlockLines()
+            ) -or $changed
+        }
+
+        return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+    }
+
+    hidden [bool] EnsureFileLinesLf([string]$path, [string[]]$desiredLines) {
+        $desiredContent = ($desiredLines -join "`n") + "`n"
+        $existingContent = ""
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $existingContent = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+        }
+
+        if ($existingContent -eq $desiredContent) {
+            return $false
+        }
+
+        $this.EnsureDirectory((Split-Path -Parent $path))
+        Set-Content -LiteralPath $path -Encoding UTF8 -NoNewline -Value $desiredContent
+        return $true
+    }
+
+    hidden [pscustomobject] InvokeLifelogCoreBootstrap([SetupContext]$ctx) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentLifelogCoreEnabled", $true))) {
+            return [PSCustomObject]@{ Success = $true; Changed = $false; Source = "Disabled"; Message = "" }
+        }
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentLifelogCoreBootstrapEnabled", $true))) {
+            return [PSCustomObject]@{ Success = $true; Changed = $false; Source = "Disabled"; Message = "" }
+        }
+
+        $output = @(Invoke-Docker -Arguments @(
+                "exec",
+                "hermes",
+                "bash",
+                "-lc",
+                "bash /opt/data/scripts/lifelog_sync.sh --bootstrap"
+            ) -TimeoutSeconds $this.DockerRunTimeoutSeconds)
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            $message = ($output -join "`n").Trim()
+            if ([string]::IsNullOrWhiteSpace($message)) {
+                $message = "exit code $exitCode"
+            }
+            return [PSCustomObject]@{
+                Success = $false
+                Changed = $false
+                Source  = "Docker"
+                Message = "Hermes lifelog core の初回同期に失敗しました: $message"
+            }
+        }
+
+        return [PSCustomObject]@{
+            Success = $true
+            Changed = $true
+            Source  = "Docker"
+            Message = ""
+        }
+    }
+
+    hidden [string[]] GetLifelogCorePolicyBlockLines() {
+        return @(
+            "## Lifelog Core Policy",
+            "",
+            "Before making user-context decisions, read /opt/data/core/lifelog/AGENTS.md and the relevant notes under /opt/data/core/lifelog.",
+            "Treat /opt/data/core/lifelog as the shared source of truth for durable cross-agent user context.",
+            "Write durable shared context to /opt/data/core/lifelog according to its AGENTS.md; do not use profile memories/ as the shared source of truth."
+        )
+    }
+
+    hidden [bool] EnsureLifelogCronJob([string]$dataDir) {
+        $cronDir = Join-Path $dataDir "cron"
+        $this.EnsureDirectory($cronDir)
+        $cronPath = Join-Path $cronDir "jobs.json"
+
+        $cron = $null
+        if (Test-Path -LiteralPath $cronPath -PathType Leaf) {
+            try {
+                $cron = Get-Content -LiteralPath $cronPath -Raw -ErrorAction Stop | ConvertFrom-Json
+            }
+            catch {
+                $cron = $null
+            }
+        }
+        if ($null -eq $cron) {
+            $cron = [PSCustomObject]@{
+                jobs       = @()
+                updated_at = $null
+            }
+        }
+
+        $jobs = @()
+        if ($null -ne $cron.jobs) {
+            $jobs = @($cron.jobs)
+        }
+
+        $desiredJob = $this.GetLifelogCronJob()
+        $changed = $false
+        $updatedJobs = @()
+        $found = $false
+        foreach ($job in $jobs) {
+            if ($job.id -eq $desiredJob.id) {
+                $found = $true
+                $mergedJob = $this.MergeLifelogCronJob($job, $desiredJob)
+                if ((ConvertTo-Json -InputObject $job -Depth 10 -Compress) -ne (ConvertTo-Json -InputObject $mergedJob -Depth 10 -Compress)) {
+                    $changed = $true
+                }
+                $updatedJobs += $mergedJob
+                continue
+            }
+            $updatedJobs += $job
+        }
+
+        if (-not $found) {
+            $updatedJobs += $desiredJob
+            $changed = $true
+        }
+
+        if (-not $changed) {
+            return $false
+        }
+
+        $cron.jobs = @($updatedJobs)
+        $cron.updated_at = (Get-Date).ToUniversalTime().ToString("o")
+        $json = ConvertTo-Json -InputObject $cron -Depth 10
+        Set-Content -LiteralPath $cronPath -Encoding UTF8 -Value $json
+        return $true
+    }
+
+    hidden [pscustomobject] MergeLifelogCronJob([object]$existingJob, [pscustomobject]$desiredJob) {
+        $mergedJob = ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $existingJob -Depth 10)
+        foreach ($propertyName in @(
+                "name",
+                "prompt",
+                "skills",
+                "skill",
+                "model",
+                "provider",
+                "provider_snapshot",
+                "model_snapshot",
+                "base_url",
+                "script",
+                "no_agent",
+                "context_from",
+                "schedule",
+                "schedule_display",
+                "enabled",
+                "workdir"
+            )) {
+            $mergedJob | Add-Member -MemberType NoteProperty -Name $propertyName -Value $desiredJob.$propertyName -Force
+        }
+
+        return $mergedJob
+    }
+
+    hidden [pscustomobject] GetLifelogCronJob() {
+        return [PSCustomObject]@{
+            id                  = "lifelog-core-sync"
+            name                = "Daily Lifelog core GitHub sync"
+            prompt              = "Run the Hermes lifelog core GitHub sync script. It clones or updates /opt/data/core/lifelog, commits non-secret lifelog changes, rebases from origin/main, and pushes back to GitHub."
+            skills              = @()
+            skill               = $null
+            model               = $null
+            provider            = $null
+            provider_snapshot   = $null
+            model_snapshot      = $null
+            base_url            = $null
+            script              = "lifelog_sync.sh"
+            no_agent            = $true
+            context_from        = $null
+            schedule            = [PSCustomObject]@{
+                kind    = "cron"
+                expr    = "20 4 * * *"
+                display = "20 4 * * *"
+            }
+            schedule_display    = "20 4 * * *"
+            repeat              = [PSCustomObject]@{
+                times     = $null
+                completed = 0
+            }
+            enabled             = $true
+            state               = "scheduled"
+            paused_at           = $null
+            paused_reason       = $null
+            last_run_at         = $null
+            last_status         = $null
+            last_error          = $null
+            last_delivery_error = $null
+            enabled_toolsets    = $null
+            workdir             = $null
+        }
+    }
+
+    hidden [string[]] GetLifelogCoreSyncScriptLines() {
+        return @(
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            "",
+            'LIFELOG_DIR="${LIFELOG_ROOT:-/opt/data/core/lifelog}"',
+            'LIFELOG_REMOTE_URL="${LIFELOG_REMOTE_URL:-https://github.com/rurusasu/lifelog.git}"',
+            'LIFELOG_BRANCH="${LIFELOG_BRANCH:-main}"',
+            'HERMES_HOME_DIR="/opt/data"',
+            "",
+            'load_github_token() {',
+            '  if [ -f "$HERMES_HOME_DIR/.env" ]; then',
+            '    while IFS="=" read -r key value || [ -n "$key" ]; do',
+            '      key="${key#export }"',
+            '      key="${key%$''\r''}"',
+            '      value="${value%$''\r''}"',
+            '      value="${value%\"}"; value="${value#\"}"',
+            '      case "$key" in',
+            '        GH_TOKEN|GITHUB_TOKEN) [ -z "${GH_TOKEN:-}" ] && export GH_TOKEN="$value" ;;',
+            '        GITHUB_PERSONAL_ACCESS_TOKEN) [ -z "${GH_TOKEN:-}" ] && export GH_TOKEN="$value" ;;',
+            '      esac',
+            '    done < "$HERMES_HOME_DIR/.env"',
+            '  fi',
+            '}',
+            "",
+            'setup_git_auth() {',
+            '  export GIT_TERMINAL_PROMPT=0',
+            '  if [ -z "${GH_TOKEN:-}" ]; then',
+            '    return',
+            '  fi',
+            '  GIT_ASKPASS_FILE="$(mktemp)"',
+            '  export GIT_ASKPASS_FILE',
+            '  cat > "$GIT_ASKPASS_FILE" <<''ASKPASS''',
+            "#!/bin/sh",
+            'case "$1" in',
+            '  *Username*) printf "%s\n" "x-access-token" ;;',
+            '  *Password*) printf "%s\n" "$GH_TOKEN" ;;',
+            '  *) printf "\n" ;;',
+            'esac',
+            "ASKPASS",
+            '  chmod 700 "$GIT_ASKPASS_FILE"',
+            '  export GIT_ASKPASS="$GIT_ASKPASS_FILE"',
+            '}',
+            "",
+            'cleanup() {',
+            '  if [ -n "${GIT_ASKPASS_FILE:-}" ] && [ -f "$GIT_ASKPASS_FILE" ]; then',
+            '    rm -f "$GIT_ASKPASS_FILE"',
+            '  fi',
+            '}',
+            'trap cleanup EXIT',
+            "",
+            'refuse_secret_changes() {',
+            '  if git -c safe.directory="$LIFELOG_DIR" diff --cached --name-only | grep -E ''(^|/)(\.direnv/|\.env|\.env\..*|auth\.json|.*token.*|.*secret.*|.*password.*|state\.db|.*\.sqlite3?|.*\.db|.*-shm|.*-wal|logs/|sessions/|cache/)'' >/dev/null 2>&1; then',
+            '    echo "Hermes lifelog sync refused: secret/state/runtime file would be committed"',
+            '    git -c safe.directory="$LIFELOG_DIR" reset --mixed >/dev/null',
+            '    exit 1',
+            '  fi',
+            '}',
+            "",
+            'restore_runtime_paths() {',
+            '  git -c safe.directory="$LIFELOG_DIR" restore --staged --worktree -- .direnv >/dev/null 2>&1 || true',
+            '}',
+            "",
+            'load_github_token',
+            'setup_git_auth',
+            'mkdir -p "$(dirname "$LIFELOG_DIR")"',
+            "",
+            'if [ ! -d "$LIFELOG_DIR/.git" ]; then',
+            '  if [ -e "$LIFELOG_DIR" ] && [ "$(find "$LIFELOG_DIR" -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)" != "" ]; then',
+            '    echo "Hermes lifelog sync failed: $LIFELOG_DIR exists but is not an empty git repository"',
+            '    exit 1',
+            '  fi',
+            '  rm -rf "$LIFELOG_DIR"',
+            '  git clone --branch "$LIFELOG_BRANCH" "$LIFELOG_REMOTE_URL" "$LIFELOG_DIR"',
+            'fi',
+            "",
+            'cd "$LIFELOG_DIR"',
+            'if ! git -c safe.directory="$LIFELOG_DIR" config user.name >/dev/null; then',
+            '  git -c safe.directory="$LIFELOG_DIR" config user.name "Hermes Lifelog Sync"',
+            'fi',
+            'if ! git -c safe.directory="$LIFELOG_DIR" config user.email >/dev/null; then',
+            '  git -c safe.directory="$LIFELOG_DIR" config user.email "hermes-lifelog-sync@users.noreply.github.com"',
+            'fi',
+            'current_branch="$(git -c safe.directory="$LIFELOG_DIR" branch --show-current)"',
+            'if [ "$current_branch" != "$LIFELOG_BRANCH" ]; then',
+            '  echo "Hermes lifelog sync failed: expected branch $LIFELOG_BRANCH but found $current_branch"',
+            '  exit 1',
+            'fi',
+            "",
+            'restore_runtime_paths',
+            'git -c safe.directory="$LIFELOG_DIR" add -A -- .',
+            'refuse_secret_changes',
+            'if ! git -c safe.directory="$LIFELOG_DIR" diff --cached --quiet; then',
+            '  git -c safe.directory="$LIFELOG_DIR" commit -m "chore: sync lifelog $(date -u +%Y-%m-%d)" >/dev/null',
+            '  echo "Hermes lifelog committed local changes."',
+            'fi',
+            "",
+            'git -c safe.directory="$LIFELOG_DIR" pull --rebase origin "$LIFELOG_BRANCH"',
+            'git -c safe.directory="$LIFELOG_DIR" push origin "$LIFELOG_BRANCH"',
+            'if [ "${1:-}" = "--bootstrap" ]; then',
+            '  echo "Hermes lifelog bootstrap completed."',
+            'fi'
+        )
     }
 
     hidden [bool] EnsureProfileRepositoryLayout([string]$dataDir, [string]$profileName) {
@@ -494,7 +847,9 @@ class HermesAgentHandler : SetupHandlerBase {
             '- The default gateway mounts `~/.hermes` as `/opt/data`.',
             '- A dedicated profile gateway mounts `~/.hermes/profiles/<profile>` as `/opt/data`.',
             '- A dedicated profile gateway mounts the root shared docs directory `~/.hermes/docs` onto `/opt/data/docs` read-only.',
+            '- A dedicated profile gateway mounts the root shared core directory `~/.hermes/core` onto `/opt/data/core` read/write.',
             '- From the default gateway, profile homes are visible under `/opt/data/profiles/<profile>`.',
+            '- `HERMES_DATA_DIR` remains the Hermes home. Do not point it at lifelog; lifelog is restored under `~/.hermes/core/lifelog`.',
             '',
             '## Standard Profile Filesystem',
             '',
@@ -561,7 +916,23 @@ class HermesAgentHandler : SetupHandlerBase {
             '',
             '## Shared Knowledge',
             '',
-            'Do not share profile `memories/` through Git. Put durable shared guidance in `docs/` or repository `AGENTS.md` files, and use Slack, Hermes Kanban, GitHub issues, or Linear for cross-agent work state. If a shared memory backend is introduced later, namespace it by user, app, and profile.'
+            'Do not share profile `memories/` through Git. Put durable shared guidance in `docs/` or repository `AGENTS.md` files, and use Slack, Hermes Kanban, GitHub issues, or Linear for cross-agent work state. If a shared memory backend is introduced later, namespace it by user, app, and profile.',
+            '',
+            '## Lifelog Core',
+            '',
+            '`install.cmd` restores the shared lifelog core at:',
+            '',
+            '```text',
+            '~/.hermes/core/lifelog',
+            '```',
+            '',
+            'Hermes gateways see it at:',
+            '',
+            '```text',
+            '/opt/data/core/lifelog',
+            '```',
+            '',
+            'Every managed profile should treat `/opt/data/core/lifelog/AGENTS.md` and relevant lifelog notes as the shared source of truth before making user-context decisions. The Hermes home repository ignores `core/`; lifelog is its own Git repository and is synced by the `lifelog_sync.sh` cron job.'
         )
     }
 

@@ -68,6 +68,9 @@ Hermes home は Git-managed profile distribution として扱う。root home と
 `/opt/data/docs/profile-home-layout.md` を配置し、managed profile gateway は root `docs` directory を
 `/opt/data/docs` に read-only mount する。
 root home repository では nested profile repository を混ぜないため `profiles/` を `.gitignore` に追加する。
+`HERMES_DATA_DIR` は Hermes home のままにし、lifelog repo には向けない。共有 lifelog core は
+`~/.hermes/core/lifelog` に clone / sync し、container 内では `/opt/data/core/lifelog` として全 gateway から
+read/write する。root home repository では `core/` を `.gitignore` に追加する。
 
 - account: `my.1password.com`
 - vault: `openclaw`
@@ -170,6 +173,12 @@ Hermes Agent の API / MCP 用 token も同じ `openclaw` vault から `~/.herme
 GitHub 操作用には Hermes container 内の `gh` CLI を使う。`gh` は `GH_TOKEN` / `GITHUB_TOKEN` を
 参照するため、token を rotate した場合は 1Password 側を更新して Hermes setup を再実行する。
 `mcp_servers.github` は重複するため Hermes setup で削除する。
+
+Hermes setup は `scripts/lifelog_sync.sh` と daily cron job を `~/.hermes` に作成する。
+初回 install では compose 起動後に `sh /opt/data/scripts/lifelog_sync.sh --bootstrap` を default gateway で実行し、
+`~/.hermes/core/lifelog` を GitHub から復元する。以後は Hermes cron が毎日 `04:20 UTC` に lifelog repo を
+`commit -> pull --rebase -> push` で同期する。`.env`、`auth.json`、token、secret、DB、logs、sessions、cache などが
+staged された場合は commit / push せず失敗させる。
 
 X API MCP は `xurl` bridge を使う。Hermes setup は `mcp_servers.xapi` と `mcp_servers.x-docs` を
 `~/.hermes/config.yaml` に生成し、`xurl` の OAuth cache は `~/.hermes/.xurl` に永続化する。
