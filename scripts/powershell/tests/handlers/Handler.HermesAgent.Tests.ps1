@@ -138,12 +138,14 @@ Describe 'HermesAgentHandler' {
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
             $profiles = @(
-                @{ Name = "researcher"; Container = "hermes-researcher"; Api = "HERMES_RESEARCHER_API_PORT:-8643"; Dashboard = "HERMES_RESEARCHER_DASHBOARD_PORT:-9120" },
                 @{ Name = "rick"; Container = "hermes-rick"; Api = "HERMES_RICK_API_PORT:-8644"; Dashboard = "HERMES_RICK_DASHBOARD_PORT:-9121" },
                 @{ Name = "hoffman"; Container = "hermes-hoffman"; Api = "HERMES_HOFFMAN_API_PORT:-8645"; Dashboard = "HERMES_HOFFMAN_DASHBOARD_PORT:-9122" },
                 @{ Name = "risarisa"; Container = "hermes-risarisa"; Api = "HERMES_RISARISA_API_PORT:-8646"; Dashboard = "HERMES_RISARISA_DASHBOARD_PORT:-9123" }
             )
+            $retiredProfileName = "researcher"
 
+            $composeContent | Should -Not -Match "(?m)^\s{2}$($retiredProfileName):"
+            $composeContent | Should -Not -Match "hermes-$retiredProfileName"
             foreach ($profile in $profiles) {
                 $composeContent | Should -Match "(?m)^\s{2}$($profile.Name):"
                 $composeContent | Should -Match "(?m)^\s{4}container_name:\s*$($profile.Container)"
@@ -167,7 +169,7 @@ Describe 'HermesAgentHandler' {
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
             $composeContent | Should -Match "(?m)^\s*LIFELOG_ROOT:\s*/opt/data/core/lifelog\s*$"
-            foreach ($profile in @("researcher", "rick", "hoffman", "risarisa")) {
+            foreach ($profile in @("rick", "hoffman", "risarisa")) {
                 $composeContent | Should -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/core"))
                 $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data/core\s*$"
             }
@@ -188,11 +190,13 @@ Describe 'HermesAgentHandler' {
             $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
 
             $taskfileContent | Should -Match "(?m)^\s{2}hermes:profile:init:"
-            $taskfileContent | Should -Match "PROFILE: '{{.CLI_ARGS | default `"researcher`"}}'"
+            $taskfileContent | Should -Match "PROFILE: '{{.CLI_ARGS | default `"risarisa`"}}'"
             $taskfileContent | Should -Match "docker exec hermes sh -lc"
             $taskfileContent | Should -Match "git init -b main"
 
-            foreach ($profile in @("researcher", "rick", "hoffman", "risarisa")) {
+            $retiredProfileName = "researcher"
+            $taskfileContent | Should -Not -Match "(?m)^\s{2}hermes:$($retiredProfileName):"
+            foreach ($profile in @("rick", "hoffman", "risarisa")) {
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:up:"
                 $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build $profile"
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:down:"
@@ -315,13 +319,14 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain "-f"
             $composeCall | Should -Contain $script:composeFile
             $composeCall | Should -Contain "--profile"
-            $composeCall | Should -Contain "researcher"
+            $composeCall | Should -Not -Contain "researcher"
             $composeCall | Should -Contain "rick"
             $composeCall | Should -Contain "hoffman"
             $composeCall | Should -Contain "risarisa"
             $composeCall | Should -Contain "up"
             $composeCall | Should -Contain "-d"
             $composeCall | Should -Contain "--build"
+            $composeCall | Should -Contain "--remove-orphans"
         }
 
         It 'should configure the default Codex model in config.yaml' {
@@ -469,6 +474,17 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "1Password CLI"
+            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
+        }
+
+        It 'should fail before compose when enabled root Slack tokens cannot be configured' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Slack"
             @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
         }
 
@@ -683,20 +699,15 @@ Describe 'HermesAgentHandler' {
             }
         }
 
-        It 'should configure researcher Slack environment from its dedicated 1Password item' {
-            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
-            $ctx.Options["HermesAgentResearcherSlack1PasswordEnabled"] = $true
+        It 'should not require a retired researcher Slack item when the legacy profile directory exists' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            $retiredProfileName = "researcher"
+            $retiredItemName = "SlackBot-$($retiredProfileName.Substring(0, 1).ToUpperInvariant())$($retiredProfileName.Substring(1))"
             $dataDir = Join-Path $script:userProfile ".hermes"
-            $researcherDir = Join-Path $dataDir "profiles\researcher"
-            $researcherEnvPath = Join-Path $researcherDir ".env"
+            $researcherDir = Join-Path $dataDir "profiles\$retiredProfileName"
             New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
-            Set-Content -LiteralPath $researcherEnvPath -Encoding UTF8 -Value @(
-                "OTHER=value",
-                "GEMINI_API_KEY=shared-api-key",
-                "TELEGRAM_BOT_TOKEN=cloned-telegram-token",
-                "SLACK_BOT_TOKEN=xoxb-cloned-default",
-                "SLACK_APP_TOKEN=xapp-cloned-default",
-                "SLACK_ALLOWED_USERS=UDEFAULT"
+            Set-Content -LiteralPath (Join-Path $researcherDir ".env") -Encoding UTF8 -Value @(
+                "OTHER=value"
             )
             $onePasswordItemJson = @{
                 fields = @(
@@ -704,19 +715,19 @@ Describe 'HermesAgentHandler' {
                         id      = "bot_token"
                         label   = "bot_token"
                         purpose = ""
-                        value   = "xoxb-researcher-bot-token"
+                        value   = "xoxb-root-bot-token"
                     },
                     @{
                         id      = "app_level_token"
                         label   = "app_level_token"
                         purpose = ""
-                        value   = "xapp-researcher-app-token"
+                        value   = "xapp-root-app-token"
                     },
                     @{
                         id      = "SLACK_ALLOWED_USERS"
                         label   = "SLACK_ALLOWED_USERS"
                         purpose = ""
-                        value   = "URESEARCHER"
+                        value   = "UROOT"
                     }
                 )
             } | ConvertTo-Json -Compress
@@ -732,7 +743,7 @@ Describe 'HermesAgentHandler' {
                 )
                 $null = $OpExe
                 $null = $TimeoutSeconds
-                if ($Arguments -contains "SlackBot-Researcher") {
+                if ($Arguments -contains "SlackBot-OpenClaw") {
                     return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
@@ -741,24 +752,11 @@ Describe 'HermesAgentHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
-            $envContent = Get-Content -LiteralPath $researcherEnvPath -Raw
-            $envContent | Should -Match "OTHER=value"
-            $envContent | Should -Match "GEMINI_API_KEY=shared-api-key"
-            $envContent | Should -Match "SLACK_BOT_TOKEN=xoxb-researcher-bot-token"
-            $envContent | Should -Match "SLACK_APP_TOKEN=xapp-researcher-app-token"
-            $envContent | Should -Match "SLACK_ALLOWED_USERS=URESEARCHER"
-            $envContent | Should -Not -Match "xoxb-cloned-default"
-            $envContent | Should -Not -Match "TELEGRAM_BOT_TOKEN"
-            $envContent | Should -Not -Match "cloned-telegram-token"
+            Should -Invoke Invoke-OpCommand -Times 0 -ParameterFilter {
+                $Arguments -contains $retiredItemName
+            }
             Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
-                $OpExe -eq "C:\op.exe" -and
-                $Arguments[0] -eq "item" -and
-                $Arguments[1] -eq "get" -and
-                $Arguments -contains "SlackBot-Researcher" -and
-                $Arguments -contains "--account" -and
-                $Arguments -contains "my.1password.com" -and
-                $Arguments -contains "--vault" -and
-                $Arguments -contains "openclaw"
+                $Arguments -contains "SlackBot-OpenClaw"
             }
         }
 
@@ -839,16 +837,152 @@ Describe 'HermesAgentHandler' {
             }
         }
 
-        It 'should bootstrap separate Git-managed profile home policy for researcher' {
+        It 'should configure Slack tokens for every managed profile dynamically' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            $ctx.Options["HermesAgentManagedProfiles"] = "rick,hoffman,risarisa,newagent"
             $dataDir = Join-Path $script:userProfile ".hermes"
-            $researcherDir = Join-Path $dataDir "profiles\researcher"
-            New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
+            $profilesDir = Join-Path $dataDir "profiles"
+            $profileNames = @("rick", "hoffman", "risarisa", "newagent")
+            foreach ($profileName in $profileNames) {
+                $profileDir = Join-Path $profilesDir $profileName
+                New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $profileDir ".env") -Encoding UTF8 -Value @(
+                    "OTHER=$profileName"
+                )
+            }
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $TimeoutSeconds
+                $itemName = $Arguments[2]
+                if ($itemName -notmatch '^SlackBot-') {
+                    return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+                }
+
+                $suffix = $itemName.Substring("SlackBot-".Length).ToLowerInvariant()
+                return [PSCustomObject]@{
+                    Output   = @(@{
+                            fields = @(
+                                @{
+                                    id      = "bot_token"
+                                    label   = "bot_token"
+                                    purpose = ""
+                                    value   = "xoxb-$suffix"
+                                },
+                                @{
+                                    id      = "app_level_token"
+                                    label   = "app_level_token"
+                                    purpose = ""
+                                    value   = "xapp-$suffix"
+                                },
+                                @{
+                                    id      = "SLACK_ALLOWED_USERS"
+                                    label   = "SLACK_ALLOWED_USERS"
+                                    purpose = ""
+                                    value   = "U-$suffix"
+                                }
+                            )
+                        } | ConvertTo-Json -Compress)
+                    ExitCode = 0
+                }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            foreach ($profileName in $profileNames) {
+                $profileEnvContent = Get-Content -LiteralPath (Join-Path $profilesDir "$profileName\.env") -Raw
+                $profileEnvContent | Should -Match "OTHER=$profileName"
+                $profileEnvContent | Should -Match "SLACK_BOT_TOKEN=xoxb-$profileName"
+                $profileEnvContent | Should -Match "SLACK_APP_TOKEN=xapp-$profileName"
+                $profileEnvContent | Should -Match "SLACK_ALLOWED_USERS=U-$profileName"
+            }
+        }
+
+        It 'should fail before compose when any managed profile Slack token cannot be configured' {
+            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
+            $ctx.Options["HermesAgentManagedProfiles"] = "rick,newagent"
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $profilesDir = Join-Path $dataDir "profiles"
+            foreach ($profileName in @("rick", "newagent")) {
+                $profileDir = Join-Path $profilesDir $profileName
+                New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $profileDir ".env") -Encoding UTF8 -Value @(
+                    "OTHER=$profileName"
+                )
+            }
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $TimeoutSeconds
+                $itemName = $Arguments[2]
+                if ($itemName -eq "SlackBot-Newagent") {
+                    return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+                }
+                if ($itemName -match '^SlackBot-') {
+                    return [PSCustomObject]@{
+                        Output   = @(@{
+                                fields = @(
+                                    @{
+                                        id      = "bot_token"
+                                        label   = "bot_token"
+                                        purpose = ""
+                                        value   = "xoxb-ok"
+                                    },
+                                    @{
+                                        id      = "app_level_token"
+                                        label   = "app_level_token"
+                                        purpose = ""
+                                        value   = "xapp-ok"
+                                    },
+                                    @{
+                                        id      = "SLACK_ALLOWED_USERS"
+                                        label   = "SLACK_ALLOWED_USERS"
+                                        purpose = ""
+                                        value   = "UOK"
+                                    }
+                                )
+                            } | ConvertTo-Json -Compress)
+                        ExitCode = 0
+                    }
+                }
+                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "Slack"
+            $result.Message | Should -Match "newagent"
+            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
+        }
+
+        It 'should bootstrap separate Git-managed profile home policy for a managed profile' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $profileDir = Join-Path $dataDir "profiles\risarisa"
+            New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $dataDir ".gitignore") -Encoding UTF8 -Value @(
                 ".env",
                 "memories/"
             )
             Set-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Encoding UTF8 -Value "Default profile soul."
-            Set-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Encoding UTF8 -Value "Researcher profile soul."
+            Set-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Encoding UTF8 -Value "Risarisa profile soul."
 
             $result = $handler.Apply($ctx)
 
@@ -878,35 +1012,35 @@ Describe 'HermesAgentHandler' {
             $rootSoul | Should -Match "auth\.json"
             $rootSoul | Should -Not -Match ([string][char]7)
 
-            $researcherGitignorePath = Join-Path $researcherDir ".gitignore"
-            $researcherGitignorePath | Should -Exist
-            $researcherGitignore = Get-Content -LiteralPath $researcherGitignorePath -Raw
-            $researcherGitignore | Should -Match "(?m)^\.env\r?$"
-            $researcherGitignore | Should -Match "(?m)^memories/\r?$"
-            $researcherGitignore | Should -Match "(?m)^sessions/\r?$"
-            $researcherGitignore | Should -Match "(?m)^logs/\r?$"
-            $researcherGitignore | Should -Match "(?m)^state\.db\*\r?$"
-            $researcherGitignore | Should -Match "(?m)^skills/\.usage\.json\*\r?$"
+            $profileGitignorePath = Join-Path $profileDir ".gitignore"
+            $profileGitignorePath | Should -Exist
+            $profileGitignore = Get-Content -LiteralPath $profileGitignorePath -Raw
+            $profileGitignore | Should -Match "(?m)^\.env\r?$"
+            $profileGitignore | Should -Match "(?m)^memories/\r?$"
+            $profileGitignore | Should -Match "(?m)^sessions/\r?$"
+            $profileGitignore | Should -Match "(?m)^logs/\r?$"
+            $profileGitignore | Should -Match "(?m)^state\.db\*\r?$"
+            $profileGitignore | Should -Match "(?m)^skills/\.usage\.json\*\r?$"
 
-            $profileDocPath = Join-Path $researcherDir "docs\profile-home-layout.md"
+            $profileDocPath = Join-Path $profileDir "docs\profile-home-layout.md"
             Test-Path -LiteralPath (Split-Path -Parent $profileDocPath) | Should -Be $true
             Test-Path -LiteralPath $profileDocPath | Should -Be $false
 
-            $profileSoul = Get-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Raw
+            $profileSoul = Get-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $profileSoul | Should -Match "standard filesystem layout"
         }
 
         It 'should bootstrap shared lifelog core files, policy, cron, and first sync' {
             $dataDir = Join-Path $script:userProfile ".hermes"
-            $researcherDir = Join-Path $dataDir "profiles\researcher"
-            New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
+            $profileDir = Join-Path $dataDir "profiles\risarisa"
+            New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $dataDir ".gitignore") -Encoding UTF8 -Value @(
                 ".env",
                 "profiles/"
             )
             Set-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Encoding UTF8 -Value "Default profile soul."
-            Set-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Encoding UTF8 -Value "Researcher profile soul."
+            Set-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Encoding UTF8 -Value "Risarisa profile soul."
 
             $result = $handler.Apply($ctx)
 
@@ -942,7 +1076,7 @@ Describe 'HermesAgentHandler' {
             $rootSoul | Should -Match "/opt/data/core/lifelog/AGENTS.md"
             $rootSoul | Should -Match "shared source of truth"
 
-            $profileSoul = Get-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Raw
+            $profileSoul = Get-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/core/lifelog/AGENTS.md"
             $profileSoul | Should -Match "shared source of truth"
 
@@ -998,6 +1132,7 @@ Describe 'HermesAgentHandler' {
 
         It 'should configure OpenClaw API environment from 1Password items' {
             $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
+            $ctx.Options["HermesAgentManagedProfiles"] = "rick,hoffman,risarisa,newagent"
             $items = @{
                 "GitHubUsedOpenClawPAT"    = "github-token"
                 "openclaw"                 = "gateway-token"
@@ -1011,10 +1146,13 @@ Describe 'HermesAgentHandler' {
                 "AutoCLI"                  = "autocli-token"
             }
             $dataDir = Join-Path $script:userProfile ".hermes"
-            $rickDir = Join-Path $dataDir "profiles\rick"
-            $hoffmanDir = Join-Path $dataDir "profiles\hoffman"
-            $risarisaDir = Join-Path $dataDir "profiles\risarisa"
-            New-Item -ItemType Directory -Path $rickDir, $hoffmanDir, $risarisaDir -Force | Out-Null
+            $profilesDir = Join-Path $dataDir "profiles"
+            $profileNames = @("rick", "hoffman", "risarisa", "newagent")
+            foreach ($profileName in $profileNames) {
+                New-Item -ItemType Directory -Path (Join-Path $profilesDir $profileName) -Force | Out-Null
+            }
+            $rickDir = Join-Path $profilesDir "rick"
+            $risarisaDir = Join-Path $profilesDir "risarisa"
             Set-Content -LiteralPath (Join-Path $rickDir ".env") -Encoding UTF8 -Value @(
                 "SLACK_BOT_TOKEN=xoxb-rick-token"
             )
@@ -1079,16 +1217,34 @@ Describe 'HermesAgentHandler' {
             $envContent | Should -Match "XAI_API_KEY=xai-token"
             $envContent | Should -Match "AUTOCLI_API_KEY=autocli-token"
 
-            foreach ($profileDir in @($rickDir, $hoffmanDir, $risarisaDir)) {
+            foreach ($profileName in $profileNames) {
+                $profileDir = Join-Path $profilesDir $profileName
                 $profileEnvContent = Get-Content -LiteralPath (Join-Path $profileDir ".env") -Raw
                 $profileEnvContent | Should -Match "GITHUB_TOKEN=github-token"
                 $profileEnvContent | Should -Match "GH_TOKEN=github-token"
                 $profileEnvContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
+                $profileEnvContent | Should -Match "OPENCLAW_GATEWAY_TOKEN=gateway-token"
             }
             $rickEnvContent = Get-Content -LiteralPath (Join-Path $rickDir ".env") -Raw
             $rickEnvContent | Should -Match "SLACK_BOT_TOKEN=xoxb-rick-token"
             $risarisaEnvContent = Get-Content -LiteralPath (Join-Path $risarisaDir ".env") -Raw
             $risarisaEnvContent | Should -Not -Match "GITHUB_TOKEN=stale-token"
+        }
+
+        It 'should fail before compose when any required OpenClaw API token cannot be configured' {
+            $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "GitHubUsedOpenClawPAT"
+            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
         }
 
         It 'should configure X MCP servers and remove the GitHub MCP server from config.yaml' {
@@ -1144,7 +1300,17 @@ Describe 'HermesAgentHandler' {
         It 'should configure X API MCP OAuth environment from the openclaw 1Password item' {
             $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
             $items = @{
-                "XApiMcp" = @{
+                "GitHubUsedOpenClawPAT"    = "github-token"
+                "openclaw"                 = "gateway-token"
+                "ExaUsedOpenclawPAT"       = "exa-token"
+                "TavilyUsedOpenclawPAT"    = "tavily-token"
+                "FirecrawlUsedOpenclawPAT" = "firecrawl-token"
+                "OpenClawGeminiAPI"        = "gemini-token"
+                "HuggingFace"              = "hf-token"
+                "TelegramBot"              = "telegram-token"
+                "XUsedOpenClaw"            = "xai-token"
+                "AutoCLI"                  = "autocli-token"
+                "XApiMcp"                  = @{
                     "CLIENT_ID"     = "x-client-id"
                     "CLIENT_SECRET" = "x-client-secret"
                 }
@@ -1163,6 +1329,29 @@ Describe 'HermesAgentHandler' {
                 $null = $TimeoutSeconds
                 $itemName = $Arguments[2]
                 if ($items.ContainsKey($itemName)) {
+                    if ($itemName -ne "XApiMcp") {
+                        $fieldId = "credential"
+                        $fieldLabel = "認証情報"
+                        if ($itemName -eq "openclaw") {
+                            $fieldId = "password"
+                            $fieldLabel = "gateway token"
+                        }
+
+                        return [PSCustomObject]@{
+                            Output   = @(@{
+                                    fields = @(
+                                        @{
+                                            id      = $fieldId
+                                            label   = $fieldLabel
+                                            purpose = ""
+                                            value   = $items[$itemName]
+                                        }
+                                    )
+                                } | ConvertTo-Json -Compress)
+                            ExitCode = 0
+                        }
+                    }
+
                     return [PSCustomObject]@{
                         Output   = @(@{
                                 fields = @(

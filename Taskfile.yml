@@ -217,7 +217,7 @@ tasks:
   hermes:profile:init:
     desc: Initialize a Hermes profile home as a separate Git repository
     vars:
-      PROFILE: '{{.CLI_ARGS | default "researcher"}}'
+      PROFILE: '{{.CLI_ARGS | default "risarisa"}}'
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -238,39 +238,6 @@ tasks:
         cd "$dir";
         if [ ! -d .git ]; then git init -b main >/dev/null 2>&1 || git init >/dev/null; fi;
         git status --short --branch'
-
-  hermes:researcher:up:
-    desc: Start researcher Hermes profile gateway in Docker
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build researcher
-
-  hermes:researcher:down:
-    desc: Stop researcher Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop researcher
-
-  hermes:researcher:restart:
-    desc: Restart researcher Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart researcher
-
-  hermes:researcher:logs:
-    desc: Follow researcher Hermes gateway logs
-    interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 researcher
 
   hermes:rick:up:
     desc: Start Rick Hermes profile gateway in Docker
