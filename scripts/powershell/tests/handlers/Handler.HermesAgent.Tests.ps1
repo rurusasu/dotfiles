@@ -161,6 +161,18 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^\s*read_only:\s*true\s*$"
         }
 
+        It 'should expose the shared lifelog core to every Hermes gateway' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
+            $composeContent = Get-Content -LiteralPath $composePath -Raw
+
+            $composeContent | Should -Match "(?m)^\s*LIFELOG_ROOT:\s*/opt/data/core/lifelog\s*$"
+            foreach ($profile in @("researcher", "rick", "hoffman", "risarisa")) {
+                $composeContent | Should -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/core"))
+                $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data/core\s*$"
+            }
+        }
+
         It 'should rebuild the local Hermes image instead of pulling it from a registry' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
@@ -275,6 +287,11 @@ Describe 'HermesAgentHandler' {
                     return @("started")
                 }
 
+                if ($Arguments[0] -eq "exec") {
+                    $global:LASTEXITCODE = 0
+                    return @("lifelog synced")
+                }
+
                 $global:LASTEXITCODE = 1
                 return @("unexpected docker call")
             }
@@ -297,6 +314,11 @@ Describe 'HermesAgentHandler' {
             $composeCall = @($script:dockerCalls | Where-Object { $_[0] -eq "compose" })[0]
             $composeCall | Should -Contain "-f"
             $composeCall | Should -Contain $script:composeFile
+            $composeCall | Should -Contain "--profile"
+            $composeCall | Should -Contain "researcher"
+            $composeCall | Should -Contain "rick"
+            $composeCall | Should -Contain "hoffman"
+            $composeCall | Should -Contain "risarisa"
             $composeCall | Should -Contain "up"
             $composeCall | Should -Contain "-d"
             $composeCall | Should -Contain "--build"
@@ -873,6 +895,105 @@ Describe 'HermesAgentHandler' {
             $profileSoul = Get-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $profileSoul | Should -Match "standard filesystem layout"
+        }
+
+        It 'should bootstrap shared lifelog core files, policy, cron, and first sync' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $researcherDir = Join-Path $dataDir "profiles\researcher"
+            New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $dataDir ".gitignore") -Encoding UTF8 -Value @(
+                ".env",
+                "profiles/"
+            )
+            Set-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Encoding UTF8 -Value "Default profile soul."
+            Set-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Encoding UTF8 -Value "Researcher profile soul."
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Test-Path -LiteralPath (Join-Path $dataDir "core") -PathType Container | Should -Be $true
+
+            $rootGitignore = Get-Content -LiteralPath (Join-Path $dataDir ".gitignore") -Raw
+            $rootGitignore | Should -Match "(?m)^core/\r?$"
+
+            $syncScriptPath = Join-Path $dataDir "scripts\lifelog_sync.sh"
+            $syncScriptPath | Should -Exist
+            $syncScript = Get-Content -LiteralPath $syncScriptPath -Raw
+            $syncScript | Should -Match "/opt/data/core/lifelog"
+            $syncScript | Should -Match "github\.com/rurusasu/lifelog\.git"
+            $syncScript | Should -Match 'safe\.directory="\$LIFELOG_DIR"'
+            $syncScript | Should -Match "restore_runtime_paths"
+            $syncScript | Should -Match "\.direnv"
+            $syncScript | Should -Match "Hermes Lifelog Sync"
+            $syncScript | Should -Match "Hermes lifelog sync refused"
+            $syncScript | Should -Not -Match "`r"
+            $syncScript | Should -Not -Match ([string][char]7)
+
+            $cronPath = Join-Path $dataDir "cron\jobs.json"
+            $cronPath | Should -Exist
+            $cron = Get-Content -LiteralPath $cronPath -Raw | ConvertFrom-Json
+            $lifelogJob = @($cron.jobs | Where-Object { $_.id -eq "lifelog-core-sync" })[0]
+            $lifelogJob.name | Should -Be "Daily Lifelog core GitHub sync"
+            $lifelogJob.script | Should -Be "lifelog_sync.sh"
+            $lifelogJob.no_agent | Should -Be $true
+            $lifelogJob.schedule.expr | Should -Be "20 4 * * *"
+
+            $rootSoul = Get-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Raw
+            $rootSoul | Should -Match "/opt/data/core/lifelog/AGENTS.md"
+            $rootSoul | Should -Match "shared source of truth"
+
+            $profileSoul = Get-Content -LiteralPath (Join-Path $researcherDir "SOUL.md") -Raw
+            $profileSoul | Should -Match "/opt/data/core/lifelog/AGENTS.md"
+            $profileSoul | Should -Match "shared source of truth"
+
+            Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
+                $Arguments[0] -eq "exec" -and
+                $Arguments[1] -eq "hermes" -and
+                ($Arguments -join " ") -match "bash /opt/data/scripts/lifelog_sync.sh --bootstrap"
+            }
+        }
+
+        It 'should update an existing lifelog cron job without removing runtime fields' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $cronDir = Join-Path $dataDir "cron"
+            New-Item -ItemType Directory -Path $cronDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $cronDir "jobs.json") -Encoding UTF8 -Value (@{
+                    jobs       = @(
+                        @{
+                            id         = "lifelog-core-sync"
+                            name       = "stale lifelog sync"
+                            script     = "old.sh"
+                            no_agent   = $false
+                            schedule   = @{
+                                kind    = "cron"
+                                expr    = "0 0 * * *"
+                                display = "0 0 * * *"
+                            }
+                            fire_claim = "runtime-claim"
+                        },
+                        @{
+                            id     = "other-job"
+                            name   = "Other job"
+                            script = "other.sh"
+                        }
+                    )
+                    updated_at = "2026-01-01T00:00:00Z"
+                } | ConvertTo-Json -Depth 10)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $cron = Get-Content -LiteralPath (Join-Path $cronDir "jobs.json") -Raw | ConvertFrom-Json
+            $lifelogJob = @($cron.jobs | Where-Object { $_.id -eq "lifelog-core-sync" })[0]
+            $lifelogJob.name | Should -Be "Daily Lifelog core GitHub sync"
+            $lifelogJob.script | Should -Be "lifelog_sync.sh"
+            $lifelogJob.no_agent | Should -Be $true
+            $lifelogJob.schedule.expr | Should -Be "20 4 * * *"
+            $lifelogJob.fire_claim | Should -Be "runtime-claim"
+
+            $otherJob = @($cron.jobs | Where-Object { $_.id -eq "other-job" })[0]
+            $otherJob.name | Should -Be "Other job"
+            $otherJob.script | Should -Be "other.sh"
         }
 
         It 'should configure OpenClaw API environment from 1Password items' {

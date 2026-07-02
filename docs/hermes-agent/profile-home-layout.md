@@ -7,7 +7,9 @@ Hermes profile homes should keep the filesystem layout that Hermes expects, whil
 - The default gateway mounts `~/.hermes` as `/opt/data`.
 - A dedicated profile gateway mounts `~/.hermes/profiles/<profile>` as `/opt/data`.
 - A dedicated profile gateway mounts the root shared docs directory `~/.hermes/docs` onto `/opt/data/docs` read-only.
+- A dedicated profile gateway mounts the root shared core directory `~/.hermes/core` onto `/opt/data/core` read/write.
 - From the default gateway, profile homes are visible under `/opt/data/profiles/<profile>`.
+- `HERMES_DATA_DIR` remains the Hermes home. Do not point it at lifelog; lifelog is restored under `~/.hermes/core/lifelog`.
 
 ## Standard Profile Filesystem
 
@@ -75,3 +77,19 @@ Ignore secrets and live state:
 ## Sharing Knowledge
 
 Do not share profile `memories/` through Git. Put durable shared guidance in `docs/` or repository `AGENTS.md` files, and use Slack, Hermes Kanban, GitHub issues, or Linear for cross-agent work state. If a shared memory backend is introduced later, namespace it by user, app, and profile.
+
+## Lifelog Core
+
+`install.cmd` restores the shared lifelog core at:
+
+```text
+~/.hermes/core/lifelog
+```
+
+Hermes gateways see it at:
+
+```text
+/opt/data/core/lifelog
+```
+
+Every managed profile should treat `/opt/data/core/lifelog/AGENTS.md` and relevant lifelog notes as the shared source of truth before making user-context decisions. The Hermes home repository ignores `core/`; lifelog is its own Git repository and is synced by the `lifelog_sync.sh` cron job.
