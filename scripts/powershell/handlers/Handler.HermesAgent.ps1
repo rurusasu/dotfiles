@@ -84,8 +84,8 @@ class HermesAgentHandler : SetupHandlerBase {
             $authResult = $this.EnsureDashboardAuth($ctx, $envPath, $infoFilePath)
             $profileDashboardAuthResult = $this.SyncDashboardAuthToManagedProfileEnvironments($ctx, $dataDir, $envPath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
-            $researcherSlackResult = $this.EnsureResearcherSlackEnvironment($ctx, $dataDir)
-            $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $envPath)
+            $profileSlackResult = $this.EnsureManagedProfileSlackEnvironments($ctx, $dataDir)
+            $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $dataDir, $envPath)
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
             $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
@@ -128,8 +128,8 @@ class HermesAgentHandler : SetupHandlerBase {
                 $this.Log("Slack 接続情報は既に設定済みです", "Gray")
             }
 
-            if ($researcherSlackResult.Changed -and $researcherSlackResult.Source -eq "1Password") {
-                $this.Log("researcher Slack 接続情報を 1Password から設定しました", "Green")
+            if ($profileSlackResult.Changed -and $profileSlackResult.Count -gt 0) {
+                $this.Log("Managed profile Slack 接続情報を 1Password から設定しました ($($profileSlackResult.Count) profiles)", "Green")
             }
 
             if ($homeRepositoryResult.Changed) {
@@ -138,6 +138,9 @@ class HermesAgentHandler : SetupHandlerBase {
 
             if ($openClawApiResult.Changed -and $openClawApiResult.Count -gt 0) {
                 $this.Log("OpenClaw API token を Hermes .env に設定しました ($($openClawApiResult.Count) keys)", "Green")
+            }
+            if ($openClawApiResult.ProfileCount -gt 0) {
+                $this.Log("OpenClaw API token を managed profile .env に同期しました ($($openClawApiResult.ProfileCount) profiles)", "Green")
             }
             elseif (-not $openClawApiResult.Changed -and $openClawApiResult.Source -eq "Disabled") {
                 $this.Log("OpenClaw API token の自動設定は無効化されています", "Gray")
@@ -316,7 +319,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string[]] GetManagedProfileNames([SetupContext]$ctx) {
-        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher,rick,hoffman")
+        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher,rick,hoffman,risarisa")
         if ($value -is [array]) {
             return @($value | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         }
@@ -729,7 +732,8 @@ class HermesAgentHandler : SetupHandlerBase {
 
     hidden [string[]] SetSlackMentionConfigLines([string[]]$lines) {
         $managedLines = @(
-            "  require_mention: false",
+            "  require_mention: true",
+            "  strict_mention: false",
             "  allow_bots: mentions"
         )
         $desiredBlock = @("slack:") + $managedLines
@@ -767,7 +771,7 @@ class HermesAgentHandler : SetupHandlerBase {
         $preservedChildLines = @(
             $existingBlock |
                 Select-Object -Skip 1 |
-                Where-Object { $_ -notmatch '^\s{2}(require_mention|allow_bots)\s*:' }
+                Where-Object { $_ -notmatch '^\s{2}(require_mention|strict_mention|allow_bots)\s*:' }
         )
 
         $newBlock = @("slack:") + $managedLines + $preservedChildLines
@@ -1006,43 +1010,110 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
     }
 
-    hidden [pscustomobject] EnsureResearcherSlackEnvironment([SetupContext]$ctx, [string]$dataDir) {
+    hidden [pscustomobject] EnsureManagedProfileSlackEnvironments([SetupContext]$ctx, [string]$dataDir) {
         $defaultEnabled = $this.IsTruthy($ctx.GetOption("HermesAgentSlack1PasswordEnabled", $true))
-        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentResearcherSlack1PasswordEnabled", $defaultEnabled))) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
+        $profilesDir = Join-Path $dataDir "profiles"
+        $changedProfiles = @()
+        $existingProfiles = @()
+        $missingProfiles = @()
+
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path $profilesDir $profileName
+            $envPath = Join-Path $profileDir ".env"
+            if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
+                continue
+            }
+
+            $profileTitle = $this.GetManagedProfileTitle($profileName)
+            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+            $slackEnvironment = $this.GetOnePasswordSlackEnvironmentForItem(
+                $ctx,
+                "HermesAgent$($profileTitle)Slack1PasswordEnabled",
+                $defaultEnabled,
+                "HermesAgentRequire$($profileTitle)Slack",
+                "HermesAgent$($profileTitle)Slack1PasswordAccount",
+                "HermesAgent$($profileTitle)Slack1PasswordVault",
+                "HermesAgent$($profileTitle)Slack1PasswordItem",
+                "SlackBot-$profileTitle"
+            )
+            if ($null -ne $slackEnvironment) {
+                $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment, $true)
+                $changedProfiles += $profileName
+                continue
+            }
+
+            if ($this.HasSlackEnvironment($lines)) {
+                $existingProfiles += $profileName
+                continue
+            }
+
+            $missingProfiles += $profileName
         }
 
-        $envPath = Join-Path $dataDir "profiles\researcher\.env"
-        if (-not (Test-Path -LiteralPath $envPath)) {
-            return [PSCustomObject]@{ Changed = $false; Source = "MissingProfile" }
+        return [PSCustomObject]@{
+            Changed  = $changedProfiles.Count -gt 0
+            Source   = "1Password"
+            Count    = $changedProfiles.Count
+            Profiles = $changedProfiles
+            Existing = $existingProfiles
+            Missing  = $missingProfiles
         }
-
-        $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
-        $slackEnvironment = $this.GetOnePasswordSlackEnvironmentForItem(
-            $ctx,
-            "HermesAgentResearcherSlack1PasswordEnabled",
-            $true,
-            "HermesAgentRequireResearcherSlack",
-            "HermesAgentResearcherSlack1PasswordAccount",
-            "HermesAgentResearcherSlack1PasswordVault",
-            "HermesAgentResearcherSlack1PasswordItem",
-            "SlackBot-Researcher"
-        )
-        if ($null -ne $slackEnvironment) {
-            $this.WriteSlackEnvironment($envPath, $lines, $slackEnvironment, $true)
-            return [PSCustomObject]@{ Changed = $true; Source = "1Password" }
-        }
-
-        if ($this.HasSlackEnvironment($lines)) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Existing" }
-        }
-
-        return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
     }
 
-    hidden [pscustomobject] EnsureOpenClawApiEnvironment([SetupContext]$ctx, [string]$envPath) {
+    hidden [string] GetManagedProfileTitle([string]$profileName) {
+        if ([string]::IsNullOrWhiteSpace($profileName)) {
+            return ""
+        }
+
+        $textInfo = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo
+        return $textInfo.ToTitleCase($profileName.ToLowerInvariant())
+    }
+
+    hidden [pscustomobject] SyncOpenClawApiEnvironmentToManagedProfileEnvironments(
+        [SetupContext]$ctx,
+        [string]$dataDir,
+        [hashtable]$environment
+    ) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSyncOpenClawSecretsToProfiles", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Profiles = @() }
+        }
+
+        if ($environment.Count -eq 0) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0; Profiles = @() }
+        }
+
+        $profilesDir = Join-Path $dataDir "profiles"
+        $changedProfiles = @()
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path $profilesDir $profileName
+            if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
+                continue
+            }
+
+            $profileEnvPath = Join-Path $profileDir ".env"
+            $profileLines = @()
+            if (Test-Path -LiteralPath $profileEnvPath -PathType Leaf) {
+                $profileLines = @(Get-Content -LiteralPath $profileEnvPath -ErrorAction Stop)
+            }
+
+            $updatedLines = $this.SetNamedEnvironmentLines($profileLines, $environment)
+            if (-not $this.LinesEqual($profileLines, $updatedLines)) {
+                Set-Content -LiteralPath $profileEnvPath -Encoding UTF8 -Value $updatedLines
+                $changedProfiles += $profileName
+            }
+        }
+
+        return [PSCustomObject]@{
+            Changed  = $changedProfiles.Count -gt 0
+            Source   = "1Password"
+            Count    = $changedProfiles.Count
+            Profiles = $changedProfiles
+        }
+    }
+
+    hidden [pscustomobject] EnsureOpenClawApiEnvironment([SetupContext]$ctx, [string]$dataDir, [string]$envPath) {
         if (-not $this.IsTruthy($ctx.GetOption("HermesAgentOpenClawSecrets1PasswordEnabled", $true))) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0 }
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; ProfileCount = 0; Profiles = @() }
         }
 
         $lines = @()
@@ -1052,11 +1123,18 @@ class HermesAgentHandler : SetupHandlerBase {
 
         $environment = $this.GetOnePasswordOpenClawApiEnvironment($ctx)
         if ($environment.Count -eq 0) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0 }
+            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0; ProfileCount = 0; Profiles = @() }
         }
 
         $this.WriteNamedEnvironment($envPath, $lines, $environment)
-        return [PSCustomObject]@{ Changed = $true; Source = "1Password"; Count = $environment.Count }
+        $profileResult = $this.SyncOpenClawApiEnvironmentToManagedProfileEnvironments($ctx, $dataDir, $environment)
+        return [PSCustomObject]@{
+            Changed      = $true
+            Source       = "1Password"
+            Count        = $environment.Count
+            ProfileCount = $profileResult.Count
+            Profiles     = $profileResult.Profiles
+        }
     }
 
     hidden [void] WriteDashboardAuth([string]$envPath, [string[]]$lines, [pscustomobject]$credentials) {
@@ -1105,9 +1183,18 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [void] WriteNamedEnvironment([string]$envPath, [string[]]$lines, [hashtable]$environment) {
+        $filteredLines = $this.SetNamedEnvironmentLines($lines, $environment)
+        if ($filteredLines.Count -eq 0) {
+            return
+        }
+
+        Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+    }
+
+    hidden [string[]] SetNamedEnvironmentLines([string[]]$lines, [hashtable]$environment) {
         $keys = @($environment.Keys | Sort-Object)
         if ($keys.Count -eq 0) {
-            return
+            return $lines
         }
 
         $escapedKeys = @($keys | ForEach-Object { [regex]::Escape([string]$_) })
@@ -1126,7 +1213,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $filteredLines += "$key=$($environment[$key])"
         }
 
-        Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+        return $filteredLines
     }
 
     hidden [bool] HasDashboardAuth([string[]]$lines) {

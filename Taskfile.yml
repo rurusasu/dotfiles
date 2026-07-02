@@ -338,6 +338,39 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hoffman
 
+  hermes:risarisa:up:
+    desc: Start RisaRisa Hermes profile gateway in Docker
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build risarisa
+
+  hermes:risarisa:down:
+    desc: Stop RisaRisa Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop risarisa
+
+  hermes:risarisa:restart:
+    desc: Restart RisaRisa Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart risarisa
+
+  hermes:risarisa:logs:
+    desc: Follow RisaRisa Hermes gateway logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 risarisa
+
   hermes:ps:
     desc: Show Hermes Agent Docker container status
     preconditions:
