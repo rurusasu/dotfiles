@@ -123,3 +123,35 @@ services:
     environment:
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
+
+  risarisa:
+    profiles: ["risarisa"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/hermes-agent-gh:latest
+    container_name: hermes-risarisa
+    restart: unless-stopped
+    shm_size: 1g
+    command: gateway run
+    ports:
+      - "127.0.0.1:${HERMES_RISARISA_API_PORT:-8646}:8642"
+      - "127.0.0.1:${HERMES_RISARISA_DASHBOARD_PORT:-9123}:9119"
+    volumes:
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/risarisa
+        target: /opt/data
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/docs
+        target: /opt/data/docs
+        read_only: true
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
+        target: /root/.xurl
+    env_file:
+      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/risarisa/.env
+        format: raw
+        required: false
+    environment:
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: "0.0.0.0"
