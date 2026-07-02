@@ -94,7 +94,7 @@ class HermesAgentHandler : SetupHandlerBase {
             foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
                 $composeArgs += @("--profile", $profileName)
             }
-            $composeArgs += @("up", "-d", "--build")
+            $composeArgs += @("up", "-d", "--build", "--remove-orphans")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
@@ -672,7 +672,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string[]] GetManagedProfileNames([SetupContext]$ctx) {
-        $value = $ctx.GetOption("HermesAgentManagedProfiles", "researcher,rick,hoffman,risarisa")
+        $value = $ctx.GetOption("HermesAgentManagedProfiles", "rick,hoffman,risarisa")
         if ($value -is [array]) {
             return @($value | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         }
@@ -1391,12 +1391,15 @@ class HermesAgentHandler : SetupHandlerBase {
         foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
             $profileDir = Join-Path $profilesDir $profileName
             $envPath = Join-Path $profileDir ".env"
-            if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
+            if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
                 continue
             }
 
             $profileTitle = $this.GetManagedProfileTitle($profileName)
-            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+            $lines = @()
+            if (Test-Path -LiteralPath $envPath -PathType Leaf) {
+                $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+            }
             $slackEnvironment = $this.GetOnePasswordSlackEnvironmentForItem(
                 $ctx,
                 "HermesAgent$($profileTitle)Slack1PasswordEnabled",
@@ -1726,7 +1729,7 @@ class HermesAgentHandler : SetupHandlerBase {
             return $null
         }
 
-        $required = $this.IsTruthy($ctx.GetOption($requiredOption, $false))
+        $required = $this.IsTruthy($ctx.GetOption($requiredOption, $true))
         $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
         if (-not $opCommand) {
             if ($required) {
@@ -1751,7 +1754,7 @@ class HermesAgentHandler : SetupHandlerBase {
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
         if ($result.ExitCode -ne 0) {
             if ($required) {
-                throw "1Password から Hermes Slack 接続情報を取得できません"
+                throw "1Password から Hermes Slack 接続情報を取得できません: $item"
             }
             $this.Log("1Password から Hermes Slack 接続情報を取得できないため Slack 自動設定をスキップします: $item", "Gray")
             return $null
@@ -1768,7 +1771,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 [string]::IsNullOrWhiteSpace($allowedUsers)
             ) {
                 if ($required) {
-                    throw "1Password item に Slack token または allowed users がありません"
+                    throw "1Password item に Slack token または allowed users がありません: $item"
                 }
                 $this.Log("1Password item に Slack token または allowed users がないため Slack 自動設定をスキップします: $item", "Gray")
                 return $null
@@ -1790,7 +1793,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [hashtable] GetOnePasswordOpenClawApiEnvironment([SetupContext]$ctx) {
-        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireOpenClawSecrets", $false))
+        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireOpenClawSecrets", $true))
         $environment = @{}
         $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
         if (-not $opCommand) {

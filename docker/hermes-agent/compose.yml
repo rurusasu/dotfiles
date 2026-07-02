@@ -29,42 +29,6 @@ services:
       HERMES_DASHBOARD_HOST: "0.0.0.0"
       LIFELOG_ROOT: /opt/data/core/lifelog
 
-  researcher:
-    profiles: ["researcher"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: local/hermes-agent-gh:latest
-    container_name: hermes-researcher
-    restart: unless-stopped
-    shm_size: 1g
-    command: gateway run
-    ports:
-      - "127.0.0.1:${HERMES_RESEARCHER_API_PORT:-8643}:8642"
-      - "127.0.0.1:${HERMES_RESEARCHER_DASHBOARD_PORT:-9120}:9119"
-    volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher
-        target: /opt/data
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/docs
-        target: /opt/data/docs
-        read_only: true
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/core
-        target: /opt/data/core
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
-        target: /root/.xurl
-    env_file:
-      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/profiles/researcher/.env
-        format: raw
-        required: false
-    environment:
-      HERMES_DASHBOARD: "1"
-      HERMES_DASHBOARD_HOST: "0.0.0.0"
-      LIFELOG_ROOT: /opt/data/core/lifelog
-
   rick:
     profiles: ["rick"]
     build:
