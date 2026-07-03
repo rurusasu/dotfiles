@@ -79,6 +79,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $homeRepositoryResult = $this.EnsureHomeRepositoryLayout($ctx, $dataDir)
             $lifelogCoreResult = $this.EnsureLifelogCore($ctx, $dataDir)
             $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
+            $null = $this.EnsureTerminalEnvironmentPassthroughConfiguration($ctx, $dataDir)
 
             $envPath = Join-Path $dataDir ".env"
             $infoFilePath = Join-Path $dataDir "dashboard-basic-auth-password.txt"
@@ -90,11 +91,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
             $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
-            $composeArgs = @("compose", "-f", $composeFile)
-            foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
-                $composeArgs += @("--profile", $profileName)
-            }
-            $composeArgs += @("up", "-d", "--build", "--remove-orphans")
+            $composeArgs = @("compose", "-f", $composeFile, "up", "-d", "--build", "--force-recreate", "--remove-orphans")
             $output = @(Invoke-Docker -Arguments $composeArgs -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
@@ -844,11 +841,10 @@ class HermesAgentHandler : SetupHandlerBase {
             '',
             '## Runtime Mounts',
             '',
-            '- The default gateway mounts `~/.hermes` as `/opt/data`.',
-            '- A dedicated profile gateway mounts `~/.hermes/profiles/<profile>` as `/opt/data`.',
-            '- A dedicated profile gateway mounts the root shared docs directory `~/.hermes/docs` onto `/opt/data/docs` read-only.',
-            '- A dedicated profile gateway mounts the root shared core directory `~/.hermes/core` onto `/opt/data/core` read/write.',
-            '- From the default gateway, profile homes are visible under `/opt/data/profiles/<profile>`.',
+            '- The Hermes Docker service mounts `~/.hermes` as `/opt/data`.',
+            '- Inside the official Docker image, s6 supervises profile gateways as `/run/service/gateway-<profile>` within that same container.',
+            '- Profile homes stay visible under `/opt/data/profiles/<profile>` and keep their own `.env`, config, cron, memory, sessions, and gateway state.',
+            '- Do not run another Hermes gateway container against `~/.hermes` or any `~/.hermes/profiles/<profile>` directory while the root container can see that profile.',
             '- `HERMES_DATA_DIR` remains the Hermes home. Do not point it at lifelog; lifelog is restored under `~/.hermes/core/lifelog`.',
             '',
             '## Standard Profile Filesystem',
@@ -895,9 +891,9 @@ class HermesAgentHandler : SetupHandlerBase {
             '- curated profile-specific `skills/`, if intentionally maintained',
             '- declarative `cron/` definitions only, not cron output, locks, or tick files',
             '',
-            '## Dedicated Gateway Runtime Secrets',
+            '## Profile Gateway Runtime Secrets',
             '',
-            'A profile that runs its own gateway still needs runtime credentials inside that profile home. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.',
+            'A profile gateway still needs runtime credentials inside that profile home, even when s6 runs it inside the root Docker container. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.',
             '',
             '## Ignored Runtime State',
             '',
@@ -1064,6 +1060,43 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
     }
 
+    hidden [pscustomobject] EnsureTerminalEnvironmentPassthroughConfiguration([SetupContext]$ctx, [string]$dataDir) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentTerminalEnvPassthroughEnabled", $true))) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Paths = @() }
+        }
+
+        $configPaths = @((Join-Path $dataDir "config.yaml"))
+        $profilesDir = Join-Path $dataDir "profiles"
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path $profilesDir $profileName
+            if (Test-Path -LiteralPath $profileDir -PathType Container) {
+                $configPaths += (Join-Path $profileDir "config.yaml")
+            }
+        }
+
+        $changedPaths = @()
+        foreach ($configPath in $configPaths) {
+            $existingLines = @()
+            if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+                $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+            }
+
+            $updatedLines = $this.SetTerminalEnvPassthroughConfigLines($existingLines)
+            if (-not $this.LinesEqual($existingLines, $updatedLines)) {
+                $this.EnsureDirectory((Split-Path -Parent $configPath))
+                Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+                $changedPaths += $configPath
+            }
+        }
+
+        return [PSCustomObject]@{
+            Changed = $changedPaths.Count -gt 0
+            Source  = "Config"
+            Count   = $changedPaths.Count
+            Paths   = $changedPaths
+        }
+    }
+
     hidden [pscustomobject] EnsureSlackMentionConfiguration([SetupContext]$ctx, [string]$dataDir) {
         if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSlackRespondWithoutMention", $true))) {
             return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Paths = @() }
@@ -1099,6 +1132,96 @@ class HermesAgentHandler : SetupHandlerBase {
             Count   = $changedPaths.Count
             Paths   = $changedPaths
         }
+    }
+
+    hidden [string[]] SetTerminalEnvPassthroughConfigLines([string[]]$lines) {
+        $managedEnvNames = @(
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "OPENCLAW_GATEWAY_TOKEN"
+        )
+        $removedEnvNames = @(
+            "GH_TOKEN",
+            "GITHUB_TOKEN"
+        )
+        $managedLines = @("  env_passthrough:") + @($managedEnvNames | ForEach-Object { "    - $_" })
+        $desiredBlock = @("terminal:") + $managedLines
+
+        if ($lines.Count -eq 0) {
+            return $desiredBlock
+        }
+
+        $terminalStart = -1
+        for ($index = 0; $index -lt $lines.Count; $index++) {
+            if ($lines[$index] -match '^terminal\s*:') {
+                $terminalStart = $index
+                break
+            }
+        }
+
+        if ($terminalStart -lt 0) {
+            $result = @($lines)
+            if ($result.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($result[-1])) {
+                $result += ""
+            }
+            $result += $desiredBlock
+            return $result
+        }
+
+        $terminalEnd = $terminalStart + 1
+        while ($terminalEnd -lt $lines.Count) {
+            if ($lines[$terminalEnd] -match '^\S[^:]*\s*:') {
+                break
+            }
+            $terminalEnd++
+        }
+
+        $existingBlock = @($lines[$terminalStart..($terminalEnd - 1)])
+        $preservedChildLines = @()
+        $preservedEnvNames = @()
+        $childIndex = 1
+        while ($childIndex -lt $existingBlock.Count) {
+            if ($existingBlock[$childIndex] -match '^\s{2}env_passthrough\s*:') {
+                $childIndex++
+                while (
+                    $childIndex -lt $existingBlock.Count `
+                        -and $existingBlock[$childIndex] -notmatch '^\s{2}\S[^:]*\s*:' `
+                        -and $existingBlock[$childIndex] -notmatch '^\S'
+                ) {
+                    if ($existingBlock[$childIndex] -match '^\s{4}-\s*(?<name>[^#\s]+)\s*(?:#.*)?$') {
+                        $envName = $Matches["name"].Trim("'`"")
+                        if (
+                            $removedEnvNames -notcontains $envName `
+                                -and $preservedEnvNames -notcontains $envName
+                        ) {
+                            $preservedEnvNames += $envName
+                        }
+                    }
+                    $childIndex++
+                }
+                continue
+            }
+
+            $preservedChildLines += $existingBlock[$childIndex]
+            $childIndex++
+        }
+
+        $envNames = @($preservedEnvNames)
+        foreach ($managedEnvName in $managedEnvNames) {
+            if ($envNames -notcontains $managedEnvName) {
+                $envNames += $managedEnvName
+            }
+        }
+        $envPassthroughLines = @("  env_passthrough:") + @($envNames | ForEach-Object { "    - $_" })
+        $newBlock = @("terminal:") + $preservedChildLines + $envPassthroughLines
+        $result = @()
+        if ($terminalStart -gt 0) {
+            $result += $lines[0..($terminalStart - 1)]
+        }
+        $result += $newBlock
+        if ($terminalEnd -lt $lines.Count) {
+            $result += $lines[$terminalEnd..($lines.Count - 1)]
+        }
+        return $result
     }
 
     hidden [string[]] SetSlackMentionConfigLines([string[]]$lines) {
