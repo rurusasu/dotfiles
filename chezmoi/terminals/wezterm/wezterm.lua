@@ -104,6 +104,9 @@ config.send_composed_key_when_right_alt_is_pressed = false
 config.keys = {
     -- Shift+Enter → insert newline (Claude Code, Codex, multi-line prompts)
     { key = "Return", mods = "SHIFT", action = act.SendString("\n") },
+    -- Pass Ctrl+Shift+h/l through to Neovim; WezTerm defaults Ctrl+Shift+l to the debug overlay.
+    { key = "h", mods = "CTRL|SHIFT", action = act.SendKey({ key = "h", mods = "CTRL|SHIFT" }) },
+    { key = "l", mods = "CTRL|SHIFT", action = act.SendKey({ key = "l", mods = "CTRL|SHIFT" }) },
 
     -- Alt+key → send ESC sequence for fzf/zoxide/PSReadLine bindings
     { key = "q", mods = "ALT", action = act.SendString("\x1bq") },
