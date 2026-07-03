@@ -1,5 +1,24 @@
 -- Plugin specifications for lazy.nvim
 
+local function resize_sidekick_cli(terminal, delta)
+    local win = terminal and terminal.win
+    if not win or not vim.api.nvim_win_is_valid(win) then
+        return
+    end
+
+    local layout = terminal.opts and terminal.opts.layout or "right"
+    if layout == "float" then
+        local cfg = vim.api.nvim_win_get_config(win)
+        cfg.width = math.max(20, (cfg.width or vim.api.nvim_win_get_width(win)) + delta)
+        cfg.height = math.max(5, (cfg.height or vim.api.nvim_win_get_height(win)) + delta)
+        vim.api.nvim_win_set_config(win, cfg)
+    elseif layout == "top" or layout == "bottom" then
+        vim.api.nvim_win_set_height(win, math.max(5, vim.api.nvim_win_get_height(win) + delta))
+    else
+        vim.api.nvim_win_set_width(win, math.max(20, vim.api.nvim_win_get_width(win) + delta))
+    end
+end
+
 return {
     -- Colorscheme
     {
@@ -523,6 +542,26 @@ return {
         },
         opts = {
             cli = {
+                win = {
+                    keys = {
+                        resize_grow = {
+                            "<M-+>",
+                            function(terminal)
+                                resize_sidekick_cli(terminal, 5)
+                            end,
+                            mode = "nt",
+                            desc = "Sidekick grow window",
+                        },
+                        resize_shrink = {
+                            "<M-_>",
+                            function(terminal)
+                                resize_sidekick_cli(terminal, -5)
+                            end,
+                            mode = "nt",
+                            desc = "Sidekick shrink window",
+                        },
+                    },
+                },
                 mux = {
                     backend = "tmux",
                     enabled = false,

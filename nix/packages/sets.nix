@@ -396,7 +396,7 @@ let
     };
     stylua = {
       pkg = pkgs.stylua;
-      winget = null;
+      winget = "JohnnyMorganz.StyLua";
       category = "lsp";
     };
     marksman = {
@@ -658,6 +658,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     taplo = {
       command = "taplo";
+      args = [ "--version" ];
+    };
+    stylua = {
+      command = "stylua";
       args = [ "--version" ];
     };
     rust-analyzer = {

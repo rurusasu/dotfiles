@@ -216,6 +216,18 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'StyLua package' {
+        It 'should generate StyLua with command verification' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'JohnnyMorganz.StyLua' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'stylua'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
     Context 'Codex Desktop Microsoft Store package' {
         It 'should include Codex Desktop as a Windows-only Microsoft Store package in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
