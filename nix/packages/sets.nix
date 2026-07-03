@@ -107,7 +107,7 @@ let
     };
     python3 = {
       pkg = pkgs.python3;
-      winget = "Python.Python.3.13";
+      winget = null;
       category = "dev";
     };
     go = {
@@ -680,10 +680,6 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "oxlint";
       args = [ "--version" ];
     };
-    python3 = {
-      command = "python";
-      args = [ "--version" ];
-    };
     google-cloud-sdk = {
       command = "gcloud";
       args = [ "version" ];
@@ -825,6 +821,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "Microsoft.WindowsTerminal"
       "Microsoft.WSL"
       "OpenAI.Codex"
+      "StablyAI.Orca"
       "TablePlus.TablePlus"
       "Oven-sh.Bun"
       "zig.zig"

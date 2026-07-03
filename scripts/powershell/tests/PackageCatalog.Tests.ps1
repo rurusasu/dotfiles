@@ -286,6 +286,31 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'Windows Orca and Python installation policy' {
+        It 'should manage Orca as a Windows-only winget package and avoid native Python winget installs in the SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
+            $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
+            $sets | Should -Not -Match 'winget\s*=\s*"Python\.Python\.3\.13"'
+            $sets | Should -Match '(?s)uv\s*=\s*\{.*?pkg\s*=\s*pkgs\.uv;.*?winget\s*=\s*"astral-sh\.uv"'
+        }
+
+        It 'should generate Orca and uv without the native Python winget package' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $orca = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'StablyAI.Orca' }) | Select-Object -First 1
+            $python = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Python.Python.3.13' }) | Select-Object -First 1
+            $uv = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'astral-sh.uv' }) | Select-Object -First 1
+
+            $orca | Should -Not -BeNullOrEmpty
+            $python | Should -BeNullOrEmpty -Because "Windows Python should be provisioned through uv, not the native winget package"
+            $uv | Should -Not -BeNullOrEmpty
+            $uv.verifyCommand.command | Should -Be 'uv'
+            @($uv.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
     Context 'Windows native Rust browser automation tools' {
         It 'should manage agent-browser as a Windows npm global package with verification' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
