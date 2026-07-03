@@ -82,22 +82,30 @@ Describe 'HermesAgentHandler' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $dockerfilePath = Join-Path $repoRoot "docker\hermes-agent\Dockerfile"
+            $ghWrapperPath = Join-Path $repoRoot "docker\hermes-agent\gh-wrapper.sh"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
             $composeContent | Should -Match "(?m)^\s*build:"
             $composeContent | Should -Match "(?m)^\s*context:\s*\."
             $composeContent | Should -Match "(?m)^\s*dockerfile:\s*Dockerfile"
             $dockerfilePath | Should -Exist
+            $ghWrapperPath | Should -Exist
 
             $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
             $dockerfileContent | Should -Match "nousresearch/hermes-agent:latest"
             $dockerfileContent | Should -Match "apt-get"
             $dockerfileContent | Should -Match "(?m)\bgh\b"
-            $dockerfileContent | Should -Match "gh --version"
+            $dockerfileContent | Should -Match "/usr/bin/gh --version"
+            $dockerfileContent | Should -Match "COPY gh-wrapper\.sh /usr/local/bin/gh"
             $dockerfileContent | Should -Match "(?m)\bnpm\b"
             $dockerfileContent | Should -Match "npx --version"
             $dockerfileContent | Should -Match "xapi-mcp\.sh"
             $dockerfileContent | Should -Match "/usr/local/bin/hermes-xapi-mcp"
+
+            $ghWrapperContent = Get-Content -LiteralPath $ghWrapperPath -Raw
+            $ghWrapperContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN"
+            $ghWrapperContent | Should -Match "export GH_TOKEN="
+            $ghWrapperContent | Should -Match "exec /usr/bin/gh"
         }
 
         It 'should include an X API MCP wrapper that ignores unresolved credential placeholders' {
@@ -132,47 +140,30 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^\s*target:\s*/root/\.xurl\s*$"
         }
 
-        It 'should define isolated managed profile gateway services' {
+        It 'should keep managed profile gateways under the root Hermes container supervisor' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
-            $profiles = @(
-                @{ Name = "rick"; Container = "hermes-rick"; Api = "HERMES_RICK_API_PORT:-8644"; Dashboard = "HERMES_RICK_DASHBOARD_PORT:-9121" },
-                @{ Name = "hoffman"; Container = "hermes-hoffman"; Api = "HERMES_HOFFMAN_API_PORT:-8645"; Dashboard = "HERMES_HOFFMAN_DASHBOARD_PORT:-9122" },
-                @{ Name = "risarisa"; Container = "hermes-risarisa"; Api = "HERMES_RISARISA_API_PORT:-8646"; Dashboard = "HERMES_RISARISA_DASHBOARD_PORT:-9123" }
-            )
-            $retiredProfileName = "researcher"
-
-            $composeContent | Should -Not -Match "(?m)^\s{2}$($retiredProfileName):"
-            $composeContent | Should -Not -Match "hermes-$retiredProfileName"
-            foreach ($profile in $profiles) {
-                $composeContent | Should -Match "(?m)^\s{2}$($profile.Name):"
-                $composeContent | Should -Match "(?m)^\s{4}container_name:\s*$($profile.Container)"
-                $composeContent | Should -Match "(?m)^\s{4}restart:\s*unless-stopped"
-                $composeContent | Should -Match "(?m)^\s{4}command:\s*gateway run"
-                $composeContent | Should -Match ([regex]::Escape("127.0.0.1:`$`{$($profile.Api)`}:8642"))
-                $composeContent | Should -Match ([regex]::Escape("127.0.0.1:`$`{$($profile.Dashboard)`}:9119"))
-                $composeContent | Should -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$($profile.Name)"))
-                $composeContent | Should -Match ([regex]::Escape("path: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$($profile.Name)/.env"))
-            }
-
+            $composeContent | Should -Match "(?m)^\s{2}hermes:"
+            $composeContent | Should -Match "container_name:\s*hermes"
+            $composeContent | Should -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}'))
             $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data\s*$"
-            $composeContent | Should -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/docs'))
-            $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data/docs\s*$"
-            $composeContent | Should -Match "(?m)^\s*read_only:\s*true\s*$"
+            foreach ($profile in @("rick", "hoffman", "risarisa")) {
+                $composeContent | Should -Not -Match "(?m)^\s{2}${profile}:"
+                $composeContent | Should -Not -Match "hermes-$profile"
+                $composeContent | Should -Not -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$profile"))
+                $composeContent | Should -Not -Match ([regex]::Escape("path: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/profiles/$profile/.env"))
+            }
         }
 
-        It 'should expose the shared lifelog core to every Hermes gateway' {
+        It 'should expose the shared lifelog core through the root Hermes home' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
             $composeContent | Should -Match "(?m)^\s*LIFELOG_ROOT:\s*/opt/data/core/lifelog\s*$"
-            foreach ($profile in @("rick", "hoffman", "risarisa")) {
-                $composeContent | Should -Match ([regex]::Escape("source: `${HERMES_DATA_DIR:-`${USERPROFILE:-`${HOME}}/.hermes}/core"))
-                $composeContent | Should -Match "(?m)^\s*target:\s*/opt/data/core\s*$"
-            }
+            $composeContent | Should -Not -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/core'))
         }
 
         It 'should rebuild the local Hermes image instead of pulling it from a registry' {
@@ -194,16 +185,18 @@ Describe 'HermesAgentHandler' {
             $taskfileContent | Should -Match "docker exec hermes sh -lc"
             $taskfileContent | Should -Match "git init -b main"
 
-            $retiredProfileName = "researcher"
-            $taskfileContent | Should -Not -Match "(?m)^\s{2}hermes:$($retiredProfileName):"
             foreach ($profile in @("rick", "hoffman", "risarisa")) {
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:up:"
-                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build $profile"
+                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes"
+                $taskfileContent | Should -Match "/opt/hermes/.venv/bin/hermes -p $profile gateway start"
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:down:"
-                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} stop $profile"
+                $taskfileContent | Should -Match "/opt/hermes/.venv/bin/hermes -p $profile gateway stop"
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:restart:"
+                $taskfileContent | Should -Match "/opt/hermes/.venv/bin/hermes -p $profile gateway restart"
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:logs:"
-                $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 $profile"
+                $taskfileContent | Should -Match "/opt/data/logs/gateways/$profile/current"
             }
+            $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} (up|stop|logs).*(rick|hoffman|risarisa)"
         }
     }
 
@@ -318,14 +311,14 @@ Describe 'HermesAgentHandler' {
             $composeCall = @($script:dockerCalls | Where-Object { $_[0] -eq "compose" })[0]
             $composeCall | Should -Contain "-f"
             $composeCall | Should -Contain $script:composeFile
-            $composeCall | Should -Contain "--profile"
-            $composeCall | Should -Not -Contain "researcher"
-            $composeCall | Should -Contain "rick"
-            $composeCall | Should -Contain "hoffman"
-            $composeCall | Should -Contain "risarisa"
+            $composeCall | Should -Not -Contain "--profile"
+            $composeCall | Should -Not -Contain "rick"
+            $composeCall | Should -Not -Contain "hoffman"
+            $composeCall | Should -Not -Contain "risarisa"
             $composeCall | Should -Contain "up"
             $composeCall | Should -Contain "-d"
             $composeCall | Should -Contain "--build"
+            $composeCall | Should -Contain "--force-recreate"
             $composeCall | Should -Contain "--remove-orphans"
         }
 
@@ -405,6 +398,42 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "(?m)^model:\r?\n  provider: openai-codex\r?\n  default: gpt-5\.5"
             $configContent | Should -Not -Match "(?m)^model\.(default|provider):"
             $configContent | Should -Match "(?m)^agent:\r?\n  max_turns: 60"
+        }
+
+        It 'should allow terminal tools to pass only the GitHub PAT used by the gh wrapper' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $rickDir = Join-Path $dataDir "profiles\rick"
+            $hoffmanDir = Join-Path $dataDir "profiles\hoffman"
+            New-Item -ItemType Directory -Path $rickDir, $hoffmanDir -Force | Out-Null
+            $rootConfigPath = Join-Path $dataDir "config.yaml"
+            $rickConfigPath = Join-Path $rickDir "config.yaml"
+            $hoffmanConfigPath = Join-Path $hoffmanDir "config.yaml"
+            Set-Content -LiteralPath $rootConfigPath -Encoding UTF8 -Value @(
+                "terminal:",
+                "  backend: local",
+                "  env_passthrough:",
+                "    - GH_TOKEN",
+                "    - GITHUB_TOKEN"
+            )
+            Set-Content -LiteralPath $rickConfigPath -Encoding UTF8 -Value @(
+                "terminal:",
+                "  timeout: 180"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            foreach ($configPath in @($rootConfigPath, $rickConfigPath, $hoffmanConfigPath)) {
+                $configContent = Get-Content -LiteralPath $configPath -Raw
+                $configContent | Should -Match "(?m)^terminal:"
+                $configContent | Should -Match "(?m)^  env_passthrough:\r?$"
+                $configContent | Should -Match "(?m)^    - GITHUB_PERSONAL_ACCESS_TOKEN\r?$"
+                $configContent | Should -Match "(?m)^    - OPENCLAW_GATEWAY_TOKEN\r?$"
+                $configContent | Should -Not -Match "(?m)^\s+- GH_TOKEN\r?$"
+                $configContent | Should -Not -Match "(?m)^\s+- GITHUB_TOKEN\r?$"
+            }
+            (Get-Content -LiteralPath $rootConfigPath -Raw) | Should -Match "(?m)^  backend: local\r?$"
+            (Get-Content -LiteralPath $rickConfigPath -Raw) | Should -Match "(?m)^  timeout: 180\r?$"
         }
 
         It 'should require initial Slack mentions while allowing thread follow-ups without repeated mentions' {
@@ -699,67 +728,6 @@ Describe 'HermesAgentHandler' {
             }
         }
 
-        It 'should not require a retired researcher Slack item when the legacy profile directory exists' {
-            $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
-            $retiredProfileName = "researcher"
-            $retiredItemName = "SlackBot-$($retiredProfileName.Substring(0, 1).ToUpperInvariant())$($retiredProfileName.Substring(1))"
-            $dataDir = Join-Path $script:userProfile ".hermes"
-            $researcherDir = Join-Path $dataDir "profiles\$retiredProfileName"
-            New-Item -ItemType Directory -Path $researcherDir -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $researcherDir ".env") -Encoding UTF8 -Value @(
-                "OTHER=value"
-            )
-            $onePasswordItemJson = @{
-                fields = @(
-                    @{
-                        id      = "bot_token"
-                        label   = "bot_token"
-                        purpose = ""
-                        value   = "xoxb-root-bot-token"
-                    },
-                    @{
-                        id      = "app_level_token"
-                        label   = "app_level_token"
-                        purpose = ""
-                        value   = "xapp-root-app-token"
-                    },
-                    @{
-                        id      = "SLACK_ALLOWED_USERS"
-                        label   = "SLACK_ALLOWED_USERS"
-                        purpose = ""
-                        value   = "UROOT"
-                    }
-                )
-            } | ConvertTo-Json -Compress
-
-            Mock Get-Command {
-                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
-            } -ParameterFilter { $Name -eq "op" }
-            Mock Invoke-OpCommand {
-                param(
-                    [string]$OpExe,
-                    [string[]]$Arguments,
-                    [int]$TimeoutSeconds
-                )
-                $null = $OpExe
-                $null = $TimeoutSeconds
-                if ($Arguments -contains "SlackBot-OpenClaw") {
-                    return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
-                }
-                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            Should -Invoke Invoke-OpCommand -Times 0 -ParameterFilter {
-                $Arguments -contains $retiredItemName
-            }
-            Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
-                $Arguments -contains "SlackBot-OpenClaw"
-            }
-        }
-
         It 'should configure managed profile Slack environment from its dedicated 1Password item' {
             $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
             $ctx.Options["HermesAgentRisarisaSlack1PasswordEnabled"] = $true
@@ -996,11 +964,12 @@ Describe 'HermesAgentHandler' {
             $sharedDoc | Should -Match "Hermes profile homes should keep the filesystem layout"
             $sharedDoc | Should -Match "hermes profile create <name>"
             $sharedDoc | Should -Match "Do not delete or flatten this physical layout"
-            $sharedDoc | Should -Match "read-only"
+            $sharedDoc | Should -Match "s6 supervises profile gateways"
+            $sharedDoc | Should -Match "Do not run another Hermes gateway container"
             $sharedDoc | Should -Match "do not copy the shared root layout doc"
             $sharedDoc | Should -Match "memories/"
             $sharedDoc | Should -Match "auth\.json"
-            $sharedDoc | Should -Match "Dedicated Gateway Runtime Secrets"
+            $sharedDoc | Should -Match "Profile Gateway Runtime Secrets"
             $sharedDoc | Should -Match "model-provider auth"
             $sharedDoc | Should -Match "profile\.yaml"
             $sharedDoc | Should -Match "slack-manifest\.json"

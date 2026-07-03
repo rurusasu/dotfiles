@@ -4,11 +4,10 @@ Hermes profile homes should keep the filesystem layout that Hermes expects, whil
 
 ## Runtime Mounts
 
-- The default gateway mounts `~/.hermes` as `/opt/data`.
-- A dedicated profile gateway mounts `~/.hermes/profiles/<profile>` as `/opt/data`.
-- A dedicated profile gateway mounts the root shared docs directory `~/.hermes/docs` onto `/opt/data/docs` read-only.
-- A dedicated profile gateway mounts the root shared core directory `~/.hermes/core` onto `/opt/data/core` read/write.
-- From the default gateway, profile homes are visible under `/opt/data/profiles/<profile>`.
+- The Hermes Docker service mounts `~/.hermes` as `/opt/data`.
+- Inside the official Docker image, s6 supervises profile gateways as `/run/service/gateway-<profile>` within that same container.
+- Profile homes stay visible under `/opt/data/profiles/<profile>` and keep their own `.env`, config, cron, memory, sessions, and gateway state.
+- Do not run another Hermes gateway container against `~/.hermes` or any `~/.hermes/profiles/<profile>` directory while the root container can see that profile.
 - `HERMES_DATA_DIR` remains the Hermes home. Do not point it at lifelog; lifelog is restored under `~/.hermes/core/lifelog`.
 
 ## Standard Profile Filesystem
@@ -55,9 +54,9 @@ Track durable, declarative profile content:
 - curated profile-specific `skills/`, if intentionally maintained
 - declarative `cron/` definitions only, not cron output, locks, or tick files
 
-## Dedicated Gateway Runtime Secrets
+## Profile Gateway Runtime Secrets
 
-A profile that runs its own gateway still needs runtime credentials inside that profile home. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.
+A profile gateway still needs runtime credentials inside that profile home, even when s6 runs it inside the root Docker container. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.
 
 ## Ignored Runtime State
 

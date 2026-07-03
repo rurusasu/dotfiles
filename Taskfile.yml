@@ -187,7 +187,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate
 
   hermes:down:
     desc: Stop Hermes Agent Docker container
@@ -198,12 +198,12 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} down
 
   hermes:restart:
-    desc: Restart Hermes Agent Docker container
+    desc: Recreate Hermes Agent Docker container
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart hermes
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate hermes
 
   hermes:logs:
     desc: Follow Hermes Agent Docker logs
@@ -240,12 +240,13 @@ tasks:
         git status --short --branch'
 
   hermes:rick:up:
-    desc: Start Rick Hermes profile gateway in Docker
+    desc: Start Rick Hermes profile gateway in the Hermes container
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build rick
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway start
 
   hermes:rick:down:
     desc: Stop Rick Hermes profile gateway
@@ -253,7 +254,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop rick
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway stop
 
   hermes:rick:restart:
     desc: Restart Rick Hermes profile gateway
@@ -261,7 +262,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart rick
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway restart
 
   hermes:rick:logs:
     desc: Follow Rick Hermes gateway logs
@@ -270,15 +271,16 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 rick
+      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/rick/current'
 
   hermes:hoffman:up:
-    desc: Start Hoffman Hermes profile gateway in Docker
+    desc: Start Hoffman Hermes profile gateway in the Hermes container
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build hoffman
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway start
 
   hermes:hoffman:down:
     desc: Stop Hoffman Hermes profile gateway
@@ -286,7 +288,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hoffman
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway stop
 
   hermes:hoffman:restart:
     desc: Restart Hoffman Hermes profile gateway
@@ -294,7 +296,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart hoffman
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway restart
 
   hermes:hoffman:logs:
     desc: Follow Hoffman Hermes gateway logs
@@ -303,15 +305,16 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hoffman
+      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/hoffman/current'
 
   hermes:risarisa:up:
-    desc: Start RisaRisa Hermes profile gateway in Docker
+    desc: Start RisaRisa Hermes profile gateway in the Hermes container
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --build risarisa
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway start
 
   hermes:risarisa:down:
     desc: Stop RisaRisa Hermes profile gateway
@@ -319,7 +322,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop risarisa
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway stop
 
   hermes:risarisa:restart:
     desc: Restart RisaRisa Hermes profile gateway
@@ -327,7 +330,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart risarisa
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway restart
 
   hermes:risarisa:logs:
     desc: Follow RisaRisa Hermes gateway logs
@@ -336,7 +339,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 risarisa
+      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/risarisa/current'
 
   hermes:ps:
     desc: Show Hermes Agent Docker container status
