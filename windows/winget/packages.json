@@ -337,7 +337,8 @@
           }
         },
         {
-          "PackageIdentifier": "StablyAI.Orca"
+          "PackageIdentifier": "StablyAI.Orca",
+          "ciSkipInstall": true
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"

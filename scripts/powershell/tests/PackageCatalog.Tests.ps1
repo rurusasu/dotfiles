@@ -291,6 +291,7 @@ Describe 'Package catalog consistency' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
             $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
+            $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"StablyAI\.Orca"\s*=\s*true;'
             $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
             $sets | Should -Not -Match 'winget\s*=\s*"Python\.Python\.3\.13"'
             $sets | Should -Match '(?s)uv\s*=\s*\{.*?pkg\s*=\s*pkgs\.uv;.*?winget\s*=\s*"astral-sh\.uv"'
@@ -304,6 +305,7 @@ Describe 'Package catalog consistency' {
             $uv = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'astral-sh.uv' }) | Select-Object -First 1
 
             $orca | Should -Not -BeNullOrEmpty
+            $orca.ciSkipInstall | Should -BeTrue
             $python | Should -BeNullOrEmpty -Because "Windows Python should be provisioned through uv, not the native winget package"
             $uv | Should -Not -BeNullOrEmpty
             $uv.verifyCommand.command | Should -Be 'uv'

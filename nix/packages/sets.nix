@@ -725,6 +725,7 @@ lib.mapAttrs (_: names: resolve names) grouped
     wezterm = true;
     warp-terminal = true;
     "9PLM9XGG6VKS" = true;
+    "StablyAI.Orca" = true;
   };
 
   # Extra PATH directories for installers that do not register CLI commands on PATH.
