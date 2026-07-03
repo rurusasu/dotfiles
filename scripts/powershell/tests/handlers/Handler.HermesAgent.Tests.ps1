@@ -400,7 +400,7 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "(?m)^agent:\r?\n  max_turns: 60"
         }
 
-        It 'should allow terminal tools to pass only the GitHub PAT used by the gh wrapper' {
+        It 'should preserve custom terminal env passthrough entries while replacing GitHub token aliases' {
             $dataDir = Join-Path $script:userProfile ".hermes"
             $rickDir = Join-Path $dataDir "profiles\rick"
             $hoffmanDir = Join-Path $dataDir "profiles\hoffman"
@@ -412,6 +412,7 @@ Describe 'HermesAgentHandler' {
                 "terminal:",
                 "  backend: local",
                 "  env_passthrough:",
+                "    - NPM_TOKEN",
                 "    - GH_TOKEN",
                 "    - GITHUB_TOKEN"
             )
@@ -433,6 +434,7 @@ Describe 'HermesAgentHandler' {
                 $configContent | Should -Not -Match "(?m)^\s+- GITHUB_TOKEN\r?$"
             }
             (Get-Content -LiteralPath $rootConfigPath -Raw) | Should -Match "(?m)^  backend: local\r?$"
+            (Get-Content -LiteralPath $rootConfigPath -Raw) | Should -Match "(?m)^    - NPM_TOKEN\r?$"
             (Get-Content -LiteralPath $rickConfigPath -Raw) | Should -Match "(?m)^  timeout: 180\r?$"
         }
 

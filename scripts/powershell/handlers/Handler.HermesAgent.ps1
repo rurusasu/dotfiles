@@ -1135,11 +1135,15 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string[]] SetTerminalEnvPassthroughConfigLines([string[]]$lines) {
-        $managedLines = @(
-            "  env_passthrough:",
-            "    - GITHUB_PERSONAL_ACCESS_TOKEN",
-            "    - OPENCLAW_GATEWAY_TOKEN"
+        $managedEnvNames = @(
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "OPENCLAW_GATEWAY_TOKEN"
         )
+        $removedEnvNames = @(
+            "GH_TOKEN",
+            "GITHUB_TOKEN"
+        )
+        $managedLines = @("  env_passthrough:") + @($managedEnvNames | ForEach-Object { "    - $_" })
         $desiredBlock = @("terminal:") + $managedLines
 
         if ($lines.Count -eq 0) {
@@ -1173,6 +1177,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
         $existingBlock = @($lines[$terminalStart..($terminalEnd - 1)])
         $preservedChildLines = @()
+        $preservedEnvNames = @()
         $childIndex = 1
         while ($childIndex -lt $existingBlock.Count) {
             if ($existingBlock[$childIndex] -match '^\s{2}env_passthrough\s*:') {
@@ -1182,6 +1187,15 @@ class HermesAgentHandler : SetupHandlerBase {
                         -and $existingBlock[$childIndex] -notmatch '^\s{2}\S[^:]*\s*:' `
                         -and $existingBlock[$childIndex] -notmatch '^\S'
                 ) {
+                    if ($existingBlock[$childIndex] -match '^\s{4}-\s*(?<name>[^#\s]+)\s*(?:#.*)?$') {
+                        $envName = $Matches["name"].Trim("'`"")
+                        if (
+                            $removedEnvNames -notcontains $envName `
+                                -and $preservedEnvNames -notcontains $envName
+                        ) {
+                            $preservedEnvNames += $envName
+                        }
+                    }
                     $childIndex++
                 }
                 continue
@@ -1191,7 +1205,14 @@ class HermesAgentHandler : SetupHandlerBase {
             $childIndex++
         }
 
-        $newBlock = @("terminal:") + $preservedChildLines + $managedLines
+        $envNames = @($preservedEnvNames)
+        foreach ($managedEnvName in $managedEnvNames) {
+            if ($envNames -notcontains $managedEnvName) {
+                $envNames += $managedEnvName
+            }
+        }
+        $envPassthroughLines = @("  env_passthrough:") + @($envNames | ForEach-Object { "    - $_" })
+        $newBlock = @("terminal:") + $preservedChildLines + $envPassthroughLines
         $result = @()
         if ($terminalStart -gt 0) {
             $result += $lines[0..($terminalStart - 1)]
