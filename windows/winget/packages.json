@@ -219,6 +219,13 @@
           }
         },
         {
+          "PackageIdentifier": "JohnnyMorganz.StyLua",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "stylua"
+          }
+        },
+        {
           "PackageIdentifier": "tamasfe.taplo",
           "verifyCommand": {
             "args": ["--version"],
