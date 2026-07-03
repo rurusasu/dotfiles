@@ -397,6 +397,17 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Codex hook Python runtime policy' {
+        It 'should run Windows Python hooks through uv managed Python' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -LiteralPath $templatePath -Raw
+
+            $content | Should -Not -Match "(?m)^command_windows\s*=\s*'python\s+" -Because "Windows must not depend on native Python installs"
+            $content | Should -Match "(?m)^command_windows\s*=\s*'uv run --isolated --managed-python python .+claude_permission_policy\.py`"'" -Because "Codex hooks should use uv-managed Python on Windows"
+            $content | Should -Match "(?m)^command_windows\s*=\s*'uv run --isolated --managed-python python .+deny_protected_branch_commit\.py`"'" -Because "Codex hooks should use uv-managed Python on Windows"
+        }
+    }
+
     Context 'Codex MCP startup defaults' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"

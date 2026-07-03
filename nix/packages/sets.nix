@@ -107,7 +107,7 @@ let
     };
     python3 = {
       pkg = pkgs.python3;
-      winget = "Python.Python.3.13";
+      winget = null;
       category = "dev";
     };
     go = {
@@ -680,10 +680,6 @@ lib.mapAttrs (_: names: resolve names) grouped
       command = "oxlint";
       args = [ "--version" ];
     };
-    python3 = {
-      command = "python";
-      args = [ "--version" ];
-    };
     google-cloud-sdk = {
       command = "gcloud";
       args = [ "version" ];
@@ -729,6 +725,7 @@ lib.mapAttrs (_: names: resolve names) grouped
     wezterm = true;
     warp-terminal = true;
     "9PLM9XGG6VKS" = true;
+    "StablyAI.Orca" = true;
   };
 
   # Extra PATH directories for installers that do not register CLI commands on PATH.
@@ -825,6 +822,7 @@ lib.mapAttrs (_: names: resolve names) grouped
       "Microsoft.WindowsTerminal"
       "Microsoft.WSL"
       "OpenAI.Codex"
+      "StablyAI.Orca"
       "TablePlus.TablePlus"
       "Oven-sh.Bun"
       "zig.zig"

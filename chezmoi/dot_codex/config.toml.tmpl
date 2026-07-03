@@ -167,14 +167,14 @@ matcher = "^Bash$"
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = 'python3 "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py"'
-command_windows = 'python "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py"'
+command_windows = 'uv run --isolated --managed-python python "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py"'
 timeout = 30
 statusMessage = "Checking Claude-aligned Bash policy"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = 'python3 "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/deny_protected_branch_commit.py"'
-command_windows = 'python "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/deny_protected_branch_commit.py"'
+command_windows = 'uv run --isolated --managed-python python "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/deny_protected_branch_commit.py"'
 timeout = 30
 statusMessage = "Checking protected branch policy"
 

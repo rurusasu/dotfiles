@@ -169,13 +169,6 @@
           }
         },
         {
-          "PackageIdentifier": "Python.Python.3.13",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "python"
-          }
-        },
-        {
           "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
           "verifyCommand": {
             "args": ["--version"],
@@ -342,6 +335,10 @@
             "args": ["--version"],
             "command": "codex"
           }
+        },
+        {
+          "PackageIdentifier": "StablyAI.Orca",
+          "ciSkipInstall": true
         },
         {
           "PackageIdentifier": "TablePlus.TablePlus"
