@@ -19,6 +19,19 @@ local function resize_sidekick_cli(terminal, delta)
     end
 end
 
+local function resize_sidekick_cli_toward(terminal, direction)
+    local layout = terminal.opts and terminal.opts.layout or "right"
+    if layout == "top" or layout == "bottom" then
+        return
+    end
+
+    local delta = direction == "left" and 5 or -5
+    if layout == "left" then
+        delta = -delta
+    end
+    resize_sidekick_cli(terminal, delta)
+end
+
 return {
     -- Colorscheme
     {
@@ -559,6 +572,22 @@ return {
                             end,
                             mode = "nt",
                             desc = "Sidekick shrink window",
+                        },
+                        resize_left = {
+                            "<C-S-h>",
+                            function(terminal)
+                                resize_sidekick_cli_toward(terminal, "left")
+                            end,
+                            mode = "nt",
+                            desc = "Sidekick resize left",
+                        },
+                        resize_right = {
+                            "<C-S-l>",
+                            function(terminal)
+                                resize_sidekick_cli_toward(terminal, "right")
+                            end,
+                            mode = "nt",
+                            desc = "Sidekick resize right",
                         },
                     },
                 },
