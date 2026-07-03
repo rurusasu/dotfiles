@@ -309,6 +309,11 @@ class HermesAgentHandler : SetupHandlerBase {
             $this.GetLifelogCoreSyncScriptLines()
         ) -or $changed
 
+        $changed = $this.EnsureFileLinesLf(
+            (Join-Path $scriptsDir "article_news_slack.sh"),
+            $this.GetArticleNewsSlackScriptLines()
+        ) -or $changed
+
         $changed = $this.EnsureLifelogCronJob($dataDir) -or $changed
 
         $changed = $this.EnsureManagedBlock(
@@ -356,8 +361,31 @@ class HermesAgentHandler : SetupHandlerBase {
             return [PSCustomObject]@{ Success = $true; Changed = $false; Source = "Disabled"; Message = "" }
         }
 
+        $repairOutput = @(Invoke-Docker -Arguments @(
+                "exec",
+                "hermes",
+                "bash",
+                "-lc",
+                "mkdir -p /opt/data/core && chown -R hermes:hermes /opt/data/core"
+            ) -TimeoutSeconds $this.DockerRunTimeoutSeconds)
+        $repairExitCode = $LASTEXITCODE
+        if ($repairExitCode -ne 0) {
+            $message = ($repairOutput -join "`n").Trim()
+            if ([string]::IsNullOrWhiteSpace($message)) {
+                $message = "exit code $repairExitCode"
+            }
+            return [PSCustomObject]@{
+                Success = $false
+                Changed = $false
+                Source  = "Docker"
+                Message = "Hermes lifelog core ownership repair failed: $message"
+            }
+        }
+
         $output = @(Invoke-Docker -Arguments @(
                 "exec",
+                "--user",
+                "hermes",
                 "hermes",
                 "bash",
                 "-lc",
@@ -421,13 +449,22 @@ class HermesAgentHandler : SetupHandlerBase {
             $jobs = @($cron.jobs)
         }
 
-        $desiredJob = $this.GetLifelogCronJob()
+        $desiredJobs = @(
+            $this.GetLifelogCronJob(),
+            $this.GetArticleNewsSlackCronJob()
+        )
+        $desiredJobsById = @{}
+        foreach ($desiredJob in $desiredJobs) {
+            $desiredJobsById[$desiredJob.id] = $desiredJob
+        }
+
         $changed = $false
         $updatedJobs = @()
-        $found = $false
+        $foundJobIds = @{}
         foreach ($job in $jobs) {
-            if ($job.id -eq $desiredJob.id) {
-                $found = $true
+            if ($desiredJobsById.ContainsKey($job.id)) {
+                $desiredJob = $desiredJobsById[$job.id]
+                $foundJobIds[$desiredJob.id] = $true
                 $mergedJob = $this.MergeLifelogCronJob($job, $desiredJob)
                 if ((ConvertTo-Json -InputObject $job -Depth 10 -Compress) -ne (ConvertTo-Json -InputObject $mergedJob -Depth 10 -Compress)) {
                     $changed = $true
@@ -438,9 +475,11 @@ class HermesAgentHandler : SetupHandlerBase {
             $updatedJobs += $job
         }
 
-        if (-not $found) {
-            $updatedJobs += $desiredJob
-            $changed = $true
+        foreach ($desiredJob in $desiredJobs) {
+            if (-not $foundJobIds.ContainsKey($desiredJob.id)) {
+                $updatedJobs += $desiredJob
+                $changed = $true
+            }
         }
 
         if (-not $changed) {
@@ -516,6 +555,156 @@ class HermesAgentHandler : SetupHandlerBase {
             enabled_toolsets    = $null
             workdir             = $null
         }
+    }
+
+    hidden [pscustomobject] GetArticleNewsSlackCronJob() {
+        return [PSCustomObject]@{
+            id                  = "article-news-slack-post"
+            name                = "Article collector translated news Slack post"
+            prompt              = "Run the article collector translated news Slack post script. It collects recommended articles, translates them, saves translated Markdown into the lifelog inbox, and posts it to Slack channel C0AJVDKGN6A."
+            skills              = @()
+            skill               = $null
+            model               = $null
+            provider            = $null
+            provider_snapshot   = $null
+            model_snapshot      = $null
+            base_url            = $null
+            script              = "article_news_slack.sh"
+            no_agent            = $true
+            context_from        = $null
+            schedule            = [PSCustomObject]@{
+                kind    = "cron"
+                expr    = "0 */2 * * *"
+                display = "0 */2 * * *"
+            }
+            schedule_display    = "0 */2 * * *"
+            repeat              = [PSCustomObject]@{
+                times     = $null
+                completed = 0
+            }
+            enabled             = $true
+            state               = "scheduled"
+            paused_at           = $null
+            paused_reason       = $null
+            last_run_at         = $null
+            last_status         = $null
+            last_error          = $null
+            last_delivery_error = $null
+            enabled_toolsets    = $null
+            workdir             = $null
+        }
+    }
+
+    hidden [string[]] GetArticleNewsSlackScriptLines() {
+        return @(
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            "",
+            'HERMES_HOME_DIR="/opt/data"',
+            'LIFELOG_INBOX_DIR="${ARTICLE_NEWS_LIFELOG_INBOX_DIR:-/opt/data/core/lifelog/0_inbox/article-news}"',
+            'RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"',
+            'WORK_ROOT="$HERMES_HOME_DIR/cron/output/article-news/$RUN_ID"',
+            'STATE_DIR="$HERMES_HOME_DIR/cron/state/article-news"',
+            'CONFIG_PATH="$WORK_ROOT/article-collector.toml"',
+            'SLACK_CHANNEL="${ARTICLE_NEWS_SLACK_CHANNEL:-C0AJVDKGN6A}"',
+            'ARTICLE_NEWS_LIMIT="${ARTICLE_NEWS_LIMIT:-2}"',
+            "",
+            'case "$ARTICLE_NEWS_LIMIT" in',
+            '  ""|*[!0-9]*) echo "ARTICLE_NEWS_LIMIT must be a positive integer" >&2; exit 1 ;;',
+            'esac',
+            "",
+            'mkdir -p "$WORK_ROOT" "$STATE_DIR" "$LIFELOG_INBOX_DIR"',
+            "",
+            'if [ -z "${SLACK_BOT_TOKEN:-}" ]; then',
+            '  echo "SLACK_BOT_TOKEN is required" >&2',
+            "  exit 1",
+            "fi",
+            "",
+            'if ! command -v article-collector >/dev/null 2>&1; then',
+            '  echo "article-collector is required" >&2',
+            "  exit 1",
+            "fi",
+            "",
+            'cat > "$CONFIG_PATH" <<CONFIG',
+            "[recommend]",
+            'sources = ["hackernews", "zenn", "qiita", "devto", "github-advisory", "aws-whatsnew", "kubernetes", "cncf", "infoq", "martinfowler", "github-search"]',
+            'limit = $ARTICLE_NEWS_LIMIT',
+            "fetch_articles = true",
+            "create_pr = false",
+            'history_path = "$STATE_DIR/recommend-history.sqlite"',
+            "",
+            "[recommend.source.qiita]",
+            'query = "AI OR Rust OR security"',
+            "",
+            "[recommend.source.github-search]",
+            'query = "stars:>1000 pushed:>2026-01-01 archived:false"',
+            "CONFIG",
+            "",
+            'export ACP_AGENT="${ARTICLE_NEWS_ACP_AGENT:-codex}"',
+            'export TRANSLATE_LANG="${ARTICLE_NEWS_TRANSLATE_LANG:-ja}"',
+            'export ARTICLE_COLLECTOR_TEMP_DIR="$WORK_ROOT"',
+            "",
+            "set +e",
+            'collector_output="$(article-collector recommend all --config "$CONFIG_PATH" 2>&1)"',
+            'collector_status=$?',
+            "set -e",
+            'printf "%s\n" "$collector_output" > "$WORK_ROOT/article-collector.log"',
+            "",
+            'if [ "$collector_status" -ne 0 ]; then',
+            '  if printf "%s\n" "$collector_output" | grep -Eq "No (new )?recommended articles found"; then',
+            '    echo "No new recommended articles; skipping Slack post."',
+            "    exit 0",
+            "  fi",
+            '  printf "%s\n" "$collector_output" >&2',
+            '  exit "$collector_status"',
+            "fi",
+            "",
+            'translated_path="$WORK_ROOT/translated.md"',
+            'if [ ! -s "$translated_path" ]; then',
+            '  echo "translated.md was not created" >&2',
+            "  exit 1",
+            "fi",
+            "",
+            'saved_path="$LIFELOG_INBOX_DIR/$RUN_ID.md"',
+            'cp "$translated_path" "$saved_path"',
+            "",
+            'PYTHON_BIN="${PYTHON_BIN:-/opt/hermes/.venv/bin/python}"',
+            'if [ ! -x "$PYTHON_BIN" ]; then',
+            '  PYTHON_BIN="python3"',
+            "fi",
+            "",
+            '$PYTHON_BIN - "$translated_path" "$SLACK_CHANNEL" <<''PY''',
+            "import json",
+            "import os",
+            "import sys",
+            "import urllib.error",
+            "import urllib.request",
+            "",
+            "translated_path = sys.argv[1]",
+            "channel = sys.argv[2]",
+            'token = os.environ["SLACK_BOT_TOKEN"]',
+            'with open(translated_path, "r", encoding="utf-8") as handle:',
+            "    text = handle.read()",
+            'payload = json.dumps({"channel": channel, "text": text, "mrkdwn": True}).encode("utf-8")',
+            "request = urllib.request.Request(",
+            '    "https://slack.com/api/chat.postMessage",',
+            "    data=payload,",
+            '    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"},',
+            '    method="POST",',
+            ")",
+            "try:",
+            "    with urllib.request.urlopen(request, timeout=30) as response:",
+            '        body = response.read().decode("utf-8")',
+            "except urllib.error.HTTPError as exc:",
+            '    body = exc.read().decode("utf-8", errors="replace")',
+            '    raise SystemExit(f"Slack HTTP error {exc.code}: {body}")',
+            "result = json.loads(body)",
+            'if not result.get("ok"):',
+            '    raise SystemExit(f"Slack API error: {body}")',
+            "PY",
+            "",
+            'echo "Saved translated news to $saved_path and posted to Slack channel $SLACK_CHANNEL."'
+        )
     }
 
     hidden [string[]] GetLifelogCoreSyncScriptLines() {

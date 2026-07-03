@@ -101,6 +101,11 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "npx --version"
             $dockerfileContent | Should -Match "xapi-mcp\.sh"
             $dockerfileContent | Should -Match "/usr/local/bin/hermes-xapi-mcp"
+            $dockerfileContent | Should -Match "ARTICLE_COLLECTOR_VERSION"
+            $dockerfileContent | Should -Match "article-collector-linux-amd64"
+            $dockerfileContent | Should -Match "article-collector-linux-arm64"
+            $dockerfileContent | Should -Match "/usr/local/bin/article-collector"
+            $dockerfileContent | Should -Match "article-collector --help"
 
             $ghWrapperContent = Get-Content -LiteralPath $ghWrapperPath -Raw
             $ghWrapperContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN"
@@ -1034,6 +1039,18 @@ Describe 'HermesAgentHandler' {
             $syncScript | Should -Not -Match "`r"
             $syncScript | Should -Not -Match ([string][char]7)
 
+            $newsScriptPath = Join-Path $dataDir "scripts\article_news_slack.sh"
+            $newsScriptPath | Should -Exist
+            $newsScript = Get-Content -LiteralPath $newsScriptPath -Raw
+            $newsScript | Should -Match "article-collector recommend all"
+            $newsScript | Should -Match ([regex]::Escape('ACP_AGENT="${ARTICLE_NEWS_ACP_AGENT:-codex}"'))
+            $newsScript | Should -Match ([regex]::Escape('TRANSLATE_LANG="${ARTICLE_NEWS_TRANSLATE_LANG:-ja}"'))
+            $newsScript | Should -Match "C0AJVDKGN6A"
+            $newsScript | Should -Match "/opt/data/core/lifelog/0_inbox/article-news"
+            $newsScript | Should -Match "chat.postMessage"
+            $newsScript | Should -Match "fetch_articles = true"
+            $newsScript | Should -Not -Match "`r"
+
             $cronPath = Join-Path $dataDir "cron\jobs.json"
             $cronPath | Should -Exist
             $cron = Get-Content -LiteralPath $cronPath -Raw | ConvertFrom-Json
@@ -1042,6 +1059,12 @@ Describe 'HermesAgentHandler' {
             $lifelogJob.script | Should -Be "lifelog_sync.sh"
             $lifelogJob.no_agent | Should -Be $true
             $lifelogJob.schedule.expr | Should -Be "20 4 * * *"
+            $newsJob = @($cron.jobs | Where-Object { $_.id -eq "article-news-slack-post" })[0]
+            $newsJob.name | Should -Be "Article collector translated news Slack post"
+            $newsJob.script | Should -Be "article_news_slack.sh"
+            $newsJob.no_agent | Should -Be $true
+            $newsJob.schedule.expr | Should -Be "0 */2 * * *"
+            $newsJob.enabled | Should -Be $true
 
             $rootSoul = Get-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Raw
             $rootSoul | Should -Match "/opt/data/core/lifelog/AGENTS.md"
@@ -1054,6 +1077,13 @@ Describe 'HermesAgentHandler' {
             Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
                 $Arguments[0] -eq "exec" -and
                 $Arguments[1] -eq "hermes" -and
+                ($Arguments -join " ") -match "chown -R hermes:hermes /opt/data/core"
+            }
+            Should -Invoke Invoke-Docker -Times 1 -ParameterFilter {
+                $Arguments[0] -eq "exec" -and
+                $Arguments[1] -eq "--user" -and
+                $Arguments[2] -eq "hermes" -and
+                $Arguments[3] -eq "hermes" -and
                 ($Arguments -join " ") -match "bash /opt/data/scripts/lifelog_sync.sh --bootstrap"
             }
         }
@@ -1095,6 +1125,52 @@ Describe 'HermesAgentHandler' {
             $lifelogJob.no_agent | Should -Be $true
             $lifelogJob.schedule.expr | Should -Be "20 4 * * *"
             $lifelogJob.fire_claim | Should -Be "runtime-claim"
+
+            $otherJob = @($cron.jobs | Where-Object { $_.id -eq "other-job" })[0]
+            $otherJob.name | Should -Be "Other job"
+            $otherJob.script | Should -Be "other.sh"
+        }
+
+        It 'should update an existing article news cron job without removing runtime fields' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $cronDir = Join-Path $dataDir "cron"
+            New-Item -ItemType Directory -Path $cronDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $cronDir "jobs.json") -Encoding UTF8 -Value (@{
+                    jobs       = @(
+                        @{
+                            id         = "article-news-slack-post"
+                            name       = "stale news post"
+                            script     = "old.sh"
+                            no_agent   = $false
+                            schedule   = @{
+                                kind    = "cron"
+                                expr    = "0 0 * * *"
+                                display = "0 0 * * *"
+                            }
+                            fire_claim = "runtime-claim"
+                        },
+                        @{
+                            id     = "other-job"
+                            name   = "Other job"
+                            script = "other.sh"
+                        }
+                    )
+                    updated_at = "2026-01-01T00:00:00Z"
+                } | ConvertTo-Json -Depth 10)
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $cron = Get-Content -LiteralPath (Join-Path $cronDir "jobs.json") -Raw | ConvertFrom-Json
+            $newsJob = @($cron.jobs | Where-Object { $_.id -eq "article-news-slack-post" })[0]
+            $newsJob.name | Should -Be "Article collector translated news Slack post"
+            $newsJob.script | Should -Be "article_news_slack.sh"
+            $newsJob.no_agent | Should -Be $true
+            $newsJob.schedule.expr | Should -Be "0 */2 * * *"
+            $newsJob.fire_claim | Should -Be "runtime-claim"
+
+            $lifelogJob = @($cron.jobs | Where-Object { $_.id -eq "lifelog-core-sync" })[0]
+            $lifelogJob.script | Should -Be "lifelog_sync.sh"
 
             $otherJob = @($cron.jobs | Where-Object { $_.id -eq "other-job" })[0]
             $otherJob.name | Should -Be "Other job"
