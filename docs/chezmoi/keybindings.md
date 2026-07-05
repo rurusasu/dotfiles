@@ -44,6 +44,8 @@
 
 - Neovim
   - `Leader` は `Space`
+  - `Ctrl+Z`: undo
+  - `Ctrl+Y`: redo
   - `Space+e`: エクスプローラ
   - `Space+ff/fg/fb`: ファイル検索/grep/buffers
   - `Space+aa`: AI チャット toggle (codecompanion)
