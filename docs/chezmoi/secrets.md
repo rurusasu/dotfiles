@@ -44,6 +44,31 @@ dotfiles 側で管理するもの:
   - `op://openclaw/TavilyUsedOpenclawPAT/credential`
   - `op://openclaw/FirecrawlUsedOpenclawPAT/credential`
 
+Plane MCP の API token は共有された 1Password item を参照する:
+
+- `op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential`
+
+Plane MCP / Plane GitHub sync の workspace slug は secret ではないため、`ruru` に固定する。
+Plane 初期セットアップ時も workspace slug は `ruru` にする。
+Plane install handler は同じ 1Password item の `username` / `password` で初期 admin user を作成し、
+`credential` に保存された `plane_api_...` token を MCP / GitHub sync 用に Plane DB へ登録する。
+`credential` が未作成の場合は handler が token を生成して同 item へ追加する。
+
+Plane <-> GitHub issue sync は `chezmoi/dot_config/plane-github-sync/config.json.tmpl`
+で管理する。GitHub Issues を source of truth にするため、Plane で作られた未リンク work item は
+GitHub issue に作成し、GitHub 側で作られた issue は Plane work item として作成する。既存リンクで
+両側が変更された場合は GitHub 側を正として Plane に反映する。Plane 側には GitHub issue URL を、
+GitHub issue body には復旧用の `plane-github-sync` marker を残す。
+
+GitHub Actions では mock Pester で双方向同期、競合時の GitHub 優先、marker 復旧、CI path filter を検証する。
+実 GitHub issue を作る E2E はローカルで明示実行する。
+
+既定の同期対象:
+
+- `dotfiles` -> `rurusasu/dotfiles`
+- `article-collector` -> `rurusasu/article-collector`
+- `lifelog` -> `rurusasu/lifelog`
+
 新しい端末、初期化後、または browser scope が追加された後は、端末ごとに pairing / scope
 upgrade を承認する。
 

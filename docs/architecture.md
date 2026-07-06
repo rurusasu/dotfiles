@@ -172,24 +172,26 @@ $vhdPath = $context.SharedData["VhdPath"]
 
 ### ハンドラー実行順序
 
-| Order | Phase | Admin | ハンドラー     | ソースファイル                                                                          | 説明                                     |
-| ----- | ----- | ----- | -------------- | --------------------------------------------------------------------------------------- | ---------------------------------------- |
-| 5     | 1     | No    | Winget         | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                 | winget パッケージ管理                    |
-| 5     | 2     | Yes   | WslInstall     | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)         | WSL コンポーネントのインストール         |
-| 6     | 1     | No    | Codex          | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                   | Codex CLI リンクと MCP PATH 設定         |
-| 6     | 1     | No    | Npm            | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                       | npm グローバルパッケージ管理             |
-| 7     | 1     | No    | ClaudeCode     | [Handler.ClaudeCode.ps1](../scripts/powershell/handlers/Handler.ClaudeCode.ps1)         | Claude Code スタンドアロンインストール   |
-| 7     | 1     | No    | Pnpm           | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                     | pnpm グローバルパッケージ管理            |
-| 8     | 1     | No    | Bun            | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                       | Bun シンボリックリンク作成               |
-| 9     | 1     | No    | OnePasswordCli | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1) | 1Password CLI op.exe shim 作成           |
-| 10    | 2     | No    | Chezmoi        | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)               | chezmoi dotfiles 適用                    |
-| 18    | 2     | No    | Docker         | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                 | Docker Desktop WSL 連携                  |
-| 20    | 2     | No    | WslConfig      | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)           | .wslconfig 適用                          |
-| 21    | 2     | Yes   | VhdManager     | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)         | WSL VHD サイズ拡張                       |
-| 40    | 2     | No    | VscodeServer   | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)     | VS Code Server キャッシュクリア          |
-| 50    | 2     | No    | NixOSWSL       | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)             | NixOS-WSL インストール                   |
-| 55    | 2     | No    | NixRebuild     | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)         | nixos-rebuild switch の実行              |
-| 56    | 2     | No    | HermesAgent    | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)       | Hermes Agent Docker コンテナセットアップ |
+| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                     |
+| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                    |
+| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール         |
+| 6     | 1     | No    | Codex           | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                     | Codex CLI リンクと MCP PATH 設定         |
+| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理             |
+| 7     | 1     | No    | ClaudeCode      | [Handler.ClaudeCode.ps1](../scripts/powershell/handlers/Handler.ClaudeCode.ps1)           | Claude Code スタンドアロンインストール   |
+| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理            |
+| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成               |
+| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成           |
+| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                    |
+| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携                  |
+| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                          |
+| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                       |
+| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア          |
+| 50    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                   |
+| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行              |
+| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | Hermes Agent Docker コンテナセットアップ |
+| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ        |
+| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録     |
 
 **重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するローカルコンテナ系ハンドラーは NixOSWSL/NixRebuild の後に置く。
 
