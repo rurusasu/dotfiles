@@ -140,6 +140,31 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Plane MCP server configuration' {
+        BeforeAll {
+            $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
+            $script:mcpContent = Get-Content -Path $script:mcpServersPath -Raw
+            $match = [regex]::Match($script:mcpContent, '(?ms)-\s+name:\s+plane\b.*?(?=^\s+-\s+name:|\z)')
+            $script:planeBlock = if ($match.Success) { $match.Value } else { "" }
+        }
+
+        It 'should configure Plane MCP over local stdio with token from the provided 1Password item' {
+            $script:planeBlock | Should -Not -BeNullOrEmpty
+            $script:planeBlock | Should -Match '(?m)^\s+command:\s+uvx\s*$'
+            $script:planeBlock | Should -Match '(?m)^\s+-\s+"plane-mcp-server"\s*$'
+            $script:planeBlock | Should -Match '(?m)^\s+-\s+"stdio"\s*$'
+            $script:planeBlock | Should -Match 'PLANE_BASE_URL:\s+"http://127\.0\.0\.1:18080"'
+            $script:planeBlock | Should -Match 'PLANE_WORKSPACE_SLUG:\s+"ruru"'
+            $script:planeBlock | Should -Not -Match '\$\{PLANE_WORKSPACE_SLUG\}'
+            $script:planeBlock | Should -Match 'PLANE_API_KEY:\s+"\$\{PLANE_API_KEY\}"'
+            $script:planeBlock | Should -Match 'PLANE_API_KEY:\s+"op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential"'
+        }
+
+        It 'should avoid Codex auto-start because Plane depends on local service state' {
+            $script:planeBlock | Should -Not -Match '(?m)^\s+-\s+codex\s*$'
+        }
+    }
+
     Context 'Shell keybindings' {
         It 'should source bashrc from profile for interactive login bash' {
             $profileContent = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw

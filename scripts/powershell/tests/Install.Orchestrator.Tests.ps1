@@ -68,7 +68,9 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match 'set "PS7_DIR=%ProgramFiles%\\PowerShell\\7"'
         $content | Should -Match 'if exist "%PS7_DIR%\\pwsh\.exe"'
         $content | Should -Match 'set "PATH=%PS7_DIR%;%PATH%"'
-        $content | Should -Match 'where pwsh'
+        $content | Should -Match 'set "PS_CMD=%PS7_DIR%\\pwsh\.exe"'
+        $content | Should -Match '%SystemRoot%\\System32\\where\.exe" pwsh'
+        $content | Should -Match '%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe'
         $content | Should -Match 'Falling back to Windows PowerShell'
     }
 }

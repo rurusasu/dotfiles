@@ -37,6 +37,28 @@ mcp_servers:
       - gemini
       - vscode
 
+  # Plane - Local self-hosted project management
+  - name: plane
+    command: uvx
+    args:
+      - "plane-mcp-server"
+      - "stdio"
+    startup_timeout_sec: 120
+    env:
+      PLANE_API_KEY: "${PLANE_API_KEY}"
+      PLANE_WORKSPACE_SLUG: "ruru"
+      PLANE_BASE_URL: "http://127.0.0.1:18080"
+    op_env:
+      PLANE_API_KEY: "op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential"
+    supports:
+      - claude-code
+      - claude-desktop
+      - cursor
+      - gemini
+      - vscode
+      - windsurf
+      - zed
+
   # GitHub - GitHub API integration
   - name: github
     command: pnpm

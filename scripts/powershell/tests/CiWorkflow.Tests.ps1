@@ -180,6 +180,13 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
 
+    It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
+        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
+
+        $path = '- "chezmoi/dot_config/plane-github-sync/**"'
+        ([regex]::Matches($powershellWorkflow, [regex]::Escape($path))).Count | Should -Be 2
+    }
+
     It 'should trigger dcnvim platform tests when dcnvim implementations change' {
         $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
