@@ -303,6 +303,40 @@ Describe 'Plane work item helpers' {
       Should -Throw -ExpectedMessage "*Cannot validate argument on parameter 'Method'*"
   }
 
+  It 'reads every page from Plane API cursor collections' {
+    $config = [pscustomobject]@{ planeBaseUrl = 'http://127.0.0.1:18080'; planeWorkspaceSlug = 'team' }
+    $script:planeCollectionPaths = @()
+
+    Mock Invoke-PlaneApi {
+      $script:planeCollectionPaths += $Path
+      if ($Path -eq 'projects/project-1/work-items/') {
+        return [pscustomobject]@{
+          results = @([pscustomobject]@{ id = 'work-item-1' })
+          next_page_results = $true
+          next_cursor = 'cursor 1'
+        }
+      }
+
+      if ($Path -eq 'projects/project-1/work-items/?cursor=cursor%201') {
+        return [pscustomobject]@{
+          results = @([pscustomobject]@{ id = 'work-item-2' })
+          next_page_results = $false
+          next_cursor = $null
+        }
+      }
+
+      throw "Unexpected Plane API call: $Method $Path"
+    }
+
+    $items = Get-PlaneApiCollection -Config $config -Token 'token' -Path 'projects/project-1/work-items/'
+
+    $items.Count | Should -Be 2
+    $items[0].id | Should -Be 'work-item-1'
+    $items[1].id | Should -Be 'work-item-2'
+    $script:planeCollectionPaths[0] | Should -Be 'projects/project-1/work-items/'
+    $script:planeCollectionPaths[1] | Should -Be 'projects/project-1/work-items/?cursor=cursor%201'
+  }
+
   It 'creates a GitHub issue in Plane with external identity' {
     $script:planeCreate = $null
     $config = [pscustomobject]@{ planeBaseUrl = 'http://127.0.0.1:18080'; planeWorkspaceSlug = 'team' }
@@ -539,6 +573,71 @@ Describe 'Invoke-PlaneGithubSync' {
 
     $link.planeFingerprint | Should -Be $expectedPlaneFingerprint
     $link.planeFingerprint | Should -Not -Be $preLinkFingerprint
+    $link.githubFingerprint | Should -Be $expectedGitHubFingerprint
+  }
+
+  It 'closes a GitHub issue created from an already closed Plane work item' {
+    $statePath = Join-Path $TestDrive 'state-plane-create-closed.json'
+    @{
+      planeBaseUrl = 'http://127.0.0.1:18080'
+      planeWorkspaceSlug = 'team'
+      planeApiToken = 'test-token'
+      statePath = $statePath
+      projectMappings = @(@{
+        planeProject = 'dotfiles'
+        githubRepository = 'rurusasu/dotfiles'
+      })
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $script:testConfigPath -Encoding UTF8
+
+    $script:closedIssueUpdate = $null
+    Mock Invoke-PlaneApi {
+      if ($Path -eq 'projects/') {
+        return @([pscustomobject]@{ id = 'project-1'; name = 'dotfiles'; identifier = 'DOT'; slug = 'dotfiles' })
+      }
+      if ($Path -eq 'projects/project-1/work-items/') {
+        return @([pscustomobject]@{
+          id = 'work-item-1'
+          name = 'Done in Plane'
+          sequence_id = 12
+          state = 'state-done'
+          description_html = '<p>Finished before sync.</p>'
+        })
+      }
+      if ($Path -eq 'projects/project-1/states/') {
+        return @([pscustomobject]@{ id = 'state-done'; group = 'completed' })
+      }
+      if ($Method -eq 'Patch') {
+        return [pscustomobject]@{ ok = $true }
+      }
+      throw "Unexpected Plane API call: $Method $Path"
+    }
+    Mock Invoke-GitHubIssueList {
+      return @()
+    }
+    Mock Invoke-GitHubIssueCreate {
+      return 'https://github.com/rurusasu/dotfiles/issues/123'
+    }
+    Mock Update-GitHubIssueFromPlane {
+      $script:closedIssueUpdate = @{
+        Repository = $Repository
+        IssueNumber = $IssueNumber
+        Title = $Title
+        Body = $Body
+        Closed = $Closed
+      }
+      return [pscustomobject]@{ state = 'closed' }
+    }
+
+    Invoke-PlaneGithubSync -ConfigPath $script:testConfigPath
+
+    Should -Invoke Update-GitHubIssueFromPlane -Times 1 -Exactly
+    $script:closedIssueUpdate.Repository | Should -Be 'rurusasu/dotfiles'
+    $script:closedIssueUpdate.IssueNumber | Should -Be 123
+    $script:closedIssueUpdate.Closed | Should -BeTrue
+
+    $saved = Get-PlaneGithubSyncState -Path $statePath
+    $link = Get-PlaneGithubSyncStateLink -State $saved -Repository 'rurusasu/dotfiles' -GitHubIssueUrl 'https://github.com/rurusasu/dotfiles/issues/123'
+    $expectedGitHubFingerprint = New-PlaneGithubFingerprint -Title 'Done in Plane' -Body $script:closedIssueUpdate.Body -Closed $true
     $link.githubFingerprint | Should -Be $expectedGitHubFingerprint
   }
 

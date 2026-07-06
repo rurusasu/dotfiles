@@ -304,7 +304,7 @@ class PlaneHandler : SetupHandlerBase {
         }
 
         $this.Log("Plane setup.sh をダウンロードしています...")
-        Invoke-WebRequest -Uri $this.SetupScriptUrl -OutFile $setupPath
+        Invoke-WebRequestSafe -Uri $this.SetupScriptUrl -OutFile $setupPath
         Update-PlaneSetupScriptCompatibility -SetupPath $setupPath
     }
 

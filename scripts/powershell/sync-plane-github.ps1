@@ -369,6 +369,41 @@ function Get-PlaneApiResponseItems {
     return @($Response)
 }
 
+function Add-PlaneApiQueryParameter {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [string]$Name,
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+
+    $separator = if ($Path.Contains("?")) { "&" } else { "?" }
+    $encodedName = [System.Uri]::EscapeDataString($Name)
+    $encodedValue = [System.Uri]::EscapeDataString($Value)
+    return "$Path$separator$encodedName=$encodedValue"
+}
+
+function Test-PlaneApiResponseHasNextPage {
+    [CmdletBinding()]
+    param(
+        [object]$Response
+    )
+
+    if ($null -eq $Response) {
+        return $false
+    }
+
+    $value = Get-ObjectPropertyValue -InputObject $Response -Names @("next_page_results")
+    if ($value -is [bool]) {
+        return [bool]$value
+    }
+
+    return ([string]$value).Trim().ToLowerInvariant() -in @("1", "true", "yes")
+}
+
 function Get-PlaneApiCollection {
     [CmdletBinding()]
     param(
@@ -380,8 +415,28 @@ function Get-PlaneApiCollection {
         [string]$Path
     )
 
-    $response = Invoke-PlaneApi -Method "Get" -Config $Config -Token $Token -Path $Path
-    return @(Get-PlaneApiResponseItems -Response $response)
+    $items = @()
+    $pagePath = $Path
+    $seenCursors = @{}
+
+    while ($true) {
+        $response = Invoke-PlaneApi -Method "Get" -Config $Config -Token $Token -Path $pagePath
+        $items += @(Get-PlaneApiResponseItems -Response $response)
+
+        if (-not (Test-PlaneApiResponseHasNextPage -Response $response)) {
+            break
+        }
+
+        $nextCursor = [string](Get-ObjectPropertyValue -InputObject $response -Names @("next_cursor"))
+        if ([string]::IsNullOrWhiteSpace($nextCursor) -or $seenCursors.ContainsKey($nextCursor)) {
+            break
+        }
+
+        $seenCursors[$nextCursor] = $true
+        $pagePath = Add-PlaneApiQueryParameter -Path $Path -Name "cursor" -Value $nextCursor
+    }
+
+    return @($items)
 }
 
 function Normalize-PlaneProjectToken {
@@ -1329,11 +1384,15 @@ function Invoke-PlaneGithubSync {
 
             $body = New-PlaneGithubIssueBody -Config $config -Project $project -WorkItem $workItem
             $issueUrl = Invoke-GitHubIssueCreate -Repository $repository -Title $title -Body $body
+            if ($closed) {
+                $issueNumber = Get-GitHubIssueNumberFromUrl -Url $issueUrl
+                Update-GitHubIssueFromPlane -Repository $repository -IssueNumber $issueNumber -Title $title -Body $body -Closed $true | Out-Null
+            }
             Update-PlaneWorkItemGitHubLink -Config $config -Token $token -Project $project -WorkItem $workItem -GitHubIssueUrl $issueUrl
 
             $postLinkDescription = Add-GitHubLinkToPlaneDescription -DescriptionHtml (Get-PlaneWorkItemDescription -WorkItem $workItem) -GitHubIssueUrl $issueUrl
             $planeFingerprint = New-PlaneGithubFingerprint -Title $title -Body (Get-PlainTextFromHtml -Html $postLinkDescription) -Closed $closed
-            $githubFingerprint = New-PlaneGithubFingerprint -Title $title -Body $body -Closed $false
+            $githubFingerprint = New-PlaneGithubFingerprint -Title $title -Body $body -Closed $closed
             Set-PlaneGithubSyncStateLink -State $state -Repository $repository -GitHubIssueUrl $issueUrl -Value @{
                 repository = $repository
                 githubIssueUrl = $issueUrl

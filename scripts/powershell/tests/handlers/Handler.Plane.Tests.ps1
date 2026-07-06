@@ -24,7 +24,7 @@ Describe 'PlaneHandler' {
         } -ParameterFilter { $Name -in @("docker", "bash") }
         Mock Get-Command { return $null } -ParameterFilter { $Name -eq "op" }
         Mock Test-DockerDaemon { return $true }
-        Mock Invoke-WebRequest {
+        Mock Invoke-WebRequestSafe {
             param(
                 [string]$Uri,
                 [string]$OutFile
