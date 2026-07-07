@@ -43,7 +43,7 @@ $servers["{{ .name }}"] = [ordered]@{
 {{- if hasKey . "env" }}
 $servers["{{ .name }}"]["env"] = @{
 {{- range $key, $value := .env }}
-    "{{ $key }}" = "{{ $value }}"
+    "{{ $key }}" = '{{ $value }}'
 {{- end }}
 }
 {{- end }}

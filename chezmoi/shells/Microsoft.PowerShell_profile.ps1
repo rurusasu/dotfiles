@@ -560,7 +560,7 @@ function dotf {
     try { task @args } finally { Pop-Location }
 }
 
-# 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
+# 1Password-managed secrets (GITHUB_PAT_TOKEN, TAVILY_API_KEY, etc.)
 # Codex 等の最小環境では $HOME が空文字列のため Join-Path がエラーになる。
 if ($HOME) {
     $_secretPs1 = Join-Path $HOME ".config\shell\secret.ps1"

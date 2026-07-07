@@ -140,6 +140,22 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Windows MCP deploy scripts の env fallback' {
+        It 'PowerShell 展開時に ${VAR} fallback を空文字にしないこと' {
+            $templates = @(
+                ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
+                ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
+            ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
+
+            foreach ($path in $templates) {
+                $content = Get-Content -LiteralPath $path -Raw
+
+                $content | Should -Match '"\{\{ \$key \}\}" = ''\{\{ \$value \}\}''' -Because "$path should write mcp_servers.yaml env fallback values literally"
+                $content | Should -Not -Match '"\{\{ \$key \}\}" = "\{\{ \$value \}\}"' -Because "$path must not let PowerShell expand `${VAR} fallback values"
+            }
+        }
+    }
+
     Context 'Plane MCP server configuration' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"

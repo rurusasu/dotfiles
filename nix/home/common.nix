@@ -154,7 +154,7 @@ in
       # dotf: run task from dotfiles root without changing cwd
       dotf() { (cd ~/.dotfiles && task "$@") }
 
-      # 1Password-managed secrets (GH_TOKEN, TAVILY_API_KEY, etc.)
+      # 1Password-managed secrets (GITHUB_PAT_TOKEN, TAVILY_API_KEY, etc.)
       [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
 
       # GitHub CLI token switching for personal/work repositories.
