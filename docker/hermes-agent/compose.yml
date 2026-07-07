@@ -20,10 +20,6 @@ services:
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
         target: /root/.xurl
-    env_file:
-      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env
-        format: raw
-        required: false
     environment:
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"

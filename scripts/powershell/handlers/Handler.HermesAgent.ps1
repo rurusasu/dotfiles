@@ -1234,19 +1234,54 @@ class HermesAgentHandler : SetupHandlerBase {
             return [PSCustomObject]@{ Changed = $false; Source = "Disabled" }
         }
 
-        $configPath = Join-Path $dataDir "config.yaml"
-        $existingLines = @()
-        if (Test-Path -LiteralPath $configPath) {
-            $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+        $configTargets = @(
+            [PSCustomObject]@{
+                ConfigPath = Join-Path $dataDir "config.yaml"
+                DataDir    = $dataDir
+            }
+        )
+
+        $profilesDir = Join-Path $dataDir "profiles"
+        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
+            $profileDir = Join-Path $profilesDir $profileName
+            if (Test-Path -LiteralPath $profileDir -PathType Container) {
+                $configTargets += [PSCustomObject]@{
+                    ConfigPath = Join-Path $profileDir "config.yaml"
+                    DataDir    = $profileDir
+                }
+            }
         }
 
-        $updatedLines = $this.SetMcpConfigLines($existingLines)
-        $changed = -not $this.LinesEqual($existingLines, $updatedLines)
-        if ($changed) {
-            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+        $changedPaths = @()
+        foreach ($target in $configTargets) {
+            $configPath = $target.ConfigPath
+            $targetDataDir = $target.DataDir
+            $existingLines = @()
+            if (Test-Path -LiteralPath $configPath) {
+                $existingLines = @(Get-Content -LiteralPath $configPath -ErrorAction Stop)
+            }
+
+            $envPath = Join-Path $targetDataDir ".env"
+            $envLines = @()
+            if (Test-Path -LiteralPath $envPath) {
+                $envLines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+            }
+
+            $includeXApi = $this.HasXApiMcpAuthentication($targetDataDir, $envLines)
+            $updatedLines = $this.SetMcpConfigLines($existingLines, $includeXApi)
+            if (-not $this.LinesEqual($existingLines, $updatedLines)) {
+                $this.EnsureDirectory((Split-Path -Parent $configPath))
+                Set-Content -LiteralPath $configPath -Encoding UTF8 -Value $updatedLines
+                $changedPaths += $configPath
+            }
         }
 
-        return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
+        return [PSCustomObject]@{
+            Changed = $changedPaths.Count -gt 0
+            Source  = "Config"
+            Count   = $changedPaths.Count
+            Paths   = $changedPaths
+        }
     }
 
     hidden [pscustomobject] EnsureTerminalEnvironmentPassthroughConfiguration([SetupContext]$ctx, [string]$dataDir) {
@@ -1469,15 +1504,21 @@ class HermesAgentHandler : SetupHandlerBase {
         return $result
     }
 
-    hidden [string[]] SetMcpConfigLines([string[]]$lines) {
+    hidden [string[]] SetMcpConfigLines([string[]]$lines, [bool]$includeXApi) {
         $managedServerNames = @("github", "xapi", "x-docs")
-        $desiredLines = @(
-            "  xapi:",
-            "    command: /usr/local/bin/hermes-xapi-mcp",
-            "    connect_timeout: 300",
-            "    env:",
-            '      X_API_CLIENT_ID: ${X_API_CLIENT_ID}',
-            '      X_API_CLIENT_SECRET: ${X_API_CLIENT_SECRET}',
+        $desiredLines = @()
+        if ($includeXApi) {
+            $desiredLines += @(
+                "  xapi:",
+                "    command: /usr/local/bin/hermes-xapi-mcp",
+                "    connect_timeout: 300",
+                "    env:",
+                '      X_API_CLIENT_ID: ${X_API_CLIENT_ID}',
+                '      X_API_CLIENT_SECRET: ${X_API_CLIENT_SECRET}'
+            )
+        }
+
+        $desiredLines += @(
             "  x-docs:",
             "    url: https://docs.x.com/mcp",
             "    connect_timeout: 60"
@@ -1531,6 +1572,51 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return $result
+    }
+
+    hidden [bool] HasXApiMcpAuthentication([string]$dataDir, [string[]]$envLines) {
+        $clientId = $this.GetEnvLineValue($envLines, "X_API_CLIENT_ID")
+        $clientSecret = $this.GetEnvLineValue($envLines, "X_API_CLIENT_SECRET")
+        if ($this.HasRealEnvValue($clientId) -and $this.HasRealEnvValue($clientSecret)) {
+            return $true
+        }
+
+        $xurlDir = Join-Path $dataDir ".xurl"
+        if (-not (Test-Path -LiteralPath $xurlDir -PathType Container)) {
+            return $false
+        }
+
+        $cacheFile = Get-ChildItem -LiteralPath $xurlDir -Force -File -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        return $null -ne $cacheFile
+    }
+
+    hidden [string] GetEnvLineValue([string[]]$lines, [string]$name) {
+        $escapedName = [regex]::Escape($name)
+        foreach ($line in $lines) {
+            if ($line -match "^\s*(?:export\s+)?$escapedName\s*=\s*(?<value>.*)\s*$") {
+                return $Matches["value"]
+            }
+        }
+
+        return $null
+    }
+
+    hidden [bool] HasRealEnvValue([string]$value) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            return $false
+        }
+
+        $trimmed = $value.Trim()
+        if ($trimmed.Length -ge 2) {
+            $first = $trimmed.Substring(0, 1)
+            $last = $trimmed.Substring($trimmed.Length - 1, 1)
+            if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+                $trimmed = $trimmed.Substring(1, $trimmed.Length - 2).Trim()
+            }
+        }
+
+        return -not [string]::IsNullOrWhiteSpace($trimmed) -and $trimmed -notmatch '^\$\{[^}]+\}$'
     }
 
     hidden [string[]] RemoveGithubMcpConfigLines([string[]]$lines) {
@@ -1768,6 +1854,14 @@ class HermesAgentHandler : SetupHandlerBase {
             return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0; Profiles = @() }
         }
 
+        $profileEnvironment = @{}
+        foreach ($key in $environment.Keys) {
+            $envName = [string]$key
+            if (-not $this.IsSharedPlatformSecretName($envName)) {
+                $profileEnvironment[$envName] = $environment[$key]
+            }
+        }
+
         $profilesDir = Join-Path $dataDir "profiles"
         $changedProfiles = @()
         foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
@@ -1782,7 +1876,10 @@ class HermesAgentHandler : SetupHandlerBase {
                 $profileLines = @(Get-Content -LiteralPath $profileEnvPath -ErrorAction Stop)
             }
 
-            $updatedLines = $this.SetNamedEnvironmentLines($profileLines, $environment)
+            $managedProfileLines = @(
+                $profileLines | Where-Object { -not $this.IsSharedPlatformSecretLine($_) }
+            )
+            $updatedLines = $this.SetNamedEnvironmentLines($managedProfileLines, $profileEnvironment)
             if (-not $this.LinesEqual($profileLines, $updatedLines)) {
                 Set-Content -LiteralPath $profileEnvPath -Encoding UTF8 -Value $updatedLines
                 $changedProfiles += $profileName
@@ -1865,7 +1962,19 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [bool] IsSharedPlatformSecretLine([string]$line) {
-        return $line -match '^\s*(TELEGRAM_BOT_TOKEN|DISCORD_BOT_TOKEN|DISCORD_TOKEN|WHATSAPP_[A-Z0-9_]+|SIGNAL_[A-Z0-9_]+|TEAMS_[A-Z0-9_]+|QQBOT_[A-Z0-9_]+|YUANBAO_[A-Z0-9_]+|HOMEASSISTANT_[A-Z0-9_]+)\s*='
+        if ($line -notmatch '^\s*(?:export\s+)?(?<name>[A-Z0-9_]+)\s*=') {
+            return $false
+        }
+
+        return $this.IsSharedPlatformSecretName($Matches["name"])
+    }
+
+    hidden [bool] IsSharedPlatformSecretName([string]$name) {
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            return $false
+        }
+
+        return $name.Trim() -match '^(TELEGRAM_BOT_TOKEN|DISCORD_BOT_TOKEN|DISCORD_TOKEN|WHATSAPP_[A-Z0-9_]+|SIGNAL_[A-Z0-9_]+|TEAMS_[A-Z0-9_]+|QQBOT_[A-Z0-9_]+|YUANBAO_[A-Z0-9_]+|HOMEASSISTANT_[A-Z0-9_]+)$'
     }
 
     hidden [void] WriteNamedEnvironment([string]$envPath, [string[]]$lines, [hashtable]$environment) {

@@ -101,6 +101,9 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "npx --version"
             $dockerfileContent | Should -Match "xapi-mcp\.sh"
             $dockerfileContent | Should -Match "/usr/local/bin/hermes-xapi-mcp"
+            $dockerfileContent | Should -Match "channel_directory\.py"
+            $dockerfileContent | Should -Match 'types="public_channel,private_channel"'
+            $dockerfileContent | Should -Match 'types="public_channel"'
             $dockerfileContent | Should -Match "ARTICLE_COLLECTOR_VERSION"
             $dockerfileContent | Should -Match "article-collector-linux-amd64"
             $dockerfileContent | Should -Match "article-collector-linux-arm64"
@@ -125,15 +128,13 @@ Describe 'HermesAgentHandler' {
             $wrapperContent | Should -Match ([regex]::Escape('exec npx -y @xdevplatform/xurl mcp https://api.x.com/mcp'))
         }
 
-        It 'should pass the Hermes env file into the container without Compose interpolation' {
+        It 'should not inject the Hermes env file into every supervised gateway process' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
-            $composeContent | Should -Match "(?m)^\s*env_file:"
-            $composeContent | Should -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env'))
-            $composeContent | Should -Match "(?m)^\s*format:\s*raw\s*$"
-            $composeContent | Should -Match "(?m)^\s*required:\s*false\s*$"
+            $composeContent | Should -Not -Match "(?m)^\s*env_file:"
+            $composeContent | Should -Not -Match ([regex]::Escape('path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.env'))
         }
 
         It 'should persist xurl OAuth cache for the X API MCP bridge' {
@@ -1201,10 +1202,12 @@ Describe 'HermesAgentHandler' {
             $rickDir = Join-Path $profilesDir "rick"
             $risarisaDir = Join-Path $profilesDir "risarisa"
             Set-Content -LiteralPath (Join-Path $rickDir ".env") -Encoding UTF8 -Value @(
-                "SLACK_BOT_TOKEN=xoxb-rick-token"
+                "SLACK_BOT_TOKEN=xoxb-rick-token",
+                "TELEGRAM_BOT_TOKEN=stale-rick-telegram-token"
             )
             Set-Content -LiteralPath (Join-Path $risarisaDir ".env") -Encoding UTF8 -Value @(
-                "GITHUB_TOKEN=stale-token"
+                "GITHUB_TOKEN=stale-token",
+                "TELEGRAM_BOT_TOKEN=stale-risarisa-telegram-token"
             )
 
             Mock Get-Command {
@@ -1271,11 +1274,14 @@ Describe 'HermesAgentHandler' {
                 $profileEnvContent | Should -Match "GH_TOKEN=github-token"
                 $profileEnvContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
                 $profileEnvContent | Should -Match "OPENCLAW_GATEWAY_TOKEN=gateway-token"
+                $profileEnvContent | Should -Not -Match "TELEGRAM_BOT_TOKEN"
             }
             $rickEnvContent = Get-Content -LiteralPath (Join-Path $rickDir ".env") -Raw
             $rickEnvContent | Should -Match "SLACK_BOT_TOKEN=xoxb-rick-token"
+            $rickEnvContent | Should -Not -Match "stale-rick-telegram-token"
             $risarisaEnvContent = Get-Content -LiteralPath (Join-Path $risarisaDir ".env") -Raw
             $risarisaEnvContent | Should -Not -Match "GITHUB_TOKEN=stale-token"
+            $risarisaEnvContent | Should -Not -Match "stale-risarisa-telegram-token"
         }
 
         It 'should fail before compose when any required OpenClaw API token cannot be configured' {
@@ -1294,7 +1300,7 @@ Describe 'HermesAgentHandler' {
             @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
         }
 
-        It 'should configure X MCP servers and remove the GitHub MCP server from config.yaml' {
+        It 'should skip the X API MCP server without authentication and remove the GitHub MCP server from config.yaml' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
             New-Item -ItemType Directory -Path $configDir -Force | Out-Null
@@ -1317,16 +1323,13 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Not -Match "(?m)^\s{2}github:"
             $configContent | Should -Not -Match "@modelcontextprotocol/server-github"
             $configContent | Should -Match "(?m)^\s{2}local:"
-            $configContent | Should -Match "(?m)^\s{2}xapi:"
-            $configContent | Should -Match "(?m)^\s{4}command:\s*/usr/local/bin/hermes-xapi-mcp"
-            $configContent | Should -Match "(?m)^\s{4}connect_timeout:\s*300"
-            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_ID:\s*`\$`\{X_API_CLIENT_ID`\}"
-            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_SECRET:\s*`\$`\{X_API_CLIENT_SECRET`\}"
+            $configContent | Should -Not -Match "(?m)^\s{2}xapi:"
+            $configContent | Should -Not -Match "/usr/local/bin/hermes-xapi-mcp"
             $configContent | Should -Match "(?m)^\s{2}x-docs:"
             $configContent | Should -Match "https://docs\.x\.com/mcp"
         }
 
-        It 'should preserve X MCP servers when mcp_servers is absent' {
+        It 'should add X docs only when mcp_servers is absent and X API authentication is unavailable' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
             New-Item -ItemType Directory -Path $configDir -Force | Out-Null
@@ -1340,7 +1343,58 @@ Describe 'HermesAgentHandler' {
             $result.Success | Should -Be $true
             $configContent = Get-Content -LiteralPath $configPath -Raw
             $configContent | Should -Match "(?m)^mcp_servers:"
+            $configContent | Should -Not -Match "(?m)^\s{2}xapi:"
+            $configContent | Should -Match "(?m)^\s{2}x-docs:"
+        }
+
+        It 'should remove stale X API MCP servers from managed profile configs without authentication' {
+            $ctx.Options["HermesAgentManagedProfiles"] = "rick,hoffman"
+            $dataDir = Join-Path $script:userProfile ".hermes"
+            $profilesDir = Join-Path $dataDir "profiles"
+            foreach ($profileName in @("rick", "hoffman")) {
+                $profileDir = Join-Path $profilesDir $profileName
+                New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $profileDir "config.yaml") -Encoding UTF8 -Value @(
+                    "model:",
+                    "  provider: openai-codex",
+                    "mcp_servers:",
+                    "  xapi:",
+                    "    command: /usr/local/bin/hermes-xapi-mcp",
+                    "    connect_timeout: 300",
+                    "  local:",
+                    "    command: local-tool"
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            foreach ($profileName in @("rick", "hoffman")) {
+                $configContent = Get-Content -LiteralPath (Join-Path $profilesDir "$profileName\config.yaml") -Raw
+                $configContent | Should -Not -Match "(?m)^\s{2}xapi:"
+                $configContent | Should -Not -Match "/usr/local/bin/hermes-xapi-mcp"
+                $configContent | Should -Match "(?m)^\s{2}local:"
+                $configContent | Should -Match "(?m)^\s{2}x-docs:"
+            }
+        }
+
+        It 'should configure the X API MCP server when an xurl OAuth cache exists' {
+            $configDir = Join-Path $script:userProfile ".hermes"
+            $cacheDir = Join-Path $configDir ".xurl"
+            $configPath = Join-Path $configDir "config.yaml"
+            New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $cacheDir "oauth.json") -Encoding UTF8 -Value "{}"
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model:",
+                "  provider: openai-codex"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
             $configContent | Should -Match "(?m)^\s{2}xapi:"
+            $configContent | Should -Match "(?m)^\s{4}command:\s*/usr/local/bin/hermes-xapi-mcp"
             $configContent | Should -Match "(?m)^\s{2}x-docs:"
         }
 
@@ -1429,6 +1483,15 @@ Describe 'HermesAgentHandler' {
             $envContent = Get-Content -LiteralPath $envPath -Raw
             $envContent | Should -Match "X_API_CLIENT_ID=x-client-id"
             $envContent | Should -Match "X_API_CLIENT_SECRET=x-client-secret"
+
+            $configPath = Join-Path $script:userProfile ".hermes\config.yaml"
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^\s{2}xapi:"
+            $configContent | Should -Match "(?m)^\s{4}command:\s*/usr/local/bin/hermes-xapi-mcp"
+            $configContent | Should -Match "(?m)^\s{4}connect_timeout:\s*300"
+            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_ID:\s*`\$`\{X_API_CLIENT_ID`\}"
+            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_SECRET:\s*`\$`\{X_API_CLIENT_SECRET`\}"
+            $configContent | Should -Match "(?m)^\s{2}x-docs:"
         }
 
         It 'should fail before compose when Slack integration is required but unavailable' {
