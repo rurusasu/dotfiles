@@ -18,6 +18,7 @@ AfterAll {
 Describe 'PowerShell secret loader' {
     BeforeEach {
         $script:previousGhToken = [Environment]::GetEnvironmentVariable('GH_TOKEN', 'Process')
+        $script:previousGitHubPatToken = [Environment]::GetEnvironmentVariable('GITHUB_PAT_TOKEN', 'Process')
         $script:previousTavilyApiKey = [Environment]::GetEnvironmentVariable('TAVILY_API_KEY', 'Process')
         $script:previousWorkToken = [Environment]::GetEnvironmentVariable('GITHUB_WORK_TOKEN', 'Process')
         $script:previousOpBin = [Environment]::GetEnvironmentVariable('DOTFILES_OP_BIN', 'Process')
@@ -25,6 +26,7 @@ Describe 'PowerShell secret loader' {
         $script:previousForceSecretLoad = [Environment]::GetEnvironmentVariable('DOTFILES_FORCE_SECRET_LOAD', 'Process')
 
         Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:GITHUB_PAT_TOKEN -ErrorAction SilentlyContinue
         Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:GITHUB_WORK_TOKEN -ErrorAction SilentlyContinue
         $env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = '3'
@@ -37,6 +39,13 @@ Describe 'PowerShell secret loader' {
         }
         else {
             $env:GH_TOKEN = $script:previousGhToken
+        }
+
+        if ($null -eq $script:previousGitHubPatToken) {
+            Remove-Item Env:GITHUB_PAT_TOKEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GITHUB_PAT_TOKEN = $script:previousGitHubPatToken
         }
 
         if ($null -eq $script:previousTavilyApiKey) {
@@ -80,7 +89,7 @@ Describe 'PowerShell secret loader' {
         Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
 @echo off
 if "%1"=="inject" if "%2"=="--in-file" if exist "%3" if "%4"=="--account" if "%5"=="EJLA3HRAVZBCXIQ7SRSFGQBTNU" (
-  echo GH_TOKEN=personal-token
+  echo GITHUB_PAT_TOKEN=personal-token
   echo TAVILY_API_KEY=tavily-token
   exit /b 0
 )
@@ -94,6 +103,7 @@ exit /b 1
 
         . $script:secretLoaderPath
 
+        $env:GITHUB_PAT_TOKEN | Should -Be 'personal-token'
         $env:GH_TOKEN | Should -Be 'personal-token'
         $env:TAVILY_API_KEY | Should -Be 'tavily-token'
         $env:GITHUB_WORK_TOKEN | Should -Be 'work-token'
@@ -140,15 +150,18 @@ exit /b 0
 `$env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = '3'
 Remove-Item Env:DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
 Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:GITHUB_PAT_TOKEN -ErrorAction SilentlyContinue
 Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:GITHUB_WORK_TOKEN -ErrorAction SilentlyContinue
 . '$loader'
 [Console]::WriteLine('gh=' + [bool]`$env:GH_TOKEN)
+[Console]::WriteLine('githubPat=' + [bool]`$env:GITHUB_PAT_TOKEN)
 "@
 
         $output = & pwsh -NoLogo -NoProfile -Command $command
 
         $output | Should -Contain 'gh=False'
+        $output | Should -Contain 'githubPat=False'
         Test-Path -LiteralPath $marker | Should -BeFalse
     }
 }
@@ -287,6 +300,8 @@ Describe 'GitHub token switching templates' {
     It 'WezTerm launcher が GITHUB_WORK_TOKEN を WSL に渡すこと' {
         $content = Get-Content -LiteralPath $script:weztermLaunch -Raw
 
+        $content | Should -Match 'WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN'
+        $content | Should -Not -Match 'WSLENV=GH_TOKEN'
         $content | Should -Match 'WSLENV=.*GITHUB_WORK_TOKEN'
     }
 
@@ -294,6 +309,8 @@ Describe 'GitHub token switching templates' {
         $secretsEnvPath = Join-Path $script:chezmoiRoot "secret/secrets.env"
         $content = Get-Content -LiteralPath $secretsEnvPath -Raw
 
+        $content | Should -Match 'GITHUB_PAT_TOKEN=op://Private/GitHubUsedUserPAT/credential'
+        $content | Should -Not -Match '^GH_TOKEN=op://Private/GitHubUsedUserPAT/credential'
         $content | Should -Match 'GITHUB_WORK_TOKEN=op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential'
     }
 
@@ -301,6 +318,7 @@ Describe 'GitHub token switching templates' {
         $secretPs1Path = Join-Path $script:chezmoiRoot "secret/env.ps1"
         $content = Get-Content -LiteralPath $secretPs1Path -Raw
 
+        $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'GITHUB_WORK_TOKEN'
     }
 }

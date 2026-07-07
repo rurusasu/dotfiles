@@ -2,12 +2,15 @@
 # Sourced by PowerShell profile at shell startup.
 #
 # Preferred usage: launch WezTerm via ~/.local/bin/wezterm-launch.cmd
-#   op run --env-file injects GH_TOKEN/TAVILY_API_KEY/GITHUB_WORK_TOKEN once at WezTerm startup;
+#   op run --env-file injects GITHUB_PAT_TOKEN/TAVILY_API_KEY/GITHUB_WORK_TOKEN once at WezTerm startup;
 #   all tabs inherit them and this guard exits immediately.
 #
 # Fallback: standalone pwsh attempts bounded op inject calls when values are missing.
 
-if ($env:GH_TOKEN -and $env:TAVILY_API_KEY -and $env:GITHUB_WORK_TOKEN) { return }
+if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
+if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
+
+if ($env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN -and $env:TAVILY_API_KEY -and $env:GITHUB_WORK_TOKEN) { return }
 if (-not $env:DOTFILES_FORCE_SECRET_LOAD) {
     $dotfilesPowerShellArgs = [Environment]::GetCommandLineArgs()
     $dotfilesSecretLoadIsCommandMode = $false
@@ -133,7 +136,7 @@ function Set-DotfilesSecretEnvironment {
         return
     }
 
-    $allowedNames = @('GH_TOKEN', 'TAVILY_API_KEY', 'GITHUB_WORK_TOKEN')
+    $allowedNames = @('GITHUB_PAT_TOKEN', 'GH_TOKEN', 'TAVILY_API_KEY', 'GITHUB_WORK_TOKEN')
     foreach ($line in ($Content -split '\r?\n')) {
         if ($line -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
             continue
@@ -153,13 +156,16 @@ try {
     $personalAccount = if ($env:OP_ACCOUNT) { $env:OP_ACCOUNT } else { 'EJLA3HRAVZBCXIQ7SRSFGQBTNU' }
     $workAccount = 'aimatecoltd.1password.com'
 
-    if (-not ($env:GH_TOKEN -and $env:TAVILY_API_KEY)) {
+    if (-not ($env:GITHUB_PAT_TOKEN -and $env:TAVILY_API_KEY)) {
         $personalTemplate = @'
-GH_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
+GITHUB_PAT_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
 TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}
 '@
         Set-DotfilesSecretEnvironment -Content (Invoke-DotfilesOpInject -Template $personalTemplate -Account $personalAccount -TimeoutSeconds $timeoutSeconds)
     }
+
+    if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
+    if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
 
     if (-not $env:GITHUB_WORK_TOKEN) {
         $workTemplate = @'
