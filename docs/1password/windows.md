@@ -61,7 +61,7 @@ shell 起動や deploy script で `op` を呼ぶ場合は、timeout を短くし
 
 目安:
 
-- shell startup fallback: 20-30 秒程度まで許容し、失敗時は warning で続行する。
+- shell startup fallback / runtime deploy read: 60 秒程度まで許容し、失敗時は warning で続行する。
 - GUI launcher: ユーザー体験を優先し、短めの timeout 後に token なし起動へ fallback する。
 - 必須 secret: timeout したら明示的に失敗させる。
 

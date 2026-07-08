@@ -20,7 +20,7 @@ shell startup や deploy script では、prompt や app integration 待ちで止
 timeout を付ける。
 
 ```bash
-timeout 30s op read "op://Private/Example/credential" --account my.1password.com
+timeout 60s op read "op://Private/Example/credential" --account my.1password.com
 ```
 
 失敗しても続行したい箇所では warning / fallback を使う。
