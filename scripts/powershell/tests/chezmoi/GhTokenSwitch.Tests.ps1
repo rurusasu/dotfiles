@@ -371,10 +371,17 @@ Describe 'GitHub token switching templates' {
         Test-Path -LiteralPath $helperPath | Should -BeTrue
 
         $fakeOp = Join-Path $TestDrive 'op.cmd'
-        $target = Join-Path $TestDrive 'target.cmd'
         $marker = Join-Path $TestDrive 'fallback-marker.txt'
         $personalEnv = Join-Path $TestDrive 'personal.env'
         $workEnv = Join-Path $TestDrive 'work.env'
+        $target = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source
+        $markerLiteral = $marker.Replace("'", "''")
+        $targetArgs = @(
+            '-NoLogo',
+            '-NoProfile',
+            '-Command',
+            "Set-Content -LiteralPath '$markerLiteral' -Value fallback"
+        )
 
         Set-Content -LiteralPath $personalEnv -Encoding ascii -Value 'GITHUB_PAT_TOKEN=op://Private/token/credential'
         Set-Content -LiteralPath $workEnv -Encoding ascii -Value 'GITHUB_WORK_TOKEN=op://devcontainer/token/credential'
@@ -383,11 +390,6 @@ Describe 'GitHub token switching templates' {
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "Start-Sleep -Seconds 6"
 exit /b 0
 '@
-        Set-Content -LiteralPath $target -Encoding ascii -Value @"
-@echo off
-echo fallback>"$marker"
-exit /b 0
-"@
 
         & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $helperPath `
             -OpExe $fakeOp `
@@ -396,7 +398,8 @@ exit /b 0
             -WorkAccount work `
             -WorkEnvFile $workEnv `
             -TimeoutSeconds 1 `
-            -Target $target 2>$null
+            -Target $target `
+            @targetArgs 2>$null
 
         $LASTEXITCODE | Should -Be 0
         for ($i = 0; $i -lt 20 -and -not (Test-Path -LiteralPath $marker); $i++) {
