@@ -84,18 +84,21 @@ Describe 'PowerShell secret loader' {
         }
     }
 
-    It '環境変数が未設定なら op inject から PowerShell process 環境に読み込むこと' {
+    It '環境変数が未設定なら op read から PowerShell process 環境に読み込むこと' {
         $fakeOp = Join-Path $TestDrive 'op.cmd'
         Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
 @echo off
 set "ARGS=%*"
-if not "%ARGS:EJLA3HRAVZBCXIQ7SRSFGQBTNU=%"=="%ARGS%" (
-  echo GITHUB_PAT_TOKEN=personal-token
-  echo TAVILY_API_KEY=tavily-token
+if not "%ARGS:GitHubUsedUserPAT=%"=="%ARGS%" (
+  echo personal-token
   exit /b 0
 )
-if not "%ARGS:aimatecoltd.1password.com=%"=="%ARGS%" (
-  echo GITHUB_WORK_TOKEN=work-token
+if not "%ARGS:TavilyUsedUserPAT=%"=="%ARGS%" (
+  echo tavily-token
+  exit /b 0
+)
+if not "%ARGS:GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8=%"=="%ARGS%" (
+  echo work-token
   exit /b 0
 )
 exit /b 1
@@ -110,7 +113,7 @@ exit /b 1
         $env:GITHUB_WORK_TOKEN | Should -Be 'work-token'
     }
 
-    It 'op inject が失敗しても shell 起動を例外で止めないこと' {
+    It 'op read が失敗しても shell 起動を例外で止めないこと' {
         $fakeOp = Join-Path $TestDrive 'op-fail.cmd'
         Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
 @echo off
@@ -316,6 +319,7 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'WSLENV=.*GITHUB_WORK_TOKEN'
         $content | Should -Match 'op-run-gui-launch\.ps1'
         $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS'
+        $content | Should -Match 'OP_RUN_TIMEOUT_SECONDS=60'
         $content | Should -Match 'for /f "delims=" %%I in'
         $content | Should -Not -Match 'set "OP_EXE=op"'
     }
@@ -326,6 +330,7 @@ Describe 'GitHub token switching templates' {
 
         $content | Should -Match 'op-run-gui-launch\.ps1' -Because 'GUI launchers should not hang forever when 1Password is locked'
         $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS' -Because '1Password startup injection should have a bounded wait'
+        $content | Should -Match 'OP_RUN_TIMEOUT_SECONDS=60' -Because '1Password can take longer than 20 seconds on the first app auth'
         $content | Should -Match 'PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU' -Because 'personal secrets must resolve against the personal account'
         $content | Should -Match 'WORK_ACCOUNT=aimatecoltd\.1password\.com' -Because 'work secrets must resolve against the company account'
         $content | Should -Match 'Orca\.exe'
@@ -370,6 +375,9 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'GITHUB_WORK_TOKEN'
         $content | Should -Match '--cache=false'
+        $content | Should -Match "'read'"
+        $content | Should -Match 'GitHubUsedUserPAT'
+        $content | Should -Match '\$timeoutSeconds = 60'
     }
 
     It 'WSL secret loader uses op.exe with cache disabled' {
@@ -384,6 +392,7 @@ Describe 'GitHub token switching templates' {
     It 'GUI op run launcher attempts target fallback when 1Password injection times out' {
         $helperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-run-gui-launch.ps1"
         Test-Path -LiteralPath $helperPath | Should -BeTrue
+        (Get-Content -LiteralPath $helperPath -Raw) | Should -Match '\[int\]\$TimeoutSeconds = 60'
 
         $fakeOp = Join-Path $TestDrive 'op.cmd'
         $personalEnv = Join-Path $TestDrive 'personal.env'

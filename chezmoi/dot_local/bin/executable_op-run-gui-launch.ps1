@@ -16,7 +16,7 @@ param(
     [string]$WorkEnvFile,
 
     [Parameter()]
-    [int]$TimeoutSeconds = 8,
+    [int]$TimeoutSeconds = 60,
 
     [Parameter(Mandatory = $true)]
     [string]$Target,
@@ -28,7 +28,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($TimeoutSeconds -le 0) {
-    $TimeoutSeconds = 8
+    $TimeoutSeconds = 60
 }
 
 function ConvertTo-DotfilesCmdQuoted {

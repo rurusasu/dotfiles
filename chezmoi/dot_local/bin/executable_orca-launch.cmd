@@ -26,7 +26,7 @@ set "PERSONAL_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets.env"
 set "WORK_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets-work.env"
 set "OP_RUN_GUI_LAUNCH=%USERPROFILE%\.local\bin\op-run-gui-launch.ps1"
 set "OP_RUN_TIMEOUT_SECONDS=%DOTFILES_OP_RUN_TIMEOUT_SECONDS%"
-if "%OP_RUN_TIMEOUT_SECONDS%"=="" set "OP_RUN_TIMEOUT_SECONDS=8"
+if "%OP_RUN_TIMEOUT_SECONDS%"=="" set "OP_RUN_TIMEOUT_SECONDS=60"
 set "PWSH_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\pwsh.exe"
 if not exist "%PWSH_EXE%" (
   for /f "delims=" %%I in ('"%WHERE_EXE%" pwsh.exe 2^>nul') do (

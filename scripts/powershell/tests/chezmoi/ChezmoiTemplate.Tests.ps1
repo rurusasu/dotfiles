@@ -655,9 +655,11 @@ Describe 'chezmoi テンプレート バリデーション' {
             $linuxContent = Get-Content -LiteralPath $script:kaggleDeployLinux -Raw
 
             $windowsContent | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $windowsContent | Should -Match '\$OpReadTimeoutSeconds = 20' -Because "1Password reads can exceed 8-10 seconds after app auth"
             $windowsContent | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
             $windowsContent | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
             $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
+            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=20' -Because "WSL op.exe reads can exceed 8-10 seconds after app auth"
             $linuxContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
             $linuxContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout failures should be reported as non-fatal skips"
         }

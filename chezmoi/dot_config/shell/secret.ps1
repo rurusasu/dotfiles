@@ -5,7 +5,7 @@
 #   op run --account ... --env-file injects personal/work secrets once at WezTerm startup;
 #   all tabs inherit them and this guard exits immediately.
 #
-# Fallback: standalone pwsh attempts bounded op inject calls when values are missing.
+# Fallback: standalone pwsh attempts bounded op read calls when values are missing.
 
 if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
 if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
@@ -53,7 +53,7 @@ function Get-DotfilesSecretLoadTimeoutSeconds {
     [CmdletBinding()]
     param()
 
-    $timeoutSeconds = 8
+    $timeoutSeconds = 60
     if ($env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS) {
         $parsedTimeout = 0
         if ([int]::TryParse($env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS, [ref]$parsedTimeout) -and $parsedTimeout -gt 0) {
@@ -64,11 +64,11 @@ function Get-DotfilesSecretLoadTimeoutSeconds {
     return $timeoutSeconds
 }
 
-function Invoke-DotfilesOpInject {
+function Invoke-DotfilesOpRead {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Template,
+        [string]$Reference,
 
         [Parameter(Mandatory = $true)]
         [string]$Account,
@@ -82,72 +82,74 @@ function Invoke-DotfilesOpInject {
         return $null
     }
 
-    $stdin = [System.IO.Path]::GetTempFileName()
     $stdout = [System.IO.Path]::GetTempFileName()
     $stderr = [System.IO.Path]::GetTempFileName()
 
     try {
-        Set-Content -LiteralPath $stdin -Value $Template -Encoding utf8 -NoNewline
         $process = Start-Process `
             -FilePath $opBin `
-            -ArgumentList @('--cache=false', 'inject', '--in-file', $stdin, '--account', $Account) `
+            -ArgumentList @('--cache=false', 'read', $Reference, '--account', $Account) `
             -PassThru `
             -WindowStyle Hidden `
             -RedirectStandardOutput $stdout `
             -RedirectStandardError $stderr
 
         if ($process.WaitForExit($TimeoutSeconds * 1000) -and $process.ExitCode -eq 0) {
-            return Get-Content -LiteralPath $stdout -Raw -ErrorAction SilentlyContinue
+            $value = Get-Content -LiteralPath $stdout -Raw -ErrorAction SilentlyContinue
+            if ($null -eq $value) {
+                return $null
+            }
+            return ([string]$value).Trim()
         }
 
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            Write-Warning "1Password secret injection timed out after $TimeoutSeconds seconds; continuing without injected secrets."
+            Write-Warning "1Password secret read timed out after $TimeoutSeconds seconds; continuing without '$Reference'."
         }
         else {
             $errorContent = Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue
             $errorText = if ($null -ne $errorContent) { $errorContent.Trim() } else { '' }
             if ($errorText) {
-                Write-Warning "1Password secret injection failed: $errorText"
+                Write-Warning "1Password secret read failed for '$Reference': $errorText"
             }
             else {
-                Write-Warning "1Password secret injection failed with exit code $($process.ExitCode)."
+                Write-Warning "1Password secret read failed for '$Reference' with exit code $($process.ExitCode)."
             }
         }
     }
     catch {
-        Write-Warning "1Password secret injection failed: $($_.Exception.Message)"
+        Write-Warning "1Password secret read failed for '$Reference': $($_.Exception.Message)"
     }
     finally {
-        Remove-Item -LiteralPath $stdin, $stdout, $stderr -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
     }
 
     return $null
 }
 
-function Set-DotfilesSecretEnvironment {
+function Set-DotfilesSecretEnvironmentValue {
     [CmdletBinding()]
     param(
-        [Parameter()]
-        [string]$Content
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Reference,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Account,
+
+        [Parameter(Mandatory = $true)]
+        [int]$TimeoutSeconds
     )
 
-    if (-not $Content) {
+    if ([Environment]::GetEnvironmentVariable($Name, 'Process')) {
         return
     }
 
-    $allowedNames = @('GITHUB_PAT_TOKEN', 'GH_TOKEN', 'TAVILY_API_KEY', 'GITHUB_WORK_TOKEN')
-    foreach ($line in ($Content -split '\r?\n')) {
-        if ($line -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            continue
-        }
-
-        $name = $Matches[1]
-        if ($name -notin $allowedNames) {
-            continue
-        }
-
-        [Environment]::SetEnvironmentVariable($name, $Matches[2], 'Process')
+    $value = Invoke-DotfilesOpRead -Reference $Reference -Account $Account -TimeoutSeconds $TimeoutSeconds
+    if ($value) {
+        [Environment]::SetEnvironmentVariable($Name, $value, 'Process')
     }
 }
 
@@ -156,29 +158,32 @@ try {
     $personalAccount = if ($env:OP_ACCOUNT) { $env:OP_ACCOUNT } else { 'EJLA3HRAVZBCXIQ7SRSFGQBTNU' }
     $workAccount = 'aimatecoltd.1password.com'
 
-    if (-not ($env:GITHUB_PAT_TOKEN -and $env:TAVILY_API_KEY)) {
-        $personalTemplate = @'
-GITHUB_PAT_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
-TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}
-'@
-        Set-DotfilesSecretEnvironment -Content (Invoke-DotfilesOpInject -Template $personalTemplate -Account $personalAccount -TimeoutSeconds $timeoutSeconds)
-    }
+    Set-DotfilesSecretEnvironmentValue `
+        -Name 'GITHUB_PAT_TOKEN' `
+        -Reference 'op://Private/GitHubUsedUserPAT/credential' `
+        -Account $personalAccount `
+        -TimeoutSeconds $timeoutSeconds
+
+    Set-DotfilesSecretEnvironmentValue `
+        -Name 'TAVILY_API_KEY' `
+        -Reference 'op://Private/TavilyUsedUserPAT/credential' `
+        -Account $personalAccount `
+        -TimeoutSeconds $timeoutSeconds
 
     if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
     if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
 
-    if (-not $env:GITHUB_WORK_TOKEN) {
-        $workTemplate = @'
-GITHUB_WORK_TOKEN={{ op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential }}
-'@
-        Set-DotfilesSecretEnvironment -Content (Invoke-DotfilesOpInject -Template $workTemplate -Account $workAccount -TimeoutSeconds $timeoutSeconds)
-    }
+    Set-DotfilesSecretEnvironmentValue `
+        -Name 'GITHUB_WORK_TOKEN' `
+        -Reference 'op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential' `
+        -Account $workAccount `
+        -TimeoutSeconds $timeoutSeconds
 }
 finally {
     Remove-Item Function:\Resolve-DotfilesOpCli -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-DotfilesSecretLoadTimeoutSeconds -ErrorAction SilentlyContinue
-    Remove-Item Function:\Invoke-DotfilesOpInject -ErrorAction SilentlyContinue
-    Remove-Item Function:\Set-DotfilesSecretEnvironment -ErrorAction SilentlyContinue
+    Remove-Item Function:\Invoke-DotfilesOpRead -ErrorAction SilentlyContinue
+    Remove-Item Function:\Set-DotfilesSecretEnvironmentValue -ErrorAction SilentlyContinue
 
-    Remove-Variable timeoutSeconds, personalAccount, workAccount, personalTemplate, workTemplate -ErrorAction SilentlyContinue
+    Remove-Variable timeoutSeconds, personalAccount, workAccount -ErrorAction SilentlyContinue
 }
