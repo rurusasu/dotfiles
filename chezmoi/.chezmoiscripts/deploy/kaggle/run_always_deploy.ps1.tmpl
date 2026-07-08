@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $KaggleDir = "$env:USERPROFILE\.kaggle"
 $OpAccount = "{{ .op_account_personal }}"
 $SecretRef = "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
-$OpReadTimeoutSeconds = 20
+$OpReadTimeoutSeconds = 60
 
 $opCmd = Get-Command op -ErrorAction SilentlyContinue
 if (-not $opCmd) {
