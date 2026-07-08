@@ -165,6 +165,7 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
             $script:ps1Content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
+            $script:ps1Content | Should -Match 'ArgumentList\.Add\("--cache=false"\)' -Because "Windows op read should disable 1Password cache"
             $script:ps1Content | Should -Match 'ArgumentList\.Add\("read"\)' -Because "op read should happen at script runtime"
             $script:ps1Content | Should -Match 'ArgumentList\.Add\(\$Reference\)' -Because "op read should happen at script runtime"
             $script:ps1Content | Should -Match 'skipping \$Label|no SSH public keys deployed' -Because "runtime 1Password failures should be non-fatal"
@@ -193,6 +194,7 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
             $script:shContent | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
+            $script:shContent | Should -Match 'op_cache_args=\(--cache=false\)' -Because "WSL op.exe reads should disable 1Password cache"
             $script:shContent | Should -Match 'read "\$reference"' -Because "op read should happen at script runtime"
             $script:shContent | Should -Match 'skipping \$label' -Because "runtime 1Password failures should be non-fatal"
         }

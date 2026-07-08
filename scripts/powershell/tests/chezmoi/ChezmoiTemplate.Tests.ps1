@@ -132,6 +132,7 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $content | Should -Match 'exit 0' -Because "$path should not abort template rendering on Windows op read failures"
                 $content | Should -Match '\|\| true' -Because "$path should not abort template rendering on Unix op read failures"
                 $content | Should -Match '\$opReadFailed' -Because "$path should stop repeated op attempts after the first failed lookup"
+                $content | Should -Match "'--cache=false', 'read'" -Because "$path should disable Windows 1Password cache for noninteractive op reads"
                 $content | Should -Match 'WaitForExit\(%d000\)' -Because "$path should timeout Windows op read calls"
                 $content | Should -Match 'Stop-Process -Id \$process\.Id -Force' -Because "$path should terminate timed-out Windows op read calls"
                 $content | Should -Match 'sleep %d; kill' -Because "$path should timeout Unix op read calls"
@@ -644,6 +645,7 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $content = Get-Content -LiteralPath $path -Raw
                 $content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
                 $content | Should -Match 'ArgumentList\.Add\("read"\)|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
+                $content | Should -Match 'ArgumentList\.Add\("--cache=false"\)|OP_CACHE_ARGS=\(--cache=false\)' -Because "Windows/op.exe runtime reads should disable 1Password cache"
                 $content | Should -Match 'skipping Kaggle API credentials deployment' -Because "runtime 1Password failures should be non-fatal"
             }
         }

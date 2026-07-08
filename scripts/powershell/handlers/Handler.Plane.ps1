@@ -430,7 +430,7 @@ class PlaneHandler : SetupHandlerBase {
             return ""
         }
 
-        $output = & op read --account $this.OpAccount $ref 2>$null
+        $output = & op --cache=false read --account $this.OpAccount $ref 2>$null
         if ($LASTEXITCODE -ne 0) {
             if ($required) { throw "1Password から Plane secret を取得できません: $ref" }
             return ""
@@ -440,7 +440,7 @@ class PlaneHandler : SetupHandlerBase {
     }
 
     hidden [void] SetPlaneCredentialSecret([string]$apiToken) {
-        $itemJson = & op item get $this.OpItem --vault $this.OpVault --account $this.OpAccount --format json
+        $itemJson = & op --cache=false item get $this.OpItem --vault $this.OpVault --account $this.OpAccount --format json
         if ($LASTEXITCODE -ne 0) {
             throw "Plane API token 保存先の 1Password item を取得できません"
         }
@@ -468,7 +468,7 @@ class PlaneHandler : SetupHandlerBase {
 
         $item.fields = @($fields)
         $payload = $item | ConvertTo-Json -Depth 100
-        $payload | & op item edit $this.OpItem --vault $this.OpVault --account $this.OpAccount | Out-Null
+        $payload | & op --cache=false item edit $this.OpItem --vault $this.OpVault --account $this.OpAccount | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "Plane API token を 1Password item に保存できません"
         }

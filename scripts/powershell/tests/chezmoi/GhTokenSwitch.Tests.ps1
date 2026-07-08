@@ -88,12 +88,13 @@ Describe 'PowerShell secret loader' {
         $fakeOp = Join-Path $TestDrive 'op.cmd'
         Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
 @echo off
-if "%1"=="inject" if "%2"=="--in-file" if exist "%3" if "%4"=="--account" if "%5"=="EJLA3HRAVZBCXIQ7SRSFGQBTNU" (
+set "ARGS=%*"
+if not "%ARGS:EJLA3HRAVZBCXIQ7SRSFGQBTNU=%"=="%ARGS%" (
   echo GITHUB_PAT_TOKEN=personal-token
   echo TAVILY_API_KEY=tavily-token
   exit /b 0
 )
-if "%1"=="inject" if "%2"=="--in-file" if exist "%3" if "%4"=="--account" if "%5"=="aimatecoltd.1password.com" (
+if not "%ARGS:aimatecoltd.1password.com=%"=="%ARGS%" (
   echo GITHUB_WORK_TOKEN=work-token
   exit /b 0
 )
@@ -368,6 +369,16 @@ Describe 'GitHub token switching templates' {
 
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'GITHUB_WORK_TOKEN'
+        $content | Should -Match '--cache=false'
+    }
+
+    It 'WSL secret loader uses op.exe with cache disabled' {
+        $secretShPath = Join-Path $script:chezmoiRoot "dot_config/shell/secret.sh"
+        $content = Get-Content -LiteralPath $secretShPath -Raw
+
+        $content | Should -Match 'WSL_DISTRO_NAME'
+        $content | Should -Match '_op_cmd=op\.exe'
+        $content | Should -Match "_op_cache_arg='--cache=false'"
     }
 
     It 'GUI op run launcher attempts target fallback when 1Password injection times out' {

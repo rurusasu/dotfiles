@@ -20,11 +20,14 @@ fi
 # Use op.exe so secrets resolve without a separate Linux signin.
 if [ -n "$WSL_DISTRO_NAME" ]; then
   _op_cmd=op.exe
+  _op_cache_arg='--cache=false'
 else
   _op_cmd=op
+  _op_cache_arg=''
 fi
 command -v "$_op_cmd" >/dev/null 2>&1 || {
   unset _op_cmd
+  unset _op_cache_arg
   return 0
 }
 
@@ -34,7 +37,11 @@ _work_acct="aimatecoltd.1password.com"
 _secret_tmpl='GITHUB_PAT_TOKEN={{ op://Private/GitHubUsedUserPAT/credential }}
 TAVILY_API_KEY={{ op://Private/TavilyUsedUserPAT/credential }}'
 
-_resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject --account "$_personal_acct" 2>/dev/null) || {
+if [ -n "$_op_cache_arg" ]; then
+  _resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" "$_op_cache_arg" inject --account "$_personal_acct" 2>/dev/null)
+else
+  _resolved=$(printf '%s\n' "$_secret_tmpl" | "$_op_cmd" inject --account "$_personal_acct" 2>/dev/null)
+fi || {
   printf '[secret/env.sh] warning: %s inject failed; GITHUB_PAT_TOKEN/TAVILY_API_KEY not set\n' "$_op_cmd" >&2
   _resolved=''
 }
@@ -53,7 +60,11 @@ if [ -z "${GH_TOKEN:-}" ] && [ -n "${GITHUB_PAT_TOKEN:-}" ]; then
 fi
 
 _work_tmpl='GITHUB_WORK_TOKEN={{ op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential }}'
-_work_resolved=$(printf '%s\n' "$_work_tmpl" | "$_op_cmd" inject --account "$_work_acct" 2>/dev/null) || {
+if [ -n "$_op_cache_arg" ]; then
+  _work_resolved=$(printf '%s\n' "$_work_tmpl" | "$_op_cmd" "$_op_cache_arg" inject --account "$_work_acct" 2>/dev/null)
+else
+  _work_resolved=$(printf '%s\n' "$_work_tmpl" | "$_op_cmd" inject --account "$_work_acct" 2>/dev/null)
+fi || {
   printf '[secret/env.sh] warning: %s inject failed (work); GITHUB_WORK_TOKEN not set\n' "$_op_cmd" >&2
   _work_resolved=''
 }
@@ -64,4 +75,4 @@ if [ -n "$_work_resolved" ]; then
   set +a
 fi
 
-unset _secret_tmpl _resolved _work_tmpl _work_resolved _op_cmd _personal_acct _work_acct
+unset _secret_tmpl _resolved _work_tmpl _work_resolved _op_cmd _op_cache_arg _personal_acct _work_acct

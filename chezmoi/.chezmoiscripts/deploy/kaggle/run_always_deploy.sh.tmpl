@@ -7,10 +7,15 @@ OP_ACCOUNT="{{ .op_account_personal }}"
 SECRET_REF="op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
 OP_READ_TIMEOUT_SECONDS=10
 
-if command -v op >/dev/null 2>&1; then
+OP_CACHE_ARGS=()
+if [ -n "${WSL_DISTRO_NAME:-}" ] && command -v op.exe >/dev/null 2>&1; then
+  OP_CMD="$(command -v op.exe)"
+  OP_CACHE_ARGS=(--cache=false)
+elif command -v op >/dev/null 2>&1; then
   OP_CMD="$(command -v op)"
 elif command -v op.exe >/dev/null 2>&1; then
   OP_CMD="$(command -v op.exe)"
+  OP_CACHE_ARGS=(--cache=false)
 else
   echo "WARNING: 1Password CLI not found, skipping Kaggle API credentials deployment"
   exit 0
@@ -30,7 +35,7 @@ echo "Deploying Kaggle API credentials..."
 ERR_FILE="$(mktemp)"
 trap 'rm -f "$ERR_FILE"' EXIT
 
-if TOKEN="$("$TIMEOUT_CMD" "${OP_READ_TIMEOUT_SECONDS}s" "$OP_CMD" read "$SECRET_REF" --account "$OP_ACCOUNT" 2>"$ERR_FILE")"; then
+if TOKEN="$("$TIMEOUT_CMD" "${OP_READ_TIMEOUT_SECONDS}s" "$OP_CMD" "${OP_CACHE_ARGS[@]}" read "$SECRET_REF" --account "$OP_ACCOUNT" 2>"$ERR_FILE")"; then
   EXIT_CODE=0
 else
   EXIT_CODE=$?
