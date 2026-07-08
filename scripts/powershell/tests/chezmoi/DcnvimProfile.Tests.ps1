@@ -219,6 +219,18 @@ Describe 'PowerShell codex profile wrapper' {
         $script:profileContent | Should -Match 'Set-Alias\s+-Name\s+codex\s+-Value\s+Invoke-CodexCli'
     }
 
+    It 'should load missing Codex secrets before launching the direct TUI' {
+        $codexBlock = [regex]::Match(
+            $script:profileContent,
+            '(?s)function Invoke-CodexCli \{.*?\r?\n\}\r?\n\r?\nSet-Alias'
+        ).Value
+
+        $codexBlock | Should -Match 'DOTFILES_FORCE_SECRET_LOAD'
+        $codexBlock | Should -Match '\.config\\shell\\secret\.ps1'
+        $codexBlock | Should -Not -Match 'opCommand'
+        $codexBlock | Should -Not -Match 'opArgs'
+    }
+
     It 'should run codex.exe with conservative terminal input settings and restore the environment' {
         $env:TERM = "wezterm"
         Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue

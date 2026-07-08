@@ -30,10 +30,18 @@ if not exist "%CODEX_EXE%" (
   exit /b 1
 )
 
-set "SECRETS_ENV=%USERPROFILE%\.config\shell\secrets.env"
+set "PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU"
+set "WORK_ACCOUNT=aimatecoltd.1password.com"
+set "PERSONAL_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets.env"
+set "WORK_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets-work.env"
 if "%GITHUB_PAT_TOKEN%"=="" (
-  if exist "%OP_EXE%" if exist "%SECRETS_ENV%" (
-    "%OP_EXE%" run --env-file="%SECRETS_ENV%" -- "%CODEX_EXE%" %*
+  if exist "%OP_EXE%" if exist "%PERSONAL_SECRETS_ENV%" (
+    if exist "%WORK_SECRETS_ENV%" (
+      "%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%" -- "%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%" -- "%CODEX_EXE%" %*
+      exit /b %ERRORLEVEL%
+    )
+
+    "%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%" -- "%CODEX_EXE%" %*
     exit /b %ERRORLEVEL%
   )
 )

@@ -283,13 +283,14 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'gh-token-switch\.ps1'
     }
 
-    It 'PowerShell profile の codex wrapper が 1Password env-file injection を使うこと' {
+    It 'PowerShell profile の codex wrapper が secret loader 経由で token を読み込むこと' {
         $profilePath = Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
         $content = Get-Content -LiteralPath $profilePath -Raw
 
         $content | Should -Match 'GITHUB_PAT_TOKEN' -Because 'GitHub plugin MCP reads GITHUB_PAT_TOKEN from the Codex process environment'
-        $content | Should -Match 'opArgs\s*=\s*@\("run", "--env-file", \$secretsEnv, "--", \$codexExecutable\)' -Because 'codex should be launched through op run when the token is not already set'
-        $content | Should -Match '\.config\\shell\\secrets\.env' -Because 'the managed 1Password env file is the source of Codex process secrets'
+        $content | Should -Match 'DOTFILES_FORCE_SECRET_LOAD' -Because 'Codex should force bounded runtime secret loading before plugin startup'
+        $content | Should -Match '\.config\\shell\\secret\.ps1' -Because 'Codex should use the managed PowerShell secret loader'
+        $content | Should -Not -Match 'opArgs\s*=\s*@\("run"' -Because 'Codex TUI should not be wrapped in op run because it can break terminal stdout'
     }
 
     It 'bashrc が gh token switching helper を読み込むこと' {
@@ -312,36 +313,49 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN'
         $content | Should -Not -Match 'WSLENV=GH_TOKEN'
         $content | Should -Match 'WSLENV=.*GITHUB_WORK_TOKEN'
+        $content | Should -Match 'op-run-gui-launch\.ps1'
+        $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS'
     }
 
     It 'Orca launcher が GITHUB_PAT_TOKEN を Codex process に渡すこと' {
         $orcaLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
         $content = Get-Content -LiteralPath $orcaLaunch -Raw
 
-        $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'GitHub MCP checks GITHUB_PAT_TOKEN during Codex startup'
+        $content | Should -Match 'op-run-gui-launch\.ps1' -Because 'GUI launchers should not hang forever when 1Password is locked'
+        $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS' -Because '1Password startup injection should have a bounded wait'
+        $content | Should -Match 'PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU' -Because 'personal secrets must resolve against the personal account'
+        $content | Should -Match 'WORK_ACCOUNT=aimatecoltd\.1password\.com' -Because 'work secrets must resolve against the company account'
         $content | Should -Match 'Orca\.exe'
         $content | Should -Match 'WinGet\\Links\\op\.exe'
         $content | Should -Match 'secrets\.env'
+        $content | Should -Match 'secrets-work\.env'
     }
 
     It 'Codex CLI launcher が GITHUB_PAT_TOKEN を Codex process に渡すこと' {
         $codexLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex.cmd"
         $content = Get-Content -LiteralPath $codexLaunch -Raw
 
-        $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'GitHub MCP checks GITHUB_PAT_TOKEN during Codex startup'
+        $content | Should -Match '"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%"' -Because 'personal secrets must resolve against the personal account'
+        $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'work secrets must resolve against the company account'
         $content | Should -Match 'codex\.exe'
         $content | Should -Match 'WinGet\\Links\\op\.exe'
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'secrets\.env'
+        $content | Should -Match 'secrets-work\.env'
     }
 
-    It 'secrets.env が work token の 1Password 参照を含むこと' {
+    It '1Password env files are split by account' {
         $secretsEnvPath = Join-Path $script:chezmoiRoot "dot_config/shell/secrets.env"
-        $content = Get-Content -LiteralPath $secretsEnvPath -Raw
+        $workSecretsEnvPath = Join-Path $script:chezmoiRoot "dot_config/shell/secrets-work.env"
+        $personalContent = Get-Content -LiteralPath $secretsEnvPath -Raw
+        $workContent = Get-Content -LiteralPath $workSecretsEnvPath -Raw
 
-        $content | Should -Match 'GITHUB_PAT_TOKEN=op://Private/GitHubUsedUserPAT/credential'
-        $content | Should -Not -Match '^GH_TOKEN=op://Private/GitHubUsedUserPAT/credential'
-        $content | Should -Match 'GITHUB_WORK_TOKEN=op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential'
+        $personalContent | Should -Match 'GITHUB_PAT_TOKEN=op://Private/GitHubUsedUserPAT/credential'
+        $personalContent | Should -Match 'TAVILY_API_KEY=op://Private/TavilyUsedUserPAT/credential'
+        $personalContent | Should -Not -Match '^GH_TOKEN=op://Private/GitHubUsedUserPAT/credential'
+        $personalContent | Should -Not -Match 'GITHUB_WORK_TOKEN'
+        $workContent | Should -Match 'GITHUB_WORK_TOKEN=op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential'
+        $workContent | Should -Not -Match 'GITHUB_PAT_TOKEN'
     }
 
     It 'PowerShell secret loader の guard が GITHUB_WORK_TOKEN を含むこと' {
@@ -352,10 +366,50 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'GITHUB_WORK_TOKEN'
     }
 
+    It 'GUI op run launcher falls back to the target when 1Password injection times out' {
+        $helperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-run-gui-launch.ps1"
+        Test-Path -LiteralPath $helperPath | Should -BeTrue
+
+        $fakeOp = Join-Path $TestDrive 'op.cmd'
+        $target = Join-Path $TestDrive 'target.cmd'
+        $marker = Join-Path $TestDrive 'fallback-marker.txt'
+        $personalEnv = Join-Path $TestDrive 'personal.env'
+        $workEnv = Join-Path $TestDrive 'work.env'
+
+        Set-Content -LiteralPath $personalEnv -Encoding ascii -Value 'GITHUB_PAT_TOKEN=op://Private/token/credential'
+        Set-Content -LiteralPath $workEnv -Encoding ascii -Value 'GITHUB_WORK_TOKEN=op://devcontainer/token/credential'
+        Set-Content -LiteralPath $fakeOp -Encoding ascii -Value @'
+@echo off
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "Start-Sleep -Seconds 6"
+exit /b 0
+'@
+        Set-Content -LiteralPath $target -Encoding ascii -Value @"
+@echo off
+echo fallback>"$marker"
+exit /b 0
+"@
+
+        & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $helperPath `
+            -OpExe $fakeOp `
+            -PersonalAccount personal `
+            -PersonalEnvFile $personalEnv `
+            -WorkAccount work `
+            -WorkEnvFile $workEnv `
+            -TimeoutSeconds 1 `
+            -Target $target 2>$null
+
+        $LASTEXITCODE | Should -Be 0
+        for ($i = 0; $i -lt 20 -and -not (Test-Path -LiteralPath $marker); $i++) {
+            Start-Sleep -Milliseconds 100
+        }
+        Test-Path -LiteralPath $marker | Should -BeTrue
+    }
+
     It 'secret loader files are stored at the managed shell config paths' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secret.ps1") | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secret.sh") | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secrets.env") | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secrets-work.env") | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "secret") | Should -BeFalse
     }
 }

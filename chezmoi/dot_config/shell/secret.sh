@@ -2,7 +2,7 @@
 # Sourced by .bashrc and .zshrc at shell startup.
 #
 # Preferred usage (WSL in WezTerm): launch WezTerm via wezterm-launch.cmd
-#   wezterm-launch.cmd sets WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN before op run,
+#   wezterm-launch.cmd sets WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN before account-scoped op run,
 #   so WSL child processes inherit the vars and this guard exits immediately.
 #
 # Fallback (standalone WSL / native Linux): op.exe inject runs once per session.

@@ -13,13 +13,13 @@
 ## 変更時の必須確認
 
 1. `.chezmoiignore.tmpl` がターゲット名ベースで正しく除外されること。
-2. `.tmpl` では `onepasswordRead` を直接呼ばないこと。1Password app 連携が一時的に使えないだけで `chezmoi apply` が失敗する。
-3. 1Password の値が必要な場合は deploy スクリプト実行時に `op read --account ...` で取得し、取得失敗時は警告または既定値 fallback で続行すること。
+2. 1Password / `op` / secret template 方針は `docs/1password/README.md` と OS 別 docs に従うこと。
+3. Chezmoi で secret を扱う場合は `docs/1password/README.md` の Chezmoi 方針を確認すること。
 4. `.chezmoi.toml.tmpl` を変更したら `chezmoi init` で再生成すること。`[data]` 追加が反映されず `map has no entry for key` で apply が止まる。
 5. `AGENTS.md`/`README.md` は deploy 対象にしないこと。
 6. `.tmpl` ファイルを deploy スクリプトから参照する場合は `include` でインライン展開すること（ファイルコピーでは未展開のまま配置される）。
 7. SSH config の `IdentityFile` で参照する公開鍵は、deploy スクリプトで必ずデプロイすること。
-8. `gpg.ssh.program` には 1Password の `op-ssh-sign` を使うこと（`ssh-keygen` は 1Password の鍵にアクセスできない）。
+8. 1Password SSH Agent / signing の OS 別パスは `docs/1password/` を確認すること。
 
 ## 実行
 

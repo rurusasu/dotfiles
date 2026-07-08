@@ -2,7 +2,7 @@
 #!/bin/bash
 # Deploy shell configurations for Linux/macOS
 # zshrc is managed by Home Manager (programs.zsh) on all HM-managed platforms.
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "secret/env.sh" | sha256sum }}{{ include "secret/secrets.env" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}
 
 set -euo pipefail
 
@@ -29,10 +29,11 @@ deploy_file "$CHEZMOI_SOURCE/shells/profile" "$HOME_DIR/.profile"
 # HM-managed platforms (NixOS/WSL, macOS via nix-darwin, standalone Linux).
 
 # 1Password-managed secret loader
-deploy_file "$CHEZMOI_SOURCE/secret/env.sh" "$HOME_DIR/.config/shell/secret.sh"
+deploy_file "$CHEZMOI_SOURCE/dot_config/shell/secret.sh" "$HOME_DIR/.config/shell/secret.sh"
 
-# op run env-file (1Password official pattern)
-deploy_file "$CHEZMOI_SOURCE/secret/secrets.env" "$HOME_DIR/.config/shell/secrets.env"
+# op run env-files (1Password official pattern, split by account)
+deploy_file "$CHEZMOI_SOURCE/dot_config/shell/secrets.env" "$HOME_DIR/.config/shell/secrets.env"
+deploy_file "$CHEZMOI_SOURCE/dot_config/shell/secrets-work.env" "$HOME_DIR/.config/shell/secrets-work.env"
 
 echo "Shell configurations deployed."
 {{ end -}}
