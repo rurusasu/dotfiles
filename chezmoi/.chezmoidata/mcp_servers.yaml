@@ -11,8 +11,9 @@ mcp_servers:
       - "dlx"
       - "@upstash/context7-mcp@2.2.3"
     startup_timeout_sec: 30
+    # pnpm/npm exec currently fails to resolve the Windows bin shim for this
+    # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -177,8 +178,9 @@ mcp_servers:
       - "dlx"
       - "@drawio/mcp@1.2.6"
     startup_timeout_sec: 30
+    # pnpm/npm exec currently fails to resolve the Windows bin shim for this
+    # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - codex
       - claude-code
       - claude-desktop
       - vscode
@@ -246,7 +248,7 @@ mcp_servers:
       - windsurf
       - zed
 
-  # Playwright - Browser automation MCP (Codex and VS Code)
+  # Playwright - Browser automation MCP (VS Code)
   # --isolated: セッションごとに独立したブラウザを起動し、複数セッション間の競合を防ぐ
   - name: playwright
     command: pnpm
@@ -255,8 +257,9 @@ mcp_servers:
       - "@playwright/mcp@0.0.75"
       - "--isolated"
     startup_timeout_sec: 60
+    # pnpm/npm exec currently fails to resolve the Windows bin shim for this
+    # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - codex
       - vscode
 
   # SuperLocalMemory - Local-only memory service (HTTP, machine-local)

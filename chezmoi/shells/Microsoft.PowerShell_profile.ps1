@@ -46,7 +46,21 @@ function Invoke-CodexCli {
         $env:TERM = "xterm-256color"
         $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = "1"
         Reset-DotfilesTerminalInputMode
-        & codex.exe @codexArgs
+
+        $codexCommand = Get-Command codex.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        $secretsEnv = if ($HOME) { Join-Path $HOME ".config\shell\secrets.env" } else { $null }
+        $opCommand = Get-Command op -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $opCommand) {
+            $opCommand = Get-Command op.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+
+        if (-not $env:GITHUB_PAT_TOKEN -and $opCommand -and $secretsEnv -and (Test-Path -LiteralPath $secretsEnv -PathType Leaf)) {
+            $opArgs = @("run", "--env-file", $secretsEnv, "--", $codexCommand.Source) + $codexArgs
+            & $opCommand.Source @opArgs
+        }
+        else {
+            & $codexCommand.Source @codexArgs
+        }
     }
     finally {
         $codexExitCode = $global:LASTEXITCODE

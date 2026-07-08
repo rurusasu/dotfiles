@@ -14,12 +14,16 @@
 
 ## 配置
 
-- `chezmoi/secret/secrets.env`
+- `chezmoi/dot_config/shell/secrets.env`
   - `op run --env-file` 用。値は `op://...` 参照のみ。
-- `chezmoi/secret/env.sh`
+- `chezmoi/dot_config/shell/secret.sh`
   - WSL / Linux の fallback loader。`op inject --account ...` を実行時に呼ぶ。
-- `chezmoi/secret/env.ps1`
+- `chezmoi/dot_config/shell/secret.ps1`
   - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取り、未設定なら timeout 付きで `op inject --account ...` を呼ぶ。
+- `chezmoi/dot_local/bin/executable_orca-launch.cmd`
+  - Orca 経由で起動される Codex 用。GitHub MCP は shell profile 実行前に `GITHUB_PAT_TOKEN` を読むため、Orca 自体を `op run --env-file` の内側で起動する。
+- `chezmoi/dot_local/bin/executable_codex.cmd`
+  - Codex CLI 直起動用。`~/.local/bin` が `WinGet\Links` より PATH の前にあるため、`codex` はこの wrapper を通ってから実体の `codex.exe` を起動する。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`
   - MCP の `op_env` 参照を置く。client template は失敗しても env fallback を使う。
 - `chezmoi/.chezmoiscripts/**`
@@ -235,6 +239,18 @@ Shell 起動時に環境変数として渡す場合:
 
 ```powershell
 op run --env-file="$env:USERPROFILE\.config\shell\secrets.env" -- pwsh
+```
+
+Orca から Codex を起動する場合は、Orca process に先に注入する:
+
+```powershell
+~\.local\bin\orca-launch.cmd
+```
+
+Codex CLI を直接起動する場合も、PATH 上の `~\.local\bin\codex.cmd` が同じ env-file injection を行う:
+
+```powershell
+codex
 ```
 
 ## 検証
