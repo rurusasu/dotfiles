@@ -29,6 +29,8 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
   - Orca 経由で起動される Codex 用。GitHub MCP は shell profile 実行前に `GITHUB_PAT_TOKEN` を読むため、Orca 自体を `op run --env-file` の内側で起動する。
 - `chezmoi/dot_local/bin/executable_op-run-gui-launch.ps1`
   - GUI launcher 用。account 別の `op run --env-file` を timeout 付きで実行し、1Password が locked / unavailable の場合も GUI 本体を token なしで起動する。
+- `chezmoi/.chezmoiscripts/run_after_update-wezterm-shortcut_windows.ps1.tmpl`
+  - WezTerm の Start Menu shortcut と既存 taskbar pin を `wezterm-launch.cmd` に向け、通常起動でも Codex の GitHub MCP startup secrets を継承させる。
 - `chezmoi/dot_local/bin/executable_codex.cmd`
   - Codex CLI 直起動用。`~/.local/bin` が `WinGet\Links` より PATH の前にあるため、`codex` はこの wrapper を通ってから実体の `codex.exe` を起動する。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`

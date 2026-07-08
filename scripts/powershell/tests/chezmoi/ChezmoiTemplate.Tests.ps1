@@ -551,6 +551,17 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'WScript\.Shell' -Because 'Windows shortcuts need COM shortcut editing'
         }
 
+        It 'should point WezTerm shortcuts at the injected launcher' {
+            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-wezterm-shortcut_windows.ps1.tmpl"
+            Test-Path -LiteralPath $scriptPath | Should -BeTrue
+            $content = Get-Content -LiteralPath $scriptPath -Raw
+
+            $content | Should -Match 'wezterm-launch\.cmd' -Because 'normal WezTerm launches should inject GitHub MCP startup secrets'
+            $content | Should -Match 'WezTerm\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
+            $content | Should -Match 'User Pinned\\TaskBar\\WezTerm\.lnk' -Because 'existing pinned taskbar shortcuts can keep launching wezterm-gui.exe directly'
+            $content | Should -Match 'WScript\.Shell' -Because 'Windows shortcuts need COM shortcut editing'
+        }
+
         It 'should launch direct Codex CLI through 1Password env-file injection' {
             $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex.cmd"
             Test-Path -LiteralPath $launcherPath | Should -BeTrue

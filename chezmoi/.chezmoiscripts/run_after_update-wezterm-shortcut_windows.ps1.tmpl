@@ -1,0 +1,49 @@
+$launcher = Join-Path $HOME ".local\bin\wezterm-launch.cmd"
+$startMenuShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\WezTerm.lnk"
+$taskbarShortcutPath = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\WezTerm.lnk"
+$weztermExeCandidates = @(
+    (Join-Path $env:ProgramFiles "WezTerm\wezterm-gui.exe"),
+    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\wezterm-gui.exe"),
+    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\wezterm.exe")
+)
+
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+    return
+}
+
+$weztermExe = $weztermExeCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+$workingDirectory = Split-Path -Parent $launcher
+if ($weztermExe) {
+    $workingDirectory = Split-Path -Parent $weztermExe
+}
+
+function Set-DotfilesWezTermShortcut {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter()]
+        [bool]$Create
+    )
+
+    if (-not $Create -and -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return
+    }
+
+    $shortcutDir = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $shortcutDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $shortcutDir -Force | Out-Null
+    }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    $shortcut.TargetPath = $launcher
+    $shortcut.WorkingDirectory = $workingDirectory
+    if ($weztermExe) {
+        $shortcut.IconLocation = "$weztermExe,0"
+    }
+    $shortcut.Save()
+}
+
+Set-DotfilesWezTermShortcut -Path $startMenuShortcutPath -Create $true
+Set-DotfilesWezTermShortcut -Path $taskbarShortcutPath -Create $false
