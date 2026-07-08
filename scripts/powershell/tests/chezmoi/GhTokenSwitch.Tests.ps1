@@ -288,7 +288,7 @@ Describe 'GitHub token switching templates' {
         $content = Get-Content -LiteralPath $profilePath -Raw
 
         $content | Should -Match 'GITHUB_PAT_TOKEN' -Because 'GitHub plugin MCP reads GITHUB_PAT_TOKEN from the Codex process environment'
-        $content | Should -Match 'opArgs\s*=\s*@\("run", "--env-file", \$secretsEnv, "--", \$codexCommand\.Source\)' -Because 'codex should be launched through op run when the token is not already set'
+        $content | Should -Match 'opArgs\s*=\s*@\("run", "--env-file", \$secretsEnv, "--", \$codexExecutable\)' -Because 'codex should be launched through op run when the token is not already set'
         $content | Should -Match '\.config\\shell\\secrets\.env' -Because 'the managed 1Password env file is the source of Codex process secrets'
     }
 

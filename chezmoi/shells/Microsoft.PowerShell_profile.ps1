@@ -47,19 +47,20 @@ function Invoke-CodexCli {
         $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = "1"
         Reset-DotfilesTerminalInputMode
 
-        $codexCommand = Get-Command codex.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        $codexCommand = Get-Command codex.exe -ErrorAction Stop | Select-Object -First 1
+        $codexExecutable = if ($codexCommand.Source) { $codexCommand.Source } else { $codexCommand.Name }
         $secretsEnv = if ($HOME) { Join-Path $HOME ".config\shell\secrets.env" } else { $null }
         $opCommand = Get-Command op -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $opCommand) {
             $opCommand = Get-Command op.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         }
 
-        if (-not $env:GITHUB_PAT_TOKEN -and $opCommand -and $secretsEnv -and (Test-Path -LiteralPath $secretsEnv -PathType Leaf)) {
-            $opArgs = @("run", "--env-file", $secretsEnv, "--", $codexCommand.Source) + $codexArgs
+        if (-not $env:GITHUB_PAT_TOKEN -and $codexCommand.CommandType -eq "Application" -and $opCommand -and $secretsEnv -and (Test-Path -LiteralPath $secretsEnv -PathType Leaf)) {
+            $opArgs = @("run", "--env-file", $secretsEnv, "--", $codexExecutable) + $codexArgs
             & $opCommand.Source @opArgs
         }
         else {
-            & $codexCommand.Source @codexArgs
+            & $codexExecutable @codexArgs
         }
     }
     finally {
