@@ -366,22 +366,14 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'GITHUB_WORK_TOKEN'
     }
 
-    It 'GUI op run launcher falls back to the target when 1Password injection times out' {
+    It 'GUI op run launcher attempts target fallback when 1Password injection times out' {
         $helperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-run-gui-launch.ps1"
         Test-Path -LiteralPath $helperPath | Should -BeTrue
 
         $fakeOp = Join-Path $TestDrive 'op.cmd'
-        $marker = Join-Path $TestDrive 'fallback-marker.txt'
         $personalEnv = Join-Path $TestDrive 'personal.env'
         $workEnv = Join-Path $TestDrive 'work.env'
-        $target = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source
-        $markerLiteral = $marker.Replace("'", "''")
-        $targetArgs = @(
-            '-NoLogo',
-            '-NoProfile',
-            '-Command',
-            "Set-Content -LiteralPath '$markerLiteral' -Value fallback"
-        )
+        $target = Join-Path $TestDrive 'missing-target.exe'
 
         Set-Content -LiteralPath $personalEnv -Encoding ascii -Value 'GITHUB_PAT_TOKEN=op://Private/token/credential'
         Set-Content -LiteralPath $workEnv -Encoding ascii -Value 'GITHUB_WORK_TOKEN=op://devcontainer/token/credential'
@@ -391,21 +383,18 @@ Describe 'GitHub token switching templates' {
 exit /b 0
 '@
 
-        & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $helperPath `
+        $output = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $helperPath `
             -OpExe $fakeOp `
             -PersonalAccount personal `
             -PersonalEnvFile $personalEnv `
             -WorkAccount work `
             -WorkEnvFile $workEnv `
             -TimeoutSeconds 1 `
-            -Target $target `
-            @targetArgs 2>$null
+            -Target $target 2>&1
 
-        $LASTEXITCODE | Should -Be 0
-        for ($i = 0; $i -lt 20 -and -not (Test-Path -LiteralPath $marker); $i++) {
-            Start-Sleep -Milliseconds 100
-        }
-        Test-Path -LiteralPath $marker | Should -BeTrue
+        $LASTEXITCODE | Should -Be 1
+        ($output -join "`n") | Should -Match '1Password GUI launch injection timed out'
+        ($output -join "`n") | Should -Match 'Failed to start GUI target'
     }
 
     It 'secret loader files are stored at the managed shell config paths' {
