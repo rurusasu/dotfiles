@@ -561,6 +561,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT' -Because 'direct CLI should keep the existing conservative terminal input setting'
             $content | Should -Match '%SystemRoot%\\System32\\where\.exe' -Because 'Codex shells can have a trimmed PATH without System32'
             $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'direct CLI can run before shell PATH repair'
+            $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"' -Because 'direct codex CLI should inject work secrets even when the personal token is already present'
         }
     }
 

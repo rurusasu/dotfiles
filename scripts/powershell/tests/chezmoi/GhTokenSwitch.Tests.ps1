@@ -315,6 +315,8 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'WSLENV=.*GITHUB_WORK_TOKEN'
         $content | Should -Match 'op-run-gui-launch\.ps1'
         $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS'
+        $content | Should -Match 'for /f "delims=" %%I in'
+        $content | Should -Not -Match 'set "OP_EXE=op"'
     }
 
     It 'Orca launcher が GITHUB_PAT_TOKEN を Codex process に渡すこと' {
@@ -340,6 +342,8 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'codex\.exe'
         $content | Should -Match 'WinGet\\Links\\op\.exe'
         $content | Should -Match 'GITHUB_PAT_TOKEN'
+        $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"'
+        $content | Should -Match 'if defined NEEDS_SECRET_LOAD if exist "%OP_EXE%"'
         $content | Should -Match 'secrets\.env'
         $content | Should -Match 'secrets-work\.env'
     }

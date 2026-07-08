@@ -16,7 +16,13 @@ set "WORK_ACCOUNT=aimatecoltd.1password.com"
 set "PERSONAL_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets.env"
 set "WORK_SECRETS_ENV=%USERPROFILE%\.config\shell\secrets-work.env"
 set "OP_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\op.exe"
-if not exist "%OP_EXE%" set "OP_EXE=op"
+if not exist "%OP_EXE%" (
+  for /f "delims=" %%I in ('"%WHERE_EXE%" op.exe 2^>nul') do (
+    set "OP_EXE=%%I"
+    goto :found_op
+  )
+)
+:found_op
 set "OP_RUN_GUI_LAUNCH=%USERPROFILE%\.local\bin\op-run-gui-launch.ps1"
 set "OP_RUN_TIMEOUT_SECONDS=%DOTFILES_OP_RUN_TIMEOUT_SECONDS%"
 if "%OP_RUN_TIMEOUT_SECONDS%"=="" set "OP_RUN_TIMEOUT_SECONDS=8"
