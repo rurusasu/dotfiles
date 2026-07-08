@@ -41,6 +41,8 @@ function Invoke-CodexCli {
     $previousTerm = $env:TERM
     $hadKeyboardEnhancement = Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
     $previousKeyboardEnhancement = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+    $hadForceSecretLoad = Test-Path Env:\DOTFILES_FORCE_SECRET_LOAD
+    $previousForceSecretLoad = $env:DOTFILES_FORCE_SECRET_LOAD
 
     try {
         $env:TERM = "xterm-256color"
@@ -49,19 +51,18 @@ function Invoke-CodexCli {
 
         $codexCommand = Get-Command codex.exe -ErrorAction Stop | Select-Object -First 1
         $codexExecutable = if ($codexCommand.Source) { $codexCommand.Source } else { $codexCommand.Name }
-        $secretsEnv = if ($HOME) { Join-Path $HOME ".config\shell\secrets.env" } else { $null }
-        $opCommand = Get-Command op -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $opCommand) {
-            $opCommand = Get-Command op.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $secretLoader = if ($HOME) { Join-Path $HOME ".config\shell\secret.ps1" } else { $null }
+        if (
+            (-not $env:GITHUB_PAT_TOKEN -or -not $env:GITHUB_WORK_TOKEN) -and
+            $codexCommand.CommandType -eq "Application" -and
+            $secretLoader -and
+            (Test-Path -LiteralPath $secretLoader -PathType Leaf)
+        ) {
+            $env:DOTFILES_FORCE_SECRET_LOAD = "1"
+            . $secretLoader
         }
 
-        if (-not $env:GITHUB_PAT_TOKEN -and $codexCommand.CommandType -eq "Application" -and $opCommand -and $secretsEnv -and (Test-Path -LiteralPath $secretsEnv -PathType Leaf)) {
-            $opArgs = @("run", "--env-file", $secretsEnv, "--", $codexExecutable) + $codexArgs
-            & $opCommand.Source @opArgs
-        }
-        else {
-            & $codexExecutable @codexArgs
-        }
+        & $codexExecutable @codexArgs
     }
     finally {
         $codexExitCode = $global:LASTEXITCODE
@@ -78,6 +79,13 @@ function Invoke-CodexCli {
         }
         else {
             Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue
+        }
+
+        if ($hadForceSecretLoad) {
+            $env:DOTFILES_FORCE_SECRET_LOAD = $previousForceSecretLoad
+        }
+        else {
+            Remove-Item Env:\DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
         }
 
         Reset-DotfilesTerminalInputMode

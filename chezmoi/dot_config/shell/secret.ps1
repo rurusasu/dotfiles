@@ -2,7 +2,7 @@
 # Sourced by PowerShell profile at shell startup.
 #
 # Preferred usage: launch WezTerm via ~/.local/bin/wezterm-launch.cmd
-#   op run --env-file injects GITHUB_PAT_TOKEN/TAVILY_API_KEY/GITHUB_WORK_TOKEN once at WezTerm startup;
+#   op run --account ... --env-file injects personal/work secrets once at WezTerm startup;
 #   all tabs inherit them and this guard exits immediately.
 #
 # Fallback: standalone pwsh attempts bounded op inject calls when values are missing.

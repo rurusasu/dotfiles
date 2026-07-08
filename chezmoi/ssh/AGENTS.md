@@ -6,15 +6,10 @@
 
 ## 変更ルール
 
-- 1Password SSH Agent の OS 別パス分岐を維持する。
+- 1Password SSH Agent / signing の OS 別パス分岐は `docs/1password/` を確認する。
 - GitHub host alias 変更時は既存リポジトリ接続への影響を確認する。
 - 秘密鍵の実体は置かない。
-- 公開鍵は deploy スクリプト実行時に `op read --account ...` で 1Password から取得し配置する:
-  - `~/.ssh/signing_key.pub` — personal (`Host github.com`)
-  - `~/.ssh/github_work.pub` — work (`Host github-work`)
-- 1Password 参照先:
-  - personal: `op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key` (rurusasu account, default chezmoi account)
-  - work: `op://Employee/GitHub Work/public key` (kohei-miki-im8 account, account UUID `FXVKKR2KWFCMHGMEA7HQYK6XRE` を `op read --account` で明示指定)
+- 公開鍵の 1Password 取得方針は `docs/1password/README.md` と OS 別 docs に従う。
 - `Host github-work` alias は LIF-182 で導入した `[includeIf "hasconfig:remote.*.url:git@github-work:**"]` の hook となる。work repo の remote URL を `git@github-work:org/repo` に変えると work identity (`~/.gitconfig-work`) が自動適用される。
 
 ## deploy スクリプトの注意点

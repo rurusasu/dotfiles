@@ -43,7 +43,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Not -Match '\{\{\s*onepassword(Read)?\b' -Because 'docs must not recommend template-time 1Password lookups'
             $content | Should -Match 'op read --account' -Because 'docs should describe explicit-account runtime reads'
             $content | Should -Match 'op run --env-file' -Because 'docs should describe the official env-file injection pattern'
-            $content | Should -Match 'OpenClaw' -Because 'OpenClaw tokens and browser scope approval are part of the current secret policy'
+            $content | Should -Not -Match 'OpenClaw は local state|openclaw devices|OpenClaw 用 provider API keys' -Because 'OpenClaw is no longer managed by dotfiles'
         }
 
     }
@@ -530,9 +530,13 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $launcherPath | Should -BeTrue
             $content = Get-Content -LiteralPath $launcherPath -Raw
 
-            $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'Codex MCP startup reads process env before shell profiles run'
+            $content | Should -Match 'op-run-gui-launch\.ps1' -Because 'Codex MCP startup secrets should be injected through a bounded GUI launcher'
+            $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS' -Because 'Orca startup should not hang forever when 1Password is locked'
+            $content | Should -Match 'PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU' -Because 'Codex MCP startup reads personal GitHub secrets before shell profiles run'
+            $content | Should -Match 'WORK_ACCOUNT=aimatecoltd\.1password\.com' -Because 'work GitHub secrets live in the company 1Password account'
             $content | Should -Match 'Orca\.exe' -Because 'the launcher should start the packaged Orca app'
-            $content | Should -Match 'secrets\.env' -Because 'GITHUB_PAT_TOKEN lives in the managed 1Password env file'
+            $content | Should -Match 'secrets\.env' -Because 'GITHUB_PAT_TOKEN lives in the managed personal 1Password env file'
+            $content | Should -Match 'secrets-work\.env' -Because 'GITHUB_WORK_TOKEN lives in the managed work 1Password env file'
             $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'Orca startup can happen before shell PATH repair'
         }
 
@@ -551,11 +555,38 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $launcherPath | Should -BeTrue
             $content = Get-Content -LiteralPath $launcherPath -Raw
 
-            $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'direct codex CLI should also satisfy GitHub MCP startup auth'
+            $content | Should -Match '"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%"' -Because 'direct codex CLI should satisfy personal GitHub MCP startup auth'
+            $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'direct codex CLI should inherit work GitHub token from the company account'
             $content | Should -Match 'WinGet\\Links\\codex\.exe' -Because 'the wrapper should call the real Codex executable instead of recursing through PATH'
             $content | Should -Match 'CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT' -Because 'direct CLI should keep the existing conservative terminal input setting'
             $content | Should -Match '%SystemRoot%\\System32\\where\.exe' -Because 'Codex shells can have a trimmed PATH without System32'
             $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'direct CLI can run before shell PATH repair'
+            $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"' -Because 'direct codex CLI should inject work secrets even when the personal token is already present'
+        }
+    }
+
+    Context 'Shell config deploy script' {
+        It 'should deploy secret loader files from the managed dot_config paths' {
+            $scriptPaths = @(
+                Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.sh.tmpl"
+                Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl"
+            )
+
+            foreach ($scriptPath in $scriptPaths) {
+                Test-Path -LiteralPath $scriptPath | Should -BeTrue
+                $content = Get-Content -LiteralPath $scriptPath -Raw
+
+                $content | Should -Match 'dot_config[\\/]shell[\\/]secret\.(sh|ps1)'
+                $content | Should -Match 'dot_config[\\/]shell[\\/]secrets\.env'
+                $content | Should -Match 'dot_config[\\/]shell[\\/]secrets-work\.env'
+                $content | Should -Not -Match 'secret[\\/]env\.(sh|ps1)'
+                $content | Should -Not -Match 'secret[\\/]secrets\.env'
+
+                if ($scriptPath -like "*.ps1.tmpl") {
+                    $content | Should -Match 'dot_local[\\/]bin[\\/]executable_wezterm-launch\.cmd'
+                    $content | Should -Not -Match 'secret[\\/]wezterm-launch\.cmd'
+                }
+            }
         }
     }
 

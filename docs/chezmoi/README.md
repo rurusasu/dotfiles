@@ -9,6 +9,7 @@ chezmoi によるユーザー設定管理の詳細ドキュメント。
 - [ディレクトリ構造](./structure.md)
 - [キーバインド統一方針](./keybindings.md)
 - [シークレット管理](./secrets.md)
+- [1Password CLI 運用](../1password/README.md)
 
 ## 概要
 
