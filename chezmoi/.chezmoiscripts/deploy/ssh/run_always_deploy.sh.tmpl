@@ -22,7 +22,9 @@ deploy_content() {
 }
 
 find_op() {
-  if command -v op >/dev/null 2>&1; then
+  if [ -n "${WSL_DISTRO_NAME:-}" ] && command -v op.exe >/dev/null 2>&1; then
+    command -v op.exe
+  elif command -v op >/dev/null 2>&1; then
     command -v op
   elif command -v op.exe >/dev/null 2>&1; then
     command -v op.exe
@@ -41,11 +43,19 @@ find_timeout() {
   fi
 }
 
+is_windows_op() {
+  case "$(basename "$1" | tr '[:upper:]' '[:lower:]')" in
+    op.exe) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 read_op_secret() {
   local reference="$1"
   local account="$2"
   local label="$3"
   local op_cmd
+  local op_cache_args=()
   local timeout_cmd
   local err_file
 
@@ -57,11 +67,14 @@ read_op_secret() {
     echo "WARNING: timeout command not found, skipping $label" >&2
     return 1
   fi
+  if is_windows_op "$op_cmd"; then
+    op_cache_args=(--cache=false)
+  fi
 
   err_file="$(mktemp)"
   local output
   local exit_code
-  if output="$("$timeout_cmd" "${OP_READ_TIMEOUT_SECONDS}s" "$op_cmd" read "$reference" --account "$account" 2>"$err_file")"; then
+  if output="$("$timeout_cmd" "${OP_READ_TIMEOUT_SECONDS}s" "$op_cmd" "${op_cache_args[@]}" read "$reference" --account "$account" 2>"$err_file")"; then
     exit_code=0
   else
     exit_code=$?

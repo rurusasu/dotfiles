@@ -50,6 +50,7 @@ function Read-OpSecret {
   $psi.UseShellExecute = $false
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  $null = $psi.ArgumentList.Add("--cache=false")
   $null = $psi.ArgumentList.Add("read")
   $null = $psi.ArgumentList.Add($Reference)
   $null = $psi.ArgumentList.Add("--account")

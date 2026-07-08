@@ -64,6 +64,14 @@ Describe 'PlaneHandler' {
             $handler.HttpPort | Should -Be 18080
             $handler.HttpsPort | Should -Be 18081
         }
+
+        It 'should disable 1Password cache for noninteractive op calls' {
+            $content = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../handlers/Handler.Plane.ps1") -Raw
+
+            $content | Should -Match 'op --cache=false read'
+            $content | Should -Match 'op --cache=false item get'
+            $content | Should -Match 'op --cache=false item edit'
+        }
     }
 
     Context 'Invoke-PlaneBash' {

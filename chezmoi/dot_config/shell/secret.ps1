@@ -90,7 +90,7 @@ function Invoke-DotfilesOpInject {
         Set-Content -LiteralPath $stdin -Value $Template -Encoding utf8 -NoNewline
         $process = Start-Process `
             -FilePath $opBin `
-            -ArgumentList @('inject', '--in-file', $stdin, '--account', $Account) `
+            -ArgumentList @('--cache=false', 'inject', '--in-file', $stdin, '--account', $Account) `
             -PassThru `
             -WindowStyle Hidden `
             -RedirectStandardOutput $stdout `
