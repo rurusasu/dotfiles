@@ -358,6 +358,15 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Not -Match '(?m)^apps\s*=\s*false\s*$' -Because "この repo で connector tool が露出しなくなる"
         }
 
+        It 'project-scoped config should not re-enable noisy Codex MCP servers' {
+            $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
+            $content = Get-Content -LiteralPath $projectConfigPath -Raw
+
+            foreach ($serverName in @('context7', 'drawio', 'playwright', 'linear', 'notion')) {
+                $content | Should -Not -Match "(?m)^\[mcp_servers\.$serverName\]" -Because "$serverName should not auto-start from project config"
+            }
+        }
+
         It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {
             $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex-docker-mcp.ps1"
             $content = Get-Content -Path $wrapperPath -Raw
@@ -440,12 +449,12 @@ Describe 'chezmoi テンプレート バリデーション' {
 
     Context 'Codex hook Python runtime policy' {
         It 'should run Windows Python hooks through uv managed Python' {
-            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/hooks.json.tmpl"
             $content = Get-Content -LiteralPath $templatePath -Raw
 
-            $content | Should -Not -Match "(?m)^command_windows\s*=\s*'python\s+" -Because "Windows must not depend on native Python installs"
-            $content | Should -Match "(?m)^command_windows\s*=\s*'uv run --isolated --managed-python python .+claude_permission_policy\.py`"'" -Because "Codex hooks should use uv-managed Python on Windows"
-            $content | Should -Match "(?m)^command_windows\s*=\s*'uv run --isolated --managed-python python .+deny_protected_branch_commit\.py`"'" -Because "Codex hooks should use uv-managed Python on Windows"
+            $content | Should -Not -Match '"command":\s*"python\s+' -Because "Windows must not depend on native Python installs"
+            $content | Should -Match 'uv run --isolated --managed-python python .+claude_permission_policy\.py' -Because "Codex hooks should use uv-managed Python on Windows"
+            $content | Should -Match 'uv run --isolated --managed-python python .+deny_protected_branch_commit\.py' -Because "Codex hooks should use uv-managed Python on Windows"
         }
     }
 
@@ -457,7 +466,18 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should not auto-start auth or API-key MCP servers in Codex' {
             $content = Get-Content -LiteralPath $script:mcpServersPath -Raw
             $serverBlocks = [regex]::Matches($content, '(?ms)-\s+name:\s+(\S+).*?(?=^\s+-\s+name:|\z)')
-            $codexDisabled = @('linear', 'tavily', 'exa', 'firecrawl', 'sentry', 'cloud-run', 'kaggle')
+            $codexDisabled = @(
+                'context7',
+                'linear',
+                'tavily',
+                'exa',
+                'firecrawl',
+                'drawio',
+                'sentry',
+                'cloud-run',
+                'kaggle',
+                'playwright'
+            )
             $violations = @()
 
             foreach ($block in $serverBlocks) {
@@ -469,6 +489,73 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
 
             $violations | Should -BeNullOrEmpty -Because "these servers require OAuth, API keys, or local cloud auth and should not warn during Codex startup"
+        }
+
+        It 'should keep OAuth plugin MCP servers disabled until login' {
+            $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $content = Get-Content -LiteralPath $templatePath -Raw
+
+            foreach ($plugin in @('linear', 'notion')) {
+                $block = [regex]::Match(
+                    $content,
+                    "(?ms)^\[plugins\.`"$plugin@openai-curated`"\]\s*.*?(?=^\[plugins\.|\z)"
+                )
+                $block.Success | Should -BeTrue -Because "$plugin plugin config should be explicit"
+                $block.Value | Should -Match '(?m)^enabled\s*=\s*false\s*$' -Because "$plugin requires codex mcp login before startup"
+            }
+        }
+    }
+
+    Context 'Codex hook representation' {
+        It 'should keep global hooks in hooks.json, not config.toml' {
+            $hooksTemplatePath = Join-Path $script:chezmoiRoot "dot_codex/hooks.json.tmpl"
+            $configTemplatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
+            $cleanupScript = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_cleanup-codex-hooks-json_windows.ps1.tmpl"
+
+            Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_codex/hooks.json") | Should -BeFalse
+            Test-Path -LiteralPath $hooksTemplatePath | Should -BeTrue
+            Test-Path -LiteralPath $cleanupScript | Should -BeFalse
+
+            $hooksContent = Get-Content -LiteralPath $hooksTemplatePath -Raw
+            $configContent = Get-Content -LiteralPath $configTemplatePath -Raw
+
+            $hooksContent | Should -Match '"PreToolUse"' -Because 'Orca mirrors ~/.codex/hooks.json into its managed Codex runtime'
+            $configContent | Should -Not -Match '(?m)^\[\[hooks\.' -Because 'config.toml hooks conflict with Orca-managed hooks.json'
+        }
+    }
+
+    Context 'Orca Codex startup environment' {
+        It 'should launch Orca through 1Password env-file injection' {
+            $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
+            Test-Path -LiteralPath $launcherPath | Should -BeTrue
+            $content = Get-Content -LiteralPath $launcherPath -Raw
+
+            $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'Codex MCP startup reads process env before shell profiles run'
+            $content | Should -Match 'Orca\.exe' -Because 'the launcher should start the packaged Orca app'
+            $content | Should -Match 'secrets\.env' -Because 'GITHUB_PAT_TOKEN lives in the managed 1Password env file'
+            $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'Orca startup can happen before shell PATH repair'
+        }
+
+        It 'should point the Orca Start Menu shortcut at the injected launcher' {
+            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-orca-shortcut_windows.ps1.tmpl"
+            Test-Path -LiteralPath $scriptPath | Should -BeTrue
+            $content = Get-Content -LiteralPath $scriptPath -Raw
+
+            $content | Should -Match 'orca-launch\.cmd' -Because 'normal Orca launches should inherit GITHUB_PAT_TOKEN'
+            $content | Should -Match 'Orca\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
+            $content | Should -Match 'WScript\.Shell' -Because 'Windows shortcuts need COM shortcut editing'
+        }
+
+        It 'should launch direct Codex CLI through 1Password env-file injection' {
+            $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex.cmd"
+            Test-Path -LiteralPath $launcherPath | Should -BeTrue
+            $content = Get-Content -LiteralPath $launcherPath -Raw
+
+            $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'direct codex CLI should also satisfy GitHub MCP startup auth'
+            $content | Should -Match 'WinGet\\Links\\codex\.exe' -Because 'the wrapper should call the real Codex executable instead of recursing through PATH'
+            $content | Should -Match 'CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT' -Because 'direct CLI should keep the existing conservative terminal input setting'
+            $content | Should -Match '%SystemRoot%\\System32\\where\.exe' -Because 'Codex shells can have a trimmed PATH without System32'
+            $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'direct CLI can run before shell PATH repair'
         }
     }
 

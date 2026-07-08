@@ -4,8 +4,8 @@ BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../../"
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
     $script:helperPath = Join-Path $script:chezmoiRoot "dot_config/shell/gh-token-switch.ps1"
-    $script:secretLoaderPath = Join-Path $script:chezmoiRoot "secret/env.ps1"
-    $script:weztermLaunch = Join-Path $script:chezmoiRoot "secret/wezterm-launch.cmd"
+    $script:secretLoaderPath = Join-Path $script:chezmoiRoot "dot_config/shell/secret.ps1"
+    $script:weztermLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_wezterm-launch.cmd"
 }
 
 AfterAll {
@@ -283,6 +283,15 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'gh-token-switch\.ps1'
     }
 
+    It 'PowerShell profile の codex wrapper が 1Password env-file injection を使うこと' {
+        $profilePath = Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
+        $content = Get-Content -LiteralPath $profilePath -Raw
+
+        $content | Should -Match 'GITHUB_PAT_TOKEN' -Because 'GitHub plugin MCP reads GITHUB_PAT_TOKEN from the Codex process environment'
+        $content | Should -Match 'opArgs\s*=\s*@\("run", "--env-file", \$secretsEnv, "--", \$codexExecutable\)' -Because 'codex should be launched through op run when the token is not already set'
+        $content | Should -Match '\.config\\shell\\secrets\.env' -Because 'the managed 1Password env file is the source of Codex process secrets'
+    }
+
     It 'bashrc が gh token switching helper を読み込むこと' {
         $bashrcPath = Join-Path $script:chezmoiRoot "shells/bashrc"
         $content = Get-Content -LiteralPath $bashrcPath -Raw
@@ -305,8 +314,29 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'WSLENV=.*GITHUB_WORK_TOKEN'
     }
 
+    It 'Orca launcher が GITHUB_PAT_TOKEN を Codex process に渡すこと' {
+        $orcaLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
+        $content = Get-Content -LiteralPath $orcaLaunch -Raw
+
+        $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'GitHub MCP checks GITHUB_PAT_TOKEN during Codex startup'
+        $content | Should -Match 'Orca\.exe'
+        $content | Should -Match 'WinGet\\Links\\op\.exe'
+        $content | Should -Match 'secrets\.env'
+    }
+
+    It 'Codex CLI launcher が GITHUB_PAT_TOKEN を Codex process に渡すこと' {
+        $codexLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex.cmd"
+        $content = Get-Content -LiteralPath $codexLaunch -Raw
+
+        $content | Should -Match '"%OP_EXE%" run --env-file="%SECRETS_ENV%"' -Because 'GitHub MCP checks GITHUB_PAT_TOKEN during Codex startup'
+        $content | Should -Match 'codex\.exe'
+        $content | Should -Match 'WinGet\\Links\\op\.exe'
+        $content | Should -Match 'GITHUB_PAT_TOKEN'
+        $content | Should -Match 'secrets\.env'
+    }
+
     It 'secrets.env が work token の 1Password 参照を含むこと' {
-        $secretsEnvPath = Join-Path $script:chezmoiRoot "secret/secrets.env"
+        $secretsEnvPath = Join-Path $script:chezmoiRoot "dot_config/shell/secrets.env"
         $content = Get-Content -LiteralPath $secretsEnvPath -Raw
 
         $content | Should -Match 'GITHUB_PAT_TOKEN=op://Private/GitHubUsedUserPAT/credential'
@@ -315,10 +345,17 @@ Describe 'GitHub token switching templates' {
     }
 
     It 'PowerShell secret loader の guard が GITHUB_WORK_TOKEN を含むこと' {
-        $secretPs1Path = Join-Path $script:chezmoiRoot "secret/env.ps1"
+        $secretPs1Path = Join-Path $script:chezmoiRoot "dot_config/shell/secret.ps1"
         $content = Get-Content -LiteralPath $secretPs1Path -Raw
 
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'GITHUB_WORK_TOKEN'
+    }
+
+    It 'secret loader files are stored at the managed shell config paths' {
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secret.ps1") | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secret.sh") | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/shell/secrets.env") | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "secret") | Should -BeFalse
     }
 }

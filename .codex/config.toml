@@ -86,14 +86,6 @@ config_file = "agents/fast_worker.toml"
 description = "Python implementation-only agent (no test execution)."
 config_file = "agents/python_coding.toml"
 
-[mcp_servers.context7]
-command = "pnpm"
-args = [
-  "dlx",
-  "@upstash/context7-mcp@2.2.3",
-]
-startup_timeout_sec = 30
-
 # [mcp_servers.linear]
 # url = "https://mcp.linear.app/mcp"
 # command = "pnpm"
@@ -105,14 +97,6 @@ startup_timeout_sec = 30
 
 [mcp_servers.deepwiki]
 url = "https://mcp.deepwiki.com/mcp"
-
-[mcp_servers.drawio]
-command = "pnpm"
-args = [
-  "dlx",
-  "@drawio/mcp@1.2.6",
-]
-startup_timeout_sec = 30
 
 # [mcp_servers.sentry]
 # url = "https://mcp.sentry.dev/mcp"

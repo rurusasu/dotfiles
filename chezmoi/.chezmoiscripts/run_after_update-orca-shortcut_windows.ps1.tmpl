@@ -1,0 +1,21 @@
+$launcher = Join-Path $HOME ".local\bin\orca-launch.cmd"
+$shortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Orca.lnk"
+$orcaExe = Join-Path $env:LOCALAPPDATA "Programs\orca\Orca.exe"
+
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+    return
+}
+
+$shortcutDir = Split-Path -Parent $shortcutPath
+if (-not (Test-Path -LiteralPath $shortcutDir -PathType Container)) {
+    New-Item -ItemType Directory -Path $shortcutDir -Force | Out-Null
+}
+
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $launcher
+$shortcut.WorkingDirectory = Split-Path -Parent $orcaExe
+if (Test-Path -LiteralPath $orcaExe -PathType Leaf) {
+    $shortcut.IconLocation = "$orcaExe,0"
+}
+$shortcut.Save()
