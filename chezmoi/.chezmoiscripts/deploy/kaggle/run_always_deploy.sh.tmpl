@@ -5,7 +5,7 @@ set -euo pipefail
 
 OP_ACCOUNT="{{ .op_account_personal }}"
 SECRET_REF="op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu"
-OP_READ_TIMEOUT_SECONDS=10
+OP_READ_TIMEOUT_SECONDS=20
 
 OP_CACHE_ARGS=()
 if [ -n "${WSL_DISTRO_NAME:-}" ] && command -v op.exe >/dev/null 2>&1; then

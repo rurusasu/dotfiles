@@ -22,9 +22,9 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
 - `chezmoi/dot_config/shell/secrets-work.env`
   - 会社用 1Password account の `op run --env-file` 用。`devcontainer` vault の work token を置く。
 - `chezmoi/dot_config/shell/secret.sh`
-  - WSL / Linux の fallback loader。`op inject --account ...` を実行時に呼ぶ。
+  - WSL / Linux の fallback loader。`op read --account ...` を実行時に呼ぶ。
 - `chezmoi/dot_config/shell/secret.ps1`
-  - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取り、未設定なら timeout 付きで `op inject --account ...` を呼ぶ。
+  - PowerShell 用。通常は WezTerm launcher から注入済みの環境変数を受け取り、未設定なら timeout 付きで個別に `op read --account ...` を呼ぶ。
 - `chezmoi/dot_local/bin/executable_orca-launch.cmd`
   - Orca 経由で起動される Codex 用。GitHub MCP は shell profile 実行前に `GITHUB_PAT_TOKEN` を読むため、Orca 自体を `op run --env-file` の内側で起動する。
 - `chezmoi/dot_local/bin/executable_op-run-gui-launch.ps1`
@@ -230,10 +230,10 @@ Orca から Codex を起動する場合は、Orca process に先に注入する:
 ~\.local\bin\orca-launch.cmd
 ```
 
-GUI launcher の 1Password 待ち時間は既定 8 秒。必要なら上書きする:
+GUI launcher の 1Password 待ち時間は既定 60 秒。必要なら上書きする:
 
 ```powershell
-$env:DOTFILES_OP_RUN_TIMEOUT_SECONDS = "15"
+$env:DOTFILES_OP_RUN_TIMEOUT_SECONDS = "60"
 ~\.local\bin\orca-launch.cmd
 ```
 

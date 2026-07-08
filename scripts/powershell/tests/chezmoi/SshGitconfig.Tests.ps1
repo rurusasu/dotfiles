@@ -173,6 +173,7 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 実行時読み込みに timeout があること' {
             $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always deploy should not hang when 1Password prompts or stalls"
+            $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds = 20' -Because "1Password reads can exceed 8-10 seconds after app auth"
             $script:ps1Content | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
             $script:ps1Content | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
             $script:ps1Content | Should -Match 'timed out after \$OpReadTimeoutSeconds seconds' -Because "timeout should take the non-fatal skip path"
@@ -201,6 +202,7 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 実行時読み込みに timeout があること' {
             $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always deploy should not hang when 1Password prompts or stalls"
+            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=20' -Because "WSL op.exe reads can exceed 8-10 seconds after app auth"
             $script:shContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
             $script:shContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout should take the non-fatal skip path"
         }
