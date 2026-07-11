@@ -423,6 +423,15 @@ Describe 'GitHub token switching templates' {
         $content.IndexOf('if /i "%~1"=="login" goto :login_codex') | Should -BeLessThan $content.IndexOf('"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%"') -Because 'login must bypass op run before secret injection starts'
     }
 
+    It 'Codex CLI launcher は非 login コマンドを preflight 前に本体へ渡すこと' {
+        $content = Get-Content -LiteralPath $script:codexLaunch -Raw
+        $fallbackLaunchIndex = $content.IndexOf('goto :launch_codex')
+        $loginLabelIndex = $content.IndexOf("`n:login_codex")
+
+        $fallbackLaunchIndex | Should -BeGreaterThan $content.IndexOf('if defined NEEDS_SECRET_LOAD if exist "%OP_EXE%"') -Because 'non-login commands should try secret injection first'
+        $fallbackLaunchIndex | Should -BeLessThan $loginLabelIndex -Because 'non-login commands must not fall through into login preflight'
+    }
+
     It 'Codex CLI launcher は login 前に stale OAuth listener を掃除すること' {
         $content = Get-Content -LiteralPath $script:codexLaunch -Raw
 
@@ -546,7 +555,7 @@ Describe 'Codex login preflight helper' {
         Remove-Item Function:\Remove-FailedOrcaCodexAccountHomes -ErrorAction SilentlyContinue
     }
 
-    It '127.0.0.1:1457 を掴む codex.exe login process だけ停止すること' {
+    It '127.0.0.1:1457 を掴む Codex login process だけ停止すること' {
         Test-Path -LiteralPath $script:codexLoginPreflight | Should -BeTrue
         . $script:codexLoginPreflight
 
@@ -555,6 +564,7 @@ Describe 'Codex login preflight helper' {
                 [pscustomobject]@{ OwningProcess = 1111 }
                 [pscustomobject]@{ OwningProcess = 2222 }
                 [pscustomobject]@{ OwningProcess = 3333 }
+                [pscustomobject]@{ OwningProcess = 4444 }
             )
         }
         Mock Get-CimInstance {
@@ -562,6 +572,8 @@ Describe 'Codex login preflight helper' {
                 [string]$ClassName,
                 [string]$Filter
             )
+
+            $null = $ClassName
 
             switch -Regex ($Filter) {
                 '1111' {
@@ -585,6 +597,13 @@ Describe 'Codex login preflight helper' {
                         CommandLine    = 'other.exe login'
                     }
                 }
+                '4444' {
+                    [pscustomobject]@{
+                        Name           = 'codex-x86_64-pc-windows-msvc.exe'
+                        ExecutablePath = 'C:\Users\KoheiMiki\AppData\Local\Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe\codex-x86_64-pc-windows-msvc.exe'
+                        CommandLine    = 'C:\Users\KoheiMiki\AppData\Local\Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe\codex-x86_64-pc-windows-msvc.exe login'
+                    }
+                }
             }
         }
         Mock Stop-Process { }
@@ -598,6 +617,9 @@ Describe 'Codex login preflight helper' {
         }
         Should -Invoke Stop-Process -Times 1 -Exactly -ParameterFilter {
             $Id -eq 1111 -and $Force
+        }
+        Should -Invoke Stop-Process -Times 1 -Exactly -ParameterFilter {
+            $Id -eq 4444 -and $Force
         }
         Should -Invoke Stop-Process -Times 0 -Exactly -ParameterFilter {
             $Id -in @(2222, 3333)
@@ -622,6 +644,8 @@ Describe 'Codex login preflight helper' {
                 [string]$ClassName,
                 [string]$Filter
             )
+
+            $null = $ClassName
 
             switch -Regex ($Filter) {
                 '1111' {
@@ -665,6 +689,9 @@ Describe 'Codex login preflight helper' {
                 [string]$ClassName,
                 [string]$Filter
             )
+
+            $null = $ClassName
+            $null = $Filter
 
             @(
                 [pscustomobject]@{

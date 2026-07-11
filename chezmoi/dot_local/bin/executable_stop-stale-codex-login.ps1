@@ -50,7 +50,8 @@ function Test-CodexLoginProcess {
     $processName = [string]$Process.Name
     $executableName = [System.IO.Path]::GetFileName([string]$Process.ExecutablePath)
     $commandLine = [string]$Process.CommandLine
-    $isCodex = $processName -ieq 'codex.exe' -or $executableName -ieq 'codex.exe'
+    $codexExecutablePattern = '^codex(?:-x86_64-pc-windows-msvc)?\.exe$'
+    $isCodex = $processName -imatch $codexExecutablePattern -or $executableName -imatch $codexExecutablePattern
     $isLogin = $commandLine -match '(?i)\blogin\b'
 
     return $isCodex -and $isLogin

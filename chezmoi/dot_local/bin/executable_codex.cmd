@@ -63,6 +63,8 @@ if defined NEEDS_SECRET_LOAD if exist "%OP_EXE%" (
   )
 )
 
+goto :launch_codex
+
 :login_codex
 set "CODEX_LOGIN_PREFLIGHT=%~dp0stop-stale-codex-login.ps1"
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
