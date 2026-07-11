@@ -154,6 +154,26 @@ in
       # dotf: run task from dotfiles root without changing cwd
       dotf() { (cd ~/.dotfiles && task "$@") }
 
+      codex() {
+        local __dotfiles_had_force_secret_load=0
+        local __dotfiles_previous_force_secret_load="''${DOTFILES_FORCE_SECRET_LOAD:-}"
+        if [ "''${DOTFILES_FORCE_SECRET_LOAD+x}" = x ]; then
+          __dotfiles_had_force_secret_load=1
+        fi
+
+        if { [ -z "''${GITHUB_PAT_TOKEN:-}" ] || [ -z "''${GITHUB_WORK_TOKEN:-}" ] || [ -z "''${TAVILY_API_KEY:-}" ]; } && [ -f "$HOME/.config/shell/secret.sh" ]; then
+          export DOTFILES_FORCE_SECRET_LOAD=1
+          source "$HOME/.config/shell/secret.sh"
+          if [ "$__dotfiles_had_force_secret_load" = 1 ]; then
+            export DOTFILES_FORCE_SECRET_LOAD="$__dotfiles_previous_force_secret_load"
+          else
+            unset DOTFILES_FORCE_SECRET_LOAD
+          fi
+        fi
+
+        command codex "$@"
+      }
+
       # 1Password-managed secrets (GITHUB_PAT_TOKEN, TAVILY_API_KEY, etc.)
       [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
 

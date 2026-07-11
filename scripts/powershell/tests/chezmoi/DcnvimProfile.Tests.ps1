@@ -17,7 +17,7 @@ BeforeAll {
     }
 
     $script:functionScriptBlockByName = @{}
-    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli", "Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
+    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Resolve-DotfilesCodexExecutable", "Invoke-CodexCli", "Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
         $functionAst = $profileAst.Find(
             {
                 param($node)
@@ -39,7 +39,7 @@ BeforeAll {
     }
 
     function Import-CodexProfileFunction {
-        foreach ($name in @("Reset-DotfilesTerminalInputMode", "Invoke-CodexCli")) {
+        foreach ($name in @("Reset-DotfilesTerminalInputMode", "Resolve-DotfilesCodexExecutable", "Invoke-CodexCli")) {
             Set-Item -Path "Function:\global:$name" -Value $script:functionScriptBlockByName[$name]
         }
     }
@@ -178,6 +178,9 @@ Describe 'PowerShell codex profile wrapper' {
         $script:oldTerm = $env:TERM
         $script:oldKeyboardEnhancementExists = Test-Path Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
         $script:oldKeyboardEnhancement = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
+        $script:oldLocalAppDataExists = Test-Path Env:\LOCALAPPDATA
+        $script:oldLocalAppData = $env:LOCALAPPDATA
+        $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppDataWithoutCodexPackage'
 
         function global:codex.exe {
             $script:codexArgs = [string[]]$args
@@ -194,6 +197,7 @@ Describe 'PowerShell codex profile wrapper' {
     AfterEach {
         foreach ($functionName in @(
                 "Invoke-CodexCli",
+                "Resolve-DotfilesCodexExecutable",
                 "Reset-DotfilesTerminalInputMode",
                 "codex.exe"
             )) {
@@ -213,6 +217,13 @@ Describe 'PowerShell codex profile wrapper' {
         else {
             Remove-Item Env:\CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT -ErrorAction SilentlyContinue
         }
+
+        if ($script:oldLocalAppDataExists) {
+            $env:LOCALAPPDATA = $script:oldLocalAppData
+        }
+        else {
+            Remove-Item Env:\LOCALAPPDATA -ErrorAction SilentlyContinue
+        }
     }
 
     It 'should alias codex to the compatibility wrapper' {
@@ -229,6 +240,30 @@ Describe 'PowerShell codex profile wrapper' {
         $codexBlock | Should -Match '\.config\\shell\\secret\.ps1'
         $codexBlock | Should -Not -Match 'opCommand'
         $codexBlock | Should -Not -Match 'opArgs'
+    }
+
+    It 'should prefer the current winget package executable over a stale WinGet Links copy' {
+        $oldLocalAppData = $env:LOCALAPPDATA
+        try {
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+            $packageDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe'
+            $packageExe = Join-Path $packageDir 'codex-x86_64-pc-windows-msvc.exe'
+            $linksDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+            $linksExe = Join-Path $linksDir 'codex.exe'
+            New-Item -ItemType Directory -Path $packageDir, $linksDir -Force | Out-Null
+            Set-Content -LiteralPath $packageExe -Encoding ascii -Value 'new'
+            Set-Content -LiteralPath $linksExe -Encoding ascii -Value 'old'
+
+            Resolve-DotfilesCodexExecutable | Should -Be $packageExe
+        }
+        finally {
+            if ($oldLocalAppData) {
+                $env:LOCALAPPDATA = $oldLocalAppData
+            }
+            else {
+                Remove-Item Env:\LOCALAPPDATA -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     It 'should run codex.exe with conservative terminal input settings and restore the environment' {

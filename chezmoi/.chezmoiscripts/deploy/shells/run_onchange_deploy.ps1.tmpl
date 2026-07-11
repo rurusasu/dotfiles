@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy shell configurations for Windows
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secret.ps1" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}{{ include "dot_local/bin/executable_wezterm-launch.cmd" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secret.ps1" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}{{ include "dot_local/bin/executable_op-run-gui-launch.ps1" | sha256sum }}{{ include "dot_local/bin/executable_wezterm-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_orca-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_codex.cmd" | sha256sum }}{{ include "dot_local/bin/executable_stop-stale-codex-login.ps1" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -46,10 +46,14 @@ Deploy-File "$ChezmoiSource\shells\Microsoft.PowerShell_profile.ps1" "$MyDocumen
 Deploy-File "$ChezmoiSource\dot_config\shell\secret.sh"  "$HomeDir\.config\shell\secret.sh"
 Deploy-File "$ChezmoiSource\dot_config\shell\secret.ps1" "$HomeDir\.config\shell\secret.ps1"
 
-# op run env-files and WezTerm launcher (1Password official pattern, split by account)
+# op run env-files and GUI launchers (1Password official pattern, split by account)
 Deploy-File "$ChezmoiSource\dot_config\shell\secrets.env"       "$HomeDir\.config\shell\secrets.env"
 Deploy-File "$ChezmoiSource\dot_config\shell\secrets-work.env"  "$HomeDir\.config\shell\secrets-work.env"
+Deploy-File "$ChezmoiSource\dot_local\bin\executable_op-run-gui-launch.ps1" "$HomeDir\.local\bin\op-run-gui-launch.ps1"
 Deploy-File "$ChezmoiSource\dot_local\bin\executable_wezterm-launch.cmd" "$HomeDir\.local\bin\wezterm-launch.cmd"
+Deploy-File "$ChezmoiSource\dot_local\bin\executable_orca-launch.cmd" "$HomeDir\.local\bin\orca-launch.cmd"
+Deploy-File "$ChezmoiSource\dot_local\bin\executable_codex.cmd" "$HomeDir\.local\bin\codex.cmd"
+Deploy-File "$ChezmoiSource\dot_local\bin\executable_stop-stale-codex-login.ps1" "$HomeDir\.local\bin\stop-stale-codex-login.ps1"
 
 Write-Host "Shell configurations deployed."
 {{ end -}}

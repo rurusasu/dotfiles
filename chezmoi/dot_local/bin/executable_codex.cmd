@@ -16,7 +16,12 @@ if not exist "%OP_EXE%" (
 )
 :found_op
 
-set "CODEX_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\codex.exe"
+set "CODEX_EXE="
+for /d %%I in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\OpenAI.Codex_*") do (
+  if not defined CODEX_EXE if exist "%%~fI\codex-x86_64-pc-windows-msvc.exe" set "CODEX_EXE=%%~fI\codex-x86_64-pc-windows-msvc.exe"
+  if not defined CODEX_EXE if exist "%%~fI\codex.exe" set "CODEX_EXE=%%~fI\codex.exe"
+)
+if not defined CODEX_EXE set "CODEX_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\codex.exe"
 if not exist "%CODEX_EXE%" (
   for /f "delims=" %%I in ('"%WHERE_EXE%" codex.exe 2^>nul') do (
     set "CODEX_EXE=%%I"
@@ -29,6 +34,8 @@ if not exist "%CODEX_EXE%" (
   echo Unable to locate codex.exe 1>&2
   exit /b 1
 )
+
+if /i "%~1"=="login" goto :login_codex
 
 set "PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU"
 set "WORK_ACCOUNT=aimatecoltd.1password.com"
@@ -56,4 +63,19 @@ if defined NEEDS_SECRET_LOAD if exist "%OP_EXE%" (
   )
 )
 
+:login_codex
+set "CODEX_LOGIN_PREFLIGHT=%~dp0stop-stale-codex-login.ps1"
+set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if "%DOTFILES_ORCA_LAUNCH%"=="1" if not "%CODEX_HOME%"=="" (
+  if exist "%CODEX_LOGIN_PREFLIGHT%" if exist "%POWERSHELL_EXE%" (
+    "%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CODEX_LOGIN_PREFLIGHT%" -InitializeManagedCodexHomeFromRuntimeAuth
+    if not errorlevel 1 exit /b 0
+  )
+)
+if exist "%CODEX_LOGIN_PREFLIGHT%" if exist "%POWERSHELL_EXE%" (
+  "%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CODEX_LOGIN_PREFLIGHT%"
+)
+
+:launch_codex
 "%CODEX_EXE%" %*
+exit /b %ERRORLEVEL%

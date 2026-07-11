@@ -35,6 +35,30 @@ function Reset-DotfilesTerminalInputMode {
     )
 }
 
+function Resolve-DotfilesCodexExecutable {
+    if ($env:LOCALAPPDATA) {
+        $packagesBase = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+        foreach ($packageDir in @(
+                Get-ChildItem -LiteralPath $packagesBase -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending
+            )) {
+            foreach ($fileName in @("codex-x86_64-pc-windows-msvc.exe", "codex.exe")) {
+                $candidate = Join-Path $packageDir.FullName $fileName
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    return $candidate
+                }
+            }
+        }
+    }
+
+    $codexCommand = Get-Command codex.exe -ErrorAction Stop | Select-Object -First 1
+    if ($codexCommand.Source) {
+        return $codexCommand.Source
+    }
+
+    return $codexCommand.Name
+}
+
 function Invoke-CodexCli {
     $codexArgs = [string[]]$args
     $hadTerm = Test-Path Env:\TERM
@@ -49,12 +73,10 @@ function Invoke-CodexCli {
         $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT = "1"
         Reset-DotfilesTerminalInputMode
 
-        $codexCommand = Get-Command codex.exe -ErrorAction Stop | Select-Object -First 1
-        $codexExecutable = if ($codexCommand.Source) { $codexCommand.Source } else { $codexCommand.Name }
+        $codexExecutable = Resolve-DotfilesCodexExecutable
         $secretLoader = if ($HOME) { Join-Path $HOME ".config\shell\secret.ps1" } else { $null }
         if (
             (-not $env:GITHUB_PAT_TOKEN -or -not $env:GITHUB_WORK_TOKEN) -and
-            $codexCommand.CommandType -eq "Application" -and
             $secretLoader -and
             (Test-Path -LiteralPath $secretLoader -PathType Leaf)
         ) {

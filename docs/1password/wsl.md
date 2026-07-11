@@ -24,15 +24,18 @@ Windows launcher から WSL shell へ secret env を渡す場合は `WSLENV` を
 set WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN
 ```
 
-この repo の shell fallback は、env が既に入っていれば `op.exe inject` を呼ばずに抜ける。
+この repo の shell loader は、env が既に入っていれば抜ける。
+env が不足していても `DOTFILES_FORCE_SECRET_LOAD` が無ければ、shell 起動時には
+`op.exe` を呼ばない。`codex` などの wrapper が明示的に force したときだけ
+`op.exe --cache=false read` で不足分を読む。
 
 ## 出力の CRLF
 
-`op.exe` の出力を WSL shell で `eval` する場合は CR を落とす。
+`op.exe` の出力を WSL shell の環境変数へ入れる場合は CR を落とす。
 
 ```bash
-resolved="$(printf '%s\n' "$template" | op.exe --cache=false inject --account "$account")"
-resolved="$(printf '%s' "$resolved" | tr -d '\r')"
+value="$(op.exe --cache=false read "$secret_ref" --account "$account")"
+value="$(printf '%s' "$value" | tr -d '\r')"
 ```
 
 ## Native Linux `op` を使う場合

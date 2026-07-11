@@ -526,12 +526,14 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Orca Codex startup environment' {
-        It 'should launch Orca through 1Password env-file injection' {
+        It 'should launch Orca directly by default and keep 1Password env-file injection opt-in' {
             $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
             Test-Path -LiteralPath $launcherPath | Should -BeTrue
             $content = Get-Content -LiteralPath $launcherPath -Raw
 
-            $content | Should -Match 'op-run-gui-launch\.ps1' -Because 'Codex MCP startup secrets should be injected through a bounded GUI launcher'
+            $content | Should -Match 'DOTFILES_GUI_EAGER_SECRET_LOAD' -Because 'opening Orca should not prompt for 1Password unless explicitly requested'
+            $content | Should -Match 'start "" "%ORCA_EXE%" %\*' -Because 'the default launch path should bypass op run'
+            $content | Should -Match 'op-run-gui-launch\.ps1' -Because 'Codex MCP startup secrets can still be injected through a bounded opt-in GUI launcher'
             $content | Should -Match 'DOTFILES_OP_RUN_TIMEOUT_SECONDS' -Because 'Orca startup should not hang forever when 1Password is locked'
             $content | Should -Match 'PERSONAL_ACCOUNT=EJLA3HRAVZBCXIQ7SRSFGQBTNU' -Because 'Codex MCP startup reads personal GitHub secrets before shell profiles run'
             $content | Should -Match 'WORK_ACCOUNT=aimatecoltd\.1password\.com' -Because 'work GitHub secrets live in the company 1Password account'
@@ -541,22 +543,26 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'Orca startup can happen before shell PATH repair'
         }
 
-        It 'should point the Orca Start Menu shortcut at the injected launcher' {
-            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-orca-shortcut_windows.ps1.tmpl"
+        It 'should point the Orca Start Menu shortcut at the managed launcher' {
+            $legacyScriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-orca-shortcut_windows.ps1.tmpl"
+            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_update-orca-shortcut_windows.ps1.tmpl"
+            Test-Path -LiteralPath $legacyScriptPath | Should -BeFalse -Because 'Orca updates can rewrite shortcuts after the chezmoi script content last changed'
             Test-Path -LiteralPath $scriptPath | Should -BeTrue
             $content = Get-Content -LiteralPath $scriptPath -Raw
 
-            $content | Should -Match 'orca-launch\.cmd' -Because 'normal Orca launches should inherit GITHUB_PAT_TOKEN'
+            $content | Should -Match 'orca-launch\.cmd' -Because 'normal Orca launches should use the lazy 1Password-aware launcher'
             $content | Should -Match 'Orca\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
             $content | Should -Match 'WScript\.Shell' -Because 'Windows shortcuts need COM shortcut editing'
         }
 
-        It 'should point WezTerm shortcuts at the injected launcher' {
-            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-wezterm-shortcut_windows.ps1.tmpl"
+        It 'should point WezTerm shortcuts at the managed launcher' {
+            $legacyScriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_after_update-wezterm-shortcut_windows.ps1.tmpl"
+            $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_update-wezterm-shortcut_windows.ps1.tmpl"
+            Test-Path -LiteralPath $legacyScriptPath | Should -BeFalse -Because 'WezTerm updates can rewrite shortcuts after the chezmoi script content last changed'
             Test-Path -LiteralPath $scriptPath | Should -BeTrue
             $content = Get-Content -LiteralPath $scriptPath -Raw
 
-            $content | Should -Match 'wezterm-launch\.cmd' -Because 'normal WezTerm launches should inject GitHub MCP startup secrets'
+            $content | Should -Match 'wezterm-launch\.cmd' -Because 'normal WezTerm launches should use the lazy 1Password-aware launcher'
             $content | Should -Match 'WezTerm\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
             $content | Should -Match 'User Pinned\\TaskBar\\WezTerm\.lnk' -Because 'existing pinned taskbar shortcuts can keep launching wezterm-gui.exe directly'
             $content | Should -Match 'WScript\.Shell' -Because 'Windows shortcuts need COM shortcut editing'
@@ -595,7 +601,11 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $content | Should -Not -Match 'secret[\\/]secrets\.env'
 
                 if ($scriptPath -like "*.ps1.tmpl") {
+                    $content | Should -Match 'dot_local[\\/]bin[\\/]executable_op-run-gui-launch\.ps1'
                     $content | Should -Match 'dot_local[\\/]bin[\\/]executable_wezterm-launch\.cmd'
+                    $content | Should -Match 'dot_local[\\/]bin[\\/]executable_orca-launch\.cmd'
+                    $content | Should -Match 'dot_local[\\/]bin[\\/]executable_codex\.cmd'
+                    $content | Should -Match 'dot_local[\\/]bin[\\/]executable_stop-stale-codex-login\.ps1'
                     $content | Should -Not -Match 'secret[\\/]wezterm-launch\.cmd'
                 }
             }

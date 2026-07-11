@@ -62,13 +62,20 @@ shell 起動や deploy script で `op` を呼ぶ場合は、timeout を短くし
 目安:
 
 - shell startup fallback / runtime deploy read: 60 秒程度まで許容し、失敗時は warning で続行する。
-- GUI launcher: ユーザー体験を優先し、短めの timeout 後に token なし起動へ fallback する。
+- GUI launcher: 既定では `op` を呼ばない。`DOTFILES_GUI_EAGER_SECRET_LOAD=1` で opt-in した場合だけ、短めの timeout 後に token なし起動へ fallback する。
 - 必須 secret: timeout したら明示的に失敗させる。
 
 ## `op run` について
 
 `op run --env-file` は、子プロセスへ env をまとめて渡すための手段。
 全アプリを `op run` で起動する必要はない。
+この repo の Orca / WezTerm launcher は、UX 優先で direct 起動を既定にする。
+GUI process の起動前に secret が必要な場合だけ `DOTFILES_GUI_EAGER_SECRET_LOAD=1`
+を設定して opt-in する。
+
+WezTerm / Orca が内部で PowerShell を起動すると profile が読まれるため、
+`~\.config\shell\secret.ps1` も `DOTFILES_FORCE_SECRET_LOAD=1` が無い限り
+即 return する。plain terminal startup では `op read` に進ませない。
 
 1Password app integration が有効なら、任意のプロセスから `op --cache=false read` や
 `op --cache=false inject` を呼べる。

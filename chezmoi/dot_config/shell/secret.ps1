@@ -1,32 +1,16 @@
-# Secret environment variables — 1Password op run pattern
+# Secret environment variables - lazy 1Password loader.
 # Sourced by PowerShell profile at shell startup.
 #
-# Preferred usage: launch WezTerm via ~/.local/bin/wezterm-launch.cmd
-#   op run --account ... --env-file injects personal/work secrets once at WezTerm startup;
-#   all tabs inherit them and this guard exits immediately.
-#
-# Fallback: standalone pwsh attempts bounded op read calls when values are missing.
+# Plain shell startup should not prompt for 1Password. Explicit command wrappers
+# such as Invoke-CodexCli set DOTFILES_FORCE_SECRET_LOAD before sourcing this
+# file so missing values can be read with bounded op read calls.
 
 if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
 if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
 
 if ($env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN -and $env:TAVILY_API_KEY -and $env:GITHUB_WORK_TOKEN) { return }
 if (-not $env:DOTFILES_FORCE_SECRET_LOAD) {
-    $dotfilesPowerShellArgs = [Environment]::GetCommandLineArgs()
-    $dotfilesSecretLoadIsCommandMode = $false
-    foreach ($arg in $dotfilesPowerShellArgs) {
-        if ($arg -match '^-{1,2}(command|c|encodedcommand|ec|file|f|noninteractive)$') {
-            $dotfilesSecretLoadIsCommandMode = $true
-            break
-        }
-    }
-
-    Remove-Variable dotfilesPowerShellArgs -ErrorAction SilentlyContinue
-    if ($dotfilesSecretLoadIsCommandMode) {
-        Remove-Variable dotfilesSecretLoadIsCommandMode -ErrorAction SilentlyContinue
-        return
-    }
-    Remove-Variable dotfilesSecretLoadIsCommandMode -ErrorAction SilentlyContinue
+    return
 }
 
 function Resolve-DotfilesOpCli {
