@@ -722,7 +722,7 @@ function Get-OrcaRegisteredCodexAccountIds {
     $ids = @()
     foreach ($account in @($data.settings.codexManagedAccounts)) {
         foreach ($propertyName in @('id', 'accountId')) {
-            $id = [string]$account.$propertyName
+            $id = Get-NormalizedStringProperty -InputObject $account -Name $propertyName
             if (-not [string]::IsNullOrWhiteSpace($id)) {
                 $ids += $id.ToLowerInvariant()
             }
