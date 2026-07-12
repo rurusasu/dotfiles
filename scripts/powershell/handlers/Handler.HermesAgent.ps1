@@ -87,7 +87,6 @@ class HermesAgentHandler : SetupHandlerBase {
             $profileDashboardAuthResult = $this.SyncDashboardAuthToManagedProfileEnvironments($ctx, $dataDir, $envPath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
             $profileSlackResult = $this.EnsureManagedProfileSlackEnvironments($ctx, $dataDir)
-            $openClawApiResult = $this.EnsureOpenClawApiEnvironment($ctx, $dataDir, $envPath)
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
             $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
@@ -148,16 +147,6 @@ class HermesAgentHandler : SetupHandlerBase {
             }
             if ($lifelogBootstrapResult.Changed) {
                 $this.Log("Hermes lifelog core を同期しました", "Green")
-            }
-
-            if ($openClawApiResult.Changed -and $openClawApiResult.Count -gt 0) {
-                $this.Log("OpenClaw API token を Hermes .env に設定しました ($($openClawApiResult.Count) keys)", "Green")
-            }
-            if ($openClawApiResult.ProfileCount -gt 0) {
-                $this.Log("OpenClaw API token を managed profile .env に同期しました ($($openClawApiResult.ProfileCount) profiles)", "Green")
-            }
-            elseif (-not $openClawApiResult.Changed -and $openClawApiResult.Source -eq "Disabled") {
-                $this.Log("OpenClaw API token の自動設定は無効化されています", "Gray")
             }
 
             if ($mcpResult.Changed) {
@@ -1360,8 +1349,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
     hidden [string[]] SetTerminalEnvPassthroughConfigLines([string[]]$lines) {
         $managedEnvNames = @(
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "OPENCLAW_GATEWAY_TOKEN"
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
         )
         $removedEnvNames = @(
             "GH_TOKEN",
@@ -1841,85 +1829,6 @@ class HermesAgentHandler : SetupHandlerBase {
         return $textInfo.ToTitleCase($profileName.ToLowerInvariant())
     }
 
-    hidden [pscustomobject] SyncOpenClawApiEnvironmentToManagedProfileEnvironments(
-        [SetupContext]$ctx,
-        [string]$dataDir,
-        [hashtable]$environment
-    ) {
-        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentSyncOpenClawSecretsToProfiles", $true))) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; Profiles = @() }
-        }
-
-        if ($environment.Count -eq 0) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0; Profiles = @() }
-        }
-
-        $profileEnvironment = @{}
-        foreach ($key in $environment.Keys) {
-            $envName = [string]$key
-            if (-not $this.IsSharedPlatformSecretName($envName)) {
-                $profileEnvironment[$envName] = $environment[$key]
-            }
-        }
-
-        $profilesDir = Join-Path $dataDir "profiles"
-        $changedProfiles = @()
-        foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
-            $profileDir = Join-Path $profilesDir $profileName
-            if (-not (Test-Path -LiteralPath $profileDir -PathType Container)) {
-                continue
-            }
-
-            $profileEnvPath = Join-Path $profileDir ".env"
-            $profileLines = @()
-            if (Test-Path -LiteralPath $profileEnvPath -PathType Leaf) {
-                $profileLines = @(Get-Content -LiteralPath $profileEnvPath -ErrorAction Stop)
-            }
-
-            $managedProfileLines = @(
-                $profileLines | Where-Object { -not $this.IsSharedPlatformSecretLine($_) }
-            )
-            $updatedLines = $this.SetNamedEnvironmentLines($managedProfileLines, $profileEnvironment)
-            if (-not $this.LinesEqual($profileLines, $updatedLines)) {
-                Set-Content -LiteralPath $profileEnvPath -Encoding UTF8 -Value $updatedLines
-                $changedProfiles += $profileName
-            }
-        }
-
-        return [PSCustomObject]@{
-            Changed  = $changedProfiles.Count -gt 0
-            Source   = "1Password"
-            Count    = $changedProfiles.Count
-            Profiles = $changedProfiles
-        }
-    }
-
-    hidden [pscustomobject] EnsureOpenClawApiEnvironment([SetupContext]$ctx, [string]$dataDir, [string]$envPath) {
-        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentOpenClawSecrets1PasswordEnabled", $true))) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Disabled"; Count = 0; ProfileCount = 0; Profiles = @() }
-        }
-
-        $lines = @()
-        if (Test-Path -LiteralPath $envPath) {
-            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
-        }
-
-        $environment = $this.GetOnePasswordOpenClawApiEnvironment($ctx)
-        if ($environment.Count -eq 0) {
-            return [PSCustomObject]@{ Changed = $false; Source = "Missing"; Count = 0; ProfileCount = 0; Profiles = @() }
-        }
-
-        $this.WriteNamedEnvironment($envPath, $lines, $environment)
-        $profileResult = $this.SyncOpenClawApiEnvironmentToManagedProfileEnvironments($ctx, $dataDir, $environment)
-        return [PSCustomObject]@{
-            Changed      = $true
-            Source       = "1Password"
-            Count        = $environment.Count
-            ProfileCount = $profileResult.Count
-            Profiles     = $profileResult.Profiles
-        }
-    }
-
     hidden [void] WriteDashboardAuth([string]$envPath, [string[]]$lines, [pscustomobject]$credentials) {
         $filteredLines = @(
             $lines | Where-Object {
@@ -1975,40 +1884,6 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return $name.Trim() -match '^(TELEGRAM_BOT_TOKEN|DISCORD_BOT_TOKEN|DISCORD_TOKEN|WHATSAPP_[A-Z0-9_]+|SIGNAL_[A-Z0-9_]+|TEAMS_[A-Z0-9_]+|QQBOT_[A-Z0-9_]+|YUANBAO_[A-Z0-9_]+|HOMEASSISTANT_[A-Z0-9_]+)$'
-    }
-
-    hidden [void] WriteNamedEnvironment([string]$envPath, [string[]]$lines, [hashtable]$environment) {
-        $filteredLines = $this.SetNamedEnvironmentLines($lines, $environment)
-        if ($filteredLines.Count -eq 0) {
-            return
-        }
-
-        Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
-    }
-
-    hidden [string[]] SetNamedEnvironmentLines([string[]]$lines, [hashtable]$environment) {
-        $keys = @($environment.Keys | Sort-Object)
-        if ($keys.Count -eq 0) {
-            return $lines
-        }
-
-        $escapedKeys = @($keys | ForEach-Object { [regex]::Escape([string]$_) })
-        $pattern = '^\s*(' + ($escapedKeys -join '|') + ')\s*='
-        $filteredLines = @(
-            $lines | Where-Object {
-                $_ -notmatch $pattern
-            }
-        )
-
-        if ($filteredLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($filteredLines[-1])) {
-            $filteredLines += ""
-        }
-
-        foreach ($key in $keys) {
-            $filteredLines += "$key=$($environment[$key])"
-        }
-
-        return $filteredLines
     }
 
     hidden [bool] HasDashboardAuth([string[]]$lines) {
@@ -2085,7 +1960,7 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $account = [string]$ctx.GetOption("HermesAgent1PasswordAccount", "my.1password.com")
-        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "openclaw")
+        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "Private")
         $item = [string]$ctx.GetOption("HermesAgent1PasswordItem", "Hermes Agent Dashboard")
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
@@ -2132,7 +2007,7 @@ class HermesAgentHandler : SetupHandlerBase {
             "HermesAgentSlack1PasswordAccount",
             "HermesAgentSlack1PasswordVault",
             "HermesAgentSlack1PasswordItem",
-            "SlackBot-OpenClaw"
+            "SlackBot-Hermes"
         )
     }
 
@@ -2169,7 +2044,7 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $account = [string]$ctx.GetOption($accountOption, "my.1password.com")
-        $vault = [string]$ctx.GetOption($vaultOption, "openclaw")
+        $vault = [string]$ctx.GetOption($vaultOption, "Private")
         $item = [string]$ctx.GetOption($itemOption, $defaultItem)
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
@@ -2211,134 +2086,6 @@ class HermesAgentHandler : SetupHandlerBase {
             $this.Log("1Password item を読めないため Slack 自動設定をスキップします: $item", "Gray")
             return $null
         }
-    }
-
-    hidden [hashtable] GetOnePasswordOpenClawApiEnvironment([SetupContext]$ctx) {
-        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireOpenClawSecrets", $true))
-        $environment = @{}
-        $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
-        if (-not $opCommand) {
-            if ($required) {
-                throw "OpenClaw API token 用の 1Password CLI (op) が見つかりません"
-            }
-            $this.Log("1Password CLI が見つからないため OpenClaw API token の自動取得をスキップします", "Gray")
-            return $environment
-        }
-
-        $opExe = [string]$opCommand.Source
-        if ([string]::IsNullOrWhiteSpace($opExe) -and $opCommand.PSObject.Properties.Name -contains "Path") {
-            $opExe = [string]$opCommand.Path
-        }
-        if ([string]::IsNullOrWhiteSpace($opExe)) {
-            $opExe = "op"
-        }
-
-        $account = [string]$ctx.GetOption("HermesAgentOpenClawSecrets1PasswordAccount", "my.1password.com")
-        $vault = [string]$ctx.GetOption("HermesAgentOpenClawSecrets1PasswordVault", "openclaw")
-        $specs = @(
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentGitHub1PasswordItem", "GitHubUsedOpenClawPAT")
-                Field    = @("credential", "認証情報", "token", "PAT")
-                EnvNames = @("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentOpenClawGateway1PasswordItem", "openclaw")
-                Field    = @("password", "gateway token", "credential", "認証情報", "token")
-                EnvNames = @("OPENCLAW_GATEWAY_TOKEN")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentExa1PasswordItem", "ExaUsedOpenclawPAT")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("EXA_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentTavily1PasswordItem", "TavilyUsedOpenclawPAT")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("TAVILY_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentFirecrawl1PasswordItem", "FirecrawlUsedOpenclawPAT")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("FIRECRAWL_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentGemini1PasswordItem", "OpenClawGeminiAPI")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("GEMINI_API_KEY", "GOOGLE_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentHuggingFace1PasswordItem", "HuggingFace")
-                Field    = @("PAT", "credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentTelegram1PasswordItem", "TelegramBot")
-                Field    = @("credential", "認証情報", "bot token", "bot_token", "token")
-                EnvNames = @("TELEGRAM_BOT_TOKEN")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentXai1PasswordItem", "XUsedOpenClaw")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("XAI_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentAutoCli1PasswordItem", "AutoCLI")
-                Field    = @("credential", "認証情報", "api key", "api_key", "token")
-                EnvNames = @("AUTOCLI_API_KEY")
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentXApiMcp1PasswordItem", "XApiMcp")
-                Field    = @("CLIENT_ID", "client_id", "client id", "oauth client id", "OAuth 2.0 Client ID")
-                EnvNames = @("X_API_CLIENT_ID")
-                Required = $false
-            },
-            [PSCustomObject]@{
-                Item     = [string]$ctx.GetOption("HermesAgentXApiMcp1PasswordItem", "XApiMcp")
-                Field    = @("CLIENT_SECRET", "client_secret", "client secret", "oauth client secret", "OAuth 2.0 Client Secret")
-                EnvNames = @("X_API_CLIENT_SECRET")
-                Required = $false
-            }
-        )
-
-        foreach ($spec in $specs) {
-            if ([string]::IsNullOrWhiteSpace($spec.Item)) {
-                continue
-            }
-
-            $arguments = @("item", "get", $spec.Item, "--account", $account, "--vault", $vault, "--format", "json")
-            $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
-            if ($result.ExitCode -ne 0) {
-                if ($required -and $spec.Required -ne $false) {
-                    throw "1Password から OpenClaw API token を取得できません: $($spec.Item)"
-                }
-                $this.Log("1Password item が読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")
-                continue
-            }
-
-            try {
-                $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
-                $value = $this.GetOnePasswordFieldValue($itemJson, "", $spec.Field)
-                if ([string]::IsNullOrWhiteSpace($value)) {
-                    if ($required -and $spec.Required -ne $false) {
-                        throw "1Password item に OpenClaw API token がありません: $($spec.Item)"
-                    }
-                    $this.Log("1Password item に OpenClaw API token がないためスキップします: $($spec.Item)", "Gray")
-                    continue
-                }
-
-                foreach ($envName in $spec.EnvNames) {
-                    $environment[$envName] = $value
-                }
-            }
-            catch {
-                if ($required -and $spec.Required -ne $false) {
-                    throw
-                }
-                $this.Log("1Password item を読めないため OpenClaw API token をスキップします: $($spec.Item)", "Gray")
-            }
-        }
-
-        return $environment
     }
 
     hidden [string] GetOnePasswordFieldValue([pscustomobject]$item, [string]$purpose, [string[]]$names) {

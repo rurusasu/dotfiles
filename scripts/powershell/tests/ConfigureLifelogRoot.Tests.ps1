@@ -15,7 +15,6 @@ Describe 'configure-lifelog-root.ps1' {
 
         $content | Should -Match '\[Parameter\(Mandatory\s*=\s*\$true\)\]\s*\[string\]\$Path' -Because 'the caller must choose the lifelog root'
         $content | Should -Not -Match 'D:\\\\lifelog|D:/lifelog' -Because 'the script must not bake in a candidate root'
-        $content | Should -Not -Match 'OPENCLAW_|\.openclaw' -Because 'OpenClaw is no longer managed by dotfiles'
         $content | Should -Not -Match 'Get-ChildItem.*lifelog|Resolve-Path.*lifelog' -Because 'the script must not discover lifelog by scanning the filesystem'
     }
 
@@ -85,7 +84,6 @@ exit /b 0
             ($calls -join "`n") | Should -Not -Match '--promptString' -Because 'chezmoi init must not prompt in CI or bootstrap contexts'
             ($calls -join "`n") | Should -Match 'chezmoi .*apply .*--source'
             ($calls -join "`n") | Should -Match ('LIFELOG_ROOT=' + [regex]::Escape($env:CONFIGURE_LIFELOG_TEST_ROOT))
-            ($calls -join "`n") | Should -Not -Match 'OPENCLAW_' -Because 'OpenClaw setup is no longer part of lifelog root configuration'
         }
         finally {
             Remove-Item Env:\CONFIGURE_LIFELOG_TEST_LOG -ErrorAction SilentlyContinue

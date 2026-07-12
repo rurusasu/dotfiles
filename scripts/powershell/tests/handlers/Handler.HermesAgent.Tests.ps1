@@ -23,7 +23,6 @@ Describe 'HermesAgentHandler' {
         $script:ctx.Options["NixRebuildApplied"] = $true
         $script:ctx.Options["HermesAgent1PasswordEnabled"] = $false
         $script:ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
-        $script:ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $false
         Remove-Item -LiteralPath $script:userProfile -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
@@ -435,7 +434,6 @@ Describe 'HermesAgentHandler' {
                 $configContent | Should -Match "(?m)^terminal:"
                 $configContent | Should -Match "(?m)^  env_passthrough:\r?$"
                 $configContent | Should -Match "(?m)^    - GITHUB_PERSONAL_ACCESS_TOKEN\r?$"
-                $configContent | Should -Match "(?m)^    - OPENCLAW_GATEWAY_TOKEN\r?$"
                 $configContent | Should -Not -Match "(?m)^\s+- GH_TOKEN\r?$"
                 $configContent | Should -Not -Match "(?m)^\s+- GITHUB_TOKEN\r?$"
             }
@@ -670,11 +668,11 @@ Describe 'HermesAgentHandler' {
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "openclaw"
+                $Arguments -contains "Private"
             }
         }
 
-        It 'should configure Slack environment from the openclaw 1Password item' {
+        It 'should configure Slack environment from the Hermes 1Password item' {
             $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
             $onePasswordItemJson = @{
                 fields = @(
@@ -710,7 +708,7 @@ Describe 'HermesAgentHandler' {
                 )
                 $null = $OpExe
                 $null = $TimeoutSeconds
-                if ($Arguments -contains "SlackBot-OpenClaw") {
+                if ($Arguments -contains "SlackBot-Hermes") {
                     return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
@@ -728,11 +726,11 @@ Describe 'HermesAgentHandler' {
                 $OpExe -eq "C:\op.exe" -and
                 $Arguments[0] -eq "item" -and
                 $Arguments[1] -eq "get" -and
-                $Arguments -contains "SlackBot-OpenClaw" -and
+                $Arguments -contains "SlackBot-Hermes" -and
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "openclaw"
+                $Arguments -contains "Private"
             }
         }
 
@@ -809,7 +807,7 @@ Describe 'HermesAgentHandler' {
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "openclaw"
+                $Arguments -contains "Private"
             }
         }
 
@@ -1178,128 +1176,6 @@ Describe 'HermesAgentHandler' {
             $otherJob.script | Should -Be "other.sh"
         }
 
-        It 'should configure OpenClaw API environment from 1Password items' {
-            $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
-            $ctx.Options["HermesAgentManagedProfiles"] = "rick,hoffman,risarisa,newagent"
-            $items = @{
-                "GitHubUsedOpenClawPAT"    = "github-token"
-                "openclaw"                 = "gateway-token"
-                "ExaUsedOpenclawPAT"       = "exa-token"
-                "TavilyUsedOpenclawPAT"    = "tavily-token"
-                "FirecrawlUsedOpenclawPAT" = "firecrawl-token"
-                "OpenClawGeminiAPI"        = "gemini-token"
-                "HuggingFace"              = "hf-token"
-                "TelegramBot"              = "telegram-token"
-                "XUsedOpenClaw"            = "xai-token"
-                "AutoCLI"                  = "autocli-token"
-            }
-            $dataDir = Join-Path $script:userProfile ".hermes"
-            $profilesDir = Join-Path $dataDir "profiles"
-            $profileNames = @("rick", "hoffman", "risarisa", "newagent")
-            foreach ($profileName in $profileNames) {
-                New-Item -ItemType Directory -Path (Join-Path $profilesDir $profileName) -Force | Out-Null
-            }
-            $rickDir = Join-Path $profilesDir "rick"
-            $risarisaDir = Join-Path $profilesDir "risarisa"
-            Set-Content -LiteralPath (Join-Path $rickDir ".env") -Encoding UTF8 -Value @(
-                "SLACK_BOT_TOKEN=xoxb-rick-token",
-                "TELEGRAM_BOT_TOKEN=stale-rick-telegram-token"
-            )
-            Set-Content -LiteralPath (Join-Path $risarisaDir ".env") -Encoding UTF8 -Value @(
-                "GITHUB_TOKEN=stale-token",
-                "TELEGRAM_BOT_TOKEN=stale-risarisa-telegram-token"
-            )
-
-            Mock Get-Command {
-                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
-            } -ParameterFilter { $Name -eq "op" }
-            Mock Invoke-OpCommand {
-                param(
-                    [string]$OpExe,
-                    [string[]]$Arguments,
-                    [int]$TimeoutSeconds
-                )
-                $null = $OpExe
-                $null = $TimeoutSeconds
-                $itemName = $Arguments[2]
-                if ($items.ContainsKey($itemName)) {
-                    $fieldId = "credential"
-                    $fieldLabel = "認証情報"
-                    if ($itemName -eq "openclaw") {
-                        $fieldId = "password"
-                        $fieldLabel = "gateway token"
-                    }
-
-                    return [PSCustomObject]@{
-                        Output   = @(@{
-                                fields = @(
-                                    @{
-                                        id      = $fieldId
-                                        label   = $fieldLabel
-                                        purpose = ""
-                                        value   = $items[$itemName]
-                                    }
-                                )
-                            } | ConvertTo-Json -Compress)
-                        ExitCode = 0
-                    }
-                }
-                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $envPath = Join-Path $script:userProfile ".hermes\.env"
-            $envContent = Get-Content -LiteralPath $envPath -Raw
-            $envContent | Should -Match "GITHUB_TOKEN=github-token"
-            $envContent | Should -Match "GH_TOKEN=github-token"
-            $envContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
-            $envContent | Should -Match "OPENCLAW_GATEWAY_TOKEN=gateway-token"
-            $envContent | Should -Match "EXA_API_KEY=exa-token"
-            $envContent | Should -Match "TAVILY_API_KEY=tavily-token"
-            $envContent | Should -Match "FIRECRAWL_API_KEY=firecrawl-token"
-            $envContent | Should -Match "GEMINI_API_KEY=gemini-token"
-            $envContent | Should -Match "GOOGLE_API_KEY=gemini-token"
-            $envContent | Should -Match "HF_TOKEN=hf-token"
-            $envContent | Should -Match "HUGGINGFACEHUB_API_TOKEN=hf-token"
-            $envContent | Should -Match "TELEGRAM_BOT_TOKEN=telegram-token"
-            $envContent | Should -Match "XAI_API_KEY=xai-token"
-            $envContent | Should -Match "AUTOCLI_API_KEY=autocli-token"
-
-            foreach ($profileName in $profileNames) {
-                $profileDir = Join-Path $profilesDir $profileName
-                $profileEnvContent = Get-Content -LiteralPath (Join-Path $profileDir ".env") -Raw
-                $profileEnvContent | Should -Match "GITHUB_TOKEN=github-token"
-                $profileEnvContent | Should -Match "GH_TOKEN=github-token"
-                $profileEnvContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
-                $profileEnvContent | Should -Match "OPENCLAW_GATEWAY_TOKEN=gateway-token"
-                $profileEnvContent | Should -Not -Match "TELEGRAM_BOT_TOKEN"
-            }
-            $rickEnvContent = Get-Content -LiteralPath (Join-Path $rickDir ".env") -Raw
-            $rickEnvContent | Should -Match "SLACK_BOT_TOKEN=xoxb-rick-token"
-            $rickEnvContent | Should -Not -Match "stale-rick-telegram-token"
-            $risarisaEnvContent = Get-Content -LiteralPath (Join-Path $risarisaDir ".env") -Raw
-            $risarisaEnvContent | Should -Not -Match "GITHUB_TOKEN=stale-token"
-            $risarisaEnvContent | Should -Not -Match "stale-risarisa-telegram-token"
-        }
-
-        It 'should fail before compose when any required OpenClaw API token cannot be configured' {
-            $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
-            Mock Get-Command {
-                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
-            } -ParameterFilter { $Name -eq "op" }
-            Mock Invoke-OpCommand {
-                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "GitHubUsedOpenClawPAT"
-            @($script:dockerCalls | Where-Object { $_[0] -eq "compose" }).Count | Should -Be 0
-        }
-
         It 'should skip the X API MCP server without authentication and remove the GitHub MCP server from config.yaml' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
@@ -1395,102 +1271,6 @@ Describe 'HermesAgentHandler' {
             $configContent = Get-Content -LiteralPath $configPath -Raw
             $configContent | Should -Match "(?m)^\s{2}xapi:"
             $configContent | Should -Match "(?m)^\s{4}command:\s*/usr/local/bin/hermes-xapi-mcp"
-            $configContent | Should -Match "(?m)^\s{2}x-docs:"
-        }
-
-        It 'should configure X API MCP OAuth environment from the openclaw 1Password item' {
-            $ctx.Options["HermesAgentOpenClawSecrets1PasswordEnabled"] = $true
-            $items = @{
-                "GitHubUsedOpenClawPAT"    = "github-token"
-                "openclaw"                 = "gateway-token"
-                "ExaUsedOpenclawPAT"       = "exa-token"
-                "TavilyUsedOpenclawPAT"    = "tavily-token"
-                "FirecrawlUsedOpenclawPAT" = "firecrawl-token"
-                "OpenClawGeminiAPI"        = "gemini-token"
-                "HuggingFace"              = "hf-token"
-                "TelegramBot"              = "telegram-token"
-                "XUsedOpenClaw"            = "xai-token"
-                "AutoCLI"                  = "autocli-token"
-                "XApiMcp"                  = @{
-                    "CLIENT_ID"     = "x-client-id"
-                    "CLIENT_SECRET" = "x-client-secret"
-                }
-            }
-
-            Mock Get-Command {
-                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
-            } -ParameterFilter { $Name -eq "op" }
-            Mock Invoke-OpCommand {
-                param(
-                    [string]$OpExe,
-                    [string[]]$Arguments,
-                    [int]$TimeoutSeconds
-                )
-                $null = $OpExe
-                $null = $TimeoutSeconds
-                $itemName = $Arguments[2]
-                if ($items.ContainsKey($itemName)) {
-                    if ($itemName -ne "XApiMcp") {
-                        $fieldId = "credential"
-                        $fieldLabel = "認証情報"
-                        if ($itemName -eq "openclaw") {
-                            $fieldId = "password"
-                            $fieldLabel = "gateway token"
-                        }
-
-                        return [PSCustomObject]@{
-                            Output   = @(@{
-                                    fields = @(
-                                        @{
-                                            id      = $fieldId
-                                            label   = $fieldLabel
-                                            purpose = ""
-                                            value   = $items[$itemName]
-                                        }
-                                    )
-                                } | ConvertTo-Json -Compress)
-                            ExitCode = 0
-                        }
-                    }
-
-                    return [PSCustomObject]@{
-                        Output   = @(@{
-                                fields = @(
-                                    @{
-                                        id      = "CLIENT_ID"
-                                        label   = "CLIENT_ID"
-                                        purpose = ""
-                                        value   = $items[$itemName]["CLIENT_ID"]
-                                    },
-                                    @{
-                                        id      = "CLIENT_SECRET"
-                                        label   = "CLIENT_SECRET"
-                                        purpose = ""
-                                        value   = $items[$itemName]["CLIENT_SECRET"]
-                                    }
-                                )
-                            } | ConvertTo-Json -Compress)
-                        ExitCode = 0
-                    }
-                }
-                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $envPath = Join-Path $script:userProfile ".hermes\.env"
-            $envContent = Get-Content -LiteralPath $envPath -Raw
-            $envContent | Should -Match "X_API_CLIENT_ID=x-client-id"
-            $envContent | Should -Match "X_API_CLIENT_SECRET=x-client-secret"
-
-            $configPath = Join-Path $script:userProfile ".hermes\config.yaml"
-            $configContent = Get-Content -LiteralPath $configPath -Raw
-            $configContent | Should -Match "(?m)^\s{2}xapi:"
-            $configContent | Should -Match "(?m)^\s{4}command:\s*/usr/local/bin/hermes-xapi-mcp"
-            $configContent | Should -Match "(?m)^\s{4}connect_timeout:\s*300"
-            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_ID:\s*`\$`\{X_API_CLIENT_ID`\}"
-            $configContent | Should -Match "(?m)^\s{6}X_API_CLIENT_SECRET:\s*`\$`\{X_API_CLIENT_SECRET`\}"
             $configContent | Should -Match "(?m)^\s{2}x-docs:"
         }
 

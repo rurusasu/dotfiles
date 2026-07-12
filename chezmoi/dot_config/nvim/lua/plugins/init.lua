@@ -734,8 +734,12 @@ return {
                 capabilities = capabilities,
             })
 
+            local is_win = vim.fn.has("win32") == 1
+            local nix_lsp_proxy = vim.fn.expand("~/.local/bin/nix-lsp-wsl-proxy.mjs")
+
             local servers = {
                 nixd = {
+                    cmd = is_win and { "node", nix_lsp_proxy } or nil,
                     settings = {
                         nixd = {
                             formatting = { command = { "nixfmt" } },
@@ -837,8 +841,11 @@ return {
 
             for name, cfg in pairs(servers) do
                 vim.lsp.config(name, cfg)
-                vim.lsp.enable(name)
+                if name ~= "nixd" then
+                    vim.lsp.enable(name)
+                end
             end
+            vim.lsp.enable("nixd")
         end,
     },
 
