@@ -120,21 +120,21 @@ config.keys = {
     { key = "x", mods = "CTRL|ALT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
-    -- Pane navigation (Ctrl+Alt + H/J/K/L)
-    { key = "h", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Left") },
-    { key = "j", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Down") },
-    { key = "k", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Up") },
-    { key = "l", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Right") },
+    -- Pane navigation (Alt + H/J/K/L)
+    { key = "h", mods = "ALT", action = act.ActivatePaneDirection("Left") },
+    { key = "j", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+    { key = "k", mods = "ALT", action = act.ActivatePaneDirection("Up") },
+    { key = "l", mods = "ALT", action = act.ActivatePaneDirection("Right") },
 
-    -- Window focus (Ctrl+Alt+Shift + H/L)
-    { key = "h", mods = "CTRL|ALT|SHIFT", action = focus_adjacent_window("left") },
-    { key = "l", mods = "CTRL|ALT|SHIFT", action = focus_adjacent_window("right") },
+    -- Window focus (Alt+Shift + H/L)
+    { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
+    { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
 
-    -- Pane resize (Ctrl+Alt + Arrow)
-    { key = "LeftArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Left", 5 }) },
-    { key = "DownArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Down", 5 }) },
-    { key = "UpArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Up", 5 }) },
-    { key = "RightArrow", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Right", 5 }) },
+    -- Pane resize (Ctrl+Alt + H/J/K/L)
+    { key = "h", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Left", 5 }) },
+    { key = "j", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Down", 5 }) },
+    { key = "k", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Up", 5 }) },
+    { key = "l", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Right", 5 }) },
 
     -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
