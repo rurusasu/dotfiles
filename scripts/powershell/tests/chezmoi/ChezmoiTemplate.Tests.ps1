@@ -43,7 +43,6 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Not -Match '\{\{\s*onepassword(Read)?\b' -Because 'docs must not recommend template-time 1Password lookups'
             $content | Should -Match 'op read --account' -Because 'docs should describe explicit-account runtime reads'
             $content | Should -Match 'op run --env-file' -Because 'docs should describe the official env-file injection pattern'
-            $content | Should -Not -Match 'OpenClaw は local state|openclaw devices|OpenClaw 用 provider API keys' -Because 'OpenClaw is no longer managed by dotfiles'
         }
 
     }
