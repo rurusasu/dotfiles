@@ -55,6 +55,7 @@ return {
         keys = { { "-", "<cmd>Oil<cr>", desc = "Open parent directory" } },
         opts = {
             default_file_explorer = true,
+            delete_to_trash = true,
             view_options = { show_hidden = true },
             win_options = {
                 conceallevel = 3,
