@@ -45,18 +45,34 @@ function translateServerString(value) {
   return wslPathToWindowsPath(wslUriToWindowsUri(value));
 }
 
-function translateJson(value, translateString) {
+const translatedFieldNames = new Set([
+  "documenturi",
+  "filepath",
+  "newuri",
+  "olduri",
+  "path",
+  "rootpath",
+  "rooturi",
+  "targeturi",
+  "uri",
+]);
+
+function shouldTranslateField(fieldName) {
+  return translatedFieldNames.has(String(fieldName).toLowerCase());
+}
+
+function translateJson(value, translateString, fieldName = "") {
   if (typeof value === "string") {
-    return translateString(value);
+    return shouldTranslateField(fieldName) ? translateString(value) : value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => translateJson(item, translateString));
+    return value.map((item) => translateJson(item, translateString, fieldName));
   }
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, translateJson(item, translateString)])
+      Object.entries(value).map(([key, item]) => [key, translateJson(item, translateString, key)])
     );
   }
 
@@ -171,6 +187,27 @@ function runSelfTest() {
         rootUri: "file:///mnt/d/ruru/dotfiles",
         rootPath: "/mnt/d/ruru/dotfiles",
         text: "{ config, ... }:",
+      },
+    }
+  );
+  assert.deepEqual(
+    translateJson(
+      {
+        params: {
+          textDocument: {
+            uri: "file:///D:/ruru/dotfiles/flake.nix",
+            text: "literal file:///D:/ruru/dotfiles/flake.nix",
+          },
+        },
+      },
+      translateClientString
+    ),
+    {
+      params: {
+        textDocument: {
+          uri: "file:///mnt/d/ruru/dotfiles/flake.nix",
+          text: "literal file:///D:/ruru/dotfiles/flake.nix",
+        },
       },
     }
   );

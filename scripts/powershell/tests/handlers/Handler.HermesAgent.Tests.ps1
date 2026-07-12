@@ -22,6 +22,7 @@ Describe 'HermesAgentHandler' {
 
         $script:ctx.Options["NixRebuildApplied"] = $true
         $script:ctx.Options["HermesAgent1PasswordEnabled"] = $false
+        $script:ctx.Options["HermesAgentGitHub1PasswordEnabled"] = $false
         $script:ctx.Options["HermesAgentSlack1PasswordEnabled"] = $false
         Remove-Item -LiteralPath $script:userProfile -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
@@ -665,6 +666,53 @@ Describe 'HermesAgentHandler' {
                 $Arguments[0] -eq "item" -and
                 $Arguments[1] -eq "get" -and
                 $Arguments -contains "Hermes Agent Dashboard" -and
+                $Arguments -contains "--account" -and
+                $Arguments -contains "my.1password.com" -and
+                $Arguments -contains "--vault" -and
+                $Arguments -contains "Private"
+            }
+        }
+
+        It 'should provision the Hermes lifelog GitHub token from a generic 1Password item' {
+            $ctx.Options["HermesAgentGitHub1PasswordEnabled"] = $true
+            $onePasswordItemJson = @{
+                fields = @(
+                    @{
+                        id      = "credential"
+                        label   = "credential"
+                        purpose = ""
+                        value   = "github-token"
+                    }
+                )
+            } | ConvertTo-Json -Compress
+
+            Mock Get-Command {
+                return [PSCustomObject]@{ Name = "op"; Source = "C:\op.exe" }
+            } -ParameterFilter { $Name -eq "op" }
+            Mock Invoke-OpCommand {
+                param(
+                    [string]$OpExe,
+                    [string[]]$Arguments,
+                    [int]$TimeoutSeconds
+                )
+                $null = $OpExe
+                $null = $TimeoutSeconds
+                if ($Arguments -contains "GitHubUsedUserPAT") {
+                    return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
+                }
+                return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $envContent = Get-Content -LiteralPath (Join-Path $script:userProfile ".hermes\.env") -Raw
+            $envContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN=github-token"
+            $envContent | Should -Match "GH_TOKEN=github-token"
+            $envContent | Should -Match "GITHUB_TOKEN=github-token"
+            Should -Invoke Invoke-OpCommand -Times 1 -ParameterFilter {
+                $OpExe -eq "C:\op.exe" -and
+                $Arguments -contains "GitHubUsedUserPAT" -and
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and

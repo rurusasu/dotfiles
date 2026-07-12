@@ -87,6 +87,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $profileDashboardAuthResult = $this.SyncDashboardAuthToManagedProfileEnvironments($ctx, $dataDir, $envPath)
             $slackResult = $this.EnsureSlackEnvironment($ctx, $envPath)
             $profileSlackResult = $this.EnsureManagedProfileSlackEnvironments($ctx, $dataDir)
+            $githubResult = $this.EnsureGitHubEnvironment($ctx, $envPath)
             $mcpResult = $this.EnsureMcpConfiguration($ctx, $dataDir)
             $slackMentionResult = $this.EnsureSlackMentionConfiguration($ctx, $dataDir)
 
@@ -136,6 +137,13 @@ class HermesAgentHandler : SetupHandlerBase {
 
             if ($profileSlackResult.Changed -and $profileSlackResult.Count -gt 0) {
                 $this.Log("Managed profile Slack 接続情報を 1Password から設定しました ($($profileSlackResult.Count) profiles)", "Green")
+            }
+
+            if ($githubResult.Changed -and $githubResult.Source -eq "1Password") {
+                $this.Log("Hermes lifelog sync 用 GitHub token を 1Password から設定しました", "Green")
+            }
+            elseif (-not $githubResult.Changed -and $githubResult.Source -eq "Existing") {
+                $this.Log("Hermes lifelog sync 用 GitHub token は既に設定済みです", "Gray")
             }
 
             if ($homeRepositoryResult.Changed) {
@@ -1767,6 +1775,49 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
     }
 
+    hidden [pscustomobject] EnsureGitHubEnvironment([SetupContext]$ctx, [string]$envPath) {
+        $lines = @()
+        if (Test-Path -LiteralPath $envPath) {
+            $lines = @(Get-Content -LiteralPath $envPath -ErrorAction Stop)
+        }
+
+        $existingToken = $null
+        foreach ($name in @("GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_PAT_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")) {
+            $candidate = $this.GetEnvLineValue($lines, $name)
+            if ($this.HasRealEnvValue($candidate)) {
+                $existingToken = $candidate.Trim().Trim('"').Trim("'")
+                break
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($existingToken)) {
+            $existingToken = $this.GetOnePasswordGitHubToken($ctx)
+        }
+
+        if ([string]::IsNullOrWhiteSpace($existingToken)) {
+            return [PSCustomObject]@{ Changed = $false; Source = "Missing" }
+        }
+
+        $environment = @{
+            GITHUB_PERSONAL_ACCESS_TOKEN = $existingToken
+            GH_TOKEN                     = $existingToken
+            GITHUB_TOKEN                 = $existingToken
+        }
+        $updatedLines = $this.SetNamedEnvironmentLines($lines, $environment)
+        $changed = -not $this.LinesEqual($lines, $updatedLines)
+        if ($changed) {
+            Set-Content -LiteralPath $envPath -Encoding UTF8 -Value $updatedLines
+        }
+
+        $source = if ($this.HasRealEnvValue($this.GetEnvLineValue($lines, "GITHUB_PERSONAL_ACCESS_TOKEN"))) {
+            "Existing"
+        }
+        else {
+            "1Password"
+        }
+        return [PSCustomObject]@{ Changed = $changed; Source = $source }
+    }
+
     hidden [pscustomobject] EnsureManagedProfileSlackEnvironments([SetupContext]$ctx, [string]$dataDir) {
         $defaultEnabled = $this.IsTruthy($ctx.GetOption("HermesAgentSlack1PasswordEnabled", $true))
         $profilesDir = Join-Path $dataDir "profiles"
@@ -1868,6 +1919,29 @@ class HermesAgentHandler : SetupHandlerBase {
         $filteredLines += "SLACK_ALLOWED_USERS=$($environment.AllowedUsers)"
 
         Set-Content -LiteralPath $envPath -Value $filteredLines -Encoding UTF8
+    }
+
+    hidden [string[]] SetNamedEnvironmentLines([string[]]$lines, [hashtable]$environment) {
+        $keys = @($environment.Keys | Sort-Object)
+        if ($keys.Count -eq 0) {
+            return $lines
+        }
+
+        $escapedKeys = @($keys | ForEach-Object { [regex]::Escape([string]$_) })
+        $pattern = '^\s*(?:export\s+)?(' + ($escapedKeys -join '|') + ')\s*='
+        $filteredLines = @(
+            $lines | Where-Object { $_ -notmatch $pattern }
+        )
+
+        if ($filteredLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($filteredLines[-1])) {
+            $filteredLines += ""
+        }
+
+        foreach ($key in $keys) {
+            $filteredLines += "$key=$($environment[$key])"
+        }
+
+        return $filteredLines
     }
 
     hidden [bool] IsSharedPlatformSecretLine([string]$line) {
@@ -1994,6 +2068,57 @@ class HermesAgentHandler : SetupHandlerBase {
                 throw
             }
             $this.Log("1Password item を読めないためローカル生成にフォールバックします", "Gray")
+            return $null
+        }
+    }
+
+    hidden [string] GetOnePasswordGitHubToken([SetupContext]$ctx) {
+        if (-not $this.IsTruthy($ctx.GetOption("HermesAgentGitHub1PasswordEnabled", $true))) {
+            return $null
+        }
+
+        $required = $this.IsTruthy($ctx.GetOption("HermesAgentRequireGitHub", $false))
+        $opCommand = @(Get-Command -Name "op" -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if (-not $opCommand) {
+            if ($required) {
+                throw "Hermes lifelog sync 用の 1Password CLI (op) が見つかりません"
+            }
+            return $null
+        }
+
+        $opExe = [string]$opCommand.Source
+        if ([string]::IsNullOrWhiteSpace($opExe) -and $opCommand.PSObject.Properties.Name -contains "Path") {
+            $opExe = [string]$opCommand.Path
+        }
+        if ([string]::IsNullOrWhiteSpace($opExe)) {
+            $opExe = "op"
+        }
+
+        $account = [string]$ctx.GetOption("HermesAgentGitHub1PasswordAccount", "my.1password.com")
+        $vault = [string]$ctx.GetOption("HermesAgentGitHub1PasswordVault", "Private")
+        $item = [string]$ctx.GetOption("HermesAgentGitHub1PasswordItem", "GitHubUsedUserPAT")
+        $result = Invoke-OpCommand -OpExe $opExe -Arguments @(
+            "item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json"
+        )
+        if ($result.ExitCode -ne 0) {
+            if ($required) {
+                throw "1Password から Hermes lifelog sync 用 GitHub token を取得できません: $item"
+            }
+            return $null
+        }
+
+        try {
+            $itemJson = ($result.Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
+            $token = $this.GetOnePasswordFieldValue($itemJson, "", @("credential", "token", "PAT", "password"))
+            if ([string]::IsNullOrWhiteSpace($token) -and $required) {
+                throw "1Password item に GitHub token がありません: $item"
+            }
+            return $token
+        }
+        catch {
+            if ($required) {
+                throw
+            }
             return $null
         }
     }
