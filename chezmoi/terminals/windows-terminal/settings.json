@@ -91,6 +91,22 @@
       "id": "User.moveFocus.down"
     },
     {
+      "command": { "action": "swapPane", "direction": "left" },
+      "id": "User.swapPane.left"
+    },
+    {
+      "command": { "action": "swapPane", "direction": "down" },
+      "id": "User.swapPane.down"
+    },
+    {
+      "command": { "action": "swapPane", "direction": "up" },
+      "id": "User.swapPane.up"
+    },
+    {
+      "command": { "action": "swapPane", "direction": "right" },
+      "id": "User.swapPane.right"
+    },
+    {
       "command": { "action": "resizePane", "direction": "up" },
       "id": "User.resizePane.up"
     },
@@ -116,20 +132,24 @@
     { "id": "User.find", "keys": "ctrl+shift+f" },
     { "id": "User.paste", "keys": "ctrl+v" },
     { "id": "User.splitPane.horizontal", "keys": "ctrl+alt+\\" },
-    { "id": "User.resizePane.right", "keys": "ctrl+alt+right" },
     { "id": "User.splitPane.vertical", "keys": "ctrl+alt+minus" },
     { "id": "User.closePane", "keys": "ctrl+alt+x" },
     { "id": "User.togglePaneZoom", "keys": "ctrl+alt+w" },
-    { "id": "User.moveFocus.left", "keys": "ctrl+alt+h" },
-    { "id": "User.moveFocus.up", "keys": "ctrl+alt+k" },
-    { "id": "User.moveFocus.right", "keys": "ctrl+alt+l" },
-    { "id": "User.moveFocus.down", "keys": "ctrl+alt+j" },
+    { "id": "User.moveFocus.left", "keys": "alt+h" },
+    { "id": "User.moveFocus.up", "keys": "alt+k" },
+    { "id": "User.moveFocus.right", "keys": "alt+l" },
+    { "id": "User.moveFocus.down", "keys": "alt+j" },
+    { "id": "User.swapPane.left", "keys": "alt+shift+h" },
+    { "id": "User.swapPane.up", "keys": "alt+shift+k" },
+    { "id": "User.swapPane.right", "keys": "alt+shift+l" },
+    { "id": "User.swapPane.down", "keys": "alt+shift+j" },
+    { "id": "User.resizePane.left", "keys": "ctrl+alt+h" },
+    { "id": "User.resizePane.up", "keys": "ctrl+alt+k" },
+    { "id": "User.resizePane.right", "keys": "ctrl+alt+l" },
+    { "id": "User.resizePane.down", "keys": "ctrl+alt+j" },
     { "id": "User.nextTab", "keys": "ctrl+tab" },
     { "id": "User.toggleFullscreen", "keys": "f11" },
     { "id": "User.newTab", "keys": "ctrl+alt+t" },
-    { "id": "User.resizePane.left", "keys": "ctrl+alt+left" },
-    { "id": "User.resizePane.up", "keys": "ctrl+alt+up" },
-    { "id": "User.resizePane.down", "keys": "ctrl+alt+down" },
     { "id": "User.resetFontSize", "keys": "ctrl+shift+0" },
     { "id": "User.increaseFontSize", "keys": "ctrl+shift+plus" },
     { "id": "User.decreaseFontSize", "keys": "ctrl+shift+minus" }

@@ -10,13 +10,15 @@
 
 ## 統一ルール
 
-| グループ           | 役割                | 例                             |
-| ------------------ | ------------------- | ------------------------------ |
-| `Ctrl+Shift`       | 移動/ナビゲーション | ペイン移動 (`H/J/K/L`)         |
-| `Ctrl+Alt`         | レイアウト変更      | 分割、ペイン close、ズーム     |
-| `Shift+Enter`      | 複数行入力          | AI CLI / terminal prompt 改行  |
-| `Space` (`Leader`) | ツール機能呼び出し  | 検索、エクスプローラ、タブ操作 |
-| `Alt` (Shell)      | CLI 補助操作        | fzf/zoxide ウィジェット        |
+| グループ           | 役割                          | 例                                    |
+| ------------------ | ----------------------------- | ------------------------------------- |
+| `Alt`              | GUI pane/window focus         | `Alt+H/J/K/L`                         |
+| `Alt+Shift`        | GUI pane/window move/swap     | `Alt+Shift+H/J/K/L`（対応アプリのみ） |
+| `Ctrl+Alt`         | GUI pane/window resize/layout | `Ctrl+Alt+H/J/K/L`, split/close/zoom  |
+| `Ctrl`             | Unix/Vim/tmux focus           | `Ctrl+H/J/K/L`                        |
+| `Shift+Enter`      | 複数行入力                    | AI CLI / terminal prompt 改行         |
+| `Space` (`Leader`) | ツール機能呼び出し            | 検索、エクスプローラ、タブ操作        |
+| `Alt` (Shell)      | CLI 補助操作                  | fzf/zoxide ウィジェット (`Q/D/T/R`)   |
 
 ## 現在の適用状況
 
@@ -24,18 +26,23 @@
 
 - WezTerm
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Ctrl+Shift+H/J/K/L`: ペイン移動
-  - `Ctrl+Alt+H/V/X/W`: 分割/close/ズーム
+  - `Alt+H/J/K/L`: ペイン移動
+  - `Alt+Shift+H/L`: WezTerm window focus
+  - `Ctrl+Alt+H/J/K/L`: ペイン resize
+  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: 分割/close/ズーム
   - `Leader` (`Ctrl+Space`) + `t/x/h/l/1-9`: タブ操作
   - `Leader` (`Ctrl+Space`) + `c/v`: コピー/ペースト
 - Windows Terminal
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力 (`CSI u`)
   - `Ctrl+Enter`: Windows Terminal 用 fallback (`CSI u`)
-  - `Ctrl+Shift+H/J/K/L`: ペイン移動
-  - `Ctrl+Alt+H/V/X/W`: 分割/close/ズーム
+  - `Alt+H/J/K/L`: ペイン移動
+  - `Alt+Shift+H/J/K/L`: ペイン swap
+  - `Ctrl+Alt+H/J/K/L`: ペイン resize
+  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: 分割/close/ズーム
 - Warp
-  - `Ctrl+Shift+H/J/K/L`: ペイン移動
-  - `Ctrl+Alt+H/V`: 分割
+  - `Alt+H/J/K/L`: ペイン移動
+  - `Ctrl+Alt+H/J/K/L`: ペイン resize
+  - `Ctrl+Alt+\` / `Ctrl+Alt+-`: 分割
   - `Ctrl+Space`: AI natural language search（nvim/WezTerm leader に合わせた統一キー）
   - `Ctrl+Enter`: AI agent へ送信（Warp ハードコード、変更不可）
   - `Ctrl+Y`: AI agent 会話を継続（Warp ハードコード、変更不可）
@@ -44,6 +51,7 @@
 
 - Neovim
   - `Leader` は `Space`
+  - `Ctrl+H/J/K/L`: window 移動（tmux 境界越えも同じ）
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: redo
   - `Space+e`: エクスプローラ
@@ -55,12 +63,20 @@
 - VS Code / Cursor
   - `Vim` 拡張は利用しない
   - terminal focus の `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Ctrl+Shift+H/J/K/L`: editor group 移動
-  - `Ctrl+Alt+H/V/X/W`: split/close/toggle widths
+  - `Alt+H/J/K/L`: editor group 移動
+  - `Alt+Shift+H/J/K/L`: editor group move
+  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: split/close/toggle widths
   - それ以外は標準キーバインドを優先
+- Zed
+  - `Alt+H/J/K/L`: pane 移動
+  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: split/close/zoom
 
 ### Shells
 
+- tmux (Unix/Linux/WSL)
+  - `Ctrl+H/J/K/L`: pane 移動（vim-tmux-navigator と共有）
+  - `Prefix` (`Ctrl+A`) + `\` / `-`: pane 分割
+  - `Prefix` (`Ctrl+A`) + `h/l`: window 前後移動
 - zsh
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット
@@ -88,5 +104,6 @@
 ## 運用ルール
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
-- 既存ショートカットと衝突する場合は、`Ctrl+Shift` (移動) を優先して維持する
+- GUI アプリの pane/window 操作は `Alt` / `Alt+Shift` / `Ctrl+Alt` の役割を優先する
+- tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

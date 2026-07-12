@@ -8,11 +8,11 @@
     "when": "terminalFocus"
   },
   {
-    "key": "ctrl+alt+h",
+    "key": "ctrl+alt+\\",
     "command": "workbench.action.splitEditorRight"
   },
   {
-    "key": "ctrl+alt+v",
+    "key": "ctrl+alt+-",
     "command": "workbench.action.splitEditorDown"
   },
   {
@@ -24,19 +24,35 @@
     "command": "workbench.action.toggleEditorWidths"
   },
   {
-    "key": "ctrl+shift+h",
+    "key": "alt+h",
     "command": "workbench.action.focusLeftGroup"
   },
   {
-    "key": "ctrl+shift+j",
+    "key": "alt+j",
     "command": "workbench.action.focusBelowGroup"
   },
   {
-    "key": "ctrl+shift+k",
+    "key": "alt+k",
     "command": "workbench.action.focusAboveGroup"
   },
   {
-    "key": "ctrl+shift+l",
+    "key": "alt+l",
     "command": "workbench.action.focusRightGroup"
+  },
+  {
+    "key": "alt+shift+h",
+    "command": "workbench.action.moveActiveEditorGroupLeft"
+  },
+  {
+    "key": "alt+shift+j",
+    "command": "workbench.action.moveActiveEditorGroupDown"
+  },
+  {
+    "key": "alt+shift+k",
+    "command": "workbench.action.moveActiveEditorGroupUp"
+  },
+  {
+    "key": "alt+shift+l",
+    "command": "workbench.action.moveActiveEditorGroupRight"
   }
 ]
