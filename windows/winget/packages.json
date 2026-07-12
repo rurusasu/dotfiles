@@ -116,6 +116,13 @@
           }
         },
         {
+          "PackageIdentifier": "LuaLS.lua-language-server",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "lua-language-server"
+          }
+        },
+        {
           "PackageIdentifier": "Neovim.Neovim",
           "verifyCommand": {
             "args": ["--version"],

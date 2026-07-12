@@ -391,7 +391,7 @@ let
     };
     lua-language-server = {
       pkg = pkgs.lua-language-server;
-      winget = null;
+      winget = "LuaLS.lua-language-server";
       category = "lsp";
     };
     stylua = {
@@ -658,6 +658,10 @@ lib.mapAttrs (_: names: resolve names) grouped
     };
     taplo = {
       command = "taplo";
+      args = [ "--version" ];
+    };
+    lua-language-server = {
+      command = "lua-language-server";
       args = [ "--version" ];
     };
     stylua = {

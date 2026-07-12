@@ -217,6 +217,16 @@ Describe 'Package catalog consistency' {
     }
 
     Context 'StyLua package' {
+        It 'should generate Lua Language Server with command verification' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'LuaLS.lua-language-server' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'lua-language-server'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+
         It 'should generate StyLua with command verification' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
