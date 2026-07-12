@@ -9,7 +9,8 @@ BeforeAll {
     $script:pluginsContent = Get-Content -LiteralPath $script:pluginsPath -Raw
     $script:nixLspProxyContent = if (Test-Path -LiteralPath $script:nixLspProxyPath -PathType Leaf) {
         Get-Content -LiteralPath $script:nixLspProxyPath -Raw
-    } else {
+    }
+    else {
         ""
     }
 }
@@ -40,7 +41,7 @@ Describe 'Neovim shell configuration' {
         $script:nixLspProxyContent | Should -Match '"--distribution"'
         $script:nixLspProxyContent | Should -Match '"--user"'
         $script:nixLspProxyContent | Should -Match '"--exec"'
-        $script:nixLspProxyContent | Should -Match '"sh", "-lc"'
+        $script:nixLspProxyContent | Should -Match '"sh"\s*,\s*"-lc"'
         $script:nixLspProxyContent | Should -Match 'backendRelaySource'
         $script:nixLspProxyContent | Should -Match 'process\.stdin\.pipe'
         $script:nixLspProxyContent | Should -Match 'Content-Length'
