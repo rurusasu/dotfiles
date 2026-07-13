@@ -18,6 +18,7 @@ Describe 'HermesAgentHandler' {
         $script:oldUserProfile = $env:USERPROFILE
         $script:oldHome = $env:HOME
         $script:oldHermesDataDir = $env:HERMES_DATA_DIR
+        $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
         $script:dockerCalls = @()
 
         $script:ctx.Options["NixRebuildApplied"] = $true
@@ -32,6 +33,7 @@ Describe 'HermesAgentHandler' {
         $env:USERPROFILE = $script:userProfile
         Remove-Item Env:\HOME -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
 
         Mock Write-Host { }
         Mock Get-Command {
@@ -59,6 +61,13 @@ Describe 'HermesAgentHandler' {
         }
         else {
             $env:HERMES_DATA_DIR = $script:oldHermesDataDir
+        }
+
+        if ($null -eq $script:oldHermesBrowserDataDir) {
+            Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HERMES_BROWSER_DATA_DIR = $script:oldHermesBrowserDataDir
         }
     }
 
@@ -503,6 +512,26 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain "--build"
             $composeCall | Should -Contain "--force-recreate"
             $composeCall | Should -Contain "--remove-orphans"
+        }
+
+        It 'should create the default browser profile directory before starting compose' {
+            $browserProfileDir = Join-Path $script:userProfile ".hermes\.browser"
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $browserProfileDir | Should -Exist
+        }
+
+        It 'should create the browser profile directory from HERMES_BROWSER_DATA_DIR when set' {
+            $customBrowserProfileDir = Join-Path $TestDrive "custom-browser-profile"
+            $env:HERMES_BROWSER_DATA_DIR = $customBrowserProfileDir
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $customBrowserProfileDir | Should -Exist
+            (Join-Path $script:userProfile ".hermes\.browser") | Should -Not -Exist
         }
 
         It 'should configure the default Codex model in config.yaml' {

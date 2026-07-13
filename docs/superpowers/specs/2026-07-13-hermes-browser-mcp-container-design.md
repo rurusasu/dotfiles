@@ -25,7 +25,8 @@ Browser MCP container
         v
 Dedicated Chromium container
   Debian + Chromium
-  headless Chromium
+  CDP forwarder on 0.0.0.0:9222
+  headless Chromium on 127.0.0.1:9223
   persistent /data browser profile
 ```
 
@@ -38,7 +39,8 @@ The MCP container converts the stdio transport of `chrome-devtools-mcp` to Strea
 ### Chromium service
 
 - Build a dedicated image from a pinned Debian family base and install Chromium inside the image.
-- Run Chromium as a non-root user with `--headless=new`, `--remote-debugging-address=0.0.0.0`, and port `9222`.
+- Run Chromium as a non-root user with `--headless=new`, `--remote-debugging-address=127.0.0.1`, and port `9223`.
+- Run an internal CDP forwarder on `0.0.0.0:9222` so other Compose services can reach CDP without exposing Chromium directly.
 - Store the browser profile at `/data`, mounted from `${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}`.
 - Expose a Docker healthcheck through `/json/version`.
 - Do not publish `9222` to the host.
@@ -48,7 +50,7 @@ The MCP container converts the stdio transport of `chrome-devtools-mcp` to Strea
 - Build a Node.js 22 image with exact npm dependencies:
   - `chrome-devtools-mcp@1.4.0`
   - `mcp-proxy@6.5.2`
-- Start `chrome-devtools-mcp` with `--browser-url=http://chromium:9222` and `--no-usage-statistics`.
+- Start `chrome-devtools-mcp` with `--browser-url=http://chromium:9222` and `--no-usage-statistics`; that URL reaches the internal forwarder, which proxies to Chromium on `127.0.0.1:9223` inside the browser container.
 - Start `mcp-proxy` in Streamable HTTP mode on port `8080` and expose only `/mcp` to the Compose network.
 - Wait for the Chromium healthcheck before starting.
 - Do not mount the host filesystem or use host Node/npm/Python binaries.
@@ -106,7 +108,7 @@ With Docker available:
 
 1. `docker compose -f docker/hermes-agent/compose.yml config` succeeds.
 2. The Chromium healthcheck becomes healthy.
-3. Browser MCP can reach `http://chromium:9222/json/version`.
+3. Browser MCP can reach `http://chromium:9222/json/version` through the internal CDP forwarder.
 4. Hermes can complete an MCP initialize/list-tools exchange against `http://browser-mcp:8080/mcp`.
 5. A browser MCP tool can open a public page and return its title or visible text.
 6. No host-side `chromium`, `node`, `npm`, `python`, or CDP listener is required.

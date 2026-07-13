@@ -76,6 +76,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $dataDir = $this.GetDataDir()
             $this.EnsureDirectory($dataDir)
             $this.EnsureDirectory((Join-Path $dataDir ".xurl"))
+            $this.EnsureDirectory($this.GetBrowserDataDir())
             $homeRepositoryResult = $this.EnsureHomeRepositoryLayout($ctx, $dataDir)
             $lifelogCoreResult = $this.EnsureLifelogCore($ctx, $dataDir)
             $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
@@ -229,6 +230,14 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return Join-Path $this.GetHomeDir() ".hermes"
+    }
+
+    hidden [string] GetBrowserDataDir() {
+        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_DATA_DIR)) {
+            return $env:HERMES_BROWSER_DATA_DIR
+        }
+
+        return Join-Path (Join-Path $this.GetHomeDir() ".hermes") ".browser"
     }
 
     hidden [string] GetHomeDir() {

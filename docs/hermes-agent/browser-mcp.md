@@ -32,11 +32,18 @@ ${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}
 
 ## 起動
 
-Browser MCP image と Chromium image を更新してから Hermes を起動する。
+最初に dotfiles の config apply を実行し、Hermes install handler に root/profile の `config.yaml` を更新させる。
+この手順で root と managed profile の `mcp_servers.browser` に `http://browser-mcp:8080/mcp` が書き込まれる。
+
+```powershell
+dotf chezmoi
+```
+
+その後、Browser MCP image と Chromium image を更新してから Hermes を起動する。
 
 ```powershell
 task hermes:pull
 task hermes:up
 ```
 
-`task hermes:up` は Hermes、Chromium、Browser MCP を同じ Compose project/network で起動する。Hermes の `config.yaml` は install handler が管理し、既存の unrelated MCP server は残したまま `browser` block を上記 URL に置き換える。
+`dotf chezmoi` が使えない環境では、同じ install handler config-apply path を実行してから `task hermes:pull` / `task hermes:up` に進む。`task hermes:up` は Hermes、Chromium、Browser MCP を同じ Compose project/network で起動する。Hermes の `config.yaml` は install handler が管理し、既存の unrelated MCP server は残したまま `browser` block を上記 URL に置き換える。

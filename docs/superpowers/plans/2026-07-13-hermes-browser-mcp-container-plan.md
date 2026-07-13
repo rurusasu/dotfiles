@@ -4,7 +4,7 @@
 
 **Goal:** Add a fully containerized Chromium and Chrome DevTools MCP path that Hermes Agent can use without host Chrome, Node.js, npm, Python, or CDP dependencies.
 
-**Architecture:** Extend the existing Hermes Compose project with a dedicated chromium service and a browser-mcp service. Chromium exposes CDP only on the Compose network; browser-mcp runs pinned chrome-devtools-mcp@1.4.0 behind pinned mcp-proxy@6.5.2 and exposes Streamable HTTP at http://browser-mcp:8080/mcp; the Hermes handler manages that URL in every root/profile config.yaml.
+**Architecture:** Extend the existing Hermes Compose project with a dedicated chromium service and a browser-mcp service. The chromium service exposes an internal CDP forwarder on the Compose network at http://chromium:9222, while Chromium itself listens only inside that container on 127.0.0.1:9223. browser-mcp runs pinned chrome-devtools-mcp@1.4.0 behind pinned mcp-proxy@6.5.2 and exposes Streamable HTTP at http://browser-mcp:8080/mcp; the Hermes handler manages that URL in every root/profile config.yaml.
 
 **Tech Stack:** Docker Compose, Debian Bookworm Chromium, Node.js 22, chrome-devtools-mcp@1.4.0, mcp-proxy@6.5.2, PowerShell/Pester, Taskfile.
 
@@ -14,7 +14,7 @@
 - Chromium CDP port 9222 and Browser MCP port 8080 are never published to the host.
 - The browser profile is stored separately from the user's normal browser profile at `${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}`.
 - chrome-devtools-mcp is pinned to 1.4.0; mcp-proxy is pinned to 6.5.2.
-- MCP connects to http://chromium:9222; Hermes connects to http://browser-mcp:8080/mcp.
+- MCP connects to the chromium service's internal CDP forwarder at http://chromium:9222; the forwarder proxies to Chromium on 127.0.0.1:9223 inside that container. Hermes connects to http://browser-mcp:8080/mcp.
 - The browser is headless and isolated; loading or managing a real host Chrome extension is out of scope for network CDP mode.
 - Use 2-space YAML/JSON indentation and preserve existing Hermes handler behavior and unrelated MCP entries.
 - Use task commit -- "message" for commits from the normal checkout; run the repository formatter and pre-commit checks before committing.
@@ -32,11 +32,11 @@
 **Interfaces:**
 
 - Consumes: Compose bind mount at /data and the container network.
-- Produces: A non-root Chromium process listening on 0.0.0.0:9222 with a healthcheckable /json/version endpoint.
+- Produces: A non-root Chromium process listening on 127.0.0.1:9223 plus an internal forwarder listening on 0.0.0.0:9222 with a healthcheckable /json/version endpoint.
 
 - [ ] Step 1: Write static tests for the Chromium image contract
 
-Add assertions that the repository contains docker/hermes-browser/Dockerfile and entrypoint.sh, the image installs Chromium, the entrypoint uses --headless=new, --remote-debugging-address=0.0.0.0, --remote-debugging-port=9222, and /data, and the service does not require a host Chrome executable.
+Add assertions that the repository contains docker/hermes-browser/Dockerfile and entrypoint.sh, the image installs Chromium, the entrypoint uses --headless=new, --remote-debugging-address=127.0.0.1, --remote-debugging-port=9223, an internal forwarder on 0.0.0.0:9222, and /data, and the service does not require a host Chrome executable.
 
 - [ ] Step 2: Run the focused test to verify the new assertions fail
 
@@ -60,8 +60,8 @@ mkdir -p /data
 exec /usr/bin/chromium \
   --headless=new \
   --disable-gpu \
-  --remote-debugging-address=0.0.0.0 \
-  --remote-debugging-port=9222 \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9223 \
   --user-data-dir=/data \
   about:blank
 ```
@@ -93,7 +93,7 @@ Expected: formatter, pre-commit, and PowerShell tests pass and a commit is creat
 
 **Interfaces:**
 
-- Consumes: http://chromium:9222 on the Compose network.
+- Consumes: http://chromium:9222 on the Compose network, served by the browser container's internal CDP forwarder.
 - Produces: Streamable HTTP MCP at port 8080, path /mcp, with no host process dependencies.
 
 - [ ] Step 1: Write static tests for the Browser MCP image contract
@@ -109,7 +109,7 @@ Add assertions that package.json pins:
 }
 ```
 
-Also assert that the Dockerfile uses Node.js 22, installs with npm ci, disables update checks/statistics, starts mcp-proxy in stream mode on port 8080, and passes --browser-url=http://chromium:9222 and --no-usage-statistics to Chrome DevTools MCP.
+Also assert that the Dockerfile uses Node.js 22, installs with npm ci, disables update checks/statistics, starts mcp-proxy in stream mode on port 8080, and passes --browser-url=http://chromium:9222 and --no-usage-statistics to Chrome DevTools MCP. The URL targets the forwarder rather than Chromium's local-only listener.
 
 - [ ] Step 2: Run the focused test to verify the new assertions fail
 
@@ -282,7 +282,7 @@ docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS htt
 docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 ```
 
-Expected: both commands exit successfully; a host request to 127.0.0.1:9222 is not required and is not a prerequisite.
+Expected: both commands exit successfully; the service URL reaches the forwarder on 9222, which proxies to Chromium on 127.0.0.1:9223 inside the container. A host request to 127.0.0.1:9222 is not required and is not a prerequisite.
 
 - [ ] Step 4: Verify the MCP HTTP endpoint and Hermes startup
 
