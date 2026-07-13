@@ -9,6 +9,7 @@ if ! touch /data/.hermes-browser-write-test 2>/dev/null; then
 fi
 
 rm -f /data/.hermes-browser-write-test
+# Remove only stale Chromium singleton markers from the dedicated /data profile.
 rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie
 
 cat >/tmp/hermes-cdp-forwarder.py <<'PY'

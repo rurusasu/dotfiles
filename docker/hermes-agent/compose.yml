@@ -38,8 +38,8 @@ services:
     container_name: hermes-chromium
     restart: unless-stopped
     shm_size: 2g
-    cap_add:
-      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
     volumes:
       - type: bind
         source: ${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}

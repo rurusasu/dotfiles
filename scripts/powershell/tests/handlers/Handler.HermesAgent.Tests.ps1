@@ -312,6 +312,7 @@ Describe 'HermesAgentHandler' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
+            $chromiumService = [regex]::Match($composeContent, "(?ms)^\s{2}chromium:.*?(?=^\s{2}\S|\z)").Value
 
             $composeContent | Should -Match "(?m)^\s{2}hermes:"
             $composeContent | Should -Match "(?m)^\s{2}chromium:"
@@ -325,7 +326,8 @@ Describe 'HermesAgentHandler' {
 
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?shm_size:\s*2g"
-            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?cap_add:\s*`r?`n\s{6}- SYS_ADMIN"
+            $chromiumService | Should -Not -Match "(?m)^\s{4}cap_add:\s*$"
+            $chromiumService | Should -Not -Match "(?m)^\s*-\s*SYS_ADMIN\s*$"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
 
