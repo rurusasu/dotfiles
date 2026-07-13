@@ -1246,3 +1246,590 @@ Verification:
 - `docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 CDP metadata.
 - `docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"` exited 0 with `status=200`.
 - Additional scoped response check from `browser-mcp` printed `ws://chromium:9222/devtools/browser/882e7a0b-8aa1-4b16-9b53-dc73fdd25978`, confirming external Host rewrite in the WebSocket URL.
+
+## Full Task 5 verification rerun after 58a1543 - 2026-07-14
+
+Scope:
+
+- Branch: `codex/hermes-browser-mcp-container`
+- HEAD: `58a1543`
+- Instruction followed: no code changes unless verification exposes a concrete defect. A Step 4 verification defect was exposed, so no code files were edited.
+
+### Step 1: repository static checks
+
+Command:
+
+```powershell
+git diff --check
+```
+
+Exit status: 0
+
+Key output: no output.
+
+Command:
+
+```powershell
+git grep -n -i [o]penclaw -- ':!*.lock'
+```
+
+Exit status: 1
+
+Key output: no output, which means no matches.
+
+Command:
+
+```powershell
+pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Normal"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Discovery found 53 tests in 532ms.
+Tests completed in 16.48s
+Tests Passed: 53, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+```
+
+Command:
+
+```powershell
+pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1' -Output Normal"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Discovery found 42 tests in 837ms.
+Tests completed in 4.19s
+Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+```
+
+### Step 2: build and start isolated browser services
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Image local/hermes-browser-mcp:latest Built
+Image local/hermes-browser:latest Built
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Container hermes-chromium Healthy
+Container hermes-browser-mcp Started
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+NAME                 IMAGE                             SERVICE       STATUS                    PORTS
+hermes-browser-mcp   local/hermes-browser-mcp:latest   browser-mcp   Up 15 seconds (healthy)   8080/tcp
+hermes-chromium      local/hermes-browser:latest       chromium      Up 21 seconds (healthy)
+```
+
+Command:
+
+```powershell
+docker inspect hermes-chromium hermes-browser-mcp --format "{{.Name}} {{json .NetworkSettings.Ports}}"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+/hermes-chromium {}
+/hermes-browser-mcp {"8080/tcp":null}
+```
+
+This confirms no host port binding was published for 9222 or 8080.
+
+### Step 3: internal CDP reachability over the Compose network
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
+```
+
+Exit status: 0
+
+Key output:
+
+```json
+{
+  "Browser": "Chrome/150.0.7871.114",
+  "Protocol-Version": "1.3",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/2e84ffd8-332a-4073-acb1-2ef03ffb38f1"
+}
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+```
+
+Exit status: 0
+
+Key output: no output.
+
+### Step 4: Hermes startup and root/profile config verification
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml up -d hermes
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Container hermes-chromium Healthy
+Container hermes-browser-mcp Healthy
+Container hermes Started
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+NAME                 IMAGE                             SERVICE       STATUS                      PORTS
+hermes               local/hermes-agent-gh:latest      hermes        Up 43 seconds               127.0.0.1:8642->8642/tcp, 127.0.0.1:9119->9119/tcp
+hermes-browser-mcp   local/hermes-browser-mcp:latest   browser-mcp   Up About a minute (healthy) 8080/tcp
+hermes-chromium      local/hermes-browser:latest       chromium      Up About a minute (healthy)
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=200 hermes | Select-String -Pattern 'error|fail|started|listening|gateway|mcp|browser|config|success|running' -CaseSensitive:$false
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+cont-init: info: running /etc/cont-init.d/01-hermes-setup
+[stage2] Found agent-browser Chromium binary: /opt/hermes/.playwright/chromium_headless_shell-1228/chrome-headless-shell-linux64/chrome-headless-shell
+reconcile: profile=default prior_state=running action=started
+reconcile: profile=hoffman prior_state=running action=started
+reconcile: profile=rick prior_state=running action=started
+reconcile: profile=risarisa prior_state=running action=started
+s6-rc: info: service main-hermes successfully started
+s6-rc: info: service dashboard successfully started
+Hermes Gateway Starting...
+gateway is now running under s6 supervision
+```
+
+Sensitive-looking credential/env lines were not copied.
+
+Command:
+
+```powershell
+$root = Join-Path $env:USERPROFILE '.hermes'; rg -n --glob 'config.yaml' --glob 'settings.yaml' --glob '*.yml' --glob '*.yaml' 'http://browser-mcp:8080/mcp' $root
+```
+
+Exit status: 1
+
+Key output: no output.
+
+Follow-up command:
+
+```powershell
+$root = Join-Path $env:USERPROFILE '.hermes'; rg -n 'http://browser-mcp:8080/mcp|browser-mcp|mcp_servers' (Join-Path $root 'config.yaml') (Join-Path $root 'profiles') --glob 'config.yaml'
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+C:\Users\KoheiMiki\.hermes\config.yaml:148:mcp_servers:
+C:\Users\KoheiMiki\.hermes\profiles\rick\config.yaml:170:mcp_servers:
+C:\Users\KoheiMiki\.hermes\profiles\hoffman\config.yaml:170:mcp_servers:
+```
+
+This shows root/rick/hoffman configs have an `mcp_servers:` section but do not contain `browser-mcp` or `http://browser-mcp:8080/mcp`. The `risarisa` profile did not appear in the matched config output.
+
+Additional read-only context:
+
+```powershell
+$root = if ($env:HERMES_DATA_DIR) { $env:HERMES_DATA_DIR } else { Join-Path $env:USERPROFILE '.hermes' }; "HERMES_DATA_DIR_EFFECTIVE=$root"; Test-Path $root
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+HERMES_DATA_DIR_EFFECTIVE=C:\Users\KoheiMiki\.hermes
+True
+```
+
+```powershell
+$root = Join-Path $env:USERPROFILE '.hermes'; if (Test-Path (Join-Path $root 'profiles')) { Get-ChildItem -Path (Join-Path $root 'profiles') -Directory | ForEach-Object { $cfg=Join-Path $_.FullName 'config.yaml'; "PROFILE=$($_.Name) CONFIG_EXISTS=$(Test-Path $cfg)" } } else { 'NO_PROFILES_DIR' }
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+PROFILE=hoffman CONFIG_EXISTS=True
+PROFILE=rick CONFIG_EXISTS=True
+PROFILE=risarisa CONFIG_EXISTS=True
+```
+
+### Commands not executed after the defect
+
+The following commands/checks were not executed because Task 5 Step 4 expected root/profile configs to contain the internal browser MCP URL, but the current runtime config does not:
+
+- MCP endpoint/tool-list handshake through Hermes config.
+- Profile persistence `down`/`up` acceptance check.
+- Final `git status --short --branch`, final `git diff --check`, and full `task test`.
+- Commit of this report.
+
+### Result
+
+Status: NEEDS_FIX / BLOCKED.
+
+Concrete defect: after `docker compose -f docker/hermes-agent/compose.yml up -d hermes`, Hermes and the browser services are running, and internal CDP reachability from `browser-mcp` to `chromium:9222` now passes. However, the effective root/profile runtime configs under `C:\Users\KoheiMiki\.hermes` do not contain the required internal browser MCP URL `http://browser-mcp:8080/mcp`. Because Task 5 explicitly requires verifying that root/profile configs contain that browser URL, verification stopped here and no code changes were made.
+
+## Runtime config reapplied verification - 2026-07-14
+
+After `HermesAgentHandler.EnsureMcpConfiguration` was run directly against `C:\Users\KoheiMiki\.hermes`, Task 5 verification resumed from Step 4 and the quick static gates were re-checked.
+
+### Quick static gates
+
+Command:
+
+```powershell
+git diff --check
+```
+
+Exit status: 0
+
+Key output: no output.
+
+Command:
+
+```powershell
+git grep -n -i [o]penclaw -- ':!*.lock'
+```
+
+Exit status: 1
+
+Key output: no output.
+
+Command:
+
+```powershell
+rg -n "browser-mcp:8080/mcp|mcp" C:\Users\KoheiMiki\.hermes\config.yaml C:\Users\KoheiMiki\.hermes\profiles -g config.yaml
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+C:\Users\KoheiMiki\.hermes\config.yaml:153:    url: http://browser-mcp:8080/mcp
+C:\Users\KoheiMiki\.hermes\profiles\risarisa\config.yaml:185:    url: http://browser-mcp:8080/mcp
+C:\Users\KoheiMiki\.hermes\profiles\rick\config.yaml:175:    url: http://browser-mcp:8080/mcp
+C:\Users\KoheiMiki\.hermes\profiles\hoffman\config.yaml:175:    url: http://browser-mcp:8080/mcp
+```
+
+The root config and rick/hoffman/risarisa profile configs now contain the required internal Browser MCP URL.
+
+### Compose startup and Docker smoke
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp hermes
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Container hermes-chromium Running
+Container hermes-browser-mcp Running
+Container hermes Running
+Container hermes-chromium Healthy
+Container hermes-browser-mcp Healthy
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+NAME                 IMAGE                             SERVICE       STATUS                   PORTS
+hermes               local/hermes-agent-gh:latest      hermes        Up 8 minutes             127.0.0.1:8642->8642/tcp, 127.0.0.1:9119->9119/tcp
+hermes-browser-mcp   local/hermes-browser-mcp:latest   browser-mcp   Up 9 minutes (healthy)   8080/tcp
+hermes-chromium      local/hermes-browser:latest       chromium      Up 9 minutes (healthy)
+```
+
+Command:
+
+```powershell
+docker inspect --format '{{.Name}} {{json .NetworkSettings.Ports}}' <chromium-and-browser-mcp-container-ids>
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+/hermes-browser-mcp {"8080/tcp":null}
+/hermes-chromium {}
+```
+
+This verifies that browser-mcp's internal 8080/tcp is not published to the host and Chromium has no host-published 9222 port.
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version')..."
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+200
+"Browser": "Chrome/150.0.7871.114"
+"webSocketDebuggerUrl": "ws://chromium:9222/devtools/browser/..."
+```
+
+### MCP endpoint/tool-list handshake
+
+No dedicated Hermes-configured MCP tool-list command was found in the repository, so the Browser MCP Streamable HTTP endpoint was checked directly from inside the Compose network at `http://browser-mcp:8080/mcp`.
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "<Streamable HTTP initialize, notifications/initialized, tools/list>"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+STATUS 200
+SESSION 89171dfc-c962-4752-8492-7d3930a87f84
+BODY event: message
+data: {"result":{"protocolVersion":"2025-03-26","capabilities":{"logging":{},"tools":{"listChanged":true}},"serverInfo":{"name":"chrome_devtools","title":"Chrome DevTools MCP server","version":"1.4.0"}},"jsonrpc":"2.0","id":1}
+
+STATUS 202
+
+STATUS 200
+BODY event: message
+data: {"result":{"tools":[{"name":"click",...
+```
+
+Follow-up count command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "<parse Streamable HTTP SSE and count tools>"
+```
+
+Exit status: 0
+
+Key output:
+
+```json
+{
+  "initializeStatus": 200,
+  "protocolVersion": "2025-03-26",
+  "server": {
+    "name": "chrome_devtools",
+    "title": "Chrome DevTools MCP server",
+    "version": "1.4.0"
+  },
+  "toolsListStatus": 200,
+  "toolCount": 29,
+  "firstTools": [
+    "click",
+    "close_page",
+    "drag",
+    "emulate",
+    "evaluate_script",
+    "fill",
+    "fill_form",
+    "get_console_message"
+  ]
+}
+```
+
+### Profile persistence check
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml down
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Container hermes Removed
+Container hermes-browser-mcp Removed
+Container hermes-chromium Removed
+Network hermes-browser Removed
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Network hermes-browser Created
+Container hermes-chromium Started
+Container hermes-chromium Healthy
+Container hermes-browser-mcp Started
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+NAME                 IMAGE                             SERVICE       STATUS                    PORTS
+hermes-browser-mcp   local/hermes-browser-mcp:latest   browser-mcp   Up 19 seconds (healthy)   8080/tcp
+hermes-chromium      local/hermes-browser:latest       chromium      Up 25 seconds (healthy)
+```
+
+Command:
+
+```powershell
+docker inspect --format '{{.Name}} {{.State.Health.Status}} {{json .NetworkSettings.Ports}}' <chromium-and-browser-mcp-container-ids>
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+/hermes-browser-mcp healthy {"8080/tcp":null}
+/hermes-chromium healthy {}
+```
+
+### Final checks
+
+Command:
+
+```powershell
+git status --short --branch
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+## codex/hermes-browser-mcp-container...origin/main [ahead 17]
+ M .superpowers/sdd/task-5-report.md
+```
+
+Command:
+
+```powershell
+git diff --check
+```
+
+Exit status: 0
+
+Key output: no output.
+
+Command:
+
+```powershell
+task test
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Discovery found 1033 tests in 17.58s.
+Tests completed in 381.02s
+Tests Passed: 1028, Failed: 0, Skipped: 5, Inconclusive: 0, NotRun: 0
+Tests: 1028 passed, 0 failed, 5 skipped / 1033 total
+SUCCESS: All tests passed!
+```
+
+Sensitive-looking credential/env warning details were not copied.
+
+### Result
+
+Status: PASS with one acceptable limitation.
+
+The runtime root/profile configs contain the internal Browser MCP URL, Chromium and Browser MCP are healthy without host-publishing 9222/8080, Browser MCP reaches Chromium's DevTools endpoint inside the Compose network, Streamable HTTP initialize/list-tools succeeds with 29 Chrome DevTools MCP tools, the down/up profile persistence smoke remains healthy, and `task test` passes with 1028 passed / 0 failed / 5 skipped / 1033 total.
+
+Residual limitation: no Hermes-specific CLI path for listing the configured MCP tools was found, so the endpoint/tool-list handshake was verified directly against `http://browser-mcp:8080/mcp` from inside the Compose network instead.
