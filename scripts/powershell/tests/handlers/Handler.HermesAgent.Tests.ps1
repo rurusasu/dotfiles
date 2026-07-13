@@ -193,6 +193,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "FROM debian:bookworm-slim"
             $dockerfileContent | Should -Match "apt-get"
             $dockerfileContent | Should -Match "--no-install-recommends"
+            $dockerfileContent | Should -Match ([regex]::Escape('rm -rf /var/lib/apt/lists/*'))
             $dockerfileContent | Should -Match "(?m)\bchromium\b"
             $dockerfileContent | Should -Match "(?m)\bcurl\b"
             $dockerfileContent | Should -Match "useradd"
@@ -211,6 +212,21 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Match "mkdir -p /data"
             $entrypointContent | Should -Not -Match "--no-sandbox"
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
+
+            $imageEntrypointContent = "$dockerfileContent`n$entrypointContent"
+            $imageEntrypointContent | Should -Match ([regex]::Escape('/usr/bin/chromium'))
+            $imageEntrypointContent | Should -Match '(?m)(?<![A-Za-z0-9_-])/data(?![A-Za-z0-9_-])'
+
+            @(
+                '(?i)(?<![A-Za-z0-9])brave(?:browser)?(?:\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])node(?:js)?(?:\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])npm(?:\.cmd|\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?(?:\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?:127\.0\.0\.1|localhost):9222',
+                '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|/home/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
         }
 
         It 'should expose managed profile gateway lifecycle tasks' {
