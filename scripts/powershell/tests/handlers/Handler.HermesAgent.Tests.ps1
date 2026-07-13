@@ -305,6 +305,7 @@ Describe 'HermesAgentHandler' {
 
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?shm_size:\s*2g"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?cap_add:\s*`r?`n\s{6}- SYS_ADMIN"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
 
@@ -314,8 +315,9 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Match "(?m)^networks:\s*$"
             $composeContent | Should -Match "(?ms)^networks:\s*`r?`n\s{2}hermes-browser:\s*`r?`n\s{4}name:\s*hermes-browser\s*`r?`n\s{4}driver:\s*bridge"
             $composeContent | Should -Not -Match "(?ms)^networks:.*?internal:\s*true"
-            $composeContent | Should -Not -Match '["'']?9222:9222["'']?'
-            $composeContent | Should -Not -Match '["'']?8080:8080["'']?'
+            $composeContent | Should -Not -Match "(?m)^\s*privileged:\s*true\s*$"
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?9222:9222[""']?\s*$"
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?8080:8080[""']?\s*$"
         }
 
         It 'should expose Hermes browser lifecycle tasks' {
