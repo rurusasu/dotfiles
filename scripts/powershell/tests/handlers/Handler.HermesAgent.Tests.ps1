@@ -286,6 +286,52 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
         }
 
+        It 'should wire Chromium and Browser MCP into the Hermes Compose network without publishing browser ports' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
+            $composeContent = Get-Content -LiteralPath $composePath -Raw
+
+            $composeContent | Should -Match "(?m)^\s{2}hermes:"
+            $composeContent | Should -Match "(?m)^\s{2}chromium:"
+            $composeContent | Should -Match "(?m)^\s{2}browser-mcp:"
+            $composeContent | Should -Match "(?ms)^\s{2}hermes:.*?depends_on:\s*`r?`n\s{6}browser-mcp:\s*`r?`n\s{8}condition:\s*service_healthy"
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?depends_on:\s*`r?`n\s{6}chromium:\s*`r?`n\s{8}condition:\s*service_healthy"
+
+            foreach ($service in @("hermes", "chromium", "browser-mcp")) {
+                $composeContent | Should -Match "(?ms)^\s{2}${service}:.*?networks:\s*`r?`n\s{6}- hermes-browser"
+            }
+
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?shm_size:\s*2g"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
+
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser-mcp"
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?healthcheck:.*?8080"
+
+            $composeContent | Should -Match "(?m)^networks:\s*$"
+            $composeContent | Should -Match "(?ms)^networks:\s*`r?`n\s{2}hermes-browser:\s*`r?`n\s{4}name:\s*hermes-browser\s*`r?`n\s{4}driver:\s*bridge"
+            $composeContent | Should -Not -Match "(?ms)^networks:.*?internal:\s*true"
+            $composeContent | Should -Not -Match '["'']?9222:9222["'']?'
+            $composeContent | Should -Not -Match '["'']?8080:8080["'']?'
+        }
+
+        It 'should expose Hermes browser lifecycle tasks' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
+            $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
+
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp"
+            foreach ($task in @("pull", "restart", "logs", "ps")) {
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:browser:${task}:"
+            }
+
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp"
+        }
+
         It 'should expose managed profile gateway lifecycle tasks' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"

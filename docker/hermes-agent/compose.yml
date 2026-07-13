@@ -10,6 +10,9 @@ services:
     restart: unless-stopped
     shm_size: 1g
     command: gateway run
+    depends_on:
+      browser-mcp:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${HERMES_API_PORT:-8642}:8642"
       - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
@@ -24,3 +27,53 @@ services:
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
       LIFELOG_ROOT: /opt/data/core/lifelog
+    networks:
+      - hermes-browser
+
+  chromium:
+    build:
+      context: ../hermes-browser
+      dockerfile: Dockerfile
+    image: local/hermes-browser:latest
+    container_name: hermes-chromium
+    restart: unless-stopped
+    shm_size: 2g
+    volumes:
+      - type: bind
+        source: ${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}
+        target: /data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9222/json/version >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - hermes-browser
+
+  browser-mcp:
+    build:
+      context: ../hermes-browser-mcp
+      dockerfile: Dockerfile
+    image: local/hermes-browser-mcp:latest
+    container_name: hermes-browser-mcp
+    restart: unless-stopped
+    depends_on:
+      chromium:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          node -e "const net=require('node:net');const s=net.connect({host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - hermes-browser
+
+networks:
+  hermes-browser:
+    name: hermes-browser
+    driver: bridge
