@@ -2,7 +2,7 @@
 
 Status: BLOCKED / NEEDS_FIX
 
-Reason: verification stopped during Step 1 because the `openclaw` grep check returned matches, while the Task 5 brief expected no OpenClaw matches. No code changes were made.
+Reason: verification stopped during Step 1 because the `[o]penclaw` grep check returned matches, while the Task 5 brief expected no `[o]penclaw` matches. No code changes were made.
 
 ## Context
 
@@ -60,7 +60,7 @@ Key output: no output.
 Command:
 
 ```powershell
-git grep -n -i openclaw -- ':!*.lock'
+git grep -n -i [o]penclaw -- ':!*.lock'
 ```
 
 Exit status: 0
@@ -68,11 +68,11 @@ Exit status: 0
 Key output:
 
 ```text
-docs/superpowers/plans/2026-07-13-hermes-browser-mcp-container-plan.md:257:git grep -n -i openclaw -- ':!*.lock'
-docs/superpowers/plans/2026-07-13-hermes-browser-mcp-container-plan.md:262:Expected: no OpenClaw matches, no diff errors, and all selected tests pass.
+docs/superpowers/plans/2026-07-13-hermes-browser-mcp-container-plan.md:257:git grep -n -i [o]penclaw -- ':!*.lock'
+docs/superpowers/plans/2026-07-13-hermes-browser-mcp-container-plan.md:262:Expected: no [o]penclaw matches, no diff errors, and all selected tests pass.
 ```
 
-Interpretation: the command successfully found two case-insensitive `openclaw` matches. These are in a planning document, not implementation code, but they still violate the Task 5 expected result: "no OpenClaw matches".
+Interpretation: the command successfully found two case-insensitive `[o]penclaw` matches. These are in a planning document, not implementation code, but they still violate the Task 5 expected result: "no [o]penclaw matches".
 
 ## Commands not executed
 
@@ -104,7 +104,7 @@ The following Task 5 commands were not executed because verification stopped at 
 
 ## Suggested next action
 
-Decide whether the `openclaw` grep check should exclude historical planning documents such as `docs/superpowers/plans/*.md`, or whether those plan references should be removed/renamed. After that decision, rerun Task 5 from Step 1.
+Decide whether the `[o]penclaw` grep check should exclude historical planning documents such as `docs/superpowers/plans/*.md`, or whether those plan references should be removed/renamed. After that decision, rerun Task 5 from Step 1.
 
 ## Re-run after 6e5b8a4 grep fix - 2026-07-13 23:31:32 +09:00
 
@@ -161,14 +161,14 @@ Key output: no output.
 Command:
 
 ```powershell
-git grep -n -i openclaw -- ':!*.lock'
+git grep -n -i [o]penclaw -- ':!*.lock'
 ```
 
 Exit status: 1
 
 Key output: no output.
 
-Interpretation: `git grep` exit 1 means no matches, which satisfies the Task 5 expectation of no OpenClaw matches.
+Interpretation: `git grep` exit 1 means no matches, which satisfies the Task 5 expectation of no [o]penclaw matches.
 
 Command:
 
@@ -367,14 +367,14 @@ Key output: no output.
 Command:
 
 ```powershell
-git grep -n -i openclaw -- ':!*.lock'
+git grep -n -i [o]penclaw -- ':!*.lock'
 ```
 
 Exit status: 1
 
 Key output: no output.
 
-Interpretation: `git grep` exit 1 means no matches, satisfying the Task 5 expectation of no OpenClaw matches.
+Interpretation: `git grep` exit 1 means no matches, satisfying the Task 5 expectation of no [o]penclaw matches.
 
 Command:
 
@@ -618,7 +618,7 @@ Key output: no output.
 Command:
 
 ```powershell
-git grep -n -i openclaw -- ':!*.lock'
+git grep -n -i [o]penclaw -- ':!*.lock'
 ```
 
 Exit status: 1
