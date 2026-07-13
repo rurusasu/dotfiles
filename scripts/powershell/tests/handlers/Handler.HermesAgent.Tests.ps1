@@ -246,6 +246,39 @@ Describe 'HermesAgentHandler' {
             }
         }
 
+        It 'should define a streamable Browser MCP image contract backed by the Compose Chromium service' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser-mcp\Dockerfile"
+            $packageJsonPath = Join-Path $repoRoot "docker\hermes-browser-mcp\package.json"
+            $packageLockPath = Join-Path $repoRoot "docker\hermes-browser-mcp\package-lock.json"
+
+            $dockerfilePath | Should -Exist
+            $packageJsonPath | Should -Exist
+            $packageLockPath | Should -Exist
+
+            $packageJson = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+            $packageJson.dependencies.'chrome-devtools-mcp' | Should -Be '1.4.0'
+            $packageJson.dependencies.'mcp-proxy' | Should -Be '6.5.2'
+
+            $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
+            $dockerfileContent | Should -Match '(?m)^FROM node:22-bookworm-slim\s*$'
+            $dockerfileContent | Should -Match 'COPY package\.json package-lock\.json'
+            $dockerfileContent | Should -Match 'npm ci --omit=dev'
+            $dockerfileContent | Should -Match 'CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1'
+            $dockerfileContent | Should -Match 'NO_UPDATE_CHECKS=1'
+            $dockerfileContent | Should -Match 'USER node'
+            $dockerfileContent | Should -Match '(?m)^HEALTHCHECK\b'
+            $dockerfileContent | Should -Match '127\.0\.0\.1:8080'
+            $dockerfileContent | Should -Match '"--server", "stream"'
+            $dockerfileContent | Should -Match '"--port", "8080"'
+            $dockerfileContent | Should -Match '--browser-url=http://chromium:9222'
+            $dockerfileContent | Should -Match '--no-usage-statistics'
+            $dockerfileContent | Should -Match 'node_modules/.bin/mcp-proxy'
+            $dockerfileContent | Should -Match 'node_modules/.bin/chrome-devtools-mcp'
+            $dockerfileContent | Should -Not -Match 'localhost:9222|127\.0\.0\.1:9222|host\.docker\.internal'
+            $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
+        }
+
         It 'should expose managed profile gateway lifecycle tasks' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
