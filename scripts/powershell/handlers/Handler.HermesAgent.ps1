@@ -1501,7 +1501,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string[]] SetMcpConfigLines([string[]]$lines, [bool]$includeXApi) {
-        $managedServerNames = @("github", "xapi", "x-docs")
+        $managedServerNames = @("github", "xapi", "x-docs", "browser")
         $desiredLines = @()
         if ($includeXApi) {
             $desiredLines += @(
@@ -1517,7 +1517,10 @@ class HermesAgentHandler : SetupHandlerBase {
         $desiredLines += @(
             "  x-docs:",
             "    url: https://docs.x.com/mcp",
-            "    connect_timeout: 60"
+            "    connect_timeout: 60",
+            "  browser:",
+            "    url: http://browser-mcp:8080/mcp",
+            "    connect_timeout: 120"
         )
         $result = @()
         $index = 0

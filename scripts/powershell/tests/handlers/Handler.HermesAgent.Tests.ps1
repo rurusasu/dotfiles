@@ -1404,6 +1404,40 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "https://docs\.x\.com/mcp"
         }
 
+        It 'should configure Browser MCP, preserve unrelated servers, and replace stale browser blocks' {
+            $configDir = Join-Path $script:userProfile ".hermes"
+            $configPath = Join-Path $configDir "config.yaml"
+            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model:",
+                "  provider: openai-codex",
+                "mcp_servers:",
+                "  local:",
+                "    command: local-tool",
+                "  browser:",
+                "    url: http://stale-browser:9000/mcp",
+                "    connect_timeout: 5"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^mcp_servers:"
+            $configContent | Should -Match "(?m)^\s{2}local:"
+            $configContent | Should -Match "(?m)^\s{4}command:\s*local-tool"
+            $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+            $configContent | Should -Not -Match "stale-browser"
+            $configContent | Should -Not -Match "(?m)^\s{4}connect_timeout:\s*5"
+
+            $rerunResult = $handler.Apply($ctx)
+
+            $rerunResult.Success | Should -Be $true
+            $rerunConfigContent = Get-Content -LiteralPath $configPath -Raw
+            ([regex]::Matches($rerunConfigContent, "(?m)^\s{2}browser:")).Count | Should -Be 1
+            $rerunConfigContent | Should -Match "(?m)^\s{2}local:"
+        }
+
         It 'should add X docs only when mcp_servers is absent and X API authentication is unavailable' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
@@ -1450,6 +1484,7 @@ Describe 'HermesAgentHandler' {
                 $configContent | Should -Not -Match "/usr/local/bin/hermes-xapi-mcp"
                 $configContent | Should -Match "(?m)^\s{2}local:"
                 $configContent | Should -Match "(?m)^\s{2}x-docs:"
+                $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
             }
         }
 
