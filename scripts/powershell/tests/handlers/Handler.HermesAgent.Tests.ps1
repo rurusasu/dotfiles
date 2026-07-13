@@ -211,6 +211,12 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Match "--remote-debugging-port=9222"
             $entrypointContent | Should -Match "--user-data-dir=/data"
             $entrypointContent | Should -Match "mkdir -p /data"
+            $entrypointContent | Should -Match "SingletonLock"
+            $entrypointContent | Should -Match "SingletonSocket"
+            $entrypointContent | Should -Match "SingletonCookie"
+            $entrypointContent | Should -Match ([regex]::Escape('rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie'))
+            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*exec /usr/bin/chromium"
+            $entrypointContent | Should -Not -Match "(?i)(?:`$HOME|`$USERPROFILE|/root|/home)/.*Singleton(?:Lock|Socket|Cookie)"
             $entrypointContent | Should -Not -Match "--no-sandbox"
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
 
