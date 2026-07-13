@@ -195,6 +195,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "--no-install-recommends"
             $dockerfileContent | Should -Match ([regex]::Escape('rm -rf /var/lib/apt/lists/*'))
             $dockerfileContent | Should -Match "(?m)\bchromium\b"
+            $dockerfileContent | Should -Match "(?m)\bchromium-sandbox\b"
             $dockerfileContent | Should -Match "(?m)\bcurl\b"
             $dockerfileContent | Should -Match "useradd"
             $dockerfileContent | Should -Match "hermes-browser"
@@ -216,6 +217,7 @@ Describe 'HermesAgentHandler' {
             $imageEntrypointContent = "$dockerfileContent`n$entrypointContent"
             $imageEntrypointContent | Should -Match ([regex]::Escape('/usr/bin/chromium'))
             $imageEntrypointContent | Should -Match '(?m)(?<![A-Za-z0-9_-])/data(?![A-Za-z0-9_-])'
+            $imageEntrypointContent | Should -Not -Match "--no-sandbox"
 
             @(
                 '(?i)(?<![A-Za-z0-9])brave(?:browser)?(?:\.exe)?(?![A-Za-z0-9])',
