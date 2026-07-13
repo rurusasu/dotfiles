@@ -14,7 +14,7 @@ ENV CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1 \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8080/ping').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "const net=require('node:net');const socket=net.connect({host:'127.0.0.1',port:8080});socket.setTimeout(5000);socket.on('connect',()=>{socket.end();process.exit(0)});socket.on('timeout',()=>{socket.destroy();process.exit(1)});socket.on('error',()=>process.exit(1));"
 
 USER node
 

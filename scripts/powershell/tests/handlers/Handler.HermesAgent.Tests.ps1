@@ -260,6 +260,11 @@ Describe 'HermesAgentHandler' {
             $packageJson.dependencies.'chrome-devtools-mcp' | Should -Be '1.4.0'
             $packageJson.dependencies.'mcp-proxy' | Should -Be '6.5.2'
 
+            $packageLock = Get-Content -LiteralPath $packageLockPath -Raw | ConvertFrom-Json -AsHashtable
+            $packageLock.packages.Keys | Should -Contain ''
+            $packageLock.packages[''].dependencies['chrome-devtools-mcp'] | Should -Be '1.4.0'
+            $packageLock.packages[''].dependencies['mcp-proxy'] | Should -Be '6.5.2'
+
             $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
             $dockerfileContent | Should -Match '(?m)^FROM node:22-bookworm-slim\s*$'
             $dockerfileContent | Should -Match 'COPY package\.json package-lock\.json'
@@ -268,13 +273,15 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match 'NO_UPDATE_CHECKS=1'
             $dockerfileContent | Should -Match 'USER node'
             $dockerfileContent | Should -Match '(?m)^HEALTHCHECK\b'
-            $dockerfileContent | Should -Match '127\.0\.0\.1:8080'
+            $dockerfileContent | Should -Match 'node:net'
+            $dockerfileContent | Should -Match 'connect\(\{host:\s*["'']127\.0\.0\.1["''],\s*port:\s*8080\}\)'
             $dockerfileContent | Should -Match '"--server", "stream"'
             $dockerfileContent | Should -Match '"--port", "8080"'
             $dockerfileContent | Should -Match '--browser-url=http://chromium:9222'
             $dockerfileContent | Should -Match '--no-usage-statistics'
             $dockerfileContent | Should -Match 'node_modules/.bin/mcp-proxy'
             $dockerfileContent | Should -Match 'node_modules/.bin/chrome-devtools-mcp'
+            $dockerfileContent | Should -Not -Match '/ping|fetch\('
             $dockerfileContent | Should -Not -Match 'localhost:9222|127\.0\.0\.1:9222|host\.docker\.internal'
             $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
         }
