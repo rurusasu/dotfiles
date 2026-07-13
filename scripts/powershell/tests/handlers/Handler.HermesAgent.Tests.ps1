@@ -18,6 +18,7 @@ Describe 'HermesAgentHandler' {
         $script:oldUserProfile = $env:USERPROFILE
         $script:oldHome = $env:HOME
         $script:oldHermesDataDir = $env:HERMES_DATA_DIR
+        $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
         $script:dockerCalls = @()
 
         $script:ctx.Options["NixRebuildApplied"] = $true
@@ -32,6 +33,7 @@ Describe 'HermesAgentHandler' {
         $env:USERPROFILE = $script:userProfile
         Remove-Item Env:\HOME -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
 
         Mock Write-Host { }
         Mock Get-Command {
@@ -59,6 +61,13 @@ Describe 'HermesAgentHandler' {
         }
         else {
             $env:HERMES_DATA_DIR = $script:oldHermesDataDir
+        }
+
+        if ($null -eq $script:oldHermesBrowserDataDir) {
+            Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HERMES_BROWSER_DATA_DIR = $script:oldHermesBrowserDataDir
         }
     }
 
@@ -179,6 +188,183 @@ Describe 'HermesAgentHandler' {
 
             $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes"
             $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} pull"
+        }
+
+        It 'should define a dedicated non-host Chromium image contract for Hermes browser MCP' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser\Dockerfile"
+            $entrypointPath = Join-Path $repoRoot "docker\hermes-browser\entrypoint.sh"
+
+            $dockerfilePath | Should -Exist
+            $entrypointPath | Should -Exist
+
+            $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
+            $dockerfileContent | Should -Match "FROM debian:bookworm-slim"
+            $dockerfileContent | Should -Match "apt-get"
+            $dockerfileContent | Should -Match "--no-install-recommends"
+            $dockerfileContent | Should -Match ([regex]::Escape('rm -rf /var/lib/apt/lists/*'))
+            $dockerfileContent | Should -Match "(?m)\bchromium\b"
+            $dockerfileContent | Should -Match "(?m)\bchromium-sandbox\b"
+            $dockerfileContent | Should -Match "(?m)\bsocat\b"
+            $dockerfileContent | Should -Match "(?m)\bpython3-minimal\b"
+            $dockerfileContent | Should -Match "(?m)\bcurl\b"
+            $dockerfileContent | Should -Match "useradd"
+            $dockerfileContent | Should -Match "hermes-browser"
+            $dockerfileContent | Should -Match "COPY entrypoint\.sh"
+            $dockerfileContent | Should -Match "chmod \+x"
+            $dockerfileContent | Should -Match "(?m)^USER hermes-browser\s*$"
+            $dockerfileContent | Should -Not -Match "chrome\.exe|chromium\.exe"
+
+            $entrypointContent = Get-Content -LiteralPath $entrypointPath -Raw
+            $entrypointContent | Should -Match "socat"
+            $entrypointContent | Should -Match "TCP-LISTEN:9222,fork,reuseaddr,bind=0\.0\.0\.0"
+            $entrypointContent | Should -Match 'UPSTREAM_HOST = "127\.0\.0\.1"'
+            $entrypointContent | Should -Match "UPSTREAM_PORT = 9223"
+            $entrypointContent | Should -Match "EXTERNAL_PORT = 9222"
+            $entrypointContent | Should -Match "Host"
+            $entrypointContent | Should -Match ([regex]::Escape('upstream_host = f"{UPSTREAM_HOST}:{UPSTREAM_PORT}"'))
+            $entrypointContent | Should -Match ([regex]::Escape('external_host = get_header(request_headers, "Host")'))
+            $entrypointContent | Should -Match ([regex]::Escape('external_host.encode("ascii")'))
+            $entrypointContent | Should -Match "Content-Length"
+            $entrypointContent | Should -Match "/usr/bin/chromium"
+            $entrypointContent | Should -Match "--headless=new"
+            $entrypointContent | Should -Match "--remote-debugging-address=127\.0\.0\.1"
+            $entrypointContent | Should -Match "--remote-debugging-port=9223"
+            $entrypointContent | Should -Not -Match "--remote-debugging-address=0\.0\.0\.0"
+            $entrypointContent | Should -Not -Match "--remote-debugging-port=9222"
+            $entrypointContent | Should -Match "--user-data-dir=/data"
+            $entrypointContent | Should -Match "mkdir -p /data"
+            $entrypointContent | Should -Match "SingletonLock"
+            $entrypointContent | Should -Match "SingletonSocket"
+            $entrypointContent | Should -Match "SingletonCookie"
+            $entrypointContent | Should -Match ([regex]::Escape('rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie'))
+            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*socat.*exec /usr/bin/chromium"
+            $entrypointContent | Should -Not -Match "(?i)(?:`$HOME|`$USERPROFILE|/root|/home)/.*Singleton(?:Lock|Socket|Cookie)"
+            $entrypointContent | Should -Not -Match "--no-sandbox"
+            $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
+
+            $imageEntrypointContent = "$dockerfileContent`n$entrypointContent"
+            $imageEntrypointContent | Should -Match ([regex]::Escape('/usr/bin/chromium'))
+            $imageEntrypointContent | Should -Match '(?m)(?<![A-Za-z0-9_-])/data(?![A-Za-z0-9_-])'
+            $imageEntrypointContent | Should -Not -Match "--no-sandbox"
+
+            @(
+                '(?i)(?<![A-Za-z0-9])brave(?:browser)?(?:\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])node(?:js)?(?:\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])npm(?:\.cmd|\.exe)?(?![A-Za-z0-9])',
+                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?\.exe(?![A-Za-z0-9])'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
+
+            $forbiddenCdpEndpointPattern = '(?i)(?:127\.0\.0\.1|localhost):9222|host\.docker\.internal(?::\d+)?'
+
+            @(
+                $forbiddenCdpEndpointPattern,
+                '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
+
+            'host.docker.internal' | Should -Match $forbiddenCdpEndpointPattern
+            'host.docker.internal:9222' | Should -Match $forbiddenCdpEndpointPattern
+            'host.docker.internal:9999' | Should -Match $forbiddenCdpEndpointPattern
+
+            @(
+                '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
+        }
+
+        It 'should define a streamable Browser MCP image contract backed by the Compose Chromium service' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser-mcp\Dockerfile"
+            $packageJsonPath = Join-Path $repoRoot "docker\hermes-browser-mcp\package.json"
+            $packageLockPath = Join-Path $repoRoot "docker\hermes-browser-mcp\package-lock.json"
+
+            $dockerfilePath | Should -Exist
+            $packageJsonPath | Should -Exist
+            $packageLockPath | Should -Exist
+
+            $packageJson = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+            $packageJson.dependencies.'chrome-devtools-mcp' | Should -Be '1.4.0'
+            $packageJson.dependencies.'mcp-proxy' | Should -Be '6.5.2'
+
+            $packageLock = Get-Content -LiteralPath $packageLockPath -Raw | ConvertFrom-Json -AsHashtable
+            $packageLock.packages.Keys | Should -Contain ''
+            $packageLock.packages[''].dependencies['chrome-devtools-mcp'] | Should -Be '1.4.0'
+            $packageLock.packages[''].dependencies['mcp-proxy'] | Should -Be '6.5.2'
+
+            $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
+            $dockerfileContent | Should -Match '(?m)^FROM node:22-bookworm-slim\s*$'
+            $dockerfileContent | Should -Match 'COPY package\.json package-lock\.json'
+            $dockerfileContent | Should -Match 'npm ci --omit=dev'
+            $dockerfileContent | Should -Match 'CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1'
+            $dockerfileContent | Should -Match 'NO_UPDATE_CHECKS=1'
+            $dockerfileContent | Should -Match 'USER node'
+            $dockerfileContent | Should -Match '(?m)^HEALTHCHECK\b'
+            $dockerfileContent | Should -Match 'node:net'
+            $dockerfileContent | Should -Match 'connect\(\{host:\s*["'']127\.0\.0\.1["''],\s*port:\s*8080\}\)'
+            $dockerfileContent | Should -Match '"--server", "stream"'
+            $dockerfileContent | Should -Match '"--port", "8080"'
+            $dockerfileContent | Should -Match '--browser-url=http://chromium:9222'
+            $dockerfileContent | Should -Match '--no-usage-statistics'
+            $dockerfileContent | Should -Match 'node_modules/.bin/mcp-proxy'
+            $dockerfileContent | Should -Match 'node_modules/.bin/chrome-devtools-mcp'
+            $dockerfileContent | Should -Not -Match '/ping|fetch\('
+            $dockerfileContent | Should -Not -Match 'localhost:9222|127\.0\.0\.1:9222|host\.docker\.internal'
+            $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
+        }
+
+        It 'should wire Chromium and Browser MCP into the Hermes Compose network without publishing browser ports' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
+            $composeContent = Get-Content -LiteralPath $composePath -Raw
+            $chromiumService = [regex]::Match($composeContent, "(?ms)^\s{2}chromium:.*?(?=^\s{2}\S|\z)").Value
+
+            $composeContent | Should -Match "(?m)^\s{2}hermes:"
+            $composeContent | Should -Match "(?m)^\s{2}chromium:"
+            $composeContent | Should -Match "(?m)^\s{2}browser-mcp:"
+            $composeContent | Should -Match "(?ms)^\s{2}hermes:.*?depends_on:\s*`r?`n\s{6}browser-mcp:\s*`r?`n\s{8}condition:\s*service_healthy"
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?depends_on:\s*`r?`n\s{6}chromium:\s*`r?`n\s{8}condition:\s*service_healthy"
+
+            foreach ($service in @("hermes", "chromium", "browser-mcp")) {
+                $composeContent | Should -Match "(?ms)^\s{2}${service}:.*?networks:\s*`r?`n\s{6}- hermes-browser"
+            }
+
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?shm_size:\s*2g"
+            $chromiumService | Should -Not -Match "(?m)^\s{4}cap_add:\s*$"
+            $chromiumService | Should -Not -Match "(?m)^\s*-\s*SYS_ADMIN\s*$"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
+
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser-mcp"
+            $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?healthcheck:.*?8080"
+
+            $composeContent | Should -Match "(?m)^networks:\s*$"
+            $composeContent | Should -Match "(?ms)^networks:\s*`r?`n\s{2}hermes-browser:\s*`r?`n\s{4}name:\s*hermes-browser\s*`r?`n\s{4}driver:\s*bridge"
+            $composeContent | Should -Not -Match "(?ms)^networks:.*?internal:\s*true"
+            $composeContent | Should -Not -Match "(?m)^\s*privileged:\s*true\s*$"
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?9222:9222[""']?\s*$"
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?8080:8080[""']?\s*$"
+        }
+
+        It 'should expose Hermes browser lifecycle tasks' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
+            $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
+
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp"
+            foreach ($task in @("pull", "restart", "logs", "ps")) {
+                $taskfileContent | Should -Match "(?m)^\s{2}hermes:browser:${task}:"
+            }
+
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 chromium browser-mcp"
+            $taskfileContent | Should -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp"
         }
 
         It 'should expose managed profile gateway lifecycle tasks' {
@@ -326,6 +512,26 @@ Describe 'HermesAgentHandler' {
             $composeCall | Should -Contain "--build"
             $composeCall | Should -Contain "--force-recreate"
             $composeCall | Should -Contain "--remove-orphans"
+        }
+
+        It 'should create the default browser profile directory before starting compose' {
+            $browserProfileDir = Join-Path $script:userProfile ".hermes\.browser"
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $browserProfileDir | Should -Exist
+        }
+
+        It 'should create the browser profile directory from HERMES_BROWSER_DATA_DIR when set' {
+            $customBrowserProfileDir = Join-Path $TestDrive "custom-browser-profile"
+            $env:HERMES_BROWSER_DATA_DIR = $customBrowserProfileDir
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $customBrowserProfileDir | Should -Exist
+            (Join-Path $script:userProfile ".hermes\.browser") | Should -Not -Exist
         }
 
         It 'should configure the default Codex model in config.yaml' {
@@ -1253,6 +1459,40 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "https://docs\.x\.com/mcp"
         }
 
+        It 'should configure Browser MCP, preserve unrelated servers, and replace stale browser blocks' {
+            $configDir = Join-Path $script:userProfile ".hermes"
+            $configPath = Join-Path $configDir "config.yaml"
+            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+            Set-Content -LiteralPath $configPath -Encoding UTF8 -Value @(
+                "model:",
+                "  provider: openai-codex",
+                "mcp_servers:",
+                "  local:",
+                "    command: local-tool",
+                "  browser:",
+                "    url: http://stale-browser:9000/mcp",
+                "    connect_timeout: 5"
+            )
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $configContent = Get-Content -LiteralPath $configPath -Raw
+            $configContent | Should -Match "(?m)^mcp_servers:"
+            $configContent | Should -Match "(?m)^\s{2}local:"
+            $configContent | Should -Match "(?m)^\s{4}command:\s*local-tool"
+            $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+            $configContent | Should -Not -Match "stale-browser"
+            $configContent | Should -Not -Match "(?m)^\s{4}connect_timeout:\s*5"
+
+            $rerunResult = $handler.Apply($ctx)
+
+            $rerunResult.Success | Should -Be $true
+            $rerunConfigContent = Get-Content -LiteralPath $configPath -Raw
+            ([regex]::Matches($rerunConfigContent, "(?m)^\s{2}browser:")).Count | Should -Be 1
+            $rerunConfigContent | Should -Match "(?m)^\s{2}local:"
+        }
+
         It 'should add X docs only when mcp_servers is absent and X API authentication is unavailable' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
@@ -1299,6 +1539,7 @@ Describe 'HermesAgentHandler' {
                 $configContent | Should -Not -Match "/usr/local/bin/hermes-xapi-mcp"
                 $configContent | Should -Match "(?m)^\s{2}local:"
                 $configContent | Should -Match "(?m)^\s{2}x-docs:"
+                $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
             }
         }
 

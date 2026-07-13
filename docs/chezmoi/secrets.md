@@ -174,6 +174,9 @@ X API MCP は `xurl` bridge を使う。Hermes setup は `mcp_servers.xapi` と 
 `~/.hermes/config.yaml` に生成し、`xurl` の OAuth cache は `~/.hermes/.xurl` に永続化する。
 初回 OAuth は X app の redirect URI に `http://localhost:8080/callback` を登録してから実行する。
 
+Browser MCP は host browser を使わず、Compose 内の Chromium / Browser MCP container だけを使う。
+内部接続 URL、専用 browser profile、起動順は [Hermes Browser MCP](../hermes-agent/browser-mcp.md) を参照する。
+
 Hermes Agent から OpenAI Codex provider を使う場合は、Codex CLI の `~/.codex/auth.json` をコピーしない。
 refresh token の競合を避けるため、Hermes 側で別 OAuth session を作る。
 

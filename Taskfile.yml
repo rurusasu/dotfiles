@@ -174,12 +174,12 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
   hermes:pull:
-    desc: Rebuild the Hermes Agent Docker image with the latest base image
+    desc: Rebuild the Hermes Agent Docker images with the latest base images
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
@@ -213,6 +213,39 @@ tasks:
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hermes
+
+  hermes:browser:pull:
+    desc: Rebuild Hermes browser and Browser MCP Docker images
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp
+
+  hermes:browser:restart:
+    desc: Recreate Hermes browser and Browser MCP containers
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate chromium browser-mcp
+
+  hermes:browser:logs:
+    desc: Follow Hermes browser and Browser MCP Docker logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 chromium browser-mcp
+
+  hermes:browser:ps:
+    desc: Show Hermes browser and Browser MCP container status
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp
 
   hermes:profile:init:
     desc: Initialize a Hermes profile home as a separate Git repository

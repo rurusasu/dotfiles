@@ -76,6 +76,7 @@ class HermesAgentHandler : SetupHandlerBase {
             $dataDir = $this.GetDataDir()
             $this.EnsureDirectory($dataDir)
             $this.EnsureDirectory((Join-Path $dataDir ".xurl"))
+            $this.EnsureDirectory($this.GetBrowserDataDir())
             $homeRepositoryResult = $this.EnsureHomeRepositoryLayout($ctx, $dataDir)
             $lifelogCoreResult = $this.EnsureLifelogCore($ctx, $dataDir)
             $modelResult = $this.EnsureModelConfiguration($ctx, $dataDir)
@@ -229,6 +230,14 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return Join-Path $this.GetHomeDir() ".hermes"
+    }
+
+    hidden [string] GetBrowserDataDir() {
+        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_DATA_DIR)) {
+            return $env:HERMES_BROWSER_DATA_DIR
+        }
+
+        return Join-Path (Join-Path $this.GetHomeDir() ".hermes") ".browser"
     }
 
     hidden [string] GetHomeDir() {
@@ -1501,7 +1510,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string[]] SetMcpConfigLines([string[]]$lines, [bool]$includeXApi) {
-        $managedServerNames = @("github", "xapi", "x-docs")
+        $managedServerNames = @("github", "xapi", "x-docs", "browser")
         $desiredLines = @()
         if ($includeXApi) {
             $desiredLines += @(
@@ -1517,7 +1526,10 @@ class HermesAgentHandler : SetupHandlerBase {
         $desiredLines += @(
             "  x-docs:",
             "    url: https://docs.x.com/mcp",
-            "    connect_timeout: 60"
+            "    connect_timeout: 60",
+            "  browser:",
+            "    url: http://browser-mcp:8080/mcp",
+            "    connect_timeout: 120"
         )
         $result = @()
         $index = 0
