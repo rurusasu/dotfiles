@@ -221,9 +221,20 @@ Describe 'HermesAgentHandler' {
                 '(?i)(?<![A-Za-z0-9])brave(?:browser)?(?:\.exe)?(?![A-Za-z0-9])',
                 '(?i)(?<![A-Za-z0-9])node(?:js)?(?:\.exe)?(?![A-Za-z0-9])',
                 '(?i)(?<![A-Za-z0-9])npm(?:\.cmd|\.exe)?(?![A-Za-z0-9])',
-                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?(?:\.exe)?(?![A-Za-z0-9])',
-                '(?i)(?:127\.0\.0\.1|localhost):9222',
-                '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|/home/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
+                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?(?:\.exe)?(?![A-Za-z0-9])'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
+
+            @(
+                '(?i)(?:127\.0\.0\.1|localhost|host\.docker\.internal):9222',
+                '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
+            ) | ForEach-Object {
+                $imageEntrypointContent | Should -Not -Match $_
+            }
+
+            @(
+                '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
             ) | ForEach-Object {
                 $imageEntrypointContent | Should -Not -Match $_
             }
