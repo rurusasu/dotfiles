@@ -254,12 +254,12 @@ Run:
 
 ```powershell
 git diff --check
-git grep -n -i openclaw -- ':!*.lock'
+git grep -n -i '[o]penclaw' -- ':!*.lock'
 pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Normal"
 pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1' -Output Normal"
 ```
 
-Expected: no OpenClaw matches, no diff errors, and all selected tests pass.
+Expected: no matches for the removed tool name, no diff errors, and all selected tests pass.
 
 - [ ] Step 2: Build and start the isolated browser services
 
