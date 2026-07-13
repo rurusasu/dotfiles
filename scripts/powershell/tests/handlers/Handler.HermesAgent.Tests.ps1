@@ -227,7 +227,7 @@ Describe 'HermesAgentHandler' {
             }
 
             @(
-                '(?i)(?:127\.0\.0\.1|localhost|host\.docker\.internal):9222',
+                '(?i)(?:127\\.0\\.0\\.1|localhost):9222|host\\.docker\\.internal(?::\\d+)?',
                 '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
             ) | ForEach-Object {
                 $imageEntrypointContent | Should -Not -Match $_
