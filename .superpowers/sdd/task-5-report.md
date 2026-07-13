@@ -990,3 +990,259 @@ Commands and results:
 - Cleanup: `docker compose -f docker/hermes-agent/compose.yml stop chromium` stopped `hermes-chromium`, because Chromium was not running before this smoke test.
 
 Scope note: stale lock cleanup is intentionally limited to the dedicated `/data` container profile root and does not touch the user's normal browser profile.
+
+## Full Task 5 re-verification after `ffa0245` - 2026-07-14
+
+Branch and head before verification:
+
+```text
+## codex/hermes-browser-mcp-container...origin/main [ahead 16]
+ffa0245 'fix Task 5 report grep self-hit'
+67494b9 'clear stale Chromium profile locks'
+75b0d21 'allow Chromium sandbox namespace'
+3476096 'install Chromium sandbox package'
+6e5b8a4 'fix browser verification grep'
+```
+
+### Step 1: repository static checks
+
+Command:
+
+```powershell
+git diff --check
+```
+
+Exit status: 0
+
+Key output: no output.
+
+Command:
+
+```powershell
+git grep -n -i [o]penclaw -- ':!*.lock'
+```
+
+Exit status: 1
+
+Key output: no output, meaning no matches.
+
+Command:
+
+```powershell
+pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Normal"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Discovery found 53 tests in 957ms.
+[+] D:\ruru\dotfiles\scripts\powershell\tests\handlers\Handler.HermesAgent.Tests.ps1 21.84s (19.15s|1.83s)
+Tests completed in 21.87s
+Tests Passed: 53, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+```
+
+Command:
+
+```powershell
+pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1' -Output Normal"
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Discovery found 42 tests in 1.58s.
+[+] D:\ruru\dotfiles\scripts\powershell\tests\chezmoi\ChezmoiTemplate.Tests.ps1 7.79s (4.14s|2.16s)
+Tests completed in 7.86s
+Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+```
+
+### Step 2: build and start isolated browser services
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Image local/hermes-browser-mcp:latest Built
+Image local/hermes-browser:latest Built
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+Container hermes-chromium Recreate
+Container hermes-chromium Recreated
+Container hermes-browser-mcp Recreate
+Container hermes-browser-mcp Recreated
+Container hermes-chromium Started
+Container hermes-chromium Healthy
+Container hermes-browser-mcp Started
+```
+
+Effect note: this did not run `docker compose down`, but it did recreate the existing `hermes-chromium` and `hermes-browser-mcp` containers for the compose project.
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+NAME                 IMAGE                             SERVICE       STATUS                    PORTS
+hermes-browser-mcp   local/hermes-browser-mcp:latest   browser-mcp   Up 8 seconds (healthy)    8080/tcp
+hermes-chromium      local/hermes-browser:latest       chromium      Up 14 seconds (healthy)
+```
+
+Command:
+
+```powershell
+docker port hermes-chromium; docker port hermes-browser-mcp
+```
+
+Exit status: 0
+
+Key output: no output, confirming no host port bindings were published for 9222 or 8080.
+
+### Step 3: internal CDP reachability over the Compose network
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
+```
+
+Exit status: 0
+
+Key output:
+
+```json
+{
+  "Browser": "Chrome/150.0.7871.114",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/6d5d5245-8799-4831-bc02-8153ab6ad20b"
+}
+```
+
+Command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+```
+
+Exit status: 1
+
+Key output: no output.
+
+Follow-up diagnostic command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 200)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"
+```
+
+Exit status: 1
+
+Key output:
+
+```text
+TypeError: fetch failed
+    at node:internal/deps/undici/undici:15141:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+```
+
+Follow-up diagnostic command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp getent hosts chromium
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+172.24.0.2      chromium
+```
+
+Follow-up diagnostic command:
+
+```powershell
+docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=80 chromium browser-mcp
+```
+
+Exit status: 0
+
+Key output:
+
+```text
+hermes-browser-mcp  | starting server on port 8080
+hermes-chromium     | DevTools listening on ws://127.0.0.1:9222/devtools/browser/6d5d5245-8799-4831-bc02-8153ab6ad20b
+```
+
+The remaining Chromium DBus and GCM log lines were local container/runtime noise and did not include secrets.
+
+### Commands not executed after the defect
+
+The following commands/checks were not executed because internal CDP reachability from `browser-mcp` to `chromium:9222` failed:
+
+- `docker compose -f docker/hermes-agent/compose.yml up -d hermes`
+- Hermes log inspection for the startup path
+- root/profile config verification for the internal browser URL
+- MCP endpoint/tool-list handshake
+- profile persistence `down`/`up` acceptance check
+- final full repository `task test`
+
+### Test counts
+
+- Handler.HermesAgent focused Pester: 53 passed, 0 failed.
+- ChezmoiTemplate focused Pester: 42 passed, 0 failed.
+- Docker build: passed for `chromium` and `browser-mcp`.
+- Docker service startup: `chromium` and `browser-mcp` started healthy, with no host port bindings.
+- Internal CDP from inside `chromium`: passed.
+- Internal CDP from `browser-mcp` to `chromium:9222`: failed with `TypeError: fetch failed`.
+
+### Result
+
+Status: NEEDS_FIX / BLOCKED.
+
+Concrete defect: Chromium is healthy and its local CDP endpoint works from inside the Chromium container, but the CDP listener is advertised as `ws://127.0.0.1:9222/...` and is not reachable from the `browser-mcp` container at `http://chromium:9222/json/version`. Compose DNS for `chromium` resolves successfully, so the observed blocker is network reachability to the CDP listener rather than service-name resolution. Per Task 5 instructions, no code changes were made after exposing this defect.
+
+## CDP forwarder Host rewrite fix - 2026-07-14
+
+Scope:
+
+- Changed only the CDP forwarder behavior in `docker/hermes-browser/entrypoint.sh`: upstream requests now send `Host: 127.0.0.1:9223`, while response body WebSocket URLs are rewritten back to the caller's external Host such as `chromium:9222`.
+- Strengthened `Handler.HermesAgent` static coverage for upstream Host rewrite and external WebSocket response rewrite.
+- Kept the external contract at `chromium:9222` and did not add `--no-sandbox`.
+
+Verification:
+
+- RED focused Pester before the forwarder fix: 52 passed, 1 failed on the expected upstream Host rewrite assertion.
+- GREEN focused Pester after the fix: `pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Normal"` exited 0 with 53 passed, 0 failed.
+- `docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp` exited 0 and rebuilt `local/hermes-browser:latest`.
+- `docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp` exited 0; `chromium` became healthy and `browser-mcp` started.
+- `docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 CDP metadata.
+- `docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"` exited 0 with `status=200`.
+- Additional scoped response check from `browser-mcp` printed `ws://chromium:9222/devtools/browser/882e7a0b-8aa1-4b16-9b53-dc73fdd25978`, confirming external Host rewrite in the WebSocket URL.

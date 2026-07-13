@@ -196,6 +196,8 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match ([regex]::Escape('rm -rf /var/lib/apt/lists/*'))
             $dockerfileContent | Should -Match "(?m)\bchromium\b"
             $dockerfileContent | Should -Match "(?m)\bchromium-sandbox\b"
+            $dockerfileContent | Should -Match "(?m)\bsocat\b"
+            $dockerfileContent | Should -Match "(?m)\bpython3-minimal\b"
             $dockerfileContent | Should -Match "(?m)\bcurl\b"
             $dockerfileContent | Should -Match "useradd"
             $dockerfileContent | Should -Match "hermes-browser"
@@ -205,17 +207,29 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Not -Match "chrome\.exe|chromium\.exe"
 
             $entrypointContent = Get-Content -LiteralPath $entrypointPath -Raw
+            $entrypointContent | Should -Match "socat"
+            $entrypointContent | Should -Match "TCP-LISTEN:9222,fork,reuseaddr,bind=0\.0\.0\.0"
+            $entrypointContent | Should -Match 'UPSTREAM_HOST = "127\.0\.0\.1"'
+            $entrypointContent | Should -Match "UPSTREAM_PORT = 9223"
+            $entrypointContent | Should -Match "EXTERNAL_PORT = 9222"
+            $entrypointContent | Should -Match "Host"
+            $entrypointContent | Should -Match ([regex]::Escape('upstream_host = f"{UPSTREAM_HOST}:{UPSTREAM_PORT}"'))
+            $entrypointContent | Should -Match ([regex]::Escape('external_host = get_header(request_headers, "Host")'))
+            $entrypointContent | Should -Match ([regex]::Escape('external_host.encode("ascii")'))
+            $entrypointContent | Should -Match "Content-Length"
             $entrypointContent | Should -Match "/usr/bin/chromium"
             $entrypointContent | Should -Match "--headless=new"
-            $entrypointContent | Should -Match "--remote-debugging-address=0\.0\.0\.0"
-            $entrypointContent | Should -Match "--remote-debugging-port=9222"
+            $entrypointContent | Should -Match "--remote-debugging-address=127\.0\.0\.1"
+            $entrypointContent | Should -Match "--remote-debugging-port=9223"
+            $entrypointContent | Should -Not -Match "--remote-debugging-address=0\.0\.0\.0"
+            $entrypointContent | Should -Not -Match "--remote-debugging-port=9222"
             $entrypointContent | Should -Match "--user-data-dir=/data"
             $entrypointContent | Should -Match "mkdir -p /data"
             $entrypointContent | Should -Match "SingletonLock"
             $entrypointContent | Should -Match "SingletonSocket"
             $entrypointContent | Should -Match "SingletonCookie"
             $entrypointContent | Should -Match ([regex]::Escape('rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie'))
-            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*exec /usr/bin/chromium"
+            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*socat.*exec /usr/bin/chromium"
             $entrypointContent | Should -Not -Match "(?i)(?:`$HOME|`$USERPROFILE|/root|/home)/.*Singleton(?:Lock|Socket|Cookie)"
             $entrypointContent | Should -Not -Match "--no-sandbox"
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
@@ -229,7 +243,7 @@ Describe 'HermesAgentHandler' {
                 '(?i)(?<![A-Za-z0-9])brave(?:browser)?(?:\.exe)?(?![A-Za-z0-9])',
                 '(?i)(?<![A-Za-z0-9])node(?:js)?(?:\.exe)?(?![A-Za-z0-9])',
                 '(?i)(?<![A-Za-z0-9])npm(?:\.cmd|\.exe)?(?![A-Za-z0-9])',
-                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?(?:\.exe)?(?![A-Za-z0-9])'
+                '(?i)(?<![A-Za-z0-9])python(?:\d+(?:\.\d+)*)?\.exe(?![A-Za-z0-9])'
             ) | ForEach-Object {
                 $imageEntrypointContent | Should -Not -Match $_
             }

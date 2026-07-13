@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends chromium chromium-sandbox curl ca-certificates \
+  && apt-get install -y --no-install-recommends chromium chromium-sandbox socat python3-minimal curl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system hermes-browser \
   && useradd --system --create-home --gid hermes-browser hermes-browser \
