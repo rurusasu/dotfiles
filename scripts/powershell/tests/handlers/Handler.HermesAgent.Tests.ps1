@@ -226,12 +226,18 @@ Describe 'HermesAgentHandler' {
                 $imageEntrypointContent | Should -Not -Match $_
             }
 
+            $forbiddenCdpEndpointPattern = '(?i)(?:127\.0\.0\.1|localhost):9222|host\.docker\.internal(?::\d+)?'
+
             @(
-                '(?i)(?:127\\.0\\.0\\.1|localhost):9222|host\\.docker\\.internal(?::\\d+)?',
+                $forbiddenCdpEndpointPattern,
                 '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
             ) | ForEach-Object {
                 $imageEntrypointContent | Should -Not -Match $_
             }
+
+            'host.docker.internal' | Should -Match $forbiddenCdpEndpointPattern
+            'host.docker.internal:9222' | Should -Match $forbiddenCdpEndpointPattern
+            'host.docker.internal:9999' | Should -Match $forbiddenCdpEndpointPattern
 
             @(
                 '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
