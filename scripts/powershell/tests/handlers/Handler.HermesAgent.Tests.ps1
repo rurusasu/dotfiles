@@ -181,6 +181,38 @@ Describe 'HermesAgentHandler' {
             $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} pull"
         }
 
+        It 'should define a dedicated non-host Chromium image contract for Hermes browser MCP' {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
+            $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser\Dockerfile"
+            $entrypointPath = Join-Path $repoRoot "docker\hermes-browser\entrypoint.sh"
+
+            $dockerfilePath | Should -Exist
+            $entrypointPath | Should -Exist
+
+            $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
+            $dockerfileContent | Should -Match "FROM debian:bookworm-slim"
+            $dockerfileContent | Should -Match "apt-get"
+            $dockerfileContent | Should -Match "--no-install-recommends"
+            $dockerfileContent | Should -Match "(?m)\bchromium\b"
+            $dockerfileContent | Should -Match "(?m)\bcurl\b"
+            $dockerfileContent | Should -Match "useradd"
+            $dockerfileContent | Should -Match "hermes-browser"
+            $dockerfileContent | Should -Match "COPY entrypoint\.sh"
+            $dockerfileContent | Should -Match "chmod \+x"
+            $dockerfileContent | Should -Match "(?m)^USER hermes-browser\s*$"
+            $dockerfileContent | Should -Not -Match "chrome\.exe|chromium\.exe"
+
+            $entrypointContent = Get-Content -LiteralPath $entrypointPath -Raw
+            $entrypointContent | Should -Match "/usr/bin/chromium"
+            $entrypointContent | Should -Match "--headless=new"
+            $entrypointContent | Should -Match "--remote-debugging-address=0\.0\.0\.0"
+            $entrypointContent | Should -Match "--remote-debugging-port=9222"
+            $entrypointContent | Should -Match "--user-data-dir=/data"
+            $entrypointContent | Should -Match "mkdir -p /data"
+            $entrypointContent | Should -Not -Match "--no-sandbox"
+            $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
+        }
+
         It 'should expose managed profile gateway lifecycle tasks' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
