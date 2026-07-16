@@ -208,6 +208,10 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "(?m)\bsocat\b"
             $dockerfileContent | Should -Match "(?m)\bpython3-minimal\b"
             $dockerfileContent | Should -Match "(?m)\bcurl\b"
+            $dockerfileContent | Should -Match "(?m)\bxvfb\b"
+            $dockerfileContent | Should -Match "(?m)\bx11vnc\b"
+            $dockerfileContent | Should -Match "(?m)\bnovnc\b"
+            $dockerfileContent | Should -Match "(?m)\bwebsockify\b"
             $dockerfileContent | Should -Match "useradd"
             $dockerfileContent | Should -Match "hermes-browser"
             $dockerfileContent | Should -Match "COPY entrypoint\.sh"
@@ -227,7 +231,17 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Match ([regex]::Escape('external_host.encode("ascii")'))
             $entrypointContent | Should -Match "Content-Length"
             $entrypointContent | Should -Match "/usr/bin/chromium"
-            $entrypointContent | Should -Match "--headless=new"
+            $entrypointContent | Should -Match 'DISPLAY="\$\{DISPLAY:-:99\}"'
+            $entrypointContent | Should -Match "HERMES_BROWSER_XVFB_SCREEN:-1280x900x24"
+            $entrypointContent | Should -Match "/usr/bin/Xvfb"
+            $entrypointContent | Should -Match "x11vnc"
+            $entrypointContent | Should -Match "-listen 127\.0\.0\.1"
+            $entrypointContent | Should -Match "-rfbport 5900"
+            $entrypointContent | Should -Match "websockify"
+            $entrypointContent | Should -Match "--web=/usr/share/novnc"
+            $entrypointContent | Should -Match "0\.0\.0\.0:6080"
+            $entrypointContent | Should -Match "127\.0\.0\.1:5900"
+            $entrypointContent | Should -Not -Match "--headless=new"
             $entrypointContent | Should -Match "--remote-debugging-address=127\.0\.0\.1"
             $entrypointContent | Should -Match "--remote-debugging-port=9223"
             $entrypointContent | Should -Not -Match "--remote-debugging-address=0\.0\.0\.0"
@@ -238,7 +252,7 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Match "SingletonSocket"
             $entrypointContent | Should -Match "SingletonCookie"
             $entrypointContent | Should -Match ([regex]::Escape('rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie'))
-            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*socat.*exec /usr/bin/chromium"
+            $entrypointContent | Should -Match '(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*Xvfb.*x11vnc.*websockify.*socat.*chromium_pid=.*wait "\$chromium_pid"'
             $entrypointContent | Should -Not -Match "(?i)(?:`$HOME|`$USERPROFILE|/root|/home)/.*Singleton(?:Lock|Socket|Cookie)"
             $entrypointContent | Should -Not -Match "--no-sandbox"
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"

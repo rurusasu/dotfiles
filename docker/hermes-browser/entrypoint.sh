@@ -12,6 +12,18 @@ rm -f /data/.hermes-browser-write-test
 # Remove only stale Chromium singleton markers from the dedicated /data profile.
 rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie
 
+export DISPLAY="${DISPLAY:-:99}"
+XVFB_SCREEN="${HERMES_BROWSER_XVFB_SCREEN:-1280x900x24}"
+
+/usr/bin/Xvfb "$DISPLAY" -screen 0 "$XVFB_SCREEN" -nolisten tcp &
+xvfb_pid=$!
+
+x11vnc -display "$DISPLAY" -listen 127.0.0.1 -rfbport 5900 -forever -shared -nopw -quiet &
+vnc_pid=$!
+
+websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 &
+novnc_pid=$!
+
 cat >/tmp/hermes-cdp-forwarder.py <<'PY'
 import os
 import selectors
@@ -156,11 +168,17 @@ with socket.create_connection((UPSTREAM_HOST, UPSTREAM_PORT)) as upstream:
 PY
 
 socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 EXEC:"python3 /tmp/hermes-cdp-forwarder.py",nofork &
+cdp_pid=$!
 
-exec /usr/bin/chromium \
-  --headless=new \
+/usr/bin/chromium \
   --disable-gpu \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port=9223 \
   --user-data-dir=/data \
-  about:blank
+  about:blank &
+chromium_pid=$!
+
+wait "$chromium_pid"
+status=$?
+kill "$cdp_pid" "$novnc_pid" "$vnc_pid" "$xvfb_pid" 2>/dev/null || true
+exit "$status"
