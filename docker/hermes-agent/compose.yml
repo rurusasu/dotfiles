@@ -47,7 +47,7 @@ services:
         source: ${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}
         target: /data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9222/json/version >/dev/null"]
+      test: ["CMD-SHELL", "/usr/local/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 12

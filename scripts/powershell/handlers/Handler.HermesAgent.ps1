@@ -1060,7 +1060,7 @@ class HermesAgentHandler : SetupHandlerBase {
             "",
             "Before creating or updating a Slack App for a Hermes profile, read /opt/data/docs/slack-app-registration.md.",
             "Use Browser MCP for Slack UI automation and ask the user to complete login, 2FA, workspace selection, or consent in the visible noVNC browser when needed.",
-            "Never print Slack tokens in logs or Slack messages; store profile runtime credentials in that profile's .env or the matching 1Password item."
+            "Do not read generated Slack token values back through Browser MCP or tool output, shell arguments, Slack messages, or logs. Pause before token reveal or extraction and ask the user to capture and store secrets through noVNC or another approved non-logged secret channel. If no non-logging secret write path is available, leave the profile .env unchanged and report the blocked step."
         )
     }
 
@@ -1075,7 +1075,7 @@ class HermesAgentHandler : SetupHandlerBase {
             "The host-visible browser viewer is:",
             "",
             '```text',
-            'http://127.0.0.1:${HERMES_BROWSER_VIEW_PORT:-6080}',
+            $this.GetBrowserViewUrl(),
             '```',
             "",
             "This is the same browser session controlled by Hermes Browser MCP. Ask the user to open this URL when Slack requires login, 2FA, workspace selection, or consent.",
@@ -1089,7 +1089,8 @@ class HermesAgentHandler : SetupHandlerBase {
             "5. Review the Slack app settings and create the app.",
             '6. In Basic Information, generate an app-level token with `connections:write` for Socket Mode.',
             "7. Install the app to the workspace to obtain the bot token.",
-            '8. Write runtime credentials to the profile `.env` only after all values are available.',
+            '8. Pause before token reveal or extraction and ask the user to capture and store values through noVNC or another approved non-logged secret channel.',
+            '9. Write runtime credentials to the profile `.env` only after all values are available through that non-logging path.',
             "",
             "## Required Environment",
             "",
@@ -1107,10 +1108,11 @@ class HermesAgentHandler : SetupHandlerBase {
             "",
             "## Secret Safety",
             "",
-            "- Do not print generated Slack token values in logs.",
+            "- Do not read generated Slack token values back through Browser MCP or tool output.",
+            "- Do not pass generated Slack token values through shell arguments, Slack messages, or logs.",
             "- Do not send generated Slack token values back into Slack.",
             '- Do not commit `.env`, `auth.json`, tokens, secrets, sessions, logs, or database files.',
-            '- If token extraction from the Slack UI fails, leave the profile `.env` unchanged and report the exact blocked step.'
+            '- If no approved non-logged secret channel is available, leave the profile `.env` unchanged and report the exact blocked step.'
         )
     }
 
