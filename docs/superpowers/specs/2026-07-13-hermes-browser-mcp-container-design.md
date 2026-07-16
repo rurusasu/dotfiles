@@ -61,12 +61,12 @@ Extend the existing Hermes MCP configuration handler so every managed Hermes con
 
 ```yaml
 mcp_servers:
-  browser:
+  chrome:
     url: http://browser-mcp:8080/mcp
     connect_timeout: 120
 ```
 
-The `browser` server is a handler-managed entry, alongside the existing X API entries. Existing unrelated MCP servers remain preserved. Managed profiles receive the same internal URL because they run in the root Hermes container and share its Docker network.
+The `chrome` server is a handler-managed entry, alongside the existing X API entries. Its collision-free name keeps the MCP tools distinct from Hermes' built-in `browser` toolset. Existing unrelated MCP servers remain preserved. Managed profiles receive the same internal URL because they run in the root Hermes container and share its Docker network.
 
 ### Compose lifecycle
 
@@ -96,7 +96,7 @@ The `browser` server is a handler-managed entry, alongside the existing X API en
 
 ### Static tests
 
-- PowerShell handler tests verify that `browser` is managed in Hermes `mcp_servers` without removing unrelated entries.
+- PowerShell handler tests verify that `chrome` is managed in Hermes `mcp_servers` without removing unrelated entries or retaining a stale `browser` entry.
 - PowerShell handler tests verify the Compose file declares `chromium` and `browser-mcp`, private networking, health dependencies, and no host CDP port publication.
 - Dockerfile/package tests verify the exact MCP package versions and the internal CDP URL.
 - Existing Hermes, chezmoi, and lifelog tests remain green.
