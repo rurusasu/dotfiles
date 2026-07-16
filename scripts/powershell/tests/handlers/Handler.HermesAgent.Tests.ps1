@@ -301,8 +301,8 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
 
             $clipboardPasteContent = Get-Content -LiteralPath $clipboardPastePath -Raw
-            $clipboardPasteContent | Should -Match ([regex]::Escape('addEventListener("keydown"'))
-            $clipboardPasteContent | Should -Match ([regex]::Escape('addEventListener("paste"'))
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"keydown"'
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"paste"'
             $clipboardPasteContent | Should -Match ([regex]::Escape('clipboardData?.getData("text/plain")'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('new TextEncoder().encode(text)'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('RFB.messages.clientCutText'))
