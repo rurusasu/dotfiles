@@ -53,6 +53,8 @@ docs/plans/
 *.log
 coverage.xml
 scripts/powershell/coverage.xml
+test-results.xml
+scripts/powershell/test-results.xml
 
 # Docker env files
 docker/**/.env

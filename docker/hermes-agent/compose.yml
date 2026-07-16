@@ -40,12 +40,14 @@ services:
     shm_size: 2g
     security_opt:
       - seccomp=unconfined
+    ports:
+      - "127.0.0.1:${HERMES_BROWSER_VIEW_PORT:-6080}:6080"
     volumes:
       - type: bind
         source: ${HERMES_BROWSER_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.browser}
         target: /data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9222/json/version >/dev/null"]
+      test: ["CMD-SHELL", "/usr/local/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 12

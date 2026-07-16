@@ -19,6 +19,7 @@ Describe 'HermesAgentHandler' {
         $script:oldHome = $env:HOME
         $script:oldHermesDataDir = $env:HERMES_DATA_DIR
         $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
+        $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
         $script:dockerCalls = @()
 
         $script:ctx.Options["NixRebuildApplied"] = $true
@@ -34,6 +35,7 @@ Describe 'HermesAgentHandler' {
         Remove-Item Env:\HOME -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
 
         Mock Write-Host { }
         Mock Get-Command {
@@ -68,6 +70,13 @@ Describe 'HermesAgentHandler' {
         }
         else {
             $env:HERMES_BROWSER_DATA_DIR = $script:oldHermesBrowserDataDir
+        }
+
+        if ($null -eq $script:oldHermesBrowserViewPort) {
+            Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HERMES_BROWSER_VIEW_PORT = $script:oldHermesBrowserViewPort
         }
     }
 
@@ -190,27 +199,50 @@ Describe 'HermesAgentHandler' {
             $taskfileContent | Should -Not -Match "docker compose -f {{.HERMES_COMPOSE_FILE}} pull"
         }
 
-        It 'should define a dedicated non-host Chromium image contract for Hermes browser MCP' {
+        It 'should define a dedicated non-host Google Chrome image contract for Hermes browser MCP' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser\Dockerfile"
             $entrypointPath = Join-Path $repoRoot "docker\hermes-browser\entrypoint.sh"
+            $clipboardPastePath = Join-Path $repoRoot "docker\hermes-browser\clipboard-paste.js"
 
             $dockerfilePath | Should -Exist
             $entrypointPath | Should -Exist
+            $clipboardPastePath | Should -Exist
 
             $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
             $dockerfileContent | Should -Match "FROM debian:bookworm-slim"
             $dockerfileContent | Should -Match "apt-get"
             $dockerfileContent | Should -Match "--no-install-recommends"
             $dockerfileContent | Should -Match ([regex]::Escape('rm -rf /var/lib/apt/lists/*'))
-            $dockerfileContent | Should -Match "(?m)\bchromium\b"
-            $dockerfileContent | Should -Match "(?m)\bchromium-sandbox\b"
+            $dockerfileContent | Should -Match ([regex]::Escape('https://dl.google.com/linux/linux_signing_key.pub'))
+            $dockerfileContent | Should -Match ([regex]::Escape('signed-by=/etc/apt/keyrings/google-chrome.asc'))
+            $dockerfileContent | Should -Match "(?m)\bgoogle-chrome-stable\b"
+            $dockerfileContent | Should -Match ([regex]::Escape('dpkg --print-architecture'))
+            $dockerfileContent | Should -Not -Match '(?m)apt-get install[^\r\n]*\bchromium(?:-sandbox)?\b'
+            $dockerfileContent | Should -Match "(?m)\bfonts-noto-cjk\b"
+            $dockerfileContent | Should -Match "(?m)\blocales\b"
+            $dockerfileContent | Should -Match ([regex]::Escape('ja_JP.UTF-8 UTF-8'))
+            $dockerfileContent | Should -Match "(?m)\blocale-gen\b"
+            $dockerfileContent | Should -Match "(?m)^ENV LANG=ja_JP\.UTF-8"
+            $dockerfileContent | Should -Match "LANGUAGE=ja_JP:ja"
+            $dockerfileContent | Should -Match "LC_ALL=ja_JP\.UTF-8"
             $dockerfileContent | Should -Match "(?m)\bsocat\b"
             $dockerfileContent | Should -Match "(?m)\bpython3-minimal\b"
             $dockerfileContent | Should -Match "(?m)\bcurl\b"
+            $dockerfileContent | Should -Match "(?m)\bxvfb\b"
+            $dockerfileContent | Should -Match "(?m)\bx11vnc\b"
+            $dockerfileContent | Should -Match "(?m)\bnovnc\b"
+            $dockerfileContent | Should -Match "(?m)\bwebsockify\b"
+            $dockerfileContent | Should -Match ([regex]::Escape('groupadd --system --gid 997 hermes-browser'))
             $dockerfileContent | Should -Match "useradd"
+            $dockerfileContent | Should -Match '(?m)useradd[^\r\n]*--uid 997'
+            $dockerfileContent | Should -Match '(?m)useradd[^\r\n]*--gid hermes-browser'
             $dockerfileContent | Should -Match "hermes-browser"
             $dockerfileContent | Should -Match "COPY entrypoint\.sh"
+            $dockerfileContent | Should -Match "COPY clipboard-paste\.js /usr/share/novnc/app/clipboard-paste\.js"
+            $dockerfileContent | Should -Match ([regex]::Escape('<script type="module" src="app/clipboard-paste.js"></script>'))
+            $dockerfileContent | Should -Match ([regex]::Escape('ln -sf vnc.html /usr/share/novnc/index.html'))
+            $dockerfileContent | Should -Match "COPY healthcheck\.sh"
             $dockerfileContent | Should -Match "chmod \+x"
             $dockerfileContent | Should -Match "(?m)^USER hermes-browser\s*$"
             $dockerfileContent | Should -Not -Match "chrome\.exe|chromium\.exe"
@@ -226,25 +258,60 @@ Describe 'HermesAgentHandler' {
             $entrypointContent | Should -Match ([regex]::Escape('external_host = get_header(request_headers, "Host")'))
             $entrypointContent | Should -Match ([regex]::Escape('external_host.encode("ascii")'))
             $entrypointContent | Should -Match "Content-Length"
-            $entrypointContent | Should -Match "/usr/bin/chromium"
-            $entrypointContent | Should -Match "--headless=new"
+            $entrypointContent | Should -Match ([regex]::Escape('/usr/bin/google-chrome-stable'))
+            $entrypointContent | Should -Not -Match ([regex]::Escape('/usr/bin/chromium'))
+            $entrypointContent | Should -Match 'DISPLAY="\$\{DISPLAY:-:99\}"'
+            $entrypointContent | Should -Match ([regex]::Escape('display_number="${DISPLAY#*:}"'))
+            $entrypointContent | Should -Match ([regex]::Escape('display_number="${display_number%%.*}"'))
+            $entrypointContent | Should -Match ([regex]::Escape('rm -f "/tmp/.X${display_number}-lock" "/tmp/.X11-unix/X${display_number}"'))
+            $entrypointContent | Should -Match "HERMES_BROWSER_XVFB_SCREEN:-1280x900x24"
+            $entrypointContent | Should -Match "/usr/bin/Xvfb"
+            $entrypointContent | Should -Match ([regex]::Escape('until xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; do'))
+            $entrypointContent | Should -Match "x11vnc"
+            $entrypointContent | Should -Match "-listen 127\.0\.0\.1"
+            $entrypointContent | Should -Match "-rfbport 5900"
+            $entrypointContent | Should -Match "websockify"
+            $entrypointContent | Should -Match "--web=/usr/share/novnc"
+            $entrypointContent | Should -Match "0\.0\.0\.0:6080"
+            $entrypointContent | Should -Match "127\.0\.0\.1:5900"
+            $entrypointContent | Should -Not -Match "--headless=new"
             $entrypointContent | Should -Match "--remote-debugging-address=127\.0\.0\.1"
             $entrypointContent | Should -Match "--remote-debugging-port=9223"
             $entrypointContent | Should -Not -Match "--remote-debugging-address=0\.0\.0\.0"
             $entrypointContent | Should -Not -Match "--remote-debugging-port=9222"
             $entrypointContent | Should -Match "--user-data-dir=/data"
+            $entrypointContent | Should -Match "--lang=ja"
             $entrypointContent | Should -Match "mkdir -p /data"
             $entrypointContent | Should -Match "SingletonLock"
             $entrypointContent | Should -Match "SingletonSocket"
             $entrypointContent | Should -Match "SingletonCookie"
             $entrypointContent | Should -Match ([regex]::Escape('rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie'))
-            $entrypointContent | Should -Match "(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*socat.*exec /usr/bin/chromium"
+            $entrypointContent | Should -Match '(?s)touch /data/\.hermes-browser-write-test.*rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie.*Xvfb.*x11vnc.*websockify.*socat.*chromium_pid=.*wait "\$chromium_pid"'
+            $entrypointContent | Should -Match "monitor_helpers\(\)"
+            $entrypointContent | Should -Match "xvfb_pid.*vnc_pid.*novnc_pid.*cdp_pid"
+            $entrypointContent | Should -Match ([regex]::Escape('/proc/$pid/stat'))
+            $entrypointContent | Should -Match "process_is_running\(\)"
+            $entrypointContent | Should -Match "shutdown_requested=0"
+            $entrypointContent | Should -Match "request_shutdown\(\)"
+            $entrypointContent | Should -Match "trap request_shutdown TERM INT"
+            $entrypointContent | Should -Match ([regex]::Escape('kill "$chromium_pid"'))
+            $entrypointContent | Should -Match ([regex]::Escape('monitor_pid=$!'))
             $entrypointContent | Should -Not -Match "(?i)(?:`$HOME|`$USERPROFILE|/root|/home)/.*Singleton(?:Lock|Socket|Cookie)"
             $entrypointContent | Should -Not -Match "--no-sandbox"
             $entrypointContent | Should -Not -Match "chrome\.exe|chromium\.exe"
 
+            $clipboardPasteContent = Get-Content -LiteralPath $clipboardPastePath -Raw
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"keydown"'
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"paste"'
+            $clipboardPasteContent | Should -Match ([regex]::Escape('clipboardData?.getData("text/plain")'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('new TextEncoder().encode(text)'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('RFB.messages.clientCutText'))
+            $clipboardPasteContent | Should -Match "XK_Control_L"
+            $clipboardPasteContent | Should -Match "XK_v"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('#noVNC_clipboard'))
+
             $imageEntrypointContent = "$dockerfileContent`n$entrypointContent"
-            $imageEntrypointContent | Should -Match ([regex]::Escape('/usr/bin/chromium'))
+            $imageEntrypointContent | Should -Match ([regex]::Escape('/usr/bin/google-chrome-stable'))
             $imageEntrypointContent | Should -Match '(?m)(?<![A-Za-z0-9_-])/data(?![A-Za-z0-9_-])'
             $imageEntrypointContent | Should -Not -Match "--no-sandbox"
 
@@ -260,11 +327,12 @@ Describe 'HermesAgentHandler' {
             $forbiddenCdpEndpointPattern = '(?i)(?:127\.0\.0\.1|localhost):9222|host\.docker\.internal(?::\d+)?'
 
             @(
-                $forbiddenCdpEndpointPattern,
-                '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
+                $forbiddenCdpEndpointPattern
             ) | ForEach-Object {
                 $imageEntrypointContent | Should -Not -Match $_
             }
+
+            $entrypointContent | Should -Not -Match '(?i)\b(?:ws|wss|http|https)://[^\s''"`]+'
 
             'host.docker.internal' | Should -Match $forbiddenCdpEndpointPattern
             'host.docker.internal:9222' | Should -Match $forbiddenCdpEndpointPattern
@@ -273,11 +341,11 @@ Describe 'HermesAgentHandler' {
             @(
                 '(?i)(?:[A-Za-z]:[\\/]|\\\\|/mnt/[a-z]/|%USERPROFILE%|%LOCALAPPDATA%|\$\{USERPROFILE\}|\$\{HOME\}|\$HOME\b|/Users/|Program Files|AppData|\.exe\b|\.bat\b|\.cmd\b|\.ps1\b)'
             ) | ForEach-Object {
-                $imageEntrypointContent | Should -Not -Match $_
+                $entrypointContent | Should -Not -Match $_
             }
         }
 
-        It 'should define a streamable Browser MCP image contract backed by the Compose Chromium service' {
+        It 'should define a streamable Browser MCP image contract backed by the Compose browser service' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $dockerfilePath = Join-Path $repoRoot "docker\hermes-browser-mcp\Dockerfile"
             $packageJsonPath = Join-Path $repoRoot "docker\hermes-browser-mcp\package.json"
@@ -317,7 +385,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
         }
 
-        It 'should wire Chromium and Browser MCP into the Hermes Compose network without publishing browser ports' {
+        It 'should wire Google Chrome and Browser MCP into the Hermes Compose network while publishing only noVNC locally' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
@@ -338,7 +406,9 @@ Describe 'HermesAgentHandler' {
             $chromiumService | Should -Not -Match "(?m)^\s{4}cap_add:\s*$"
             $chromiumService | Should -Not -Match "(?m)^\s*-\s*SYS_ADMIN\s*$"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
-            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
+            $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/usr/local/bin/healthcheck\.sh"
+            $composeContent | Should -Match '(?m)^\s*-\s*"127\.0\.0\.1:\$\{HERMES_BROWSER_VIEW_PORT:-6080\}:6080"\s*$'
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?5900:5900[""']?\s*$"
 
             $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser-mcp"
             $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?healthcheck:.*?8080"
@@ -349,6 +419,13 @@ Describe 'HermesAgentHandler' {
             $composeContent | Should -Not -Match "(?m)^\s*privileged:\s*true\s*$"
             $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?9222:9222[""']?\s*$"
             $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?8080:8080[""']?\s*$"
+
+            $healthcheckPath = Join-Path $repoRoot "docker\hermes-browser\healthcheck.sh"
+            $healthcheckPath | Should -Exist
+            $healthcheckContent = Get-Content -LiteralPath $healthcheckPath -Raw
+            $healthcheckContent | Should -Match "/json/version"
+            $healthcheckContent | Should -Match "127\.0\.0\.1:6080/"
+            $healthcheckContent | Should -Match "127\.0\.0\.1.*5900"
         }
 
         It 'should expose Hermes browser lifecycle tasks' {
@@ -490,6 +567,8 @@ Describe 'HermesAgentHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
+            $result.Message | Should -Match "http://127\.0\.0\.1:9119"
+            $result.Message | Should -Match "http://127\.0\.0\.1:6080"
             $envPath = Join-Path $script:userProfile ".hermes\.env"
             $passwordPath = Join-Path $script:userProfile ".hermes\dashboard-basic-auth-password.txt"
             $envContent = Get-Content -LiteralPath $envPath -Raw
@@ -521,6 +600,35 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -Be $true
             $browserProfileDir | Should -Exist
+        }
+
+        It 'should show the configured browser viewer port in the setup result' {
+            $oldPort = $env:HERMES_BROWSER_VIEW_PORT
+            try {
+                $env:HERMES_BROWSER_VIEW_PORT = "16080"
+                $result = $handler.Apply($ctx)
+                $result.Success | Should -Be $true
+                $result.Message | Should -Match "http://127\.0\.0\.1:16080"
+            }
+            finally {
+                if ($null -eq $oldPort) {
+                    Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:HERMES_BROWSER_VIEW_PORT = $oldPort
+                }
+            }
+        }
+
+        It 'should write the configured browser viewer port into the Slack registration guide' {
+            $env:HERMES_BROWSER_VIEW_PORT = "16080"
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $slackRegistrationDoc = Get-Content -LiteralPath (Join-Path $script:userProfile ".hermes\docs\slack-app-registration.md") -Raw
+            $slackRegistrationDoc | Should -Match "http://127\.0\.0\.1:16080"
+            $slackRegistrationDoc | Should -Not -Match "HERMES_BROWSER_VIEW_PORT"
         }
 
         It 'should create the browser profile directory from HERMES_BROWSER_DATA_DIR when set' {
@@ -1236,9 +1344,31 @@ Describe 'HermesAgentHandler' {
             $sharedDoc | Should -Match "AGENTS.md"
             $sharedDoc | Should -Not -Match ([string][char]7)
 
+            $slackRegistrationDocPath = Join-Path $dataDir "docs\slack-app-registration.md"
+            $slackRegistrationDocPath | Should -Exist
+            $slackRegistrationDoc = Get-Content -LiteralPath $slackRegistrationDocPath -Raw
+            $slackRegistrationDoc | Should -Match "Hermes Slack App Registration"
+            $slackRegistrationDoc | Should -Match "http://127\.0\.0\.1:6080"
+            $slackRegistrationDoc | Should -Match "https://api\.slack\.com/apps\?new_app=1"
+            $slackRegistrationDoc | Should -Match "slack-manifest\.json"
+            $slackRegistrationDoc | Should -Match "connections:write"
+            $slackRegistrationDoc | Should -Match "SLACK_BOT_TOKEN"
+            $slackRegistrationDoc | Should -Match "SLACK_APP_TOKEN"
+            $slackRegistrationDoc | Should -Match "SLACK_ALLOWED_USERS"
+            $slackRegistrationDoc | Should -Match "SlackBot-<ProfileTitle>"
+            $slackRegistrationDoc | Should -Match "Do not read generated Slack token values back through Browser MCP or tool output"
+            $slackRegistrationDoc | Should -Match "Do not pass generated Slack token values through shell arguments"
+            $slackRegistrationDoc | Should -Match "Pause before token reveal or extraction"
+            $slackRegistrationDoc | Should -Match "approved non-logged secret channel"
+            $slackRegistrationDoc | Should -Match ([regex]::Escape('leave the profile `.env` unchanged'))
+            $slackRegistrationDoc | Should -Not -Match ([string][char]7)
+
             $rootSoul = Get-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Raw
             $rootSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $rootSoul | Should -Match "auth\.json"
+            $rootSoul | Should -Match "/opt/data/docs/slack-app-registration.md"
+            $rootSoul | Should -Match "Slack App registration"
+            $rootSoul | Should -Match ([regex]::Escape('Do not read generated Slack token values back through Browser MCP or tool output'))
             $rootSoul | Should -Not -Match ([string][char]7)
 
             $profileGitignorePath = Join-Path $profileDir ".gitignore"
@@ -1258,6 +1388,7 @@ Describe 'HermesAgentHandler' {
             $profileSoul = Get-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $profileSoul | Should -Match "standard filesystem layout"
+            $profileSoul | Should -Match "/opt/data/docs/slack-app-registration.md"
         }
 
         It 'should bootstrap shared lifelog core files, policy, cron, and first sync' {

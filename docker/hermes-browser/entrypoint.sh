@@ -4,13 +4,49 @@ set -eu
 mkdir -p /data
 
 if ! touch /data/.hermes-browser-write-test 2>/dev/null; then
-  echo "The Chromium profile bind mount at /data must be writable by hermes-browser without disabling the sandbox." >&2
+  echo "The Google Chrome profile bind mount at /data must be writable by hermes-browser without disabling the sandbox." >&2
   exit 1
 fi
 
 rm -f /data/.hermes-browser-write-test
-# Remove only stale Chromium singleton markers from the dedicated /data profile.
+# Remove only stale browser singleton markers from the dedicated /data profile.
 rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie
+
+export DISPLAY="${DISPLAY:-:99}"
+display_number="${DISPLAY#*:}"
+display_number="${display_number%%.*}"
+rm -f "/tmp/.X${display_number}-lock" "/tmp/.X11-unix/X${display_number}"
+
+XVFB_SCREEN="${HERMES_BROWSER_XVFB_SCREEN:-1280x900x24}"
+
+process_is_running() {
+  pid="$1"
+  if [ ! -r "/proc/$pid/stat" ]; then
+    return 1
+  fi
+
+  state="$(awk '{ print $3 }' "/proc/$pid/stat" 2>/dev/null || true)"
+  [ "$state" != "Z" ] && kill -0 "$pid" 2>/dev/null
+}
+
+shutdown_requested=0
+
+/usr/bin/Xvfb "$DISPLAY" -screen 0 "$XVFB_SCREEN" -nolisten tcp &
+xvfb_pid=$!
+
+until xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; do
+  if ! process_is_running "$xvfb_pid"; then
+    echo "Xvfb exited before display $DISPLAY became ready" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+
+x11vnc -display "$DISPLAY" -listen 127.0.0.1 -rfbport 5900 -forever -shared -nopw -quiet &
+vnc_pid=$!
+
+websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 &
+novnc_pid=$!
 
 cat >/tmp/hermes-cdp-forwarder.py <<'PY'
 import os
@@ -156,11 +192,68 @@ with socket.create_connection((UPSTREAM_HOST, UPSTREAM_PORT)) as upstream:
 PY
 
 socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 EXEC:"python3 /tmp/hermes-cdp-forwarder.py",nofork &
+cdp_pid=$!
 
-exec /usr/bin/chromium \
-  --headless=new \
+/usr/bin/google-chrome-stable \
   --disable-gpu \
+  --lang=ja \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port=9223 \
   --user-data-dir=/data \
-  about:blank
+  about:blank &
+chromium_pid=$!
+
+cleanup() {
+  kill "$cdp_pid" "$novnc_pid" "$vnc_pid" "$xvfb_pid" 2>/dev/null || true
+}
+
+request_shutdown() {
+  shutdown_requested=1
+  kill "$chromium_pid" "$cdp_pid" "$novnc_pid" "$vnc_pid" "$xvfb_pid" 2>/dev/null || true
+}
+
+trap request_shutdown TERM INT
+
+monitor_helpers() {
+  while process_is_running "$chromium_pid"; do
+    if [ "$shutdown_requested" -eq 1 ]; then
+      return 0
+    fi
+
+    for helper_pid in "$xvfb_pid" "$vnc_pid" "$novnc_pid" "$cdp_pid"; do
+      if ! process_is_running "$helper_pid"; then
+        echo "Hermes browser helper process exited unexpectedly" >&2
+        kill "$chromium_pid" 2>/dev/null || true
+        return 1
+      fi
+    done
+    sleep 1
+  done
+}
+
+monitor_helpers &
+monitor_pid=$!
+
+if wait "$chromium_pid"; then
+  chromium_status=0
+else
+  chromium_status=$?
+fi
+
+if wait "$monitor_pid"; then
+  monitor_status=0
+else
+  monitor_status=$?
+fi
+
+cleanup
+
+if [ "$shutdown_requested" -eq 1 ]; then
+  exit 0
+fi
+
+if [ "$monitor_status" -ne 0 ]; then
+  exit "$monitor_status"
+fi
+
+exit "$chromium_status"

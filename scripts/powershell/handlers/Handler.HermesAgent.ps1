@@ -166,7 +166,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 $this.Log("Slack 無メンション応答設定を更新しました ($($slackMentionResult.Count) configs)", "Green")
             }
 
-            return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
+            return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119 / browser: $($this.GetBrowserViewUrl())")
         }
         catch {
             return $this.CreateFailureResult("Hermes Agent セットアップに失敗しました: $($_.Exception.Message)", $_.Exception)
@@ -240,6 +240,15 @@ class HermesAgentHandler : SetupHandlerBase {
         return Join-Path (Join-Path $this.GetHomeDir() ".hermes") ".browser"
     }
 
+    hidden [string] GetBrowserViewUrl() {
+        $port = "6080"
+        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_VIEW_PORT)) {
+            $port = $env:HERMES_BROWSER_VIEW_PORT
+        }
+
+        return "http://127.0.0.1:$port"
+    }
+
     hidden [string] GetHomeDir() {
         if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
             return $env:USERPROFILE
@@ -274,6 +283,10 @@ class HermesAgentHandler : SetupHandlerBase {
             (Join-Path $docsDir "profile-home-layout.md"),
             $this.GetSharedHomeLayoutDocLines()
         ) -or $changed
+        $changed = $this.EnsureFileLines(
+            (Join-Path $docsDir "slack-app-registration.md"),
+            $this.GetSlackAppRegistrationDocLines()
+        ) -or $changed
 
         $changed = $this.EnsureManagedBlock(
             (Join-Path $dataDir "SOUL.md"),
@@ -285,9 +298,22 @@ class HermesAgentHandler : SetupHandlerBase {
                 "Runtime state such as .env, auth.json, memories/, sessions/, logs/, and state.db* stays out of Git."
             )
         ) -or $changed
+        $changed = $this.EnsureManagedBlock(
+            (Join-Path $dataDir "SOUL.md"),
+            "HERMES_SLACK_APP_REGISTRATION_POLICY",
+            $this.GetSlackAppRegistrationPolicyBlockLines()
+        ) -or $changed
 
         foreach ($profileName in $this.GetManagedProfileNames($ctx)) {
             $changed = $this.EnsureProfileRepositoryLayout($dataDir, $profileName) -or $changed
+            $profileDir = Join-Path (Join-Path $dataDir "profiles") $profileName
+            if (Test-Path -LiteralPath $profileDir -PathType Container) {
+                $changed = $this.EnsureManagedBlock(
+                    (Join-Path $profileDir "SOUL.md"),
+                    "HERMES_SLACK_APP_REGISTRATION_POLICY",
+                    $this.GetSlackAppRegistrationPolicyBlockLines()
+                ) -or $changed
+            }
         }
 
         return [PSCustomObject]@{ Changed = $changed; Source = "Config" }
@@ -1026,6 +1052,68 @@ class HermesAgentHandler : SetupHandlerBase {
         $this.EnsureDirectory((Split-Path -Parent $path))
         Set-Content -LiteralPath $path -Encoding UTF8 -Value $updatedLines
         return $true
+    }
+
+    hidden [string[]] GetSlackAppRegistrationPolicyBlockLines() {
+        return @(
+            "## Slack App Registration Policy",
+            "",
+            "Before creating or updating a Slack App for a Hermes profile, read /opt/data/docs/slack-app-registration.md.",
+            "Use Browser MCP for Slack UI automation and ask the user to complete login, 2FA, workspace selection, or consent in the visible noVNC browser when needed.",
+            "Do not read generated Slack token values back through Browser MCP or tool output, shell arguments, Slack messages, or logs. Pause before token reveal or extraction and ask the user to capture and store secrets through noVNC or another approved non-logged secret channel. If no non-logging secret write path is available, leave the profile .env unchanged and report the blocked step."
+        )
+    }
+
+    hidden [string[]] GetSlackAppRegistrationDocLines() {
+        return @(
+            "# Hermes Slack App Registration",
+            "",
+            "Use this guide when registering a Hermes managed profile as a Slack App through Browser MCP.",
+            "",
+            "## Visible Browser",
+            "",
+            "The host-visible browser viewer is:",
+            "",
+            '```text',
+            $this.GetBrowserViewUrl(),
+            '```',
+            "",
+            "This is the same browser session controlled by Hermes Browser MCP. Ask the user to open this URL when Slack requires login, 2FA, workspace selection, or consent.",
+            "",
+            "## Registration Flow",
+            "",
+            '1. Locate the profile directory, for example `/opt/data/profiles/nancy`.',
+            '2. Read the profile''s `slack-manifest.json`.',
+            '3. Open `https://api.slack.com/apps?new_app=1` with Browser MCP.',
+            "4. Create the app from an app manifest and paste the manifest content.",
+            "5. Review the Slack app settings and create the app.",
+            '6. In Basic Information, generate an app-level token with `connections:write` for Socket Mode.',
+            "7. Install the app to the workspace to obtain the bot token.",
+            '8. Pause before token reveal or extraction and ask the user to capture and store values through noVNC or another approved non-logged secret channel.',
+            '9. Write runtime credentials to the profile `.env` only after all values are available through that non-logging path.',
+            "",
+            "## Required Environment",
+            "",
+            '```text',
+            "SLACK_BOT_TOKEN=xoxb-redacted",
+            "SLACK_APP_TOKEN=xapp-redacted",
+            "SLACK_ALLOWED_USERS=U04BDJU87KJ",
+            '```',
+            "",
+            'If `.env` already has Slack credentials, ask before replacing them.',
+            "",
+            "## 1Password",
+            "",
+            'When the user wants persistent secret storage and 1Password is available, store the same fields in the matching `SlackBot-<ProfileTitle>` item. The install handler reads managed profile Slack credentials from that item naming convention.',
+            "",
+            "## Secret Safety",
+            "",
+            "- Do not read generated Slack token values back through Browser MCP or tool output.",
+            "- Do not pass generated Slack token values through shell arguments, Slack messages, or logs.",
+            "- Do not send generated Slack token values back into Slack.",
+            '- Do not commit `.env`, `auth.json`, tokens, secrets, sessions, logs, or database files.',
+            '- If no approved non-logged secret channel is available, leave the profile `.env` unchanged and report the exact blocked step.'
+        )
     }
 
     hidden [string[]] GetSharedHomeLayoutDocLines() {

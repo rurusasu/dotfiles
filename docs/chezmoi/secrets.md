@@ -157,6 +157,8 @@ Slack app manifest は次のように risarisa profile で生成する。
 docker exec hermes /opt/hermes/bin/hermes -p risarisa slack manifest --write /opt/data/profiles/risarisa/slack-manifest.json --name Risarisa
 ```
 
+Slack app 登録を Hermes Agent に任せる場合は、Hermes Browser MCP で `https://api.slack.com/apps?new_app=1` を開き、profile の `slack-manifest.json` から app を作成する。ログイン、2FA、workspace 選択、consent が必要な場面では `http://127.0.0.1:${HERMES_BROWSER_VIEW_PORT:-6080}` の noVNC viewer で同じ browser session を操作する。生成した `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_ALLOWED_USERS` は Browser MCP や tool output に token 値を戻さない。token reveal / extraction の前に一度止まり、noVNC または承認済みの non-logged secret channel で profile の `.env` または `SlackBot-<ProfileTitle>` 1Password item に保存する。安全な非ログ経路がない場合は profile の `.env` を変更しない。
+
 Hermes setup は `scripts/lifelog_sync.sh` と daily cron job を `~/.hermes` に作成する。
 初回 install では compose 起動後に `sh /opt/data/scripts/lifelog_sync.sh --bootstrap` を default gateway で実行し、
 `~/.hermes/core/lifelog` を GitHub から復元する。以後は Hermes cron が毎日 `04:20 UTC` に lifelog repo を
