@@ -1,11 +1,12 @@
 # Hermes Browser MCP
 
-Hermes の browser MCP は host browser ではなく、Compose 内の専用 Chromium container と Browser MCP container だけを使う。
+Hermes の browser MCP は host browser ではなく、Compose 内の専用 Chromium container と Browser MCP container だけを使う。browser は containerized だが、noVNC を通じて表示できる。
+ホスト PC から browser session を見る場合は noVNC を使う。既定 URL は `http://127.0.0.1:6080` で、`HERMES_BROWSER_VIEW_PORT` により host 側 port だけ変更できる。CDP `9222` と Browser MCP `8080` は引き続き host に publish しない。
 host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host Node/npm/Python は使わない。
 
 ## 構成
 
-- `chromium`: headless Chromium を container 内で起動し、CDP を Compose network 内だけに公開する。
+- `chromium`: Xvfb 上の visible Chromium を container 内で起動し、CDP を Compose network 内だけに公開し、noVNC viewer だけを `127.0.0.1` に公開する。
 - `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。
 - `hermes`: `browser-mcp` service 名で Browser MCP に接続する。
 

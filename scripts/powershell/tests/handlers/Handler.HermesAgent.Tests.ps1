@@ -1281,9 +1281,25 @@ Describe 'HermesAgentHandler' {
             $sharedDoc | Should -Match "AGENTS.md"
             $sharedDoc | Should -Not -Match ([string][char]7)
 
+            $slackRegistrationDocPath = Join-Path $dataDir "docs\slack-app-registration.md"
+            $slackRegistrationDocPath | Should -Exist
+            $slackRegistrationDoc = Get-Content -LiteralPath $slackRegistrationDocPath -Raw
+            $slackRegistrationDoc | Should -Match "Hermes Slack App Registration"
+            $slackRegistrationDoc | Should -Match "http://127\.0\.0\.1:\$\{HERMES_BROWSER_VIEW_PORT:-6080\}"
+            $slackRegistrationDoc | Should -Match "https://api\.slack\.com/apps\?new_app=1"
+            $slackRegistrationDoc | Should -Match "slack-manifest\.json"
+            $slackRegistrationDoc | Should -Match "connections:write"
+            $slackRegistrationDoc | Should -Match "SLACK_BOT_TOKEN"
+            $slackRegistrationDoc | Should -Match "SLACK_APP_TOKEN"
+            $slackRegistrationDoc | Should -Match "SLACK_ALLOWED_USERS"
+            $slackRegistrationDoc | Should -Match "SlackBot-<ProfileTitle>"
+            $slackRegistrationDoc | Should -Not -Match ([string][char]7)
+
             $rootSoul = Get-Content -LiteralPath (Join-Path $dataDir "SOUL.md") -Raw
             $rootSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $rootSoul | Should -Match "auth\.json"
+            $rootSoul | Should -Match "/opt/data/docs/slack-app-registration.md"
+            $rootSoul | Should -Match "Slack App registration"
             $rootSoul | Should -Not -Match ([string][char]7)
 
             $profileGitignorePath = Join-Path $profileDir ".gitignore"
@@ -1303,6 +1319,7 @@ Describe 'HermesAgentHandler' {
             $profileSoul = Get-Content -LiteralPath (Join-Path $profileDir "SOUL.md") -Raw
             $profileSoul | Should -Match "/opt/data/docs/profile-home-layout.md"
             $profileSoul | Should -Match "standard filesystem layout"
+            $profileSoul | Should -Match "/opt/data/docs/slack-app-registration.md"
         }
 
         It 'should bootstrap shared lifelog core files, policy, cron, and first sync' {
