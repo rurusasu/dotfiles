@@ -39,3 +39,35 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"bootstrap complete"* ]]
 }
+
+@test "bootstrap.sh installs claude code without writing workspace npm config" {
+	rm "$STUB_BIN/claude"
+	export HOME="$TEST_HOME"
+	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
+	write_stub npm '
+printf "args=%s\n" "$*" >>"$NPM_LOG"
+printf "prefix=%s\n" "${NPM_CONFIG_PREFIX:-}" >>"$NPM_LOG"
+if [ "${1:-}" = "config" ]; then exit 70; fi
+exit 0
+'
+	filtered_path=""
+	IFS=: read -r -a path_entries <<<"$PATH"
+	for path_entry in "${path_entries[@]}"; do
+		[ -n "$path_entry" ] || continue
+		[ -x "$path_entry/claude" ] && continue
+		if [ -z "$filtered_path" ]; then
+			filtered_path="$path_entry"
+		else
+			filtered_path="$filtered_path:$path_entry"
+		fi
+	done
+	export PATH="$STUB_BIN:$filtered_path"
+
+	run timeout 30 bash "$REPO_ROOT/bootstrap.sh" 2>&1
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"bootstrap complete"* ]]
+	grep -q "args=install -g @anthropic-ai/claude-code" "$NPM_LOG"
+	grep -q "prefix=$TEST_HOME/.local/npm" "$NPM_LOG"
+	! grep -q "args=config set prefix" "$NPM_LOG"
+}

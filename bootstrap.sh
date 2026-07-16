@@ -159,9 +159,9 @@ if ! have claude; then
   fi
   if have npm; then
     log "installing @anthropic-ai/claude-code (user-local prefix)"
-    mkdir -p "$HOME/.local/npm"
-    npm config set prefix "$HOME/.local/npm" >/dev/null
-    if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+    npm_prefix="$HOME/.local/npm"
+    mkdir -p "$npm_prefix"
+    if NPM_CONFIG_PREFIX="$npm_prefix" npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
       # PATH wiring for next shells
       for f in "$HOME/.profile" "$HOME/.bashrc"; do
         grep -q '\.local/npm/bin' "$f" 2>/dev/null ||
