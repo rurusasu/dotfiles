@@ -139,6 +139,76 @@ exit /b 42
         $env:GITHUB_WORK_TOKEN | Should -BeNullOrEmpty
     }
 
+    It 'Windows PowerShell 5.1 でも space を含む secret reference を読み込めること' {
+        $windowsPowerShell = Get-Command powershell.exe -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if (-not $windowsPowerShell) {
+            Set-ItResult -Skipped -Because 'powershell.exe is unavailable on this platform'
+            return
+        }
+
+        $fakeOp = Join-Path $TestDrive 'op-spaced-reference.exe'
+        $fakeOpSourcePath = Join-Path $TestDrive 'op-spaced-reference.cs'
+        $fakeOpSource = @'
+using System;
+
+public static class Program
+{
+    public static int Main(string[] args)
+    {
+        if (
+            args.Length == 5 &&
+            args[0] == "--cache=false" &&
+            args[1] == "--account" &&
+            args[2] == "aimatecoltd.1password.com" &&
+            args[3] == "read" &&
+            args[4] == "op://Employee/1password Service Account/password")
+        {
+            Console.WriteLine("service-token");
+            return 0;
+        }
+
+        Console.Error.WriteLine("bad args: " + string.Join("|", args));
+        return 1;
+    }
+}
+'@
+        Set-Content -LiteralPath $fakeOpSourcePath -Encoding ascii -Value $fakeOpSource
+
+        $fakeOpSourceLiteral = $fakeOpSourcePath.Replace("'", "''")
+        $fakeOpLiteral = $fakeOp.Replace("'", "''")
+        $compileCommand = @"
+`$source = Get-Content -LiteralPath '$fakeOpSourceLiteral' -Raw
+Add-Type -TypeDefinition `$source -Language CSharp -OutputAssembly '$fakeOpLiteral' -OutputType ConsoleApplication
+"@
+        try {
+            $compileOutput = & $windowsPowerShell.Source -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $compileCommand 2>&1
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $fakeOp)) {
+                throw "powershell.exe Add-Type failed: $($compileOutput -join [Environment]::NewLine)"
+            }
+        }
+        catch {
+            Set-ItResult -Skipped -Because "failed to build fake op.exe: $($_.Exception.Message)"
+            return
+        }
+
+        $loader = $script:secretLoaderPath.Replace("'", "''")
+        $command = @"
+`$env:DOTFILES_OP_BIN = '$fakeOpLiteral'
+`$env:DOTFILES_FORCE_SECRET_LOAD = '1'
+`$env:DOTFILES_SECRET_LOAD_ONLY = 'OP_SERVICE_ACCOUNT_TOKEN'
+`$env:DOTFILES_SECRET_LOAD_TIMEOUT_SECONDS = '3'
+Remove-Item Env:OP_SERVICE_ACCOUNT_TOKEN -ErrorAction SilentlyContinue
+. '$loader'
+[Console]::WriteLine('token=' + `$env:OP_SERVICE_ACCOUNT_TOKEN)
+"@
+
+        $output = & $windowsPowerShell.Source -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $command
+
+        $LASTEXITCODE | Should -Be 0
+        $output | Should -Contain 'token=service-token'
+    }
+
     It 'pwsh -Command では force 未設定なら fallback を起動しないこと' {
         $fakeOp = Join-Path $TestDrive 'op-marker.cmd'
         $marker = Join-Path $TestDrive 'op-called.txt'

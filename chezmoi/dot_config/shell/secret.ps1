@@ -66,6 +66,73 @@ function Get-DotfilesSecretLoadTimeoutSeconds {
     return $timeoutSeconds
 }
 
+function ConvertTo-DotfilesWindowsCommandLineArgument {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$Argument
+    )
+
+    if ($null -eq $Argument) {
+        return '""'
+    }
+
+    if ($Argument -notmatch '[\s"]' -and $Argument.Length -gt 0) {
+        return $Argument
+    }
+
+    $builder = [System.Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $backslashCount = 0
+
+    foreach ($char in $Argument.ToCharArray()) {
+        if ($char -eq '\') {
+            $backslashCount++
+            continue
+        }
+
+        if ($char -eq '"') {
+            [void]$builder.Append('\' * (($backslashCount * 2) + 1))
+            [void]$builder.Append('"')
+            $backslashCount = 0
+            continue
+        }
+
+        if ($backslashCount -gt 0) {
+            [void]$builder.Append('\' * $backslashCount)
+            $backslashCount = 0
+        }
+        [void]$builder.Append($char)
+    }
+
+    if ($backslashCount -gt 0) {
+        [void]$builder.Append('\' * ($backslashCount * 2))
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Set-DotfilesProcessStartInfoArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.ProcessStartInfo]$StartInfo,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    if ($StartInfo.GetType().GetProperty('ArgumentList')) {
+        foreach ($argument in @($Arguments)) {
+            [void]$StartInfo.ArgumentList.Add([string]$argument)
+        }
+        return
+    }
+
+    $StartInfo.Arguments = (@($Arguments) |
+            ForEach-Object { ConvertTo-DotfilesWindowsCommandLineArgument -Argument ([string]$_) }) -join ' '
+}
+
 function Invoke-DotfilesOpRead {
     [CmdletBinding()]
     param(
@@ -93,9 +160,9 @@ function Invoke-DotfilesOpRead {
         $startInfo.CreateNoWindow = $true
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
-        foreach ($argument in @('--cache=false', '--account', $Account, 'read', $Reference)) {
-            $startInfo.ArgumentList.Add($argument)
-        }
+        Set-DotfilesProcessStartInfoArguments `
+            -StartInfo $startInfo `
+            -Arguments @('--cache=false', '--account', $Account, 'read', $Reference)
 
         $process = [System.Diagnostics.Process]::new()
         $process.StartInfo = $startInfo
@@ -206,6 +273,8 @@ try {
 finally {
     Remove-Item Function:\Resolve-DotfilesOpCli -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-DotfilesSecretLoadTimeoutSeconds -ErrorAction SilentlyContinue
+    Remove-Item Function:\ConvertTo-DotfilesWindowsCommandLineArgument -ErrorAction SilentlyContinue
+    Remove-Item Function:\Set-DotfilesProcessStartInfoArguments -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-DotfilesShouldLoadSecret -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-DotfilesOpRead -ErrorAction SilentlyContinue
     Remove-Item Function:\Set-DotfilesSecretEnvironmentValue -ErrorAction SilentlyContinue
