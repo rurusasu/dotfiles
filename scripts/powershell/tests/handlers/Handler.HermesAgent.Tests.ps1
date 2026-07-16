@@ -1590,7 +1590,7 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "https://docs\.x\.com/mcp"
         }
 
-        It 'should configure Browser MCP, preserve unrelated servers, and replace stale browser blocks' {
+        It 'should configure Browser MCP without colliding with the built-in browser toolset' {
             $configDir = Join-Path $script:userProfile ".hermes"
             $configPath = Join-Path $configDir "config.yaml"
             New-Item -ItemType Directory -Path $configDir -Force | Out-Null
@@ -1612,7 +1612,8 @@ Describe 'HermesAgentHandler' {
             $configContent | Should -Match "(?m)^mcp_servers:"
             $configContent | Should -Match "(?m)^\s{2}local:"
             $configContent | Should -Match "(?m)^\s{4}command:\s*local-tool"
-            $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+            $configContent | Should -Match "(?m)^\s{2}chrome:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+            $configContent | Should -Not -Match "(?m)^\s{2}browser:"
             $configContent | Should -Not -Match "stale-browser"
             $configContent | Should -Not -Match "(?m)^\s{4}connect_timeout:\s*5"
 
@@ -1620,7 +1621,8 @@ Describe 'HermesAgentHandler' {
 
             $rerunResult.Success | Should -Be $true
             $rerunConfigContent = Get-Content -LiteralPath $configPath -Raw
-            ([regex]::Matches($rerunConfigContent, "(?m)^\s{2}browser:")).Count | Should -Be 1
+            ([regex]::Matches($rerunConfigContent, "(?m)^\s{2}chrome:")).Count | Should -Be 1
+            $rerunConfigContent | Should -Not -Match "(?m)^\s{2}browser:"
             $rerunConfigContent | Should -Match "(?m)^\s{2}local:"
         }
 
@@ -1670,7 +1672,8 @@ Describe 'HermesAgentHandler' {
                 $configContent | Should -Not -Match "/usr/local/bin/hermes-xapi-mcp"
                 $configContent | Should -Match "(?m)^\s{2}local:"
                 $configContent | Should -Match "(?m)^\s{2}x-docs:"
-                $configContent | Should -Match "(?m)^\s{2}browser:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+                $configContent | Should -Match "(?m)^\s{2}chrome:\r?\n\s{4}url:\s*http://browser-mcp:8080/mcp\r?\n\s{4}connect_timeout:\s*120"
+                $configContent | Should -Not -Match "(?m)^\s{2}browser:"
             }
         }
 
