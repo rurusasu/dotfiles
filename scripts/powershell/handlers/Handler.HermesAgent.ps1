@@ -166,7 +166,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 $this.Log("Slack 無メンション応答設定を更新しました ($($slackMentionResult.Count) configs)", "Green")
             }
 
-            return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119")
+            return $this.CreateSuccessResult("Hermes Agent を起動しました: http://127.0.0.1:9119 / browser: $($this.GetBrowserViewUrl())")
         }
         catch {
             return $this.CreateFailureResult("Hermes Agent セットアップに失敗しました: $($_.Exception.Message)", $_.Exception)
@@ -238,6 +238,15 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return Join-Path (Join-Path $this.GetHomeDir() ".hermes") ".browser"
+    }
+
+    hidden [string] GetBrowserViewUrl() {
+        $port = "6080"
+        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_VIEW_PORT)) {
+            $port = $env:HERMES_BROWSER_VIEW_PORT
+        }
+
+        return "http://127.0.0.1:$port"
     }
 
     hidden [string] GetHomeDir() {

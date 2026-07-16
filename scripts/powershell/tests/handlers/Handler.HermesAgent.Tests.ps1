@@ -19,6 +19,7 @@ Describe 'HermesAgentHandler' {
         $script:oldHome = $env:HOME
         $script:oldHermesDataDir = $env:HERMES_DATA_DIR
         $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
+        $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
         $script:dockerCalls = @()
 
         $script:ctx.Options["NixRebuildApplied"] = $true
@@ -34,6 +35,7 @@ Describe 'HermesAgentHandler' {
         Remove-Item Env:\HOME -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
 
         Mock Write-Host { }
         Mock Get-Command {
@@ -68,6 +70,13 @@ Describe 'HermesAgentHandler' {
         }
         else {
             $env:HERMES_BROWSER_DATA_DIR = $script:oldHermesBrowserDataDir
+        }
+
+        if ($null -eq $script:oldHermesBrowserViewPort) {
+            Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HERMES_BROWSER_VIEW_PORT = $script:oldHermesBrowserViewPort
         }
     }
 
@@ -331,7 +340,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Not -Match 'chrome\.exe|chromium\.exe|python(?:\d+(?:\.\d+)*)?(?:\.exe)?'
         }
 
-        It 'should wire Chromium and Browser MCP into the Hermes Compose network without publishing browser ports' {
+        It 'should wire Chromium and Browser MCP into the Hermes Compose network while publishing only noVNC locally' {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
@@ -353,6 +362,8 @@ Describe 'HermesAgentHandler' {
             $chromiumService | Should -Not -Match "(?m)^\s*-\s*SYS_ADMIN\s*$"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?source:\s*\$\{HERMES_BROWSER_DATA_DIR:-\$\{USERPROFILE:-\$\{HOME\}\}/\.hermes/\.browser\}\s*`r?`n\s{8}target:\s*/data"
             $composeContent | Should -Match "(?ms)^\s{2}chromium:.*?healthcheck:.*?/json/version"
+            $composeContent | Should -Match '(?m)^\s*-\s*"127\.0\.0\.1:\$\{HERMES_BROWSER_VIEW_PORT:-6080\}:6080"\s*$'
+            $composeContent | Should -Not -Match "(?m)^\s*-\s*[""']?(?:127\.0\.0\.1:|0\.0\.0\.0:|\$\{[^}]+}:)?5900:5900[""']?\s*$"
 
             $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?build:\s*`r?`n\s{6}context:\s*\.\./hermes-browser-mcp"
             $composeContent | Should -Match "(?ms)^\s{2}browser-mcp:.*?healthcheck:.*?8080"
@@ -504,6 +515,8 @@ Describe 'HermesAgentHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
+            $result.Message | Should -Match "http://127\.0\.0\.1:9119"
+            $result.Message | Should -Match "http://127\.0\.0\.1:6080"
             $envPath = Join-Path $script:userProfile ".hermes\.env"
             $passwordPath = Join-Path $script:userProfile ".hermes\dashboard-basic-auth-password.txt"
             $envContent = Get-Content -LiteralPath $envPath -Raw
@@ -535,6 +548,24 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -Be $true
             $browserProfileDir | Should -Exist
+        }
+
+        It 'should show the configured browser viewer port in the setup result' {
+            $oldPort = $env:HERMES_BROWSER_VIEW_PORT
+            try {
+                $env:HERMES_BROWSER_VIEW_PORT = "16080"
+                $result = $handler.Apply($ctx)
+                $result.Success | Should -Be $true
+                $result.Message | Should -Match "http://127\.0\.0\.1:16080"
+            }
+            finally {
+                if ($null -eq $oldPort) {
+                    Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:HERMES_BROWSER_VIEW_PORT = $oldPort
+                }
+            }
         }
 
         It 'should create the browser profile directory from HERMES_BROWSER_DATA_DIR when set' {
