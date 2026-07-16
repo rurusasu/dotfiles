@@ -330,8 +330,17 @@ Describe 'PowerShell dcnvim profile function' {
         $script:fzfCallCount = 0
         $script:oldDotfilesRepositoryUrl = $env:DOTFILES_REPOSITORY_URL
         $script:oldDotfilesRepositoryRef = $env:DOTFILES_REPOSITORY_REF
+        $script:oldHome = $env:HOME
+        $script:oldOpServiceAccountToken = $env:OP_SERVICE_ACCOUNT_TOKEN
+        $script:oldForceSecretLoad = $env:DOTFILES_FORCE_SECRET_LOAD
+        $script:oldSecretLoadOnly = $env:DOTFILES_SECRET_LOAD_ONLY
+        $env:HOME = Join-Path $TestDrive "home"
+        New-Item -ItemType Directory -Path $env:HOME -Force | Out-Null
         Remove-Item Env:\DOTFILES_REPOSITORY_URL -ErrorAction SilentlyContinue
         Remove-Item Env:\DOTFILES_REPOSITORY_REF -ErrorAction SilentlyContinue
+        Remove-Item Env:\OP_SERVICE_ACCOUNT_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:\DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+        Remove-Item Env:\DOTFILES_SECRET_LOAD_ONLY -ErrorAction SilentlyContinue
 
         function global:Get-Command {
             [CmdletBinding()]
@@ -370,9 +379,12 @@ Describe 'PowerShell dcnvim profile function' {
             $command = if ($callArgs.Count -gt 0) { [string]$callArgs[0] } else { "" }
             $payload = if ($callArgs.Count -gt 0) { [string]$callArgs[-1] } else { "" }
             $script:devcontainerCalls.Add([PSCustomObject]@{
-                    Command = $command
-                    Args    = $callArgs
-                    Payload = $payload
+                    Command             = $command
+                    Args                = $callArgs
+                    Payload             = $payload
+                    OpServiceAccountSet = [bool]$env:OP_SERVICE_ACCOUNT_TOKEN
+                    ForceSecretLoad     = $env:DOTFILES_FORCE_SECRET_LOAD
+                    SecretLoadOnly      = $env:DOTFILES_SECRET_LOAD_ONLY
                 }) | Out-Null
 
             switch ($command) {
@@ -467,6 +479,34 @@ Describe 'PowerShell dcnvim profile function' {
         else {
             $env:DOTFILES_REPOSITORY_REF = $script:oldDotfilesRepositoryRef
         }
+
+        if ($null -eq $script:oldHome) {
+            Remove-Item Env:\HOME -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HOME = $script:oldHome
+        }
+
+        if ($null -eq $script:oldOpServiceAccountToken) {
+            Remove-Item Env:\OP_SERVICE_ACCOUNT_TOKEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:OP_SERVICE_ACCOUNT_TOKEN = $script:oldOpServiceAccountToken
+        }
+
+        if ($null -eq $script:oldForceSecretLoad) {
+            Remove-Item Env:\DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_FORCE_SECRET_LOAD = $script:oldForceSecretLoad
+        }
+
+        if ($null -eq $script:oldSecretLoadOnly) {
+            Remove-Item Env:\DOTFILES_SECRET_LOAD_ONLY -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_SECRET_LOAD_ONLY = $script:oldSecretLoadOnly
+        }
     }
 
     It 'should quote tmux session names for bash payloads' {
@@ -517,6 +557,25 @@ Describe 'PowerShell dcnvim profile function' {
         $exec.Payload | Should -Match "command -v tmux"
         $exec.Payload | Should -Match ([regex]::Escape("tmux new -A -s 'repo' 'nvim .'"))
     }
+
+    It 'should load OP service account token before devcontainer up' {
+        $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")
+        $secretDir = Join-Path $env:HOME ".config\shell"
+        New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $secretDir "secret.ps1") -Encoding ascii -Value @'
+if (-not $env:DOTFILES_FORCE_SECRET_LOAD) { throw "DOTFILES_FORCE_SECRET_LOAD was not set" }
+if ($env:DOTFILES_SECRET_LOAD_ONLY -ne "OP_SERVICE_ACCOUNT_TOKEN") { throw "DOTFILES_SECRET_LOAD_ONLY was not scoped" }
+$env:OP_SERVICE_ACCOUNT_TOKEN = "loaded-by-secret-loader"
+'@
+
+        dcnvim -Workspace $workspace
+
+        $script:devcontainerCalls[0].Command | Should -Be "up"
+        $script:devcontainerCalls[0].OpServiceAccountSet | Should -BeTrue
+        Test-Path Env:\DOTFILES_FORCE_SECRET_LOAD | Should -BeFalse
+        Test-Path Env:\DOTFILES_SECRET_LOAD_ONLY | Should -BeFalse
+    }
+
 
     It 'should use custom dotfiles repo URL in bootstrap payload' {
         $workspace = New-DcnvimWorkspace (Join-Path $TestDrive "repo")

@@ -473,6 +473,38 @@ function dcnvim {
     }
     $dotfilesUrlQuoted = ConvertTo-DcnvimBashSingleQuoted $dotfilesUrl
     $dotfilesRefQuoted = ConvertTo-DcnvimBashSingleQuoted $dotfilesRef
+
+    $homeDir = if ($env:HOME) { $env:HOME } else { $HOME }
+    if (-not $env:OP_SERVICE_ACCOUNT_TOKEN -and $homeDir) {
+        $secretLoader = Join-Path $homeDir ".config\shell\secret.ps1"
+        if (Test-Path -LiteralPath $secretLoader -PathType Leaf) {
+            $hadForceSecretLoad = Test-Path Env:\DOTFILES_FORCE_SECRET_LOAD
+            $previousForceSecretLoad = $env:DOTFILES_FORCE_SECRET_LOAD
+            $hadSecretLoadOnly = Test-Path Env:\DOTFILES_SECRET_LOAD_ONLY
+            $previousSecretLoadOnly = $env:DOTFILES_SECRET_LOAD_ONLY
+            try {
+                $env:DOTFILES_FORCE_SECRET_LOAD = "1"
+                $env:DOTFILES_SECRET_LOAD_ONLY = "OP_SERVICE_ACCOUNT_TOKEN"
+                . $secretLoader
+            }
+            finally {
+                if ($hadForceSecretLoad) {
+                    $env:DOTFILES_FORCE_SECRET_LOAD = $previousForceSecretLoad
+                }
+                else {
+                    Remove-Item Env:\DOTFILES_FORCE_SECRET_LOAD -ErrorAction SilentlyContinue
+                }
+
+                if ($hadSecretLoadOnly) {
+                    $env:DOTFILES_SECRET_LOAD_ONLY = $previousSecretLoadOnly
+                }
+                else {
+                    Remove-Item Env:\DOTFILES_SECRET_LOAD_ONLY -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+
     & devcontainer up `
         --workspace-folder $Workspace | Out-Null
     if ($LASTEXITCODE -ne 0) {
