@@ -468,7 +468,11 @@ Describe 'GitHub token switching templates' {
 
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'GITHUB_WORK_TOKEN'
+        $content | Should -Match 'OP_SERVICE_ACCOUNT_TOKEN'
+        $content | Should -Match 'DOTFILES_OP_SERVICE_ACCOUNT_TOKEN_REF'
+        $content | Should -Match 'DOTFILES_SECRET_LOAD_ONLY'
         $content | Should -Match '--cache=false'
+        $content | Should -Match "'--account'"
         $content | Should -Match "'read'"
         $content | Should -Match 'GitHubUsedUserPAT'
         $content | Should -Match '\$timeoutSeconds = 60'
@@ -489,6 +493,10 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match '\bread\b'
         $content | Should -Match 'GitHubUsedUserPAT'
         $content | Should -Match 'GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8'
+        $content | Should -Match 'OP_SERVICE_ACCOUNT_TOKEN'
+        $content | Should -Match 'DOTFILES_OP_SERVICE_ACCOUNT_TOKEN_REF'
+        $content | Should -Match 'DOTFILES_SECRET_LOAD_ONLY'
+        $content | Should -Match '--account "\$_acct" read "\$_ref"'
         $content | Should -Not -Match '\binject\b' -Because 'forced shell loading should use bounded individual reads instead of bulk inject'
     }
 

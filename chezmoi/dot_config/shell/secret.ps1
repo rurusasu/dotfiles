@@ -8,9 +8,27 @@
 if (-not $env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN) { $env:GITHUB_PAT_TOKEN = $env:GH_TOKEN }
 if (-not $env:GH_TOKEN -and $env:GITHUB_PAT_TOKEN) { $env:GH_TOKEN = $env:GITHUB_PAT_TOKEN }
 
-if ($env:GITHUB_PAT_TOKEN -and $env:GH_TOKEN -and $env:TAVILY_API_KEY -and $env:GITHUB_WORK_TOKEN) { return }
 if (-not $env:DOTFILES_FORCE_SECRET_LOAD) {
     return
+}
+
+$script:DotfilesSecretLoadOnly = @()
+if ($env:DOTFILES_SECRET_LOAD_ONLY) {
+    $script:DotfilesSecretLoadOnly = @(
+        $env:DOTFILES_SECRET_LOAD_ONLY -split '[,\s]+' |
+            Where-Object { $_ }
+    )
+}
+
+function Test-DotfilesShouldLoadSecret {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if ($script:DotfilesSecretLoadOnly.Count -eq 0) {
+        return $true
+    }
+
+    return $script:DotfilesSecretLoadOnly -contains $Name
 }
 
 function Resolve-DotfilesOpCli {
@@ -66,20 +84,25 @@ function Invoke-DotfilesOpRead {
         return $null
     }
 
-    $stdout = [System.IO.Path]::GetTempFileName()
-    $stderr = [System.IO.Path]::GetTempFileName()
+    $process = $null
 
     try {
-        $process = Start-Process `
-            -FilePath $opBin `
-            -ArgumentList @('--cache=false', 'read', $Reference, '--account', $Account) `
-            -PassThru `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $stdout `
-            -RedirectStandardError $stderr
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $opBin
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        foreach ($argument in @('--cache=false', '--account', $Account, 'read', $Reference)) {
+            $startInfo.ArgumentList.Add($argument)
+        }
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        [void]$process.Start()
 
         if ($process.WaitForExit($TimeoutSeconds * 1000) -and $process.ExitCode -eq 0) {
-            $value = Get-Content -LiteralPath $stdout -Raw -ErrorAction SilentlyContinue
+            $value = $process.StandardOutput.ReadToEnd()
             if ($null -eq $value) {
                 return $null
             }
@@ -91,7 +114,7 @@ function Invoke-DotfilesOpRead {
             Write-Warning "1Password secret read timed out after $TimeoutSeconds seconds; continuing without '$Reference'."
         }
         else {
-            $errorContent = Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue
+            $errorContent = $process.StandardError.ReadToEnd()
             $errorText = if ($null -ne $errorContent) { $errorContent.Trim() } else { '' }
             if ($errorText) {
                 Write-Warning "1Password secret read failed for '$Reference': $errorText"
@@ -105,7 +128,9 @@ function Invoke-DotfilesOpRead {
         Write-Warning "1Password secret read failed for '$Reference': $($_.Exception.Message)"
     }
     finally {
-        Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
+        if ($process) {
+            $process.Dispose()
+        }
     }
 
     return $null
@@ -130,6 +155,9 @@ function Set-DotfilesSecretEnvironmentValue {
     if ([Environment]::GetEnvironmentVariable($Name, 'Process')) {
         return
     }
+    if (-not (Test-DotfilesShouldLoadSecret -Name $Name)) {
+        return
+    }
 
     $value = Invoke-DotfilesOpRead -Reference $Reference -Account $Account -TimeoutSeconds $TimeoutSeconds
     if ($value) {
@@ -141,6 +169,12 @@ try {
     $timeoutSeconds = Get-DotfilesSecretLoadTimeoutSeconds
     $personalAccount = if ($env:OP_ACCOUNT) { $env:OP_ACCOUNT } else { 'EJLA3HRAVZBCXIQ7SRSFGQBTNU' }
     $workAccount = 'aimatecoltd.1password.com'
+    $serviceAccountTokenRef = if ($env:DOTFILES_OP_SERVICE_ACCOUNT_TOKEN_REF) {
+        $env:DOTFILES_OP_SERVICE_ACCOUNT_TOKEN_REF
+    }
+    else {
+        'op://Employee/1password Service Account/password'
+    }
 
     Set-DotfilesSecretEnvironmentValue `
         -Name 'GITHUB_PAT_TOKEN' `
@@ -162,12 +196,20 @@ try {
         -Reference 'op://devcontainer/GITHUB_PERSONAL_ACCESS_TOKEN_KOHEI-MIKI-IM8/credential' `
         -Account $workAccount `
         -TimeoutSeconds $timeoutSeconds
+
+    Set-DotfilesSecretEnvironmentValue `
+        -Name 'OP_SERVICE_ACCOUNT_TOKEN' `
+        -Reference $serviceAccountTokenRef `
+        -Account $workAccount `
+        -TimeoutSeconds $timeoutSeconds
 }
 finally {
     Remove-Item Function:\Resolve-DotfilesOpCli -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-DotfilesSecretLoadTimeoutSeconds -ErrorAction SilentlyContinue
+    Remove-Item Function:\Test-DotfilesShouldLoadSecret -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-DotfilesOpRead -ErrorAction SilentlyContinue
     Remove-Item Function:\Set-DotfilesSecretEnvironmentValue -ErrorAction SilentlyContinue
 
-    Remove-Variable timeoutSeconds, personalAccount, workAccount -ErrorAction SilentlyContinue
+    Remove-Variable timeoutSeconds, personalAccount, workAccount, serviceAccountTokenRef -ErrorAction SilentlyContinue
+    Remove-Variable DotfilesSecretLoadOnly -Scope Script -ErrorAction SilentlyContinue
 }

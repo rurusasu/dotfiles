@@ -77,6 +77,35 @@ dcnvim() {
   local dotfiles_url_quoted dotfiles_ref_quoted
   dotfiles_url_quoted="$(_dcnvim_shell_quote "$dotfiles_url")"
   dotfiles_ref_quoted="$(_dcnvim_shell_quote "$dotfiles_ref")"
+
+  if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.config/shell/secret.sh" ]; then
+    local __dcnvim_had_force_secret_load=0
+    local __dcnvim_previous_force_secret_load="${DOTFILES_FORCE_SECRET_LOAD:-}"
+    local __dcnvim_had_secret_load_only=0
+    local __dcnvim_previous_secret_load_only="${DOTFILES_SECRET_LOAD_ONLY:-}"
+    if [ "${DOTFILES_FORCE_SECRET_LOAD+x}" = x ]; then
+      __dcnvim_had_force_secret_load=1
+    fi
+    if [ "${DOTFILES_SECRET_LOAD_ONLY+x}" = x ]; then
+      __dcnvim_had_secret_load_only=1
+    fi
+
+    export DOTFILES_FORCE_SECRET_LOAD=1
+    export DOTFILES_SECRET_LOAD_ONLY=OP_SERVICE_ACCOUNT_TOKEN
+    # shellcheck source=/dev/null
+    source "$HOME/.config/shell/secret.sh"
+    if [ "$__dcnvim_had_force_secret_load" = 1 ]; then
+      export DOTFILES_FORCE_SECRET_LOAD="$__dcnvim_previous_force_secret_load"
+    else
+      unset DOTFILES_FORCE_SECRET_LOAD
+    fi
+    if [ "$__dcnvim_had_secret_load_only" = 1 ]; then
+      export DOTFILES_SECRET_LOAD_ONLY="$__dcnvim_previous_secret_load_only"
+    else
+      unset DOTFILES_SECRET_LOAD_ONLY
+    fi
+  fi
+
   devcontainer up \
     --workspace-folder "$workspace" \
     >/dev/null || {

@@ -34,6 +34,7 @@ write_devcontainer_stub() {
 	write_stub devcontainer '
 {
   printf "argc=%s\n" "$#"
+  printf "op_token=%s\n" "${OP_SERVICE_ACCOUNT_TOKEN:-}"
   for arg in "$@"; do
     printf "arg=%s\n" "$arg"
   done
@@ -114,6 +115,25 @@ printf "%s\n" "$FZF_SELECTED"
 	[[ "$payload" == *"command -v nvim"* ]]
 	[[ "$payload" == *"command -v tmux"* ]]
 	[[ "$payload" == *"tmux new -A -s 'project' 'nvim .'"* ]]
+}
+
+@test "explicit workspace loads OP service account token before devcontainer up" {
+	workspace="$BATS_TEST_TMPDIR/project"
+	mkdir -p "$workspace/.devcontainer" "$HOME/.config/shell"
+cat >"$HOME/.config/shell/secret.sh" <<'EOF'
+[ "${DOTFILES_FORCE_SECRET_LOAD:-}" = "1" ] || return 99
+[ "${DOTFILES_SECRET_LOAD_ONLY:-}" = "OP_SERVICE_ACCOUNT_TOKEN" ] || return 98
+export OP_SERVICE_ACCOUNT_TOKEN="loaded-by-secret-loader"
+EOF
+	write_devcontainer_stub
+
+	run dcnvim "$workspace"
+
+	[ "$status" -eq 0 ]
+	log="$(cat "$DEVCONTAINER_LOG")"
+	[[ "$log" == *"op_token=loaded-by-secret-loader"* ]]
+	[ -z "${DOTFILES_FORCE_SECRET_LOAD:-}" ]
+	[ -z "${DOTFILES_SECRET_LOAD_ONLY:-}" ]
 }
 
 @test "workspace picker uses ghq and fzf when cwd has no devcontainer" {
