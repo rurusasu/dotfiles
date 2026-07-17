@@ -36,10 +36,12 @@
 ### Task 1: Add the macOS dispatcher
 
 **Files:**
+
 - Create: `tests/bash/install_dispatcher.bats`
 - Create: `install.sh`
 
 **Interfaces:**
+
 - Consumes: `uname -s`, `uname -m`, repository-relative `scripts/sh/install-macos.sh`.
 - Produces: executable `./install.sh` that `exec`s the macOS installer only on Darwin arm64.
 
@@ -175,10 +177,12 @@ git commit -m "feat: add macOS installer entrypoint"
 ### Task 2: Implement the idempotent macOS provisioning workflow
 
 **Files:**
+
 - Create: `tests/bash/install_macos.bats`
 - Create: `scripts/sh/install-macos.sh`
 
 **Interfaces:**
+
 - Consumes: the repository checkout, standard macOS utilities, Homebrew, Docker Desktop CLI, Nix, Home Manager activation package, chezmoi, and Docker Compose.
 - Produces: `main`, phase functions, and a complete provisioning run.
 - Supported test overrides:
@@ -735,11 +739,13 @@ git commit -m "feat: provision macOS development environment"
 ### Task 3: Wire macOS paths and Docker architecture
 
 **Files:**
+
 - Create: `tests/bash/macos_config.bats`
 - Modify: `nix/home/common.nix`
 - Modify: `docker/hermes-agent/compose.yml`
 
 **Interfaces:**
+
 - Consumes: Home Manager session configuration and the existing Compose services.
 - Produces: persistent Homebrew PATH and deterministic amd64 Chromium builds on Apple Silicon.
 
@@ -805,11 +811,11 @@ In `nix/home/common.nix`, extend `home.sessionPath`:
 In `docker/hermes-agent/compose.yml`:
 
 ```yaml
-  chromium:
-    platform: linux/amd64
-    build:
-      context: ../hermes-browser
-      dockerfile: Dockerfile
+chromium:
+  platform: linux/amd64
+  build:
+    context: ../hermes-browser
+    dockerfile: Dockerfile
 ```
 
 - [ ] **Step 5: Run guards and repository config checks**
@@ -833,11 +839,13 @@ git commit -m "feat: configure macOS package and container paths"
 ### Task 4: Document and enable CI coverage
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `.github/workflows/ci-devcontainer.yml`
 - Modify: `tests/bash/macos_config.bats`
 
 **Interfaces:**
+
 - Consumes: the new installer commands.
 - Produces: user-facing quick start and CI triggers for installer regressions.
 
@@ -901,8 +909,8 @@ Keep the existing Windows commands and NixOS/WSL explanation after the Windows h
 Add these paths to both `push.paths` and `pull_request.paths`:
 
 ```yaml
-      - "install.sh"
-      - "scripts/sh/install-macos.sh"
+- "install.sh"
+- "scripts/sh/install-macos.sh"
 ```
 
 The existing `tests/bash/**` trigger ensures the new Bats files are covered.
@@ -927,10 +935,12 @@ git commit -m "docs: add macOS bootstrap quick start"
 ### Task 5: Full verification and real macOS installation
 
 **Files:**
+
 - Verify all modified files.
 - Runtime state changes occur under `/Applications`, `/opt/homebrew`, `/nix`, the user's home directory, and Docker Desktop.
 
 **Interfaces:**
+
 - Consumes: completed implementation and the user's Apple Silicon Mac.
 - Produces: verified source changes and a configured local machine.
 

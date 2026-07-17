@@ -97,7 +97,7 @@ Docker Desktop の利用条件は実行前に README とスクリプト出力で
   `nix/home/common.nix` が `USER` と `HOME` を `builtins.getEnv` から取得するため、
   pure evaluation は使用しない。
 - `nix build --no-link --print-out-paths
-  .#homeConfigurations.aarch64-darwin.activationPackage --impure` の結果にある
+.#homeConfigurations.aarch64-darwin.activationPackage --impure` の結果にある
   `activate` を実行する。
 - 既存 Home Manager generation がある場合も、同じ activation を再適用できる。
 - activation 後に Home Manager profile の PATH を現在のプロセスへ反映する。
