@@ -298,6 +298,28 @@ cp -R "$1" "$2"
 	grep -q '^docker-install --accept-license --user=test-user$' "$COMMAND_LOG"
 }
 
+@test "a checkout already at the dotfiles target is kept in place" {
+	write_installed_stubs
+	rm "$HOME/.dotfiles"
+	mkdir -p \
+		"$HOME/.dotfiles/scripts/sh" \
+		"$HOME/.dotfiles/chezmoi" \
+		"$HOME/.dotfiles/docker/hermes-agent"
+	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
+	touch \
+		"$HOME/.dotfiles/flake.nix" \
+		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
+	INSTALLER="$HOME/.dotfiles/scripts/sh/install-macos.sh"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	[ -d "$HOME/.dotfiles" ]
+	[ ! -L "$HOME/.dotfiles" ]
+	[ -f "$HOME/.dotfiles/scripts/sh/install-macos.sh" ]
+	[ "$(find "$HOME" -maxdepth 1 -name '.dotfiles.backup.*' | wc -l | tr -d ' ')" -eq 0 ]
+}
+
 @test "an existing dotfiles directory is moved to a timestamped backup" {
 	write_installed_stubs
 	rm "$HOME/.dotfiles"

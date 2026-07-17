@@ -193,7 +193,7 @@ canonical_directory() {
 
 link_dotfiles() {
   local target="$HOME/.dotfiles"
-  if [[ -L $target ]] &&
+  if [[ -d $target ]] &&
     [[ "$(canonical_directory "$target")" == "$(canonical_directory "$ROOT")" ]]; then
     return
   fi
