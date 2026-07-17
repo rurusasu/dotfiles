@@ -3,11 +3,7 @@
   pkgs,
 }:
 let
-  inherit (pkgs) lib;
   dotfilesSource = ../..;
-  inputSources = lib.filter (source: source != null) (
-    lib.mapAttrsToList (_: input: input.outPath or null) inputs
-  );
   helloWorldImage = pkgs.dockerTools.buildImage {
     name = "hello-world";
     tag = "latest";
@@ -59,6 +55,22 @@ pkgs.testers.runNixOSTest {
         };
       };
 
+      environment.systemPackages = with pkgs; [
+        nix
+        git
+        gh
+        chezmoi
+        ripgrep
+        fd
+        jq
+        neovim
+        nodejs_24
+        python3
+        go
+        rustup
+        netcat
+      ];
+
       virtualisation = {
         diskSize = 8192;
         memorySize = 4096;
@@ -68,7 +80,6 @@ pkgs.testers.runNixOSTest {
         "nix-command"
         "flakes"
       ];
-      system.extraDependencies = inputSources ++ [ dotfilesSource ];
     };
 
   testScript = ''
@@ -78,7 +89,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("docker load < ${helloWorldImage}")
     machine.succeed("docker load < ${acceptanceImage}")
 
-    install = "su - nixos -c 'env DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=${dotfilesSource} ${dotfilesSource}/install.sh'"
+    install = "su - nixos -c 'env DOTFILES_NIXOS_PREBUILT_SYSTEM=/run/current-system DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=${dotfilesSource} ${dotfilesSource}/install.sh'"
     machine.succeed(install)
     machine.succeed(install)
     machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd ${dotfilesSource}; sg docker -c \"DOTFILES_VERIFY_SYSTEM_LAYER=nixos DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml ./scripts/sh/verify-environment.sh --runtime\"'")

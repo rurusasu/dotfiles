@@ -107,6 +107,23 @@ line_of() {
 	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
 }
 
+@test "NixOS E2E can activate an already built system through the real installer" {
+	prebuilt="$BATS_TEST_TMPDIR/prebuilt-system"
+	mkdir -p "$prebuilt/bin"
+	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
+#!/usr/bin/env bash
+printf 'switch-to-configuration %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$prebuilt/bin/switch-to-configuration"
+	export DOTFILES_NIXOS_PREBUILT_SYSTEM="$prebuilt"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q '^switch-to-configuration switch$' "$COMMAND_LOG"
+	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
+}
+
 @test "NixOS rebuild failure stops before user configuration" {
 	write_stub nixos-rebuild '
 printf "nixos-rebuild %s\n" "$*" >>"$COMMAND_LOG"

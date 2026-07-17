@@ -24,6 +24,7 @@ setup() {
 	export DOTFILES_OS_RELEASE_FILE="$OS_RELEASE"
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
+	export DOTFILES_SYSTEMD_WAIT_ATTEMPTS=2
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 
 	write_stub uname '
@@ -130,6 +131,27 @@ assert_log_order() {
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
 		"verify-environment --runtime"
+}
+
+@test "Linux waits for systemd to leave the transient starting state" {
+	write_nix_stub
+	state_count="$BATS_TEST_TMPDIR/systemd-state-count"
+	printf '0\n' >"$state_count"
+	export STATE_COUNT="$state_count"
+	write_stub systemctl '
+printf "systemctl %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == "is-system-running" ]]; then
+	count="$(cat "$STATE_COUNT")"
+	count=$((count + 1))
+	printf "%s\n" "$count" >"$STATE_COUNT"
+	if ((count == 1)); then echo starting; else echo running; fi
+fi
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^systemctl is-system-running$' "$COMMAND_LOG")" -eq 2 ]
 }
 
 @test "Debian selects the Debian System Manager output" {

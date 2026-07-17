@@ -142,8 +142,20 @@ jobs:
             sleep 2
           done
           [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value) == running ]]
-          sudo machinectl shell --quiet "root@$MACHINE_NAME" /bin/bash -lc \
-            'systemctl is-system-running | grep -E "^(running|degraded)$"'
+          machine_ready=0
+          for _ in $(seq 1 60); do
+            if sudo machinectl shell --quiet "root@$MACHINE_NAME" /bin/bash -lc \
+              'systemctl is-system-running | grep -E "^(running|degraded)$"' \
+              >/dev/null 2>&1; then
+              machine_ready=1
+              break
+            fi
+            sleep 2
+          done
+          if ((machine_ready == 0)); then
+            tail -200 debian-nspawn.log
+            exit 1
+          fi
 
           run_inside() {
             sudo machinectl shell --quiet "dotfiles@$MACHINE_NAME" /bin/bash -lc "$1"

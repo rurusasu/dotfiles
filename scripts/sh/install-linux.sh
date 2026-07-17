@@ -10,6 +10,7 @@ COMPOSE_FILE="${DOTFILES_COMPOSE_FILE:-$ROOT/docker/hermes-agent/compose.yml}"
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
 SERVICE_WAIT_ATTEMPTS="${DOTFILES_SERVICE_WAIT_ATTEMPTS:-60}"
+SYSTEMD_WAIT_ATTEMPTS="${DOTFILES_SYSTEMD_WAIT_ATTEMPTS:-30}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 LINUX_CONFIG=""
 
@@ -38,12 +39,18 @@ ensure_systemd() {
   [[ -d $SYSTEMD_DIR ]] || dotfiles_die "A running systemd system instance is required."
   dotfiles_have systemctl || dotfiles_die "systemctl is required."
 
-  local state
-  state="$(systemctl is-system-running 2>/dev/null || true)"
-  case "$state" in
-  running | degraded) ;;
-  *) dotfiles_die "systemd is not ready (state: ${state:-unknown})." ;;
-  esac
+  local attempt state=""
+  for ((attempt = 1; attempt <= SYSTEMD_WAIT_ATTEMPTS; attempt++)); do
+    state="$(systemctl is-system-running 2>/dev/null || true)"
+    case "$state" in
+    running | degraded) return ;;
+    esac
+    if ((attempt < SYSTEMD_WAIT_ATTEMPTS)); then
+      sleep "$DOTFILES_WAIT_SLEEP_SECONDS"
+    fi
+  done
+
+  dotfiles_die "systemd is not ready after $SYSTEMD_WAIT_ATTEMPTS attempts (state: ${state:-unknown})."
 }
 
 ensure_nix() {

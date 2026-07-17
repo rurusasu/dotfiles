@@ -241,6 +241,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'name:\s+Debian systemd Destructive'
         $workflow | Should -Match 'timeout-minutes:'
         $workflow | Should -Match 'systemd-nspawn'
+        $workflow | Should -Match '(?s)for _ in \$\(seq 1 60\).*machinectl shell.*systemctl is-system-running'
         $workflow | Should -Match 'dotfiles_run_in_group docker.*verify-environment\.sh --runtime'
         $workflow | Should -Match 'systemd systemd-sysv dbus'
         ([regex]::Matches($workflow, '(?m)^\s+- "flake\.nix"\s*$')).Count | Should -Be 2
@@ -262,6 +263,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'name:\s+NixOS VM'
         $workflow | Should -Match 'bootstrap-nixos-vm'
         $test | Should -Match 'dotfilesSource.*install\.sh'
+        $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=/run/current-system'
         ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
         $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'bootstrap-compose\.yml'

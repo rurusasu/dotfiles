@@ -11,6 +11,7 @@ NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
 SERVICE_WAIT_ATTEMPTS="${DOTFILES_SERVICE_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"
+NIXOS_PREBUILT_SYSTEM="${DOTFILES_NIXOS_PREBUILT_SYSTEM:-}"
 
 preflight() {
   [[ $(uname -s) == "Linux" && -e $NIXOS_MARKER ]] || dotfiles_die "NixOS is required."
@@ -21,6 +22,12 @@ preflight() {
     dotfiles_die "NixOS hardware configuration must be an absolute path: $NIXOS_HARDWARE_CONFIG"
   [[ -r $NIXOS_HARDWARE_CONFIG ]] ||
     dotfiles_die "NixOS hardware configuration is missing or unreadable: $NIXOS_HARDWARE_CONFIG"
+  if [[ -n $NIXOS_PREBUILT_SYSTEM ]]; then
+    [[ $NIXOS_PREBUILT_SYSTEM == /* ]] ||
+      dotfiles_die "Prebuilt NixOS system must be an absolute path: $NIXOS_PREBUILT_SYSTEM"
+    [[ -x $NIXOS_PREBUILT_SYSTEM/bin/switch-to-configuration ]] ||
+      dotfiles_die "Prebuilt NixOS system is invalid: $NIXOS_PREBUILT_SYSTEM"
+  fi
 
   local required
   for required in \
@@ -54,6 +61,14 @@ capture_host_identity() {
 }
 
 apply_nixos_system() {
+  if [[ -n $NIXOS_PREBUILT_SYSTEM ]]; then
+    dotfiles_log "Activating prebuilt NixOS system for E2E..."
+    sudo "$NIXOS_PREBUILT_SYSTEM/bin/switch-to-configuration" switch
+    export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:$PATH"
+    hash -r
+    return
+  fi
+
   local rebuild_bin
   rebuild_bin="$(command -v nixos-rebuild)"
   dotfiles_log "Applying NixOS and Home Manager..."
