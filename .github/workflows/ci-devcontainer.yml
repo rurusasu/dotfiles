@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "install.sh"
+      - "scripts/sh/install-macos.sh"
       - "scripts/sh/dcnvim.sh"
       - "tests/bash/**"
       - ".devcontainer/**"
@@ -14,6 +16,8 @@ on:
     branches: [main]
     paths:
       - "bootstrap.sh"
+      - "install.sh"
+      - "scripts/sh/install-macos.sh"
       - "scripts/sh/dcnvim.sh"
       - "tests/bash/**"
       - ".devcontainer/**"
