@@ -98,7 +98,7 @@ install_docker_desktop_fallback() {
   have 7zz || die "7-Zip is required for the Docker Desktop fallback."
 
   local temp_dir dmg_path extract_dir actual_sha source_app
-  temp_dir="$(mktemp -d "${TMPDIR:-/private/tmp}/dotfiles-docker.XXXXXX")"
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-docker.XXXXXX")"
   dmg_path="$temp_dir/Docker.dmg"
   extract_dir="$temp_dir/extracted"
 
