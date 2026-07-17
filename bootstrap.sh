@@ -67,12 +67,11 @@ if ! have chezmoi && have curl; then
 fi
 
 # ── modern Neovim (distro nvim is usually too old for lazy.nvim) ────────
-# Read --version once with sed `q` so nvim is not killed by SIGPIPE under
-# `set -o pipefail` (which would abort the entire script on the
-# already-installed path and break idempotency).
+# Read the complete, short --version output instead of quitting sed early.
+# This avoids SIGPIPE under `set -o pipefail` and stays portable to BSD sed.
 need_nvim=1
 if have nvim; then
-  ver=$(nvim --version 2>/dev/null | sed -n '1{s/^NVIM v\([0-9]*\.[0-9]*\).*/\1/p;q}')
+  ver=$(nvim --version 2>/dev/null | sed -n '1s/^NVIM v\([0-9]*\.[0-9]*\).*/\1/p')
   if [ -z "$ver" ]; then
     log "Neovim present but version string unparseable; will reinstall"
   else

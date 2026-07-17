@@ -31,6 +31,7 @@ services:
       - hermes-browser
 
   chromium:
+    platform: linux/amd64
     build:
       context: ../hermes-browser
       dockerfile: Dockerfile

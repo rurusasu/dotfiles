@@ -217,5 +217,10 @@ in
     "$HOME/.bun/bin"
     "$HOME/.local/share/pnpm/bin"
     "$HOME/.local/share/pnpm"
+  ]
+  ++ lib.optionals pkgs.stdenv.isDarwin [
+    "/opt/homebrew/bin"
+    "/opt/homebrew/sbin"
+    "/Applications/Docker.app/Contents/Resources/bin"
   ];
 }
