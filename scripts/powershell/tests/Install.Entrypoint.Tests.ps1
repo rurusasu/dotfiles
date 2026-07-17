@@ -240,8 +240,16 @@ if ($AdminOnly -eq $false) {
 Write-Host "STUB_ADMIN_PHASE_COMPLETE"
 exit 0
 '@
+        $stubAcceptance = @'
+function Test-DotfilesEnvironment {
+    param([switch]$Runtime)
+    Write-Host "STUB_ACCEPTANCE_COMPLETE"
+    return [pscustomobject]@{ Success = $true; Message = "OK" }
+}
+'@
         [System.IO.File]::WriteAllText((Join-Path $scriptDir "install.user.ps1"), $stubUser, [System.Text.UTF8Encoding]::new($false))
         [System.IO.File]::WriteAllText((Join-Path $scriptDir "install.admin.ps1"), $stubAdmin, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText((Join-Path $scriptDir "Test-Environment.ps1"), $stubAcceptance, [System.Text.UTF8Encoding]::new($false))
 
         $result = Invoke-TestCmdProcess `
             -WorkingDirectory $workDir `
@@ -251,6 +259,7 @@ exit 0
         $result.Stdout | Should -Match "STUB_USER_PHASE_COMPLETE"
         $result.Stdout | Should -Match "Phase 2a: Non-Admin Setup"
         $result.Stdout | Should -Match "STUB_PHASE2A_COMPLETE"
+        $result.Stdout | Should -Match "STUB_ACCEPTANCE_COMPLETE"
         $result.Stdout | Should -Match "Setup Complete!"
     }
 }

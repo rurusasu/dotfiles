@@ -1,0 +1,90 @@
+name: Bootstrap Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/ci-bootstrap-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/ci-bootstrap-build.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Bootstrap Build (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /home/runner
+      DOTFILES_UID: "1000"
+      DOTFILES_GID: "1000"
+      DOTFILES_GROUP: runner
+      DOTFILES_SYSTEM: x86_64-linux
+      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/hardware-configuration.nix
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux declarative outputs
+        run: |
+          set -euo pipefail
+          nix build .#systemConfigs.ubuntu --impure --no-link
+          nix build .#systemConfigs.debian --impure --no-link
+          nix build .#nixosConfigurations.linux.config.system.build.toplevel --impure --no-link
+          nix build .#homeConfigurations.x86_64-linux.activationPackage --impure --no-link
+          nix build .#package-support-report --no-link
+
+  darwin:
+    name: Bootstrap Build (Darwin)
+    runs-on: macos-14
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /Users/runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS declarative output
+        run: nix build .#darwinConfigurations.macos.system --impure --no-link
+
+  complete:
+    name: Bootstrap Build
+    needs: [linux, darwin]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - run: echo "All bootstrap outputs built successfully."

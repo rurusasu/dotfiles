@@ -1,62 +1,99 @@
 { config, pkgs, ... }:
 {
-  environment.systemPackages = with pkgs; [
-    coreutils
-    nvidia-container-toolkit
-    _1password-cli
-    # Japanese input: fcitx5+mozc installed as system packages.
-    # i18n.inputMethod is intentionally NOT used here because it auto-generates
-    # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
-    # user systemd service that runs fcitx5 with --disable=wayland (required for WSLg).
-    fcitx5
-    fcitx5-mozc
-    fcitx5-gtk
-  ];
+  environment = {
+    systemPackages = with pkgs; [
+      coreutils
+      nvidia-container-toolkit
+      _1password-cli
+      # Japanese input: fcitx5+mozc installed as system packages.
+      # i18n.inputMethod is intentionally NOT used here because it auto-generates
+      # app-org.fcitx.Fcitx5@autostart.service, which conflicts with the Home Manager
+      # user systemd service that runs fcitx5 with --disable=wayland (required for WSLg).
+      fcitx5
+      fcitx5-mozc
+      fcitx5-gtk
+    ];
 
-  # Merge /share/fcitx5 from all installed packages into /run/current-system/sw/share/fcitx5.
-  # Without this, fcitx5 cannot find addon/inputmethod conf files provided by
-  # separate packages like fcitx5-mozc (only the fcitx5 package itself is searched by default).
-  environment.pathsToLink = [ "/share/fcitx5" ];
+    # Merge /share/fcitx5 from all installed packages into /run/current-system/sw/share/fcitx5.
+    # Without this, fcitx5 cannot find addon/inputmethod conf files provided by
+    # separate packages like fcitx5-mozc (only the fcitx5 package itself is searched by default).
+    pathsToLink = [ "/share/fcitx5" ];
 
-  system.activationScripts.wslWhoami = {
-    text = ''
-      mkdir -p /usr/bin
-      ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami
-    '';
+    # Ensure nix-ld works for non-login shells (e.g. VS Code WSL server).
+    variables = {
+      NIX_LD = "/run/current-system/sw/share/nix-ld/lib/ld.so";
+      NIX_LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
+      WARP_ENABLE_WAYLAND = "1";
+    };
   };
 
-  # Delegate op CLI to Windows op.exe so 1Password desktop app (Windows Hello)
-  # can authenticate from WSL. The NixOS-native op binary has no socket from the
-  # Windows app; op.exe on Windows connects via the named pipe directly.
-  # op run is kept on the native binary because it injects secrets into Linux processes.
-  system.activationScripts.opWrapper =
-    let
-      opScript = pkgs.writeShellScript "op-wrapper" ''
-        OP_NATIVE="/etc/profiles/per-user/nixos/bin/op"
-        # op run injects secrets into Linux processes — keep on native binary
-        if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
-          exec "$OP_NATIVE" "$@"
-        fi
-        # Find op.exe via Windows PATH (available in WSL via interop)
-        OP_EXE=$(IFS=:; for p in $PATH; do
-          [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
-        done)
-        if [ -z "$OP_EXE" ]; then
-          echo "[ERROR] op.exe not found in PATH" >&2
-          exit 1
-        fi
-        OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
-        export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
-        exec "$OP_EXE" "$@"
-      '';
-    in
-    {
+  system.activationScripts = {
+    wslWhoami = {
       text = ''
-        mkdir -p /usr/local/bin
-        cp ${opScript} /usr/local/bin/op
-        chmod +x /usr/local/bin/op
+        mkdir -p /usr/bin
+        ln -sf /run/current-system/sw/bin/whoami /usr/bin/whoami
       '';
     };
+
+    # Delegate op CLI to Windows op.exe so 1Password desktop app (Windows Hello)
+    # can authenticate from WSL. The NixOS-native op binary has no socket from the
+    # Windows app; op.exe on Windows connects via the named pipe directly.
+    # op run is kept on the native binary because it injects secrets into Linux processes.
+    opWrapper =
+      let
+        opScript = pkgs.writeShellScript "op-wrapper" ''
+          OP_NATIVE="/etc/profiles/per-user/nixos/bin/op"
+          # op run injects secrets into Linux processes — keep on native binary
+          if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
+            exec "$OP_NATIVE" "$@"
+          fi
+          # Find op.exe via Windows PATH (available in WSL via interop)
+          OP_EXE=$(IFS=:; for p in $PATH; do
+            [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
+          done)
+          if [ -z "$OP_EXE" ]; then
+            echo "[ERROR] op.exe not found in PATH" >&2
+            exit 1
+          fi
+          OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
+          export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
+          exec "$OP_EXE" "$@"
+        '';
+      in
+      {
+        text = ''
+          mkdir -p /usr/local/bin
+          cp ${opScript} /usr/local/bin/op
+          chmod +x /usr/local/bin/op
+        '';
+      };
+
+    # Provide containerd hosts.toml for registry.localhost so kind nodes can
+    # mount /etc/containerd/certs.d and use the in-cluster Zot as a mirror.
+    # kind.yaml: extraMounts hostPath=/etc/containerd/certs.d
+    containerdCertsD = {
+      text = ''
+              mkdir -p /etc/containerd/certs.d/registry.localhost
+              cat > /etc/containerd/certs.d/registry.localhost/hosts.toml << 'EOF'
+        server = "http://registry.localhost"
+
+        [host."http://zot.infra.svc.cluster.local:5080"]
+          capabilities = ["pull", "resolve"]
+        EOF
+      '';
+    };
+
+    # Generate CDI spec on each activation so kind worker nodes can mount
+    # /etc/cdi and use GPU resources through containerd CDI.
+    nvidiaCdi = {
+      deps = [ "wslWhoami" ];
+      text = ''
+        mkdir -p /etc/cdi
+        ${pkgs.nvidia-container-toolkit}/bin/nvidia-ctk cdi generate \
+          --output /etc/cdi/nvidia.yaml 2>/dev/null || true
+      '';
+    };
+  };
 
   # Allow running dynamically linked binaries in WSL (e.g. VS Code Server).
   programs.nix-ld = {
@@ -94,32 +131,6 @@
 
   users.users.nixos.extraGroups = [ "docker" ];
 
-  # Provide containerd hosts.toml for registry.localhost so kind nodes can
-  # mount /etc/containerd/certs.d and use the in-cluster Zot as a mirror.
-  # kind.yaml: extraMounts hostPath=/etc/containerd/certs.d
-  system.activationScripts.containerdCertsD = {
-    text = ''
-            mkdir -p /etc/containerd/certs.d/registry.localhost
-            cat > /etc/containerd/certs.d/registry.localhost/hosts.toml << 'EOF'
-      server = "http://registry.localhost"
-
-      [host."http://zot.infra.svc.cluster.local:5080"]
-        capabilities = ["pull", "resolve"]
-      EOF
-    '';
-  };
-
-  # Generate CDI spec on each activation so kind worker nodes can mount
-  # /etc/cdi and use GPU resources through containerd CDI.
-  system.activationScripts.nvidiaCdi = {
-    deps = [ "wslWhoami" ];
-    text = ''
-      mkdir -p /etc/cdi
-      ${pkgs.nvidia-container-toolkit}/bin/nvidia-ctk cdi generate \
-        --output /etc/cdi/nvidia.yaml 2>/dev/null || true
-    '';
-  };
-
   # Re-register WSLInterop binfmt entry after systemd clears it on boot.
   # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.
   wsl.interop.register = true;
@@ -128,10 +139,4 @@
   # NixOS が networking.extraHosts 経由で /etc/hosts を管理できるようにする。
   wsl.wslConf.network.generateHosts = false;
 
-  # Ensure nix-ld works for non-login shells (e.g. VS Code WSL server).
-  environment.variables = {
-    NIX_LD = "/run/current-system/sw/share/nix-ld/lib/ld.so";
-    NIX_LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
-    WARP_ENABLE_WAYLAND = "1";
-  };
 }

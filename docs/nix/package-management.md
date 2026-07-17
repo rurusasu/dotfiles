@@ -1,100 +1,96 @@
 # パッケージ管理
 
-## SSOT: `nix/packages/sets.nix`
+## Single Source of Truth
 
-全プラットフォームのパッケージ定義を一元管理する Single Source of Truth。
-`catalog` attrset に全パッケージを定義し、カテゴリ別グルーピング・winget 対応・フラットリストを自動導出する。
+`nix/packages/sets.nix` の catalog が全プラットフォームの package provider を一元管理します。Home Manager だけを SSOT とするのではなく、1 つの catalog から OS ごとの実装を導出します。
 
-```
-nix/packages/sets.nix
-├── catalog        → { pkg, winget, npm, category } の attrset
-├── packages       → Home Manager で Linux/macOS にインストール
-├── wingetMap      → nix attr → winget PackageIdentifier の対応表
-├── npmMap         → nix attr → npm package spec の対応表
-└── windowsOnly    → Windows 専用アプリ (winget/msstore/npm/pnpm)
-```
+| Catalog output        | Consumer                            | Platform                     |
+| --------------------- | ----------------------------------- | ---------------------------- |
+| `all` / category sets | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
+| `darwinCasks`         | nix-homebrew in nix-darwin          | macOS                        |
+| `linuxSystemModules`  | NixOS / System Manager modules      | Linux                        |
+| `wingetMap`, `npmMap` | `nix/packages/winget.nix`           | Windows                      |
+| `supportReport`       | `package-support-report` derivation | CI and review                |
+| `providerErrors`      | flake check                         | all platforms                |
 
-## パッケージ追加
+Windows だけに存在する GUI や OS component は `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
-### クロスプラットフォームツール (Linux + Windows)
+## Provider の追加
 
-`nix/packages/sets.nix` の `catalog` attrset にエントリを追加:
-
-```nix
-mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
-```
-
-Set `winget = null` if there is no Windows equivalent.
-
-### Linux 専用ツール
-
-`catalog` にエントリを追加し、`winget = null` とする。
-
-### Windows 専用アプリ
-
-`windowsOnly` セクションに追加:
+一般的な CLI は catalog に Nix package と Windows provider を記述します。実際の schema は既存 entry に合わせてください。
 
 ```nix
-windowsOnly = {
-  winget = [
-    "Publisher.NewApp"  # ← 追加
-  ];
-  msstore = [ ... ];
-  pnpm = [ ... ];
+mypackage = {
+  package = pkgs.mypackage;
+  category = "dev";
+  windows = {
+    provider = "winget";
+    id = "Publisher.Package";
+  };
 };
 ```
 
-## 反映手順
+macOS cask や Linux system module が必要な application は、それぞれの provider metadata も同じ entry に追加します。どの OS にも provider がない場合は、その OS の `unsupported` reason が必要です。
 
-### Linux (WSL/NixOS)
+## OS ごとの反映
 
-```bash
-sudo nixos-rebuild switch --flake ~/.dotfiles#nixos
+通常は個別コマンドではなく one-command installer を再実行します。
+
+```text
+Windows:          install.cmd
+macOS:            ./install.sh
+NixOS:            ./install.sh
+Ubuntu / Debian:  ./install.sh
 ```
 
-### Windows (winget JSON 再生成)
+- Windows は catalog から生成された winget/npm/pnpm manifest を PowerShell handlers が適用します。
+- macOS は nix-darwin が Home Manager と nix-homebrew cask を同じ switch に含めます。
+- Ubuntu/Debian は System Manager が Home Manager と system package/service を適用します。
+- NixOS は NixOS generation に Home Manager と system module を統合します。
+
+その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
+
+## 生成ファイル
+
+Windows manifest は直接編集しません。更新時は以下を生成し、repository の JSON と一致させます。
 
 ```bash
-# WSL 上で実行
 nix build .#winget-export -o /tmp/winget-export
-cp /tmp/winget-export/winget/packages.json /mnt/d/ruru/dotfiles/windows/winget/packages.json
-cp /tmp/winget-export/npm/packages.json /mnt/d/ruru/dotfiles/windows/npm/packages.json
-cp /tmp/winget-export/pnpm/packages.json /mnt/d/ruru/dotfiles/windows/pnpm/packages.json
-
-# Windows 上で反映
-pwsh -File scripts/powershell/install.ps1 -UserPhaseOnly -NoPause
+cp /tmp/winget-export/winget/packages.json windows/winget/packages.json
+cp /tmp/winget-export/npm/packages.json windows/npm/packages.json
+cp /tmp/winget-export/pnpm/packages.json windows/pnpm/packages.json
 ```
 
-## ファイル構成
+provider coverage は次で確認できます。
 
-| ファイル                       | 役割                                                     |
-| ------------------------------ | -------------------------------------------------------- |
-| `nix/packages/sets.nix`        | SSOT: catalog (全パッケージ + winget + category)         |
-| `nix/home/packages.nix`        | Home Manager module (`home.packages = allPkgs.packages`) |
-| `nix/home/wsl/users.nix`       | WSL ユーザーの Home Manager 設定                         |
-| `nix/packages/winget.nix`      | `nix build .#winget-export` 用 derivation                |
-| `nix/flakes/packages.nix`      | `nix profile install .#default` 用 perSystem buildEnv    |
-| `nix/modules/host/default.nix` | システムレベルのみ (nix settings, git, Docker)           |
+```bash
+nix build .#package-support-report
+cat result/package-support-report.json
+```
 
-## Home Manager と systemPackages の使い分け
+`package-support-report` は各 catalog entry の Windows、Darwin、Linux provider または unsupported reason を記録します。自動推測できない provider gap は `reviewedUnsupported` に package 名と理由を明示し、新規 entry の未検討 platform は `checks.*.package-provider-coverage` で失敗させます。consistency CI は生成 manifest drift も失敗にします。
 
-| 対象                                         | 管理先                                 |
-| -------------------------------------------- | -------------------------------------- |
-| CLI ツール (git, ripgrep, neovim 等)         | Home Manager (`nix/home/packages.nix`) |
-| システム設定に必要なもの (git for nix flake) | `environment.systemPackages`           |
-| NixOS モジュール連携 (Docker, ZSH)           | `nix/modules/host/default.nix`         |
+## システム package と Home Manager の境界
 
-## CI による整合性チェック
+| 対象                                             | 管理先                              |
+| ------------------------------------------------ | ----------------------------------- |
+| shell から使う共通 CLI                           | Home Manager `home.packages`        |
+| Docker daemon/socket、ユーザー group、OS service | NixOS / System Manager / nix-darwin |
+| macOS GUI application                            | nix-homebrew cask                   |
+| Windows GUI/OS application                       | winget/msstore handler              |
+| shell、Git、terminal、editor 設定                | chezmoi                             |
 
-`test-consistency.yml` が以下を検証:
+同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-1. `nix build .#winget-export` で Windows package JSON を生成
-2. `windows/winget/packages.json`, `windows/npm/packages.json`, `windows/pnpm/packages.json` との diff をチェック
-3. 差分があれば CI が失敗 → `nix build .#winget-export` の再実行を促す
+## 主なファイル
 
-## 注意点
-
-- `windows/winget/packages.json`, `windows/npm/packages.json`, `windows/pnpm/packages.json` は **生成ファイル**。直接編集しない
-- WSL では `flake.lock` が `~/.dotfiles` に作られる
-- `allowUnfree` は NixOS config (`nix/modules/host/default.nix`) で設定済み
-- `nix profile install .#default` で使える package sets は `nix/flakes/packages.nix` の perSystem で定義
+| File                              | Responsibility                           |
+| --------------------------------- | ---------------------------------------- |
+| `nix/packages/sets.nix`           | provider catalog and derived sets        |
+| `nix/packages/support-report.nix` | coverage report derivation               |
+| `nix/packages/winget.nix`         | generated Windows manifests              |
+| `nix/home/common.nix`             | shared Home Manager packages             |
+| `nix/darwin/default.nix`          | macOS system and casks                   |
+| `nix/system-manager/`             | Ubuntu/Debian system packages and Docker |
+| `nix/hosts/linux/`                | native NixOS system packages and Docker  |
+| `nix/flakes/packages.nix`         | package sets, report, and checks         |

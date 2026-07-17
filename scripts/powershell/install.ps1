@@ -38,6 +38,7 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new()
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
+. (Join-Path $PSScriptRoot "Test-Environment.ps1")
 
 if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
     $InstallDir = Join-Path $env:USERPROFILE "NixOS"
@@ -225,6 +226,17 @@ if ($adminRequired) {
 else {
     Write-Host "No admin-required tasks detected. Running admin phase without elevation." -ForegroundColor Green
     & $adminScriptPath @phaseParams -AdminOnly:$true
+}
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Environment Acceptance" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$acceptanceResult = Test-DotfilesEnvironment -Runtime
+if (-not $acceptanceResult.Success) {
+    throw $acceptanceResult.Message
 }
 
 Write-Host ""

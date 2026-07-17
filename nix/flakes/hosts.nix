@@ -10,6 +10,9 @@ let
       doCheck = false;
     });
   };
+  hardwareConfig = builtins.getEnv "DOTFILES_NIXOS_HARDWARE_CONFIG";
+  requestedSystem = builtins.getEnv "DOTFILES_SYSTEM";
+  nativeLinuxSystem = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
 in
 {
   flake = {
@@ -37,9 +40,11 @@ in
           }
         );
 
+    }
+    // inputs.nixpkgs.lib.optionalAttrs (hardwareConfig != "") {
       linux =
         let
-          system = "x86_64-linux";
+          system = nativeLinuxSystem;
         in
         withSystem system (
           { pkgs, ... }:
@@ -54,6 +59,7 @@ in
             hostPath = ../hosts/linux;
             homeModulePath = ../home/linux/users.nix;
             overlays = [ workmuxOverlay ];
+            extraModules = [ (/. + hardwareConfig) ];
           }
         );
     };

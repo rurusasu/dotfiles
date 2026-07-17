@@ -1,0 +1,206 @@
+name: Linux Bootstrap E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "install.sh"
+      - "scripts/sh/**"
+      - "nix/**"
+      - "docker/hermes-agent/**"
+      - ".github/e2e/**"
+      - ".github/workflows/ci-bootstrap-e2e-linux.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "install.sh"
+      - "scripts/sh/**"
+      - "nix/**"
+      - "docker/hermes-agent/**"
+      - ".github/e2e/**"
+      - ".github/workflows/ci-bootstrap-e2e-linux.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  ubuntu:
+    name: Ubuntu Destructive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      DOTFILES_COMPOSE_FILE: ${{ github.workspace }}/.github/e2e/bootstrap-compose.yml
+      DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: First one-command convergence
+        run: |
+          ./install.sh
+          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Second idempotent convergence
+        run: |
+          ./install.sh
+          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Write Ubuntu attestation
+        if: always()
+        run: |
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          {
+            echo "sha=$TESTED_SHA"
+            echo "system_manager=$(readlink -f /run/system-manager/system 2>/dev/null || true)"
+            echo "docker=$(dotfiles_run_in_group docker docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+          } > ubuntu-attestation.txt
+
+      - name: Upload Ubuntu attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: ubuntu-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ubuntu-attestation.txt
+
+  debian:
+    name: Debian systemd Destructive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install systemd-nspawn prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes debootstrap systemd-container
+
+      - name: Run Debian bootstrap twice
+        env:
+          DEBIAN_ROOT: ${{ runner.temp }}/debian-root
+          MACHINE_NAME: dotfiles-debian-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          sudo debootstrap --variant=minbase bookworm "$DEBIAN_ROOT" https://deb.debian.org/debian
+          sudo systemd-nspawn -D "$DEBIAN_ROOT" /bin/bash -lc '
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install --yes ca-certificates curl git sudo xz-utils systemd systemd-sysv dbus
+            useradd --create-home --shell /bin/bash dotfiles
+            printf "dotfiles ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/dotfiles
+            chmod 0440 /etc/sudoers.d/dotfiles
+          '
+
+          {
+            sudo systemd-nspawn \
+              --directory="$DEBIAN_ROOT" \
+              --machine="$MACHINE_NAME" \
+              --boot \
+              --capability=all \
+              --bind="$GITHUB_WORKSPACE:/workspace"
+          } >debian-nspawn.log 2>&1 &
+          nspawn_pid=$!
+          cleanup() {
+            sudo machinectl terminate "$MACHINE_NAME" >/dev/null 2>&1 || true
+            wait "$nspawn_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 60); do
+            if [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value 2>/dev/null || true) == running ]]; then
+              break
+            fi
+            sleep 2
+          done
+          [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value) == running ]]
+          sudo machinectl shell --quiet "root@$MACHINE_NAME" /bin/bash -lc \
+            'systemctl is-system-running | grep -E "^(running|degraded)$"'
+
+          run_inside() {
+            sudo machinectl shell --quiet "dotfiles@$MACHINE_NAME" /bin/bash -lc "$1"
+          }
+
+          # The variables below must expand inside the Debian machine.
+          # shellcheck disable=SC2016
+          bootstrap='export DOTFILES_COMPOSE_FILE=/workspace/.github/e2e/bootstrap-compose.yml; cd /workspace; ./install.sh'
+          # shellcheck disable=SC2016
+          verify='export DOTFILES_COMPOSE_FILE=/workspace/.github/e2e/bootstrap-compose.yml; export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
+          run_inside "$bootstrap"
+          run_inside "$verify"
+          run_inside "$bootstrap"
+          run_inside "$verify"
+
+          {
+            echo "sha=$TESTED_SHA"
+            # shellcheck disable=SC2016
+            run_inside 'echo system_manager=$(readlink -f /run/system-manager/system); echo docker=$(docker version --format "{{.Server.Version}}")'
+          } >debian-attestation.txt
+
+      - name: Upload Debian logs and attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: debian-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            debian-attestation.txt
+            debian-nspawn.log
+
+  nixos:
+    name: NixOS VM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run idempotent NixOS VM test
+        run: nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --print-build-logs
+
+      - name: Write NixOS attestation
+        if: always()
+        run: printf 'sha=%s\ncheck=bootstrap-nixos-vm\n' "$TESTED_SHA" > nixos-attestation.txt
+
+      - name: Upload NixOS attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nixos-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nixos-attestation.txt

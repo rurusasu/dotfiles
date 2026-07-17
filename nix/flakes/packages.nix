@@ -36,6 +36,11 @@
         inherit lib;
         gwqSrc = inputs.gwq-src;
       };
+      packageSupportReport = import ../packages/support-report.nix {
+        pkgs = unfreePkgs;
+        inherit lib;
+        gwqSrc = inputs.gwq-src;
+      };
     in
     {
       packages = {
@@ -83,6 +88,16 @@
         winget-export = import ../packages/winget.nix {
           inherit pkgs lib;
           gwqSrc = inputs.gwq-src;
+        };
+        package-support-report = packageSupportReport;
+      };
+
+      checks = {
+        package-provider-coverage = packageSupportReport;
+      }
+      // lib.optionalAttrs pkgs.stdenv.isLinux {
+        bootstrap-nixos-vm = import ../tests/bootstrap-nixos.nix {
+          inherit inputs pkgs;
         };
       };
     };

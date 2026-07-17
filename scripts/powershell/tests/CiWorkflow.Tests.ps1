@@ -214,4 +214,100 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match 'nix profile install devcontainer failed after \$attempt attempts'
         $devcontainerWorkflow | Should -Match 'retrying in \$\{sleep_seconds\}s'
     }
+
+    It 'should build every declarative bootstrap output on hosted runners' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-build.yml"
+        $workflowPath | Should -Exist
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        $workflow | Should -Match 'name:\s+Bootstrap Build'
+        $workflow | Should -Match 'timeout-minutes:'
+        $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
+        $workflow | Should -Match 'cachix/install-nix-action@[0-9a-f]{40}'
+        $workflow | Should -Match 'darwinConfigurations\.macos\.system'
+        $workflow | Should -Match 'systemConfigs\.ubuntu'
+        $workflow | Should -Match 'systemConfigs\.debian'
+        $workflow | Should -Match 'nixosConfigurations\.linux\.config\.system\.build\.toplevel'
+        $workflow | Should -Match 'homeConfigurations\.x86_64-linux\.activationPackage'
+        $workflow | Should -Match 'package-support-report'
+    }
+
+    It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-linux.yml"
+        $workflowPath | Should -Exist
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        $workflow | Should -Match 'name:\s+Ubuntu Destructive'
+        $workflow | Should -Match 'name:\s+Debian systemd Destructive'
+        $workflow | Should -Match 'timeout-minutes:'
+        $workflow | Should -Match 'systemd-nspawn'
+        $workflow | Should -Match 'dotfiles_run_in_group docker.*verify-environment\.sh --runtime'
+        $workflow | Should -Match 'systemd systemd-sysv dbus'
+        ([regex]::Matches($workflow, '(?m)^\s+- "flake\.nix"\s*$')).Count | Should -Be 2
+        ([regex]::Matches($workflow, '(?m)^\s+- "flake\.lock"\s*$')).Count | Should -Be 2
+        ([regex]::Matches($workflow, '(?m)^\s*(?:sudo\s+)?\./install\.sh\s*$')).Count | Should -BeGreaterOrEqual 2
+        ([regex]::Matches($workflow, 'scripts/sh/verify-environment\.sh --runtime')).Count | Should -BeGreaterOrEqual 2
+        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
+        $workflow | Should -Match 'if:\s+always\(\)'
+    }
+
+    It 'should run idempotent NixOS activation and Docker acceptance in a VM' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-linux.yml"
+        $testPath = Join-Path $script:repoRoot "nix/tests/bootstrap-nixos.nix"
+        $workflowPath | Should -Exist
+        $testPath | Should -Exist
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $test = Get-Content -LiteralPath $testPath -Raw
+
+        $workflow | Should -Match 'name:\s+NixOS VM'
+        $workflow | Should -Match 'bootstrap-nixos-vm'
+        $test | Should -Match 'dotfilesSource.*install\.sh'
+        ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
+        $test | Should -Match 'verify-environment\.sh --runtime'
+        $test | Should -Match 'bootstrap-compose\.yml'
+        $test | Should -Match 'docker compose.*ps'
+    }
+
+    It 'should protect destructive Windows and macOS self-hosted jobs' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+        $workflowPath | Should -Exist
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        ([regex]::Matches($workflow, "github\.event\.pull_request\.head\.repo\.full_name == github\.repository")).Count | Should -Be 2
+        ([regex]::Matches($workflow, 'environment:\s+destructive-e2e')).Count | Should -Be 2
+        $workflow | Should -Match 'runs-on:\s+\[self-hosted, Windows, X64, dotfiles-e2e\]'
+        $workflow | Should -Match 'runs-on:\s+\[self-hosted, macOS, ARM64, dotfiles-e2e\]'
+        $workflow | Should -Match 'concurrency:'
+        $workflow | Should -Match '"flake\.nix"'
+        $workflow | Should -Match '"flake\.lock"'
+        ([regex]::Matches($workflow, 'timeout-minutes:')).Count | Should -BeGreaterOrEqual 2
+    }
+
+    It 'should run both real self-hosted installers twice and attest the PR head SHA' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        ([regex]::Matches($workflow, '(?m)^\s*& \.\\install\.cmd -NoPause\s*$')).Count | Should -Be 2
+        $workflow | Should -Match 'Test-Environment\.ps1 -Runtime'
+        ([regex]::Matches($workflow, '(?m)^\s*\./install\.sh\s*$')).Count | Should -Be 2
+        $workflow | Should -Match 'verify-environment\.sh --runtime'
+        $workflow | Should -Match 'github\.event\.pull_request\.head\.sha'
+        ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
+        ([regex]::Matches($workflow, 'if:\s+always\(\)')).Count | Should -BeGreaterOrEqual 2
+    }
+
+    It 'should document dedicated destructive runner security and cleanup' {
+        $docPath = Join-Path $script:repoRoot "docs/ci/self-hosted-bootstrap-runners.md"
+        $docPath | Should -Exist
+        $content = Get-Content -LiteralPath $docPath -Raw
+
+        $content | Should -Match 'dotfiles-e2e'
+        $content | Should -Match 'destructive-e2e'
+        $content | Should -Match 'dedicated account|専用アカウント'
+        $content | Should -Match 'personal secrets|個人.*secret'
+        $content | Should -Match 'sudo|elevation|昇格'
+        $content | Should -Match 'Docker.*license|Docker.*ライセンス'
+        $content | Should -Match 'reset|リセット'
+        $content | Should -Match 'remove|削除'
+    }
 }

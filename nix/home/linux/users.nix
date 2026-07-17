@@ -1,16 +1,19 @@
 # User → Home Manager module mapping for native Linux host.
 # Imported by nix/flakes/hosts.nix as home-manager.users.
+let
+  bootstrapUser = builtins.getEnv "DOTFILES_USER";
+  user = if bootstrapUser == "" then "nixos" else bootstrapUser;
+in
 {
-  nixos =
+  ${user} =
     { ... }:
     {
       imports = [ ../common.nix ];
 
-      # NixOS rebuild shortcuts (also defined in wsl/users.nix for WSL context)
+      # Native NixOS must preserve the machine hardware profile, so route the
+      # shortcut through the same guarded one-command installer.
       programs.zsh.shellAliases = {
-        nrs = "nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
-        nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
-        nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
+        nrs = "~/.dotfiles/install.sh";
       };
     };
 }
