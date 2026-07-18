@@ -5,81 +5,151 @@
       "Packages": [
         {
           "PackageIdentifier": "AgileBits.1Password.CLI",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
+          ],
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "op"
+          }
+        },
+        {
+          "PackageIdentifier": "AgileBits.1Password"
+        },
+        {
+          "PackageIdentifier": "TheBrowserCompany.Arc"
+        },
+        {
+          "PackageIdentifier": "Oven-sh.Bun",
+          "verifyCommand": {
+            "args": [
+              "--version"
+            ],
+            "command": "bun"
           }
         },
         {
           "PackageIdentifier": "twpayne.chezmoi",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "chezmoi"
+          }
+        },
+        {
+          "PackageIdentifier": "Anthropic.Claude"
+        },
+        {
+          "PackageIdentifier": "OpenAI.Codex",
+          "portableLink": {
+            "linkName": "codex.exe",
+            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
+          },
+          "verifyCommand": {
+            "args": [
+              "--version"
+            ],
+            "command": "codex"
           }
         },
         {
           "PackageIdentifier": "direnv.direnv",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "direnv"
+          }
+        },
+        {
+          "PackageIdentifier": "Docker.DockerDesktop"
+        },
+        {
+          "PackageIdentifier": "dprint.dprint",
+          "verifyCommand": {
+            "args": [
+              "--version"
+            ],
+            "command": "dprint"
           }
         },
         {
           "PackageIdentifier": "eza-community.eza",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "eza"
           }
         },
         {
           "PackageIdentifier": "sharkdp.fd",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "fd"
           }
         },
         {
           "PackageIdentifier": "junegunn.fzf",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "fzf"
           }
         },
         {
           "PackageIdentifier": "GitHub.cli",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "gh"
           }
         },
         {
           "PackageIdentifier": "x-motemen.ghq",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "ghq"
           }
         },
         {
           "PackageIdentifier": "Git.Git",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "git"
           }
         },
         {
           "PackageIdentifier": "GoLang.Go",
           "verifyCommand": {
-            "args": ["version"],
+            "args": [
+              "version"
+            ],
             "command": "go"
           }
         },
         {
           "PackageIdentifier": "Task.Task",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "task"
           }
+        },
+        {
+          "PackageIdentifier": "Google.Chrome"
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
@@ -90,49 +160,72 @@
             "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
           ],
           "verifyCommand": {
-            "args": ["version"],
+            "args": [
+              "version"
+            ],
             "command": "gcloud"
+          }
+        },
+        {
+          "PackageIdentifier": "hadolint.hadolint",
+          "verifyCommand": {
+            "args": [
+              "--version"
+            ],
+            "command": "hadolint"
           }
         },
         {
           "PackageIdentifier": "ImageMagick.ImageMagick",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "magick"
           }
         },
         {
           "PackageIdentifier": "jqlang.jq",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "jq"
           }
         },
         {
           "PackageIdentifier": "JesseDuffield.lazygit",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "lazygit"
           }
         },
         {
           "PackageIdentifier": "LuaLS.lua-language-server",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "lua-language-server"
           }
         },
         {
           "PackageIdentifier": "Neovim.Neovim",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "nvim"
           }
         },
         {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "node"
           }
         },
@@ -142,7 +235,9 @@
         {
           "PackageIdentifier": "SST.opencode",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "opencode"
           }
         },
@@ -153,7 +248,9 @@
             "targetPattern": "oxlint-*.exe"
           },
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "oxlint"
           }
         },
@@ -163,29 +260,40 @@
             "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
           ],
           "verifyCommand": {
-            "args": ["-v"],
+            "args": [
+              "-v"
+            ],
             "command": "pdftoppm"
           }
         },
         {
           "PackageIdentifier": "Microsoft.PowerShell",
-          "installArgs": ["--installer-type", "wix"],
+          "installArgs": [
+            "--installer-type",
+            "wix"
+          ],
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "pwsh"
           }
         },
         {
           "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "rg"
           }
         },
         {
           "PackageIdentifier": "astral-sh.ruff",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "ruff"
           }
         },
@@ -202,9 +310,13 @@
         },
         {
           "PackageIdentifier": "Rustlang.Rustup",
-          "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
+          "pathEntries": [
+            "%USERPROFILE%\\.cargo\\bin"
+          ],
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "rustup"
           }
         },
@@ -214,43 +326,64 @@
         {
           "PackageIdentifier": "Starship.Starship",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "starship"
           }
         },
         {
           "PackageIdentifier": "JohnnyMorganz.StyLua",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "stylua"
           }
         },
         {
+          "PackageIdentifier": "TablePlus.TablePlus"
+        },
+        {
           "PackageIdentifier": "tamasfe.taplo",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "taplo"
           }
         },
         {
           "PackageIdentifier": "astral-sh.ty",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "ty"
           }
         },
         {
           "PackageIdentifier": "astral-sh.uv",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "uv"
           }
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudioCode"
         },
         {
           "PackageIdentifier": "Warp.Warp",
           "ciSkipInstall": true,
           "directInstaller": {
-            "installerArgs": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER"],
+            "installerArgs": [
+              "/VERYSILENT",
+              "/SUPPRESSMSGBOXES",
+              "/NORESTART",
+              "/CURRENTUSER"
+            ],
             "timeoutSeconds": 900,
             "type": "warpInnoLatest"
           }
@@ -258,50 +391,36 @@
         {
           "PackageIdentifier": "wez.wezterm.nightly",
           "ciSkipInstall": true,
-          "pathEntries": ["%ProgramFiles%\\WezTerm"],
+          "pathEntries": [
+            "%ProgramFiles%\\WezTerm"
+          ],
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "wezterm"
+          }
+        },
+        {
+          "PackageIdentifier": "zig.zig",
+          "verifyCommand": {
+            "args": [
+              "version"
+            ],
+            "command": "zig"
           }
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "zoxide"
           }
         },
         {
-          "PackageIdentifier": "AgileBits.1Password"
-        },
-        {
-          "PackageIdentifier": "Anthropic.Claude"
-        },
-        {
-          "PackageIdentifier": "TheBrowserCompany.Arc"
-        },
-        {
-          "PackageIdentifier": "Docker.DockerDesktop"
-        },
-        {
           "PackageIdentifier": "GitHub.Copilot"
-        },
-        {
-          "PackageIdentifier": "dprint.dprint",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "dprint"
-          }
-        },
-        {
-          "PackageIdentifier": "hadolint.hadolint",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "hadolint"
-          }
-        },
-        {
-          "PackageIdentifier": "Google.Chrome"
         },
         {
           "PackageIdentifier": "Microsoft.PowerToys"
@@ -318,51 +437,22 @@
           "installTimeoutSeconds": 1800
         },
         {
-          "PackageIdentifier": "Microsoft.VisualStudioCode"
-        },
-        {
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
           "PackageIdentifier": "Microsoft.WSL",
           "verifyCommand": {
-            "args": ["--version"],
+            "args": [
+              "--version"
+            ],
             "command": "wsl",
             "recoveryStrategy": "wingetRepairThenReinstall",
             "timeoutSeconds": 30
           }
         },
         {
-          "PackageIdentifier": "OpenAI.Codex",
-          "portableLink": {
-            "linkName": "codex.exe",
-            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "codex"
-          }
-        },
-        {
           "PackageIdentifier": "StablyAI.Orca",
           "ciSkipInstall": true
-        },
-        {
-          "PackageIdentifier": "TablePlus.TablePlus"
-        },
-        {
-          "PackageIdentifier": "Oven-sh.Bun",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "bun"
-          }
-        },
-        {
-          "PackageIdentifier": "zig.zig",
-          "verifyCommand": {
-            "args": ["version"],
-            "command": "zig"
-          }
         }
       ],
       "SourceDetails": {
@@ -381,7 +471,9 @@
           "PackageIdentifier": "9PLM9XGG6VKS",
           "ciSkipInstall": true,
           "verifyCommand": {
-            "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
+            "args": [
+              "OpenAI.Codex_2p2nqsd0c76g0!App"
+            ],
             "command": "OpenAI.Codex",
             "type": "appxLaunchTarget"
           }
