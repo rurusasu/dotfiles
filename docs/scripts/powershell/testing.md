@@ -56,6 +56,16 @@ cd scripts/powershell/tests
 
 **現在の状態**: 230+ テスト成功（100%）、カバレッジ 95%+
 
+## CI テスト戦略
+
+| Workflow                      | Runner                     | Guarantee                                                     |
+| ----------------------------- | -------------------------- | ------------------------------------------------------------- |
+| `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Windows/macOS contract と `Protected Bootstrap E2E` aggregate |
+
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
+
+Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap-e2e-linux.yml` がUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
+
 ## Windows environment acceptance
 
 Unit testsだけでなく、`install.cmd` の最後に [Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) を実行します。`Setup Complete!` は acceptance が成功した後にだけ表示されます。
@@ -78,7 +88,7 @@ acceptance は次を検証します。
 .\Invoke-Tests.ps1 -Path .\Test-Environment.Tests.ps1 -MinimumCoverage 0
 ```
 
-保護された Windows self-hosted E2E は real `install.cmd` と `Test-Environment.ps1 -Runtime` を 2 回実行し、1 周目の convergence と 2 周目の idempotency を確認します。
+`Protected Bootstrap E2E` は hosted Windows の全Pester contract、hosted macOSの全Bats contractとnix-darwin buildを集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
 
 ## pre-commit 統合
 

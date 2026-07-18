@@ -1,5 +1,7 @@
 # Cross-platform One-command Bootstrap Design
 
+> **CI update (2026-07-19):** The Windows/macOS self-hosted E2E sections are superseded by [Cloud-only Cross-platform Bootstrap CI Design](./2026-07-19-cloud-only-bootstrap-ci-design.md). The installer and declarative-layer design remains current.
+
 ## Goal
 
 Windows、Apple Silicon macOS、NixOS、Ubuntu、Debianで、clone済みの本リポジトリから

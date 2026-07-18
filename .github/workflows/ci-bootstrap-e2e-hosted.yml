@@ -1,0 +1,136 @@
+name: Protected Bootstrap E2E
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: protected-bootstrap-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  windows:
+    name: Windows Bootstrap Contract
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Windows bootstrap contracts
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit.xml
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows bootstrap contracts failed: $LASTEXITCODE"
+          }
+
+      - name: Write Windows contract attestation
+        if: always()
+        shell: pwsh
+        run: |
+          @(
+            "sha=$env:TESTED_SHA"
+            "runner_image=$env:ImageOS-$env:ImageVersion"
+            "layer=windows-contract"
+            "runtime=not-applicable-on-github-hosted-runner"
+          ) | Set-Content -LiteralPath windows-contract-attestation.txt -Encoding utf8
+
+      - name: Upload Windows contract results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-bootstrap-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            windows-contract-attestation.txt
+            windows-contract-junit.xml
+          if-no-files-found: warn
+
+  macos:
+    name: macOS Bootstrap Contract
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /Users/runner
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Bash, Bats, and GNU coreutils
+        run: |
+          brew install bash bats-core coreutils
+          {
+            echo "$(brew --prefix bash)/bin"
+            echo "$(brew --prefix coreutils)/libexec/gnubin"
+          } >> "$GITHUB_PATH"
+
+      - name: Run POSIX bootstrap contracts
+        run: bats tests/bash
+
+      - name: Build macOS declarative output
+        run: nix build .#darwinConfigurations.macos.system --impure --no-link
+
+      - name: Verify provider coverage
+        run: nix build .#package-support-report --no-link
+
+      - name: Write macOS contract attestation
+        if: always()
+        run: |
+          {
+            echo "sha=$TESTED_SHA"
+            echo "runner_image=$ImageOS-$ImageVersion"
+            echo "layer=macos-contract"
+            echo "runtime=not-applicable-on-github-hosted-runner"
+          } > macos-contract-attestation.txt
+
+      - name: Upload macOS contract results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: macos-bootstrap-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: macos-contract-attestation.txt
+
+  complete:
+    name: Protected Bootstrap E2E
+    if: always()
+    needs: [windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every hosted bootstrap contract
+        env:
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+        run: |
+          set -euo pipefail
+          test "$WINDOWS_RESULT" = success
+          test "$MACOS_RESULT" = success

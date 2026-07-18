@@ -9,6 +9,9 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
+	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
+	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
+	FAKE_USER_PROFILE_ROOT="$BATS_TEST_TMPDIR/etc/profiles/per-user"
 	mkdir -p "$TEST_HOME" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$FAKE_NIX_PROFILE"
@@ -20,6 +23,9 @@ setup() {
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
+	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
+	export DOTFILES_ZSHRC_PATH="$FAKE_ZSHRC"
+	export DOTFILES_USER_PROFILE_ROOT="$FAKE_USER_PROFILE_ROOT"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
@@ -40,6 +46,10 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
+	write_stub pgrep '
+printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub sudo '
@@ -158,6 +168,63 @@ assert_log_order() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "existing shell rc files are preserved before nix-darwin activation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$FAKE_BASHRC")"
+	printf 'existing bashrc\n' >"$FAKE_BASHRC"
+	printf 'existing zshrc\n' >"$FAKE_ZSHRC"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$FAKE_BASHRC" ]
+	[ ! -e "$FAKE_ZSHRC" ]
+	grep -q '^existing bashrc$' "$FAKE_BASHRC.before-nix-darwin"
+	grep -q '^existing zshrc$' "$FAKE_ZSHRC.before-nix-darwin"
+	assert_log_order \
+		"sudo mv $FAKE_BASHRC $FAKE_BASHRC.before-nix-darwin" \
+		"sudo mv $FAKE_ZSHRC $FAKE_ZSHRC.before-nix-darwin" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
+@test "running Docker Desktop is stopped when its engine is unavailable" {
+	write_installed_stubs
+	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"; then
+	exit 1
+fi
+exit 0
+EOF
+	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		"pgrep -x com.docker.backend" \
+		"docker desktop stop --timeout 120" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
+@test "nix-darwin user profile provides chezmoi after activation" {
+	write_installed_stubs
+	rm "$STUB_BIN/chezmoi"
+	mkdir -p "$FAKE_USER_PROFILE_ROOT/test-user/bin"
+	cat >"$FAKE_USER_PROFILE_ROOT/test-user/bin/chezmoi" <<'EOF'
+#!/usr/bin/env bash
+printf 'profile-chezmoi %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$FAKE_USER_PROFILE_ROOT/test-user/bin/chezmoi"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q "^profile-chezmoi init --source $REPO_ROOT/chezmoi$" "$COMMAND_LOG"
+	grep -q '^profile-chezmoi apply --force$' "$COMMAND_LOG"
 }
 
 @test "nix-darwin switch failure stops before runtime setup" {

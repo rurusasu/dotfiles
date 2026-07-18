@@ -9,7 +9,20 @@ setup() {
 	[ "$(grep -c './install.sh' "$REPO_ROOT/README.md")" -ge 2 ]
 	grep -q 'DOTFILES_ALLOW_USER_ONLY=1' "$REPO_ROOT/README.md"
 	grep -Eqi 're-run|rerun|再実行' "$REPO_ROOT/README.md"
-	grep -q 'self-hosted-bootstrap-runners.md' "$REPO_ROOT/README.md"
+	grep -q 'GitHub-hosted' "$REPO_ROOT/README.md"
+	! grep -q 'self-hosted-bootstrap-runners.md' "$REPO_ROOT/README.md"
+}
+
+@test "operational docs require only hosted bootstrap CI" {
+	[ ! -e "$REPO_ROOT/docs/ci/self-hosted-bootstrap-runners.md" ]
+	grep -q 'ci-bootstrap-e2e-hosted.yml' "$REPO_ROOT/docs/architecture.md"
+	grep -q 'Protected Bootstrap E2E' "$REPO_ROOT/docs/scripts/powershell/testing.md"
+	for file in \
+		"$REPO_ROOT/README.md" \
+		"$REPO_ROOT/docs/architecture.md" \
+		"$REPO_ROOT/docs/scripts/powershell/testing.md"; do
+		! grep -Eq 'dotfiles-e2e|destructive-e2e|ci-bootstrap-e2e-self-hosted.yml' "$file"
+	done
 }
 
 @test "architecture documents the four declarative layers" {
