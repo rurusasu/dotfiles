@@ -92,11 +92,13 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("docker.service")
     machine.succeed("docker load < ${helloWorldImage}")
     machine.succeed("docker load < ${acceptanceImage}")
+    machine.succeed("cp -r ${dotfilesSource} /home/nixos/dotfiles")
+    machine.succeed("chmod -R u+w /home/nixos/dotfiles && chown -R nixos:users /home/nixos/dotfiles")
 
-    install = "su - nixos -c 'env DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=${dotfilesSource} ${dotfilesSource}/install.sh'"
+    install = "su - nixos -c 'env DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=/home/nixos/dotfiles/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/install.sh'"
     machine.succeed(install)
     machine.succeed(install)
-    machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd ${dotfilesSource}; sg docker -c \"DOTFILES_VERIFY_SYSTEM_LAYER=nixos DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml ./scripts/sh/verify-environment.sh --runtime\"'")
-    machine.succeed("docker compose -f ${dotfilesSource}/.github/e2e/bootstrap-compose.yml ps --status running --services | grep acceptance")
+    machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd /home/nixos/dotfiles; sg docker -c \"DOTFILES_VERIFY_SYSTEM_LAYER=nixos DOTFILES_COMPOSE_FILE=/home/nixos/dotfiles/.github/e2e/bootstrap-compose.yml ./scripts/sh/verify-environment.sh --runtime\"'")
+    machine.succeed("docker compose -f /home/nixos/dotfiles/.github/e2e/bootstrap-compose.yml ps --status running --services | grep acceptance")
   '';
 }

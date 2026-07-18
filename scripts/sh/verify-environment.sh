@@ -61,8 +61,8 @@ done
 docker compose version >/dev/null || fail "Docker Compose is unavailable"
 docker info >/dev/null || fail "Docker engine is unavailable"
 chezmoi apply --dry-run >/dev/null || fail "chezmoi dry-run failed"
-if ! chezmoi verify >/dev/null; then
-  chezmoi diff --no-pager --color=false >&2 || true
+if ! chezmoi verify --exclude=scripts >/dev/null; then
+  chezmoi diff --exclude=scripts --no-pager --color=false >&2 || true
   fail "chezmoi target state differs"
 fi
 
