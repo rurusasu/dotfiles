@@ -12,8 +12,10 @@ Describe 'Test-DotfilesEnvironment' {
         $script:dockerCalls = @()
         $script:chezmoiCalls = @()
         $script:wslCalls = @()
+        $script:commandLookups = @()
 
         Mock Get-Command {
+            $script:commandLookups += $Name
             return [pscustomobject]@{ Name = $Name; Source = "C:\tools\$Name.exe" }
         }
         Mock Invoke-Docker {
@@ -39,6 +41,13 @@ Describe 'Test-DotfilesEnvironment' {
         ($script:dockerCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain 'run --rm hello-world'
         ($script:chezmoiCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain 'apply --dry-run'
         ($script:wslCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain '--status'
+    }
+
+    It 'should verify managed uv instead of an unmanaged Python command' {
+        Test-DotfilesEnvironment
+
+        $script:commandLookups | Should -Contain 'uv'
+        $script:commandLookups | Should -Not -Contain 'python'
     }
 
     It 'should fail when a required command is missing' {

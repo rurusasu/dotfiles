@@ -324,6 +324,15 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'Linux readiness dependencies' {
+        It 'should manage the netcat provider used by Linux readiness checks' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)netcat\s*=\s*\{.*?pkg\s*=\s*pkgs\.netcat;.*?winget\s*=\s*null;'
+            $sets | Should -Match '(?s)reviewedUnsupported\s*=\s*\{.*?windows\s*=\s*lib\.genAttrs\s*\[.*?"netcat"'
+        }
+    }
+
     Context 'Windows native Rust browser automation tools' {
         It 'should manage agent-browser as a Windows npm global package with verification' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw

@@ -43,7 +43,7 @@ function Test-DotfilesEnvironment {
         "jq",
         "nvim",
         "node",
-        "python",
+        "uv",
         "go",
         "rustup",
         "docker",

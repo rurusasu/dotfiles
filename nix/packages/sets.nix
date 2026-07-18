@@ -72,6 +72,11 @@ let
       winget = "jqlang.jq";
       category = "core";
     };
+    netcat = {
+      pkg = pkgs.netcat;
+      winget = null;
+      category = "core";
+    };
     eza = {
       pkg = pkgs.eza;
       winget = "eza-community.eza";
@@ -591,6 +596,7 @@ let
       "kubeseal"
       "kustomize"
       "marksman"
+      "netcat"
       "neovim-remote"
       "nixd"
       "p7zip"
