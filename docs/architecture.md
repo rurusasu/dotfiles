@@ -259,18 +259,18 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 検証は「静的契約 → build → 破壊的 convergence → runtime acceptance」の順で強くなります。
 
-| Workflow                           | Runner                            | Guarantee                                                                  |
-| ---------------------------------- | --------------------------------- | -------------------------------------------------------------------------- |
-| `ci-nix.yml`                       | hosted Linux                      | Statix、treefmt、flake evaluation、package smoke                           |
-| `ci-consistency.yml`               | hosted Linux                      | catalog から生成した winget/npm/pnpm JSON の一致                           |
-| `ci-powershell.yml`                | hosted Windows                    | handlers、entrypoint、Windows acceptance の Pester                         |
-| `ci-bootstrap-build.yml`           | hosted Linux/macOS                | nix-darwin、System Manager、NixOS、Home Manager、support report の実 build |
-| `ci-bootstrap-e2e-linux.yml`       | hosted Linux                      | Ubuntu/Debian/NixOS installer 2 周、Compose、Docker runtime                |
-| `ci-bootstrap-e2e-self-hosted.yml` | protected dedicated Windows/macOS | real installer 2 周、Docker Desktop、head SHA attestation                  |
+| Workflow                      | Runner                     | Guarantee                                                                  |
+| ----------------------------- | -------------------------- | -------------------------------------------------------------------------- |
+| `ci-nix.yml`                  | hosted Linux               | Statix、treefmt、flake evaluation、package smoke                           |
+| `ci-consistency.yml`          | hosted Linux               | catalog から生成した winget/npm/pnpm JSON の一致                           |
+| `ci-powershell.yml`           | hosted Windows             | handlers、entrypoint、Windows acceptance の Pester                         |
+| `ci-bootstrap-build.yml`      | hosted Linux/macOS         | nix-darwin、System Manager、NixOS、Home Manager、support report の実 build |
+| `ci-bootstrap-e2e-linux.yml`  | hosted Linux               | Ubuntu/Debian/NixOS installer 2 周、Compose、Docker runtime                |
+| `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Pester/Bats、nix-darwin build、`Protected Bootstrap E2E` aggregate         |
 
-Full support の破壊的 job は 1 周目で clean bootstrap、2 周目で idempotency を検証し、各周回の後に runtime acceptance を実行します。artifact の SHA が PR head と一致し、skip や Environment approval 待ちがないことを merge 条件にします。
+Windows/macOS は標準 hosted runner で installer の分岐、順序、失敗伝播、冪等性と宣言 output を検証します。Docker Desktop、WSL2、nix-darwin switch の実機適用は nested virtualization と OS 制約のため CI では実行せず、one-command installer 末尾の local acceptance が判定します。
 
-fork PR は self-hosted runner を実行できません。Windows/macOS job は同一 repository の PR 条件、`destructive-e2e` Environment、`dotfiles-e2e` label の全てを要求します。詳細は [self-hosted runner guide](./ci/self-hosted-bootstrap-runners.md) を参照してください。
+Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2 周目で idempotency を検証し、各周回の後に runtime acceptance を実行します。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
 
 ---
 

@@ -275,46 +275,41 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'docker compose.*ps'
     }
 
-    It 'should protect destructive Windows and macOS self-hosted jobs' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+    It 'should run bootstrap contracts exclusively on GitHub-hosted runners' {
+        $oldWorkflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
+
+        $oldWorkflowPath | Should -Not -Exist
         $workflowPath | Should -Exist
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        ([regex]::Matches($workflow, "github\.event\.pull_request\.head\.repo\.full_name == github\.repository")).Count | Should -Be 2
-        ([regex]::Matches($workflow, 'environment:\s+destructive-e2e')).Count | Should -Be 2
-        $workflow | Should -Match 'runs-on:\s+\[self-hosted, Windows, X64, dotfiles-e2e\]'
-        $workflow | Should -Match 'runs-on:\s+\[self-hosted, macOS, ARM64, dotfiles-e2e\]'
-        $workflow | Should -Match 'concurrency:'
-        $workflow | Should -Match '"flake\.nix"'
-        $workflow | Should -Match '"flake\.lock"'
-        ([regex]::Matches($workflow, 'timeout-minutes:')).Count | Should -BeGreaterOrEqual 2
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
+        $workflow | Should -Match 'runs-on:\s+windows-2025'
+        $workflow | Should -Match 'runs-on:\s+macos-15'
+        $workflow | Should -Match 'runs-on:\s+ubuntu-24\.04'
+        $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
+        $workflow | Should -Not -Match 'dotfiles-e2e'
+        $workflow | Should -Not -Match 'destructive-e2e'
+        $workflow | Should -Not -Match 'head\.repo\.full_name == github\.repository'
+        $workflow | Should -Not -Match '(?m)^\s+paths:\s*$'
+        $workflow | Should -Match 'permissions:\s*\r?\n\s+contents:\s+read'
+        ([regex]::Matches($workflow, 'timeout-minutes:\s+30')).Count | Should -Be 2
+        $workflow | Should -Match 'timeout-minutes:\s+5'
     }
 
-    It 'should run both real self-hosted installers twice and attest the PR head SHA' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+    It 'should aggregate Windows and macOS contracts with explicit non-runtime attestations' {
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        ([regex]::Matches($workflow, '(?m)^\s*& \.\\install\.cmd -NoPause\s*$')).Count | Should -Be 2
-        $workflow | Should -Match 'Test-Environment\.ps1 -Runtime'
-        ([regex]::Matches($workflow, '(?m)^\s*\./install\.sh\s*$')).Count | Should -Be 2
-        $workflow | Should -Match 'verify-environment\.sh --runtime'
-        $workflow | Should -Match 'github\.event\.pull_request\.head\.sha'
+        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -IncludeIntegration'
+        $workflow | Should -Match 'bats tests/bash'
+        $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
+        ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
+        $workflow | Should -Match 'needs:\s*\[windows, macos\]'
+        $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
+        $workflow | Should -Match 'needs\.windows\.result'
+        $workflow | Should -Match 'needs\.macos\.result'
         ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
-        ([regex]::Matches($workflow, 'if:\s+always\(\)')).Count | Should -BeGreaterOrEqual 2
-    }
-
-    It 'should document dedicated destructive runner security and cleanup' {
-        $docPath = Join-Path $script:repoRoot "docs/ci/self-hosted-bootstrap-runners.md"
-        $docPath | Should -Exist
-        $content = Get-Content -LiteralPath $docPath -Raw
-
-        $content | Should -Match 'dotfiles-e2e'
-        $content | Should -Match 'destructive-e2e'
-        $content | Should -Match 'dedicated account|専用アカウント'
-        $content | Should -Match 'personal secrets|個人.*secret'
-        $content | Should -Match 'sudo|elevation|昇格'
-        $content | Should -Match 'Docker.*license|Docker.*ライセンス'
-        $content | Should -Match 'reset|リセット'
-        $content | Should -Match 'remove|削除'
+        ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
     }
 }
