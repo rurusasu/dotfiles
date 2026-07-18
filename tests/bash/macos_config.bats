@@ -5,6 +5,7 @@ setup() {
 }
 
 @test "latest nixpkgs flake evaluation excludes unsupported Intel macOS" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	run nix flake show "$REPO_ROOT" --all-systems --json --no-write-lock-file
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"x86_64-darwin"* ]]
