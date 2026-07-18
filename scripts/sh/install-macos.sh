@@ -12,6 +12,9 @@ DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/dock
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 SERVICE_WAIT_ATTEMPTS="${DOTFILES_SERVICE_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
+BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
+ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
+USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
 
 preflight() {
   local os arch version major required
@@ -59,6 +62,30 @@ ensure_nix() {
     printf '%s\n' "$feature_line" >>"$HOME/.config/nix/nix.conf"
 }
 
+preserve_shell_rc_for_nix_darwin() {
+  local rc backup
+  for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
+    [[ -e $rc || -L $rc ]] || continue
+    [[ -L $rc ]] && continue
+
+    backup="$rc.before-nix-darwin"
+    [[ ! -e $backup && ! -L $backup ]] ||
+      dotfiles_die "Refusing to overwrite existing nix-darwin backup: $backup"
+
+    dotfiles_log "Preserving existing $rc as $backup..."
+    sudo mv "$rc" "$backup"
+  done
+}
+
+stop_existing_docker_desktop() {
+  local docker_cli="$DOCKER_APP/Contents/Resources/bin/docker"
+  [[ -x $docker_cli ]] || return 0
+  "$docker_cli" info >/dev/null 2>&1 || return 0
+
+  dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
+  "$docker_cli" desktop stop --timeout 120
+}
+
 apply_darwin_system() {
   export DOTFILES_USER="${SUDO_USER:-$USER}"
   export DOTFILES_HOME="$HOME"
@@ -77,7 +104,7 @@ apply_darwin_system() {
       "$nix_bin" run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
-  export PATH="/run/current-system/sw/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$DOCKER_APP/Contents/Resources/bin:$PATH"
+  export PATH="/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$DOCKER_APP/Contents/Resources/bin:$PATH"
   hash -r
 }
 
@@ -138,6 +165,8 @@ main() {
   ensure_command_line_tools
   ensure_nix
   dotfiles_link_checkout "$ROOT"
+  preserve_shell_rc_for_nix_darwin
+  stop_existing_docker_desktop
   apply_darwin_system
   setup_docker_runtime
   apply_chezmoi
