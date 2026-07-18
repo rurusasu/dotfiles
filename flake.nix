@@ -22,10 +22,6 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    gwq-src = {
-      url = "github:d-kuro/gwq";
-      flake = false;
-    };
     workmux.url = "github:raine/workmux";
   };
 
