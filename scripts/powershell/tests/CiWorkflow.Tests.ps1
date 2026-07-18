@@ -268,6 +268,7 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'cp -r \$\{dotfilesSource\} /home/nixos/dotfiles'
         $test | Should -Match '/home/nixos/dotfiles/install\.sh'
+        $test | Should -Not -Match 'sg docker -c'
         ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
         $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'bootstrap-compose\.yml'
