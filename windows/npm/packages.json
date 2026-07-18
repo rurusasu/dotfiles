@@ -5,18 +5,14 @@
     {
       "name": "@devcontainers/cli",
       "verifyCommand": {
-        "args": [
-          "--version"
-        ],
+        "args": ["--version"],
         "command": "devcontainer"
       }
     },
     {
       "name": "agent-browser@0.29.1",
       "verifyCommand": {
-        "args": [
-          "--version"
-        ],
+        "args": ["--version"],
         "command": "agent-browser"
       }
     }
