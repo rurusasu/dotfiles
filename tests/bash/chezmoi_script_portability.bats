@@ -5,8 +5,10 @@ setup() {
 }
 
 @test "chezmoi shell scripts use a PATH-portable bash shebang" {
-	run rg -n '^#!/bin/bash$' "$REPO_ROOT/chezmoi/.chezmoiscripts" -g '*.sh.tmpl'
+	violations="$(
+		find "$REPO_ROOT/chezmoi/.chezmoiscripts" -type f -name '*.sh.tmpl' \
+			-exec grep -Hn '^#!/bin/bash$' {} + || true
+	)"
 
-	[ "$status" -eq 1 ]
-	[ -z "$output" ]
+	[ -z "$violations" ]
 }
