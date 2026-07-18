@@ -61,7 +61,10 @@ done
 docker compose version >/dev/null || fail "Docker Compose is unavailable"
 docker info >/dev/null || fail "Docker engine is unavailable"
 chezmoi apply --dry-run >/dev/null || fail "chezmoi dry-run failed"
-chezmoi verify >/dev/null || fail "chezmoi target state differs"
+if ! chezmoi verify >/dev/null; then
+  chezmoi diff --no-pager --color=false >&2 || true
+  fail "chezmoi target state differs"
+fi
 
 if [[ $platform == "linux" ]]; then
   case "$system_layer" in

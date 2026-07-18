@@ -70,6 +70,7 @@ EOF
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"chezmoi target state differs"* ]]
+	grep -q '^chezmoi diff --no-pager --color=false$' "$COMMAND_LOG"
 }
 
 @test "non-runtime verification does not run a test container" {

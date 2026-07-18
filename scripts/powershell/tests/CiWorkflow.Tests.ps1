@@ -265,6 +265,7 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'dotfilesSource.*install\.sh'
         $test | Should -Match 'testScript\s*=\s*\{\s*nodes,\s*\.\.\.\s*\}:'
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
+        $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
         $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'bootstrap-compose\.yml'

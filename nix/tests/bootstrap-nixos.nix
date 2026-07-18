@@ -80,6 +80,10 @@ pkgs.testers.runNixOSTest {
         "nix-command"
         "flakes"
       ];
+
+      # NixOS tests disable switch-to-configuration by default to reduce
+      # rebuilds. This E2E intentionally activates the generated closure.
+      system.switch.enable = true;
     };
 
   testScript = { nodes, ... }: ''
