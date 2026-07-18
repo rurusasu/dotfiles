@@ -182,7 +182,14 @@ Write-Host "Minimum Coverage: $MinimumCoverage%" -ForegroundColor White
 Write-Host ""
 
 # テスト実行
-$result = Invoke-Pester -Configuration $pesterConfig
+$testErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = "Continue"
+    $result = Invoke-Pester -Configuration $pesterConfig
+}
+finally {
+    $ErrorActionPreference = $testErrorActionPreference
+}
 
 if (-not $result) {
     Write-Host "FAIL: Test runner did not return a result." -ForegroundColor Red

@@ -67,7 +67,7 @@ workflowは次のjobを持つ。
 #### macOS Bootstrap Contract
 
 - runner: `macos-15` ARM64
-- UTF-8 localeとGNU coreutilsの`timeout`を用意して、Linuxと同じBats contractを実行可能にする。
+- Homebrew Bash、UTF-8 locale、GNU coreutilsの`timeout`を用意して、Linuxと同じBats contractを実行可能にする。
 - Nixを導入し、`darwinConfigurations.macos.system`を`--impure`付きで実buildする。
 - BatsでdispatcherとmacOS installerを実行し、Command Line Tools、Nix、nix-darwin、
   nix-homebrew、Docker Desktop、chezmoiのphase境界をstubで検証する。

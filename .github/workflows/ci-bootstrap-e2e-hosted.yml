@@ -85,10 +85,13 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bats and GNU coreutils
+      - name: Install Bash, Bats, and GNU coreutils
         run: |
-          brew install bats-core coreutils
-          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          brew install bash bats-core coreutils
+          {
+            echo "$(brew --prefix bash)/bin"
+            echo "$(brew --prefix coreutils)/libexec/gnubin"
+          } >> "$GITHUB_PATH"
 
       - name: Run POSIX bootstrap contracts
         run: bats tests/bash

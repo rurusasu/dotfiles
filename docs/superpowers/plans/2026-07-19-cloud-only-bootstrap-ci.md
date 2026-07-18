@@ -33,7 +33,7 @@
 
 **Interfaces:**
 
-- Consumes: Pester 5.6.1, `scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0`, UTF-8 Bats with GNU coreutils, `darwinConfigurations.macos.system`, and pinned `actions/checkout`, `cachix/install-nix-action`, and `actions/upload-artifact` actions already used by the repository.
+- Consumes: Pester 5.6.1, `scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0`, UTF-8 Bats with Homebrew Bash and GNU coreutils, `darwinConfigurations.macos.system`, and pinned `actions/checkout`, `cachix/install-nix-action`, and `actions/upload-artifact` actions already used by the repository.
 - Produces: hosted jobs named `Windows Bootstrap Contract`, `macOS Bootstrap Contract`, and aggregate check `Protected Bootstrap E2E`.
 - Produces artifacts: `windows-bootstrap-contract-<run>-<attempt>` and `macos-bootstrap-contract-<run>-<attempt>` containing `sha`, `runner_image`, `layer`, and `runtime` fields.
 
@@ -71,7 +71,8 @@ In `scripts/powershell/tests/CiWorkflow.Tests.ps1`, replace the three `It` block
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
         $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
-        $workflow | Should -Match 'brew install bats-core coreutils'
+        $workflow | Should -Match 'brew install bash bats-core coreutils'
+        $workflow | Should -Match 'brew --prefix bash\)/bin'
         $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
         $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
         $workflow | Should -Match 'bats tests/bash'
@@ -190,10 +191,13 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bats and GNU coreutils
+      - name: Install Bash, Bats, and GNU coreutils
         run: |
-          brew install bats-core coreutils
-          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          brew install bash bats-core coreutils
+          {
+            echo "$(brew --prefix bash)/bin"
+            echo "$(brew --prefix coreutils)/libexec/gnubin"
+          } >> "$GITHUB_PATH"
 
       - name: Run POSIX bootstrap contracts
         run: bats tests/bash
@@ -353,7 +357,7 @@ In `docs/scripts/powershell/testing.md`, replace the self-hosted row and the par
 ```markdown
 | `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Windows/macOS contract と `Protected Bootstrap E2E` aggregate |
 
-Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は UTF-8 locale と GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap-e2e-linux.yml` がUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
 ```

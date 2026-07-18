@@ -304,7 +304,8 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
         $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
-        $workflow | Should -Match 'brew install bats-core coreutils'
+        $workflow | Should -Match 'brew install bash bats-core coreutils'
+        $workflow | Should -Match 'brew --prefix bash\)/bin'
         $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
         $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
         $workflow | Should -Match 'bats tests/bash'
@@ -316,5 +317,14 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'needs\.macos\.result'
         ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
         ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
+    }
+
+    It 'should preserve normal non-terminating error semantics inside Pester tests' {
+        $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
+        $runner = Get-Content -LiteralPath $runnerPath -Raw
+
+        $runner | Should -Match '\$testErrorActionPreference = \$ErrorActionPreference'
+        $runner | Should -Match '\$ErrorActionPreference = "Continue"\s*\r?\n\s*\$result = Invoke-Pester'
+        $runner | Should -Match 'finally\s*\{\s*\r?\n\s*\$ErrorActionPreference = \$testErrorActionPreference'
     }
 }
