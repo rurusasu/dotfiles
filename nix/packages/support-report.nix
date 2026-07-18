@@ -1,10 +1,9 @@
 {
   pkgs,
   lib,
-  gwqSrc ? null,
 }:
 let
-  sets = import ./sets.nix { inherit pkgs lib gwqSrc; };
+  sets = import ./sets.nix { inherit pkgs lib; };
   reportFile = pkgs.writeText "package-support.json" (builtins.toJSON sets.supportReport);
   errorsFile = pkgs.writeText "package-provider-errors.json" (builtins.toJSON sets.providerErrors);
 in
