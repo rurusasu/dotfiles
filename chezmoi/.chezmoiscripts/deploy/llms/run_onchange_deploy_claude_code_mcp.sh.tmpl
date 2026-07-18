@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
 
 if ! command -v claude >/dev/null 2>&1; then

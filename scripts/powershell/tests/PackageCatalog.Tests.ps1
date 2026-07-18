@@ -86,12 +86,13 @@ Describe 'Package catalog consistency' {
             @($warp.directInstaller.installerArgs) | Should -Contain '/VERYSILENT'
         }
 
-        It 'should update flake inputs in the Nix rebuild aliases before applying the system' {
+        It 'should update WSL inputs and route native NixOS through the hardware-safe installer' {
             $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl/users.nix") -Raw
             $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux/users.nix") -Raw
 
             $wslUsers | Should -Match 'nrs\s*=\s*"nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
-            $linuxUsers | Should -Match 'nrs\s*=\s*"nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+            $linuxUsers | Should -Match 'nrs\s*=\s*"~/.dotfiles/install\.sh"'
+            $linuxUsers | Should -Not -Match 'nrs\s*=.*nixos-rebuild'
         }
 
         It 'should update flake inputs before every scripted NixOS rebuild entry point' {
@@ -323,6 +324,15 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'Linux readiness dependencies' {
+        It 'should manage the netcat provider used by Linux readiness checks' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)netcat\s*=\s*\{.*?pkg\s*=\s*pkgs\.netcat;.*?winget\s*=\s*null;'
+            $sets | Should -Match '(?s)reviewedUnsupported\s*=\s*\{.*?windows\s*=\s*lib\.genAttrs\s*\[.*?"netcat"'
+        }
+    }
+
     Context 'Windows native Rust browser automation tools' {
         It 'should manage agent-browser as a Windows npm global package with verification' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
@@ -357,6 +367,48 @@ Describe 'Package catalog consistency' {
             @($package.installArgs) | Should -Contain '--override'
             @($package.installArgs) | Should -Contain '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart'
             $package.installTimeoutSeconds | Should -Be 1800
+        }
+    }
+
+    Context 'Cross-platform package providers' {
+        It 'should expose provider coverage outputs from the package SSOT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match 'supportReport'
+            $sets | Should -Match 'providerErrors'
+            $sets | Should -Match 'darwinCasks'
+            $sets | Should -Match 'linuxSystemModules'
+        }
+
+        It 'should move cross-platform applications out of windowsOnly winget packages' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $windowsOnly = [regex]::Match($sets, '(?s)windowsOnly\s*=\s*\{.*?\n\s*\};').Value
+
+            @(
+                'Docker.DockerDesktop'
+                'dprint.dprint'
+                'hadolint.hadolint'
+                'Google.Chrome'
+                'Microsoft.VisualStudioCode'
+                'OpenAI.Codex'
+                'Oven-sh.Bun'
+                'zig.zig'
+            ) | ForEach-Object {
+                $windowsOnly | Should -Not -Match ([regex]::Escape('"' + $_ + '"'))
+            }
+        }
+
+        It 'should map Docker to Winget Homebrew cask and Linux system module providers' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?cask\s*=\s*"docker-desktop".*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
+        }
+
+        It 'should keep true Windows-only components with explicit unsupported reasons' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*reason:\s*\{.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
+            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Windows system utility";'
         }
     }
 }

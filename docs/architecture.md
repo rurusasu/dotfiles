@@ -4,34 +4,39 @@
 
 ## 設計原則
 
-**「Windows と Linux で同じ開発環境を構築する」** を目標に、以下の原則で管理する。
+**「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
-1. **Nix (Home Manager) がパッケージの Single Source of Truth (SSOT)**
-   - 全 CLI ツールは `nix/packages/sets.nix` に一元定義
-   - Linux/macOS: Home Manager が `home.packages` としてインストール
-   - Windows: `nix build .#winget-export` で winget/npm/pnpm の JSON を導出
+1. **Nix catalog がパッケージ provider の Single Source of Truth (SSOT)**
+   - 全ツールと OS ごとの provider は `nix/packages/sets.nix` に一元定義
+   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS/System Manager が消費
+   - Windows は `nix build .#winget-export` で winget/npm/pnpm JSON を導出
 2. **chezmoi が設定ファイルの SSOT**
    - 全 OS 共通の dotfiles をテンプレートで管理
    - OS 固有の差分は `.chezmoiignore.tmpl` とテンプレート分岐で吸収
-3. **OS 固有の処理は最小限に分離**
-   - NixOS モジュール: システムレベル設定 (nix gc, Docker, WSL 固有)
-   - PowerShell ハンドラー: Windows セットアップ自動化
+3. **システム収束は OS に適した宣言レイヤーへ分離**
+   - Windows: PowerShell handlers + winget
+   - macOS: nix-darwin + nix-homebrew
+   - Ubuntu/Debian: System Manager
+   - NixOS/WSL: NixOS module
+4. **Full support は runtime acceptance までを契約に含める**
+   - 必須 CLI、chezmoi drift、Docker、Compose 全サービス、hello-world を確認
+   - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造
 
 ```
 dotfiles/
-├── nix/                    # NixOS/Home Manager configuration
+├── nix/                    # Cross-platform declarative configuration
 │   ├── packages/
-│   │   ├── sets.nix        # ★ SSOT: catalog (全パッケージ + winget + category)
+│   │   ├── sets.nix        # ★ SSOT: package + provider catalog
 │   │   └── winget.nix      # winget/npm/pnpm JSON 生成 derivation
-│   ├── home/               # Home Manager 設定
-│   │   ├── packages.nix    # sets.nix → home.packages
-│   │   └── wsl/users.nix   # WSL ユーザー HM 設定
+│   ├── darwin/             # nix-darwin + nix-homebrew
+│   ├── system-manager/     # Ubuntu/Debian services and users
+│   ├── home/               # Shared Home Manager configuration
 │   ├── flakes/             # Flake inputs/outputs, treefmt
-│   ├── hosts/              # Host-specific configs (WSL, Linux)
+│   ├── hosts/              # NixOS hosts (native Linux, WSL)
 │   ├── modules/            # Custom NixOS modules (system-level)
-│   └── lib/                # Helper functions
+│   └── tests/              # NixOS VM acceptance
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)
@@ -42,59 +47,47 @@ dotfiles/
 │   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
-├── install.ps1             # NixOS WSL installer (auto-elevates to admin)
+├── install.cmd             # Windows one-command entrypoint
+├── install.sh              # macOS/Linux one-command dispatcher
 ├── flake.nix               # Nix flake entry point
 └── flake.lock
 ```
 
 ## セットアップフロー
 
-```
-Windows                              WSL (NixOS)
-────────                             ───────────
-install.ps1
-    │
-    ├─► Download NixOS WSL
-    │
-    ├─► Import to WSL
-    │
-    └─► scripts/sh/nixos-wsl-postinstall.sh ──► ~/.dotfiles (symlink)
-                                                  │
-                                                  ▼
-                                             nixos-rebuild switch
-                                                  │
-                                                  ▼
-                                             NixOS configured
-```
+| Platform      | Entrypoint                                | System layer                             | User layer             | Runtime        |
+| ------------- | ----------------------------------------- | ---------------------------------------- | ---------------------- | -------------- |
+| Windows       | `install.cmd`                             | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop |
+| macOS ARM64   | `./install.sh`                            | nix-darwin + nix-homebrew                | Home Manager + chezmoi | Docker Desktop |
+| Ubuntu/Debian | `./install.sh`                            | System Manager                           | Home Manager + chezmoi | rootful Docker |
+| NixOS         | `./install.sh`                            | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker |
+| Other Linux   | `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` | none                                     | Home Manager only      | not managed    |
+
+Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。失敗時はその phase で停止し、同じ入口を再実行します。
 
 ## 役割分担
 
-| 役割                  | ツール          | 説明                                         |
-| --------------------- | --------------- | -------------------------------------------- |
-| パッケージ定義 (SSOT) | Nix             | `nix/packages/sets.nix` に全ツールを一元定義 |
-| パッケージ (Linux)    | Home Manager    | `home.packages` で宣言的インストール         |
-| パッケージ (Windows)  | winget/npm/pnpm | nix から生成した JSON でインストール         |
-| ユーザー設定          | chezmoi         | dotfiles (shell, git, terminal, editor)      |
-| システム設定          | NixOS           | OS レベルの設定 (nix gc, Docker, WSL)        |
-| タスク実行            | Taskfile        | Windows から WSL コマンドを実行              |
+| 役割                    | ツール                  | 説明                                                           |
+| ----------------------- | ----------------------- | -------------------------------------------------------------- |
+| Provider 定義 (SSOT)    | Nix catalog             | package、winget、npm、Darwin cask、Linux module を一元定義     |
+| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`          |
+| Windows パッケージ      | winget/npm/pnpm         | catalog から生成した JSON を handlers が適用                   |
+| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用  |
+| Ubuntu/Debian システム  | System Manager          | user identity、Nix、Docker service/socket、Home Manager を適用 |
+| NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合     |
+| ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
+| 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
 
 ## パッケージ管理フロー
 
 ```
 nix/packages/sets.nix (SSOT)
-│
-├── catalog          ─── { pkg, winget, category } per package
-│
-├── packages         ─── nix/home/packages.nix ─── Home Manager (Linux/macOS)
-│                                                    └── home.packages = [...]
-│
-├── wingetMap        ─── nix/packages/winget.nix ── nix build .#winget-export
-│   (自動導出)           └── windows/winget/packages.json (generated)
-│                        └── windows/npm/packages.json    (generated)
-│                        └── windows/pnpm/packages.json  (generated)
-│
-└── windowsOnly      ─── Windows 専用パッケージ (winget/msstore/npm/pnpm)
-    (nix対応なし)
+├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
+├── darwinCasks ────────── nix-homebrew casks
+├── linuxSystemModules ─── NixOS / System Manager packages and services
+├── wingetMap + npmMap ─── generated Windows manifests
+├── supportReport ──────── per-OS provider/unsupported evidence
+└── providerErrors ─────── CI failure when coverage is missing
 ```
 
 ### ツール追加手順
@@ -264,112 +257,20 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 ## テスト戦略
 
-### テストピラミッド
+検証は「静的契約 → build → 破壊的 convergence → runtime acceptance」の順で強くなります。
 
-```
-       /   Smoke Test   \    ← CI: nix shell --version、winget + --version
-      /    Build Test    \   ← CI: nix build .#default（実ビルド）
-     / Consistency Test  \   ← CI: winget-export diff（JSON 整合性）
-    /     Unit Tests      \  ← CI: Pester（PowerShell ハンドラー）
-   /   Static Analysis    \  ← CI: flake check、lint、fmt
-```
+| Workflow                           | Runner                            | Guarantee                                                                  |
+| ---------------------------------- | --------------------------------- | -------------------------------------------------------------------------- |
+| `ci-nix.yml`                       | hosted Linux                      | Statix、treefmt、flake evaluation、package smoke                           |
+| `ci-consistency.yml`               | hosted Linux                      | catalog から生成した winget/npm/pnpm JSON の一致                           |
+| `ci-powershell.yml`                | hosted Windows                    | handlers、entrypoint、Windows acceptance の Pester                         |
+| `ci-bootstrap-build.yml`           | hosted Linux/macOS                | nix-darwin、System Manager、NixOS、Home Manager、support report の実 build |
+| `ci-bootstrap-e2e-linux.yml`       | hosted Linux                      | Ubuntu/Debian/NixOS installer 2 周、Compose、Docker runtime                |
+| `ci-bootstrap-e2e-self-hosted.yml` | protected dedicated Windows/macOS | real installer 2 周、Docker Desktop、head SHA attestation                  |
 
-### CI ワークフロー全体像
+Full support の破壊的 job は 1 周目で clean bootstrap、2 周目で idempotency を検証し、各周回の後に runtime acceptance を実行します。artifact の SHA が PR head と一致し、skip や Environment approval 待ちがないことを merge 条件にします。
 
-```mermaid
-flowchart TD
-    PR["Pull Request"]
-
-    PR -->|"nix/** flake.*"| NX
-    PR -->|"nix/** flake.*\npostinstall"| NW
-    PR -->|"windows/winget/packages.json\nnix/packages/sets.nix"| WG
-    PR -->|"nix/packages/** windows/winget/**"| CO
-    PR -->|"scripts/powershell/**"| PS
-
-    subgraph NX["test-nix.yml (ubuntu-latest)"]
-        N1["① nix flake check\n評価エラー検知"]
-        N2["② nix build .#default\n実ビルド"]
-        N3["③ nix build .#nixosConfigurations.nixos...\nWSL system toplevel 実ビルド"]
-        N4["④ nix shell smoke test\nchezmoi git gh fd rg bat jq eza zoxide fzf unzip"]
-        N5["⑤ nix fmt\nフォーマット確認"]
-        N1 --> N2 --> N3 --> N4 --> N5
-    end
-
-    subgraph NW["ci-nixos-wsl.yml (windows-2025 + WSL2)"]
-        NW1["① 一時 NixOS-WSL distro 作成"]
-        NW2["② postinstall 実行"]
-        NW3["③ nixos-rebuild switch 検証\nwelcome banner 消滅確認"]
-        NW4["④ distro unregister"]
-        NW1 --> NW2 --> NW3 --> NW4
-    end
-
-    subgraph WG["test-winget.yml (windows-2025)"]
-        W1["① winget import\npackages.json 全量インストール"]
-        W2["② smoke test\nchezmoi git gh fd rg jq eza zoxide fzf"]
-        W1 --> W2
-    end
-
-    subgraph CO["test-consistency.yml (ubuntu-latest)"]
-        C1["① nix build .#winget-export\nNix から JSON 生成"]
-        C2["② diff\n生成 JSON ↔ リポジトリ JSON"]
-        C1 --> C2
-    end
-
-    subgraph PS["test-powershell.yml (windows-2025)"]
-        P1["① Pester\nユニットテスト"]
-        P2["② Codecov\nカバレッジ"]
-        P1 --> P2
-    end
-```
-
-### ワークフロー詳細
-
-| Workflow               | ランナー      | 何を保証するか                                                        | トリガー                                                |
-| ---------------------- | ------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
-| `test-nix.yml`         | ubuntu-latest | Nix 式・NixOS WSL toplevel が評価/ビルドでき、ツールが動く            | `nix/**`, `flake.*`                                     |
-| `ci-nixos-wsl.yml`     | windows-2025  | 一時 NixOS-WSL distro で postinstall と `nixos-rebuild switch` が通る | `nix/**`, `flake.*`, `nixos-wsl-postinstall.sh`         |
-| `test-winget.yml`      | windows-2025  | winget パッケージがインストールでき、ツールが動く                     | `windows/winget/packages.json`, `nix/packages/sets.nix` |
-| `test-consistency.yml` | ubuntu-latest | Nix 定義と `windows/winget/packages.json` が一致                      | `nix/packages/**`, `windows/winget/**`                  |
-| `test-powershell.yml`  | windows-2025  | PowerShell ハンドラーのロジックが正しく動く                           | `scripts/powershell/**`                                 |
-
-### テストレベルの判断基準
-
-| レベル           | 対象                          | 方法                                                                 | ワークフロー     |
-| ---------------- | ----------------------------- | -------------------------------------------------------------------- | ---------------- |
-| Static Analysis  | Nix 構文、フォーマット        | `nix flake check`, `nix fmt`                                         | test-nix         |
-| Unit Test        | PowerShell ハンドラー         | Pester + モック                                                      | test-powershell  |
-| Consistency Test | SSOT ↔ 生成 JSON              | winget-export diff                                                   | test-consistency |
-| Build Test       | Nix package sets              | `nix build .#default`（実ビルド）                                    | test-nix         |
-| Build Test       | NixOS WSL system              | `nix build .#nixosConfigurations.nixos.config.system.build.toplevel` | test-nix         |
-| E2E Test         | NixOS-WSL 初回反映            | 一時 distro + `nixos-rebuild switch` + welcome 消滅確認              | ci-nixos-wsl     |
-| Smoke Test       | core CLI ツール（Nix 側）     | `nix shell` + `--version`                                            | test-nix         |
-| Smoke Test       | core CLI ツール（Windows 側） | `winget import` + `--version`                                        | test-winget      |
-
-### 検証ツール一覧
-
-| ツール  | Nix smoke test | winget smoke test | 備考                             |
-| ------- | :------------: | :---------------: | -------------------------------- |
-| chezmoi |       ✅       |        ✅         |                                  |
-| git     |       ✅       |        ✅         |                                  |
-| gh      |       ✅       |        ✅         |                                  |
-| fd      |       ✅       |        ✅         |                                  |
-| rg      |       ✅       |        ✅         | ripgrep                          |
-| bat     |       ✅       |        ❌         | winget ID なし                   |
-| jq      |       ✅       |        ✅         |                                  |
-| eza     |       ✅       |        ✅         |                                  |
-| zoxide  |       ✅       |        ✅         |                                  |
-| fzf     |       ✅       |        ✅         |                                  |
-| unzip   |       ✅       |        ❌         | winget ID なし                   |
-| p7zip   |       ❌       |        ❌         | winget ID なし、CLI 動作が不安定 |
-
-### CI で意図的に実行しないもの
-
-- **Windows GUI アプリの E2E**: VS Code, Docker Desktop 等は UAC・GUI インストーラーが自動化非対応
-- **NixOS VM test (`nixosTest`)**: systemd サービスのテストが必要になった時点で追加
-
-### GitHub Actions（public repo）
-
-public リポジトリは **Linux/Windows/macOS ランナーすべて無制限無料**。
+fork PR は self-hosted runner を実行できません。Windows/macOS job は同一 repository の PR 条件、`destructive-e2e` Environment、`dotfiles-e2e` label の全てを要求します。詳細は [self-hosted runner guide](./ci/self-hosted-bootstrap-runners.md) を参照してください。
 
 ---
 

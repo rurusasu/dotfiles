@@ -1,0 +1,125 @@
+name: Protected Bootstrap E2E
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "install.cmd"
+      - "install.sh"
+      - "scripts/powershell/**"
+      - "scripts/sh/**"
+      - "nix/**"
+      - "windows/**"
+      - "docker/hermes-agent/**"
+      - ".github/e2e/**"
+      - ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
+
+concurrency:
+  group: destructive-bootstrap-${{ github.event.pull_request.number }}-${{ github.job }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows Destructive E2E
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    environment: destructive-e2e
+    runs-on: [self-hosted, Windows, X64, dotfiles-e2e]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: First Windows convergence and acceptance
+        shell: pwsh
+        run: |
+          & .\install.cmd -NoPause
+          if ($LASTEXITCODE -ne 0) { throw "First install.cmd run failed: $LASTEXITCODE" }
+          & .\scripts\powershell\Test-Environment.ps1 -Runtime
+
+      - name: Second Windows idempotent convergence and acceptance
+        shell: pwsh
+        run: |
+          & .\install.cmd -NoPause
+          if ($LASTEXITCODE -ne 0) { throw "Second install.cmd run failed: $LASTEXITCODE" }
+          & .\scripts\powershell\Test-Environment.ps1 -Runtime
+
+      - name: Write Windows attestation
+        if: always()
+        shell: pwsh
+        run: |
+          $sha = '${{ github.event.pull_request.head.sha }}'
+          $generation = (& wsl -d NixOS -- readlink -f /run/current-system 2>$null) -join "`n"
+          $dockerVersion = (& docker version --format '{{.Server.Version}}' 2>$null) -join "`n"
+          $wslWorkspace = ((& wsl wslpath -a "$env:GITHUB_WORKSPACE") -join "`n").Trim()
+          $supportReport = (& wsl -d NixOS -- bash -lc "cd '$wslWorkspace' && nix build .#package-support-report --no-link --print-out-paths 2>/dev/null | sha256sum | cut -d' ' -f1") -join "`n"
+          @(
+            "sha=$sha"
+            "nix_generation=$generation"
+            "docker=$dockerVersion"
+            "support_report=$supportReport"
+          ) | Set-Content -LiteralPath windows-attestation.txt -Encoding utf8
+
+      - name: Upload Windows attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: windows-attestation.txt
+
+  macos:
+    name: macOS Destructive E2E
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    environment: destructive-e2e
+    runs-on: [self-hosted, macOS, ARM64, dotfiles-e2e]
+    timeout-minutes: 120
+    env:
+      DOTFILES_COMPOSE_FILE: ${{ github.workspace }}/.github/e2e/bootstrap-compose.yml
+      DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: First macOS convergence and acceptance
+        run: |
+          ./install.sh
+          export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+          ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Second macOS idempotent convergence and acceptance
+        run: |
+          ./install.sh
+          export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+          ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Write macOS attestation
+        if: always()
+        run: |
+          export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+          {
+            echo "sha=${{ github.event.pull_request.head.sha }}"
+            echo "nix_generation=$(readlink /run/current-system 2>/dev/null || true)"
+            echo "docker=$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths 2>/dev/null | shasum -a 256 | cut -d' ' -f1 || true)"
+          } > macos-attestation.txt
+
+      - name: Upload macOS attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: macos-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: macos-attestation.txt

@@ -5,6 +5,15 @@
     systems.url = "github:nix-systems/default";
     nixos-wsl.url = "github:nix-community/NixOS-WSL";
     nixos-vscode-server.url = "github:nix-community/nixos-vscode-server";
+    nix-darwin = {
+      url = "github:nix-darwin/nix-darwin/master";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-homebrew.url = "github:zhaofengli/nix-homebrew";
+    system-manager = {
+      url = "github:numtide/system-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";

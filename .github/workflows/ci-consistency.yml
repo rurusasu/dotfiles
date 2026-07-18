@@ -46,6 +46,11 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
 
+      - name: Verify package provider coverage
+        run: |
+          nix build .#package-support-report -o /tmp/package-support-report
+          jq -e 'length == 0' /tmp/package-support-report/errors.json
+
       - name: Build winget-export from SSOT
         run: nix build .#winget-export -o /tmp/winget-export
 

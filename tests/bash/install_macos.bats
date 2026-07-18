@@ -3,41 +3,27 @@
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-macos.sh"
+	COMMON_INSTALLER="$REPO_ROOT/scripts/sh/install-common.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
-	ACTIVATION="$BATS_TEST_TMPDIR/home-manager-generation"
-	mkdir -p "$TEST_HOME" "$STUB_BIN" "$ACTIVATION"
+	mkdir -p "$TEST_HOME" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$FAKE_NIX_PROFILE"
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN ACTIVATION
-	export DOTFILES_BREW_BIN="$STUB_BIN/brew"
+	export COMMAND_LOG STUB_BIN
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
-
-	cat >"$ACTIVATION/activate" <<'EOF'
-#!/usr/bin/env bash
-printf 'activate\n' >>"$COMMAND_LOG"
-mkdir -p "$HOME/.nix-profile/bin"
-if [ -n "${ACTIVATE_INSTALL_CHEZMOI:-}" ]; then
-	cat >"$HOME/.nix-profile/bin/chezmoi" <<'STUB'
-#!/usr/bin/env bash
-printf 'chezmoi %s\n' "$*" >>"$COMMAND_LOG"
-STUB
-	chmod +x "$HOME/.nix-profile/bin/chezmoi"
-fi
-EOF
-	chmod +x "$ACTIVATION/activate"
+	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 
 	write_stub uname '
 case "${1:-}" in
@@ -60,6 +46,7 @@ exit 2
 printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 exec "$@"
 '
+	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
 }
 
 write_stub() {
@@ -73,30 +60,28 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
-write_installed_stubs() {
+write_docker_app() {
 	mkdir -p "$FAKE_DOCKER_APP/Contents/MacOS" "$FAKE_DOCKER_APP/Contents/Resources/bin"
 	cat >"$FAKE_DOCKER_APP/Contents/MacOS/install" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker-install %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-	chmod +x "$FAKE_DOCKER_APP/Contents/MacOS/install"
+	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+exit 0
+EOF
+	chmod +x \
+		"$FAKE_DOCKER_APP/Contents/MacOS/install" \
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+}
+
+write_installed_stubs() {
+	write_docker_app
 	mkdir -p "$(dirname "$DOTFILES_DOCKER_SETUP_MARKER")"
 	touch "$DOTFILES_DOCKER_SETUP_MARKER"
 
-	write_stub pkgutil 'exit 0'
-	write_stub softwareupdate 'printf "softwareupdate %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub brew '
-printf "brew %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "shellenv" ]; then
-	printf "export PATH=%q:\$PATH\n" "$STUB_BIN"
-fi
-'
-	write_stub nix '
-printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "build" ]; then
-	printf "%s\n" "$ACTIVATION"
-fi
-'
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
@@ -106,48 +91,35 @@ exit 0
 }
 
 write_fresh_install_stubs() {
-	write_stub pkgutil 'exit 1'
-	write_stub softwareupdate 'printf "softwareupdate %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
-	*raw.githubusercontent.com/Homebrew/install*)
-		cat <<'"'"'SCRIPT'"'"'
-mkdir -p "$(dirname "$DOTFILES_BREW_BIN")"
-cat >"$DOTFILES_BREW_BIN" <<'"'"'BREW'"'"'
-#!/usr/bin/env bash
-set -euo pipefail
-printf "brew %s\n" "$*" >>"$COMMAND_LOG"
-case "${1:-}" in
-	shellenv)
-		printf "export PATH=%q:\$PATH\n" "$(dirname "$DOTFILES_BREW_BIN")"
-		;;
-	install)
-		mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin"
-		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
-#!/usr/bin/env bash
-printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
-DOCKER_INSTALL
-		chmod +x "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install"
-		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
-#!/usr/bin/env bash
-printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-exit 0
-DOCKER
-		chmod +x "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker"
-		;;
-esac
-BREW
-chmod +x "$DOTFILES_BREW_BIN"
-SCRIPT
-		;;
 	*nixos.org/nix/install*)
 		cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
 cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'
 #!/usr/bin/env bash
+set -euo pipefail
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "build" ]; then
-	printf "%s\n" "$ACTIVATION"
+if [ "${1:-}" = "run" ]; then
+	mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin"
+	cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
+#!/usr/bin/env bash
+printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
+DOCKER_INSTALL
+	cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
+#!/usr/bin/env bash
+printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+DOCKER
+	cat >"$STUB_BIN/chezmoi" <<'"'"'CHEZMOI'"'"'
+#!/usr/bin/env bash
+printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"
+CHEZMOI
+	chmod +x \
+		"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" \
+		"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" \
+		"$STUB_BIN/chezmoi"
 fi
 NIX
 chmod +x "$STUB_BIN/nix"
@@ -156,7 +128,6 @@ SCRIPT
 	*) exit 2 ;;
 esac
 '
-	export ACTIVATE_INSTALL_CHEZMOI=1
 }
 
 assert_log_order() {
@@ -169,133 +140,62 @@ assert_log_order() {
 	done
 }
 
-@test "installed prerequisites run Home Manager, chezmoi, and Compose in order without reinstalling" {
+@test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
 	write_installed_stubs
 
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
+	grep -q "^sudo /usr/bin/env .*DOTFILES_USER=test-user .* $STUB_BIN/nix run .#darwin-rebuild -- switch --flake .#macos --impure$" "$COMMAND_LOG"
 	assert_log_order \
-		"nix build --no-link --print-out-paths .#homeConfigurations.aarch64-darwin.activationPackage --impure" \
-		"activate" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait"
-	! grep -q 'brew install' "$COMMAND_LOG"
-	! grep -q 'softwareupdate' "$COMMAND_LOG"
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
+		"verify-environment --runtime"
+	! grep -q 'brew install --cask' "$COMMAND_LOG"
+	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
-	! grep -q 'docker desktop start' "$COMMAND_LOG"
 }
 
-@test "Home Manager build retries a transient Nix failure" {
+@test "nix-darwin switch failure stops before runtime setup" {
 	write_installed_stubs
-	export DOTFILES_NIX_BUILD_ATTEMPTS=2
-	export NIX_BUILD_COUNT_FILE="$BATS_TEST_TMPDIR/nix-build-count"
 	write_stub nix '
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "build" ]; then
-	count=0
-	if [ -f "$NIX_BUILD_COUNT_FILE" ]; then
-		count="$(cat "$NIX_BUILD_COUNT_FILE")"
-	fi
-	count=$((count + 1))
-	printf "%s\n" "$count" >"$NIX_BUILD_COUNT_FILE"
-	if [ "$count" -eq 1 ]; then
-		printf "transient cache failure\n" >&2
-		exit 1
-	fi
-	printf "%s\n" "$ACTIVATION"
-fi
+if [ "${1:-}" = "run" ]; then exit 42; fi
 '
 
 	run "$INSTALLER"
 
-	[ "$status" -eq 0 ]
-	[ "$(cat "$NIX_BUILD_COUNT_FILE")" -eq 2 ]
+	[ "$status" -eq 42 ]
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
+	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
-@test "fresh install provisions Homebrew Docker Desktop Rosetta and Nix with required arguments" {
+@test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
 	write_fresh_install_stubs
 
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
-	grep -q 'brew install --cask docker-desktop' "$COMMAND_LOG"
-	grep -q 'sudo .* --accept-license --user=test-user' "$COMMAND_LOG"
-	grep -q 'docker-install --accept-license --user=test-user' "$COMMAND_LOG"
-	grep -q 'softwareupdate --install-rosetta --agree-to-license' "$COMMAND_LOG"
-	grep -q 'nix-installer --daemon' "$COMMAND_LOG"
+	assert_log_order \
+		"nix-installer --daemon" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"docker-install --accept-license --user=test-user" \
+		"chezmoi init --source $REPO_ROOT/chezmoi"
+	[ "$(grep -c 'nix-installer --daemon' "$COMMAND_LOG")" -eq 1 ]
+	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"
+	! grep -q 'brew install --cask' "$COMMAND_LOG"
+	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
+	! grep -q 'softwareupdate' "$COMMAND_LOG"
 }
 
-@test "Docker Desktop cask failure uses the checksum-verified DMG fallback" {
-	write_installed_stubs
-	rm -rf "$FAKE_DOCKER_APP"
-	rm -f "$DOTFILES_DOCKER_SETUP_MARKER"
-	export DOTFILES_DOCKER_FALLBACK_URL="https://example.test/Docker.dmg"
-	printf 'verified docker dmg\n' >"$BATS_TEST_TMPDIR/fallback-source.dmg"
-	export DOTFILES_DOCKER_FALLBACK_SHA256
-	DOTFILES_DOCKER_FALLBACK_SHA256="$(
-		shasum -a 256 "$BATS_TEST_TMPDIR/fallback-source.dmg" | awk '{print $1}'
-	)"
-
-	write_stub brew '
-printf "brew %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "shellenv" ]; then
-	printf "export PATH=%q:\$PATH\n" "$STUB_BIN"
-	exit 0
-fi
-exit 1
-'
-	write_stub curl '
-printf "curl %s\n" "$*" >>"$COMMAND_LOG"
-output=""
-while [ "$#" -gt 0 ]; do
-	if [ "$1" = "-o" ]; then
-		shift
-		output="$1"
-	fi
-	shift
-done
-cp "$BATS_TEST_TMPDIR/fallback-source.dmg" "$output"
-'
-	write_stub 7zz '
-printf "7zz %s\n" "$*" >>"$COMMAND_LOG"
-output=""
-for arg in "$@"; do
-	case "$arg" in
-		-o*) output="${arg#-o}" ;;
-	esac
-done
-app="$output/Docker/Docker.app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/bin"
-cat >"$app/Contents/MacOS/install" <<'"'"'INSTALL'"'"'
-#!/usr/bin/env bash
-printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
-INSTALL
-cat >"$app/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
-#!/usr/bin/env bash
-printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-exit 0
-DOCKER
-chmod +x "$app/Contents/MacOS/install" "$app/Contents/Resources/bin/docker"
-'
-	write_stub ditto '
-printf "ditto %s\n" "$*" >>"$COMMAND_LOG"
-cp -R "$1" "$2"
-'
-	write_stub codesign 'printf "codesign %s\n" "$*" >>"$COMMAND_LOG"'
-
-	run "$INSTALLER"
-
-	[ "$status" -eq 0 ]
-	grep -q '^brew install --cask docker-desktop$' "$COMMAND_LOG"
-	grep -q '^curl .*https://example.test/Docker.dmg.*-o ' "$COMMAND_LOG"
-	grep -q '^7zz x -snld20 ' "$COMMAND_LOG"
-	grep -q "^ditto .* $FAKE_DOCKER_APP$" "$COMMAND_LOG"
-	grep -q "^codesign --verify --deep --strict $FAKE_DOCKER_APP$" "$COMMAND_LOG"
-	grep -q '^docker-install --accept-license --user=test-user$' "$COMMAND_LOG"
+@test "macOS installer contains no imperative application installer fallback" {
+	grep -q 'run .#darwin-rebuild -- switch --flake .#macos --impure' "$INSTALLER"
+	! grep -q 'brew install --cask' "$INSTALLER"
+	! grep -q 'desktop.docker.com/mac' "$INSTALLER"
 }
 
 @test "a checkout already at the dotfiles target is kept in place" {
@@ -306,6 +206,7 @@ cp -R "$1" "$2"
 		"$HOME/.dotfiles/chezmoi" \
 		"$HOME/.dotfiles/docker/hermes-agent"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
+	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
@@ -336,11 +237,14 @@ cp -R "$1" "$2"
 
 @test "Docker engine readiness timeout fails after the configured attempt count" {
 	write_installed_stubs
-	write_stub docker '
+	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "info" ]; then exit 1; fi
 exit 0
-'
+EOF
+	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
 	run "$INSTALLER"
 

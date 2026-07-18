@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy terminal configurations for Linux/macOS
 # hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/warp/keybindings.yaml" | sha256sum }}{{ include "terminals/warp/settings.toml" | sha256sum }}
 

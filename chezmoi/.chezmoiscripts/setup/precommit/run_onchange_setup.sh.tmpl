@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Setup pre-commit hooks for Linux/macOS
 # hash: {{ include "../.pre-commit-config.yaml" | sha256sum }}
 

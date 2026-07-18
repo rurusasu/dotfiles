@@ -4,6 +4,27 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 }
 
+@test "flake exposes a macOS nix-darwin configuration" {
+	grep -q 'darwinConfigurations.macos' "$REPO_ROOT/nix/flakes/darwin.nix"
+	grep -q './darwin.nix' "$REPO_ROOT/nix/flakes/default.nix"
+}
+
+@test "Darwin uses nix-homebrew catalog casks and Home Manager" {
+	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+}
+
+@test "Darwin omits the incompatible generated documentation" {
+	grep -q 'documentation.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'tools.darwin-uninstaller.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
+}
+
+@test "Home Manager accepts the bootstrap user and home environment" {
+	grep -q 'DOTFILES_USER' "$REPO_ROOT/nix/home/common.nix"
+	grep -q 'DOTFILES_HOME' "$REPO_ROOT/nix/home/common.nix"
+}
+
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {
 	run awk '
 		/lib\.optionals pkgs\.stdenv\.isDarwin/ { in_darwin=1 }

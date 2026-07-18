@@ -146,9 +146,28 @@ let
       )
     );
 
+  # Catalog migrations change metadata lookup from PackageIdentifier to the
+  # catalog attr name. Apply the ID-keyed metadata as a fallback so generated
+  # Windows verification and installer behavior remain compatible.
+  attachWingetIdMetadata =
+    id: pkg:
+    attachSkipInstall sets.wingetSkipInstall id (
+      attachCiSkipInstall sets.wingetCiSkipInstall id (
+        attachPathEntries sets.wingetPathEntries id (
+          attachPortableLink sets.wingetPortableLinksById id (
+            attachDirectInstaller sets.wingetDirectInstallers id (
+              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                attachInstallArgs sets.wingetInstallArgs id (attachVerify sets.wingetVerifyById id pkg)
+              )
+            )
+          )
+        )
+      )
+    );
+
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
-    name: id: attachWingetMetadata name { PackageIdentifier = id; }
+    name: id: attachWingetMetadata name (attachWingetIdMetadata id { PackageIdentifier = id; })
   ) sets.wingetMap;
 
   wingetFromWindowsOnly = map (

@@ -1,0 +1,7 @@
+services:
+  acceptance:
+    image: nginx:1.29-alpine
+    ports:
+      - "127.0.0.1:8642:80"
+      - "127.0.0.1:9119:80"
+      - "127.0.0.1:6080:80"

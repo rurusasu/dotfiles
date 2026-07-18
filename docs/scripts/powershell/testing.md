@@ -56,6 +56,30 @@ cd scripts/powershell/tests
 
 **現在の状態**: 230+ テスト成功（100%）、カバレッジ 95%+
 
+## Windows environment acceptance
+
+Unit testsだけでなく、`install.cmd` の最後に [Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) を実行します。`Setup Complete!` は acceptance が成功した後にだけ表示されます。
+
+```powershell
+.\scripts\powershell\Test-Environment.ps1 -Runtime
+```
+
+acceptance は次を検証します。
+
+- winget、git、gh、chezmoi、rg、fd、jq、nvim、Node.js、Python、Go、Rust、Docker、WSL の command resolution
+- `docker info` と `docker compose version`
+- `chezmoi apply --dry-run`
+- `wsl --status`
+- runtime mode の `docker run --rm hello-world`
+
+外部 process は `Invoke-Docker`、`Invoke-Chezmoi`、`Invoke-Wsl` wrapper 経由で呼び出し、[Test-Environment.Tests.ps1](../../../scripts/powershell/tests/Test-Environment.Tests.ps1) では wrapper と `Get-Command` を mock します。
+
+```powershell
+.\Invoke-Tests.ps1 -Path .\Test-Environment.Tests.ps1 -MinimumCoverage 0
+```
+
+保護された Windows self-hosted E2E は real `install.cmd` と `Test-Environment.ps1 -Runtime` を 2 回実行し、1 周目の convergence と 2 周目の idempotency を確認します。
+
 ## pre-commit 統合
 
 PowerShell ファイルの変更時に自動でテストが実行されます。

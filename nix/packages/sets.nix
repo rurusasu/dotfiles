@@ -19,6 +19,10 @@
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
+#   - supportReport      → per-package Windows/Darwin/Linux provider metadata
+#   - darwinCasks        → Homebrew casks derived from provider metadata
+#   - linuxSystemModules → system-layer capabilities required on Linux
+#   - providerErrors     → unresolved provider metadata (must remain empty)
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/npm/pnpm)
 #
 # Imported by:
@@ -31,7 +35,7 @@
   gwqSrc ? null,
 }:
 let
-  catalog = {
+  rawCatalog = {
     # ── core ──────────────────────────────────────────────
     chezmoi = {
       pkg = pkgs.chezmoi;
@@ -66,6 +70,11 @@ let
     jq = {
       pkg = pkgs.jq;
       winget = "jqlang.jq";
+      category = "core";
+    };
+    netcat = {
+      pkg = pkgs.netcat;
+      winget = null;
       category = "core";
     };
     eza = {
@@ -183,6 +192,26 @@ let
       winget = "oschwartz10612.Poppler";
       category = "dev";
     };
+    dprint = {
+      pkg = pkgs.dprint;
+      winget = "dprint.dprint";
+      category = "dev";
+    };
+    hadolint = {
+      pkg = pkgs.hadolint;
+      winget = "hadolint.hadolint";
+      category = "dev";
+    };
+    bun = {
+      pkg = pkgs.bun;
+      winget = "Oven-sh.Bun";
+      category = "dev";
+    };
+    zig = {
+      pkg = pkgs.zig;
+      winget = "zig.zig";
+      category = "dev";
+    };
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
@@ -222,6 +251,17 @@ let
       winget = "Obsidian.Obsidian";
       category = "editors";
     };
+    vscode = {
+      pkg = pkgs.vscode;
+      winget = "Microsoft.VisualStudioCode";
+      category = "editors";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "visual-studio-code";
+        };
+      };
+    };
 
     # ── fonts ─────────────────────────────────────────────
     udev-gothic-nf = {
@@ -238,7 +278,7 @@ let
     };
     codex = {
       pkg = pkgs.codex;
-      winget = null;
+      winget = "OpenAI.Codex";
       category = "llm";
     };
     workmux = {
@@ -252,6 +292,97 @@ let
       pkg = pkgs.slack;
       winget = "SlackTechnologies.Slack";
       category = "communication";
+    };
+
+    # ── desktop applications ──────────────────────────────
+    _1password-gui = {
+      pkg = pkgs._1password-gui;
+      winget = "AgileBits.1Password";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "1password";
+        };
+      };
+    };
+    claude-desktop = {
+      winget = "Anthropic.Claude";
+      category = "desktop";
+      support = {
+        windows = {
+          provider = "winget";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "claude";
+        };
+        linux = {
+          unsupported = "Vendor does not publish a supported Linux desktop build";
+        };
+      };
+    };
+    arc-browser = {
+      winget = "TheBrowserCompany.Arc";
+      category = "desktop";
+      support = {
+        windows = {
+          provider = "winget";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "arc";
+        };
+        linux = {
+          unsupported = "Vendor does not publish a Linux build";
+        };
+      };
+    };
+    google-chrome = {
+      pkg = pkgs.google-chrome;
+      winget = "Google.Chrome";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "google-chrome";
+        };
+      };
+    };
+    tableplus = {
+      winget = "TablePlus.TablePlus";
+      category = "desktop";
+      support = {
+        windows = {
+          provider = "winget";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "tableplus";
+        };
+        linux = {
+          unsupported = "No pinned Nix provider is available";
+        };
+      };
+    };
+
+    # ── system capabilities ───────────────────────────────
+    docker-desktop = {
+      winget = "Docker.DockerDesktop";
+      category = "system";
+      support = {
+        windows = {
+          provider = "winget";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "docker-desktop";
+        };
+        linux = {
+          provider = "system-manager";
+          systemModule = "docker";
+        };
+      };
     };
 
     # ── k8s ───────────────────────────────────────────────
@@ -436,6 +567,126 @@ let
     };
   };
 
+  supports =
+    package: system:
+    package != null && builtins.elem system (package.meta.platforms or lib.platforms.all);
+
+  # Provider gaps are reviewed explicitly. Adding a package without a provider
+  # now fails providerErrors until its unsupported platform is listed here.
+  reviewedUnsupported = {
+    windows = lib.genAttrs [
+      "argocd"
+      "astro-language-server"
+      "bash-language-server"
+      "bat"
+      "bats"
+      "cilium-cli"
+      "claude-code"
+      "cmake"
+      "dive"
+      "ghostscript"
+      "gnumake"
+      "gopls"
+      "gwq"
+      "k9s"
+      "kind"
+      "kubectl"
+      "kubectx"
+      "kubernetes-helm"
+      "kubeseal"
+      "kustomize"
+      "marksman"
+      "netcat"
+      "neovim-remote"
+      "nixd"
+      "p7zip"
+      "pnpm"
+      "pre-commit"
+      "python3"
+      "rustfmt"
+      "sops"
+      "stern"
+      "tmux"
+      "treefmt"
+      "trivy"
+      "typescript-language-server"
+      "udev-gothic-nf"
+      "unzip"
+      "workmux"
+      "yaml-language-server"
+    ] (_: "No reviewed Windows package provider is selected");
+    darwin = { };
+    linux = { };
+  };
+
+  reviewedUnsupportedFor = platform: name: lib.attrByPath [ platform name ] null reviewedUnsupported;
+
+  defaultSupport =
+    name: entry:
+    let
+      package = entry.pkg or null;
+      unsupported = platform: reviewedUnsupportedFor platform name;
+    in
+    {
+      windows =
+        if (entry.winget or null) != null then
+          { provider = "winget"; }
+        else if (entry.npm or null) != null then
+          { provider = "npm"; }
+        else
+          let
+            reason = unsupported "windows";
+          in
+          if reason == null then { } else { unsupported = reason; };
+      darwin =
+        if supports package "aarch64-darwin" || supports package "x86_64-darwin" then
+          { provider = "nix"; }
+        else
+          let
+            reason = unsupported "darwin";
+          in
+          if reason == null then { } else { unsupported = reason; };
+      linux =
+        if supports package "x86_64-linux" || supports package "aarch64-linux" then
+          { provider = "nix"; }
+        else
+          let
+            reason = unsupported "linux";
+          in
+          if reason == null then { } else { unsupported = reason; };
+    };
+
+  catalog = lib.mapAttrs (
+    name: entry:
+    entry
+    // {
+      support = defaultSupport name entry // (entry.support or { });
+    }
+  ) rawCatalog;
+
+  mkWindowsOnlySupport = provider: reason: {
+    windows = { inherit provider; };
+    darwin = {
+      unsupported = reason;
+    };
+    linux = {
+      unsupported = reason;
+    };
+  };
+
+  windowsOnlySupport = {
+    "GitHub.Copilot" = mkWindowsOnlySupport "winget" "Windows application package";
+    "Microsoft.PowerToys" = mkWindowsOnlySupport "winget" "Windows system utility";
+    "Microsoft.VCRedist.2015+.x64" = mkWindowsOnlySupport "winget" "Windows runtime component";
+    "Microsoft.VisualStudio.2022.BuildTools" =
+      mkWindowsOnlySupport "winget" "Windows compiler toolchain";
+    "Microsoft.WindowsTerminal" = mkWindowsOnlySupport "winget" "Windows shell host";
+    "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Windows subsystem component";
+    "StablyAI.Orca" = mkWindowsOnlySupport "winget" "Windows application package";
+    "9NT1R1C2HH7J" = mkWindowsOnlySupport "msstore" "Windows Store application";
+    "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "Windows Store desktop application";
+  };
+
   # Group package names by category
   grouped = lib.groupBy (name: catalog.${name}.category) (lib.attrNames catalog);
 
@@ -446,28 +697,60 @@ let
       map (
         n:
         let
-          p = catalog.${n}.pkg;
+          p = catalog.${n}.pkg or null;
         in
-        if builtins.elem pkgs.stdenv.hostPlatform.system (p.meta.platforms or lib.platforms.all) then
-          p
-        else
-          null
+        if p != null && supports p pkgs.stdenv.hostPlatform.system then p else null
       ) names
     );
 
   # Extract winget mappings (non-null only)
-  wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget) catalog);
+  wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
+
+  supportReport = lib.mapAttrs (_: entry: entry.support) catalog // windowsOnlySupport;
+  darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
+    lib.filterAttrs (_: entry: entry.support.darwin ? cask) catalog
+  );
+  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule) (
+    lib.filterAttrs (_: entry: entry.support.linux ? systemModule) catalog
+  );
+  providerErrors = lib.concatMap (
+    name:
+    lib.concatMap
+      (
+        platform:
+        let
+          hasPlatform = builtins.hasAttr platform supportReport.${name};
+          platformData = if hasPlatform then supportReport.${name}.${platform} else { };
+          resolved =
+            (platformData ? provider) || ((platformData ? unsupported) && platformData.unsupported != "");
+        in
+        lib.optional (!resolved) "${name}: missing ${platform} provider or reviewed unsupported reason"
+      )
+      [
+        "windows"
+        "darwin"
+        "linux"
+      ]
+  ) (lib.attrNames supportReport);
 
 in
 # Category-resolved package lists (auto-derived from catalog)
-lib.mapAttrs (_: names: resolve names) grouped
+lib.mapAttrs (_: resolve) grouped
 // {
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
 
   # Windows: nix attr name → winget PackageIdentifier
   inherit wingetMap npmMap;
+
+  inherit
+    supportReport
+    darwinCasks
+    linuxSystemModules
+    providerErrors
+    windowsOnlySupport
+    ;
 
   # Post-install verification commands for npm packages.
   # Keys match catalog attr names from npmMap.
@@ -811,25 +1094,13 @@ lib.mapAttrs (_: names: resolve names) grouped
   # Windows-only packages (no nix equivalent)
   windowsOnly = {
     winget = [
-      "AgileBits.1Password"
-      "Anthropic.Claude"
-      "TheBrowserCompany.Arc"
-      "Docker.DockerDesktop"
       "GitHub.Copilot"
-      "dprint.dprint"
-      "hadolint.hadolint"
-      "Google.Chrome"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
       "Microsoft.VisualStudio.2022.BuildTools"
-      "Microsoft.VisualStudioCode"
       "Microsoft.WindowsTerminal"
       "Microsoft.WSL"
-      "OpenAI.Codex"
       "StablyAI.Orca"
-      "TablePlus.TablePlus"
-      "Oven-sh.Bun"
-      "zig.zig"
     ];
     msstore = [
       "9NT1R1C2HH7J"

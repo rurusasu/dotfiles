@@ -84,6 +84,7 @@ printf "%s\n" "$FZF_SELECTED"
 @test "explicit workspace runs plain devcontainer up then bootstraps before nvim tmux payload" {
 	workspace="$BATS_TEST_TMPDIR/project"
 	mkdir -p "$workspace/.devcontainer"
+	expected_workspace="$(_dcnvim_abs_path "$workspace")"
 	write_devcontainer_stub
 
 	run dcnvim "$workspace"
@@ -92,7 +93,7 @@ printf "%s\n" "$FZF_SELECTED"
 	log="$(cat "$DEVCONTAINER_LOG")"
 	[[ "$log" == *"arg=up"* ]]
 	[[ "$log" == *"arg=--workspace-folder"* ]]
-	[[ "$log" == *"arg=$workspace"* ]]
+	[[ "$log" == *"arg=$expected_workspace"* ]]
 	[[ "$log" != *"arg=--dotfiles-repository"* ]]
 	[[ "$log" != *"arg=--dotfiles-install-command"* ]]
 
@@ -141,6 +142,7 @@ EOF
 	ghq_root="$BATS_TEST_TMPDIR/ghq"
 	workspace="$ghq_root/github.com/foo/bar"
 	mkdir -p "$cwd" "$workspace/.devcontainer"
+	expected_workspace="$(_dcnvim_abs_path "$workspace")"
 	cd "$cwd"
 
 	export GHQ_ROOT="$ghq_root"
@@ -154,7 +156,7 @@ EOF
 
 	[ "$status" -eq 0 ]
 	log="$(cat "$DEVCONTAINER_LOG")"
-	[[ "$log" == *"arg=$workspace"* ]]
+	[[ "$log" == *"arg=$expected_workspace"* ]]
 	payload="$(cat "$DEVCONTAINER_PAYLOAD_LOG")"
 	[[ "$payload" == *"tmux new -A -s 'bar' 'nvim .'"* ]]
 }
@@ -208,12 +210,13 @@ EOF
 @test "missing devcontainer config fails before devcontainer up" {
 	workspace="$BATS_TEST_TMPDIR/project"
 	mkdir -p "$workspace"
+	expected_workspace="$(_dcnvim_abs_path "$workspace")"
 	write_devcontainer_stub
 
 	run dcnvim "$workspace"
 
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"dcnvim: no .devcontainer/ or .devcontainer.json under $workspace"* ]]
+	[[ "$output" == *"dcnvim: no .devcontainer/ or .devcontainer.json under $expected_workspace"* ]]
 	[ ! -f "$DEVCONTAINER_LOG" ]
 }
 

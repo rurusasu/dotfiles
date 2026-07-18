@@ -10,21 +10,34 @@
 [![ci-consistency](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-NixOS/Home Manager + chezmoi を使った dotfiles の一元管理リポジトリ
+Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。
 
 ## 技術スタック
 
-| Category        | Technology                |
-| --------------- | ------------------------- |
-| OS              | NixOS (WSL2)              |
-| Package Manager | Nix Flakes                |
-| User Config     | Chezmoi + Home Manager    |
-| Shell           | Zsh + Starship            |
-| Editor          | Neovim (nixvim)           |
-| Terminal        | Windows Terminal, WezTerm |
-| Formatter       | treefmt-nix               |
+| Category           | Technology                                         |
+| ------------------ | -------------------------------------------------- |
+| OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian  |
+| Package catalog    | Nix Flakes (`nix/packages/sets.nix`)               |
+| System convergence | winget handlers, nix-darwin, System Manager, NixOS |
+| User environment   | Home Manager + chezmoi                             |
+| Containers         | Docker Desktop / rootful Docker + Docker Compose   |
+| Formatter          | treefmt-nix                                        |
 
 ## クイックスタート
+
+clone 後、OS ごとの入口を 1 回実行します。Full support の installer は Nix、OS パッケージ、Home Manager、chezmoi、Docker Compose を適用し、最後に runtime acceptance を実行します。途中で失敗した場合も同じコマンドを再実行できます。
+
+### Windows
+
+PowerShell または Command Prompt で実行します。管理者処理は installer が必要に応じて分離します。
+
+```powershell
+git clone https://github.com/rurusasu/dotfiles.git
+cd dotfiles
+.\install.cmd
+```
+
+`install.cmd` は winget/npm 系パッケージ、Docker Desktop、WSL2/NixOS、Home Manager、chezmoi を適用し、Docker・Compose・WSL・`hello-world` の acceptance が成功してから完了を表示します。
 
 ### macOS (Apple Silicon)
 
@@ -38,41 +51,46 @@ cd dotfiles
 ./install.sh
 ```
 
-Homebrew、Docker Desktop、Nix を必要に応じて導入し、Home Manager と
-chezmoi の設定を適用した後、Hermes の Docker Compose 環境を起動します。
-再実行可能な設計ですが、初回の Nix/Docker イメージのビルドには時間が
-かかります。
+Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が Homebrew と Docker Desktop cask を管理します。Home Manager、chezmoi、Docker Compose、runtime acceptance まで同じコマンド内で実行します。macOS では WSL や NixOS を導入しません。
 
-### Windows
+### NixOS / Ubuntu / Debian
 
-Windows PowerShell で以下を実行:
+Linux では同じ入口が `/etc/NIXOS` と `/etc/os-release` を見て自動振り分けします。
 
-```powershell
-# 1. リポジトリをクローン
+```bash
 git clone https://github.com/rurusasu/dotfiles.git
 cd dotfiles
-
-# 2. インストール実行（管理者権限は自動で取得されます）
-\.\install.cmd
-
-# 参考: PowerShell スクリプトを直接実行する場合
-# .\scripts\powershell\install.ps1
+./install.sh
 ```
 
-これにより:
+- NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
+- Ubuntu / Debian: Nix を必要に応じて導入し、System Manager + Home Manager + rootful Docker を適用します。
+- どちらも既存ユーザーの UID、GID、home、primary group を保持します。
 
-1. NixOS WSL がダウンロード・インポートされる
-2. `~/.dotfiles` がこのリポジトリへのシンボリックリンクとして作成される
-3. `nixos-rebuild switch` が実行され設定が適用される
-4. Windows 側のユーザー設定は chezmoi apply で適用する
+NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host profile として読み込みます。固定ディスク構成はリポジトリに持たず、このファイルが存在しない場合は activation 前に停止します。
+
+### その他の Linux
+
+Full support ではありません。Docker や systemd の収束を行わない Home Manager のみの fallback を、明示的に opt-in した場合だけ実行できます。
+
+```bash
+DOTFILES_ALLOW_USER_ONLY=1 ./install.sh
+```
+
+### 成功条件と CI
+
+「コマンドが終了した」だけでは成功扱いにしません。必須 CLI、chezmoi drift、Docker daemon、Compose 全サービス、`docker run --rm hello-world` を acceptance で確認します。Ubuntu、Debian、NixOS は hosted E2E、Windows と macOS は保護された専用 runner で installer を 2 回実行します。runner の構築と承認手順は [self-hosted bootstrap runners](./docs/ci/self-hosted-bootstrap-runners.md) を参照してください。
 
 ## 方針
 
-Nix はパッケージ/システム設定、chezmoi はユーザー設定を管理します。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
+Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は shell、Git、terminal、editor などの設定ファイルを管理します。
 
 - ユーザー設定: `chezmoi/`
-- Home Manager: `nix/profiles/home/` (packages, tmux, nixvim, extensions)
-- ホスト設定: `nix/hosts/`
+- Home Manager: `nix/home/common.nix`
+- macOS: `nix/darwin/`
+- Ubuntu / Debian: `nix/system-manager/`
+- NixOS / WSL: `nix/hosts/`
+- パッケージ provider catalog: `nix/packages/sets.nix`
 
 ## ディレクトリ構造
 
@@ -86,7 +104,7 @@ dotfiles/
 ├── windows/                # Windows-side config files
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner
-├── install.sh              # macOS launcher
+├── install.sh              # macOS / NixOS / Ubuntu / Debian launcher
 ├── install.cmd             # Windows launcher for install.ps1
 ├── scripts/powershell/install.ps1 # NixOS WSL installer entrypoint
 └── flake.nix               # Nix flake entry point
@@ -198,6 +216,22 @@ wsl --shutdown
 ```bash
 # ドライランでエラーを確認
 sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
+```
+
+### installer が途中で停止した
+
+同じ installer を再実行すると、完了済みの宣言状態を再利用して停止した phase から収束できます。runtime だけを再確認する場合:
+
+```bash
+./scripts/sh/verify-environment.sh --runtime
+systemctl status system-manager.target docker.service docker.socket
+docker compose -f docker/hermes-agent/compose.yml ps
+```
+
+NixOS では `system-manager.target` の代わりに `readlink /run/current-system` と `nixos-rebuild list-generations` を確認します。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は次を実行します。
+
+```powershell
+.\scripts\powershell\Test-Environment.ps1 -Runtime
 ```
 
 ### Windows Terminal 設定が反映されない

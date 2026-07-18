@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy CLI tool configurations for Linux/macOS
 # hash: {{ include "cli/starship/starship.toml" | sha256sum }}{{ include "cli/fd/ignore" | sha256sum }}{{ include "cli/ripgrep/config" | sha256sum }}{{ include "cli/ghq/config" | sha256sum }}{{ include "cli/zoxide/env" | sha256sum }}
 
