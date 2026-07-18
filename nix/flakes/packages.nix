@@ -29,17 +29,14 @@
       sets = import ../packages/sets.nix {
         pkgs = pkgs.extend workmuxOverlay;
         inherit lib;
-        gwqSrc = inputs.gwq-src;
       };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        gwqSrc = inputs.gwq-src;
       };
       packageSupportReport = import ../packages/support-report.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        gwqSrc = inputs.gwq-src;
       };
     in
     {
@@ -87,7 +84,6 @@
         # Windows package export
         winget-export = import ../packages/winget.nix {
           inherit pkgs lib;
-          gwqSrc = inputs.gwq-src;
         };
         package-support-report = packageSupportReport;
       };
