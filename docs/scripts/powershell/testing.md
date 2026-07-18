@@ -62,7 +62,7 @@ cd scripts/powershell/tests
 | ----------------------------- | -------------------------- | ------------------------------------------------------------- |
 | `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Windows/macOS contract と `Protected Bootstrap E2E` aggregate |
 
-Windows hosted contract は `Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。macOS hosted contract は Bats、nix-darwin build、provider coverageを実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は UTF-8 locale と GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap-e2e-linux.yml` がUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
 

@@ -56,8 +56,8 @@ workflowは次のjobを持つ。
 #### Windows Bootstrap Contract
 
 - runner: `windows-2025`
-- `scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration`を使い、
-  `install.cmd` entrypoint、PowerShell handler、acceptance wrapperのPester testsを実行する。
+- Pester 5.6.1を固定し、`scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0`を使って、
+  `install.cmd` entrypoint、PowerShell handler、acceptance wrapperのunit/contract testsを実行する。
 - Winget generated manifestとpackage catalogの一致を検証する。
 - WSL、Docker Desktop、NixOS-WSL、chezmoiの外部processは既存wrapper境界でmockし、呼出順序、引数、
   timeout、失敗伝播、二回目実行を検証する。
@@ -67,6 +67,7 @@ workflowは次のjobを持つ。
 #### macOS Bootstrap Contract
 
 - runner: `macos-15` ARM64
+- UTF-8 localeとGNU coreutilsの`timeout`を用意して、Linuxと同じBats contractを実行可能にする。
 - Nixを導入し、`darwinConfigurations.macos.system`を`--impure`付きで実buildする。
 - BatsでdispatcherとmacOS installerを実行し、Command Line Tools、Nix、nix-darwin、
   nix-homebrew、Docker Desktop、chezmoiのphase境界をstubで検証する。

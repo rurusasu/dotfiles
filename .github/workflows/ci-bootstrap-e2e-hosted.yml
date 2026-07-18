@@ -26,12 +26,19 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
+      - name: Install pinned Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
+
       - name: Run Windows bootstrap contracts
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration -OutputFile windows-contract-junit.xml
+          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit.xml
           if ($LASTEXITCODE -ne 0) {
             throw "Windows bootstrap contracts failed: $LASTEXITCODE"
           }
@@ -64,6 +71,8 @@ jobs:
     env:
       DOTFILES_USER: runner
       DOTFILES_HOME: /Users/runner
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -76,8 +85,10 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bats
-        run: brew install bats-core
+      - name: Install Bats and GNU coreutils
+        run: |
+          brew install bats-core coreutils
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Run POSIX bootstrap contracts
         run: bats tests/bash

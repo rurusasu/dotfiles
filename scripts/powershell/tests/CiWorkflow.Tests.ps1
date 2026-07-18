@@ -301,7 +301,12 @@ Describe 'CI workflow configuration' {
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -IncludeIntegration'
+        $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
+        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
+        $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
+        $workflow | Should -Match 'brew install bats-core coreutils'
+        $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
+        $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
         $workflow | Should -Match 'bats tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2

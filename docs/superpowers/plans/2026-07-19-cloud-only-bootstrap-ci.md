@@ -33,7 +33,7 @@
 
 **Interfaces:**
 
-- Consumes: `scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration`, `bats tests/bash`, `darwinConfigurations.macos.system`, and pinned `actions/checkout`, `cachix/install-nix-action`, and `actions/upload-artifact` actions already used by the repository.
+- Consumes: Pester 5.6.1, `scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0`, UTF-8 Bats with GNU coreutils, `darwinConfigurations.macos.system`, and pinned `actions/checkout`, `cachix/install-nix-action`, and `actions/upload-artifact` actions already used by the repository.
 - Produces: hosted jobs named `Windows Bootstrap Contract`, `macOS Bootstrap Contract`, and aggregate check `Protected Bootstrap E2E`.
 - Produces artifacts: `windows-bootstrap-contract-<run>-<attempt>` and `macos-bootstrap-contract-<run>-<attempt>` containing `sha`, `runner_image`, `layer`, and `runtime` fields.
 
@@ -68,7 +68,12 @@ In `scripts/powershell/tests/CiWorkflow.Tests.ps1`, replace the three `It` block
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -IncludeIntegration'
+        $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
+        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
+        $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
+        $workflow | Should -Match 'brew install bats-core coreutils'
+        $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
+        $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
         $workflow | Should -Match 'bats tests/bash'
         $workflow | Should -Match 'nix build \.#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
@@ -126,12 +131,19 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
+      - name: Install pinned Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
+
       - name: Run Windows bootstrap contracts
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration -OutputFile windows-contract-junit.xml
+          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit.xml
           if ($LASTEXITCODE -ne 0) {
             throw "Windows bootstrap contracts failed: $LASTEXITCODE"
           }
@@ -164,6 +176,8 @@ jobs:
     env:
       DOTFILES_USER: runner
       DOTFILES_HOME: /Users/runner
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -176,8 +190,10 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bats
-        run: brew install bats-core
+      - name: Install Bats and GNU coreutils
+        run: |
+          brew install bats-core coreutils
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Run POSIX bootstrap contracts
         run: bats tests/bash
@@ -337,7 +353,7 @@ In `docs/scripts/powershell/testing.md`, replace the self-hosted row and the par
 ```markdown
 | `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Windows/macOS contract と `Protected Bootstrap E2E` aggregate |
 
-Windows hosted contract は `Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。macOS hosted contract は Bats、nix-darwin build、provider coverageを実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は UTF-8 locale と GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap-e2e-linux.yml` がUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
 ```
@@ -414,7 +430,7 @@ pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 \
   -MinimumCoverage 0
 ```
 
-Expected: every test in `CiWorkflow.Tests.ps1` passes with zero failures. Do not run the complete Windows handler suite on macOS because its fixtures intentionally use Windows drive and process semantics; `Windows Bootstrap Contract` runs that suite with `-IncludeIntegration` on `windows-2025`.
+Expected: every test in `CiWorkflow.Tests.ps1` passes with zero failures. Do not run the complete Windows handler suite on macOS because its fixtures intentionally use Windows drive and process semantics; `Windows Bootstrap Contract` runs the non-integration suite with pinned Pester 5.6.1 on `windows-2025`.
 
 - [ ] **Step 3: Evaluate all flake checks**
 
