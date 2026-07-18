@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy editor configurations for Linux/macOS
 # hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
 

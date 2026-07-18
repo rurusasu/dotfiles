@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Sync editor extensions for Linux/macOS (install missing, remove unlisted)
 # hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
 

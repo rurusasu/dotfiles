@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # pnpm グローバルパッケージ インストールスクリプト (Linux/macOS)
 # SSOT: nix/packages/all.nix (pnpmGlobal)
 # Generated from: {{ range .pnpm_global_packages }}{{ . }} {{ end }}

@@ -1,5 +1,5 @@
 {{ if ne .chezmoi.os "windows" -}}
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy shell configurations for Linux/macOS
 # zshrc is managed by Home Manager (programs.zsh) on all HM-managed platforms.
 # hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}
