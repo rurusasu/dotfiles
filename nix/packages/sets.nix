@@ -32,7 +32,6 @@
 {
   pkgs,
   lib,
-  gwqSrc ? null,
 }:
 let
   rawCatalog = {
@@ -145,9 +144,7 @@ let
       category = "dev";
     };
     gwq = {
-      pkg = import ./gwq/default.nix (
-        { inherit pkgs; } // lib.optionalAttrs (gwqSrc != null) { src = gwqSrc; }
-      );
+      pkg = pkgs.gwq;
       winget = null;
       category = "dev";
     };
