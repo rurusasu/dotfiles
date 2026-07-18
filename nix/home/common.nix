@@ -14,7 +14,6 @@
 let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
-    gwqSrc = if inputs == null then null else inputs.gwq-src;
   };
   bootstrapUser = builtins.getEnv "DOTFILES_USER";
   bootstrapHome = builtins.getEnv "DOTFILES_HOME";
