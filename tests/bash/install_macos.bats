@@ -46,6 +46,10 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
+	write_stub pgrep '
+printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub sudo '
@@ -185,14 +189,23 @@ assert_log_order() {
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
-@test "running Docker Desktop is stopped before nix-darwin updates its cask" {
+@test "running Docker Desktop is stopped when its engine is unavailable" {
 	write_installed_stubs
+	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"; then
+	exit 1
+fi
+exit 0
+EOF
+	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
-		"docker info" \
+		"pgrep -x com.docker.backend" \
 		"docker desktop stop --timeout 120" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
@@ -304,5 +317,5 @@ EOF
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]
-	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 4 ]
+	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 3 ]
 }

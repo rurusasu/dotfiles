@@ -80,7 +80,10 @@ preserve_shell_rc_for_nix_darwin() {
 stop_existing_docker_desktop() {
   local docker_cli="$DOCKER_APP/Contents/Resources/bin/docker"
   [[ -x $docker_cli ]] || return 0
-  "$docker_cli" info >/dev/null 2>&1 || return 0
+  if ! pgrep -x com.docker.backend >/dev/null 2>&1 &&
+    ! pgrep -x "Docker Desktop" >/dev/null 2>&1; then
+    return 0
+  fi
 
   dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
   "$docker_cli" desktop stop --timeout 120
