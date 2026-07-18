@@ -22,9 +22,11 @@
 ### Task 1: Add the migration regression test first
 
 **Files:**
+
 - Modify: `/Users/ktome1995/Program/dotfiles/scripts/powershell/tests/PackageCatalog.Tests.ps1` in `Describe 'Package catalog consistency'` → `Context 'Latest package policy'`
 
 **Interfaces:**
+
 - Consumes: the tracked catalog, flake, provider wiring files, and generated Windows manifest.
 - Produces: a failing Pester test that defines the required nixpkgs-backed `gwq` behavior.
 
@@ -76,6 +78,7 @@ Expected: FAIL in the new `gwq` test because the old `gwq-src` input and local d
 ### Task 2: Switch the catalog to nixpkgs and remove local source plumbing
 
 **Files:**
+
 - Modify: `/Users/ktome1995/Program/dotfiles/nix/packages/sets.nix`
 - Modify: `/Users/ktome1995/Program/dotfiles/flake.nix`
 - Modify: `/Users/ktome1995/Program/dotfiles/nix/flakes/packages.nix`
@@ -87,6 +90,7 @@ Expected: FAIL in the new `gwq` test because the old `gwq-src` input and local d
 - Delete: `/Users/ktome1995/Program/dotfiles/nix/packages/gwq/default.nix`
 
 **Interfaces:**
+
 - Consumes: nixpkgs exposing `pkgs.gwq` after the lock update.
 - Produces: a catalog entry that resolves `gwq` through Nix on Unix and no local source input dependency anywhere in the flake.
 
@@ -152,12 +156,14 @@ Run the same Pester command from Task 1. Expected: the static catalog/provider a
 ### Task 3: Update nixpkgs and regenerate the Windows manifests
 
 **Files:**
+
 - Modify: `/Users/ktome1995/Program/dotfiles/flake.lock`
 - Possibly modify: `/Users/ktome1995/Program/dotfiles/windows/winget/packages.json`
 - Possibly modify: `/Users/ktome1995/Program/dotfiles/windows/npm/packages.json`
 - Possibly modify: `/Users/ktome1995/Program/dotfiles/windows/pnpm/packages.json`
 
 **Interfaces:**
+
 - Consumes: the updated catalog from Task 2.
 - Produces: a lock file whose nixpkgs package set contains `gwq`, plus generated manifests synchronized with the catalog.
 
@@ -199,10 +205,12 @@ Expected: no generated manifest contains a `gwq` package entry. If the generated
 ### Task 4: Run focused and repository-level verification
 
 **Files:**
+
 - Test: `/Users/ktome1995/Program/dotfiles/scripts/powershell/tests/PackageCatalog.Tests.ps1`
 - Test: `/Users/ktome1995/Program/dotfiles/tests/bash/package_catalog.bats`
 
 **Interfaces:**
+
 - Consumes: the completed migration and generated artifacts.
 - Produces: evidence that Nix provider resolution, Windows exclusion, formatting, and package support coverage all pass.
 
