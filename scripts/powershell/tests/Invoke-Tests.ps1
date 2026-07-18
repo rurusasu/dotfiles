@@ -182,6 +182,8 @@ Write-Host "Minimum Coverage: $MinimumCoverage%" -ForegroundColor White
 Write-Host ""
 
 # テスト実行
+# 呼び出し元の StrictMode をテストスコープへ継承させず、通常の Pester CI と実行条件を揃える
+Set-StrictMode -Off
 $result = Invoke-Pester -Configuration $pesterConfig
 
 if (-not $result) {

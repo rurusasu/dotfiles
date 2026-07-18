@@ -325,5 +325,6 @@ Describe 'CI workflow configuration' {
 
         $runner | Should -Match '\$Path = @\(\$scriptRoot\)'
         $runner | Should -Match '\$pesterConfig\.Run\.ExcludePath = @\("\*\*/Integration\.Tests\.ps1"\)'
+        $runner | Should -Match '(?s)Set-StrictMode -Off.*Invoke-Pester -Configuration \$pesterConfig'
     }
 }
