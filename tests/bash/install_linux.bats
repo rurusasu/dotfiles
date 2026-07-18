@@ -133,7 +133,24 @@ assert_log_order() {
 		"verify-environment --runtime"
 }
 
-@test "Linux waits for systemd to leave the transient starting state" {
+@test "Linux accepts a responsive systemd manager while the global state is starting" {
+	write_nix_stub
+	write_stub systemctl '
+printf "systemctl %s\n" "$*" >>"$COMMAND_LOG"
+case "$*" in
+"is-system-running") echo starting ;;
+"show --property=Version --value") echo 255.4 ;;
+esac
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^systemctl is-system-running$' "$COMMAND_LOG")" -eq 1 ]
+	grep -q '^systemctl show --property=Version --value$' "$COMMAND_LOG"
+}
+
+@test "Linux waits when a starting systemd manager is not yet responsive" {
 	write_nix_stub
 	state_count="$BATS_TEST_TMPDIR/systemd-state-count"
 	printf '0\n' >"$state_count"

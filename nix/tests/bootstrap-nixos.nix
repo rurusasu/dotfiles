@@ -82,14 +82,14 @@ pkgs.testers.runNixOSTest {
       ];
     };
 
-  testScript = ''
+  testScript = { nodes, ... }: ''
     start_all()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("docker.service")
     machine.succeed("docker load < ${helloWorldImage}")
     machine.succeed("docker load < ${acceptanceImage}")
 
-    install = "su - nixos -c 'env DOTFILES_NIXOS_PREBUILT_SYSTEM=/run/current-system DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=${dotfilesSource} ${dotfilesSource}/install.sh'"
+    install = "su - nixos -c 'env DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml DOTFILES_CHECKOUT_TARGET=${dotfilesSource} ${dotfilesSource}/install.sh'"
     machine.succeed(install)
     machine.succeed(install)
     machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd ${dotfilesSource}; sg docker -c \"DOTFILES_VERIFY_SYSTEM_LAYER=nixos DOTFILES_COMPOSE_FILE=${dotfilesSource}/.github/e2e/bootstrap-compose.yml ./scripts/sh/verify-environment.sh --runtime\"'")

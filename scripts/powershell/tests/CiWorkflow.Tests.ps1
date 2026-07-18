@@ -263,7 +263,8 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'name:\s+NixOS VM'
         $workflow | Should -Match 'bootstrap-nixos-vm'
         $test | Should -Match 'dotfilesSource.*install\.sh'
-        $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=/run/current-system'
+        $test | Should -Match 'testScript\s*=\s*\{\s*nodes,\s*\.\.\.\s*\}:'
+        $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
         $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'bootstrap-compose\.yml'

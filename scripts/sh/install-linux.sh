@@ -44,6 +44,11 @@ ensure_systemd() {
     state="$(systemctl is-system-running 2>/dev/null || true)"
     case "$state" in
     running | degraded) return ;;
+    starting)
+      # Hosted runners can remain globally "starting" while the manager is
+      # already available for the System Manager activation below.
+      [[ -n $(systemctl show --property=Version --value 2>/dev/null || true) ]] && return
+      ;;
     esac
     if ((attempt < SYSTEMD_WAIT_ATTEMPTS)); then
       sleep "$DOTFILES_WAIT_SLEEP_SECONDS"
