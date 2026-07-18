@@ -319,12 +319,11 @@ Describe 'CI workflow configuration' {
         ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
     }
 
-    It 'should preserve normal non-terminating error semantics inside Pester tests' {
+    It 'should use directory discovery when excluding Windows integration tests' {
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $runner = Get-Content -LiteralPath $runnerPath -Raw
 
-        $runner | Should -Match '\$testErrorActionPreference = \$ErrorActionPreference'
-        $runner | Should -Match '\$ErrorActionPreference = "Continue"\s*\r?\n\s*\$result = Invoke-Pester'
-        $runner | Should -Match 'finally\s*\{\s*\r?\n\s*\$ErrorActionPreference = \$testErrorActionPreference'
+        $runner | Should -Match '\$Path = @\(\$scriptRoot\)'
+        $runner | Should -Match '\$pesterConfig\.Run\.ExcludePath = @\("\*\*/Integration\.Tests\.ps1"\)'
     }
 }

@@ -123,13 +123,10 @@ if ($MinimumCoverage -gt 0) {
 }
 
 # テストパスの決定
+$excludeIntegration = $false
 if (-not $Path) {
-    $testFiles = Get-ChildItem -Path $scriptRoot -Filter "*.Tests.ps1" -Recurse
-    if (-not $IncludeIntegration) {
-        $testFiles = $testFiles | Where-Object { $_.Name -ne "Integration.Tests.ps1" }
-    }
-
-    $Path = @($testFiles.FullName)
+    $Path = @($scriptRoot)
+    $excludeIntegration = -not $IncludeIntegration
 }
 
 # Pester 設定
@@ -137,6 +134,9 @@ $pesterConfig = New-PesterConfiguration
 
 # テストパス
 $pesterConfig.Run.Path = $Path
+if ($excludeIntegration) {
+    $pesterConfig.Run.ExcludePath = @("**/Integration.Tests.ps1")
+}
 $pesterConfig.Run.Exit = $false
 $pesterConfig.Run.PassThru = $true
 
@@ -182,14 +182,7 @@ Write-Host "Minimum Coverage: $MinimumCoverage%" -ForegroundColor White
 Write-Host ""
 
 # テスト実行
-$testErrorActionPreference = $ErrorActionPreference
-try {
-    $ErrorActionPreference = "Continue"
-    $result = Invoke-Pester -Configuration $pesterConfig
-}
-finally {
-    $ErrorActionPreference = $testErrorActionPreference
-}
+$result = Invoke-Pester -Configuration $pesterConfig
 
 if (-not $result) {
     Write-Host "FAIL: Test runner did not return a result." -ForegroundColor Red
