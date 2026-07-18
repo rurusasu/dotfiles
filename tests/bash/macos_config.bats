@@ -4,6 +4,13 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 }
 
+@test "latest nixpkgs flake evaluation excludes unsupported Intel macOS" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	run nix flake show "$REPO_ROOT" --all-systems --json --no-write-lock-file
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"x86_64-darwin"* ]]
+}
+
 @test "flake exposes a macOS nix-darwin configuration" {
 	grep -q 'darwinConfigurations.macos' "$REPO_ROOT/nix/flakes/darwin.nix"
 	grep -q './darwin.nix' "$REPO_ROOT/nix/flakes/default.nix"

@@ -5,6 +5,7 @@ BeforeAll {
     $script:setsPath = Join-Path $script:repoRoot "nix/packages/sets.nix"
     $script:wingetJsonPath = Join-Path $script:repoRoot "windows/winget/packages.json"
     $script:npmJsonPath = Join-Path $script:repoRoot "windows/npm/packages.json"
+    $script:pnpmJsonPath = Join-Path $script:repoRoot "windows/pnpm/packages.json"
 }
 
 Describe 'Package catalog consistency' {
@@ -105,16 +106,35 @@ Describe 'Package catalog consistency' {
             $postInstallScript | Should -Match 'nix flake update --flake "\$TARGET_DIR"'
         }
 
-        It 'should source gwq from a flake input so nix flake update can move it forward' {
+        It 'should use nixpkgs gwq and keep it out of Windows package providers' {
             $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
-            $gwqPackage = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/packages/gwq/default.nix") -Raw
+            $manifest = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $npmManifest = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $pnpmManifest = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $wiringPaths = @(
+                "nix/packages/sets.nix",
+                "nix/flakes/packages.nix",
+                "nix/home/common.nix",
+                "nix/darwin/default.nix",
+                "nix/modules/host/default.nix",
+                "nix/packages/winget.nix",
+                "nix/packages/support-report.nix"
+            )
+            $wiring = $wiringPaths |
+                ForEach-Object { Get-Content -LiteralPath (Join-Path $script:repoRoot $_) -Raw } |
+                Out-String
 
-            $flake | Should -Match 'gwq-src\s*=\s*\{'
-            $flake | Should -Match 'url\s*=\s*"github:d-kuro/gwq"'
-            $sets | Should -Match 'gwqSrc \? null'
-            $sets | Should -Match 'src = gwqSrc'
-            $gwqPackage | Should -Match 'version = if src == null then "0\.1\.1" else "unstable"'
+            $flake | Should -Not -Match 'gwq-src'
+            $wiring | Should -Not -Match 'gwqSrc|gwq-src'
+            $sets | Should -Match '(?s)gwq\s*=\s*\{.*?pkg\s*=\s*pkgs\.gwq;.*?winget\s*=\s*null;'
+            $sets | Should -Match '(?s)reviewedUnsupported\s*=\s*\{.*?windows\s*=\s*lib\.genAttrs\s*\[.*?"gwq"'
+
+            $wingetSource = @($manifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'gwq' }).Count | Should -Be 0
+            $globalPackages = @($npmManifest.globalPackages) + @($pnpmManifest.globalPackages)
+            @($globalPackages | Where-Object { $_.name -eq 'gwq' -or $_.name -like 'gwq@*' }).Count | Should -Be 0
+            (Join-Path $script:repoRoot "nix/packages/gwq/default.nix") | Should -Not -Exist
         }
     }
 

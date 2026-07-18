@@ -9,7 +9,6 @@ let
   home = builtins.getEnv "DOTFILES_HOME";
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
-    gwqSrc = inputs.gwq-src;
   };
 in
 {

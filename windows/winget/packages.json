@@ -12,6 +12,19 @@
           }
         },
         {
+          "PackageIdentifier": "AgileBits.1Password"
+        },
+        {
+          "PackageIdentifier": "TheBrowserCompany.Arc"
+        },
+        {
+          "PackageIdentifier": "Oven-sh.Bun",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "bun"
+          }
+        },
+        {
           "PackageIdentifier": "twpayne.chezmoi",
           "verifyCommand": {
             "args": ["--version"],
@@ -19,10 +32,34 @@
           }
         },
         {
+          "PackageIdentifier": "Anthropic.Claude"
+        },
+        {
+          "PackageIdentifier": "OpenAI.Codex",
+          "portableLink": {
+            "linkName": "codex.exe",
+            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "codex"
+          }
+        },
+        {
           "PackageIdentifier": "direnv.direnv",
           "verifyCommand": {
             "args": ["--version"],
             "command": "direnv"
+          }
+        },
+        {
+          "PackageIdentifier": "Docker.DockerDesktop"
+        },
+        {
+          "PackageIdentifier": "dprint.dprint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "dprint"
           }
         },
         {
@@ -82,6 +119,9 @@
           }
         },
         {
+          "PackageIdentifier": "Google.Chrome"
+        },
+        {
           "PackageIdentifier": "Google.CloudSDK",
           "installTimeoutSeconds": 900,
           "pathEntries": [
@@ -92,6 +132,13 @@
           "verifyCommand": {
             "args": ["version"],
             "command": "gcloud"
+          }
+        },
+        {
+          "PackageIdentifier": "hadolint.hadolint",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "hadolint"
           }
         },
         {
@@ -226,6 +273,9 @@
           }
         },
         {
+          "PackageIdentifier": "TablePlus.TablePlus"
+        },
+        {
           "PackageIdentifier": "tamasfe.taplo",
           "verifyCommand": {
             "args": ["--version"],
@@ -247,6 +297,9 @@
           }
         },
         {
+          "PackageIdentifier": "Microsoft.VisualStudioCode"
+        },
+        {
           "PackageIdentifier": "Warp.Warp",
           "ciSkipInstall": true,
           "directInstaller": {
@@ -265,6 +318,13 @@
           }
         },
         {
+          "PackageIdentifier": "zig.zig",
+          "verifyCommand": {
+            "args": ["version"],
+            "command": "zig"
+          }
+        },
+        {
           "PackageIdentifier": "ajeetdsouza.zoxide",
           "verifyCommand": {
             "args": ["--version"],
@@ -272,36 +332,7 @@
           }
         },
         {
-          "PackageIdentifier": "AgileBits.1Password"
-        },
-        {
-          "PackageIdentifier": "Anthropic.Claude"
-        },
-        {
-          "PackageIdentifier": "TheBrowserCompany.Arc"
-        },
-        {
-          "PackageIdentifier": "Docker.DockerDesktop"
-        },
-        {
           "PackageIdentifier": "GitHub.Copilot"
-        },
-        {
-          "PackageIdentifier": "dprint.dprint",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "dprint"
-          }
-        },
-        {
-          "PackageIdentifier": "hadolint.hadolint",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "hadolint"
-          }
-        },
-        {
-          "PackageIdentifier": "Google.Chrome"
         },
         {
           "PackageIdentifier": "Microsoft.PowerToys"
@@ -318,9 +349,6 @@
           "installTimeoutSeconds": 1800
         },
         {
-          "PackageIdentifier": "Microsoft.VisualStudioCode"
-        },
-        {
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
@@ -333,36 +361,8 @@
           }
         },
         {
-          "PackageIdentifier": "OpenAI.Codex",
-          "portableLink": {
-            "linkName": "codex.exe",
-            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "codex"
-          }
-        },
-        {
           "PackageIdentifier": "StablyAI.Orca",
           "ciSkipInstall": true
-        },
-        {
-          "PackageIdentifier": "TablePlus.TablePlus"
-        },
-        {
-          "PackageIdentifier": "Oven-sh.Bun",
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "bun"
-          }
-        },
-        {
-          "PackageIdentifier": "zig.zig",
-          "verifyCommand": {
-            "args": ["version"],
-            "command": "zig"
-          }
         }
       ],
       "SourceDetails": {

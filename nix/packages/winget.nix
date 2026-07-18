@@ -10,10 +10,9 @@
 {
   pkgs,
   lib,
-  gwqSrc ? null,
 }:
 let
-  sets = import ./sets.nix { inherit pkgs lib gwqSrc; };
+  sets = import ./sets.nix { inherit pkgs lib; };
 
   # Attach verifyCommand to a package object if defined in verifyMap
   attachVerify =
