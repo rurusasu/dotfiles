@@ -1,6 +1,18 @@
 # GitHub CLI token switching for personal/work repositories.
 # Sourced by ~/.bashrc after 1Password-managed secrets are loaded.
 
+_dotfiles_bind_zsh_delete_keys() {
+  [ -n "${ZSH_VERSION:-}" ] || return 0
+
+  bindkey '^?' backward-delete-char
+  bindkey '^H' backward-delete-char
+  zmodload -F zsh/terminfo +p:terminfo 2>/dev/null || true
+  eval 'if [[ -n "${terminfo[kdch1]:-}" ]]; then bindkey "${terminfo[kdch1]}" delete-char; fi'
+  bindkey '^[[3~' delete-char
+}
+
+_dotfiles_bind_zsh_delete_keys
+
 _dotfiles_git_remote_is_work() {
   command -v git >/dev/null 2>&1 || return 1
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
