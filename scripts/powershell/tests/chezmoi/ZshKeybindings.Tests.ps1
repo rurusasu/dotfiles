@@ -5,7 +5,7 @@ BeforeAll {
 }
 
 Describe 'zsh keybindings' {
-    It 'binds delete keys explicitly for terminal compatibility' {
+    It 'should bind delete keys explicitly for terminal compatibility' {
         $homeManagerZsh = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/common.nix") -Raw
         $zshHelper = Get-Content -LiteralPath (Join-Path $script:repoRoot "chezmoi/dot_config/shell/gh-token-switch.sh") -Raw
 
