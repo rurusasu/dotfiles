@@ -68,7 +68,7 @@ in
         imports = [ ../home/common.nix ];
 
         programs.zsh.shellAliases = {
-          nrs = "sudo /usr/bin/env \"NIX_CONFIG=extra-experimental-features = nix-command flakes\" \"DOTFILES_USER=$USER\" \"DOTFILES_HOME=$HOME\" nix run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure";
+          nrs = "nix_bin=$(command -v nix) && sudo /usr/bin/env \"NIX_CONFIG=extra-experimental-features = nix-command flakes\" \"DOTFILES_USER=$USER\" \"DOTFILES_HOME=$HOME\" \"$nix_bin\" run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure";
         };
       };
     extraSpecialArgs = { inherit inputs; };

@@ -37,6 +37,6 @@ setup() {
 }
 
 @test "macOS rebuild alias runs nix-darwin switch" {
-	grep -q 'nrs = "sudo /usr/bin/env' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'nix run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -Fq 'nrs = "nix_bin=$(command -v nix) && sudo /usr/bin/env' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -Fq '\"$nix_bin\" run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure' "$REPO_ROOT/nix/darwin/default.nix"
 }
