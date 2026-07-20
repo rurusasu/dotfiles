@@ -2134,7 +2134,7 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $account = [string]$ctx.GetOption("HermesAgent1PasswordAccount", "my.1password.com")
-        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "Private")
+        $vault = [string]$ctx.GetOption("HermesAgent1PasswordVault", "openclaw")
         $item = [string]$ctx.GetOption("HermesAgent1PasswordItem", "Hermes Agent Dashboard")
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments
@@ -2232,7 +2232,7 @@ class HermesAgentHandler : SetupHandlerBase {
             "HermesAgentSlack1PasswordAccount",
             "HermesAgentSlack1PasswordVault",
             "HermesAgentSlack1PasswordItem",
-            "SlackBot-Hermes"
+            "SlackBot-OpenClaw"
         )
     }
 
@@ -2269,7 +2269,7 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         $account = [string]$ctx.GetOption($accountOption, "my.1password.com")
-        $vault = [string]$ctx.GetOption($vaultOption, "Private")
+        $vault = [string]$ctx.GetOption($vaultOption, "openclaw")
         $item = [string]$ctx.GetOption($itemOption, $defaultItem)
         $arguments = @("item", "get", $item, "--account", $account, "--vault", $vault, "--format", "json")
         $result = Invoke-OpCommand -OpExe $opExe -Arguments $arguments

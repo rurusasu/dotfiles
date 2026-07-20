@@ -989,7 +989,7 @@ Describe 'HermesAgentHandler' {
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "Private"
+                $Arguments -contains "openclaw"
             }
         }
 
@@ -1040,7 +1040,7 @@ Describe 'HermesAgentHandler' {
             }
         }
 
-        It 'should configure Slack environment from the Hermes 1Password item' {
+        It 'should configure Slack environment from the OpenClaw 1Password item' {
             $ctx.Options["HermesAgentSlack1PasswordEnabled"] = $true
             $onePasswordItemJson = @{
                 fields = @(
@@ -1076,7 +1076,7 @@ Describe 'HermesAgentHandler' {
                 )
                 $null = $OpExe
                 $null = $TimeoutSeconds
-                if ($Arguments -contains "SlackBot-Hermes") {
+                if ($Arguments -contains "SlackBot-OpenClaw") {
                     return [PSCustomObject]@{ Output = @($onePasswordItemJson); ExitCode = 0 }
                 }
                 return [PSCustomObject]@{ Output = @("not found"); ExitCode = 1 }
@@ -1094,11 +1094,11 @@ Describe 'HermesAgentHandler' {
                 $OpExe -eq "C:\op.exe" -and
                 $Arguments[0] -eq "item" -and
                 $Arguments[1] -eq "get" -and
-                $Arguments -contains "SlackBot-Hermes" -and
+                $Arguments -contains "SlackBot-OpenClaw" -and
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "Private"
+                $Arguments -contains "openclaw"
             }
         }
 
@@ -1175,7 +1175,7 @@ Describe 'HermesAgentHandler' {
                 $Arguments -contains "--account" -and
                 $Arguments -contains "my.1password.com" -and
                 $Arguments -contains "--vault" -and
-                $Arguments -contains "Private"
+                $Arguments -contains "openclaw"
             }
         }
 
