@@ -85,10 +85,12 @@ The bootstrap manifest maps each target to a source and ref:
 | Shared lifelog | `rurusasu/lifelog`                 | `main` | Locked read-write Git sync      |
 
 Named profile repositories must add `distribution.yaml`. The bootstrap invokes
-Hermes' official distribution commands so `.env`, `auth.json`, memories,
-sessions, logs, workspaces, and other user-owned paths remain untouched.
-`--force-config` is used because GitHub is the source of truth for declarative
-profile configuration.
+Hermes' official distribution API so `.env`, `auth.json`, memories, sessions,
+logs, workspaces, and other user-owned paths remain untouched. It stages the
+declared ref first, then uses forced distribution installation for both initial
+and existing profiles. This replaces `config.yaml` with the same ownership
+result as `profile update --force-config` without performing a second,
+unpinned network fetch.
 
 Hermes explicitly rejects installing a distribution as `default`, so
 `hermes-home` uses `root-distribution.yaml`. It lists the root-owned paths that
@@ -153,11 +155,12 @@ The image installs a `/usr/local/bin/hermes-bootstrap` command. It owns:
 The shell and PowerShell adapters only:
 
 1. verify Docker, `op`, and host prerequisites;
-2. read the shared non-secret bootstrap manifest;
-3. retrieve the declared 1Password fields;
-4. stream a versioned JSON payload to `hermes-bootstrap` over stdin;
-5. propagate the bootstrap exit status;
-6. start or recreate the Hermes Compose services after success.
+2. request the non-secret item plan that `hermes-bootstrap` derives from the
+   shared manifest;
+3. retrieve each declared 1Password item and stream it immediately as a
+   versioned JSON payload to `hermes-bootstrap` over stdin;
+4. propagate the bootstrap exit status;
+5. start or recreate the Hermes Compose services after success.
 
 Secret values are never passed as command arguments. The adapters do not
 implement `.env`, profile, Git, or config merge behavior.
@@ -236,27 +239,35 @@ so the same wrapper works for default and named profiles.
 ## Apply Sequence
 
 1. Build the Hermes image and validate the Compose model.
-2. Retrieve all required 1Password values on the host.
-3. Start `hermes-bootstrap` with the payload on stdin.
+2. Request and validate the non-secret 1Password item plan.
+3. Start `hermes-bootstrap`, retrieving each required item on the host and
+   streaming it directly to stdin.
 4. Parse the payload without logging it.
 5. Validate all required fields, GitHub authentication, manifests, refs, and
    repository access.
 6. Stage root and profile distributions before modifying runtime targets.
-7. Snapshot every managed target and record a transaction journal.
-8. Apply the root distribution.
-9. Install or update each named profile through the Hermes distribution API.
-10. Clone, migrate, or synchronize shared repositories under
+7. Acquire each shared-repository lock and complete remote synchronization.
+8. Snapshot every locally managed target and record a transaction journal.
+9. Apply the root distribution.
+10. Apply each named profile through the Hermes distribution API.
+11. Clone, migrate, or synchronize shared working trees under
     `/opt/data/shared/`.
-11. Atomically update root and profile `.env` files with mode `0600` while
+12. Atomically update root and profile `.env` files with mode `0600` while
     preserving unmanaged keys.
-12. Validate the final layout and `gh` authentication in every profile context.
-13. Remove the transaction journal and report changed targets without values.
-14. Recreate the Hermes gateway and run health checks.
+13. Validate the final layout and `gh` authentication in every profile context.
+14. Remove the transaction journal and report changed targets without values.
+15. Recreate the Hermes gateway and run health checks.
 
 An existing gateway may remain running during validation and staging. Runtime
 files are replaced atomically, and the gateway is recreated only after the
 transaction succeeds. On failure, the bootstrap rolls back and the installer
 returns non-zero without replacing the running gateway.
+
+Remote commit and push operations are outside the local transaction boundary
+because they cannot be rolled back safely. They complete before local runtime
+files change. If a later local apply fails, the remote synchronization remains
+valid and the next installer run resumes idempotently; root, profile, shared
+working-tree migration, and `.env` changes under `/opt/data` are rolled back.
 
 ## Migration
 

@@ -1,0 +1,319 @@
+# Hermes Distribution Repositories Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Convert `hermes-home`, Rick, Hoffman, and Risarisa into explicit declarative sources for the OS-independent bootstrap while preserving the writable `lifelog` repository as shared runtime data.
+
+**Architecture:** The three named profiles use Hermes 0.18.2 `distribution.yaml`; the default profile uses the bootstrap-owned `root-distribution.yaml` because Hermes rejects a distribution named `default`. Root-owned config, cron, scripts, policy, and docs move out of dotfiles-generated PowerShell into `rurusasu/hermes-home`. `rurusasu/lifelog` remains a normal read-write Git repository and is never nested in the root distribution.
+
+**Tech Stack:** GitHub private repositories, YAML, Hermes Agent 0.18.2 profile distribution API, Docker, GitHub Actions
+
+## Global Constraints
+
+- Execute each repository change in its own `codex/hermes-distribution-*` branch and worktree.
+- Never copy `.env`, `auth.json`, memories, sessions, logs, browser state, OAuth caches, or token values into a source repository.
+- Keep `main` as the declared source ref and use pull requests; merge profile repositories before enabling the dotfiles bootstrap.
+- Use `hermes_requires: ">=0.18.2"` and start every new distribution manifest at version `0.1.0`.
+- Treat `config.yaml`, `SOUL.md`, policy docs, cron definitions, scripts, and MCP declarations as source-repository-owned content after this migration.
+- Keep `/opt/data/shared/lifelog` as the canonical runtime path. `/opt/data/core/lifelog` is only a compatibility symlink created by bootstrap.
+- Run secret scans and inspect every staged diff before pushing.
+
+---
+
+## Task 1: Prepare isolated repository worktrees and capture baselines
+
+**Repositories:**
+
+- `rurusasu/hermes-home`
+- `rurusasu/hermes-profile-rick`
+- `rurusasu/hermes-profile-hoffman`
+- `rurusasu/hermes-profile-risarisa`
+- `rurusasu/lifelog` (read-only inspection in this task)
+
+- [ ] Create one sibling worktree per repository from its current `main` branch.
+
+```bash
+gh repo clone rurusasu/hermes-home ../hermes-home
+git -C ../hermes-home worktree add ../hermes-home-distribution -b codex/hermes-distribution-root main
+gh repo clone rurusasu/hermes-profile-rick ../hermes-profile-rick
+git -C ../hermes-profile-rick worktree add ../hermes-profile-rick-distribution -b codex/hermes-distribution-rick main
+gh repo clone rurusasu/hermes-profile-hoffman ../hermes-profile-hoffman
+git -C ../hermes-profile-hoffman worktree add ../hermes-profile-hoffman-distribution -b codex/hermes-distribution-hoffman main
+gh repo clone rurusasu/hermes-profile-risarisa ../hermes-profile-risarisa
+git -C ../hermes-profile-risarisa worktree add ../hermes-profile-risarisa-distribution -b codex/hermes-distribution-risarisa main
+```
+
+Expected: every worktree reports a clean branch based on the repository's current `main`.
+
+- [ ] Record the current tracked top-level paths without reading any local runtime home.
+
+```bash
+git -C ../hermes-home-distribution ls-tree --name-only HEAD
+git -C ../hermes-profile-rick-distribution ls-tree --name-only HEAD
+git -C ../hermes-profile-hoffman-distribution ls-tree --name-only HEAD
+git -C ../hermes-profile-risarisa-distribution ls-tree --name-only HEAD
+```
+
+- [ ] Confirm the current manifests fail the Hermes distribution contract before adding them.
+
+```bash
+docker run --rm -v ../hermes-profile-rick-distribution:/distribution:ro --entrypoint python local/hermes-agent-gh:latest -c "from pathlib import Path; from hermes_cli.profile_distribution import plan_install; plan_install('/distribution', Path('/tmp/stage'))"
+```
+
+Expected: `DistributionError` reports that `distribution.yaml` is missing. Repeat for Hoffman and Risarisa.
+
+- [ ] Inspect the lifelog repository root and verify that `AGENTS.md` already describes repository-local behavior.
+
+```bash
+GH_TOKEN="$(op item get GitHubUsedOpenClawPAT --account my.1password.com --vault openclaw --fields credential --reveal)" gh api repos/rurusasu/lifelog/contents --jq '.[].name'
+```
+
+Expected: `AGENTS.md` exists; no distribution manifest is added to `lifelog`.
+
+## Task 2: Convert Rick to an official Hermes distribution
+
+**Files:**
+
+- Create: `../hermes-profile-rick-distribution/distribution.yaml`
+- Modify: `../hermes-profile-rick-distribution/config.yaml`
+- Modify: `../hermes-profile-rick-distribution/SOUL.md`
+- Verify: `../hermes-profile-rick-distribution/profile.yaml`
+- Verify: `../hermes-profile-rick-distribution/slack-manifest.json`
+
+- [ ] Add `distribution.yaml` with the exact distribution identity and owned paths.
+
+```yaml
+name: rick
+version: 0.1.0
+description: Software engineering tech lead profile
+hermes_requires: ">=0.18.2"
+author: rurusasu
+license: private
+distribution_owned:
+  - SOUL.md
+  - config.yaml
+  - profile.yaml
+  - slack-manifest.json
+  - assets/
+  - skills/
+```
+
+- [ ] Normalize `config.yaml` so it contains the intended model, Slack mention policy, terminal environment passthrough, and non-secret MCP declarations. Remove copied GitHub, Slack, dashboard, or profile-specific secret values.
+
+- [ ] Update `SOUL.md` repository policy to name `/opt/data/shared/lifelog` as the shared knowledge repository and to forbid commits from `/opt/data/profiles/rick`.
+
+- [ ] Validate the manifest with the actual Hermes 0.18.2 parser.
+
+```bash
+docker run --rm -v ../hermes-profile-rick-distribution:/distribution:ro --entrypoint python local/hermes-agent-gh:latest -c "from pathlib import Path; from hermes_cli.profile_distribution import plan_install; p=plan_install('/distribution', Path('/tmp/stage')); assert p.manifest.name == 'rick'; assert p.manifest.version == '0.1.0'"
+```
+
+Expected: exit code `0` and no output.
+
+- [ ] Test user-owned data preservation in a temporary container home.
+
+```bash
+docker run --rm -v ../hermes-profile-rick-distribution:/distribution:ro --entrypoint sh local/hermes-agent-gh:latest -c 'set -eu; export HERMES_HOME=/tmp/hermes; mkdir -p /tmp/hermes/profiles/rick/memories; printf keep >/tmp/hermes/profiles/rick/memories/probe; printf SECRET=keep >/tmp/hermes/profiles/rick/.env; hermes profile install /distribution --name rick --force -y; test "$(cat /tmp/hermes/profiles/rick/memories/probe)" = keep; test "$(cat /tmp/hermes/profiles/rick/.env)" = SECRET=keep'
+```
+
+Expected: exit code `0`; `.env` and `memories/probe` remain unchanged.
+
+- [ ] Run the repository's existing checks, inspect `git diff --check`, commit, push, open a PR, and wait for green checks.
+
+```bash
+git -C ../hermes-profile-rick-distribution diff --check
+git -C ../hermes-profile-rick-distribution add distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
+git -C ../hermes-profile-rick-distribution commit -m "feat: publish Rick Hermes distribution"
+git -C ../hermes-profile-rick-distribution push -u origin codex/hermes-distribution-rick
+gh pr create --repo rurusasu/hermes-profile-rick --base main --head codex/hermes-distribution-rick --title "feat: publish Rick Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
+```
+
+## Task 3: Convert Hoffman to an official Hermes distribution
+
+**Files:**
+
+- Create: `../hermes-profile-hoffman-distribution/distribution.yaml`
+- Modify: `../hermes-profile-hoffman-distribution/config.yaml`
+- Modify: `../hermes-profile-hoffman-distribution/SOUL.md`
+- Verify: `../hermes-profile-hoffman-distribution/profile.yaml`
+- Verify: `../hermes-profile-hoffman-distribution/slack-manifest.json`
+
+- [ ] Add the same manifest schema with these identity fields and the same owned-path list as Rick.
+
+```yaml
+name: hoffman
+version: 0.1.0
+description: Financial management profile
+hermes_requires: ">=0.18.2"
+author: rurusasu
+license: private
+```
+
+- [ ] Normalize non-secret model, Slack, terminal passthrough, and MCP config; update `SOUL.md` to use `/opt/data/shared/lifelog` and forbid profile-home Git commits.
+
+- [ ] Run the parser and preservation tests from Task 2 with `hoffman` substituted for `rick`.
+
+- [ ] Run repository checks, inspect the diff, commit, push, open a PR, and wait for green checks.
+
+```bash
+git -C ../hermes-profile-hoffman-distribution diff --check
+git -C ../hermes-profile-hoffman-distribution add distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
+git -C ../hermes-profile-hoffman-distribution commit -m "feat: publish Hoffman Hermes distribution"
+git -C ../hermes-profile-hoffman-distribution push -u origin codex/hermes-distribution-hoffman
+gh pr create --repo rurusasu/hermes-profile-hoffman --base main --head codex/hermes-distribution-hoffman --title "feat: publish Hoffman Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
+```
+
+## Task 4: Convert Risarisa to an official Hermes distribution
+
+**Files:**
+
+- Create: `../hermes-profile-risarisa-distribution/distribution.yaml`
+- Modify: `../hermes-profile-risarisa-distribution/config.yaml`
+- Modify: `../hermes-profile-risarisa-distribution/SOUL.md`
+- Verify: `../hermes-profile-risarisa-distribution/slack-manifest.json`
+
+- [ ] Add a manifest that lists only paths actually present in this repository. Do not invent a `profile.yaml` role contract.
+
+```yaml
+name: risarisa
+version: 0.1.0
+description: Dedicated Risarisa Hermes profile
+hermes_requires: ">=0.18.2"
+author: rurusasu
+license: private
+distribution_owned:
+  - SOUL.md
+  - config.yaml
+  - slack-manifest.json
+  - skills/
+```
+
+- [ ] Normalize non-secret model, Slack, terminal passthrough, and MCP config; update `SOUL.md` to use `/opt/data/shared/lifelog` and forbid profile-home Git commits.
+
+- [ ] Run the parser and preservation tests from Task 2 with `risarisa` substituted for `rick`.
+
+- [ ] Run repository checks, inspect the diff, commit, push, open a PR, and wait for green checks.
+
+```bash
+git -C ../hermes-profile-risarisa-distribution diff --check
+git -C ../hermes-profile-risarisa-distribution add distribution.yaml config.yaml SOUL.md slack-manifest.json
+git -C ../hermes-profile-risarisa-distribution commit -m "feat: publish Risarisa Hermes distribution"
+git -C ../hermes-profile-risarisa-distribution push -u origin codex/hermes-distribution-risarisa
+gh pr create --repo rurusasu/hermes-profile-risarisa --base main --head codex/hermes-distribution-risarisa --title "feat: publish Risarisa Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
+```
+
+## Task 5: Define the default/root distribution contract
+
+**Files:**
+
+- Create: `../hermes-home-distribution/root-distribution.yaml`
+- Modify: `../hermes-home-distribution/config.yaml`
+- Modify: `../hermes-home-distribution/SOUL.md`
+- Modify: `../hermes-home-distribution/profile.yaml`
+- Modify: `../hermes-home-distribution/slack-manifest.json`
+- Create or modify: `../hermes-home-distribution/docs/profile-home-layout.md`
+- Create or modify: `../hermes-home-distribution/docs/slack-app-registration.md`
+
+- [ ] Add the bootstrap-owned root manifest with explicit replacement boundaries.
+
+```yaml
+schema_version: 1
+name: default
+version: 0.1.0
+description: Default Hermes root profile
+hermes_requires: ">=0.18.2"
+distribution_owned:
+  - SOUL.md
+  - config.yaml
+  - profile.yaml
+  - slack-manifest.json
+  - assets/
+  - cron/
+  - docs/
+  - scripts/
+  - skills/
+```
+
+- [ ] Port the final declarative behavior currently emitted by `Handler.HermesAgent.ps1` into `config.yaml`: model selection, Slack mention policy, terminal GitHub-token passthrough, Browser MCP, X docs, and the X API wrapper. Store endpoint names and commands only; store no credentials.
+
+- [ ] Update `SOUL.md` and `docs/profile-home-layout.md` to state that `/opt/data` and `/opt/data/profiles/*` are runtime homes, not Git repositories; all profiles read and write the single `/opt/data/shared/lifelog` checkout.
+
+- [ ] Port the Slack registration guide currently generated by PowerShell into `docs/slack-app-registration.md`, using environment variable names and the configured viewer port rather than embedded credentials.
+
+- [ ] Verify every `distribution_owned` entry exists and all resolved paths remain under the checkout.
+
+```bash
+docker run --rm -v ../hermes-home-distribution:/distribution:ro --entrypoint python local/hermes-agent-gh:latest -c "from pathlib import Path; import yaml; root=Path('/distribution').resolve(); data=yaml.safe_load((root/'root-distribution.yaml').read_text()); assert data['schema_version']==1; missing=[p for p in data['distribution_owned'] if not (root/p.rstrip('/')).exists()]; assert not missing, missing; assert all((root/p.rstrip('/')).resolve().is_relative_to(root) for p in data['distribution_owned'])"
+```
+
+Expected: exit code `0` and no output.
+
+## Task 6: Replace root-home Git sync with shared lifelog sync
+
+**Files:**
+
+- Delete: `../hermes-home-distribution/scripts/hermes_home_sync.sh`
+- Create: `../hermes-home-distribution/scripts/lifelog_sync.sh`
+- Modify: `../hermes-home-distribution/cron/jobs.json`
+- Modify: `../hermes-home-distribution/SOUL.md`
+
+- [ ] Add `scripts/lifelog_sync.sh` as the single default-profile sync entrypoint. It must acquire `/opt/data/locks/repositories/lifelog.lock`, require `/opt/data/shared/lifelog` to be the `rurusasu/lifelog` checkout, reject likely secret/runtime paths, commit allowed changes, fetch `origin/main`, rebase, and push.
+
+- [ ] Keep authentication delegated to `/usr/local/bin/gh` and Git `GIT_ASKPASS`; do not write a token into the script or remote URL.
+
+- [ ] Replace the obsolete root-home sync cron entry with a default-profile-only lifelog sync job invoking `/opt/data/scripts/lifelog_sync.sh`. Preserve the article-news Slack job, but point all content paths at `/opt/data/shared/lifelog`.
+
+- [ ] Add shell syntax and JSON checks.
+
+```bash
+bash -n ../hermes-home-distribution/scripts/lifelog_sync.sh
+jq -e '.jobs | type == "array"' ../hermes-home-distribution/cron/jobs.json
+rg -n '/opt/data/core/lifelog|hermes_home_sync|/opt/data/.git' ../hermes-home-distribution
+```
+
+Expected: syntax and JSON checks pass; the final search returns no stale runtime-root Git assumptions.
+
+- [ ] Validate the root manifest again, run repository checks, inspect the full diff, and scan for credentials.
+
+```bash
+git -C ../hermes-home-distribution diff --check
+git -C ../hermes-home-distribution grep -nE 'ghp_[A-Za-z0-9]+|xox[baprs]-|HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=' -- ':!*.example' ':!*.md'
+```
+
+Expected: `git diff --check` succeeds and the credential search prints nothing.
+
+- [ ] Commit, push, open a PR, and wait for green checks.
+
+```bash
+git -C ../hermes-home-distribution add root-distribution.yaml SOUL.md config.yaml profile.yaml slack-manifest.json cron docs scripts skills assets
+git -C ../hermes-home-distribution commit -m "feat: define Hermes root distribution"
+git -C ../hermes-home-distribution push -u origin codex/hermes-distribution-root
+gh pr create --repo rurusasu/hermes-home --base main --head codex/hermes-distribution-root --title "feat: define Hermes root distribution" --body "Defines the root-owned declarative paths and moves shared lifelog policy and sync behavior into the Hermes source repository."
+```
+
+## Task 7: Merge and pin the source-repository contract
+
+- [ ] Merge the three named-profile PRs after their checks pass.
+
+- [ ] Merge the `hermes-home` PR after the named distributions are available.
+
+- [ ] Record each merged `main` commit SHA in the dotfiles bootstrap implementation PR description for auditability; the runtime manifest continues tracking `main` as approved.
+
+- [ ] Re-run remote manifest validation directly from fresh clones using the Hermes image.
+
+```bash
+docker run --rm --entrypoint hermes local/hermes-agent-gh:latest profile install --help
+docker run --rm --entrypoint hermes local/hermes-agent-gh:latest profile update --help
+```
+
+Expected: install exposes `--force`; update exposes `--force-config`, confirming the target Hermes CLI contract.
+
+- [ ] Confirm `rurusasu/lifelog` remains a standalone repository with `AGENTS.md`, no `distribution.yaml`, and no Hermes runtime secrets.
+
+## Completion Criteria
+
+- All four source PRs are merged with green checks.
+- Rick, Hoffman, and Risarisa pass Hermes 0.18.2 distribution parsing and user-data preservation probes.
+- `hermes-home/root-distribution.yaml` owns only explicit declarative paths.
+- Root cron and scripts sync `/opt/data/shared/lifelog`; no code treats `/opt/data` as a Git checkout.
+- No source repository contains a secret or mutable Hermes runtime path.
