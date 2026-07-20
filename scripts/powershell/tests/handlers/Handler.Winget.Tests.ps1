@@ -15,9 +15,31 @@ BeforeAll {
 
 Describe 'WingetHandler' {
     BeforeEach {
+        $script:origUserProfileForWingetTests = $env:USERPROFILE
+        $env:USERPROFILE = Join-Path $TestDrive "UserProfile"
         $script:handler = [WingetHandler]::new()
-        $script:ctx = [SetupContext]::new("D:\dotfiles")
+        $script:ctx = [SetupContext]::new((Join-Path $TestDrive "dotfiles"))
+        Mock Test-Path {
+            param($Path, $LiteralPath, $PathType)
+
+            $candidate = if ($null -ne $LiteralPath) { $LiteralPath } else { $Path }
+            if ($null -eq $candidate) { return $false }
+
+            $candidatePath = [string]$candidate
+            switch ([string]$PathType) {
+                "Leaf" { return [System.IO.File]::Exists($candidatePath) }
+                "Container" { return [System.IO.Directory]::Exists($candidatePath) }
+                default {
+                    return [System.IO.File]::Exists($candidatePath) -or
+                        [System.IO.Directory]::Exists($candidatePath)
+                }
+            }
+        }
         Mock Update-ProcessEnvironmentPath { }
+    }
+
+    AfterEach {
+        $env:USERPROFILE = $script:origUserProfileForWingetTests
     }
 
     Context 'Constructor' {
@@ -841,7 +863,7 @@ Describe 'WingetHandler' {
                 $global:LASTEXITCODE = 0
             }
             Mock Test-Path { return $true } -ParameterFilter { $Path -like "*\.cargo\bin" }
-            $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+            $cargoBin = "$env:USERPROFILE\.cargo\bin"
             Mock Get-UserEnvironmentPath { return "C:\Windows;$cargoBin" }.GetNewClosure()
             Mock Set-UserEnvironmentPath { }
         }
@@ -1137,145 +1159,6 @@ Describe 'WingetHandler' {
         }
     }
 
-    Context 'Apply - import mode: Warp direct installer' {
-        BeforeEach {
-            $script:wingetInstallCalls = 0
-            $script:downloadUri = $null
-            $script:downloadOutFile = $null
-            $script:installerCommand = $null
-            $script:installerArguments = @()
-            $script:installerTimeoutSeconds = 0
-            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Test-PathExist { return $true }
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
-            Mock Get-JsonContent {
-                return [PSCustomObject]@{
-                    Sources = @(
-                        [PSCustomObject]@{
-                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
-                            Packages      = @(
-                                [PSCustomObject]@{
-                                    PackageIdentifier = "Warp.Warp"
-                                    ciSkipInstall     = $true
-                                    directInstaller   = [PSCustomObject]@{
-                                        type           = "warpInnoLatest"
-                                        timeoutSeconds = 900
-                                        installerArgs  = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER")
-                                    }
-                                }
-                            )
-                        }
-                    )
-                }
-            }
-            Mock Invoke-Winget {
-                param($Arguments, $TimeoutSeconds)
-                if ($Arguments -contains "install") {
-                    $script:wingetInstallCalls++
-                    throw "winget install should not be used for Warp direct installer"
-                }
-                if ($Arguments -contains "show" -and $Arguments -contains "--versions") {
-                    $TimeoutSeconds | Should -Be 60
-                    $global:LASTEXITCODE = 0
-                    return @(
-                        "見つかりました Warp [Warp.Warp]",
-                        "バージョン",
-                        "-----------------------------",
-                        "v0.2026.06.03.09.49.stable_02",
-                        "v0.2026.06.03.09.49.stable_01"
-                    )
-                }
-
-                $global:LASTEXITCODE = 1
-                return @()
-            }
-            Mock Invoke-WebRequestSafe {
-                param($Uri, $OutFile)
-                $script:downloadUri = $Uri
-                $script:downloadOutFile = $OutFile
-                New-Item -ItemType Directory -Path (Split-Path -Parent $OutFile) -Force | Out-Null
-                Set-Content -LiteralPath $OutFile -Value "MZ" -NoNewline
-            }
-            Mock Invoke-ExternalCommandWithTimeout {
-                param($Command, $Arguments, $TimeoutSeconds)
-                $script:installerCommand = $Command
-                $script:installerArguments = @($Arguments)
-                $script:installerTimeoutSeconds = $TimeoutSeconds
-                $global:LASTEXITCODE = 0
-                return "installed Warp"
-            }
-        }
-
-        It 'should install Warp with the latest direct user-scope Inno installer' {
-            $ctx.Options["WingetMode"] = "import"
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
-            $script:wingetInstallCalls | Should -Be 0
-            $script:downloadUri | Should -Be "https://app.warp.dev/download/windows?version=v0.2026.06.03.09.49.stable_02&arch=x86_64"
-            $script:installerCommand | Should -Be $script:downloadOutFile
-            $script:installerArguments | Should -Contain "/CURRENTUSER"
-            $script:installerArguments | Should -Contain "/VERYSILENT"
-            $script:installerTimeoutSeconds | Should -Be 900
-        }
-
-        It 'should treat a failed Warp direct installer as success when the latest version is already installed' {
-            Mock Invoke-Winget {
-                param($Arguments, $TimeoutSeconds)
-                if ($Arguments -contains "install") {
-                    $script:wingetInstallCalls++
-                    throw "winget install should not be used for Warp direct installer"
-                }
-                if ($Arguments -contains "show" -and $Arguments -contains "--versions") {
-                    $TimeoutSeconds | Should -Be 60
-                    $global:LASTEXITCODE = 0
-                    return @(
-                        "見つかりました Warp [Warp.Warp]",
-                        "バージョン",
-                        "-----------------------------",
-                        "v0.2026.06.03.09.49.stable_02",
-                        "v0.2026.06.03.09.49.stable_01"
-                    )
-                }
-                if ($Arguments -contains "list" -and $Arguments -contains "--id") {
-                    $global:LASTEXITCODE = 0
-                    return @(
-                        "名前 ID        バージョン                    ソース",
-                        "----------------------------------------------------",
-                        "Warp Warp.Warp v0.2026.06.03.09.49.stable_02 winget"
-                    )
-                }
-                if ($Arguments -contains "list") {
-                    $global:LASTEXITCODE = 0
-                    return @(
-                        "Name Id Version Source",
-                        "Warp Warp.Warp v0.2026.06.03.09.49.stable_02 winget"
-                    )
-                }
-
-                $global:LASTEXITCODE = 1
-                return @()
-            }
-            Mock Invoke-ExternalCommandWithTimeout {
-                param($Command, $Arguments, $TimeoutSeconds)
-                $script:installerCommand = $Command
-                $script:installerArguments = @($Arguments)
-                $script:installerTimeoutSeconds = $TimeoutSeconds
-                $global:LASTEXITCODE = 1
-                return "installer exited with code 1"
-            }
-
-            $ctx.Options["WingetMode"] = "import"
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
-            $script:wingetInstallCalls | Should -Be 0
-            $script:installerCommand | Should -Be $script:downloadOutFile
-        }
-    }
-
     Context 'Apply - import mode: package portableLink' {
         BeforeEach {
             $script:origLocalAppData = $env:LOCALAPPDATA
@@ -1314,6 +1197,7 @@ Describe 'WingetHandler' {
             Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
             Mock Set-UserEnvironmentPath { }
+            Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Mock Copy-Item { }
         }

@@ -34,9 +34,8 @@ _dcnvim_shell_quote() {
 }
 
 # devcontainer: enter the project's devcontainer in a tmux session and start
-# nvim inside it. Terminal-agnostic (works in WezTerm, Windows Terminal, Warp,
-# etc.). Re-running attaches to the existing tmux session so nvim state
-# survives terminal close.
+# nvim inside it. Terminal-agnostic; re-running attaches to the existing tmux
+# session so nvim state survives terminal close.
 #
 # Usage: dcnvim [workspace-folder]
 #   No arg + cwd has .devcontainer  -> use cwd

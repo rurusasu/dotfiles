@@ -226,11 +226,6 @@ let
       winget = "Starship.Starship";
       category = "terminal";
     };
-    warp-terminal = {
-      pkg = pkgs.warp-terminal;
-      winget = "Warp.Warp";
-      category = "terminal";
-    };
 
     # ── editors ───────────────────────────────────────────
     neovim = {
@@ -335,6 +330,21 @@ let
         };
       };
     };
+    dia-browser = {
+      category = "desktop";
+      support = {
+        windows = {
+          unsupported = "Vendor currently ships Dia for macOS only";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "thebrowsercompany-dia";
+        };
+        linux = {
+          unsupported = "Vendor currently ships Dia for macOS only";
+        };
+      };
+    };
     google-chrome = {
       pkg = pkgs.google-chrome;
       winget = "Google.Chrome";
@@ -343,6 +353,34 @@ let
         darwin = {
           provider = "homebrew-cask";
           cask = "google-chrome";
+        };
+      };
+    };
+    orca-editor = {
+      winget = "StablyAI.Orca";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "stablyai/orca/orca";
+        };
+        linux = {
+          unsupported = "No reviewed Linux desktop package provider is selected";
+        };
+      };
+    };
+    raycast = {
+      category = "desktop";
+      support = {
+        windows = {
+          unsupported = "Managed only on macOS in this dotfiles profile";
+        };
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "raycast";
+        };
+        linux = {
+          unsupported = "Vendor does not publish a Linux build";
         };
       };
     };
@@ -679,7 +717,6 @@ let
       mkWindowsOnlySupport "winget" "Windows compiler toolchain";
     "Microsoft.WindowsTerminal" = mkWindowsOnlySupport "winget" "Windows shell host";
     "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Windows subsystem component";
-    "StablyAI.Orca" = mkWindowsOnlySupport "winget" "Windows application package";
     "9NT1R1C2HH7J" = mkWindowsOnlySupport "msstore" "Windows Store application";
     "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "Windows Store desktop application";
   };
@@ -987,18 +1024,7 @@ lib.mapAttrs (_: resolve) grouped
     "Microsoft.VisualStudio.2022.BuildTools" = 1800;
   };
 
-  wingetDirectInstallers = {
-    warp-terminal = {
-      type = "warpInnoLatest";
-      timeoutSeconds = 900;
-      installerArgs = [
-        "/VERYSILENT"
-        "/SUPPRESSMSGBOXES"
-        "/NORESTART"
-        "/CURRENTUSER"
-      ];
-    };
-  };
+  wingetDirectInstallers = { };
 
   # Packages kept in the catalog but skipped by the normal Windows installer.
   wingetSkipInstall = { };
@@ -1007,7 +1033,6 @@ lib.mapAttrs (_: resolve) grouped
   # hang in CI. Avoid making CI depend on their live installer behavior.
   wingetCiSkipInstall = {
     wezterm = true;
-    warp-terminal = true;
     "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
   };
@@ -1097,7 +1122,6 @@ lib.mapAttrs (_: resolve) grouped
       "Microsoft.VisualStudio.2022.BuildTools"
       "Microsoft.WindowsTerminal"
       "Microsoft.WSL"
-      "StablyAI.Orca"
     ];
     msstore = [
       "9NT1R1C2HH7J"

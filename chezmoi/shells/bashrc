@@ -22,10 +22,6 @@ else
 fi
 alias grep='rg'
 alias find='fd'
-# warp-terminal is installed as "warp-terminal" on NixOS; alias to match Windows naming
-if command -v warp-terminal >/dev/null 2>&1 && ! command -v warp >/dev/null 2>&1; then
-  alias warp="warp-terminal"
-fi
 
 # Session variables
 export USER_ID="$(id -u)"

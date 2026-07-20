@@ -4,8 +4,6 @@
 
 - `wezterm/wezterm.lua`
 - `windows-terminal/settings.json`
-- `warp/keybindings.yaml`
-- `warp/settings.toml`
 
 ## ルール
 

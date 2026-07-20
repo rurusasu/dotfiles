@@ -117,18 +117,8 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "l", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
     }
 
-    It 'Warp は Alt focus と Ctrl+Alt resize に揃えること' {
-        $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") -Raw
-
-        $content | Should -Match '(?m)^pane_group:navigate_left:\s*alt-h$'
-        $content | Should -Match '(?m)^pane_group:navigate_down:\s*alt-j$'
-        $content | Should -Match '(?m)^pane_group:navigate_up:\s*alt-k$'
-        $content | Should -Match '(?m)^pane_group:navigate_right:\s*alt-l$'
-
-        $content | Should -Match '(?m)^pane_group:resize_left:\s*ctrl-alt-h$'
-        $content | Should -Match '(?m)^pane_group:resize_down:\s*ctrl-alt-j$'
-        $content | Should -Match '(?m)^pane_group:resize_up:\s*ctrl-alt-k$'
-        $content | Should -Match '(?m)^pane_group:resize_right:\s*ctrl-alt-l$'
+    It 'Warp keybindings are no longer managed' {
+        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse
     }
 
     It 'VS Code と Cursor は Alt focus, Alt+Shift move に揃えること' {
