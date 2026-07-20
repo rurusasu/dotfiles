@@ -37,8 +37,7 @@
       home.sessionVariables = {
         _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
         BROWSER = "explorer.exe";
-        # fcitx5 GTK_IM_MODULE bridge: Warp runs in Wayland mode but reads these
-        # env vars to delegate key events to the fcitx5 daemon via the GTK IM module.
+        # fcitx5 GTK_IM_MODULE bridge for WSLg GUI applications.
         GTK_IM_MODULE = "fcitx";
         QT_IM_MODULE = "fcitx";
         XMODIFIERS = "@im=fcitx";
@@ -53,10 +52,6 @@
       };
 
       programs.zsh.shellAliases = {
-        # nixpkgs installs Warp CLI as "warp-terminal"; alias to match Windows naming.
-        # LD_LIBRARY_PATH must include wayland because Warp dlopen()s libwayland-client
-        # at runtime and the binary bypasses nix-ld (it links directly against NixOS glibc).
-        warp = "LD_LIBRARY_PATH=${pkgs.wayland}/lib:\${LD_LIBRARY_PATH:-} MESA_D3D12_DEFAULT_ADAPTER_NAME=Microsoft warp-terminal";
         # NixOS rebuild shortcuts
         nrs = "nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
@@ -66,9 +61,8 @@
       # fcitx5 user systemd service.
       # WSLg's Wayland compositor does not support zwp_input_method_v2, so
       # fcitx5 is started with --disable=wayland to prevent it from crashing
-      # ("waylandmodule: Connection removed"). Warp itself continues to run in
-      # Wayland mode; Japanese input works via the GTK_IM_MODULE=fcitx bridge
-      # which routes key events to this daemon regardless of display backend.
+      # ("waylandmodule: Connection removed"). GTK applications can still route
+      # key events to this daemon through GTK_IM_MODULE=fcitx.
       systemd.user.services.fcitx5 = {
         Unit = {
           Description = "Fcitx5 input method daemon";
@@ -92,8 +86,8 @@
       # gnome-keyring as a user systemd service.
       # WSL has no PAM login flow so the system-level keyring service is never
       # auto-started. This user unit ensures the daemon runs on every login.
-      # The keyring starts locked; Warp will create a new default collection
-      # with an empty password on first use, which is acceptable for WSL.
+      # The keyring starts locked; GUI apps can create a default collection on
+      # first use, which is acceptable for WSL.
       systemd.user.services.gnome-keyring = {
         Unit = {
           Description = "GNOME Keyring daemon";

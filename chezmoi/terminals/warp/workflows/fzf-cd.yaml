@@ -1,6 +1,0 @@
-name: fzf directory search
-command: cd "$(fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . . | fzf)"
-description: Search and jump to a directory using fd + fzf
-tags:
-  - navigation
-  - fzf

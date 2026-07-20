@@ -33,7 +33,6 @@ BeforeAll {
     $script:fontConsumers = @(
         "chezmoi/terminals/wezterm/wezterm.lua",
         "chezmoi/terminals/windows-terminal/settings.json",
-        "chezmoi/terminals/warp/settings.toml",
         "chezmoi/editors/zed/settings.json",
         "chezmoi/editors/cursor/settings.json",
         "chezmoi/editors/vscode/settings.json"
@@ -76,7 +75,6 @@ Describe 'フォント設定の一貫性' {
         It 'editor/terminal 設定すべてに "<expected>" が含まれること' -ForEach @(
             @{ Path = "chezmoi/terminals/wezterm/wezterm.lua"; Expected = $script:expectedFont }
             @{ Path = "chezmoi/terminals/windows-terminal/settings.json"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/terminals/warp/settings.toml"; Expected = $script:expectedFont }
             @{ Path = "chezmoi/editors/zed/settings.json"; Expected = $script:expectedFont }
             @{ Path = "chezmoi/editors/cursor/settings.json"; Expected = $script:expectedFont }
             @{ Path = "chezmoi/editors/vscode/settings.json"; Expected = $script:expectedFont }

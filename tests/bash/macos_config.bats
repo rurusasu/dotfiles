@@ -29,6 +29,20 @@ setup() {
   grep -q 'cleanup = "none"' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
+@test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {
+	grep -q 'com.apple.symbolichotkeys' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'PlistBuddy' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'enabled bool false' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'disableSymbolicHotKey 60' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'disableSymbolicHotKey 61' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'disableSymbolicHotKey 64' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'disableSymbolicHotKey 65' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'disableSymbolicHotKey 156' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'com.raycast.macos' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'raycastGlobalHotkey -string Command-49' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'activateSettings -u' "$REPO_ROOT/nix/darwin/default.nix"
+}
+
 @test "Darwin omits the incompatible generated documentation" {
 	grep -q 'documentation.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'tools.darwin-uninstaller.enable = false' "$REPO_ROOT/nix/darwin/default.nix"

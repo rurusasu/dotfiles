@@ -527,42 +527,12 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [object[]] InvokeDirectInstaller([object]$pkg) {
         $type = $this.GetDirectInstallerType($pkg.DirectInstaller)
-        switch ($type) {
-            "warpInnoLatest" {
-                return $this.InvokeWarpInnoLatestInstaller($pkg)
-            }
-            default {
-                throw "Unsupported directInstaller type for $($pkg.Id): $type"
-            }
-        }
-
-        return @()
+        throw "Unsupported directInstaller type for $($pkg.Id): $type"
     }
 
     hidden [bool] TestDirectInstallerCurrent([object]$pkg) {
-        $type = $this.GetDirectInstallerType($pkg.DirectInstaller)
-        switch ($type) {
-            "warpInnoLatest" {
-                return $this.TestWarpInstalledLatest($pkg.Id)
-            }
-            default {
-                return $false
-            }
-        }
-
+        $null = $pkg
         return $false
-    }
-
-    hidden [bool] TestWarpInstalledLatest([string]$packageId) {
-        try {
-            $latestVersion = $this.GetWarpLatestVersion()
-            $installedVersion = $this.GetWingetInstalledPackageVersion($packageId)
-            return -not [string]::IsNullOrWhiteSpace($installedVersion) -and $installedVersion -eq $latestVersion
-        }
-        catch {
-            $this.LogWarning("Warp.Warp のインストール済みバージョン検証に失敗しました: $($_.Exception.Message)")
-            return $false
-        }
     }
 
     hidden [string] GetWingetInstalledPackageVersion([string]$packageId) {
@@ -587,45 +557,6 @@ class WingetHandler : SetupHandlerBase {
         return ""
     }
 
-    hidden [object[]] InvokeWarpInnoLatestInstaller([object]$pkg) {
-        $version = $this.GetWarpLatestVersion()
-        $arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "x86_64" }
-        $installerUri = "https://app.warp.dev/download/windows?version=$version&arch=$arch"
-        $installerArgs = $this.GetDirectInstallerArguments($pkg.DirectInstaller)
-        $timeoutSeconds = $this.GetDirectInstallerTimeoutSeconds($pkg.DirectInstaller)
-        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "dotfiles-winget-$([Guid]::NewGuid().ToString('N'))"
-        $installerPath = Join-Path $tempDir "WarpSetup.exe"
-
-        try {
-            New-DirectorySafe -Path $tempDir | Out-Null
-            $this.Log("直接インストーラーを使用します: $($pkg.Id) $version", "Gray")
-            $this.Log("ダウンロード中: $installerUri", "Gray")
-            Invoke-WebRequestSafe -Uri $installerUri -OutFile $installerPath
-            return @(Invoke-ExternalCommandWithTimeout `
-                    -Command $installerPath `
-                    -Arguments $installerArgs `
-                    -TimeoutSeconds $timeoutSeconds)
-        }
-        finally {
-            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    hidden [string] GetWarpLatestVersion() {
-        $output = @(Invoke-Winget -Arguments @("show", "-e", "--id", "Warp.Warp", "--versions", "--accept-source-agreements") -TimeoutSeconds 60)
-        if ($LASTEXITCODE -ne 0) {
-            throw "Warp.Warp の最新バージョン取得に失敗しました"
-        }
-
-        foreach ($line in $output) {
-            $text = ([string]$line).Trim()
-            if ($text -match '^v\d+(?:\.\d+)+\.stable_\d+$') {
-                return $text
-            }
-        }
-
-        throw "Warp.Warp の最新バージョンを winget show --versions から特定できませんでした"
-    }
 
     hidden [string] GetDirectInstallerType([object]$directInstaller) {
         if ($directInstaller -is [hashtable] -and $directInstaller.ContainsKey("type")) {
@@ -1162,7 +1093,7 @@ class WingetHandler : SetupHandlerBase {
         永続的に User 環境変数 PATH に追加する。
     #>
     hidden [void] EnsureCargoPath() {
-        $cargoBinPath = Join-Path $env:USERPROFILE ".cargo\bin"
+        $cargoBinPath = "$env:USERPROFILE\.cargo\bin"
 
         if (-not (Test-Path $cargoBinPath)) {
             return

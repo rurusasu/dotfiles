@@ -114,7 +114,6 @@
   security.pam.services.login.enableGnomeKeyring = true;
 
   # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
-  # Without this, Warp logs "XDG Settings Portal did not return response in time".
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-gtk ];

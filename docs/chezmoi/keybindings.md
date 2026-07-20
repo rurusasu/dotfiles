@@ -39,13 +39,6 @@
   - `Alt+Shift+H/J/K/L`: ペイン swap
   - `Ctrl+Alt+H/J/K/L`: ペイン resize
   - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: 分割/close/ズーム
-- Warp
-  - `Alt+H/J/K/L`: ペイン移動
-  - `Ctrl+Alt+H/J/K/L`: ペイン resize
-  - `Ctrl+Alt+\` / `Ctrl+Alt+-`: 分割
-  - `Ctrl+Space`: AI natural language search（nvim/WezTerm leader に合わせた統一キー）
-  - `Ctrl+Enter`: AI agent へ送信（Warp ハードコード、変更不可）
-  - `Ctrl+Y`: AI agent 会話を継続（Warp ハードコード、変更不可）
 
 ### Editors
 

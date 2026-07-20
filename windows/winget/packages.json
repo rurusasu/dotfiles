@@ -194,6 +194,10 @@
           }
         },
         {
+          "PackageIdentifier": "StablyAI.Orca",
+          "ciSkipInstall": true
+        },
+        {
           "PackageIdentifier": "oxc-project.oxlint",
           "portableLink": {
             "linkName": "oxlint.exe",
@@ -300,15 +304,6 @@
           "PackageIdentifier": "Microsoft.VisualStudioCode"
         },
         {
-          "PackageIdentifier": "Warp.Warp",
-          "ciSkipInstall": true,
-          "directInstaller": {
-            "installerArgs": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER"],
-            "timeoutSeconds": 900,
-            "type": "warpInnoLatest"
-          }
-        },
-        {
           "PackageIdentifier": "wez.wezterm.nightly",
           "ciSkipInstall": true,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
@@ -359,10 +354,6 @@
             "recoveryStrategy": "wingetRepairThenReinstall",
             "timeoutSeconds": 30
           }
-        },
-        {
-          "PackageIdentifier": "StablyAI.Orca",
-          "ciSkipInstall": true
         }
       ],
       "SourceDetails": {

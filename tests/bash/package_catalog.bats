@@ -61,3 +61,18 @@ setup() {
 	grep -q 'attachWingetIdMetadata' "$REPO_ROOT/nix/packages/winget.nix"
 	grep -q 'attachWingetIdMetadata id' "$REPO_ROOT/nix/packages/winget.nix"
 }
+
+@test "macOS desktop casks include Raycast Dia and Orca" {
+	grep -q 'raycast = {' "$SETS"
+	grep -q 'cask = "raycast"' "$SETS"
+	grep -q 'dia-browser = {' "$SETS"
+	grep -q 'cask = "thebrowsercompany-dia"' "$SETS"
+	grep -q 'orca-editor = {' "$SETS"
+	grep -q 'cask = "stablyai/orca/orca"' "$SETS"
+}
+
+@test "Warp is removed from the package catalog" {
+	! grep -q 'warp-terminal' "$SETS"
+	! grep -q 'Warp.Warp' "$SETS"
+	! grep -q 'warpInnoLatest' "$SETS"
+}

@@ -40,18 +40,13 @@ Describe 'Package catalog consistency' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
             $sets | Should -Not -Match '(?ms)^\s*wingetSkipInstall\s*=\s*\{[^}]*^\s*wezterm\s*='
-            $sets | Should -Not -Match '(?ms)^\s*wingetSkipInstall\s*=\s*\{[^}]*^\s*warp-terminal\s*='
         }
 
         It 'should generate terminal packages without normal-run skipInstall metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
             $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
 
-            $warp | Should -Not -BeNullOrEmpty
-            $warp.PSObject.Properties.Name | Should -Not -Contain 'skipInstall'
-            $warp.PSObject.Properties.Name | Should -Not -Contain 'skipReason'
             $wezterm | Should -Not -BeNullOrEmpty
             $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipInstall'
             $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipReason'
@@ -60,31 +55,32 @@ Describe 'Package catalog consistency' {
         It 'should keep volatile terminal installers out of CI-only winget verification' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
             $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
 
-            $warp.ciSkipInstall | Should -BeTrue
             $wezterm.ciSkipInstall | Should -BeTrue
         }
 
-        It 'should cap Warp direct installer time so install.cmd cannot hang indefinitely' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
-
-            $warp.directInstaller.timeoutSeconds | Should -Be 900
-        }
-
-        It 'should install Warp through the direct user-scope Inno installer during normal winget runs' {
+        It 'should remove Warp from the SSOT and generated Windows manifest' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
 
-            $sets | Should -Match '(?s)wingetDirectInstallers\s*=\s*\{.*?warp-terminal\s*=\s*\{.*?type\s*=\s*"warpInnoLatest"'
-            $warp.directInstaller.type | Should -Be 'warpInnoLatest'
-            @($warp.directInstaller.installerArgs) | Should -Contain '/CURRENTUSER'
-            @($warp.directInstaller.installerArgs) | Should -Contain '/VERYSILENT'
+            $sets | Should -Not -Match 'warp-terminal'
+            $sets | Should -Not -Match 'Warp\.Warp'
+            $sets | Should -Not -Match 'warpInnoLatest'
+            $warp | Should -BeNullOrEmpty
+        }
+
+        It 'should manage Raycast and Dia as macOS-only Homebrew casks' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+
+            $sets | Should -Match '(?s)raycast\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"raycast"'
+            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"thebrowsercompany-dia"'
+            @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Raycast.Raycast' }).Count | Should -Be 0
+            @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
         }
 
         It 'should update WSL inputs and route native NixOS through the hardware-safe installer' {
@@ -317,11 +313,12 @@ Describe 'Package catalog consistency' {
         }
     }
 
-    Context 'Windows Orca and Python installation policy' {
-        It 'should manage Orca as a Windows-only winget package and avoid native Python winget installs in the SSOT' {
+    Context 'Orca and Python installation policy' {
+        It 'should manage Orca as a desktop catalog package with macOS cask and avoid native Python winget installs in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
+            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?cask\s*=\s*"stablyai/orca/orca"'
+            $sets | Should -Not -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
             $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"StablyAI\.Orca"\s*=\s*true;'
             $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
             $sets | Should -Not -Match 'winget\s*=\s*"Python\.Python\.3\.13"'
