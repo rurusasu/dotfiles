@@ -104,6 +104,11 @@ description: Software engineering tech lead profile
 hermes_requires: ">=0.18.2"
 author: rurusasu
 license: private
+env_requires:
+  - name: X_API_CLIENT_ID
+    description: OAuth client ID for the X API MCP server
+  - name: X_API_CLIENT_SECRET
+    description: OAuth client secret for the X API MCP server
 distribution_owned:
   - .no-bundled-skills
   - SOUL.md
@@ -209,6 +214,11 @@ description: Financial management profile
 hermes_requires: ">=0.18.2"
 author: rurusasu
 license: private
+env_requires:
+  - name: X_API_CLIENT_ID
+    description: OAuth client ID for the X API MCP server
+  - name: X_API_CLIENT_SECRET
+    description: OAuth client secret for the X API MCP server
 ```
 
 - [ ] Normalize non-secret model, Slack, terminal passthrough, and MCP config; update `SOUL.md` to use `/opt/data/shared/lifelog` and forbid profile-home Git commits.
@@ -255,6 +265,11 @@ description: Dedicated Risarisa Hermes profile
 hermes_requires: ">=0.18.2"
 author: rurusasu
 license: private
+env_requires:
+  - name: X_API_CLIENT_ID
+    description: OAuth client ID for the X API MCP server
+  - name: X_API_CLIENT_SECRET
+    description: OAuth client secret for the X API MCP server
 distribution_owned:
   - .no-bundled-skills
   - SOUL.md
