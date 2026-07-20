@@ -17,6 +17,16 @@
 - Treat `config.yaml`, `SOUL.md`, policy docs, cron definitions, scripts, and MCP declarations as source-repository-owned content after this migration.
 - Keep `/opt/data/shared/lifelog` as the canonical runtime path. `/opt/data/core/lifelog` is only a compatibility symlink created by bootstrap.
 - Run secret scans and inspect every staged diff before pushing.
+- Every distribution repository must contain `.github/workflows/distribution.yml`, `.pre-commit-config.yaml`, `scripts/validate_distribution.py`, tests for that driver, and an ignored `.hermes-validation/` report directory.
+- The validator interface is exactly `python3 scripts/validate_distribution.py {fast,full} [--json] [--output PATH]`; validator/schema versions are `1.0.0`/`1`, and exit codes are `0` pass, `1` validation failure, `2` prerequisite unavailable, and `3` internal error.
+- JSON contains exactly `schema_version`, `validator_version`, `repository`, `head_sha`, `level`, `status`, `exit_code`, and `checks`; every check contains exactly `id`, `status`, and redacted single-line `message`, where status is `pass`, `fail`, or `blocked`.
+- `fast` runs `manifest-schema`, `owned-paths`, `config-contract`, `repository-policy`, and `secret-patterns` in that deterministic order. `full` appends `hermes-parser`, then `user-data-preservation` for named profiles or `root-boundary` for root, then `gitleaks`.
+- Pin Hermes validation to `docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731` and Gitleaks to `zricethezav/gitleaks@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9`; do not use floating tags.
+- The pre-commit hook runs `fast`; the pre-push hook runs `full`; both are repository-local hooks and setup installs both hook types. Agents also invoke both commands explicitly because hook presence is not trusted as evidence.
+- The GitHub workflow runs one Linux `distribution` job on `pull_request` and `workflow_dispatch`, with no push trigger or matrix, `timeout-minutes: 10`, concurrency cancellation, no cache/artifact upload, and checkout pinned to `actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803`.
+- A result is current only when JSON `head_sha`, local `HEAD`, and PR `headRefOid` are identical. Automatic merge requires task review approval, a clean worktree, current-head local full pass including Gitleaks, a mergeable PR with no unresolved conversation, and state `PASS_REMOTE` or `PASS_LOCAL_FALLBACK`.
+- `PASS_LOCAL_FALLBACK` is allowed only when the workflow is active at the current head and GitHub-owned run/check output explicitly identifies billing, spending, included usage, storage billing, or an exhausted budget as a startup/action-required failure. Missing runs or unavailable billing APIs remain `REMOTE_UNKNOWN` and never permit merge.
+- Automated repair receives the failed IDs and exact rerun command, may not weaken the validator, and is limited to two rounds for the same failed check set. Exit `2` is `ENV_BLOCKED` and consumes no repair round; exhausted validation repair is `FIX_FAILED`.
 
 ---
 
@@ -75,6 +85,11 @@ Expected: `AGENTS.md` exists; no distribution manifest is added to `lifelog`.
 **Files:**
 
 - Create: `../hermes-profile-rick-distribution/distribution.yaml`
+- Create: `../hermes-profile-rick-distribution/.github/workflows/distribution.yml`
+- Create: `../hermes-profile-rick-distribution/.pre-commit-config.yaml`
+- Create: `../hermes-profile-rick-distribution/scripts/validate_distribution.py`
+- Create: `../hermes-profile-rick-distribution/tests/test_validate_distribution.py`
+- Modify: `../hermes-profile-rick-distribution/.gitignore`
 - Modify: `../hermes-profile-rick-distribution/config.yaml`
 - Modify: `../hermes-profile-rick-distribution/SOUL.md`
 - Verify: `../hermes-profile-rick-distribution/profile.yaml`
@@ -118,21 +133,68 @@ docker run --rm -v ../hermes-profile-rick-distribution:/distribution:ro --entryp
 
 Expected: exit code `0`; `.env` and `memories/probe` remain unchanged.
 
-- [ ] Run the repository's existing checks, inspect `git diff --check`, commit, push, open a PR, and wait for green checks.
+- [ ] Write failing `unittest` cases for the stable JSON schema, deterministic check ordering, all four exit-code classes, secret-message redaction, output atomic replacement, missing Docker/image prerequisite, Hermes parser failure, and preservation of `.env`, `auth.json`, memories, sessions, logs, and workspace. Use temporary fixture repositories only; never mount the real Hermes home.
 
 ```bash
-git -C ../hermes-profile-rick-distribution diff --check
-git -C ../hermes-profile-rick-distribution add distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
-git -C ../hermes-profile-rick-distribution commit -m "feat: publish Rick Hermes distribution"
-git -C ../hermes-profile-rick-distribution push -u origin codex/hermes-distribution-rick
-gh pr create --repo rurusasu/hermes-profile-rick --base main --head codex/hermes-distribution-rick --title "feat: publish Rick Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
+python3 -m unittest tests/test_validate_distribution.py -v
 ```
+
+Expected before implementation: tests fail because the validator contract is absent. Expected after implementation: every fixture case passes.
+
+- [ ] Implement the exact validator CLI and check order from Global Constraints. Repository data names `hermes-profile-rick`, manifest `distribution.yaml`, profile `rick`, and requires `/opt/data/shared/lifelog` plus GitHub token passthrough in `config.yaml`. JSON messages are single-line and redacted; `--output` creates parent directories and uses `os.replace` without printing raw matches.
+
+- [ ] Add local hooks with these exact stages and commands, then install both hook types.
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: hermes-distribution-fast
+        name: Hermes distribution fast validation
+        entry: python3 scripts/validate_distribution.py fast
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: hermes-distribution-full
+        name: Hermes distribution full validation
+        entry: python3 scripts/validate_distribution.py full
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+```
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type pre-push
+```
+
+- [ ] Add the one-job workflow. It checks out the exact PR head, runs `python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json`, prints the JSON to the log and `$GITHUB_STEP_SUMMARY` even on validation failure, and exits with the validator's original code. Do not expose a token or upload the report.
+
+- [ ] Run the guard explicitly, inspect `git diff --check`, amend the existing Rick commit, push PR #2, and wait for the current-head workflow classification.
+
+```bash
+python3 -m unittest tests/test_validate_distribution.py -v
+python3 scripts/validate_distribution.py fast --json --output .hermes-validation/fast.json
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+git -C ../hermes-profile-rick-distribution diff --check
+git -C ../hermes-profile-rick-distribution add .github .pre-commit-config.yaml .gitignore scripts tests distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
+git -C ../hermes-profile-rick-distribution commit --amend --no-edit
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+git -C ../hermes-profile-rick-distribution push --force-with-lease -u origin codex/hermes-distribution-rick
+gh pr view 2 --repo rurusasu/hermes-profile-rick --json headRefOid,mergeStateStatus,statusCheckRollup
+```
+
+Expected: local report `head_sha` equals PR `headRefOid`; remote state becomes `PASS_REMOTE`, or explicit GitHub billing evidence permits `PASS_LOCAL_FALLBACK`. Otherwise leave the PR open.
 
 ## Task 3: Convert Hoffman to an official Hermes distribution
 
 **Files:**
 
 - Create: `../hermes-profile-hoffman-distribution/distribution.yaml`
+- Create: `../hermes-profile-hoffman-distribution/.github/workflows/distribution.yml`
+- Create: `../hermes-profile-hoffman-distribution/.pre-commit-config.yaml`
+- Create: `../hermes-profile-hoffman-distribution/scripts/validate_distribution.py`
+- Create: `../hermes-profile-hoffman-distribution/tests/test_validate_distribution.py`
+- Modify: `../hermes-profile-hoffman-distribution/.gitignore`
 - Modify: `../hermes-profile-hoffman-distribution/config.yaml`
 - Modify: `../hermes-profile-hoffman-distribution/SOUL.md`
 - Verify: `../hermes-profile-hoffman-distribution/profile.yaml`
@@ -153,12 +215,19 @@ license: private
 
 - [ ] Run the parser and preservation tests from Task 2 with `hoffman` substituted for `rick`.
 
-- [ ] Run repository checks, inspect the diff, commit, push, open a PR, and wait for green checks.
+- [ ] Add the complete repository-local validator, tests, local hooks, and one-job workflow defined in Global Constraints. Repository data names `hermes-profile-hoffman`, manifest `distribution.yaml`, profile `hoffman`, and uses `user-data-preservation`. Run the test file once before implementation to record RED, then after implementation to record GREEN.
+
+- [ ] Run `fast` and `full` explicitly, install both hook types, inspect the diff, commit, push, open a PR, and classify the exact current head. Do not merge `REMOTE_PENDING`, `REMOTE_UNKNOWN`, `STALE_EVIDENCE`, `ENV_BLOCKED`, `FAIL_VALIDATION`, `FIX_FAILED`, or `INTERNAL_ERROR`.
 
 ```bash
+python3 -m unittest tests/test_validate_distribution.py -v
+python3 scripts/validate_distribution.py fast --json --output .hermes-validation/fast.json
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+pre-commit install --hook-type pre-commit --hook-type pre-push
 git -C ../hermes-profile-hoffman-distribution diff --check
-git -C ../hermes-profile-hoffman-distribution add distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
+git -C ../hermes-profile-hoffman-distribution add .github .pre-commit-config.yaml .gitignore scripts tests distribution.yaml config.yaml SOUL.md profile.yaml slack-manifest.json
 git -C ../hermes-profile-hoffman-distribution commit -m "feat: publish Hoffman Hermes distribution"
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
 git -C ../hermes-profile-hoffman-distribution push -u origin codex/hermes-distribution-hoffman
 gh pr create --repo rurusasu/hermes-profile-hoffman --base main --head codex/hermes-distribution-hoffman --title "feat: publish Hoffman Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
 ```
@@ -168,6 +237,11 @@ gh pr create --repo rurusasu/hermes-profile-hoffman --base main --head codex/her
 **Files:**
 
 - Create: `../hermes-profile-risarisa-distribution/distribution.yaml`
+- Create: `../hermes-profile-risarisa-distribution/.github/workflows/distribution.yml`
+- Create: `../hermes-profile-risarisa-distribution/.pre-commit-config.yaml`
+- Create: `../hermes-profile-risarisa-distribution/scripts/validate_distribution.py`
+- Create: `../hermes-profile-risarisa-distribution/tests/test_validate_distribution.py`
+- Modify: `../hermes-profile-risarisa-distribution/.gitignore`
 - Modify: `../hermes-profile-risarisa-distribution/config.yaml`
 - Modify: `../hermes-profile-risarisa-distribution/SOUL.md`
 - Verify: `../hermes-profile-risarisa-distribution/slack-manifest.json`
@@ -192,12 +266,19 @@ distribution_owned:
 
 - [ ] Run the parser and preservation tests from Task 2 with `risarisa` substituted for `rick`.
 
-- [ ] Run repository checks, inspect the diff, commit, push, open a PR, and wait for green checks.
+- [ ] Add the complete repository-local validator, tests, local hooks, and one-job workflow defined in Global Constraints. Repository data names `hermes-profile-risarisa`, manifest `distribution.yaml`, profile `risarisa`, and uses `user-data-preservation`. Run the test file once before implementation to record RED, then after implementation to record GREEN.
+
+- [ ] Run `fast` and `full` explicitly, install both hook types, inspect the diff, commit, push, open a PR, and classify the exact current head. Apply the same non-merge states and two-round repair limit as Hoffman.
 
 ```bash
+python3 -m unittest tests/test_validate_distribution.py -v
+python3 scripts/validate_distribution.py fast --json --output .hermes-validation/fast.json
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+pre-commit install --hook-type pre-commit --hook-type pre-push
 git -C ../hermes-profile-risarisa-distribution diff --check
-git -C ../hermes-profile-risarisa-distribution add distribution.yaml config.yaml SOUL.md slack-manifest.json
+git -C ../hermes-profile-risarisa-distribution add .github .pre-commit-config.yaml .gitignore scripts tests distribution.yaml config.yaml SOUL.md slack-manifest.json
 git -C ../hermes-profile-risarisa-distribution commit -m "feat: publish Risarisa Hermes distribution"
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
 git -C ../hermes-profile-risarisa-distribution push -u origin codex/hermes-distribution-risarisa
 gh pr create --repo rurusasu/hermes-profile-risarisa --base main --head codex/hermes-distribution-risarisa --title "feat: publish Risarisa Hermes distribution" --body "Adds the Hermes 0.18.2 distribution manifest and canonical declarative profile configuration."
 ```
@@ -207,6 +288,11 @@ gh pr create --repo rurusasu/hermes-profile-risarisa --base main --head codex/he
 **Files:**
 
 - Create: `../hermes-home-distribution/root-distribution.yaml`
+- Create: `../hermes-home-distribution/.github/workflows/distribution.yml`
+- Create: `../hermes-home-distribution/.pre-commit-config.yaml`
+- Create: `../hermes-home-distribution/scripts/validate_distribution.py`
+- Create: `../hermes-home-distribution/tests/test_validate_distribution.py`
+- Modify: `../hermes-home-distribution/.gitignore`
 - Modify: `../hermes-home-distribution/config.yaml`
 - Modify: `../hermes-home-distribution/SOUL.md`
 - Modify: `../hermes-home-distribution/profile.yaml`
@@ -230,9 +316,10 @@ distribution_owned:
   - assets/
   - cron/
   - docs/
-  - scripts/
   - skills/
 ```
+
+Repository tooling remains under `scripts/validate_distribution.py`, but `scripts/` is deliberately not root-owned and therefore is never copied into `/opt/data`.
 
 - [ ] Port the final declarative behavior currently emitted by `Handler.HermesAgent.ps1` into `config.yaml`: model selection, Slack mention policy, terminal GitHub-token passthrough, Browser MCP, X docs, and the X API wrapper. Store endpoint names and commands only; store no credentials.
 
@@ -247,6 +334,21 @@ docker run --rm -v ../hermes-home-distribution:/distribution:ro --entrypoint pyt
 ```
 
 Expected: exit code `0` and no output.
+
+- [ ] Write the root validator tests before implementation. Cover the same schema, ordering, exit, redaction, output, and prerequisite cases as named profiles, but replace the preservation probe with `root-boundary` fixtures that reject reserved/mutable ownership, overlap, traversal, symlinks, and special files while proving unowned runtime sentinels remain untouched.
+
+- [ ] Add the complete repository-local validator, hooks, and one-job workflow from Global Constraints. Repository data names `hermes-home`, manifest `root-distribution.yaml`, profile `default`, and the full-only root check is `root-boundary`. Run tests RED then GREEN, followed by explicit `fast` and `full` JSON reports.
+
+- [ ] Run root guard checks, stage only the root contract and guard, and commit the independently reviewable Task 5 deliverable. Do not push until Task 6 adds the common-sync cron contract.
+
+```bash
+python3 -m unittest tests/test_validate_distribution.py -v
+python3 scripts/validate_distribution.py fast --json --output .hermes-validation/fast.json
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+git diff --check
+git add .github .pre-commit-config.yaml .gitignore root-distribution.yaml SOUL.md config.yaml profile.yaml slack-manifest.json docs scripts/validate_distribution.py tests skills assets
+git commit -m "feat: define Hermes root distribution"
+```
 
 ## Task 6: Replace root-home Git sync with the common bootstrap command
 
@@ -275,26 +377,39 @@ Expected: the JSON check passes and both searches return no stale runtime-root o
 - [ ] Validate the root manifest again, run repository checks, inspect the full diff, and scan for credentials.
 
 ```bash
+python3 -m unittest tests/test_validate_distribution.py -v
+python3 scripts/validate_distribution.py fast --json --output .hermes-validation/fast.json
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
+pre-commit install --hook-type pre-commit --hook-type pre-push
 git -C ../hermes-home-distribution diff --check
 git -C ../hermes-home-distribution grep -nE 'ghp_[A-Za-z0-9]+|xox[baprs]-|HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=' -- ':!*.example' ':!*.md'
 ```
 
 Expected: `git diff --check` succeeds and the credential search prints nothing.
 
-- [ ] Commit, push, open a PR, and wait for green checks.
+- [ ] Commit the Task 6 cron/policy delta, rerun the exact-head full validator, push both reviewed commits, open a PR, and classify the current-head workflow.
 
 ```bash
-git -C ../hermes-home-distribution add root-distribution.yaml SOUL.md config.yaml profile.yaml slack-manifest.json cron docs scripts skills assets
-git -C ../hermes-home-distribution commit -m "feat: define Hermes root distribution"
+git -C ../hermes-home-distribution add cron/jobs.json SOUL.md scripts/hermes_home_sync.sh
+git -C ../hermes-home-distribution commit -m "feat: centralize Hermes lifelog sync"
+python3 scripts/validate_distribution.py full --json --output .hermes-validation/full.json
 git -C ../hermes-home-distribution push -u origin codex/hermes-distribution-root
 gh pr create --repo rurusasu/hermes-home --base main --head codex/hermes-distribution-root --title "feat: define Hermes root distribution" --body "Defines the root-owned declarative paths and moves shared lifelog policy and sync behavior into the Hermes source repository."
 ```
 
 ## Task 7: Merge and pin the source-repository contract
 
-- [ ] Merge the three named-profile PRs after their checks pass.
+- [ ] For each PR, rerun `full --json` in a clean current-head worktree, require report `head_sha == git rev-parse HEAD == gh pr view --json headRefOid`, and verify the reviewed commit range is unchanged.
 
-- [ ] Merge the `hermes-home` PR after the named distributions are available.
+- [ ] Classify remote evidence as one of `PASS_REMOTE`, `PASS_LOCAL_FALLBACK`, `FAIL_VALIDATION`, `FIX_FAILED`, `ENV_BLOCKED`, `REMOTE_PENDING`, `REMOTE_UNKNOWN`, `STALE_EVIDENCE`, or `INTERNAL_ERROR`. A successful current-head workflow is `PASS_REMOTE`. A missing run is `REMOTE_UNKNOWN`; it is never inferred to be billing.
+
+- [ ] When validation fails, create a fix brief containing repository, base/head SHA, validator version, failed IDs and redacted messages, and the exact rerun command. Dispatch one fresh fix agent, require RED then `fast` and `full` GREEN evidence, independently rerun full at the new PR head, and stop after two repair rounds for the same failed set.
+
+- [ ] For explicit billing startup failure only, post a PR comment containing validator version, current head SHA, passed check IDs, `PASS_LOCAL_FALLBACK`, and a redacted GitHub billing classification. Re-read `headRefOid` immediately after the comment and before merging.
+
+- [ ] Merge the three named-profile PRs only in `PASS_REMOTE` or `PASS_LOCAL_FALLBACK`, after task review approval, clean worktree, secret pass, mergeability, and no unresolved review conversations.
+
+- [ ] Merge the `hermes-home` PR under the same gate after the named distributions are available.
 
 - [ ] Record each merged `main` commit SHA in the dotfiles bootstrap implementation PR description for auditability; the runtime manifest continues tracking `main` as approved.
 
@@ -311,7 +426,7 @@ Expected: install exposes `--force`; update exposes `--force-config`, confirming
 
 ## Completion Criteria
 
-- All four source PRs are merged with green checks.
+- All four source PRs are merged with `PASS_REMOTE`, or with a documented `PASS_LOCAL_FALLBACK` only when GitHub explicitly reports a billing startup block.
 - Rick, Hoffman, and Risarisa pass Hermes 0.18.2 distribution parsing and user-data preservation probes.
 - `hermes-home/root-distribution.yaml` owns only explicit declarative paths.
 - Root cron invokes the common bootstrap to sync `/opt/data/shared/lifelog`; no distribution code treats `/opt/data` as a Git checkout or implements Git synchronization.

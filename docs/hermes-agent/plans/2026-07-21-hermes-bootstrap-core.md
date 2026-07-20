@@ -16,6 +16,8 @@
 - Use `/opt/data` as `HERMES_HOME`; never initialize `/opt/data` or a named profile as a Git repository.
 - Resolve and validate every managed path beneath `/opt/data` before writing. Reject source symlinks and traversal.
 - Use the official Hermes profile distribution API to preserve user-owned profile paths.
+- Before invoking the Hermes profile distribution API, construct a sanitized temporary source containing only `distribution.yaml` and normalized `distribution_owned` paths. Never install `.github`, `.pre-commit-config.yaml`, `.gitignore`, repository tests, or validator tooling into a runtime profile.
+- Pin the upstream Hermes base image used by bootstrap and tests to `docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731`, which provides the required Hermes 0.18.2 contract.
 - Remote commit/push operations finish before the local transaction and remain committed if a later local apply rolls back.
 - Test through public module interfaces; use dependency injection for GitHub HTTP, subprocess, clock, and filesystem failure points.
 - Keep Python source compatible with the Python version in `nousresearch/hermes-agent:latest` used by the built image.
@@ -278,6 +280,8 @@ Implement `stage_distribution(source: DistributionSource, workdir: Path, auth: G
 
 - [ ] Write failing profile tests that preserve `.env`, `auth.json`, `memories`, `sessions`, `logs`, and `workspace`; replace `config.yaml`; install missing profiles; update existing non-distribution profiles; and stamp canonical source metadata.
 
+- [ ] Write failing sanitized-source tests for missing owned paths, normalized path overlap, `..` traversal, absolute paths, source symlinks, symlinks nested inside an owned directory, FIFO/device/socket special files, and duplicate normalized paths. Add a valid fixture containing `.github/`, `.pre-commit-config.yaml`, `.gitignore`, `scripts/validate_distribution.py`, and `tests/`; assert none appears in the sanitized source or installed profile.
+
 - [ ] Define the root interfaces:
 
 ```python
@@ -296,9 +300,11 @@ Implement `load_root_manifest(stage: Path) -> RootDistributionManifest` and `app
 
 - [ ] Copy files and directories through transaction-owned temporary siblings, preserve executable bits, reject ownership of `.env`, `.git`, `.bootstrap`, `profiles`, `shared`, `core`, locks, memories, sessions, logs, browser data, or OAuth caches.
 
-- [ ] Define the named-profile interface as `apply_profile_distribution(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet`.
+- [ ] Define `build_sanitized_profile_source(stage: StagedSource, scratch_root: Path) -> Path`. Parse `distribution.yaml`, normalize every `distribution_owned` path as a relative `PurePosixPath`, reject empty/reserved/traversing/overlapping/duplicate entries, and copy only the manifest plus those files/directories into a new mode-`0700` scratch directory. Walk directories without following symlinks and accept only regular files and directories.
 
-- [ ] Set `HERMES_HOME=/opt/data`, invoke `hermes_cli.profile_distribution.install_distribution(str(stage.path), name=stage.declaration.name, force=True)`, and snapshot every staged top-level target except Hermes `USER_OWNED_EXCLUDE` before invocation. This uses the official install API on both first install and declarative replacement, giving `--force-config` semantics without a second unpinned network fetch.
+- [ ] Define the named-profile interface as `apply_profile_distribution(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet`. It calls `build_sanitized_profile_source` and always removes the scratch payload in `finally` after Hermes returns or raises.
+
+- [ ] Set `HERMES_HOME=/opt/data`, invoke `hermes_cli.profile_distribution.install_distribution(str(sanitized_path), name=stage.declaration.name, force=True)`, and snapshot every sanitized top-level target except Hermes `USER_OWNED_EXCLUDE` before invocation. This uses the official install API on both first install and declarative replacement, giving `--force-config` semantics without a second unpinned network fetch.
 
 - [ ] After installation, parse the installed `distribution.yaml`, replace its temporary local `source` with the canonical HTTPS source, and write it through Hermes' manifest writer. Preserve the distribution's version and install timestamp.
 

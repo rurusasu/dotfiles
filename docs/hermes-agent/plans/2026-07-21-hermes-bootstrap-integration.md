@@ -18,6 +18,7 @@
 - Preserve the Docker runner abstraction used for Linux/NixOS docker-group execution.
 - Do not edit or regenerate root/profile declarative YAML, cron, scripts, policy, or MCP blocks on the host.
 - Keep unrelated installer behavior and current browser services unchanged.
+- Document and preserve the source-repository gate from `distribution-validation-design.md`: exact-head local `full` validation plus `PASS_REMOTE`, or `PASS_LOCAL_FALLBACK` only for explicit GitHub billing startup evidence. Missing workflow evidence is never treated as billing.
 
 ---
 
@@ -206,6 +207,8 @@ install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerSh
 
 - [ ] Update `docs/architecture.md` with source repository ownership boundaries and link the approved design plus all three implementation plans.
 
+- [ ] Link `docs/hermes-agent/distribution-validation-design.md` from `bootstrap.md` and document the operator states `PASS_REMOTE`, `PASS_LOCAL_FALLBACK`, `FAIL_VALIDATION`, `FIX_FAILED`, `ENV_BLOCKED`, `REMOTE_PENDING`, `REMOTE_UNKNOWN`, `STALE_EVIDENCE`, and `INTERNAL_ERROR`, including the two-round agent repair limit and the rule that missing runs never authorize fallback.
+
 - [ ] Run Markdown and repository lint checks scoped to the changed docs.
 
 ```bash
@@ -326,7 +329,7 @@ git commit -m "feat: add OS-independent Hermes bootstrap"
 
 - [ ] Push `codex/hermes-bootstrap` and open a PR that links the four merged source-repository PRs and includes fixture plus live acceptance evidence.
 
-- [ ] Wait for all GitHub Actions checks, address review conversations, rerun affected checks, and merge with the repository's allowed merge method.
+- [ ] Wait for all GitHub Actions checks, address review conversations, rerun affected checks, and merge with the repository's allowed merge method. If GitHub explicitly reports a billing startup block, require an exact-head clean local run of every command above, post a redacted evidence comment, re-read the PR head, and apply the approved local fallback; absent explicit billing evidence, leave the PR unmerged.
 
 - [ ] After merge, run one final `hermes-bootstrap validate` against the live runtime and record only target names, versions, commit SHAs, and health states.
 
