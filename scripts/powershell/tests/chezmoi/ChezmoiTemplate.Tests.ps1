@@ -246,6 +246,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content = Get-Content -LiteralPath $envrcPath -Raw
 
             $content | Should -Match 'log_status "dotfiles dev shell ready: treefmt, statix, deadnix"'
+            $content | Should -Match 'use flake \. && log_status' -Because "direnv must preserve use flake failure status"
         }
     }
 
