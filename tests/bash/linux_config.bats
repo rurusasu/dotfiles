@@ -36,7 +36,6 @@ setup() {
 	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/home/linux/users.nix"
 }
 
-@test "macOS rebuild alias runs nix-darwin switch" {
-	grep -Fq 'nrs = "nix_bin=$(command -v nix) && sudo /usr/bin/env' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -Fq '\"$nix_bin\" run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure' "$REPO_ROOT/nix/darwin/default.nix"
+@test "macOS rebuild alias keeps the application-safe installer path" {
+  grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/darwin/default.nix"
 }

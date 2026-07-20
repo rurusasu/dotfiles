@@ -49,9 +49,10 @@ in
   homebrew = {
     enable = true;
     casks = sets.darwinCasks;
+    greedyCasks = true;
     onActivation = {
-      autoUpdate = false;
-      upgrade = false;
+      autoUpdate = true;
+      upgrade = true;
       cleanup = "none";
     };
   };
@@ -68,7 +69,7 @@ in
         imports = [ ../home/common.nix ];
 
         programs.zsh.shellAliases = {
-          nrs = "nix_bin=$(command -v nix) && sudo /usr/bin/env \"NIX_CONFIG=extra-experimental-features = nix-command flakes\" \"DOTFILES_USER=$USER\" \"DOTFILES_HOME=$HOME\" \"$nix_bin\" run ~/.dotfiles#darwin-rebuild -- switch --flake ~/.dotfiles#macos --impure";
+          nrs = "~/.dotfiles/install.sh";
         };
       };
     extraSpecialArgs = { inherit inputs; };
