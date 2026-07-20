@@ -344,6 +344,8 @@ Implement `synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSy
 
 - [ ] Run repository tests with local bare remotes and two competing lock processes.
 
+- [ ] Add `synchronize_named_repository(name: str, manifest: BootstrapManifest, auth: GitAuth) -> RemoteSyncResult` as the shared entrypoint used by both full apply and runtime cron sync. Reject unknown names and a missing canonical working tree in runtime sync mode.
+
 ## Task 7: Implement the local transaction journal and rollback
 
 **Files:**
@@ -386,15 +388,20 @@ Implement `synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSy
 hermes-bootstrap secret-plan --manifest /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 hermes-bootstrap apply --manifest /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 hermes-bootstrap validate --manifest /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
+hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 ```
 
 `secret-plan` writes one compact non-secret JSON document. `apply` reads NDJSON only from stdin. `validate` reads no secrets and checks the installed layout and file modes without network access.
+
+`sync-repository` reads the GitHub token from process `GH_TOKEN`, then active `${HERMES_HOME}/.env`, then `/opt/data/.env`, using the same non-executing env parser as `gh-wrapper.sh`. It accepts only a declared shared-repository name, requires its canonical checkout to exist, and calls the same `synchronize_named_repository` implementation used by `apply`; it does not apply distributions or rewrite `.env`.
 
 - [ ] Implement final validation for root ownership state, installed profile names and distribution versions, profile user-owned paths, canonical lifelog identity, compatibility symlink, `.env` mode, required managed keys, and no `.git` at `/opt/data` or `/opt/data/profiles/*`.
 
 - [ ] During credential validation, run an API-equivalent check for each profile environment rather than persisting `gh auth login` state. Report profile names and status only.
 
 - [ ] Map typed exceptions to the fixed exit codes and one redacted stderr line. Unexpected exceptions use apply code `6`; with `HERMES_BOOTSTRAP_DEBUG=1`, print a redacted traceback.
+
+- [ ] Add CLI tests proving `sync-repository lifelog` reuses the shared lock/Git path, rejects an unknown name, fails without a token, reads root `.env` without sourcing it, and never requires Slack/dashboard payload records.
 
 - [ ] Run all package tests in the image.
 

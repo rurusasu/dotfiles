@@ -150,6 +150,13 @@ The image installs a `/usr/local/bin/hermes-bootstrap` command. It owns:
 - permission enforcement;
 - migration, backup, rollback, and result reporting.
 
+The default profile's lifelog cron invokes
+`hermes-bootstrap sync-repository lifelog`. This command loads the GitHub token
+from the active root `.env` and reuses the same repository identity checks,
+lock, forbidden-path checks, commit, rebase, and push implementation as the
+installer. Distribution repositories do not carry a second Git sync
+implementation.
+
 ### Host adapters
 
 The shell and PowerShell adapters only:

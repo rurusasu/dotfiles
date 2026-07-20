@@ -90,12 +90,12 @@ hermes_requires: ">=0.18.2"
 author: rurusasu
 license: private
 distribution_owned:
+  - .no-bundled-skills
   - SOUL.md
   - config.yaml
   - profile.yaml
   - slack-manifest.json
   - assets/
-  - skills/
 ```
 
 - [ ] Normalize `config.yaml` so it contains the intended model, Slack mention policy, terminal environment passthrough, and non-secret MCP declarations. Remove copied GitHub, Slack, dashboard, or profile-specific secret values.
@@ -182,10 +182,10 @@ hermes_requires: ">=0.18.2"
 author: rurusasu
 license: private
 distribution_owned:
+  - .no-bundled-skills
   - SOUL.md
   - config.yaml
   - slack-manifest.json
-  - skills/
 ```
 
 - [ ] Normalize non-secret model, Slack, terminal passthrough, and MCP config; update `SOUL.md` to use `/opt/data/shared/lifelog` and forbid profile-home Git commits.
@@ -248,30 +248,29 @@ docker run --rm -v ../hermes-home-distribution:/distribution:ro --entrypoint pyt
 
 Expected: exit code `0` and no output.
 
-## Task 6: Replace root-home Git sync with shared lifelog sync
+## Task 6: Replace root-home Git sync with the common bootstrap command
 
 **Files:**
 
 - Delete: `../hermes-home-distribution/scripts/hermes_home_sync.sh`
-- Create: `../hermes-home-distribution/scripts/lifelog_sync.sh`
 - Modify: `../hermes-home-distribution/cron/jobs.json`
 - Modify: `../hermes-home-distribution/SOUL.md`
 
-- [ ] Add `scripts/lifelog_sync.sh` as the single default-profile sync entrypoint. It must acquire `/opt/data/locks/repositories/lifelog.lock`, require `/opt/data/shared/lifelog` to be the `rurusasu/lifelog` checkout, reject likely secret/runtime paths, commit allowed changes, fetch `origin/main`, rebase, and push.
+- [ ] Delete `scripts/hermes_home_sync.sh` and do not add another distribution-owned Git implementation.
 
-- [ ] Keep authentication delegated to `/usr/local/bin/gh` and Git `GIT_ASKPASS`; do not write a token into the script or remote URL.
+- [ ] Replace the obsolete root-home sync cron entry with a default-profile-only lifelog sync job invoking `/usr/local/bin/hermes-bootstrap sync-repository lifelog`. Preserve the article-news Slack job, but point all content paths at `/opt/data/shared/lifelog`.
 
-- [ ] Replace the obsolete root-home sync cron entry with a default-profile-only lifelog sync job invoking `/opt/data/scripts/lifelog_sync.sh`. Preserve the article-news Slack job, but point all content paths at `/opt/data/shared/lifelog`.
+- [ ] Keep authentication, repository identity validation, locking, forbidden-path checks, commit, rebase, and push inside the common bootstrap command. The cron definition contains no credential or Git command.
 
 - [ ] Add shell syntax and JSON checks.
 
 ```bash
-bash -n ../hermes-home-distribution/scripts/lifelog_sync.sh
 jq -e '.jobs | type == "array"' ../hermes-home-distribution/cron/jobs.json
 rg -n '/opt/data/core/lifelog|hermes_home_sync|/opt/data/.git' ../hermes-home-distribution
+rg -n 'git (add|commit|fetch|pull|rebase|push)|GIT_ASKPASS' ../hermes-home-distribution/scripts ../hermes-home-distribution/cron
 ```
 
-Expected: syntax and JSON checks pass; the final search returns no stale runtime-root Git assumptions.
+Expected: the JSON check passes and both searches return no stale runtime-root or duplicated Git-sync implementation.
 
 - [ ] Validate the root manifest again, run repository checks, inspect the full diff, and scan for credentials.
 
@@ -315,5 +314,5 @@ Expected: install exposes `--force`; update exposes `--force-config`, confirming
 - All four source PRs are merged with green checks.
 - Rick, Hoffman, and Risarisa pass Hermes 0.18.2 distribution parsing and user-data preservation probes.
 - `hermes-home/root-distribution.yaml` owns only explicit declarative paths.
-- Root cron and scripts sync `/opt/data/shared/lifelog`; no code treats `/opt/data` as a Git checkout.
+- Root cron invokes the common bootstrap to sync `/opt/data/shared/lifelog`; no distribution code treats `/opt/data` as a Git checkout or implements Git synchronization.
 - No source repository contains a secret or mutable Hermes runtime path.
