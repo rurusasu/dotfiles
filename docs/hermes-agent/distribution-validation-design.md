@@ -92,6 +92,12 @@ python3 scripts/validate_distribution.py full [--json] [--output PATH]
 - `repository-policy`;
 - `secret-patterns`.
 
+`secret-patterns` asks Git for tracked files plus non-ignored untracked files
+(`git ls-files --cached --others --exclude-standard -z`) and scans those regular
+files only. Ignored runtime material such as `.env`, auth state, memories, and
+caches is not part of the source-distribution guard. Failure to enumerate or
+read an in-scope file fails the check closed with a redacted count.
+
 `full` runs every fast check plus:
 
 - `hermes-parser`;
@@ -156,6 +162,11 @@ Repository setup installs both hooks:
 ```text
 pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
+
+The fast hook deliberately fails with prerequisite exit code `2` when Docker
+or the pinned Hermes image is unavailable. It does not silently downgrade YAML
+contract validation. Repository setup therefore pulls the pinned images before
+installing hooks; the hosted workflow performs the same explicit pulls.
 
 Agents must also invoke both stages explicitly before reporting completion.
 The controller does not trust hook execution because Git hooks can be absent or
