@@ -18,7 +18,7 @@ RUN test "$(dpkg --print-architecture)" = "amd64" \
   && groupadd --system --gid 997 hermes-browser \
   && useradd --system --uid 997 --create-home --gid hermes-browser hermes-browser \
   && install -d -o hermes-browser -g hermes-browser /data \
-  && sed -i 's#</body>#  <script type="module" src="app/clipboard-paste.js"></script>\n</body>#' /usr/share/novnc/vnc.html \
+  && sed -i 's#</body>#  <script type="module" src="app/clipboard-paste.js?v=2"></script>\n</body>#' /usr/share/novnc/vnc.html \
   && ln -sf vnc.html /usr/share/novnc/index.html
 
 ENV LANG=ja_JP.UTF-8 \

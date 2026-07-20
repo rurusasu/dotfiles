@@ -11,6 +11,7 @@ host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host 
 - `hermes`: `browser-mcp` service 名で Browser MCP に接続する。
 
 Google Chrome container は `ja_JP.UTF-8` locale と `--lang=ja` で起動し、Chrome UI と日本語入力内容を表示できるようにする。
+noVNC viewer は通常の `Cmd/Ctrl+C`、`Cmd/Ctrl+X`、`Cmd/Ctrl+V` を Google Chrome 側のショートカットへ変換し、プレーンテキストの clipboard をホストと双方向に同期する。
 
 Hermes から接続する内部 URL は次の固定値にする。
 
