@@ -312,12 +312,20 @@ browser data, X credentials, and other runtime paths do not move.
 
 ## Testing
 
+Distribution source repositories use the local/hosted validation contract in
+`distribution-validation-design.md`. GitHub Actions and pre-push invoke the
+same full validator. An explicit GitHub billing block may use current-head
+local evidence for automatic merge; missing or unknown workflow evidence may
+not.
+
 ### Bootstrap unit tests
 
 - manifest and payload schema validation;
 - path containment and symlink rejection;
 - root distribution ownership boundaries;
 - profile install/update while preserving user-owned data;
+- sanitized profile payloads containing only `distribution.yaml` and declared
+  `distribution_owned` paths;
 - shared repository clone, fast-forward, read-write sync, and locking;
 - `.env` merge, permissions, active-profile resolution, and idempotency;
 - missing and invalid GitHub credentials causing no writes;
