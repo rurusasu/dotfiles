@@ -21,9 +21,10 @@ setup() {
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
 	export DOTFILES_CURRENT_SYSTEM_PATH="$CURRENT_SYSTEM"
 	export DOTFILES_NIXOS_HARDWARE_CONFIG="$HARDWARE_CONFIG"
-	export DOTFILES_WAIT_SLEEP_SECONDS=0
-	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_WAIT_SLEEP_SECONDS=0
+		export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
+		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
 
 	write_stub uname '
 case "${1:-}" in
@@ -59,6 +60,9 @@ exec "$@"
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+fi
 exit 0
 '
 	write_stub nc 'exit 0'
@@ -93,6 +97,8 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull")" -lt "$(line_of 'docker run --rm --entrypoint /opt/hermes/.venv/bin/python')" ]
+	[ "$(line_of 'docker run --rm --entrypoint /opt/hermes/.venv/bin/python')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait")" ]
 	[ "$(line_of 'docker compose')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
 }
@@ -140,6 +146,9 @@ exit 42
 @test "NixOS Compose failure stops before acceptance" {
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+fi
 if [[ $* == *" up -d --force-recreate --wait"* ]]; then exit 43; fi
 '
 

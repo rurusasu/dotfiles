@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export DOTFILES_LOG_PREFIX="macos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/hermes-agent.sh"
 
 COMPOSE_FILE="$ROOT/docker/hermes-agent/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
@@ -145,10 +147,18 @@ show_compose_diagnostics() {
 }
 
 start_hermes_stack() {
+  dotfiles_log "Preparing Hermes runtime home..."
+  dotfiles_hermes_prepare_runtime_home
   dotfiles_log "Validating Hermes Docker Compose configuration..."
   docker compose -f "$COMPOSE_FILE" config
   dotfiles_log "Building Hermes images..."
   docker compose -f "$COMPOSE_FILE" build --pull
+  dotfiles_log "Ensuring Hermes dashboard auth..."
+  dotfiles_hermes_ensure_dashboard_auth docker
+  dotfiles_log "Ensuring Hermes runtime configuration..."
+  dotfiles_hermes_ensure_runtime_configuration
+  dotfiles_log "Ensuring Hermes Slack environment..."
+  dotfiles_hermes_ensure_slack_environment
   dotfiles_log "Starting Hermes services..."
   if ! docker compose -f "$COMPOSE_FILE" up -d --force-recreate --wait; then
     show_compose_diagnostics

@@ -4,6 +4,7 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-macos.sh"
 	COMMON_INSTALLER="$REPO_ROOT/scripts/sh/install-common.sh"
+	HERMES_INSTALLER="$REPO_ROOT/scripts/sh/hermes-agent.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
@@ -28,8 +29,9 @@ setup() {
 	export DOTFILES_USER_PROFILE_ROOT="$FAKE_USER_PROFILE_ROOT"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-	export DOTFILES_WAIT_SLEEP_SECONDS=0
-	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_WAIT_SLEEP_SECONDS=0
+		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
 
 	write_stub uname '
 case "${1:-}" in
@@ -79,6 +81,9 @@ EOF
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf 'generated-password\nscrypt$hash\ngenerated-secret\n'
+fi
 exit 0
 EOF
 	chmod +x \
@@ -95,6 +100,9 @@ write_installed_stubs() {
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+fi
 exit 0
 '
 	ln -s "$REPO_ROOT" "$HOME/.dotfiles"
@@ -117,9 +125,12 @@ if [ "${1:-}" = "run" ]; then
 #!/usr/bin/env bash
 printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
 DOCKER_INSTALL
-	cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
+		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
 #!/usr/bin/env bash
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+fi
 exit 0
 DOCKER
 	cat >"$STUB_BIN/chezmoi" <<'"'"'CHEZMOI'"'"'
@@ -157,15 +168,18 @@ assert_log_order() {
 
 	[ "$status" -eq 0 ]
 	grep -q "^sudo /usr/bin/env .*DOTFILES_USER=test-user .* $STUB_BIN/nix run .#darwin-rebuild -- switch --flake .#macos --impure$" "$COMMAND_LOG"
-	assert_log_order \
-		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"chezmoi apply --force" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
-		"verify-environment --runtime"
-	! grep -q 'brew install --cask' "$COMMAND_LOG"
+		assert_log_order \
+			"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+			"chezmoi init --source $REPO_ROOT/chezmoi" \
+			"chezmoi apply --force" \
+			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
+			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull" \
+			"docker run --rm --entrypoint /opt/hermes/.venv/bin/python" \
+			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
+			"verify-environment --runtime"
+		grep -q '^  provider: openai-codex$' "$HOME/.hermes/config.yaml"
+		grep -q '^  require_mention: true$' "$HOME/.hermes/config.yaml"
+		! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
@@ -194,6 +208,9 @@ assert_log_order() {
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf 'generated-password\nscrypt$hash\ngenerated-secret\n'
+fi
 if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"; then
 	exit 1
 fi
@@ -274,6 +291,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 		"$HOME/.dotfiles/docker/hermes-agent"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
+	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"

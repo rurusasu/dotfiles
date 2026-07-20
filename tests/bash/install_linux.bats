@@ -24,8 +24,9 @@ setup() {
 	export DOTFILES_OS_RELEASE_FILE="$OS_RELEASE"
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-	export DOTFILES_SYSTEMD_WAIT_ATTEMPTS=2
-	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_SYSTEMD_WAIT_ATTEMPTS=2
+		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
 
 	write_stub uname '
 case "${1:-}" in
@@ -55,6 +56,9 @@ esac
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+fi
 exit 0
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
@@ -127,10 +131,11 @@ assert_log_order() {
 	assert_log_order \
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"chezmoi apply --force" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
-		"verify-environment --runtime"
+			"chezmoi apply --force" \
+			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
+			"docker run --rm --entrypoint /opt/hermes/.venv/bin/python" \
+			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
+			"verify-environment --runtime"
 }
 
 @test "Linux accepts a responsive systemd manager while the global state is starting" {
