@@ -1,11 +1,8 @@
 { inputs, ... }:
 let
   system = "aarch64-darwin";
-  workmuxOverlay = _: _: {
-    workmux = inputs.workmux.packages.${system}.default.overrideAttrs (_: {
-      doCheck = false;
-    });
-  };
+  Workmux = import ./lib/workmux.nix { inherit inputs; };
+  workmuxOverlay = Workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
 in
 {
   flake.darwinConfigurations.macos = inputs.nix-darwin.lib.darwinSystem {

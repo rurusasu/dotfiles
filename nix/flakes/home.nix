@@ -5,11 +5,8 @@
 #   home-manager switch --flake .#aarch64-linux
 { inputs, ... }:
 let
-  workmuxOverlay = final: prev: {
-    workmux = inputs.workmux.packages.${prev.stdenv.hostPlatform.system}.default.overrideAttrs (_: {
-      doCheck = false;
-    });
-  };
+  Workmux = import ./lib/workmux.nix { inherit inputs; };
+  workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
   mkHome =
     system:
     inputs.home-manager.lib.homeManagerConfiguration {

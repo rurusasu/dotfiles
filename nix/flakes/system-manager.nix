@@ -2,11 +2,8 @@
 let
   requestedSystem = builtins.getEnv "DOTFILES_SYSTEM";
   system = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
-  workmuxOverlay = _: _: {
-    workmux = inputs.workmux.packages.${system}.default.overrideAttrs (_: {
-      doCheck = false;
-    });
-  };
+  Workmux = import ./lib/workmux.nix { inherit inputs; };
+  workmuxOverlay = Workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
   mkConfig =
     distro:
     inputs.system-manager.lib.makeSystemConfig {

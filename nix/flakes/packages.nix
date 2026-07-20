@@ -15,11 +15,8 @@
       ...
     }:
     let
-      workmuxOverlay = _: _: {
-        workmux = inputs'.workmux.packages.default.overrideAttrs (_: {
-          doCheck = false;
-        });
-      };
+      Workmux = import ./lib/workmux.nix { inherit inputs; };
+      workmuxOverlay = Workmux.mkOverlay (_: inputs'.workmux.packages.default);
       unfreePkgs =
         (import pkgs.path {
           system = pkgs.stdenv.hostPlatform.system;

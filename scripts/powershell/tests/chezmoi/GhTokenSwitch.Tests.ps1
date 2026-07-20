@@ -811,30 +811,30 @@ Describe 'Codex login preflight helper' {
         Set-Content -LiteralPath (Join-Path $runtimeHome 'config.toml') -Encoding ascii -Value 'model = "gpt-5.5"'
         Set-Content -LiteralPath (Join-Path $runtimeHome 'hooks.json') -Encoding ascii -Value '{}'
         Set-Content -LiteralPath (Join-Path $runtimeHome 'auth.json') -Encoding ascii -Value (@{
-                auth_mode = 'chatgpt'
+                auth_mode      = 'chatgpt'
                 OPENAI_API_KEY = $null
-                tokens = @{
-                    id_token = New-TestJwt @{
-                        email = 'kohei@example.com'
+                tokens         = @{
+                    id_token      = New-TestJwt @{
+                        email                         = 'kohei@example.com'
                         'https://api.openai.com/auth' = @{
-                            chatgpt_account_id = 'acct_123'
-                            workspace_name = 'ai-mate'
+                            chatgpt_account_id   = 'acct_123'
+                            workspace_name       = 'ai-mate'
                             workspace_account_id = 'ws_456'
                         }
                     }
-                    access_token = 'test-access-token'
+                    access_token  = 'test-access-token'
                     refresh_token = 'test-refresh-token'
-                    account_id = 'acct_123'
+                    account_id    = 'acct_123'
                 }
-                last_refresh = '2026-07-10T00:00:00Z'
+                last_refresh   = '2026-07-10T00:00:00Z'
             } | ConvertTo-Json -Depth 10)
         Set-Content -LiteralPath (Join-Path $orcaRoot 'orca-data.json') -Encoding ascii -Value (@{
                 settings = @{
-                    codexManagedAccounts = @()
-                    activeCodexManagedAccountId = $null
+                    codexManagedAccounts                  = @()
+                    activeCodexManagedAccountId           = $null
                     activeCodexManagedAccountIdsByRuntime = @{
                         host = $null
-                        wsl = @{}
+                        wsl  = @{}
                     }
                 }
             } | ConvertTo-Json -Depth 10)
@@ -879,7 +879,7 @@ Describe 'Codex login preflight helper' {
         Set-Content -LiteralPath (Join-Path $runtimeHome 'config.toml') -Encoding ascii -Value 'model = "gpt-5.5"'
         Set-Content -LiteralPath (Join-Path $runtimeHome 'auth.json') -Encoding ascii -Value (@{
                 auth_mode = 'chatgpt'
-                tokens = @{
+                tokens    = @{
                     id_token = New-TestJwt @{
                         email = 'kohei@example.com'
                     }
