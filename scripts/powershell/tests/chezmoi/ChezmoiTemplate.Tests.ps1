@@ -229,6 +229,27 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'direnv user config' {
+        It 'should hide low-level environment diff noise while keeping status logs' {
+            $configPath = Join-Path $script:chezmoiRoot "dot_config/direnv/direnv.toml"
+
+            Test-Path -LiteralPath $configPath | Should -BeTrue
+            $content = Get-Content -LiteralPath $configPath -Raw
+
+            $content | Should -Match '(?m)^\[global\]\s*$'
+            $content | Should -Match '(?m)^hide_env_diff\s*=\s*true\s*$'
+            $content | Should -Not -Match '(?m)^log_format\s*=\s*"-"\s*$' -Because "status logs should still explain when direnv loads nix-direnv"
+        }
+
+        It 'should print a human-readable dev shell summary for this repository' {
+            $envrcPath = Join-Path $script:repoRoot ".envrc"
+            $content = Get-Content -LiteralPath $envrcPath -Raw
+
+            $content | Should -Match 'log_status "dotfiles dev shell ready: treefmt, statix, deadnix"'
+            $content | Should -Match 'use flake \. && log_status' -Because "direnv must preserve use flake failure status"
+        }
+    }
+
     Context 'Docker MCP SDK サーバーの設定整合性' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
