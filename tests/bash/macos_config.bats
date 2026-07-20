@@ -17,9 +17,16 @@ setup() {
 }
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
-	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+  grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
+  grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+  grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+}
+
+@test "Darwin activation updates and upgrades every managed cask" {
+  grep -q 'greedyCasks = true' "$REPO_ROOT/nix/darwin/default.nix"
+  grep -q 'autoUpdate = true' "$REPO_ROOT/nix/darwin/default.nix"
+  grep -q 'upgrade = true' "$REPO_ROOT/nix/darwin/default.nix"
+  grep -q 'cleanup = "none"' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
 @test "Darwin omits the incompatible generated documentation" {
