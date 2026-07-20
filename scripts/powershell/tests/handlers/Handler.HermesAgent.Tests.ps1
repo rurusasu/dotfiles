@@ -240,7 +240,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "hermes-browser"
             $dockerfileContent | Should -Match "COPY entrypoint\.sh"
             $dockerfileContent | Should -Match "COPY clipboard-paste\.js /usr/share/novnc/app/clipboard-paste\.js"
-            $dockerfileContent | Should -Match ([regex]::Escape('<script type="module" src="app/clipboard-paste.js"></script>'))
+            $dockerfileContent | Should -Match ([regex]::Escape('<script type="module" src="app/clipboard-paste.js?v=2"></script>'))
             $dockerfileContent | Should -Match ([regex]::Escape('ln -sf vnc.html /usr/share/novnc/index.html'))
             $dockerfileContent | Should -Match "COPY healthcheck\.sh"
             $dockerfileContent | Should -Match "chmod \+x"
@@ -302,12 +302,18 @@ Describe 'HermesAgentHandler' {
 
             $clipboardPasteContent = Get-Content -LiteralPath $clipboardPastePath -Raw
             $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"keydown"'
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"copy"'
+            $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"cut"'
             $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"paste"'
+            $clipboardPasteContent | Should -Match 'addEventListener\(\s*"clipboard"'
             $clipboardPasteContent | Should -Match ([regex]::Escape('clipboardData?.getData("text/plain")'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('navigator.clipboard.writeText'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('new TextEncoder().encode(text)'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('RFB.messages.clientCutText'))
             $clipboardPasteContent | Should -Match "XK_Control_L"
+            $clipboardPasteContent | Should -Match "XK_c"
             $clipboardPasteContent | Should -Match "XK_v"
+            $clipboardPasteContent | Should -Match "XK_x"
             $clipboardPasteContent | Should -Match ([regex]::Escape('#noVNC_clipboard'))
 
             $imageEntrypointContent = "$dockerfileContent`n$entrypointContent"
