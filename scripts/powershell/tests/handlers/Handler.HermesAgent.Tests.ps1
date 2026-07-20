@@ -240,7 +240,7 @@ Describe 'HermesAgentHandler' {
             $dockerfileContent | Should -Match "hermes-browser"
             $dockerfileContent | Should -Match "COPY entrypoint\.sh"
             $dockerfileContent | Should -Match "COPY clipboard-paste\.js /usr/share/novnc/app/clipboard-paste\.js"
-            $dockerfileContent | Should -Match ([regex]::Escape('<script type="module" src="app/clipboard-paste.js?v=2"></script>'))
+            $dockerfileContent | Should -Match ([regex]::Escape('<script type="module" src="app/clipboard-paste.js?v=5"></script>'))
             $dockerfileContent | Should -Match ([regex]::Escape('ln -sf vnc.html /usr/share/novnc/index.html'))
             $dockerfileContent | Should -Match "COPY healthcheck\.sh"
             $dockerfileContent | Should -Match "chmod \+x"
@@ -307,6 +307,27 @@ Describe 'HermesAgentHandler' {
             $clipboardPasteContent | Should -Match 'document\.addEventListener\(\s*"paste"'
             $clipboardPasteContent | Should -Match 'addEventListener\(\s*"clipboard"'
             $clipboardPasteContent | Should -Match ([regex]::Escape('clipboardData?.getData("text/plain")'))
+            $clipboardPasteContent | Should -Match "getHostPasteTarget"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('hostPasteTarget.focus()'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('hostPasteTarget.select()'))
+            $clipboardPasteContent | Should -Match "isHostPastePrimingKey"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('event.code === "MetaLeft"'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('event.code === "MetaRight"'))
+            $clipboardPasteContent | Should -Match "HOST_PASTE_PRIMING_TIMEOUT_MS"
+            $clipboardPasteContent | Should -Match "hostPastePrimeReleaseTimer"
+            $clipboardPasteContent | Should -Match "scheduleHostPastePrimeRelease"
+            $clipboardPasteContent | Should -Match "clearHostPastePrimeRelease"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('window.clearTimeout(hostPastePrimeReleaseTimer)'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('document.activeElement === hostPasteTarget'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('.readText()'))
+            $clipboardPasteContent | Should -Match "scheduleRemotePasteShortcut"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('window.setTimeout'))
+            $clipboardPasteContent | Should -Match "typeTextToRemote"
+            $clipboardPasteContent | Should -Match "getTypeableKeysyms"
+            $clipboardPasteContent | Should -Match ([regex]::Escape('text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('character.codePointAt(0)'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('KeyTable.XK_Return'))
+            $clipboardPasteContent | Should -Match ([regex]::Escape('UI.rfb.sendKey(keysym, "", true)'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('navigator.clipboard.writeText'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('new TextEncoder().encode(text)'))
             $clipboardPasteContent | Should -Match ([regex]::Escape('RFB.messages.clientCutText'))
