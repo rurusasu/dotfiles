@@ -94,9 +94,13 @@ python3 scripts/validate_distribution.py full [--json] [--output PATH]
 
 `secret-patterns` asks Git for tracked files plus non-ignored untracked files
 (`git ls-files --cached --others --exclude-standard -z`) and scans those regular
-files only. Ignored runtime material such as `.env`, auth state, memories, and
-caches is not part of the source-distribution guard. Failure to enumerate or
-read an in-scope file fails the check closed with a redacted count.
+files only. It separately asks Git for worktree deletions (`git ls-files
+--deleted -z`) and excludes those absent paths because they cannot enter the
+next source commit; malformed or failed deletion enumeration remains a
+fail-closed error. Ignored runtime material such as `.env`, auth state,
+memories, and caches is not part of the source-distribution guard. Failure to
+enumerate or read any other in-scope file fails the check closed with a
+redacted count.
 
 `full` runs every fast check plus:
 
