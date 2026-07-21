@@ -7,26 +7,30 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_SYSTEMD_DIR="$BATS_TEST_TMPDIR/systemd/system"
 	OS_RELEASE="$BATS_TEST_TMPDIR/os-release"
+	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$FAKE_SYSTEMD_DIR"
 	: >"$COMMAND_LOG"
+	: >"$PAYLOAD_CAPTURE"
 	: >"$FAKE_NIX_PROFILE"
 	printf 'ID=ubuntu\n' >"$OS_RELEASE"
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
+	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
+	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
+	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_SYSTEMD_DIR="$FAKE_SYSTEMD_DIR"
 	export DOTFILES_OS_RELEASE_FILE="$OS_RELEASE"
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
-	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-		export DOTFILES_SYSTEMD_WAIT_ATTEMPTS=2
-		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
+	export DOTFILES_SYSTEMD_WAIT_ATTEMPTS=2
+	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 
 	write_stub uname '
 case "${1:-}" in
@@ -54,12 +58,17 @@ esac
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub jq 'exec "$REAL_JQ" "$@"'
+	write_stub op '
+printf "op %s\n" "$*" >>"$COMMAND_LOG"
+printf "%s\n" "$HERMES_ITEM_JSON"
+'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
-fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub sg '
@@ -67,6 +76,12 @@ printf "sg %s\n" "$*" >>"$COMMAND_LOG"
 [ "${2:-}" = "-c" ]
 exec bash -c "$3"
 '
+}
+
+valid_secret_plan() {
+	cat <<'JSON'
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}
+JSON
 }
 
 write_stub() {
@@ -131,11 +146,27 @@ assert_log_order() {
 	assert_log_order \
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
-			"chezmoi apply --force" \
-			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
-			"docker run --rm --entrypoint /opt/hermes/.venv/bin/python" \
-			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
-			"verify-environment --runtime"
+		"chezmoi apply --force" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
+		"verify-environment --runtime"
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 6 ]
+	[ -s "$PAYLOAD_CAPTURE" ]
+}
+
+@test "Hermes bootstrap failure stops Linux before service recreation and acceptance" {
+	write_nix_stub
+	export HERMES_BOOTSTRAP_STATUS=45
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 45 ]
+	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
+	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
 @test "Linux accepts a responsive systemd manager while the global state is starting" {

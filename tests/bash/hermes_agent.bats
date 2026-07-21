@@ -135,6 +135,7 @@ create_mocked_installer_fixture() {
 	touch "$MOCK_REPO/flake.nix" "$MOCK_REPO/docker/hermes-agent/compose.yml"
 
 	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
+printf 'selected-installer=%s\n' "${BASH_SOURCE[1]}" >>"$COMMAND_LOG"
 dotfiles_hermes_start_stack() {
   printf 'adapter runner=%s compose=%s\n' "$1" "$2" >>"$COMMAND_LOG"
   "$1" compose -f "$2" config --quiet
@@ -203,7 +204,6 @@ run_mocked_installer() {
 
 	create_mocked_installer_fixture
 	printf '{ ... }: { }\n' >"$hardware"
-	touch "$marker"
 	mkdir -p "$prebuilt/bin" "$systemd_dir"
 	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
 #!/usr/bin/env bash
@@ -211,11 +211,24 @@ printf 'switch-to-configuration %s\n' "$*" >>"$COMMAND_LOG"
 EOF
 	chmod +x "$prebuilt/bin/switch-to-configuration"
 	printf 'ID=ubuntu\n' >"$os_release"
+	MOCK_NIXOS_MARKER="$marker"
 
 	case "$platform" in
-	macos) export MOCK_UNAME_S=Darwin MOCK_UNAME_M=arm64 ;;
-	linux) export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64 ;;
-	nixos) export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64 ;;
+	macos)
+		rm -f "$marker"
+		export MOCK_UNAME_S=Darwin MOCK_UNAME_M=arm64
+		MOCK_SELECTED_INSTALLER=install-macos.sh
+		;;
+	linux)
+		rm -f "$marker"
+		export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64
+		MOCK_SELECTED_INSTALLER=install-linux.sh
+		;;
+	nixos)
+		touch "$marker"
+		export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64
+		MOCK_SELECTED_INSTALLER=install-nixos.sh
+		;;
 	*) false ;;
 	esac
 
@@ -275,6 +288,7 @@ EOF
 		*) expected_runner=docker_command ;;
 		esac
 		adapter_line="adapter runner=$expected_runner compose=$MOCK_REPO/docker/hermes-agent/compose.yml"
+		grep -Fxq "selected-installer=$MOCK_REPO/scripts/sh/$MOCK_SELECTED_INSTALLER" "$COMMAND_LOG"
 		grep -Fxq "$adapter_line" "$COMMAND_LOG"
 		grep -Fq "docker compose -f $MOCK_REPO/docker/hermes-agent/compose.yml config --quiet" "$COMMAND_LOG"
 		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
@@ -284,6 +298,11 @@ EOF
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
+		fi
+		if [[ $platform == nixos ]]; then
+			[ -e "$MOCK_NIXOS_MARKER" ]
+		else
+			[ ! -e "$MOCK_NIXOS_MARKER" ]
 		fi
 	done
 }
