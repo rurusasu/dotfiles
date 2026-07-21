@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+PYTHONPATH=/usr/local/lib/hermes-bootstrap exec /opt/hermes/.venv/bin/python -m hermes_bootstrap "$@"
