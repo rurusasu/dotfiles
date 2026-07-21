@@ -136,7 +136,7 @@ class GitStagingTests(unittest.TestCase):
         except (OSError, ValueError):
             pass
 
-    def run_failed_git_process_tree(self, *, output: bool) -> tuple[Path, Path]:
+    def run_failed_git_process_tree(self, *, output: bool, bytes_runner: bool = False) -> tuple[Path, Path]:
         bin_dir = self.root / ("overflow-bin" if output else "timeout-bin")
         bin_dir.mkdir()
         direct_pid_file = self.root / ("overflow-direct.pid" if output else "timeout-direct.pid")
@@ -168,7 +168,12 @@ class GitStagingTests(unittest.TestCase):
 
         timeout = 0.1 if not output else git_module._GIT_TIMEOUT_SECONDS
         with mock.patch.object(git_module, "_GIT_TIMEOUT_SECONDS", timeout):
-            self.assertIsNone(git_module._run_git(("anything",), self.root, environment))
+            if bytes_runner:
+                self.assertIsNone(
+                    git_module._run_git_bytes(("anything",), self.root, environment, max_output_bytes=64)
+                )
+            else:
+                self.assertIsNone(git_module._run_git(("anything",), self.root, environment))
         self.wait_for_path(direct_pid_file)
         self.wait_for_path(descendant_pid_file)
         return direct_pid_file, descendant_pid_file
@@ -382,6 +387,45 @@ class GitStagingTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "linux" and Path("/proc").is_dir(), "requires Linux /proc")
     def test_git_timeout_reaps_direct_and_descendant_processes(self) -> None:
         direct_pid_file, descendant_pid_file = self.run_failed_git_process_tree(output=False)
+
+        self.assert_proc_entries_disappear(direct_pid_file, descendant_pid_file)
+
+    def test_bytes_runner_preserves_valid_utf8_and_nul_and_text_wrapper_remains_ascii_only(self) -> None:
+        bin_dir = self.root / "bytes-bin"
+        bin_dir.mkdir()
+        fake_git = bin_dir / "git"
+        fake_git.write_text("#!/bin/sh\nprintf 'plain\\000\\303\\251\\000'\n", encoding="utf-8")
+        fake_git.chmod(0o700)
+        environment = {"PATH": str(bin_dir)}
+
+        self.assertEqual(
+            git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=64),
+            b"plain\0\xc3\xa9\0",
+        )
+        self.assertIsNone(git_module._run_git(("status",), self.root, environment))
+        fake_git.write_text("#!/bin/sh\nprintf 'plain\\n'\n", encoding="utf-8")
+        self.assertEqual(git_module._run_git_bytes(("status",), self.root, environment), b"plain\n")
+        self.assertEqual(git_module._run_git(("status",), self.root, environment), "plain")
+
+    def test_bytes_runner_rejects_invalid_bounds_before_spawning_git(self) -> None:
+        environment = os.environ.copy()
+        with mock.patch("hermes_bootstrap.git.subprocess.Popen") as popen:
+            for limit in (0, -1, 4097):
+                with self.subTest(limit=limit):
+                    self.assertIsNone(
+                        git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=limit)
+                    )
+        popen.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == "linux" and Path("/proc").is_dir(), "requires Linux /proc")
+    def test_bytes_runner_output_overflow_reaps_direct_and_descendant_processes(self) -> None:
+        direct_pid_file, descendant_pid_file = self.run_failed_git_process_tree(output=True, bytes_runner=True)
+
+        self.assert_proc_entries_disappear(direct_pid_file, descendant_pid_file)
+
+    @unittest.skipUnless(sys.platform == "linux" and Path("/proc").is_dir(), "requires Linux /proc")
+    def test_bytes_runner_timeout_reaps_direct_and_descendant_processes(self) -> None:
+        direct_pid_file, descendant_pid_file = self.run_failed_git_process_tree(output=False, bytes_runner=True)
 
         self.assert_proc_entries_disappear(direct_pid_file, descendant_pid_file)
 

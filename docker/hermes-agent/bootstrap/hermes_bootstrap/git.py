@@ -228,12 +228,32 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
 def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
     """Run Git without a shell and retain only a small, non-secret result."""
 
+    output = _run_git_bytes(arguments, cwd, environment)
+    if output is None:
+        return None
+    try:
+        return output.decode("ascii", "strict").strip()
+    except UnicodeError:
+        return None
+
+
+def _run_git_bytes(
+    arguments: tuple[str, ...],
+    cwd: Path,
+    environment: dict[str, str],
+    *,
+    max_output_bytes: int = _MAX_GIT_OUTPUT_BYTES,
+) -> bytes | None:
+    """Run Git with the same bounded lifecycle as ``_run_git`` and retain raw output."""
+
     process: subprocess.Popen[bytes] | None = None
     output_stream: object | None = None
     selector: selectors.BaseSelector | None = None
     output = bytearray()
     succeeded = False
     try:
+        if type(max_output_bytes) is not int or not 0 < max_output_bytes <= _MAX_GIT_OUTPUT_BYTES:
+            return None
         if not _ensure_linux_child_subreaper():
             return None
         process = subprocess.Popen(
@@ -261,22 +281,21 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
             if remaining <= 0:
                 return None
             for _key, _events in selector.select(remaining):
-                chunk = os.read(descriptor, _MAX_GIT_OUTPUT_BYTES + 1 - len(output))
+                chunk = os.read(descriptor, max_output_bytes + 1 - len(output))
                 if not chunk:
                     selector.unregister(output_stream)
                     end_of_output = True
                     break
                 output.extend(chunk)
-                if len(output) > _MAX_GIT_OUTPUT_BYTES:
+                if len(output) > max_output_bytes:
                     return None
 
         remaining = deadline - time.monotonic()
         if remaining <= 0 or process.wait(timeout=remaining) != 0:
             return None
-        result = bytes(output).decode("ascii", "strict").strip()
         succeeded = True
-        return result
-    except (BlockingIOError, OSError, subprocess.SubprocessError, UnicodeError, ValueError):
+        return bytes(output)
+    except (BlockingIOError, OSError, subprocess.SubprocessError, ValueError):
         return None
     finally:
         if process is not None and not succeeded:
