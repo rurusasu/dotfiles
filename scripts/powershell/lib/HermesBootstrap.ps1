@@ -6,6 +6,7 @@
 if (-not ("HermesBootstrapBoundedDrain" -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
+using System.Collections;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -43,6 +44,20 @@ public sealed class HermesBootstrapBoundedDrain : IDisposable
     public void Dispose()
     {
         lock (syncRoot) { buffer.Clear(); }
+    }
+}
+
+public static class HermesBootstrapErrorHistory
+{
+    public static void Restore(ArrayList errors, object[] snapshot)
+    {
+        try
+        {
+            errors.Clear();
+            if (snapshot == null) { return; }
+            foreach (var errorRecord in snapshot) { errors.Add(errorRecord); }
+        }
+        catch { }
     }
 }
 '@
@@ -169,7 +184,7 @@ function Invoke-HermesBootstrap {
     )
 
     $plan = Get-HermesBootstrapSecretPlan -ComposeFile $ComposeFile
-    $errorCountBeforeProducer = $Error.Count
+    [System.Management.Automation.ErrorRecord[]]$errorHistoryBeforeProducer = @($global:Error)
     $process = $null
     $processStarted = $false
     $producerFailed = $false
@@ -242,6 +257,7 @@ function Invoke-HermesBootstrap {
         }
         catch {
             $producerFailed = $true
+            Set-Variable -Name PSItem -Value $null -Scope Local
         }
         finally {
             if ($processStarted) {
@@ -352,10 +368,11 @@ function Invoke-HermesBootstrap {
         $record = $null
         $item = $null
         $invokerOutput = $null
+        $value = $null
         $secretValues = $null
-        while ($Error.Count -gt $errorCountBeforeProducer) {
-            $Error.RemoveAt(0)
-        }
+        Set-Variable -Name PSItem -Value $null -Scope Local
+        [HermesBootstrapErrorHistory]::Restore($global:Error, $errorHistoryBeforeProducer)
+        $errorHistoryBeforeProducer = $null
     }
 }
 

@@ -198,6 +198,29 @@ function global:Test-HermesBootstrapErrorGraphContains {
     return $false
 }
 
+function global:Restore-HermesBootstrapTestErrorHistory {
+    param(
+        [AllowEmptyCollection()]
+        [System.Management.Automation.ErrorRecord[]]$Snapshot
+    )
+
+    $global:Error.Clear()
+    foreach ($errorRecord in @($Snapshot)) {
+        [void]$global:Error.Add($errorRecord)
+    }
+}
+
+function global:New-HermesBootstrapTestErrorRecord {
+    param([Parameter(Mandatory)][string]$Message)
+
+    return [System.Management.Automation.ErrorRecord]::new(
+        [System.InvalidOperationException]::new($Message),
+        "HermesBootstrapTestBaseline",
+        [System.Management.Automation.ErrorCategory]::NotSpecified,
+        $null
+    )
+}
+
 Describe "Invoke-HermesBootstrap" {
     BeforeAll {
         $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
@@ -325,22 +348,106 @@ Describe "Invoke-HermesBootstrap" {
         $global:LASTEXITCODE | Should -Be 1
     }
 
-    It "removes producer ErrorRecords without clearing pre-existing error history" {
-        try { throw "pre-existing-error-history" } catch { }
-        $preExistingError = $Error[0]
-        $errorCountBefore = $Error.Count
-        $secretMarker = "producer-secret-marker-秘密"
-        $invoker = {
-            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-            throw $secretMarker
+    It "restores a saturated 256-record error history after a secret-bearing producer failure" {
+        $originalErrorHistory = @($global:Error)
+        try {
+            $global:Error.Clear()
+            foreach ($index in 0..255) {
+                [void]$global:Error.Insert(0, (New-HermesBootstrapTestErrorRecord -Message "saturated-baseline-$index"))
+            }
+            $baseline = @($global:Error)
+            $baselineMessages = @($baseline | ForEach-Object { $_.Exception.Message })
+            $secretMarker = "saturated-producer-secret-秘密"
+            $env:HERMES_BOOTSTRAP_TEST_HANG = "1"
+            $pidPath = Join-Path $TestDrive "pid"
+            $invoker = {
+                param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+                [void]$Arguments
+                if (-not $IsWindows) {
+                    $deadline = [DateTime]::UtcNow.AddSeconds(1)
+                    while (-not (Test-Path -LiteralPath $pidPath) -and [DateTime]::UtcNow -lt $deadline) {
+                        Start-Sleep -Milliseconds 10
+                    }
+                }
+                throw $secretMarker
+            }.GetNewClosure()
+            $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $watch.Stop()
+
+            $result.Success | Should -BeFalse
+            $watch.Elapsed.TotalSeconds | Should -BeLessThan 1.8
+            $actual = @($global:Error)
+            $actual.Count | Should -Be 256
+            @($actual | ForEach-Object { $_.Exception.Message }) | Should -Be $baselineMessages
+            foreach ($index in 0..255) {
+                [object]::ReferenceEquals($actual[$index], $baseline[$index]) | Should -BeTrue
+            }
+            Test-HermesBootstrapErrorGraphContains -Roots $actual -Marker $secretMarker | Should -BeFalse
+            if (-not $IsWindows) {
+                $childProcessId = [int](Get-Content -LiteralPath $pidPath -Raw)
+                { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
+            }
+            else {
+                @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$TestDrive*docker.cmd*" }).Count | Should -Be 0
+            }
         }
+        finally {
+            Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
+        }
+    }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+    It "restores an empty error history after a secret-bearing producer failure" {
+        $originalErrorHistory = @($global:Error)
+        try {
+            $global:Error.Clear()
+            $secretMarker = "empty-baseline-secret-秘密"
+            $invoker = {
+                param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+                [void]$Arguments
+                throw $secretMarker
+            }
 
-        $result.Success | Should -BeFalse
-        $Error.Count | Should -Be $errorCountBefore
-        [object]::ReferenceEquals($Error[0], $preExistingError) | Should -BeTrue
-        Test-HermesBootstrapErrorGraphContains -Roots @($Error) -Marker $secretMarker | Should -BeFalse
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+            $result.Success | Should -BeFalse
+            $global:Error.Count | Should -Be 0
+            Test-HermesBootstrapErrorGraphContains -Roots @($global:Error) -Marker $secretMarker | Should -BeFalse
+        }
+        finally {
+            Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
+        }
+    }
+
+    It "restores an exact non-saturated error history after a secret-bearing producer failure" {
+        $originalErrorHistory = @($global:Error)
+        try {
+            $global:Error.Clear()
+            foreach ($marker in @("baseline-oldest", "baseline-middle", "baseline-newest")) {
+                [void]$global:Error.Insert(0, (New-HermesBootstrapTestErrorRecord -Message $marker))
+            }
+            $baseline = @($global:Error)
+            $secretMarker = "producer-secret-marker-秘密"
+            $invoker = {
+                param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+                [void]$Arguments
+                throw $secretMarker
+            }
+
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+            $result.Success | Should -BeFalse
+            $actual = @($global:Error)
+            $actual.Count | Should -Be $baseline.Count
+            foreach ($index in 0..($baseline.Count - 1)) {
+                [object]::ReferenceEquals($actual[$index], $baseline[$index]) | Should -BeTrue
+            }
+            Test-HermesBootstrapErrorGraphContains -Roots $actual -Marker $secretMarker | Should -BeFalse
+        }
+        finally {
+            Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
+        }
     }
 
     It "removes nested item JSON parsing errors from global error history" {
