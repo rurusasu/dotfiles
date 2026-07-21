@@ -207,6 +207,29 @@ class PayloadTests(unittest.TestCase):
         with self.assertRaises(CredentialError):
             read_secret_payload(payload_stream(items), self.manifest)
 
+    def test_field_ids_match_credentials_when_display_labels_are_localized(self) -> None:
+        items = secret_items()
+        items["github"]["fields"] = [
+            {"id": "credential", "label": "localized credential label", "value": "github-token"}
+        ]
+
+        secrets = read_secret_payload(payload_stream(items), self.manifest)
+
+        self.assertEqual(secrets.github_token, "github-token")
+
+    def test_conflicting_field_id_and_label_matches_are_rejected(self) -> None:
+        items = secret_items()
+        items["slack_default"] = {
+            "id": "slack-default-id",
+            "fields": [
+                {"id": "bot_token", "label": "app_level_token", "value": "conflicting-secret"},
+                {"id": "allowed_users", "label": "allowed_users", "value": "UDEFAULT"},
+            ],
+        }
+
+        with self.assertRaises(ValidationError):
+            read_secret_payload(payload_stream(items), self.manifest)
+
     def test_header_and_end_records_are_required_with_no_trailing_record(self) -> None:
         self.assert_input_error(io.StringIO(json.dumps({"type": "item", "key": "github", "item": {}}) + "\n"))
         self.assert_input_error(payload_stream(secret_items(), include_end=False))
