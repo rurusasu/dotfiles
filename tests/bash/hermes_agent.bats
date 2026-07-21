@@ -5,19 +5,45 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
+	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
+	REAL_JQ="$(command -v jq)"
+	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME" "$STUB_BIN"
 	: >"$COMMAND_LOG"
+	: >"$PAYLOAD_CAPTURE"
+	: >"$COMPOSE_FILE"
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG
-	export DOTFILES_HERMES_AGENT_1PASSWORD_ENABLED=0
-	export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
+	export COMMAND_LOG PAYLOAD_CAPTURE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	export PLAN_JSON="$(valid_secret_plan)"
+	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
+	export BOOTSTRAP_STATUS=0
+	export OP_FAIL_ITEM=""
 
-	write_stub docker '
-printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
+	write_stub jq '
+exec "$REAL_JQ" "$@"
+'
+	write_stub op '
+printf "op" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
+	exit 17
 fi
+printf "%s\n" "$OP_ITEM_JSON"
+'
+	write_stub docker '
+printf "docker" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if [ "${1:-}" != "compose" ]; then
+	exit 1
+fi
+case " $* " in
+  *" secret-plan "*) printf "%s\n" "$PLAN_JSON" ;;
+  *" apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$BOOTSTRAP_STATUS" ;;
+esac
 '
 }
 
@@ -32,214 +58,207 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
-run_hermes_auth_helper() {
+valid_secret_plan() {
+	cat <<'JSON'
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}
+JSON
+}
+
+run_start_stack() {
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
 . "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-dotfiles_hermes_ensure_dashboard_auth docker
+dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 '
 }
 
-run_hermes_config_helper() {
+run_start_stack_with_function_runner() {
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
 . "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-dotfiles_hermes_ensure_runtime_configuration
+docker_command() {
+  printf "runner" >>"$COMMAND_LOG"
+  printf " <%s>" "$@" >>"$COMMAND_LOG"
+  printf "\n" >>"$COMMAND_LOG"
+  docker "$@"
+}
+dotfiles_hermes_start_stack docker_command "$COMPOSE_FILE"
 '
 }
 
-run_hermes_slack_helper() {
+assert_log_order() {
+	local previous=0
+	local pattern line
+	for pattern in "$@"; do
+		line="$(grep -n -m 1 -- "$pattern" "$COMMAND_LOG" | cut -d: -f1)"
+		[ -n "$line" ]
+		[ "$line" -gt "$previous" ]
+		previous="$line"
+	done
+}
+
+@test "preserves Hermes data and browser directory helpers" {
+	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
+	export HERMES_BROWSER_DATA_DIR="$TEST_HOME/custom-browser"
+
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
 . "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-dotfiles_hermes_ensure_slack_environment
+printf "%s\n%s\n" "$(dotfiles_hermes_data_dir)" "$(dotfiles_hermes_browser_data_dir)"
+dotfiles_hermes_prepare_runtime_home
 '
+
+	[ "$status" -eq 0 ]
+	[ "${lines[0]}" = "$TEST_HOME/custom-data" ]
+	[ "${lines[1]}" = "$TEST_HOME/custom-browser" ]
+	[ -d "$TEST_HOME/custom-data/.xurl" ]
+	[ -d "$TEST_HOME/custom-browser" ]
 }
 
-write_slack_jq_stub() {
-	write_stub jq '
-names=""
-while [ "$#" -gt 0 ]; do
-	if [ "${1:-}" = "--arg" ] && [ "${2:-}" = "names" ]; then
-		names="${3:-}"
-		shift 3
-		continue
-	fi
-	shift
+@test "uses the Hermes data directory for the default browser directory" {
+	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_browser_data_dir
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "$TEST_HOME/custom-data/.browser" ]
+}
+
+@test "fails preflight before Compose when op is unavailable" {
+	rm "$STUB_BIN/op"
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"1Password CLI (op) is required"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "fails preflight before Compose when jq is unavailable" {
+	rm "$STUB_BIN/jq"
+	export PATH="$STUB_BIN:/bin"
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"jq is required"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "rejects a secret plan with an unsupported schema before looking up items" {
+	export PLAN_JSON='{"schema_version":2,"items":[]}'
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	grep -q 'secret-plan' "$COMMAND_LOG"
+	! grep -q '^op' "$COMMAND_LOG"
+	! grep -q ' apply ' "$COMMAND_LOG"
+	! grep -q ' up ' "$COMMAND_LOG"
+}
+
+@test "rejects malformed secret-plan fields before looking up items" {
+	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[]}]}'
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	! grep -q '^op' "$COMMAND_LOG"
+}
+
+@test "rejects duplicate or incomplete declared secret plans" {
+	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}'
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	! grep -q '^op' "$COMMAND_LOG"
+}
+
+@test "rejects a secret plan with the wrong number of items" {
+	export PLAN_JSON='{"schema_version":1,"items":[]}'
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	! grep -q '^op' "$COMMAND_LOG"
+}
+
+@test "propagates an op failure, closes the apply stream, and does not recreate services" {
+	export OP_FAIL_ITEM='SlackBot-Rick'
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	grep -q '<SlackBot-Rick>' "$COMMAND_LOG"
+	grep -q '<apply>' "$COMMAND_LOG"
+	! grep -q '<up>' "$COMMAND_LOG"
+	! grep -q '"type":"end"' "$PAYLOAD_CAPTURE"
+	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "does not recreate services when bootstrap apply fails" {
+	export BOOTSTRAP_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	grep -q '<apply>' "$COMMAND_LOG"
+	! grep -q '<up>' "$COMMAND_LOG"
+	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "streams an ordered versioned payload and recreates services after success" {
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<up> <-d> <--force-recreate>'
+	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 6 ]
+	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
+	[ "${records[*]}" = 'header: item:dashboard item:github item:slack_default item:slack_rick item:slack_hoffman item:slack_risarisa end:' ]
+	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
+	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "forwards Docker calls through a function runner and retains host runtime paths" {
+	run_start_stack_with_function_runner
+
+	[ "$status" -eq 0 ]
+	grep -q '^runner <compose> <-f> <' "$COMMAND_LOG"
+	[ -d "$TEST_HOME/.hermes/.xurl" ]
+	[ -d "$TEST_HOME/.hermes/.browser" ]
+}
+
+@test "removes host writers for dashboard Slack model profile and env content" {
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+for function_name in \
+  dotfiles_hermes_ensure_dashboard_auth \
+  dotfiles_hermes_ensure_slack_environment \
+  dotfiles_hermes_ensure_runtime_configuration \
+  dotfiles_hermes_write_dashboard_auth \
+  dotfiles_hermes_write_slack_environment; do
+  ! declare -F "$function_name" >/dev/null
 done
-input="$(cat)"
-case "$names" in
-	*bot_token*) printf "%s\n" "$input" | sed -n "s/.*\"value\"[[:space:]]*:[[:space:]]*\"\(xoxb[^\"]*\)\".*/\1/p" | head -n 1 ;;
-	*app_level_token*) printf "%s\n" "$input" | sed -n "s/.*\"value\"[[:space:]]*:[[:space:]]*\"\(xapp[^\"]*\)\".*/\1/p" | head -n 1 ;;
-	*SLACK_ALLOWED_USERS*) printf "%s\n" "$input" | sed -n "s/.*\"value\"[[:space:]]*:[[:space:]]*\"\(U[^\"]*\)\".*/\1/p" | head -n 1 ;;
-	*) exit 1 ;;
-esac
 '
-}
-
-@test "generates dashboard auth when Hermes env has no credentials" {
-	run_hermes_auth_helper
 
 	[ "$status" -eq 0 ]
-	env_path="$TEST_HOME/.hermes/.env"
-	password_path="$TEST_HOME/.hermes/dashboard-basic-auth-password.txt"
-	[ -f "$env_path" ]
-	[ -f "$password_path" ]
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin$' "$env_path"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt\$hash$' "$env_path"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_SECRET=generated-secret$' "$env_path"
-	! grep -q '^HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=' "$env_path"
-	grep -q '^password=generated-password$' "$password_path"
-	grep -q '^docker run --rm --entrypoint /opt/hermes/.venv/bin/python' "$COMMAND_LOG"
-}
-
-@test "preserves existing dashboard auth without regenerating credentials" {
-	mkdir -p "$TEST_HOME/.hermes"
-	cat >"$TEST_HOME/.hermes/.env" <<'EOF'
-OTHER=value
-
-HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
-HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=existing-hash
-HERMES_DASHBOARD_BASIC_AUTH_SECRET=existing-secret
-EOF
-
-	run_hermes_auth_helper
-
-	[ "$status" -eq 0 ]
-	grep -q '^OTHER=value$' "$TEST_HOME/.hermes/.env"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=existing-hash$' "$TEST_HOME/.hermes/.env"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_SECRET=existing-secret$' "$TEST_HOME/.hermes/.env"
-	[ ! -e "$TEST_HOME/.hermes/dashboard-basic-auth-password.txt" ]
-	! grep -q '^docker run ' "$COMMAND_LOG"
-}
-
-@test "syncs root dashboard auth into existing managed profile env files" {
-	mkdir -p "$TEST_HOME/.hermes/profiles/rick"
-	cat >"$TEST_HOME/.hermes/profiles/rick/.env" <<'EOF'
-PROFILE_ONLY=value
-HERMES_DASHBOARD_BASIC_AUTH_USERNAME=stale
-HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=stale-hash
-HERMES_DASHBOARD_BASIC_AUTH_SECRET=stale-secret
-EOF
-
-	run_hermes_auth_helper
-
-	[ "$status" -eq 0 ]
-	profile_env="$TEST_HOME/.hermes/profiles/rick/.env"
-	grep -q '^PROFILE_ONLY=value$' "$profile_env"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin$' "$profile_env"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt\$hash$' "$profile_env"
-	grep -q '^HERMES_DASHBOARD_BASIC_AUTH_SECRET=generated-secret$' "$profile_env"
-	! grep -q 'stale' "$profile_env"
-}
-
-@test "configures model and Slack mention policy while preserving other settings" {
-	mkdir -p "$TEST_HOME/.hermes"
-	cat >"$TEST_HOME/.hermes/config.yaml" <<'EOF'
-model:
-  provider: auto
-  default: stale-model
-terminal:
-  timeout: 180
-slack:
-  allow_bots: none
-  allowed_channels: C04AHA0CE4W
-agent:
-  max_turns: 60
-EOF
-
-	run_hermes_config_helper
-
-	[ "$status" -eq 0 ]
-	config_path="$TEST_HOME/.hermes/config.yaml"
-	grep -q '^model:$' "$config_path"
-	grep -q '^  provider: openai-codex$' "$config_path"
-	grep -q '^  default: gpt-5\.5$' "$config_path"
-	grep -q '^slack:$' "$config_path"
-	grep -q '^  require_mention: true$' "$config_path"
-	grep -q '^  strict_mention: false$' "$config_path"
-	grep -q '^  allow_bots: mentions$' "$config_path"
-	grep -q '^  allowed_channels: C04AHA0CE4W$' "$config_path"
-	grep -q '^terminal:$' "$config_path"
-	grep -q '^agent:$' "$config_path"
-	! grep -q 'stale-model\|allow_bots: none' "$config_path"
-}
-
-@test "configures Slack environment from the 1Password item" {
-	export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=1
-	write_stub op '
-printf "op %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "item" ] && [ "${2:-}" = "get" ] && [ "${3:-}" = "SlackBot-OpenClaw" ]; then
-	cat <<'"'"'JSON'"'"'
-{
-  "fields": [
-    {"id": "bot_token", "label": "bot_token", "value": "xoxb-test-bot-token"},
-    {"id": "app_level_token", "label": "app_level_token", "value": "xapp-test-app-token"},
-    {"id": "SLACK_ALLOWED_USERS", "label": "SLACK_ALLOWED_USERS", "value": "U04BDJU87KJ"}
-  ]
-}
-JSON
-	exit 0
-fi
-exit 1
-'
-	write_slack_jq_stub
-
-	run_hermes_slack_helper
-
-	[ "$status" -eq 0 ]
-	env_path="$TEST_HOME/.hermes/.env"
-	grep -q '^SLACK_BOT_TOKEN=xoxb-test-bot-token$' "$env_path"
-	grep -q '^SLACK_APP_TOKEN=xapp-test-app-token$' "$env_path"
-	grep -q '^SLACK_ALLOWED_USERS=U04BDJU87KJ$' "$env_path"
-	grep -q 'SlackBot-OpenClaw' "$COMMAND_LOG"
-	grep -q -- '--vault openclaw' "$COMMAND_LOG"
-}
-
-@test "configures managed profile Slack environment from dedicated 1Password items" {
-	export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
-	export DOTFILES_HERMES_AGENT_RISARISA_SLACK_1PASSWORD_ENABLED=1
-	mkdir -p "$TEST_HOME/.hermes/profiles/risarisa"
-	cat >"$TEST_HOME/.hermes/.env" <<'EOF'
-SLACK_BOT_TOKEN=xoxb-root
-SLACK_APP_TOKEN=xapp-root
-SLACK_ALLOWED_USERS=UROOT
-EOF
-	cat >"$TEST_HOME/.hermes/profiles/risarisa/.env" <<'EOF'
-OTHER=value
-SLACK_BOT_TOKEN=xoxb-cloned-default
-SLACK_APP_TOKEN=xapp-cloned-default
-SLACK_ALLOWED_USERS=UDEFAULT
-EOF
-	write_stub op '
-printf "op %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "item" ] && [ "${2:-}" = "get" ] && [ "${3:-}" = "SlackBot-Risarisa" ]; then
-	cat <<JSON
-{
-  "fields": [
-    {"id": "bot_token", "label": "bot_token", "value": "xoxb-risarisa-bot-token"},
-    {"id": "app_level_token", "label": "app_level_token", "value": "xapp-risarisa-app-token"},
-    {"id": "SLACK_ALLOWED_USERS", "label": "SLACK_ALLOWED_USERS", "value": "URISARISA"}
-  ]
-}
-JSON
-	exit 0
-fi
-exit 1
-'
-	write_slack_jq_stub
-
-	run_hermes_slack_helper
-
-	[ "$status" -eq 0 ]
-	profile_env="$TEST_HOME/.hermes/profiles/risarisa/.env"
-	grep -q '^OTHER=value$' "$profile_env"
-	grep -q '^SLACK_BOT_TOKEN=xoxb-risarisa-bot-token$' "$profile_env"
-	grep -q '^SLACK_APP_TOKEN=xapp-risarisa-app-token$' "$profile_env"
-	grep -q '^SLACK_ALLOWED_USERS=URISARISA$' "$profile_env"
-	! grep -q 'xoxb-cloned-default' "$profile_env"
-	grep -q 'SlackBot-Risarisa' "$COMMAND_LOG"
 }
