@@ -183,6 +183,30 @@ class PayloadTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             secrets.github_token = "changed"
 
+    def test_unmatched_optional_fields_with_null_values_are_ignored(self) -> None:
+        items = secret_items()
+        items["github"]["fields"].append(
+            {"id": "notesPlain", "type": "STRING", "label": "notes", "value": None}
+        )
+        items["slack_default"]["fields"].append(
+            {"id": "app_id", "type": "STRING", "label": "app_id", "value": None}
+        )
+
+        secrets = read_secret_payload(payload_stream(items), self.manifest)
+
+        self.assertEqual(secrets.github_token, "github-token")
+        self.assertEqual(
+            secrets.slack_by_profile["default"],
+            SlackSecret("xoxb-default", "xapp-default", "UDEFAULT"),
+        )
+
+    def test_matching_required_field_with_null_value_is_missing(self) -> None:
+        items = secret_items()
+        items["github"]["fields"] = [{"label": "credential", "value": None}]
+
+        with self.assertRaises(CredentialError):
+            read_secret_payload(payload_stream(items), self.manifest)
+
     def test_header_and_end_records_are_required_with_no_trailing_record(self) -> None:
         self.assert_input_error(io.StringIO(json.dumps({"type": "item", "key": "github", "item": {}}) + "\n"))
         self.assert_input_error(payload_stream(secret_items(), include_end=False))

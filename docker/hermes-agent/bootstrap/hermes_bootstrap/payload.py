@@ -285,12 +285,16 @@ def _parse_item_record(
             raise ValidationError("secret payload item field is invalid")
         label = raw_field.get("label")
         value = raw_field.get("value")
-        if not isinstance(label, str) or not isinstance(value, str):
+        if not isinstance(label, str):
             raise ValidationError("secret payload item field is invalid")
-        discovered.append(value)
         matches = aliases.get(_normalize_label(label), ())
         if len(matches) > 1:
             raise ValidationError("secret payload item field label is ambiguous")
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValidationError("secret payload item field is invalid")
+        discovered.append(value)
         if matches:
             extracted[matches[0]].append(value)
 
