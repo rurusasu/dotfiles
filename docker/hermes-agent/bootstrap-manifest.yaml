@@ -1,0 +1,75 @@
+schema_version: 1
+data_root: /opt/data
+onepassword_items:
+  - key: dashboard
+    account: my.1password.com
+    vault: openclaw
+    item: Hermes Agent Dashboard
+    fields:
+      - canonical_name: username
+        labels: [username, user name]
+      - canonical_name: password
+        labels: [password]
+  - key: github
+    account: my.1password.com
+    vault: openclaw
+    item: GitHubUsedOpenClawPAT
+    fields:
+      - canonical_name: credential
+        labels: [credential, token, PAT, password]
+  - key: slack_default
+    account: my.1password.com
+    vault: openclaw
+    item: SlackBot-OpenClaw
+    fields: &slack_fields
+      - canonical_name: bot_token
+        labels: [SLACK_BOT_TOKEN, bot_token, bot token]
+      - canonical_name: app_token
+        labels: [SLACK_APP_TOKEN, app_level_token, app token, app-level token]
+      - canonical_name: allowed_users
+        labels: [SLACK_ALLOWED_USERS, allowed_users, allowed users, allowFrom, allow_from]
+  - key: slack_rick
+    account: my.1password.com
+    vault: openclaw
+    item: SlackBot-Rick
+    fields: *slack_fields
+  - key: slack_hoffman
+    account: my.1password.com
+    vault: openclaw
+    item: SlackBot-Hoffman
+    fields: *slack_fields
+  - key: slack_risarisa
+    account: my.1password.com
+    vault: openclaw
+    item: SlackBot-Risarisa
+    fields: *slack_fields
+root_distribution:
+  name: default
+  source: https://github.com/rurusasu/hermes-home.git
+  ref: main
+  target: /opt/data
+  manifest: root-distribution.yaml
+profiles:
+  - name: rick
+    source: https://github.com/rurusasu/hermes-profile-rick.git
+    ref: main
+    target: /opt/data/profiles/rick
+    manifest: distribution.yaml
+  - name: hoffman
+    source: https://github.com/rurusasu/hermes-profile-hoffman.git
+    ref: main
+    target: /opt/data/profiles/hoffman
+    manifest: distribution.yaml
+  - name: risarisa
+    source: https://github.com/rurusasu/hermes-profile-risarisa.git
+    ref: main
+    target: /opt/data/profiles/risarisa
+    manifest: distribution.yaml
+shared_repositories:
+  - name: lifelog
+    source: https://github.com/rurusasu/lifelog.git
+    ref: main
+    target: /opt/data/shared/lifelog
+    legacy_target: /opt/data/core/lifelog
+    mode: read-write
+    sync_owner: default
