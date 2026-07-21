@@ -435,7 +435,7 @@ def _validate_env_file(path: Path) -> None:
 
 def _validate_no_transaction(root: Path) -> None:
     store = root / ".bootstrap" / "transactions"
-    if not store.exists():
+    if not os.path.lexists(store):
         return
     _require_safe_directory(store)
     if any(entry.name != ".lock" for entry in store.iterdir()):
@@ -607,16 +607,40 @@ def _git_remote_url(config: Path) -> str | None:
 
 
 def _git_head(git: Path) -> str:
+    _require_safe_directory(git)
     _require_regular_file(git / "HEAD")
     try:
         head = (git / "HEAD").read_text(encoding="ascii").strip()
         if head.startswith("ref: "):
             ref = head[5:]
-            if not ref.startswith("refs/") or ".." in ref:
-                raise ValueError
-            head = (git / ref).read_text(encoding="ascii").strip()
+            head = _read_git_symbolic_ref(git, ref)
     except (OSError, UnicodeError, ValueError):
         raise ValidationError("installed shared repository is invalid") from None
     if _OBJECT_ID.fullmatch(head) is None:
         raise ValidationError("installed shared repository is invalid")
     return head
+
+
+def _read_git_symbolic_ref(git: Path, ref: str) -> str:
+    components = ref.split("/")
+    if (
+        len(components) < 2
+        or components[0] != "refs"
+        or "\\" in ref
+        or any(component in {"", ".", ".."} for component in components)
+        or any(component.startswith(".") or component.endswith(".lock") for component in components)
+        or "@{" in ref
+        or any(character in ref for character in " ~^:?*[")
+        or any(ord(character) < 32 or ord(character) == 127 for character in ref)
+    ):
+        raise ValueError("invalid symbolic Git ref")
+
+    current = git
+    for component in components[:-1]:
+        current = current / component
+        metadata = current.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("unsafe symbolic Git ref")
+    target = current / components[-1]
+    _require_regular_file(target)
+    return target.read_text(encoding="ascii").strip()

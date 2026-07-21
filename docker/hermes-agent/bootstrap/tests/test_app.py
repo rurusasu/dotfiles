@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import socket
 import stat
 import sys
 import tempfile
@@ -608,3 +609,98 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
         github.assert_not_called()
+
+    def test_git_head_rejects_symbolic_ref_symlink_escape(self) -> None:
+        from hermes_bootstrap import app
+
+        git = self.root / "checkout" / ".git"
+        ref_parent = git / "refs" / "heads"
+        ref_parent.mkdir(parents=True)
+        (git / "HEAD").write_text("ref: refs/heads/main\n", encoding="ascii")
+        outside = self.root.parent / "outside-object-id"
+        outside.write_text("a" * 40 + "\n", encoding="ascii")
+        (ref_parent / "main").symlink_to(outside)
+
+        with self.assertRaises(ValidationError):
+            app._git_head(git)
+
+        (ref_parent / "main").unlink()
+        os.link(outside, ref_parent / "main")
+        with self.assertRaises(ValidationError):
+            app._git_head(git)
+
+        (ref_parent / "main").unlink()
+        ref_parent.rmdir()
+        outside_refs = self.root.parent / "outside-refs"
+        outside_refs.mkdir()
+        (outside_refs / "main").write_text("a" * 40 + "\n", encoding="ascii")
+        ref_parent.symlink_to(outside_refs, target_is_directory=True)
+        with self.assertRaises(ValidationError):
+            app._git_head(git)
+
+    def test_git_head_rejects_invalid_components_and_unsafe_ref_objects(self) -> None:
+        from hermes_bootstrap import app
+
+        cases = (
+            ("refs//heads/main", ("refs", "heads", "main")),
+            (r"refs/heads\main", ("refs", r"heads\main")),
+            ("refs/heads/../main", ("refs", "main")),
+        )
+        for symbolic_ref, target_parts in cases:
+            with self.subTest(symbolic_ref=symbolic_ref), tempfile.TemporaryDirectory() as directory:
+                git = Path(directory) / ".git"
+                git.mkdir()
+                (git / "HEAD").write_text(f"ref: {symbolic_ref}\n", encoding="ascii")
+                target = git.joinpath(*target_parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("a" * 40 + "\n", encoding="ascii")
+                with self.assertRaises(ValidationError):
+                    app._git_head(git)
+
+        with tempfile.TemporaryDirectory() as directory:
+            git = Path(directory) / ".git"
+            ref = git / "refs" / "heads" / "main"
+            ref.parent.mkdir(parents=True)
+            (git / "HEAD").write_text("ref: refs/heads/main\n", encoding="ascii")
+            with socket.socket(socket.AF_UNIX) as listener:
+                listener.bind(str(ref))
+                with self.assertRaises(ValidationError):
+                    app._git_head(git)
+
+    def test_git_head_accepts_detached_and_safe_symbolic_heads(self) -> None:
+        from hermes_bootstrap import app
+
+        git = self.root / "checkout" / ".git"
+        git.mkdir(parents=True)
+        detached = "a" * 40
+        (git / "HEAD").write_text(detached + "\n", encoding="ascii")
+        self.assertEqual(app._git_head(git), detached)
+
+        symbolic = "b" * 64
+        ref = git / "refs" / "heads" / "main"
+        ref.parent.mkdir(parents=True)
+        ref.write_text(symbolic + "\n", encoding="ascii")
+        (git / "HEAD").write_text("ref: refs/heads/main\n", encoding="ascii")
+        self.assertEqual(app._git_head(git), symbolic)
+
+    def test_transaction_store_rejects_dangling_symlink_and_unsafe_objects(self) -> None:
+        from hermes_bootstrap import app
+
+        bootstrap = self.root / ".bootstrap"
+        bootstrap.mkdir()
+        store = bootstrap / "transactions"
+        store.symlink_to(self.root / "missing-transactions", target_is_directory=True)
+        self.assertTrue(os.path.lexists(store))
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)
+
+        store.unlink()
+        store.write_text("not a directory\n", encoding="utf-8")
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)
+
+    def test_transaction_store_allows_a_truly_absent_store(self) -> None:
+        from hermes_bootstrap import app
+
+        self.assertFalse(os.path.lexists(self.root / ".bootstrap" / "transactions"))
+        app._validate_no_transaction(self.root)
