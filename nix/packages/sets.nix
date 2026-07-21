@@ -246,7 +246,19 @@ let
     vscode = {
       # VS Code 1.129.1's macOS arm64 archive omits the bundled ripgrep
       # binary, so use the separately packaged ripgrep instead.
-      pkg = pkgs.vscode.override { useVSCodeRipgrep = false; };
+      pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
+        old:
+        if pkgs.stdenv.isDarwin then
+          {
+            postPatch =
+              lib.replaceStrings
+                [ "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg" ]
+                [ "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg" ]
+                old.postPatch;
+          }
+        else
+          { }
+      );
       winget = "Microsoft.VisualStudioCode";
       category = "editors";
       support = {
