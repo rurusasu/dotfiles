@@ -25,6 +25,7 @@ from .models import DistributionSource
 
 _GIT_TIMEOUT_SECONDS = 60.0
 _MAX_GIT_OUTPUT_BYTES = 4096
+_MAX_GIT_RAW_OUTPUT_BYTES = 1024 * 1024
 _GIT_TERMINATION_TIMEOUT_SECONDS = 1.0
 _MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
 _MAX_GIT_REAP_ATTEMPTS = 32
@@ -228,7 +229,7 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
 def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
     """Run Git without a shell and retain only a small, non-secret result."""
 
-    output = _run_git_bytes(arguments, cwd, environment)
+    output = _run_git_bytes(arguments, cwd, environment, max_output_bytes=_MAX_GIT_OUTPUT_BYTES)
     if output is None:
         return None
     try:
@@ -252,7 +253,7 @@ def _run_git_bytes(
     output = bytearray()
     succeeded = False
     try:
-        if type(max_output_bytes) is not int or not 0 < max_output_bytes <= _MAX_GIT_OUTPUT_BYTES:
+        if type(max_output_bytes) is not int or not 0 < max_output_bytes <= _MAX_GIT_RAW_OUTPUT_BYTES:
             return None
         if not _ensure_linux_child_subreaper():
             return None

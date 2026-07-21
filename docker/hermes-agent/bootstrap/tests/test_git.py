@@ -410,12 +410,28 @@ class GitStagingTests(unittest.TestCase):
     def test_bytes_runner_rejects_invalid_bounds_before_spawning_git(self) -> None:
         environment = os.environ.copy()
         with mock.patch("hermes_bootstrap.git.subprocess.Popen") as popen:
-            for limit in (0, -1, 4097):
+            for limit in (0, -1, True, "4096", git_module._MAX_GIT_RAW_OUTPUT_BYTES + 1):
                 with self.subTest(limit=limit):
                     self.assertIsNone(
                         git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=limit)
                     )
         popen.assert_not_called()
+
+    def test_bytes_runner_allows_an_explicit_capture_above_the_text_runner_limit(self) -> None:
+        bin_dir = self.root / "large-bytes-bin"
+        bin_dir.mkdir()
+        payload = self.root / "large-output"
+        payload.write_bytes(b"x" * 5000)
+        fake_git = bin_dir / "git"
+        fake_git.write_text("#!/bin/sh\nexec /bin/cat \"$HERMES_TEST_OUTPUT\"\n", encoding="utf-8")
+        fake_git.chmod(0o700)
+        environment = {"PATH": str(bin_dir), "HERMES_TEST_OUTPUT": str(payload)}
+
+        self.assertEqual(
+            git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=5000),
+            b"x" * 5000,
+        )
+        self.assertIsNone(git_module._run_git(("status",), self.root, environment))
 
     @unittest.skipUnless(sys.platform == "linux" and Path("/proc").is_dir(), "requires Linux /proc")
     def test_bytes_runner_output_overflow_reaps_direct_and_descendant_processes(self) -> None:
