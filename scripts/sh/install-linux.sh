@@ -2,16 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="linux-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/hermes-agent.sh"
 
-COMPOSE_FILE="${DOTFILES_COMPOSE_FILE:-$ROOT/docker/hermes-agent/compose.yml}"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
-SERVICE_WAIT_ATTEMPTS="${DOTFILES_SERVICE_WAIT_ATTEMPTS:-60}"
 SYSTEMD_WAIT_ATTEMPTS="${DOTFILES_SYSTEMD_WAIT_ATTEMPTS:-30}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 LINUX_CONFIG=""
@@ -120,38 +120,6 @@ docker_command() {
   dotfiles_run_in_group docker docker "$@"
 }
 
-show_compose_diagnostics() {
-  docker_command compose -f "$COMPOSE_FILE" ps || true
-  docker_command compose -f "$COMPOSE_FILE" logs --tail=100 || true
-}
-
-start_hermes_stack() {
-  dotfiles_log "Preparing Hermes runtime home..."
-  dotfiles_hermes_prepare_runtime_home
-  dotfiles_log "Validating Hermes Docker Compose configuration..."
-  docker_command compose -f "$COMPOSE_FILE" config
-  dotfiles_log "Building Hermes images..."
-  docker_command compose -f "$COMPOSE_FILE" build --pull
-  dotfiles_log "Ensuring Hermes dashboard auth..."
-  dotfiles_hermes_ensure_dashboard_auth docker_command
-  dotfiles_log "Ensuring Hermes runtime configuration..."
-  dotfiles_hermes_ensure_runtime_configuration
-  dotfiles_log "Ensuring Hermes Slack environment..."
-  dotfiles_hermes_ensure_slack_environment
-  dotfiles_log "Starting Hermes services..."
-  if ! docker_command compose -f "$COMPOSE_FILE" up -d --force-recreate --wait; then
-    show_compose_diagnostics
-    dotfiles_die "Hermes Docker Compose startup failed."
-  fi
-  docker_command compose -f "$COMPOSE_FILE" ps
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes API port" \
-    nc -z 127.0.0.1 "${HERMES_API_PORT:-8642}"
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes dashboard port" \
-    nc -z 127.0.0.1 "${HERMES_DASHBOARD_PORT:-9119}"
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes browser viewer port" \
-    nc -z 127.0.0.1 "${HERMES_BROWSER_VIEW_PORT:-6080}"
-}
-
 main() {
   preflight
   ensure_systemd
@@ -160,7 +128,7 @@ main() {
   capture_host_identity
   apply_linux_system
   apply_chezmoi
-  start_hermes_stack
+  dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
   dotfiles_run_in_group docker "$VERIFY_ENVIRONMENT" --runtime
   dotfiles_log "Linux setup complete."
 }

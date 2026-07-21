@@ -108,6 +108,186 @@ assert_plan_rejected_before_secret_lookup() {
 	! grep -q '<apply>' "$COMMAND_LOG"
 }
 
+write_fixture_stub() {
+	local name="$1"
+	local body="$2"
+	cat >"$MOCK_BIN/$name" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$body
+EOF
+	chmod +x "$MOCK_BIN/$name"
+}
+
+create_mocked_installer_fixture() {
+	MOCK_REPO="$BATS_TEST_TMPDIR/installer-repo"
+	MOCK_BIN="$BATS_TEST_TMPDIR/installer-bin"
+	MOCK_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
+	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
+		"$MOCK_REPO/docker/hermes-agent" "$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
+		"$MOCK_DOCKER_APP/Contents/Resources/bin"
+	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
+	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
+	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
+		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
+	done
+	touch "$MOCK_REPO/flake.nix" "$MOCK_REPO/docker/hermes-agent/compose.yml"
+
+	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
+dotfiles_hermes_start_stack() {
+  printf 'adapter runner=%s compose=%s\n' "$1" "$2" >>"$COMMAND_LOG"
+  "$1" compose -f "$2" config --quiet
+}
+EOF
+	cat >"$MOCK_REPO/scripts/sh/verify-environment.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'verify-environment %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_REPO/install.sh" "$MOCK_REPO/scripts/sh/verify-environment.sh"
+
+	write_fixture_stub uname '
+case "${1:-}" in
+  -s) printf "%s\\n" "$MOCK_UNAME_S" ;;
+  -m) printf "%s\\n" "$MOCK_UNAME_M" ;;
+  *) exit 2 ;;
+esac
+'
+	write_fixture_stub sw_vers 'printf "26.5.1\\n"'
+	write_fixture_stub xcode-select 'printf "/Library/Developer/CommandLineTools\\n"'
+	write_fixture_stub pgrep 'exit 1'
+	write_fixture_stub systemctl '
+printf "systemctl %s\\n" "$*" >>"$COMMAND_LOG"
+case "${1:-}" in
+  is-system-running) printf "running\\n" ;;
+esac
+'
+	write_fixture_stub id '
+case "${1:-}" in
+  -u | -g) printf "1000\\n" ;;
+  -gn) printf "users\\n" ;;
+  -Gn) printf "test-user docker\\n" ;;
+  *) /usr/bin/id "$@" ;;
+esac
+'
+	write_fixture_stub nix '
+printf "nix %s\\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == *"builtins.currentSystem"* ]]; then
+  printf "x86_64-linux"
+fi
+'
+	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
+	write_fixture_stub sudo 'printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"; exec "$@"'
+	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
+
+	cat >"$MOCK_DOCKER_APP/Contents/MacOS/install" <<'EOF'
+#!/usr/bin/env bash
+printf 'docker-install %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	cat >"$MOCK_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_DOCKER_APP/Contents/MacOS/install" \
+		"$MOCK_DOCKER_APP/Contents/Resources/bin/docker"
+}
+
+run_mocked_installer() {
+	local platform="$1"
+	local marker="$BATS_TEST_TMPDIR/NIXOS"
+	local hardware="$BATS_TEST_TMPDIR/hardware-configuration.nix"
+	local prebuilt="$BATS_TEST_TMPDIR/prebuilt-system"
+	local systemd_dir="$BATS_TEST_TMPDIR/systemd"
+	local os_release="$BATS_TEST_TMPDIR/os-release"
+
+	create_mocked_installer_fixture
+	printf '{ ... }: { }\n' >"$hardware"
+	touch "$marker"
+	mkdir -p "$prebuilt/bin" "$systemd_dir"
+	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
+#!/usr/bin/env bash
+printf 'switch-to-configuration %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$prebuilt/bin/switch-to-configuration"
+	printf 'ID=ubuntu\n' >"$os_release"
+
+	case "$platform" in
+	macos) export MOCK_UNAME_S=Darwin MOCK_UNAME_M=arm64 ;;
+	linux) export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64 ;;
+	nixos) export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64 ;;
+	*) false ;;
+	esac
+
+	run env \
+		HOME="$TEST_HOME" \
+		USER=test-user \
+		PATH="$MOCK_BIN:/usr/bin:/bin" \
+		COMMAND_LOG="$COMMAND_LOG" \
+		MOCK_UNAME_S="$MOCK_UNAME_S" \
+		MOCK_UNAME_M="$MOCK_UNAME_M" \
+		DOTFILES_CHECKOUT_TARGET="$BATS_TEST_TMPDIR/checkout" \
+		DOTFILES_NIX_PROFILE_SCRIPT="$BATS_TEST_TMPDIR/nix-daemon.sh" \
+		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_DOCKER_SETUP_MARKER="$BATS_TEST_TMPDIR/docker-setup" \
+		DOTFILES_SYSTEMD_DIR="$systemd_dir" \
+		DOTFILES_OS_RELEASE_FILE="$os_release" \
+		DOTFILES_NIXOS_MARKER="$marker" \
+		DOTFILES_NIXOS_HARDWARE_CONFIG="$hardware" \
+		DOTFILES_NIXOS_PREBUILT_SYSTEM="$prebuilt" \
+		"$MOCK_REPO/install.sh"
+}
+
+@test "Unix installers source the shared adapter and use one canonical handoff" {
+	local installer expected_runner expected_call contents
+	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
+		contents="$REPO_ROOT/scripts/sh/$installer"
+		grep -Fq '. "$ROOT/scripts/sh/hermes-agent.sh"' "$contents"
+		! grep -Eq '^start_hermes_stack[[:space:]]*\(\)' "$contents"
+		! grep -Eq 'dotfiles_hermes_(ensure|write)_' "$contents"
+		[ "$(grep -c 'dotfiles_hermes_start_stack' "$contents")" -eq 1 ]
+
+		case "$installer" in
+		install-macos.sh)
+			expected_runner=docker
+			grep -Fq 'setup_docker_runtime()' "$contents"
+			grep -Fq 'docker compose version >/dev/null' "$contents"
+			;;
+		*)
+			expected_runner=docker_command
+			grep -Fq 'dotfiles_run_in_group docker docker "$@"' "$contents"
+			;;
+		esac
+		expected_call="dotfiles_hermes_start_stack $expected_runner \"\$DOTFILES_ROOT/docker/hermes-agent/compose.yml\""
+		grep -Fq "$expected_call" "$contents"
+	done
+}
+
+@test "install.sh routes each Unix installer through the shared adapter after chezmoi" {
+	local platform expected_runner adapter_line apply_line
+	for platform in macos linux nixos; do
+		: >"$COMMAND_LOG"
+		run_mocked_installer "$platform"
+
+		[ "$status" -eq 0 ]
+		case "$platform" in
+		macos) expected_runner=docker ;;
+		*) expected_runner=docker_command ;;
+		esac
+		adapter_line="adapter runner=$expected_runner compose=$MOCK_REPO/docker/hermes-agent/compose.yml"
+		grep -Fxq "$adapter_line" "$COMMAND_LOG"
+		grep -Fq "docker compose -f $MOCK_REPO/docker/hermes-agent/compose.yml config --quiet" "$COMMAND_LOG"
+		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
+		[ -n "$apply_line" ]
+		[ "$(grep -n -m 1 -F "$adapter_line" "$COMMAND_LOG" | cut -d: -f1)" -gt "$apply_line" ]
+		! grep -q '^unexpected nixos-rebuild$' "$COMMAND_LOG"
+		if [[ $platform == macos ]]; then
+			grep -Fxq 'docker info' "$COMMAND_LOG"
+			grep -Fxq 'docker compose version' "$COMMAND_LOG"
+		fi
+	done
+}
+
 @test "preserves Hermes data and browser directory helpers" {
 	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
 	export HERMES_BROWSER_DATA_DIR="$TEST_HOME/custom-browser"
