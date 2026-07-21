@@ -163,15 +163,26 @@ class PayloadTests(unittest.TestCase):
         self.assert_input_error(payload_stream(undeclared))
 
     def test_invalid_utf8_json_and_record_shape_are_stable_input_errors_without_payload_echo(self) -> None:
-        for stream in (
-            io.TextIOWrapper(io.BytesIO(b'{"type":"header","schema_version":1}\n\xff\n'), encoding="utf-8"),
-            io.StringIO('{"type":"header","schema_version":1}\n{not json secret-contents}\n'),
-            io.StringIO('{"type":"header","schema_version":1}\n["secret-contents"]\n'),
+        for stream, secret in (
+            (io.BytesIO(b'{"type":"header","schema_version":1}\nsecret-bytes-retained\xff\n'), "secret-bytes-retained"),
+            (io.StringIO('{"type":"header","schema_version":1}\n{not json secret-json-retained}\n'), "secret-json-retained"),
+            (io.StringIO('{"type":"header","schema_version":1}\n["secret-contents"]\n'), "secret-contents"),
         ):
             with self.subTest(stream=type(stream).__name__):
                 with self.assertRaises(InputError) as caught:
                     read_secret_payload(stream, self.manifest)
-                self.assertNotIn("secret-contents", str(caught.exception))
+                self.assertNotIn(secret, str(caught.exception))
+                self.assertNotIn(secret, repr(caught.exception))
+                self.assertIsNone(caught.exception.__cause__)
+                self.assertIsNone(caught.exception.__context__)
+
+    def test_schema_version_must_be_the_exact_integer_one(self) -> None:
+        for schema_version in (True, 1.0, "1", 0, 2):
+            with self.subTest(schema_version=schema_version):
+                stream = payload_stream(secret_items())
+                records = stream.getvalue().splitlines()
+                records[0] = json.dumps({"type": "header", "schema_version": schema_version})
+                self.assert_input_error(io.StringIO("\n".join(records) + "\n"))
 
     def test_missing_or_ambiguous_required_fields_are_safe_credential_or_validation_errors(self) -> None:
         missing = secret_items()

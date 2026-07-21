@@ -171,13 +171,17 @@ def _read_record(reader: TextIO | BinaryIO, total_bytes: int) -> tuple[dict[str,
             raise InputError("secret payload exceeds the maximum size")
         try:
             text = line.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise InputError("secret payload is not valid UTF-8") from error
+        except UnicodeDecodeError:
+            text = None
+        if text is None:
+            raise InputError("secret payload is not valid UTF-8")
     elif isinstance(line, str):
         try:
             size = len(line.encode("utf-8"))
-        except UnicodeEncodeError as error:
-            raise InputError("secret payload is not valid UTF-8") from error
+        except UnicodeEncodeError:
+            size = None
+        if size is None:
+            raise InputError("secret payload is not valid UTF-8")
         if size > MAX_LINE_BYTES:
             raise InputError("secret payload line exceeds the maximum size")
         total_bytes += size
@@ -188,8 +192,12 @@ def _read_record(reader: TextIO | BinaryIO, total_bytes: int) -> tuple[dict[str,
         raise InputError("secret payload stream is invalid")
     try:
         value = json.loads(text)
-    except (TypeError, ValueError, json.JSONDecodeError) as error:
-        raise InputError("secret payload contains invalid JSON") from error
+    except (TypeError, ValueError, json.JSONDecodeError):
+        parsed_json = False
+    else:
+        parsed_json = True
+    if not parsed_json:
+        raise InputError("secret payload contains invalid JSON")
     if not isinstance(value, dict):
         raise InputError("secret payload record must be an object")
     return value, total_bytes
@@ -199,7 +207,8 @@ def _validate_header(record: dict[str, object]) -> None:
     _exact_keys(record, {"type", "schema_version"}, "header")
     if record.get("type") != "header":
         raise InputError("secret payload must start with a header record")
-    if record.get("schema_version") != SCHEMA_VERSION or isinstance(record.get("schema_version"), bool):
+    schema_version = record.get("schema_version")
+    if type(schema_version) is not int or schema_version != SCHEMA_VERSION:
         raise InputError("secret payload schema version is unsupported")
 
 
