@@ -8,25 +8,35 @@ profiles, repositories, or `.env` files directly.
 
 Prerequisites are a running Docker daemon, Docker Compose, an authenticated
 1Password CLI (`op`), access to the six configured items, and access to the
-declared private GitHub repositories. Unix also requires `bash` and `jq`.
+declared private GitHub repositories. Unix requires native `bash`, `jq`,
+`docker`, and `op`. Windows requires `pwsh`, Docker Desktop's native `docker`
+and Compose plugin, and an authenticated native `op.exe`; the focused adapter
+does not route these commands through WSL.
 
-For a focused rerun on macOS, Linux, or NixOS:
+For a focused rerun on any supported host:
 
 ```text
 task hermes:bootstrap
 ```
 
-On Windows, the same task uses the supported `install.cmd` route because the
-PowerShell handler depends on installer context. The supported full-machine
-entrypoints remain:
+On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
+adapter with the canonical Compose file. On Windows, it runs
+`pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
+Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
+rebuild. Both adapters run Compose config validation, build `hermes` and
+`hermes-bootstrap`, invoke the container bootstrap, and only then recreate the
+stack.
+
+`install.cmd` remains the Windows full-machine setup entrypoint and continues
+through the PowerShell handler. The exact supported installer chains are:
 
 ```text
 install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
 install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter (HermesBootstrap.ps1) -> hermes-bootstrap container -> compose up
 ```
 
-`task` returns the selected adapter or installer status; it does not hide a
-nonzero result.
+`task hermes:bootstrap` returns the selected focused adapter status; it neither
+runs the full-machine installer nor hides a nonzero result.
 
 ## Data Flow
 

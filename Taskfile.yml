@@ -178,7 +178,7 @@ tasks:
     cmds:
       - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
         platforms: [linux, darwin]
-      - cmd: cmd.exe /d /c install.cmd
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1
         platforms: [windows]
 
   hermes:bootstrap:test:
