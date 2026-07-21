@@ -647,7 +647,11 @@ def _reverse_move(
 
         if target_quarantine_kind == "absent":
             if source_kind != "absent" and _identity_at(source_parent, source.name, source_kind) == entry["identity"]:
-                if source_quarantine_kind != "absent" and target_kind != "absent":
+                if target_kind != "absent":
+                    raise ValueError
+                if source_quarantine_kind == "absent":
+                    return
+                if not _exact_move_link(transaction_parent, source_quarantine, expected_link):
                     raise ValueError
                 return
             if source_quarantine_kind != "absent" and source_kind != "absent":
@@ -984,6 +988,58 @@ def _verify_real_directory(path: Path, descriptor: int) -> None:
         _safe_close(current)
 
 
+def _managed_path_is_absent(data_root: Path, path: Path) -> bool:
+    descriptor: int | None = None
+    try:
+        relative = path.relative_to(data_root)
+        if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            raise ValueError
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | os.O_CLOEXEC
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(data_root, flags | nofollow)
+        root_info = data_root.lstat()
+        opened = os.fstat(descriptor)
+        if not stat.S_ISDIR(opened.st_mode) or (root_info.st_dev, root_info.st_ino) != (
+            opened.st_dev,
+            opened.st_ino,
+        ):
+            raise ValueError
+        current = data_root
+        for part in relative.parts[:-1]:
+            try:
+                child = os.open(part, flags | nofollow, dir_fd=descriptor)
+            except FileNotFoundError:
+                _verify_real_directory(current, descriptor)
+                if _lexists_at(descriptor, part):
+                    raise ValueError
+                return True
+            try:
+                child_path_info = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
+                child_info = os.fstat(child)
+                if (
+                    not stat.S_ISDIR(child_info.st_mode)
+                    or stat.S_ISLNK(child_path_info.st_mode)
+                    or (child_path_info.st_dev, child_path_info.st_ino)
+                    != (child_info.st_dev, child_info.st_ino)
+                ):
+                    raise ValueError
+            except Exception:
+                os.close(child)
+                raise
+            os.close(descriptor)
+            descriptor = child
+            current /= part
+        _verify_real_directory(current, descriptor)
+        return _entry_kind_at(descriptor, path.name) == "absent"
+    except ApplyError:
+        raise
+    except Exception:
+        raise ApplyError("managed path is unsafe") from None
+    finally:
+        if descriptor is not None:
+            _safe_close(descriptor)
+
+
 def _open_managed_parent(data_root: Path, path: Path) -> int:
     descriptor: int | None = None
     try:
@@ -1137,13 +1193,13 @@ def _cleanup_transaction(
     journal: dict[str, Any],
 ) -> None:
     _require_directory(directory)
-    quarantines: dict[str, tuple[str, dict[str, Any]]] = {}
+    quarantines: dict[str, tuple[str, int, dict[str, Any]]] = {}
     for index, entry in enumerate(journal["entries"]):
         if entry["kind"] != "move":
             continue
         source_quarantine, target_quarantine = _move_quarantine_names(index)
-        quarantines[source_quarantine] = ("source", entry)
-        quarantines[target_quarantine] = ("target", entry)
+        quarantines[source_quarantine] = ("source", index, entry)
+        quarantines[target_quarantine] = ("target", index, entry)
     with os.scandir(directory) as entries:
         names = [entry.name for entry in entries]
     transaction_parent = _open_real_directory(directory)
@@ -1158,14 +1214,30 @@ def _cleanup_transaction(
                 _fsync_directory(directory)
                 _cleanup_failpoint("cleanup-temp")
             elif name in quarantines:
-                role, entry = quarantines[name]
+                role, entry_index, entry = quarantines[name]
                 if journal["status"] != "rolled_back" or role != "source":
                     raise ValueError
-                source = data_root / entry["source"]
-                target = data_root / entry["target"]
-                expected_link = os.path.relpath(target, source.parent)
-                if not _exact_move_link(transaction_parent, name, expected_link):
-                    raise ValueError
+                quarantine_identity = _verify_move_cleanup_state(
+                    data_root,
+                    directory,
+                    transaction_parent,
+                    entry_index,
+                    entry,
+                    require_source_quarantine=True,
+                )
+                assert quarantine_identity is not None
+                _failpoint("cleanup-quarantine-before-unlink")
+                _verify_move_cleanup_state(
+                    data_root,
+                    directory,
+                    transaction_parent,
+                    entry_index,
+                    entry,
+                    require_source_quarantine=True,
+                    source_quarantine_identity=quarantine_identity,
+                )
+                # This mode-0700 directory is the trust boundary for the final
+                # private unlink; managed endpoint changes use RENAME_NOREPLACE.
                 os.unlink(name, dir_fd=transaction_parent)
                 os.fsync(transaction_parent)
                 _cleanup_failpoint("cleanup-quarantine")
@@ -1173,14 +1245,112 @@ def _cleanup_transaction(
                 raise ValueError
     finally:
         _safe_close(transaction_parent)
-    journal_path = directory / _JOURNAL_NAME
-    if _lexists(journal_path):
-        _remove_safe(journal_path)
-        _fsync_directory(directory)
-        _cleanup_failpoint("cleanup-journal")
+    transaction_parent = _open_real_directory(directory)
+    try:
+        if journal["status"] == "rolled_back":
+            for entry_index, entry in enumerate(journal["entries"]):
+                if (
+                    entry["kind"] == "move"
+                    and entry["state"] == "restored"
+                    and _requires_exact_move_cleanup(journal["entries"], entry_index, entry)
+                ):
+                    _verify_move_cleanup_state(
+                        data_root,
+                        directory,
+                        transaction_parent,
+                        entry_index,
+                        entry,
+                        require_source_quarantine=False,
+                    )
+        _verify_real_directory(directory, transaction_parent)
+        if _lexists_at(transaction_parent, _JOURNAL_NAME):
+            if _entry_kind_at(transaction_parent, _JOURNAL_NAME) != "file":
+                raise ValueError
+            os.unlink(_JOURNAL_NAME, dir_fd=transaction_parent)
+            os.fsync(transaction_parent)
+            _cleanup_failpoint("cleanup-journal")
+    finally:
+        _safe_close(transaction_parent)
     directory.rmdir()
     _fsync_directory(store)
     _cleanup_failpoint("cleanup-directory")
+
+
+def _verify_move_cleanup_state(
+    data_root: Path,
+    transaction_directory: Path,
+    transaction_parent: int,
+    entry_index: int,
+    entry: dict[str, Any],
+    *,
+    require_source_quarantine: bool,
+    source_quarantine_identity: list[Any] | None = None,
+) -> list[Any] | None:
+    source = data_root / entry["source"]
+    target = data_root / entry["target"]
+    source_quarantine, target_quarantine = _move_quarantine_names(entry_index)
+    expected_link = os.path.relpath(target, source.parent)
+    source_parent = _open_managed_parent(data_root, source)
+    target_parent: int | None = None
+    try:
+        try:
+            target_parent = _open_managed_parent(data_root, target)
+        except ApplyError:
+            if not _managed_path_is_absent(data_root, target):
+                raise
+        _verify_real_directory(transaction_directory, transaction_parent)
+        _verify_managed_parent(data_root, source, source_parent)
+        if target_parent is not None:
+            _verify_managed_parent(data_root, target, target_parent)
+        source_kind = _entry_kind_at(source_parent, source.name)
+        if source_kind == "absent" or _identity_at(source_parent, source.name, source_kind) != entry["identity"]:
+            raise ValueError
+        if target_parent is not None and _entry_kind_at(target_parent, target.name) != "absent":
+            raise ValueError
+        if _entry_kind_at(transaction_parent, target_quarantine) != "absent":
+            raise ValueError
+        source_quarantine_kind = _entry_kind_at(transaction_parent, source_quarantine)
+        if require_source_quarantine:
+            if source_quarantine_kind != "symlink" or _readlink_at(
+                transaction_parent, source_quarantine
+            ) != expected_link:
+                raise ValueError
+            current_identity = _identity_at(transaction_parent, source_quarantine, "symlink")
+            if source_quarantine_identity is not None and current_identity != source_quarantine_identity:
+                raise ValueError
+            return current_identity
+        if source_quarantine_kind != "absent":
+            raise ValueError
+        return None
+    finally:
+        if target_parent is not None:
+            _safe_close(target_parent)
+        _safe_close(source_parent)
+
+
+def _requires_exact_move_cleanup(
+    entries: list[dict[str, Any]],
+    entry_index: int,
+    move: dict[str, Any],
+) -> bool:
+    preceding = entries[:entry_index]
+    source = move["source"]
+    target = move["target"]
+    if any(
+        entry["kind"] == "snapshot"
+        and (entry["path"] == source or _is_descendant(source, entry["path"]))
+        for entry in preceding
+    ):
+        return False
+    target_snapshots = [
+        entry
+        for entry in preceding
+        if entry["kind"] == "snapshot"
+        and (entry["path"] == target or _is_descendant(target, entry["path"]))
+    ]
+    if not target_snapshots:
+        return True
+    return len(target_snapshots) == 1 and target_snapshots[0]["original"] == "absent"
 
 
 def _cleanup_failpoint(name: str) -> None:

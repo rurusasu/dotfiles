@@ -472,6 +472,95 @@ class TransactionTests(unittest.TestCase):
         self.assertTrue(target.is_dir())
         self.assertTrue(self.journal_paths())
 
+    def test_move_rollback_rejects_target_replacement_before_move(self) -> None:
+        source = self.root / "source"
+        target = self.root / "target"
+        source.mkdir()
+        (source / "original").write_text("source", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(target)
+        tx.record_move(source, target)
+        target.mkdir()
+        sentinel = target / "attacker-sentinel"
+        sentinel.write_text("preserve", encoding="utf-8")
+
+        with self.assertRaises(RollbackError):
+            tx.rollback()
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+        self.assertEqual((source / "original").read_text(encoding="utf-8"), "source")
+        self.assertTrue(self.journal_paths())
+
+    def test_move_cleanup_preserves_restored_source_replacement(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+        source_quarantine, target_quarantine = self.move_quarantines()
+        parked_source = self.root.parent / "parked-restored-source"
+        injected = False
+
+        def replace_restored_source(name: str) -> None:
+            nonlocal injected
+            if name != "cleanup-quarantine-before-unlink" or injected:
+                return
+            injected = True
+            _, journal = self.journal()
+            self.assertEqual(journal["status"], "rolled_back")
+            self.assertEqual(journal["entries"][0]["state"], "restored")
+            os.replace(source, parked_source)
+            source.mkdir()
+            (source / "attacker-sentinel").write_text("preserve", encoding="utf-8")
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=replace_restored_source,
+        ):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        self.assertTrue(injected)
+        self.assertEqual((source / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
+        self.assertEqual((parked_source.stat().st_dev, parked_source.stat().st_ino), identity)
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertEqual(os.readlink(source_quarantine), os.path.relpath(target, source.parent))
+        self.assertFalse(os.path.lexists(target_quarantine))
+        self.assertTrue(self.journal_paths())
+
+    def test_move_cleanup_preserves_private_quarantine_replacement(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+        source_quarantine, target_quarantine = self.move_quarantines()
+        parked_quarantine = self.root.parent / "parked-source-quarantine"
+        replacement_link = "attacker-sentinel"
+        injected = False
+
+        def replace_private_quarantine(name: str) -> None:
+            nonlocal injected
+            if name != "cleanup-quarantine-before-unlink" or injected:
+                return
+            injected = True
+            _, journal = self.journal()
+            self.assertEqual(journal["status"], "rolled_back")
+            self.assertEqual(journal["entries"][0]["state"], "restored")
+            os.replace(source_quarantine, parked_quarantine)
+            os.symlink(replacement_link, source_quarantine)
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=replace_private_quarantine,
+        ):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        self.assertTrue(injected)
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertFalse(os.path.lexists(target))
+        self.assertFalse(os.path.lexists(target_quarantine))
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertEqual(os.readlink(source_quarantine), replacement_link)
+        self.assertTrue(parked_quarantine.is_symlink())
+        self.assertEqual(os.readlink(parked_quarantine), os.path.relpath(target, source.parent))
+        self.assertTrue(self.journal_paths())
+
     def test_record_move_allows_a_target_that_was_snapshotted_first(self) -> None:
         source = self.root / "source"
         target = self.root / "target"
