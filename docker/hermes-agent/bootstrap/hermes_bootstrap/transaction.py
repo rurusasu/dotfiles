@@ -94,6 +94,8 @@ class Transaction:
         relative = _managed_relative(self._data_root, self._store, path)
         if self._covered_by_snapshot(relative):
             return
+        if self._overlaps_active_move(relative):
+            raise ApplyError("snapshot follows managed move")
         if self._has_snapshot_descendant(relative):
             raise ApplyError("snapshot parent follows child")
         original = _entry_kind(path)
@@ -237,8 +239,11 @@ class Transaction:
                 break
         if failures:
             raise RollbackError("could not roll back managed paths: " + ", ".join(sorted(set(failures))))
-        self._journal["status"] = "rolled_back"
-        self._write_journal()
+        try:
+            self._journal["status"] = "rolled_back"
+            self._write_journal()
+        except Exception:
+            raise RollbackError("could not roll back managed paths") from None
         self._cleanup_or_raise()
 
     def _cleanup_or_raise(self) -> None:
@@ -262,6 +267,14 @@ class Transaction:
     def _has_snapshot_descendant(self, relative: str) -> bool:
         return any(
             entry["kind"] == "snapshot" and entry["state"] != "restored" and _is_descendant(entry["path"], relative)
+            for entry in self._journal["entries"]
+        )
+
+    def _overlaps_active_move(self, relative: str) -> bool:
+        return any(
+            entry["kind"] == "move"
+            and entry["state"] != "restored"
+            and (_overlaps(relative, entry["source"]) or _overlaps(relative, entry["target"]))
             for entry in self._journal["entries"]
         )
 
@@ -648,6 +661,8 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
                 if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
                     raise ValueError
                 _validate_journal_managed_path(relative)
+                if entry["state"] != "preparing" and any(_overlaps(relative, endpoint) for endpoint in moves):
+                    raise ValueError
                 if any(relative == known or _is_descendant(relative, known) for known in snapshots):
                     raise ValueError
                 if any(_is_descendant(known, relative) for known in snapshots):
@@ -694,28 +709,28 @@ def _validate_journal_storage(directory: Path, backups: set[str]) -> None:
 
 def _validate_entry_states(status: str, entries: list[dict[str, Any]]) -> None:
     states = [entry["state"] for entry in entries]
-    preparing = states[-1:] == ["preparing"]
-    mutation_states = states[:-1] if preparing else states
-    if "preparing" in mutation_states:
+    has_trailing_preparing = states[-1:] == ["preparing"]
+    completed_states = states[:-1] if has_trailing_preparing else states
+    if any(state == "preparing" for state in completed_states):
         raise ValueError
     if status == "active":
-        if any(state != "ready" for state in mutation_states):
+        if any(state != "ready" for state in completed_states):
             raise ValueError
         return
     if status == "rolling_back":
         restored = False
-        for state in mutation_states:
+        for state in completed_states:
             if state == "restored":
                 restored = True
             elif state != "ready" or restored:
                 raise ValueError
         return
     if status == "committed":
-        if preparing or any(state != "ready" for state in mutation_states):
+        if has_trailing_preparing or any(state != "ready" for state in completed_states):
             raise ValueError
         return
     if status == "rolled_back":
-        if any(state != "restored" for state in mutation_states):
+        if any(state != "restored" for state in completed_states):
             raise ValueError
         return
     raise ValueError
@@ -907,13 +922,8 @@ def _cleanup_failpoint(name: str) -> None:
 def _remove_empty_transaction(directory: Path, store: Path) -> None:
     _require_directory(directory)
     with os.scandir(directory) as entries:
-        names = [entry.name for entry in entries]
-    for name in names:
-        path = directory / name
-        if not name.startswith(".journal-") or not path.is_file() or path.is_symlink():
+        if next(entries, None) is not None:
             raise ApplyError("bootstrap transaction journal is invalid")
-        path.unlink()
-        _fsync_directory(directory)
     directory.rmdir()
     _fsync_directory(store)
 

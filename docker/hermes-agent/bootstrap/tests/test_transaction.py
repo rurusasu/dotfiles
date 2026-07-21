@@ -233,6 +233,52 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(source.read_text(encoding="utf-8"), "source")
         self.assertEqual(target.read_text(encoding="utf-8"), "target")
 
+    def test_snapshot_after_move_rejects_each_endpoint_and_overlap_then_rolls_back(self) -> None:
+        for candidate_name in ("source", "target", "target/child", "."):
+            with self.subTest(candidate=candidate_name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                namespace = root / "namespace"
+                namespace.mkdir(parents=True)
+                source = namespace / "source"
+                target = namespace / "target"
+                source.mkdir()
+                (source / "payload").write_text("source", encoding="utf-8")
+                tx = Transaction.begin(root)
+                tx.record_move(source, target)
+                os.replace(source, target)
+                candidate = namespace if candidate_name == "." else namespace / candidate_name
+
+                with self.assertRaises(ApplyError):
+                    tx.snapshot(candidate)
+                tx.rollback()
+
+                self.assertEqual((source / "payload").read_text(encoding="utf-8"), "source")
+                self.assertFalse(os.path.lexists(target))
+
+    def test_recovery_rejects_a_snapshot_reordered_after_a_move_before_restore(self) -> None:
+        source = self.root / "source"
+        target = self.root / "target"
+        source.write_text("source", encoding="utf-8")
+        target.write_text("target", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(target)
+        tx.record_move(source, target)
+        os.replace(source, target)
+        journal_path, journal = self.journal()
+        snapshot, move = journal["entries"]
+        old_backup = journal_path.parent / snapshot["backup"]
+        snapshot["backup"] = "backup-000001"
+        os.replace(old_backup, journal_path.parent / snapshot["backup"])
+        journal["entries"] = [move, snapshot]
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "source")
+        self.assertTrue(journal_path.exists())
+
     def test_reverse_order_restores_move_before_related_snapshots(self) -> None:
         source = self.root / "source"
         target = self.root / "target"
@@ -374,7 +420,7 @@ class TransactionTests(unittest.TestCase):
             Transaction.recover_if_needed(self.root)
         self.assertTrue(nonempty.exists())
 
-    def test_initial_journal_temporary_is_cleaned_by_begin_and_recovery(self) -> None:
+    def test_initial_journal_temporary_is_rejected_and_retained(self) -> None:
         def fail_with_temporary(path: Path, _payload: dict[str, object]) -> None:
             (path.parent / ".journal-interrupted").write_text("partial", encoding="utf-8")
             raise OSError
@@ -383,13 +429,14 @@ class TransactionTests(unittest.TestCase):
             with self.assertRaises(ApplyError):
                 Transaction.begin(self.root)
         store = self.root / ".bootstrap" / "transactions"
-        self.assertEqual([path for path in store.iterdir() if path.name != ".lock"], [])
+        transactions = [path for path in store.iterdir() if path.name != ".lock"]
+        self.assertEqual(len(transactions), 1)
+        interrupted = transactions[0]
 
-        interrupted = store / "00000000-0000-4000-8000-000000000002"
-        interrupted.mkdir()
-        (interrupted / ".journal-interrupted").write_text("partial", encoding="utf-8")
-        Transaction.recover_if_needed(self.root)
-        self.assertFalse(interrupted.exists())
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+        self.assertTrue(interrupted.exists())
+        self.assertTrue((interrupted / ".journal-interrupted").exists())
 
     def test_preparing_ready_and_committed_recovery_are_distinct(self) -> None:
         path = self.root / "file"
@@ -529,6 +576,56 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(first.read_text(encoding="utf-8"), "first-before")
         self.assertEqual(second.read_text(encoding="utf-8"), "second-before")
         self.assertEqual(self.journal_paths(), [])
+
+    def test_terminal_rolled_back_allows_only_restored_entries_then_trailing_preparing(self) -> None:
+        source = self.root / "source"
+        target = self.root / "target"
+        source.write_text("source-before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.record_move(source, target)
+        os.replace(source, target)
+        journal_path, journal = self.journal()
+        journal["entries"].append(
+            {
+                "kind": "snapshot",
+                "path": "target",
+                "state": "preparing",
+                "original": "file",
+                "backup": "backup-000001",
+            }
+        )
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        def fail_after_rolled_back(name: str) -> None:
+            if name != "journal-write":
+                return
+            _, journal = self.journal()
+            if journal["status"] == "rolled_back":
+                raise OSError
+
+        with mock.patch.object(transaction_module, "_failpoint", side_effect=fail_after_rolled_back):
+            with self.assertRaises(RollbackError):
+                Transaction.recover_if_needed(self.root)
+
+        journal_path, journal = self.journal()
+        self.assertEqual(journal["status"], "rolled_back")
+        self.assertEqual([entry["state"] for entry in journal["entries"]], ["restored", "preparing"])
+        Transaction.recover_if_needed(self.root)
+        self.assertEqual(source.read_text(encoding="utf-8"), "source-before")
+        self.assertFalse(os.path.lexists(target))
+        self.assertFalse(journal_path.exists())
+
+        tx = Transaction.begin(self.root)
+        tx.snapshot(source)
+        source.write_text("tampered", encoding="utf-8")
+        journal_path, journal = self.journal()
+        journal["entries"][0]["state"] = "restored"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+        self.assertEqual(source.read_text(encoding="utf-8"), "tampered")
 
     def test_malformed_or_traversing_journal_is_rejected_before_targets_are_touched(self) -> None:
         store = self.root / ".bootstrap" / "transactions"
