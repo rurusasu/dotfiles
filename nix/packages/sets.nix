@@ -252,8 +252,12 @@ let
           {
             postPatch =
               lib.replaceStrings
-                [ "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg" ]
-                [ "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg" ]
+                [
+                  "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nln -s"
+                ]
+                [
+                  "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nmkdir -p Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64\nln -s"
+                ]
                 old.postPatch;
           }
         else
