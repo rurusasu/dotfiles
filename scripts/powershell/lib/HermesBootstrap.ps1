@@ -6,7 +6,6 @@
 if (-not ("HermesBootstrapBoundedDrain" -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
-using System.Collections;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -46,6 +45,12 @@ public sealed class HermesBootstrapBoundedDrain : IDisposable
         lock (syncRoot) { buffer.Clear(); }
     }
 }
+'@
+}
+
+if (-not ("HermesBootstrapErrorHistory" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System.Collections;
 
 public static class HermesBootstrapErrorHistory
 {
@@ -173,6 +178,22 @@ $script:DefaultOnePasswordInvoker = {
     return $output
 }
 
+function Invoke-HermesBootstrapCleanup {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [scriptblock]$Action
+    )
+
+    try {
+        [void](& $Action)
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 function Invoke-HermesBootstrap {
     [CmdletBinding()]
     param(
@@ -239,7 +260,7 @@ function Invoke-HermesBootstrap {
                     )
                     $invokerOutput = @(& $InvokeOnePasswordItem @onePasswordArguments)
                     $item = ConvertTo-HermesBootstrapItemObject -Output $invokerOutput
-                    foreach ($value in Get-HermesBootstrapItemFieldValues -Item $item) {
+                    foreach ($value in Get-HermesBootstrapItemFieldValue -Item $item) {
                         $secretValues.Add($value)
                     }
 
@@ -247,7 +268,9 @@ function Invoke-HermesBootstrap {
                     $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
                 }
                 finally {
-                    if ($item -is [System.IDisposable]) { $item.Dispose() }
+                    if ($item -is [System.IDisposable]) {
+                        [void](Invoke-HermesBootstrapCleanup -Action { $item.Dispose() })
+                    }
                     $record = $null
                     $item = $null
                     $invokerOutput = $null
@@ -261,7 +284,7 @@ function Invoke-HermesBootstrap {
         }
         finally {
             if ($processStarted) {
-                try { $process.StandardInput.Close() } catch { }
+                [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Close() })
             }
         }
 
@@ -338,7 +361,7 @@ function Invoke-HermesBootstrap {
     }
     finally {
         if ($item -is [System.IDisposable]) {
-            try { $item.Dispose() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $item.Dispose() })
         }
         if ($processStarted -and -not (Wait-HermesBootstrapProcess -Process $process -TimeoutMilliseconds 0)) {
             [void](Stop-HermesBootstrapProcess `
@@ -347,23 +370,23 @@ function Invoke-HermesBootstrap {
         }
         if (($stdoutDrain -and -not $stdoutDrain.IsCompleted) -or
             ($stderrDrain -and -not $stderrDrain.IsCompleted)) {
-            try { $drainCancellation.Cancel() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $drainCancellation.Cancel() })
         }
         if ($process) {
-            try { $process.StandardInput.Dispose() } catch { }
-            try { $process.StandardOutput.Dispose() } catch { }
-            try { $process.StandardError.Dispose() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Dispose() })
+            [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardOutput.Dispose() })
+            [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardError.Dispose() })
         }
         if ($stdoutDrain -and $stdoutDrain.IsCompleted) {
-            try { $stdoutDrain.Dispose() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $stdoutDrain.Dispose() })
         }
         if ($stderrDrain -and $stderrDrain.IsCompleted) {
-            try { $stderrDrain.Dispose() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $stderrDrain.Dispose() })
         }
-        try { $drainCancellation.Dispose() } catch { }
-        try { $drain.Dispose() } catch { }
+        [void](Invoke-HermesBootstrapCleanup -Action { $drainCancellation.Dispose() })
+        [void](Invoke-HermesBootstrapCleanup -Action { $drain.Dispose() })
         if ($process) {
-            try { $process.Dispose() } catch { }
+            [void](Invoke-HermesBootstrapCleanup -Action { $process.Dispose() })
         }
         $record = $null
         $item = $null
@@ -395,7 +418,7 @@ function ConvertTo-HermesBootstrapItemObject {
     }
 }
 
-function Get-HermesBootstrapItemFieldValues {
+function Get-HermesBootstrapItemFieldValue {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -437,15 +460,12 @@ function Stop-HermesBootstrapProcess {
 
     if ($null -eq $Process) { return $true }
     if (Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds 0) { return $true }
-    try {
-        $Process.Kill($true)
-    }
-    catch {
-        try { $Process.Kill() } catch { }
+    if (-not (Invoke-HermesBootstrapCleanup -Action { $Process.Kill($true) })) {
+        [void](Invoke-HermesBootstrapCleanup -Action { $Process.Kill() })
     }
     if (Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds $TimeoutMilliseconds) { return $true }
 
-    try { $Process.Kill() } catch { }
+    [void](Invoke-HermesBootstrapCleanup -Action { $Process.Kill() })
     return Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds $TimeoutMilliseconds
 }
 
@@ -480,6 +500,7 @@ function Complete-HermesBootstrapProcessDrain {
         [int]$TimeoutMilliseconds
     )
 
+    $cancellationSource = $Cancellation
     $completed = $true
     foreach ($task in @($StdoutDrain, $StderrDrain)) {
         if ($null -eq $task) { continue }
@@ -492,14 +513,14 @@ function Complete-HermesBootstrapProcessDrain {
     }
     if ($completed) { return $true }
 
-    try { $Cancellation.Cancel() } catch { }
+    [void](Invoke-HermesBootstrapCleanup -Action { $cancellationSource.Cancel() })
     if ($Process) {
-        try { $Process.StandardOutput.Dispose() } catch { }
-        try { $Process.StandardError.Dispose() } catch { }
+        [void](Invoke-HermesBootstrapCleanup -Action { $Process.StandardOutput.Dispose() })
+        [void](Invoke-HermesBootstrapCleanup -Action { $Process.StandardError.Dispose() })
     }
     foreach ($task in @($StdoutDrain, $StderrDrain)) {
         if ($null -eq $task -or $task.IsCompleted) { continue }
-        try { [void]$task.Wait($TimeoutMilliseconds) } catch { }
+        [void](Invoke-HermesBootstrapCleanup -Action { [void]$task.Wait($TimeoutMilliseconds) })
     }
     return $false
 }

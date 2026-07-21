@@ -1,3 +1,36 @@
+Describe "Hermes bootstrap type loading" {
+    It "loads error-history support when an older drain type already exists in the session" {
+        $sourcePath = (Resolve-Path (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1")).ProviderPath
+        $escapedSourcePath = $sourcePath.Replace("'", "''")
+        $childScript = @"
+Add-Type -TypeDefinition @'
+public sealed class HermesBootstrapBoundedDrain { }
+'@
+if ("HermesBootstrapErrorHistory" -as [type]) { exit 40 }
+. '$escapedSourcePath'
+if (-not ("HermesBootstrapErrorHistory" -as [type])) { exit 41 }
+`$history = [System.Collections.ArrayList]::new()
+`$record = [System.Management.Automation.ErrorRecord]::new(
+    [System.InvalidOperationException]::new("baseline"),
+    "HermesBootstrapTypeLoadingTest",
+    [System.Management.Automation.ErrorCategory]::NotSpecified,
+    `$null
+)
+[void]`$history.Add(`$record)
+[HermesBootstrapErrorHistory]::Restore(`$history, @(`$record))
+if (`$history.Count -ne 1 -or -not [object]::ReferenceEquals(`$history[0], `$record)) { exit 42 }
+exit 0
+"@
+        $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+        $pwshPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+
+        $output = @(& $pwshPath -NoLogo -NoProfile -NonInteractive -EncodedCommand $encodedCommand 2>&1)
+        $exitCode = $LASTEXITCODE
+
+        $exitCode | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+    }
+}
+
 Describe "Get-HermesBootstrapSecretPlan" {
     BeforeAll {
         $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
@@ -146,7 +179,7 @@ exit "${HERMES_BOOTSTRAP_TEST_EXIT:-0}"
     return $path
 }
 
-function global:Test-HermesBootstrapErrorGraphContains {
+function global:Test-HermesBootstrapErrorGraphMarker {
     param(
         [object[]]$Roots,
         [Parameter(Mandatory)][string]$Marker
@@ -236,6 +269,7 @@ Describe "Invoke-HermesBootstrap" {
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
+            [void]$Arguments
             $global:LASTEXITCODE = 0
             return $script:dockerOutput
         }
@@ -337,6 +371,7 @@ Describe "Invoke-HermesBootstrap" {
         $env:PATH = $TestDrive
         $invoker = {
             param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            [void]$Arguments
             throw "must not be called"
         }
 
@@ -384,7 +419,7 @@ Describe "Invoke-HermesBootstrap" {
             foreach ($index in 0..255) {
                 [object]::ReferenceEquals($actual[$index], $baseline[$index]) | Should -BeTrue
             }
-            Test-HermesBootstrapErrorGraphContains -Roots $actual -Marker $secretMarker | Should -BeFalse
+            Test-HermesBootstrapErrorGraphMarker -Roots $actual -Marker $secretMarker | Should -BeFalse
             if (-not $IsWindows) {
                 $childProcessId = [int](Get-Content -LiteralPath $pidPath -Raw)
                 { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
@@ -413,7 +448,7 @@ Describe "Invoke-HermesBootstrap" {
 
             $result.Success | Should -BeFalse
             $global:Error.Count | Should -Be 0
-            Test-HermesBootstrapErrorGraphContains -Roots @($global:Error) -Marker $secretMarker | Should -BeFalse
+            Test-HermesBootstrapErrorGraphMarker -Roots @($global:Error) -Marker $secretMarker | Should -BeFalse
         }
         finally {
             Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
@@ -443,7 +478,7 @@ Describe "Invoke-HermesBootstrap" {
             foreach ($index in 0..($baseline.Count - 1)) {
                 [object]::ReferenceEquals($actual[$index], $baseline[$index]) | Should -BeTrue
             }
-            Test-HermesBootstrapErrorGraphContains -Roots $actual -Marker $secretMarker | Should -BeFalse
+            Test-HermesBootstrapErrorGraphMarker -Roots $actual -Marker $secretMarker | Should -BeFalse
         }
         finally {
             Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
@@ -451,21 +486,28 @@ Describe "Invoke-HermesBootstrap" {
     }
 
     It "removes nested item JSON parsing errors from global error history" {
-        try { throw "pre-existing-json-history" } catch { }
-        $preExistingError = $Error[0]
-        $errorCountBefore = $Error.Count
-        $secretMarker = "nested-json-secret-marker-秘密"
-        $invoker = {
-            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-            return "{`"value`":`"$secretMarker`""
+        $originalErrorHistory = @($global:Error)
+        try {
+            $global:Error.Clear()
+            $preExistingError = New-HermesBootstrapTestErrorRecord -Message "pre-existing-json-history"
+            [void]$global:Error.Add($preExistingError)
+            $secretMarker = "nested-json-secret-marker-秘密"
+            $invoker = {
+                param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+                [void]$Arguments
+                return "{`"value`":`"$secretMarker`""
+            }
+
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+            $result.Success | Should -BeFalse
+            $global:Error.Count | Should -Be 1
+            [object]::ReferenceEquals($global:Error[0], $preExistingError) | Should -BeTrue
+            Test-HermesBootstrapErrorGraphMarker -Roots @($global:Error) -Marker $secretMarker | Should -BeFalse
         }
-
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
-
-        $result.Success | Should -BeFalse
-        $Error.Count | Should -Be $errorCountBefore
-        [object]::ReferenceEquals($Error[0], $preExistingError) | Should -BeTrue
-        Test-HermesBootstrapErrorGraphContains -Roots @($Error) -Marker $secretMarker | Should -BeFalse
+        finally {
+            Restore-HermesBootstrapTestErrorHistory -Snapshot $originalErrorHistory
+        }
     }
 
     It "redacts all discovered field values from a failed bootstrap diagnostic and preserves its exit code" {
