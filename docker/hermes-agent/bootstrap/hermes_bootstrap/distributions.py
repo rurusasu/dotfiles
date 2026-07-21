@@ -81,6 +81,24 @@ class Transaction(Protocol):
     def snapshot(self, path: Path) -> None: ...
 
 
+class _SnapshotTracker:
+    """Apply-local transaction snapshot coverage with ancestor awareness."""
+
+    def __init__(self, tx: Transaction) -> None:
+        self._tx = tx
+        self.paths: list[Path] = []
+
+    def snapshot(self, path: Path) -> bool:
+        for existing in self.paths:
+            if path == existing or path.is_relative_to(existing):
+                return False
+            if existing.is_relative_to(path):
+                raise ValueError("snapshot parent follows child")
+        self._tx.snapshot(path)
+        self.paths.append(path)
+        return True
+
+
 @dataclass(frozen=True)
 class ChangeSet:
     """A stable list of runtime paths potentially changed by an apply."""
@@ -202,10 +220,11 @@ def _read_root_manifest(stage: Path) -> RootDistributionManifest:
     if (
         type(schema_version) is not int
         or schema_version != 1
-        or not isinstance(name, str)
-        or name != "default"
-        or not isinstance(version, str)
-        or not version.strip()
+            or not isinstance(name, str)
+            or name != "default"
+            or not isinstance(version, str)
+            or not version.strip()
+            or version != version.strip()
         or not isinstance(hermes_requires, str)
         or not isinstance(owned, list)
         or any(not isinstance(item, str) for item in owned)
@@ -223,6 +242,7 @@ def _apply_root_boundary(stage: StagedSource, data_root: Path, tx: Transaction) 
         if stage.declaration.name != "default" or stage.declaration.target != data_root:
             raise ValueError("invalid root declaration")
         manifest = _read_root_manifest(stage.path)
+        snapshots = _SnapshotTracker(tx)
         state_path = data_root.joinpath(*_ROOT_STATE.parts)
         prior_owned = _read_prior_root_state(state_path)
         next_owned = manifest.distribution_owned
@@ -240,7 +260,7 @@ def _apply_root_boundary(stage: StagedSource, data_root: Path, tx: Transaction) 
             destination = data_root.joinpath(*owned.parts)
             _require_safe_managed_path(data_root, destination)
             if _lexists(destination):
-                _snapshot(tx, destination)
+                _snapshot(snapshots, destination)
                 _remove_destination(destination)
                 changed.append(destination)
         next_set = set(next_owned)
@@ -251,21 +271,21 @@ def _apply_root_boundary(stage: StagedSource, data_root: Path, tx: Transaction) 
                 source = stage.path.joinpath(*owned.parts)
                 if _same_path(source, destination):
                     continue
-                _ensure_destination_parent(destination.parent, tx)
-                _snapshot(tx, destination)
-                _replace_from_source(source, destination, tx)
+                _ensure_destination_parent(destination.parent, snapshots)
+                _snapshot(snapshots, destination)
+                _replace_from_source(source, destination, snapshots)
                 changed.append(destination)
             elif _lexists(destination):
-                _snapshot(tx, destination)
+                _snapshot(snapshots, destination)
                 _remove_destination(destination)
                 changed.append(destination)
         state = _canonical_state(stage, manifest)
         state_bytes = (json.dumps(state, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         _require_safe_managed_path(data_root, state_path)
         if not _same_regular_bytes(state_path, state_bytes):
-            _ensure_state_parent(data_root, state_path.parent, tx)
+            _ensure_state_parent(data_root, state_path.parent, snapshots)
             _require_safe_destination(data_root, state_path.parent)
-            _snapshot(tx, state_path)
+            _snapshot(snapshots, state_path)
             _atomic_write(state_path, state_bytes, 0o600)
             changed.append(state_path)
         return ChangeSet(tuple(changed))
@@ -321,20 +341,41 @@ def _build_sanitized_boundary(stage: StagedSource, scratch_root: Path) -> Path |
 
 
 def _read_profile_manifest(stage: StagedSource) -> tuple[Any, tuple[PurePosixPath, ...]]:
-    manifest_path = stage.path / "distribution.yaml"
+    return _read_profile_manifest_at(stage.path, stage.declaration.name, require_sources=True)
+
+
+def _read_profile_manifest_at(
+    root: Path, expected_name: str, *, require_sources: bool
+) -> tuple[Any, tuple[PurePosixPath, ...]]:
+    manifest_path = root / "distribution.yaml"
     _require_regular_file(manifest_path)
     raw = yaml.load(manifest_path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
     if not isinstance(raw, dict) or any(not isinstance(key, str) for key in raw):
         raise ValueError("profile manifest must be a mapping")
+    for key in ("name", "version", "hermes_requires"):
+        value = raw.get(key)
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ValueError("profile manifest identity invalid")
+    if raw["name"] != expected_name:
+        raise ValueError("profile manifest identity mismatch")
     raw_owned = raw.get("distribution_owned")
     if not isinstance(raw_owned, list) or not raw_owned or any(not isinstance(item, str) for item in raw_owned):
         raise ValueError("profile manifest owned paths invalid")
-    owned = _normalize_owned_paths(raw_owned, stage.path, require_sources=True, profile=True)
-    manifest = profile_distribution.read_manifest(stage.path)
-    if manifest is None or manifest.name != stage.declaration.name:
+    owned = _normalize_owned_paths(raw_owned, root, require_sources=require_sources, profile=True)
+    manifest = profile_distribution.read_manifest(root)
+    if manifest is None or manifest.name != expected_name:
         raise ValueError("profile manifest identity mismatch")
     profile_distribution.check_hermes_requires(manifest.hermes_requires, HERMES_VERSION)
     return manifest, owned
+
+
+def _read_prior_profile_manifest(target: Path, name: str) -> tuple[Any, tuple[PurePosixPath, ...]] | None:
+    if not _lexists(target):
+        return None
+    try:
+        return _read_profile_manifest_at(target, name, require_sources=False)
+    except Exception:
+        return None
 
 
 def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet | _Failure:
@@ -359,10 +400,13 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
             raise ValueError("could not build sanitized profile")
         sanitized = build_result
         target = expected_target
-        if _profile_is_current(target, sanitized, manifest, stage, owned):
+        prior = _read_prior_profile_manifest(target, stage.declaration.name)
+        if _profile_is_current(target, sanitized, manifest, stage, owned, prior):
             result = ChangeSet(())
         else:
-            snapshots = _profile_snapshots(target, owned, manifest, tx)
+            snapshots = _SnapshotTracker(tx)
+            _profile_snapshots(target, owned, manifest, snapshots)
+            _remove_stale_profile_paths(target, prior[1] if prior is not None else (), owned, snapshots)
             os.environ["HERMES_HOME"] = str(data_root)
             home_changed = True
             profile_distribution.install_distribution(str(sanitized), name=stage.declaration.name, force=True)
@@ -372,11 +416,9 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
                 if installed is None:
                     raise ValueError("profile installation did not write a manifest")
                 installed.source = stage.declaration.source
-                if target not in snapshots and manifest_path not in snapshots:
-                    _snapshot(tx, manifest_path)
-                    snapshots.append(manifest_path)
+                _snapshot(snapshots, manifest_path)
                 profile_distribution.write_manifest(target, installed)
-            result = ChangeSet(tuple(snapshots))
+            result = ChangeSet(tuple(snapshots.paths))
     except Exception:
         primary_failure = True
     finally:
@@ -398,16 +440,13 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
     return result
 
 
-def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest: Any, tx: Transaction) -> list[Path]:
-    snapshots: list[Path] = []
+def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest: Any, snapshots: _SnapshotTracker) -> None:
     profiles = target.parent
     if not _lexists(profiles):
-        _snapshot(tx, profiles)
-        snapshots.append(profiles)
+        _snapshot(snapshots, profiles)
     target_missing = not _lexists(target)
     if target_missing:
-        _snapshot(tx, target)
-        snapshots.append(target)
+        _snapshot(snapshots, target)
     else:
         _require_regular_directory(target)
     top_levels = {path.parts[0] for path in owned}
@@ -419,35 +458,51 @@ def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest:
         top_levels.add(".env.EXAMPLE")
     for directory in _BOOTSTRAP_USER_DIRS:
         if not _lexists(target / directory):
-            _snapshot(tx, target / directory)
-            snapshots.append(target / directory)
+            _snapshot(snapshots, target / directory)
         if directory in {"skills", "skins", "cron"}:
             top_levels.add(directory)
     if target_missing:
-        return snapshots
+        return
     for name in sorted(top_levels):
         destination = target / name
-        if destination in snapshots:
-            continue
         if name in profile_distribution.USER_OWNED_EXCLUDE:
             continue
         _require_safe_managed_path(target, destination)
-        _snapshot(tx, destination)
-        snapshots.append(destination)
-    return snapshots
+        _snapshot(snapshots, destination)
+
+
+def _remove_stale_profile_paths(
+    target: Path,
+    prior_owned: tuple[PurePosixPath, ...],
+    next_owned: tuple[PurePosixPath, ...],
+    snapshots: _SnapshotTracker,
+) -> None:
+    stale_owned = tuple(
+        owned for owned in prior_owned if not any(owned.is_relative_to(candidate) for candidate in next_owned)
+    )
+    for owned in sorted(stale_owned, key=lambda path: (len(path.parts), path.as_posix())):
+        destination = target.joinpath(*owned.parts)
+        _require_safe_managed_path(target, destination)
+        if _lexists(destination):
+            _snapshot(snapshots, destination)
+            _remove_destination(destination)
 
 
 def _profile_is_current(
-    target: Path, sanitized: Path, manifest: Any, stage: StagedSource, owned: tuple[PurePosixPath, ...]
+    target: Path,
+    sanitized: Path,
+    manifest: Any,
+    stage: StagedSource,
+    owned: tuple[PurePosixPath, ...],
+    prior: tuple[Any, tuple[PurePosixPath, ...]] | None,
 ) -> bool:
     if not _lexists(target):
         return False
     _require_regular_directory(target)
-    try:
-        installed = profile_distribution.read_manifest(target)
-    except Exception:
+    if prior is None:
         return False
-    if installed is None or _manifest_identity(installed, None) != _manifest_identity(manifest, stage.declaration.source, owned):
+    installed, installed_owned = prior
+    if _manifest_identity(installed, None, installed_owned) != _manifest_identity(manifest, stage.declaration.source, owned):
         return False
     try:
         payload = tuple(entry for entry in sanitized.iterdir() if entry.name != "distribution.yaml")
@@ -571,11 +626,12 @@ def _same_path(source: Path, destination: Path) -> bool:
         return False
 
 
-def _replace_from_source(source: Path, destination: Path, tx: Transaction) -> None:
+def _replace_from_source(source: Path, destination: Path, snapshots: _SnapshotTracker) -> None:
     _validate_source_path(source)
-    _ensure_destination_parent(destination.parent, tx)
+    _ensure_destination_parent(destination.parent, snapshots)
     temporary = _temporary_sibling(destination, directory=source.is_dir())
     retired: Path | None = None
+    replacement_completed = False
     try:
         if source.is_dir():
             shutil.rmtree(temporary)
@@ -593,6 +649,7 @@ def _replace_from_source(source: Path, destination: Path, tx: Transaction) -> No
             os.replace(temporary, destination)
             temporary = None
             _fsync_parent(destination.parent)
+            replacement_completed = True
         except Exception:
             if retired is not None and _lexists(retired):
                 try:
@@ -605,7 +662,7 @@ def _replace_from_source(source: Path, destination: Path, tx: Transaction) -> No
     finally:
         if temporary is not None and _lexists(temporary):
             _safe_remove_raw(temporary)
-        if retired is not None and _lexists(retired) and _lexists(destination):
+        if replacement_completed and retired is not None and _lexists(retired):
             _remove_raw(retired)
 
 
@@ -644,7 +701,7 @@ def _temporary_sibling(destination: Path, *, directory: bool) -> Path:
     return path
 
 
-def _ensure_destination_parent(parent: Path, tx: Transaction) -> None:
+def _ensure_destination_parent(parent: Path, snapshots: _SnapshotTracker) -> None:
     missing: list[Path] = []
     current = parent
     while not _lexists(current):
@@ -652,17 +709,17 @@ def _ensure_destination_parent(parent: Path, tx: Transaction) -> None:
         current = current.parent
     _require_regular_directory(current)
     for directory in reversed(missing):
-        _snapshot(tx, directory)
+        _snapshot(snapshots, directory)
         directory.mkdir(mode=0o700)
         _fsync_parent(directory.parent)
     _require_regular_directory(parent)
 
 
-def _ensure_state_parent(data_root: Path, parent: Path, tx: Transaction) -> None:
+def _ensure_state_parent(data_root: Path, parent: Path, snapshots: _SnapshotTracker) -> None:
     if _lexists(parent):
         _require_regular_directory(parent)
         return
-    _snapshot(tx, parent)
+    _snapshot(snapshots, parent)
     parent.mkdir(mode=0o700, parents=False, exist_ok=False)
     _fsync_parent(parent.parent)
 
@@ -762,8 +819,8 @@ def _copy_regular(source: Path, destination: Path) -> None:
     _fsync_file(destination)
 
 
-def _snapshot(tx: Transaction, path: Path) -> None:
-    tx.snapshot(path)
+def _snapshot(snapshots: _SnapshotTracker, path: Path) -> bool:
+    return snapshots.snapshot(path)
 
 
 def _lexists(path: Path) -> bool:

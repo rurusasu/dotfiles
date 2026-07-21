@@ -37,6 +37,13 @@ class RecordingTransaction:
         self.snapshots.append(path)
 
 
+class StrictRecordingTransaction(RecordingTransaction):
+    def snapshot(self, path: Path) -> None:
+        if path in self.snapshots:
+            raise AssertionError(f"duplicate snapshot: {path}")
+        super().snapshot(path)
+
+
 class DistributionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -68,9 +75,9 @@ class DistributionTests(unittest.TestCase):
         data.update(overrides)
         self.write_yaml(self.stage_root / "root-distribution.yaml", data)
 
-    def write_profile_manifest(self, name: str, owned: list[str], **overrides: object) -> None:
+    def write_profile_manifest(self, profile_name: str, owned: list[str], **overrides: object) -> None:
         data: dict[str, object] = {
-            "name": name,
+            "name": profile_name,
             "version": "0.1.0",
             "hermes_requires": ">=0.18.2",
             "distribution_owned": owned,
@@ -125,6 +132,13 @@ class DistributionTests(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 self.write_root_manifest([], **overrides)
                 self.assert_apply_error(lambda: load_root_manifest(self.stage_root))
+
+    def test_root_manifest_rejects_whitespace_version_before_writes(self) -> None:
+        self.write_root_manifest([], version=" 0.1.0")
+
+        self.assert_apply_error(lambda: apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction()))
+
+        self.assertFalse((self.data_root / ".bootstrap").exists())
 
     def test_profile_apply_does_not_follow_a_managed_destination_symlink(self) -> None:
         (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
@@ -322,6 +336,52 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(retired[0].read_text(encoding="utf-8"), "old config\n")
         self.assert_exception_hides_markers(caught.exception, "restore-secret-marker", str(self.stage_root))
 
+    def test_root_replace_retains_old_copy_when_post_replace_fsync_and_restore_fail(self) -> None:
+        (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
+        self.write_root_manifest(["config.yaml"])
+        target = self.data_root / "config.yaml"
+        target.write_text("old config\n", encoding="utf-8")
+        original_replace = os.replace
+        replace_calls = 0
+
+        def fail_restore(source: object, destination: object) -> None:
+            nonlocal replace_calls
+            replace_calls += 1
+            if replace_calls == 3:
+                raise OSError("restore-secret-marker")
+            original_replace(source, destination)
+
+        def fail_post_replace_fsync(path: Path) -> None:
+            if path == self.data_root and target.exists() and target.read_text(encoding="utf-8") == "new config\n":
+                raise OSError("post-replace-fsync-secret-marker")
+
+        with mock.patch("hermes_bootstrap.distributions.os.replace", side_effect=fail_restore):
+            with mock.patch("hermes_bootstrap.distributions._fsync_parent", side_effect=fail_post_replace_fsync):
+                with self.assertRaises(ApplyError) as caught:
+                    apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "new config\n")
+        retired = list(self.data_root.glob(".config.yaml.bootstrap-*"))
+        self.assertEqual(len(retired), 1)
+        self.assertEqual(retired[0].read_text(encoding="utf-8"), "old config\n")
+        self.assert_exception_hides_markers(caught.exception, "restore-secret-marker", "post-replace-fsync-secret-marker", str(self.stage_root))
+
+    def test_root_parent_to_child_transition_uses_one_snapshot_coverage(self) -> None:
+        state = self.data_root / ".bootstrap" / "root-distribution-state.json"
+        state.parent.mkdir()
+        state.write_text(self.root_state(["docs"]), encoding="utf-8")
+        (self.data_root / "docs").mkdir()
+        (self.data_root / "docs" / "obsolete.txt").write_text("old\n", encoding="utf-8")
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "guide.md").write_text("new\n", encoding="utf-8")
+        self.write_root_manifest(["docs/guide.md"])
+        tx = StrictRecordingTransaction()
+
+        apply_root_distribution(self.source("default", root=True), self.data_root, tx)
+
+        self.assertEqual((self.data_root / "docs" / "guide.md").read_text(encoding="utf-8"), "new\n")
+        self.assertEqual(tx.snapshots.count(self.data_root / "docs"), 1)
+
     def test_root_remove_failure_restores_existing_destination(self) -> None:
         (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
         self.write_root_manifest(["config.yaml"])
@@ -386,7 +446,7 @@ class DistributionTests(unittest.TestCase):
 
         apply_root_distribution(self.source("default", root=True), self.data_root, tx)
 
-        self.assertEqual(tx.snapshots[:2], [self.data_root / "cron", self.data_root / "cron" / "jobs.json"])
+        self.assertEqual(tx.snapshots, [self.data_root / "cron", self.data_root / ".bootstrap"])
 
     def test_root_apply_rejects_a_special_existing_managed_destination(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
@@ -479,10 +539,7 @@ class DistributionTests(unittest.TestCase):
             with self.assertRaises(ApplyError) as caught:
                 apply_profile_distribution(self.source("rick"), self.data_root, tx)
 
-        target = self.data_root / "profiles" / "rick"
-        expected = [self.data_root / "profiles", target]
-        expected.extend(target / name for name in ("memories", "sessions", "skills", "skins", "logs", "plans", "workspace", "cron", "home"))
-        self.assertEqual(tx.snapshots, expected)
+        self.assertEqual(tx.snapshots, [self.data_root / "profiles"])
         self.assert_exception_hides_markers(caught.exception, "preflight-secret-marker", str(self.stage_root))
 
     def test_profile_apply_is_a_true_identical_noop_before_official_install(self) -> None:
@@ -503,6 +560,80 @@ class DistributionTests(unittest.TestCase):
         install.assert_not_called()
         self.assertEqual((target / "distribution.yaml").read_text(encoding="utf-8"), manifest_before)
         self.assertEqual({path: path.stat().st_ino for path in inodes}, inodes)
+
+    def test_profile_update_removes_stale_owned_paths_and_then_is_a_noop(self) -> None:
+        (self.stage_root / "old.txt").write_text("old\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["old.txt"])
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+        target = self.data_root / "profiles" / "rick"
+        (self.stage_root / "old.txt").unlink()
+        (self.stage_root / "config.yaml").write_text("new\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = StrictRecordingTransaction()
+
+        changed = apply_profile_distribution(self.source("rick"), self.data_root, tx)
+
+        self.assertFalse((target / "old.txt").exists())
+        self.assertIn(target / "old.txt", changed.changed_paths)
+        with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution") as install:
+            self.assertEqual(apply_profile_distribution(self.source("rick"), self.data_root, StrictRecordingTransaction()), ChangeSet(()))
+        install.assert_not_called()
+
+    def test_profile_parent_to_child_transition_removes_parent_before_force_install(self) -> None:
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "obsolete.txt").write_text("old\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["docs"])
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+        target = self.data_root / "profiles" / "rick"
+        shutil.rmtree(self.stage_root / "docs")
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "guide.md").write_text("new\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["docs/guide.md"])
+        tx = StrictRecordingTransaction()
+
+        changed = apply_profile_distribution(self.source("rick"), self.data_root, tx)
+
+        self.assertEqual((target / "docs" / "guide.md").read_text(encoding="utf-8"), "new\n")
+        self.assertFalse((target / "docs" / "obsolete.txt").exists())
+        self.assertIn(target / "docs", changed.changed_paths)
+        self.assertEqual(tx.snapshots.count(target / "docs"), 1)
+
+    def test_profile_child_covered_by_new_parent_is_not_removed_before_force_install(self) -> None:
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "old.txt").write_text("old\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["docs/old.txt"])
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+        target = self.data_root / "profiles" / "rick"
+        (self.stage_root / "docs" / "guide.md").write_text("new\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["docs"])
+
+        with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution", side_effect=RuntimeError("stop")):
+            self.assert_apply_error(lambda: apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction()))
+
+        self.assertEqual((target / "docs" / "old.txt").read_text(encoding="utf-8"), "old\n")
+
+    def test_invalid_prior_profile_manifest_cannot_authorize_stale_deletion(self) -> None:
+        target = self.data_root / "profiles" / "rick"
+        target.mkdir(parents=True)
+        (target / "old.txt").write_text("keep\n", encoding="utf-8")
+        (target / "distribution.yaml").write_text(
+            "name: rick\nversion: 0.1.0\nhermes_requires: '>=0.18.2'\ndistribution_owned:\n  - old.txt\n  - ../outside\n",
+            encoding="utf-8",
+        )
+        (self.stage_root / "config.yaml").write_text("new\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+        self.assertEqual((target / "old.txt").read_text(encoding="utf-8"), "keep\n")
+
+    def test_profile_rejects_whitespace_raw_identity_fields_before_writes(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        for overrides in ({"version": " 0.1.0"}, {"name": " rick"}, {"hermes_requires": " >=0.18.2"}):
+            with self.subTest(overrides=overrides):
+                self.write_profile_manifest("rick", ["config.yaml"], **overrides)
+                self.assert_apply_error(lambda: apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction()))
+                self.assertFalse((self.data_root / "profiles" / "rick").exists())
 
     def test_profile_restores_home_without_mutating_it_when_preflight_fails(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
@@ -630,15 +761,7 @@ class DistributionTests(unittest.TestCase):
             with self.assertRaises(ApplyError) as caught:
                 apply_profile_distribution(self.source("rick"), self.data_root, tx)
 
-        target = self.data_root / "profiles" / "rick"
-        self.assertEqual(
-            tx.snapshots,
-            [
-                self.data_root / "profiles",
-                target,
-                *(target / name for name in ("memories", "sessions", "skills", "skins", "logs", "plans", "workspace", "cron", "home")),
-            ],
-        )
+        self.assertEqual(tx.snapshots, [self.data_root / "profiles"])
         self.assertNotIn("HERMES_HOME", os.environ)
         self.assertEqual(str(caught.exception), "could not apply the named profile distribution")
         self.assert_exception_hides_markers(caught.exception, "staged-secret-marker", str(self.stage_root))
