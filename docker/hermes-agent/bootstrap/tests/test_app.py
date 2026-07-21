@@ -145,6 +145,11 @@ class AppTests(unittest.TestCase):
             env_path.write_text(env_content, encoding="utf-8")
             env_path.chmod(0o600)
 
+    def transaction_lock_path(self) -> Path:
+        store = self.root / ".bootstrap" / "transactions"
+        store.mkdir(parents=True)
+        return store / ".lock"
+
     def test_apply_recovers_before_reading_secrets_and_network_before_transaction(self) -> None:
         from hermes_bootstrap import app
 
@@ -783,3 +788,61 @@ class AppTests(unittest.TestCase):
 
         self.assertFalse(os.path.lexists(self.root / ".bootstrap" / "transactions"))
         app._validate_no_transaction(self.root)
+
+    def test_transaction_store_allows_only_a_safe_lock_file(self) -> None:
+        from hermes_bootstrap import app
+
+        lock = self.transaction_lock_path()
+        lock.write_bytes(b"")
+        lock.chmod(0o600)
+
+        app._validate_no_transaction(self.root)
+
+    def test_transaction_store_rejects_lock_directory(self) -> None:
+        from hermes_bootstrap import app
+
+        self.transaction_lock_path().mkdir()
+
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)
+
+    def test_transaction_store_rejects_lock_symlink(self) -> None:
+        from hermes_bootstrap import app
+
+        target = self.root.parent / "lock-target"
+        target.write_bytes(b"")
+        target.chmod(0o600)
+        self.transaction_lock_path().symlink_to(target)
+
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)
+
+    def test_transaction_store_rejects_hardlinked_lock(self) -> None:
+        from hermes_bootstrap import app
+
+        target = self.root.parent / "lock-target"
+        target.write_bytes(b"")
+        target.chmod(0o600)
+        os.link(target, self.transaction_lock_path())
+
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)
+
+    def test_transaction_store_rejects_special_lock(self) -> None:
+        from hermes_bootstrap import app
+
+        lock = self.transaction_lock_path()
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(str(lock))
+            with self.assertRaises(ValidationError):
+                app._validate_no_transaction(self.root)
+
+    def test_transaction_store_rejects_lock_with_wrong_mode(self) -> None:
+        from hermes_bootstrap import app
+
+        lock = self.transaction_lock_path()
+        lock.write_bytes(b"")
+        lock.chmod(0o640)
+
+        with self.assertRaises(ValidationError):
+            app._validate_no_transaction(self.root)

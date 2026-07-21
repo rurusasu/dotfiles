@@ -441,8 +441,22 @@ def _validate_no_transaction(root: Path) -> None:
     if not os.path.lexists(store):
         return
     _require_safe_directory(store)
-    if any(entry.name != ".lock" for entry in store.iterdir()):
+    entries = list(store.iterdir())
+    if any(entry.name != ".lock" for entry in entries):
         raise ValidationError("an incomplete bootstrap transaction remains")
+    if not entries:
+        return
+    try:
+        metadata = entries[0].lstat()
+    except OSError:
+        raise ValidationError("bootstrap transaction lock is invalid") from None
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+    ):
+        raise ValidationError("bootstrap transaction lock is invalid")
 
 
 def _read_json_regular(path: Path) -> dict[str, object]:
