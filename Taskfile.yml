@@ -173,6 +173,14 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
+  hermes:bootstrap:
+    desc: Bootstrap the Hermes runtime through the supported host adapter
+    cmds:
+      - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
+        platforms: [linux, darwin]
+      - cmd: cmd.exe /d /c install.cmd
+        platforms: [windows]
+
   hermes:bootstrap:test:
     desc: Build and run the Hermes bootstrap container test stage
     preconditions:

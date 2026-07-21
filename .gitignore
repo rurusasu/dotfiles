@@ -47,6 +47,7 @@ chezmoi/private_dot_claude/settings.local.json
 # AI agent generated files
 docs/superpowers/
 docs/plans/
+.hermes-validation/
 
 # Temporary files
 *.tmp

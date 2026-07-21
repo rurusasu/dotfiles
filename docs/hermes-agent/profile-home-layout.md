@@ -1,94 +1,52 @@
 # Hermes Agent Home/Profile Layout
 
-Hermes profile homes should keep the filesystem layout that Hermes expects, while Git tracks only the declarative distribution files.
-
-## Runtime Mounts
-
-- The Hermes Docker service mounts `~/.hermes` as `/opt/data`.
-- Inside the official Docker image, s6 supervises profile gateways as `/run/service/gateway-<profile>` within that same container.
-- Profile homes stay visible under `/opt/data/profiles/<profile>` and keep their own `.env`, config, cron, memory, sessions, and gateway state.
-- Do not run another Hermes gateway container against `~/.hermes` or any `~/.hermes/profiles/<profile>` directory while the root container can see that profile.
-- `HERMES_DATA_DIR` remains the Hermes home. Do not point it at lifelog; lifelog is restored under `~/.hermes/core/lifelog`.
-
-## Standard Profile Filesystem
-
-`hermes profile create <name>` scaffolds a usable profile home. Depending on flags and runtime activity, a profile home may contain files and directories such as:
+The host Hermes directory is mounted at `/opt/data`, which is the runtime root
+and `HERMES_HOME`. It is never a Git checkout.
 
 ```text
-~/.hermes/profiles/<profile>/
-  .env
-  .gitignore
-  .no-bundled-skills
-  config.yaml
-  SOUL.md
-  profile.yaml
-  slack-manifest.json
-  assets/
-  docs/
-  cron/
-  home/
-  logs/
-  memories/
-  plans/
-  sessions/
-  skills/
-  skins/
-  workspace/
-  state.db*
+host ~/.hermes/                    container /opt/data/
+├── .env                           root runtime secrets
+├── config.yaml                    root distribution-owned config
+├── SOUL.md                        root distribution-owned profile
+├── profile.yaml
+├── profiles/
+│   ├── rick/                      official Hermes distribution target
+│   ├── hoffman/                   official Hermes distribution target
+│   └── risarisa/                  official Hermes distribution target
+├── shared/
+│   └── lifelog/                   the one writable shared Git checkout
+├── core/
+│   └── lifelog -> ../shared/lifelog
+├── memories/                      runtime state
+├── sessions/
+└── logs/
 ```
 
-Do not delete or flatten this physical layout just to make Git status smaller. Hermes and its gateway may recreate runtime directories as needed.
+## Ownership
 
-## Git-Tracked Distribution
+- The root declarative source is `rurusasu/hermes-home` at `main`; its
+  `root-distribution.yaml` declares the only root paths bootstrap may replace.
+- `profiles/rick`, `profiles/hoffman`, and `profiles/risarisa` are installed
+  with the official Hermes distribution API from
+  `rurusasu/hermes-profile-rick`, `rurusasu/hermes-profile-hoffman`, and
+  `rurusasu/hermes-profile-risarisa`. Each source has `distribution.yaml` and
+  targets the matching directory under `/opt/data/profiles/`.
+- Named profiles retain their runtime `.env`, `auth.json`, memories, sessions,
+  logs, workspaces, and gateway state, but are not Git repositories.
+- `shared/lifelog` is the canonical shared repository. The default profile owns
+  its locked read-write Git synchronization; every profile uses the same path.
+- `core/lifelog` is only the compatibility symlink for older scripts. New
+  configuration and documentation use `/opt/data/shared/lifelog`.
+- Root and named-profile source repositories own declarative config, policy,
+  cron, scripts, and MCP declarations. The bootstrap stages those sources and
+  applies them transactionally without turning runtime homes into Git working
+  trees.
 
-Track durable, declarative profile content:
+Do not run a second Hermes gateway container against this runtime root or a
+managed profile while the main Hermes container can see it. Do not initialize a
+profile repository, copy profile Git metadata into `/opt/data`, or share
+runtime memories and sessions through Git. Root and profile `.env` files are
+runtime-only, mode `0600`, and must never be committed.
 
-- `config.yaml`
-- `SOUL.md`
-- `profile.yaml`
-- `.gitignore`
-- `.no-bundled-skills` when the profile intentionally has no bundled skills
-- `slack-manifest.json` when the profile has a Slack app
-- `assets/` for durable profile images and icons
-- `docs/` for profile-specific docs only; do not copy the shared root layout doc into each profile
-- curated profile-specific `skills/`, if intentionally maintained
-- declarative `cron/` definitions only, not cron output, locks, or tick files
-
-## Profile Gateway Runtime Secrets
-
-A profile gateway still needs runtime credentials inside that profile home, even when s6 runs it inside the root Docker container. Put dashboard auth, Slack tokens, and other env-based secrets in the profile `.env`; put model-provider auth in the profile `auth.json` or provider-specific env vars. Provision these locally or from a secrets manager, and keep them out of Git.
-
-## Ignored Runtime State
-
-Ignore secrets and live state:
-
-- `.env`, `.env.*`, `auth.json`, tokens, and secrets
-- `memories/`, `sessions/`, `logs/`, `state.db*`, gateway state, channel directories, locks, pids, caches, generated usage files, local workspaces, and transient cron output
-- default profile state copied by `--clone-all` unless it has been intentionally curated into the profile distribution
-
-## Profile Creation Notes
-
-- `hermes profile create <name>` creates a standard scaffold.
-- `hermes profile create --clone <name>` copies `config.yaml`, `.env`, `SOUL.md`, and `skills` from the source profile.
-- `hermes profile create --clone-all <name>` copies broader state and is not recommended for clean Git-managed distributions.
-- If a profile does not need bundled skills, use or keep `.no-bundled-skills` instead of tracking an empty `skills/` tree.
-
-## Sharing Knowledge
-
-Do not share profile `memories/` through Git. Put durable shared guidance in `docs/` or repository `AGENTS.md` files, and use Slack, Hermes Kanban, GitHub issues, or Linear for cross-agent work state. If a shared memory backend is introduced later, namespace it by user, app, and profile.
-
-## Lifelog Core
-
-`install.cmd` restores the shared lifelog core at:
-
-```text
-~/.hermes/core/lifelog
-```
-
-Hermes gateways see it at:
-
-```text
-/opt/data/core/lifelog
-```
-
-Every managed profile should treat `/opt/data/core/lifelog/AGENTS.md` and relevant lifelog notes as the shared source of truth before making user-context decisions. The Hermes home repository ignores `core/`; lifelog is its own Git repository and is synced by the `lifelog_sync.sh` cron job.
+See [Hermes Bootstrap Operations](bootstrap.md) for installation and recovery
+behavior.
