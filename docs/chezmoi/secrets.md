@@ -92,6 +92,13 @@ item is shared as required by the bootstrap manifest. Values stay in runtime
 `.env` files with mode `0600`, never in source distributions or repository
 logs.
 
+Slack app registration or rotation through Hermes Browser MCP follows one
+strict rule: Browser MCP や tool output に token 値を戻さない。Use noVNC or another
+approved non-logged secret channel to save generated values in the matching
+`SlackBot-<ProfileTitle>` 1Password item, then rerun bootstrap. Browser-driven
+setup does not write runtime credentials directly; without an approved secret
+channel, profile の `.env` を変更しない。
+
 The runtime root is `/opt/data`; named profile homes are official distribution
 targets, not Git repositories. The canonical shared repository is
 `/opt/data/shared/lifelog`; `/opt/data/core/lifelog` is compatibility-only.
