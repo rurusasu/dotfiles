@@ -80,6 +80,49 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((nested / "program").lstat().st_mode), 0o741)
         self.assertEqual(os.readlink(path / "shortcut"), "nested/program")
 
+    def test_directory_snapshot_preserves_internal_hardlinks_without_linking_outside(self) -> None:
+        tree = self.root / "tree"
+        nested = tree / "nested"
+        nested.mkdir(parents=True)
+        first = tree / "first"
+        second = nested / "second"
+        first.write_text("shared", encoding="utf-8")
+        os.link(first, second)
+        outside = self.root.parent / "outside-link"
+        os.link(first, outside)
+        outside_inode = outside.stat().st_ino
+        tx = Transaction.begin(self.root)
+
+        tx.snapshot(tree)
+        shutil.rmtree(tree)
+        tree.mkdir()
+        (tree / "changed").write_text("changed", encoding="utf-8")
+        tx.rollback()
+
+        self.assertEqual(first.read_text(encoding="utf-8"), "shared")
+        self.assertEqual(first.stat().st_ino, second.stat().st_ino)
+        self.assertNotEqual(first.stat().st_ino, outside_inode)
+        self.assertEqual(outside.read_text(encoding="utf-8"), "shared")
+
+    def test_directory_backup_rejects_a_hardlink_escaping_the_transaction(self) -> None:
+        tree = self.root / "tree"
+        tree.mkdir()
+        path = tree / "file"
+        path.write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(tree)
+        path.write_text("after", encoding="utf-8")
+        journal_path, journal = self.journal()
+        backup_file = journal_path.parent / journal["entries"][0]["backup"] / "file"
+        escaped = self.root.parent / "escaped-backup-link"
+        os.link(backup_file, escaped)
+        self.crash(tx)
+
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+        self.assertEqual(path.read_text(encoding="utf-8"), "after")
+        self.assertTrue(journal_path.exists())
+
     def test_snapshot_symlink_restores_link_text_without_following_it(self) -> None:
         target = self.root / "target"
         target.write_text("target", encoding="utf-8")
@@ -234,6 +277,71 @@ class TransactionTests(unittest.TestCase):
         tx.rollback()
         Transaction.begin(self.root).rollback()
 
+    def test_symlinked_lock_is_rejected_without_touching_its_target(self) -> None:
+        store = self.root / ".bootstrap" / "transactions"
+        store.mkdir(parents=True)
+        outside = self.root.parent / "outside-lock"
+        outside.write_text("outside-lock-content", encoding="utf-8")
+        outside.chmod(0o644)
+        os.symlink(outside, store / ".lock")
+        outside_identity = (outside.stat().st_dev, outside.stat().st_ino)
+        flocked_external: list[int] = []
+        original_flock = transaction_module.fcntl.flock
+
+        def record_flock(descriptor: int, operation: int) -> None:
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) == outside_identity:
+                flocked_external.append(operation)
+            original_flock(descriptor, operation)
+
+        with mock.patch.object(transaction_module.fcntl, "flock", side_effect=record_flock):
+            with self.assertRaises(ApplyError):
+                Transaction.begin(self.root)
+
+        self.assertEqual(flocked_external, [])
+        self.assertEqual(outside.read_text(encoding="utf-8"), "outside-lock-content")
+        self.assertEqual(stat.S_IMODE(outside.lstat().st_mode), 0o644)
+        self.assertTrue((store / ".lock").is_symlink())
+
+    def test_persistent_lock_inode_is_private_and_regular(self) -> None:
+        store = self.root / ".bootstrap" / "transactions"
+        store.mkdir(parents=True)
+        lock = store / ".lock"
+        lock.write_text("", encoding="utf-8")
+        lock.chmod(0o666)
+
+        tx = Transaction.begin(self.root)
+
+        info = lock.lstat()
+        self.assertTrue(stat.S_ISREG(info.st_mode))
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o600)
+        tx.rollback()
+
+    def test_hardlinked_lock_is_rejected_without_touching_the_external_inode(self) -> None:
+        store = self.root / ".bootstrap" / "transactions"
+        store.mkdir(parents=True)
+        outside = self.root.parent / "outside-lock-hardlink"
+        outside.write_text("outside-lock-content", encoding="utf-8")
+        outside.chmod(0o644)
+        os.link(outside, store / ".lock")
+        outside_identity = (outside.stat().st_dev, outside.stat().st_ino)
+        flocked_external: list[int] = []
+        original_flock = transaction_module.fcntl.flock
+
+        def record_flock(descriptor: int, operation: int) -> None:
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) == outside_identity:
+                flocked_external.append(operation)
+            original_flock(descriptor, operation)
+
+        with mock.patch.object(transaction_module.fcntl, "flock", side_effect=record_flock):
+            with self.assertRaises(ApplyError):
+                Transaction.begin(self.root)
+
+        self.assertEqual(flocked_external, [])
+        self.assertEqual(outside.read_text(encoding="utf-8"), "outside-lock-content")
+        self.assertEqual(stat.S_IMODE(outside.lstat().st_mode), 0o644)
+
     def test_begin_requires_explicit_recovery_of_durable_journal(self) -> None:
         path = self.root / "file"
         path.write_text("before", encoding="utf-8")
@@ -246,6 +354,42 @@ class TransactionTests(unittest.TestCase):
             Transaction.begin(self.root)
         Transaction.recover_if_needed(self.root)
         self.assertEqual(path.read_text(encoding="utf-8"), "before")
+
+    def test_initial_journal_failure_and_empty_directory_recovery_are_safe(self) -> None:
+        with mock.patch.object(transaction_module, "_atomic_write_json", side_effect=OSError()):
+            with self.assertRaises(ApplyError):
+                Transaction.begin(self.root)
+        store = self.root / ".bootstrap" / "transactions"
+        self.assertEqual([path for path in store.iterdir() if path.name != ".lock"], [])
+
+        empty = store / "00000000-0000-4000-8000-000000000000"
+        empty.mkdir()
+        Transaction.recover_if_needed(self.root)
+        self.assertFalse(empty.exists())
+
+        nonempty = store / "00000000-0000-4000-8000-000000000001"
+        nonempty.mkdir()
+        (nonempty / "unexpected").write_text("unsafe", encoding="utf-8")
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+        self.assertTrue(nonempty.exists())
+
+    def test_initial_journal_temporary_is_cleaned_by_begin_and_recovery(self) -> None:
+        def fail_with_temporary(path: Path, _payload: dict[str, object]) -> None:
+            (path.parent / ".journal-interrupted").write_text("partial", encoding="utf-8")
+            raise OSError
+
+        with mock.patch.object(transaction_module, "_atomic_write_json", side_effect=fail_with_temporary):
+            with self.assertRaises(ApplyError):
+                Transaction.begin(self.root)
+        store = self.root / ".bootstrap" / "transactions"
+        self.assertEqual([path for path in store.iterdir() if path.name != ".lock"], [])
+
+        interrupted = store / "00000000-0000-4000-8000-000000000002"
+        interrupted.mkdir()
+        (interrupted / ".journal-interrupted").write_text("partial", encoding="utf-8")
+        Transaction.recover_if_needed(self.root)
+        self.assertFalse(interrupted.exists())
 
     def test_preparing_ready_and_committed_recovery_are_distinct(self) -> None:
         path = self.root / "file"
@@ -275,6 +419,116 @@ class TransactionTests(unittest.TestCase):
         self.crash(tx)
         Transaction.recover_if_needed(self.root)
         self.assertEqual(path.read_text(encoding="utf-8"), "committed")
+
+    def test_terminal_cleanup_recovers_after_every_durable_removal_step(self) -> None:
+        for point in ("cleanup-backup", "cleanup-journal", "cleanup-directory"):
+            with self.subTest(point=point), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                path = root / "file"
+                path.write_text("before", encoding="utf-8")
+                tx = Transaction.begin(root)
+                tx.snapshot(path)
+                path.write_text("committed", encoding="utf-8")
+
+                with mock.patch.object(
+                    transaction_module,
+                    "_failpoint",
+                    side_effect=lambda name, point=point: (_ for _ in ()).throw(OSError())
+                    if name == point
+                    else None,
+                ):
+                    with self.assertRaises(ApplyError):
+                        tx.commit()
+
+                Transaction.recover_if_needed(root)
+                self.assertEqual(path.read_text(encoding="utf-8"), "committed")
+                self.assertEqual(list((root / ".bootstrap" / "transactions").glob("*/journal.json")), [])
+
+    def test_terminal_cleanup_recovers_after_temporary_object_removal(self) -> None:
+        path = self.root / "file"
+        path.write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_text("committed", encoding="utf-8")
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (_ for _ in ()).throw(OSError()) if name == "status-update" else None,
+        ):
+            with self.assertRaises(ApplyError):
+                tx.commit()
+        journal_path, _ = self.journal()
+        (journal_path.parent / ".journal-leftover").write_text("temporary", encoding="utf-8")
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (_ for _ in ()).throw(OSError()) if name == "cleanup-temp" else None,
+        ):
+            with self.assertRaises(ApplyError):
+                Transaction.recover_if_needed(self.root)
+        self.assertTrue(journal_path.exists())
+
+        Transaction.recover_if_needed(self.root)
+        self.assertEqual(path.read_text(encoding="utf-8"), "committed")
+
+    def test_journal_rejects_illegal_status_and_entry_state_combinations(self) -> None:
+        cases = (
+            ("active", ("restored", "ready")),
+            ("rolling_back", ("restored", "ready")),
+            ("committed", ("ready", "preparing")),
+            ("committed", ("ready", "restored")),
+            ("rolled_back", ("restored", "ready")),
+        )
+        for status, states in cases:
+            with self.subTest(status=status, states=states), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                first = root / "first"
+                second = root / "second"
+                first.write_text("first-before", encoding="utf-8")
+                second.write_text("second-before", encoding="utf-8")
+                tx = Transaction.begin(root)
+                tx.snapshot(first)
+                tx.snapshot(second)
+                first.write_text("first-after", encoding="utf-8")
+                second.write_text("second-after", encoding="utf-8")
+                journal_path = next((root / ".bootstrap" / "transactions").glob("*/journal.json"))
+                journal = json.loads(journal_path.read_text(encoding="utf-8"))
+                journal["status"] = status
+                for entry, state in zip(journal["entries"], states, strict=True):
+                    entry["state"] = state
+                journal_path.write_text(json.dumps(journal), encoding="utf-8")
+                self.crash(tx)
+
+                with self.assertRaises(ApplyError):
+                    Transaction.recover_if_needed(root)
+                self.assertEqual(first.read_text(encoding="utf-8"), "first-after")
+                self.assertEqual(second.read_text(encoding="utf-8"), "second-after")
+                self.assertTrue(journal_path.exists())
+
+    def test_rolling_back_journal_accepts_only_a_restored_reverse_suffix(self) -> None:
+        first = self.root / "first"
+        second = self.root / "second"
+        first.write_text("first-before", encoding="utf-8")
+        second.write_text("second-before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(first)
+        tx.snapshot(second)
+        first.write_text("first-after", encoding="utf-8")
+        second.write_text("second-before", encoding="utf-8")
+        journal_path, journal = self.journal()
+        journal["status"] = "rolling_back"
+        journal["entries"][1]["state"] = "restored"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(first.read_text(encoding="utf-8"), "first-before")
+        self.assertEqual(second.read_text(encoding="utf-8"), "second-before")
+        self.assertEqual(self.journal_paths(), [])
 
     def test_malformed_or_traversing_journal_is_rejected_before_targets_are_touched(self) -> None:
         store = self.root / ".bootstrap" / "transactions"
@@ -342,6 +596,89 @@ class TransactionTests(unittest.TestCase):
         self.assertTrue(self.journal_paths())
         Transaction.recover_if_needed(self.root)
         self.assertEqual(path.read_text(encoding="utf-8"), "before")
+
+    def test_failure_to_enter_rolling_back_is_reported_as_rollback_error(self) -> None:
+        path = self.root / "file"
+        path.write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_text("after", encoding="utf-8")
+        self.crash(tx)
+        original_write = transaction_module._atomic_write_json
+
+        def fail_rolling_back(journal_path: Path, payload: dict[str, object]) -> None:
+            if payload["status"] == "rolling_back":
+                raise OSError
+            original_write(journal_path, payload)
+
+        with mock.patch.object(transaction_module, "_atomic_write_json", side_effect=fail_rolling_back):
+            with self.assertRaises(RollbackError):
+                Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_text(encoding="utf-8"), "after")
+        self.assertTrue(self.journal_paths())
+
+    def test_restore_revalidates_ancestors_after_journal_validation(self) -> None:
+        managed = self.root / "managed"
+        managed.mkdir()
+        path = managed / "file"
+        path.write_text("before", encoding="utf-8")
+        outside = self.root.parent / "outside"
+        outside.mkdir()
+        sentinel = outside / "file"
+        sentinel.write_text("outside-sentinel", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_text("after", encoding="utf-8")
+        self.crash(tx)
+        swapped = False
+
+        def swap_ancestor(name: str) -> None:
+            nonlocal swapped
+            if name != "before-restore" or swapped:
+                return
+            swapped = True
+            os.replace(managed, self.root / "parked-managed")
+            os.symlink(outside, managed)
+
+        with mock.patch.object(transaction_module, "_failpoint", side_effect=swap_ancestor):
+            with self.assertRaises(RollbackError):
+                Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "outside-sentinel")
+        self.assertTrue(self.journal_paths())
+
+    def test_restore_mutations_remain_bound_when_an_ancestor_is_swapped(self) -> None:
+        managed = self.root / "managed"
+        managed.mkdir()
+        path = managed / "file"
+        path.write_text("before", encoding="utf-8")
+        outside = self.root.parent / "outside-race"
+        outside.mkdir()
+        sentinel = outside / "file"
+        sentinel.write_text("outside-sentinel", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_text("after", encoding="utf-8")
+        self.crash(tx)
+        original_replace = transaction_module.os.replace
+        swapped = False
+
+        def swap_before_managed_replace(source: object, target: object, *args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            if not swapped and Path(os.fsdecode(source)).name == "file" and Path(os.fsdecode(target)).name.startswith(".file.bootstrap-"):
+                swapped = True
+                original_replace(managed, self.root / "parked-managed")
+                os.symlink(outside, managed)
+            original_replace(source, target, *args, **kwargs)
+
+        with mock.patch.object(transaction_module.os, "replace", side_effect=swap_before_managed_replace):
+            with self.assertRaises(RollbackError):
+                Transaction.recover_if_needed(self.root)
+
+        self.assertTrue(swapped)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "outside-sentinel")
+        self.assertTrue(self.journal_paths())
 
     def test_rollback_failure_retains_journal_and_redacts_runtime_content(self) -> None:
         path = self.root / "file"

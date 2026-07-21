@@ -41,6 +41,7 @@ class Transaction:
         root = _require_data_root(data_root)
         store = _open_store(root)
         lock = _acquire_lock(store)
+        directory: Path | None = None
         try:
             if _journal_directories(store):
                 raise ApplyError("a previous bootstrap transaction requires recovery")
@@ -52,9 +53,11 @@ class Transaction:
             tx._write_journal()
             return tx
         except ApplyError:
+            _safe_remove_empty_initial_transaction(directory, store)
             _release_lock(lock)
             raise
         except Exception:
+            _safe_remove_empty_initial_transaction(directory, store)
             _release_lock(lock)
             raise ApplyError("could not begin bootstrap transaction") from None
 
@@ -65,6 +68,9 @@ class Transaction:
         lock = _acquire_lock(store)
         try:
             for directory in _journal_directories(store):
+                if not _lexists(directory / _JOURNAL_NAME):
+                    _remove_empty_transaction(directory, store)
+                    continue
                 journal = _read_journal(directory)
                 _validate_journal(root, directory, journal)
                 tx = Transaction(root, store, directory, lock, journal)
@@ -201,13 +207,27 @@ class Transaction:
             raise RollbackError("could not roll back managed paths") from None
 
     def _rollback_or_raise(self) -> None:
+        try:
+            if self._journal["status"] == "active":
+                self._journal["status"] = "rolling_back"
+                self._write_journal()
+            elif self._journal["status"] != "rolling_back":
+                raise ValueError
+        except Exception:
+            raise RollbackError("could not roll back managed paths")
         failures: list[str] = []
         for entry in reversed(self._journal["entries"]):
             if entry["state"] != "ready":
                 continue
             try:
+                _failpoint("before-restore")
                 if entry["kind"] == "snapshot":
-                    _restore_snapshot(self._data_root / entry["path"], self._directory / entry["backup"], entry["original"])
+                    _restore_snapshot(
+                        self._data_root,
+                        self._data_root / entry["path"],
+                        self._directory / entry["backup"],
+                        entry["original"],
+                    )
                 else:
                     _reverse_move(self._data_root, entry)
                 entry["state"] = "restored"
@@ -301,10 +321,28 @@ def _acquire_lock(store: Path) -> int:
     descriptor: int | None = None
     try:
         lock_path = store / _LOCK_NAME
-        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
+        before: os.stat_result | None = None
+        if _lexists(lock_path):
+            before = lock_path.lstat()
+            if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+                raise OSError
+        flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(lock_path, flags, 0o600)
+        opened = os.fstat(descriptor)
+        after = lock_path.lstat()
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or stat.S_ISLNK(after.st_mode)
+            or not stat.S_ISREG(after.st_mode)
+            or after.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != (after.st_dev, after.st_ino)
+            or before is not None
+            and (before.st_nlink != 1 or (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino))
+        ):
             raise OSError
+        os.fchmod(descriptor, 0o600)
+        os.fsync(descriptor)
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _fsync_directory(store)
         return descriptor
@@ -425,22 +463,35 @@ def _copy_file(source: Path, destination: Path) -> None:
     _fsync_file(destination)
 
 
-def _copy_directory(source: Path, destination: Path) -> None:
+def _copy_directory(
+    source: Path,
+    destination: Path,
+    hardlinks: dict[tuple[int, int], Path] | None = None,
+) -> None:
     info = source.lstat()
     if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
         raise ValueError
+    if hardlinks is None:
+        hardlinks = {}
     with os.scandir(source) as entries:
         for entry in entries:
             child_source = Path(entry.path)
             child_destination = destination / entry.name
             kind = _entry_kind(child_source)
             if kind == "file":
-                descriptor = os.open(child_destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                os.close(descriptor)
-                _copy_file(child_source, child_destination)
+                child_info = child_source.lstat()
+                identity = (child_info.st_dev, child_info.st_ino)
+                linked = hardlinks.get(identity)
+                if linked is None:
+                    descriptor = os.open(child_destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    os.close(descriptor)
+                    _copy_file(child_source, child_destination)
+                    hardlinks[identity] = child_destination
+                else:
+                    os.link(linked, child_destination, follow_symlinks=False)
             elif kind == "dir":
                 child_destination.mkdir(mode=0o700)
-                _copy_directory(child_source, child_destination)
+                _copy_directory(child_source, child_destination, hardlinks)
             elif kind == "symlink":
                 os.symlink(os.readlink(child_source), child_destination)
                 _copy_ownership(child_source, child_destination, follow_symlinks=False)
@@ -459,64 +510,108 @@ def _copy_ownership(source: Path, destination: Path, *, follow_symlinks: bool = 
         pass
 
 
-def _restore_snapshot(target: Path, backup: Path, original: str) -> None:
+def _restore_snapshot(data_root: Path, target: Path, backup: Path, original: str) -> None:
     if original == "absent":
-        if _lexists(target):
-            _remove_safe(target)
-            _fsync_directory(target.parent)
+        parent = _open_managed_parent(data_root, target)
+        try:
+            _verify_managed_parent(data_root, target, parent)
+            if _lexists_at(parent, target.name):
+                _verify_managed_parent(data_root, target, parent)
+                _remove_safe_at(parent, target.name)
+                os.fsync(parent)
+                _verify_managed_parent(data_root, target, parent)
+                _fsync_directory(target.parent)
+        finally:
+            _safe_close(parent)
         _failpoint("restore")
         return
     _validate_backup(backup, original)
-    _replace_from_backup(backup, target, original)
+    _replace_from_backup(data_root, backup, target, original)
     _failpoint("restore")
 
 
-def _replace_from_backup(backup: Path, target: Path, original: str) -> None:
-    _require_parent_directory(target.parent)
-    temporary = _temporary_sibling(target, original == "dir")
-    retired: Path | None = None
+def _replace_from_backup(data_root: Path, backup: Path, target: Path, original: str) -> None:
+    parent = _open_managed_parent(data_root, target)
+    temporary: str | None = None
+    retired: str | None = None
     try:
+        _verify_managed_parent(data_root, target, parent)
+        temporary = _temporary_sibling_at(parent, target.name, original == "dir")
+        temporary_path = _descriptor_child(parent, temporary)
         if original == "file":
-            _copy_file(backup, temporary)
+            _copy_file(backup, temporary_path)
         elif original == "dir":
-            _copy_directory(backup, temporary)
+            _copy_directory(backup, temporary_path)
         elif original == "symlink":
-            _safe_remove(temporary)
-            os.symlink(os.readlink(backup), temporary)
-            _copy_ownership(backup, temporary, follow_symlinks=False)
+            _remove_safe_at(parent, temporary)
+            os.symlink(os.readlink(backup), temporary, dir_fd=parent)
+            _copy_ownership(backup, temporary_path, follow_symlinks=False)
         else:
             raise ValueError
-        if _lexists(target):
-            _entry_kind(target)
-            retired = _temporary_sibling(target, target.is_dir() and not target.is_symlink())
-            _safe_remove(retired)
-            os.replace(target, retired)
-            _fsync_directory(target.parent)
-        os.replace(temporary, target)
+        _verify_managed_parent(data_root, target, parent)
+        if _lexists_at(parent, target.name):
+            target_kind = _entry_kind_at(parent, target.name)
+            retired = _temporary_sibling_at(parent, target.name, target_kind == "dir")
+            _remove_safe_at(parent, retired)
+            _verify_managed_parent(data_root, target, parent)
+            os.replace(target.name, retired, src_dir_fd=parent, dst_dir_fd=parent)
+            os.fsync(parent)
+            _verify_managed_parent(data_root, target, parent)
+        _verify_managed_parent(data_root, target, parent)
+        os.replace(temporary, target.name, src_dir_fd=parent, dst_dir_fd=parent)
         temporary = None
+        os.fsync(parent)
+        _verify_managed_parent(data_root, target, parent)
         _fsync_directory(target.parent)
     finally:
         if temporary is not None:
-            _safe_remove(temporary)
+            _remove_safe_at(parent, temporary)
         if retired is not None:
-            _safe_remove(retired)
+            _remove_safe_at(parent, retired)
+        _safe_close(parent)
 
 
 def _reverse_move(data_root: Path, entry: dict[str, Any]) -> None:
     source = data_root / entry["source"]
     target = data_root / entry["target"]
-    source_kind = _entry_kind(source)
-    target_kind = _entry_kind(target)
-    if source_kind != "absent" and target_kind == "absent":
-        return
-    if source_kind == "absent" and target_kind != "absent" and _identity(target, target_kind) == entry["identity"]:
-        os.replace(target, source)
-        _fsync_directory(source.parent)
-        if target.parent != source.parent:
-            _fsync_directory(target.parent)
-        _failpoint("restore")
-        return
-    raise ValueError
+    source_parent = _open_managed_parent(data_root, source)
+    target_parent: int | None = None
+    try:
+        target_parent = _open_managed_parent(data_root, target)
+        _verify_managed_parent(data_root, source, source_parent)
+        _verify_managed_parent(data_root, target, target_parent)
+        source_kind = _entry_kind_at(source_parent, source.name)
+        target_kind = _entry_kind_at(target_parent, target.name)
+        if source_kind != "absent" and target_kind == "absent":
+            return
+        if (
+            source_kind == "absent"
+            and target_kind != "absent"
+            and _identity_at(target_parent, target.name, target_kind) == entry["identity"]
+        ):
+            _verify_managed_parent(data_root, source, source_parent)
+            _verify_managed_parent(data_root, target, target_parent)
+            os.replace(
+                target.name,
+                source.name,
+                src_dir_fd=target_parent,
+                dst_dir_fd=source_parent,
+            )
+            os.fsync(source_parent)
+            if target_parent != source_parent:
+                os.fsync(target_parent)
+            _verify_managed_parent(data_root, source, source_parent)
+            _verify_managed_parent(data_root, target, target_parent)
+            _fsync_directory(source.parent)
+            if target.parent != source.parent:
+                _fsync_directory(target.parent)
+            _failpoint("restore")
+            return
+        raise ValueError
+    finally:
+        if target_parent is not None:
+            _safe_close(target_parent)
+        _safe_close(source_parent)
 
 
 def _read_journal(directory: Path) -> dict[str, Any]:
@@ -538,7 +633,7 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
     try:
         if set(journal) != {"version", "status", "entries"} or journal["version"] != _VERSION:
             raise ValueError
-        if journal["status"] not in {"active", "committed", "rolled_back"} or not isinstance(journal["entries"], list):
+        if journal["status"] not in {"active", "rolling_back", "committed", "rolled_back"} or not isinstance(journal["entries"], list):
             raise ValueError
         snapshots: list[str] = []
         moves: set[str] = set()
@@ -552,14 +647,14 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
                 relative = _validate_relative(entry["path"])
                 if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
                     raise ValueError
-                _managed_relative(data_root, directory.parent, data_root / relative)
+                _validate_journal_managed_path(relative)
                 if any(relative == known or _is_descendant(relative, known) for known in snapshots):
                     raise ValueError
                 if any(_is_descendant(known, relative) for known in snapshots):
                     raise ValueError
                 snapshots.append(relative)
                 backups.add(entry["backup"])
-                if journal["status"] == "active" and entry["state"] == "ready":
+                if journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
                     _validate_backup(directory / entry["backup"], entry["original"])
             elif entry.get("kind") == "move":
                 if set(entry) != {"kind", "source", "target", "state", "identity"}:
@@ -568,11 +663,12 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
                 target = _validate_relative(entry["target"])
                 if _overlaps(source, target) or source in moves or target in moves or not _valid_identity(entry["identity"]):
                     raise ValueError
-                _managed_relative(data_root, directory.parent, data_root / source)
-                _managed_relative(data_root, directory.parent, data_root / target)
+                _validate_journal_managed_path(source)
+                _validate_journal_managed_path(target)
                 moves.update((source, target))
             else:
                 raise ValueError
+        _validate_entry_states(journal["status"], journal["entries"])
         _validate_journal_storage(directory, backups)
     except ApplyError:
         raise ApplyError("bootstrap transaction journal is invalid") from None
@@ -596,6 +692,35 @@ def _validate_journal_storage(directory: Path, backups: set[str]) -> None:
                 raise ValueError
 
 
+def _validate_entry_states(status: str, entries: list[dict[str, Any]]) -> None:
+    states = [entry["state"] for entry in entries]
+    preparing = states[-1:] == ["preparing"]
+    mutation_states = states[:-1] if preparing else states
+    if "preparing" in mutation_states:
+        raise ValueError
+    if status == "active":
+        if any(state != "ready" for state in mutation_states):
+            raise ValueError
+        return
+    if status == "rolling_back":
+        restored = False
+        for state in mutation_states:
+            if state == "restored":
+                restored = True
+            elif state != "ready" or restored:
+                raise ValueError
+        return
+    if status == "committed":
+        if preparing or any(state != "ready" for state in mutation_states):
+            raise ValueError
+        return
+    if status == "rolled_back":
+        if any(state != "restored" for state in mutation_states):
+            raise ValueError
+        return
+    raise ValueError
+
+
 def _validate_relative(value: object) -> str:
     if not isinstance(value, str) or not value or "\\" in value:
         raise ValueError
@@ -603,6 +728,79 @@ def _validate_relative(value: object) -> str:
     if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
         raise ValueError
     return path.as_posix()
+
+
+def _validate_journal_managed_path(relative: str) -> None:
+    if Path(relative).parts[:2] == (".bootstrap", "transactions"):
+        raise ValueError
+
+
+def _open_managed_parent(data_root: Path, path: Path) -> int:
+    descriptor: int | None = None
+    try:
+        relative = path.relative_to(data_root)
+        if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            raise ValueError
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | os.O_CLOEXEC
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(data_root, flags | nofollow)
+        root_info = data_root.lstat()
+        opened = os.fstat(descriptor)
+        if not stat.S_ISDIR(opened.st_mode) or (root_info.st_dev, root_info.st_ino) != (opened.st_dev, opened.st_ino):
+            raise ValueError
+        for part in relative.parts[:-1]:
+            child = os.open(part, flags | nofollow, dir_fd=descriptor)
+            child_path_info = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
+            child_info = os.fstat(child)
+            if (
+                not stat.S_ISDIR(child_info.st_mode)
+                or stat.S_ISLNK(child_path_info.st_mode)
+                or (child_path_info.st_dev, child_path_info.st_ino) != (child_info.st_dev, child_info.st_ino)
+            ):
+                os.close(child)
+                raise ValueError
+            os.close(descriptor)
+            descriptor = child
+        result = descriptor
+        descriptor = None
+        return result
+    except Exception:
+        raise ApplyError("managed path is unsafe") from None
+    finally:
+        if descriptor is not None:
+            _safe_close(descriptor)
+
+
+def _verify_managed_parent(data_root: Path, path: Path, descriptor: int) -> None:
+    current = _open_managed_parent(data_root, path)
+    try:
+        expected = os.fstat(descriptor)
+        actual = os.fstat(current)
+        if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+            raise ApplyError("managed path is unsafe")
+    finally:
+        _safe_close(current)
+
+
+def _entry_kind_at(parent: int, name: str) -> str:
+    try:
+        info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        return "absent"
+    except OSError:
+        raise ApplyError("managed path is unsafe") from None
+    if stat.S_ISREG(info.st_mode):
+        return "file"
+    if stat.S_ISDIR(info.st_mode):
+        return "dir"
+    if stat.S_ISLNK(info.st_mode):
+        return "symlink"
+    raise ApplyError("managed path is unsafe")
+
+
+def _identity_at(parent: int, name: str, kind: str) -> list[Any]:
+    info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    return [info.st_dev, info.st_ino, kind]
 
 
 def _valid_identity(value: object) -> bool:
@@ -628,16 +826,33 @@ def _validate_backup(backup: Path, original: str) -> None:
         raise ValueError
     if kind == "dir":
         _validate_backup_tree(backup)
+    elif kind == "file" and backup.lstat().st_nlink != 1:
+        raise ValueError
 
 
 def _validate_backup_tree(path: Path) -> None:
-    for entry in os.scandir(path):
-        child = Path(entry.path)
-        kind = _entry_kind(child)
-        if kind == "dir":
-            _validate_backup_tree(child)
-        elif kind not in {"file", "symlink"}:
-            raise ValueError
+    links: dict[tuple[int, int], tuple[int, int]] = {}
+    _collect_backup_links(path, links)
+    if any(count != link_count for count, link_count in links.values()):
+        raise ValueError
+
+
+def _collect_backup_links(path: Path, links: dict[tuple[int, int], tuple[int, int]]) -> None:
+    with os.scandir(path) as entries:
+        for entry in entries:
+            child = Path(entry.path)
+            kind = _entry_kind(child)
+            if kind == "dir":
+                _collect_backup_links(child, links)
+            elif kind == "file":
+                info = child.lstat()
+                identity = (info.st_dev, info.st_ino)
+                count, link_count = links.get(identity, (0, info.st_nlink))
+                if link_count != info.st_nlink:
+                    raise ValueError
+                links[identity] = (count + 1, link_count)
+            elif kind != "symlink":
+                raise ValueError
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -661,24 +876,99 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _cleanup_transaction(directory: Path, store: Path) -> None:
     _require_directory(directory)
-    for entry in list(os.scandir(directory)):
-        path = Path(entry.path)
-        if entry.name == _JOURNAL_NAME or _BACKUP_ID.fullmatch(entry.name) or entry.name.startswith(".journal-"):
-            _remove_safe(path)
+    with os.scandir(directory) as entries:
+        names = [entry.name for entry in entries]
+    for name in sorted(names):
+        if _BACKUP_ID.fullmatch(name):
+            _remove_safe(directory / name)
             _fsync_directory(directory)
-            _failpoint("cleanup-step")
-        else:
+            _cleanup_failpoint("cleanup-backup")
+        elif name.startswith(".journal-"):
+            _remove_safe(directory / name)
+            _fsync_directory(directory)
+            _cleanup_failpoint("cleanup-temp")
+        elif name != _JOURNAL_NAME:
             raise ValueError
+    journal = directory / _JOURNAL_NAME
+    if _lexists(journal):
+        _remove_safe(journal)
+        _fsync_directory(directory)
+        _cleanup_failpoint("cleanup-journal")
+    directory.rmdir()
+    _fsync_directory(store)
+    _cleanup_failpoint("cleanup-directory")
+
+
+def _cleanup_failpoint(name: str) -> None:
+    _failpoint("cleanup-step")
+    _failpoint(name)
+
+
+def _remove_empty_transaction(directory: Path, store: Path) -> None:
+    _require_directory(directory)
+    with os.scandir(directory) as entries:
+        names = [entry.name for entry in entries]
+    for name in names:
+        path = directory / name
+        if not name.startswith(".journal-") or not path.is_file() or path.is_symlink():
+            raise ApplyError("bootstrap transaction journal is invalid")
+        path.unlink()
+        _fsync_directory(directory)
     directory.rmdir()
     _fsync_directory(store)
 
 
-def _temporary_sibling(path: Path, directory: bool) -> Path:
-    if directory:
-        return Path(tempfile.mkdtemp(prefix=f".{path.name}.bootstrap-", dir=path.parent))
-    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.bootstrap-", dir=path.parent)
-    os.close(descriptor)
-    return Path(name)
+def _safe_remove_empty_initial_transaction(directory: Path | None, store: Path) -> None:
+    if directory is None:
+        return
+    try:
+        _remove_empty_transaction(directory, store)
+    except Exception:
+        pass
+
+
+def _temporary_sibling_at(parent: int, basename: str, directory: bool) -> str:
+    while True:
+        name = f".{basename}.bootstrap-{uuid.uuid4()}"
+        try:
+            if directory:
+                os.mkdir(name, mode=0o700, dir_fd=parent)
+            else:
+                descriptor = os.open(
+                    name,
+                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=parent,
+                )
+                os.close(descriptor)
+            return name
+        except FileExistsError:
+            continue
+
+
+def _descriptor_child(descriptor: int, name: str) -> Path:
+    base = Path("/proc/self/fd")
+    if not base.is_dir():
+        base = Path("/dev/fd")
+    return base / str(descriptor) / name
+
+
+def _lexists_at(parent: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _remove_safe_at(parent: int, name: str) -> None:
+    kind = _entry_kind_at(parent, name)
+    if kind == "absent":
+        return
+    if kind == "dir":
+        shutil.rmtree(name, dir_fd=parent)
+    else:
+        os.unlink(name, dir_fd=parent)
 
 
 def _remove_safe(path: Path) -> None:
@@ -695,10 +985,6 @@ def _require_directory(path: Path) -> None:
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
         raise ValueError
-
-
-def _require_parent_directory(path: Path) -> None:
-    _require_directory(path)
 
 
 def _fsync_file(path: Path) -> None:
