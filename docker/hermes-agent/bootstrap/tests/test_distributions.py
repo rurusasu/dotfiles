@@ -16,6 +16,7 @@ from unittest import mock
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
+from hermes_bootstrap import distributions
 from hermes_bootstrap.distributions import (
     ChangeSet,
     RootDistributionManifest,
@@ -140,6 +141,19 @@ class DistributionTests(unittest.TestCase):
 
         self.assertFalse((self.data_root / ".bootstrap").exists())
 
+    def test_root_manifest_rejects_empty_or_whitespace_hermes_requires_before_writes(self) -> None:
+        for index, hermes_requires in enumerate(("", " >=0.18.2", ">=0.18.2 ")):
+            with self.subTest(hermes_requires=hermes_requires):
+                self.data_root = self.root / f"root-{index}"
+                self.data_root.mkdir()
+                self.write_root_manifest([], hermes_requires=hermes_requires)
+
+                self.assert_apply_error(
+                    lambda: apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+                )
+
+                self.assertFalse((self.data_root / ".bootstrap").exists())
+
     def test_profile_apply_does_not_follow_a_managed_destination_symlink(self) -> None:
         (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
         self.write_profile_manifest("rick", ["config.yaml"])
@@ -152,6 +166,57 @@ class DistributionTests(unittest.TestCase):
         self.assert_apply_error(lambda: apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction()))
 
         self.assertEqual(outside.read_text(encoding="utf-8"), "outside\n")
+
+    def test_profile_rejects_env_template_mapping_collisions_and_invalid_template_shapes(self) -> None:
+        cases = (
+            ("mapped-destinations", [".env.template", ".env.EXAMPLE"], {".env.template": "file", ".env.EXAMPLE": "file"}),
+            ("mapped-overlap", [".env.template", ".env.EXAMPLE/nested"], {".env.template": "file", ".env.EXAMPLE": "directory"}),
+            ("nested-template", [".env.template/nested"], {".env.template": "directory"}),
+            ("directory-template", [".env.template"], {".env.template": "directory"}),
+        )
+        for name, owned, paths in cases:
+            with self.subTest(name=name):
+                shutil.rmtree(self.stage_root)
+                self.stage_root.mkdir()
+                for path, kind in paths.items():
+                    source = self.stage_root / path
+                    if kind == "directory":
+                        source.mkdir()
+                        (source / "nested").write_text("nested\n", encoding="utf-8")
+                    else:
+                        source.write_text("template\n", encoding="utf-8")
+                self.write_profile_manifest("rick", list(owned))
+
+                with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution") as install:
+                    self.assert_apply_error(lambda: apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction()))
+
+                install.assert_not_called()
+                self.assertFalse((self.data_root / "profiles" / "rick").exists())
+
+    def test_profile_template_install_is_deterministic_and_second_apply_is_a_noop(self) -> None:
+        (self.stage_root / ".env.template").write_text("DECLARED=value\n", encoding="utf-8")
+        self.write_profile_manifest("rick", [".env.template"])
+
+        first = apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+        target = self.data_root / "profiles" / "rick"
+        self.assertNotEqual(first, ChangeSet(()))
+        self.assertFalse((target / ".env.template").exists())
+        self.assertEqual((target / ".env.EXAMPLE").read_text(encoding="utf-8"), "DECLARED=value\n")
+        before = {
+            path: (path.read_bytes(), path.stat().st_ino)
+            for path in (target / ".env.EXAMPLE", target / "distribution.yaml")
+        }
+
+        with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution") as install:
+            second = apply_profile_distribution(self.source("rick"), self.data_root, StrictRecordingTransaction())
+
+        self.assertEqual(second, ChangeSet(()))
+        install.assert_not_called()
+        self.assertEqual(
+            {path: (path.read_bytes(), path.stat().st_ino) for path in before},
+            before,
+        )
 
     def test_profile_apply_snapshots_env_example_for_a_declared_template(self) -> None:
         (self.stage_root / ".env.template").write_text("DECLARED=value\n", encoding="utf-8")
@@ -560,6 +625,65 @@ class DistributionTests(unittest.TestCase):
         install.assert_not_called()
         self.assertEqual((target / "distribution.yaml").read_text(encoding="utf-8"), manifest_before)
         self.assertEqual({path: path.stat().st_ino for path in inodes}, inodes)
+
+    def test_profile_rejects_hardlinked_direct_managed_files_before_official_install(self) -> None:
+        cases = (
+            ("config.yaml", ["config.yaml"], "config.yaml"),
+            ("env-example", [".env.template"], ".env.EXAMPLE"),
+            ("manifest", ["config.yaml"], "distribution.yaml"),
+            ("other-top-level", ["SOUL.md"], "SOUL.md"),
+        )
+        for label, owned, target_name in cases:
+            with self.subTest(label=label):
+                shutil.rmtree(self.stage_root)
+                self.stage_root.mkdir()
+                for owned_path in owned:
+                    (self.stage_root / owned_path).write_text("hardlink-stage-marker\n", encoding="utf-8")
+                self.write_profile_manifest("rick", list(owned))
+                target = self.data_root / "profiles" / "rick"
+                target.mkdir(parents=True, exist_ok=True)
+                outside = self.root / f"outside-{label}"
+                outside.write_text("hardlink-outside-marker\n", encoding="utf-8")
+                os.link(outside, target / target_name)
+
+                with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution") as install:
+                    with self.assertRaises(ApplyError) as caught:
+                        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+                self.assertEqual(str(caught.exception), "could not apply the named profile distribution")
+                self.assertEqual(outside.read_text(encoding="utf-8"), "hardlink-outside-marker\n")
+                self.assert_exception_hides_markers(
+                    caught.exception,
+                    "hardlink-stage-marker",
+                    "hardlink-outside-marker",
+                    str(self.stage_root),
+                    str(outside),
+                )
+                install.assert_not_called()
+                shutil.rmtree(target)
+
+    def test_profile_allows_a_hardlink_inside_an_owned_directory_without_scanning_user_owned_paths(self) -> None:
+        (self.stage_root / "assets").mkdir()
+        (self.stage_root / "assets" / "payload.txt").write_text("old\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["assets"])
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+        target = self.data_root / "profiles" / "rick"
+        outside = self.root / "outside-directory"
+        outside.write_text("old\n", encoding="utf-8")
+        (target / "assets" / "payload.txt").unlink()
+        os.link(outside, target / "assets" / "payload.txt")
+        (target / "memories" / "preserve.txt").write_text("preserve\n", encoding="utf-8")
+        (self.stage_root / "assets" / "payload.txt").write_text("new\n", encoding="utf-8")
+        with mock.patch(
+            "hermes_bootstrap.distributions._require_unlinked_managed_regular",
+            wraps=distributions._require_unlinked_managed_regular,
+        ) as require_unlinked:
+            apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+        self.assertEqual((target / "assets" / "payload.txt").read_text(encoding="utf-8"), "new\n")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "old\n")
+        self.assertEqual((target / "memories" / "preserve.txt").read_text(encoding="utf-8"), "preserve\n")
+        self.assertNotIn(mock.call(target / "memories"), require_unlinked.call_args_list)
 
     def test_profile_update_removes_stale_owned_paths_and_then_is_a_noop(self) -> None:
         (self.stage_root / "old.txt").write_text("old\n", encoding="utf-8")

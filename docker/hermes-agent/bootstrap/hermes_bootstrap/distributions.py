@@ -220,12 +220,14 @@ def _read_root_manifest(stage: Path) -> RootDistributionManifest:
     if (
         type(schema_version) is not int
         or schema_version != 1
-            or not isinstance(name, str)
-            or name != "default"
-            or not isinstance(version, str)
-            or not version.strip()
-            or version != version.strip()
+        or not isinstance(name, str)
+        or name != "default"
+        or not isinstance(version, str)
+        or not version.strip()
+        or version != version.strip()
         or not isinstance(hermes_requires, str)
+        or not hermes_requires
+        or hermes_requires != hermes_requires.strip()
         or not isinstance(owned, list)
         or any(not isinstance(item, str) for item in owned)
         or ("description" in raw and not isinstance(raw["description"], str))
@@ -365,6 +367,11 @@ def _read_profile_manifest_at(
     manifest = profile_distribution.read_manifest(root)
     if manifest is None or manifest.name != expected_name:
         raise ValueError("profile manifest identity mismatch")
+    if any(
+        getattr(manifest, key, None) != raw[key]
+        for key in ("name", "version", "hermes_requires")
+    ):
+        raise ValueError("profile manifest identity mismatch")
     profile_distribution.check_hermes_requires(manifest.hermes_requires, HERMES_VERSION)
     return manifest, owned
 
@@ -468,6 +475,7 @@ def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest:
         if name in profile_distribution.USER_OWNED_EXCLUDE:
             continue
         _require_safe_managed_path(target, destination)
+        _require_unlinked_managed_regular(destination)
         _snapshot(snapshots, destination)
 
 
@@ -538,6 +546,7 @@ def _normalize_owned_paths(
     entries: list[str], stage: Path | None, *, require_sources: bool, profile: bool = False
 ) -> tuple[PurePosixPath, ...]:
     normalized: list[PurePosixPath] = []
+    destinations: list[PurePosixPath] = []
     for value in entries:
         if not isinstance(value, str) or not value or value != value.strip() or "\\" in value:
             raise ValueError("invalid distribution owned path")
@@ -552,8 +561,24 @@ def _normalize_owned_paths(
             raise ValueError("invalid distribution owned path")
         candidate = PurePosixPath(*candidate.parts)
         _reject_reserved_path(candidate, profile=profile)
+        if profile and candidate.parts[0] == ".env.template":
+            if candidate != PurePosixPath(".env.template"):
+                raise ValueError("invalid distribution owned path")
+            if require_sources:
+                if stage is None:
+                    raise ValueError("missing source stage")
+                _require_regular_file(stage / ".env.template")
+        destination = (
+            PurePosixPath(".env.EXAMPLE")
+            if profile and candidate == PurePosixPath(".env.template")
+            else candidate
+        )
         if candidate in normalized or any(
             candidate.is_relative_to(existing) or existing.is_relative_to(candidate) for existing in normalized
+        ):
+            raise ValueError("overlapping distribution owned paths")
+        if destination in destinations or any(
+            destination.is_relative_to(existing) or existing.is_relative_to(destination) for existing in destinations
         ):
             raise ValueError("overlapping distribution owned paths")
         if require_sources:
@@ -561,6 +586,7 @@ def _normalize_owned_paths(
                 raise ValueError("missing source stage")
             _validate_source_path(stage.joinpath(*candidate.parts))
         normalized.append(candidate)
+        destinations.append(destination)
     return tuple(sorted(normalized, key=lambda path: path.as_posix()))
 
 
@@ -777,6 +803,17 @@ def _require_safe_managed_path(data_root: Path, destination: Path) -> None:
             raise ValueError("managed destination is unsafe")
     except OSError as error:
         raise ValueError("managed destination is unsafe") from error
+
+
+def _require_unlinked_managed_regular(destination: Path) -> None:
+    if not _lexists(destination):
+        return
+    try:
+        status = destination.lstat()
+    except OSError as error:
+        raise ValueError("managed destination is unsafe") from error
+    if stat.S_ISREG(status.st_mode) and status.st_nlink != 1:
+        raise ValueError("managed regular file has multiple links")
 
 
 def _require_regular_directory(path: Path) -> None:
