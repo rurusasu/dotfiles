@@ -311,7 +311,13 @@ Implement `load_root_manifest(stage: Path) -> RootDistributionManifest` and `app
 - [ ] Run the suite inside the real image because it imports Hermes internals.
 
 ```bash
-docker run --rm -v "$PWD/docker/hermes-agent/bootstrap:/workspace:ro" --entrypoint sh local/hermes-agent-gh:latest -c 'PYTHONPATH=/workspace python -m unittest discover -s /workspace/tests -p "test_*.py" -v'
+docker run --rm \
+  -e PYTHONPATH=/workspace/docker/hermes-agent/bootstrap \
+  -v "$PWD:/workspace:ro" \
+  -w /workspace \
+  --entrypoint /opt/hermes/.venv/bin/python \
+  docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731 \
+  -m unittest discover -s docker/hermes-agent/bootstrap/tests -p 'test_*.py' -v
 ```
 
 Expected: root and profile tests pass without touching host `~/.hermes`.
