@@ -222,11 +222,11 @@ SLACK_KEYS = frozenset({
 })
 ```
 
-Implement exact callables `merge_env_file(path: Path, managed: Mapping[str, str], remove: AbstractSet[str]) -> bool` and `build_profile_environment(profile: str, secrets: SecretBundle) -> Mapping[str, str]`.
+Implement exact callables `merge_env_file(path: Path, managed: Mapping[str, str], remove: AbstractSet[str]) -> bool`, `build_dashboard_environment(secrets: SecretBundle) -> Mapping[str, str]`, and `build_profile_environment(profile: str, secrets: SecretBundle, dashboard: Mapping[str, str]) -> Mapping[str, str]`.
 
 - [ ] Preserve every unmanaged line in original order, remove all existing instances of managed keys, append one canonical managed block, write LF, fsync the temporary file, rename atomically, and enforce `0600` even when content is unchanged.
 
-- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for the signing secret. The plaintext 1Password password is never written.
+- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for the signing secret. Build this dashboard mapping exactly once per bootstrap run and reuse it for root and every named profile so all targets receive the same credentials. The plaintext 1Password password is never written.
 
 - [ ] Write the same GitHub and dashboard values to root and all managed profiles; write each profile's own Slack values and remove stale shared Slack values before appending.
 
