@@ -362,12 +362,12 @@ class BootstrapFlowTests(unittest.TestCase):
             )
 
     @staticmethod
-    def _root_manifest(owned: list[str]) -> str:
+    def _root_manifest(owned: list[str], version: str = "0.1.0") -> str:
         return "\n".join(
             [
                 "schema_version: 1",
                 "name: default",
-                "version: 0.1.0",
+                f"version: {version}",
                 "hermes_requires: '>=0.18.2'",
                 "distribution_owned:",
                 *(f"  - {path}" for path in owned),
@@ -866,7 +866,6 @@ class BootstrapFlowTests(unittest.TestCase):
 
     def test_runtime_failpoints_rollback_each_mutation_phase_without_reversing_remote_pushes(self) -> None:
         self._initial_apply()
-        checkout = self.data_root / "shared" / "lifelog"
         phases = (
             "root-apply",
             "profile-apply:rick",
@@ -880,11 +879,97 @@ class BootstrapFlowTests(unittest.TestCase):
             "final-validation",
             "commit-cleanup",
         )
-        for phase in phases:
+        managed_env_keys = frozenset(
+            {
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
+                "SLACK_BOT_TOKEN",
+                "SLACK_APP_TOKEN",
+                "SLACK_ALLOWED_USERS",
+            }
+        )
+        env_paths = {
+            "default": ".env",
+            **{
+                profile: f"profiles/{profile}/.env"
+                for profile in PROFILE_NAMES
+            },
+        }
+        unmanaged_env_markers = {
+            "default": b"CUSTOM_ROOT=keep",
+            **{
+                profile: f"CUSTOM_{profile.upper()}=keep".encode("utf-8")
+                for profile in PROFILE_NAMES
+            },
+        }
+        canonical = self.data_root / "shared" / "lifelog"
+        legacy = self.data_root / "core" / "lifelog"
+
+        for revision, phase in enumerate(phases, start=2):
             with self.subTest(phase=phase):
                 try:
-                    (checkout / f"{phase}.md").write_text(
-                        "remote change\n", encoding="utf-8"
+                    version = f"0.{revision}.0"
+                    desired_root = f"root: rollback-{revision}\n"
+                    desired_profiles = {
+                        profile: f"profile: {profile}-rollback-{revision}\n"
+                        for profile in PROFILE_NAMES
+                    }
+                    self._commit(
+                        "root",
+                        {
+                            "root-distribution.yaml": self._root_manifest(
+                                ["config.yaml", "retired.md"], version
+                            ),
+                            "config.yaml": desired_root,
+                        },
+                        f"rollback root {revision}",
+                    )
+                    for profile in PROFILE_NAMES:
+                        self._commit(
+                            profile,
+                            {
+                                "distribution.yaml": self._profile_manifest(
+                                    profile, version
+                                ),
+                                "config.yaml": desired_profiles[profile],
+                            },
+                            f"rollback {profile} {revision}",
+                        )
+
+                    stale_marker = f"stale-managed-{revision}".encode("utf-8")
+                    for profile, relative in env_paths.items():
+                        path = self.data_root / relative
+                        stale_lines: list[str] = []
+                        replaced: set[str] = set()
+                        for line in path.read_text(encoding="utf-8").splitlines():
+                            key, separator, _value = line.partition("=")
+                            if separator and key in managed_env_keys:
+                                line = f"{key}=stale-managed-{revision}-{profile}"
+                                replaced.add(key)
+                            stale_lines.append(line)
+                        self.assertEqual(replaced, managed_env_keys)
+                        self.assertTrue(
+                            unmanaged_env_markers[profile]
+                            in "\n".join(stale_lines).encode("utf-8"),
+                            "stale environment lost unmanaged content",
+                        )
+                        path.write_text(
+                            "\n".join(stale_lines) + "\n", encoding="utf-8"
+                        )
+                        self.assertEqual(self._mode(path), 0o600)
+
+                    self.assertTrue(canonical.is_dir())
+                    self.assertTrue(legacy.is_symlink())
+                    self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+                    legacy.unlink()
+                    canonical.rename(legacy)
+                    lifelog_change = legacy / f"rollback-{revision}.md"
+                    lifelog_change.write_text(
+                        f"remote change {revision}\n", encoding="utf-8"
                     )
                     remote_before = run_git(
                         "--git-dir",
@@ -895,6 +980,8 @@ class BootstrapFlowTests(unittest.TestCase):
                     transaction_tree: dict[str, TreeEntry] | None = None
                     transaction_remote: str | None = None
                     observed_failpoints: list[str] = []
+                    mutation_assertion: AssertionError | None = None
+                    mutation_verified = False
                     real_begin = app.Transaction.begin
 
                     def begin(data_root: Path) -> object:
@@ -908,9 +995,96 @@ class BootstrapFlowTests(unittest.TestCase):
                         )
                         return real_begin(data_root)
 
+                    def baseline_entry(relative: str) -> TreeEntry:
+                        self.assertIsNotNone(transaction_tree)
+                        assert transaction_tree is not None
+                        entry = transaction_tree.get(relative)
+                        self.assertIsNotNone(
+                            entry, f"transaction baseline omitted {relative}"
+                        )
+                        assert entry is not None
+                        return entry
+
+                    def assert_owned_file_mutated(
+                        relative: str, expected: str
+                    ) -> None:
+                        before = baseline_entry(relative)
+                        path = self.data_root / relative
+                        self.assertEqual(before.kind, "file")
+                        self.assertTrue(path.is_file())
+                        current = path.read_bytes()
+                        self.assertNotEqual(current, before.payload)
+                        self.assertEqual(current, expected.encode("utf-8"))
+
+                    def assert_environment_mutated(profile: str) -> None:
+                        relative = env_paths[profile]
+                        before = baseline_entry(relative)
+                        path = self.data_root / relative
+                        self.assertEqual(before.kind, "file")
+                        self.assertTrue(path.is_file())
+                        current = path.read_bytes()
+                        self.assertFalse(
+                            current == before.payload,
+                            f"{profile} environment merge was a no-op",
+                        )
+                        self.assertTrue(
+                            unmanaged_env_markers[profile] in current,
+                            f"{profile} environment lost unmanaged content",
+                        )
+
+                    def assert_shared_repository_mutated() -> None:
+                        before = baseline_entry("core/lifelog")
+                        assert transaction_tree is not None
+                        self.assertEqual(before.kind, "directory")
+                        self.assertNotIn("shared/lifelog", transaction_tree)
+                        self.assertTrue(canonical.is_dir())
+                        self.assertTrue(legacy.is_symlink())
+                        self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+                        metadata = canonical.stat()
+                        self.assertEqual(
+                            (metadata.st_dev, metadata.st_ino),
+                            (before.device, before.inode),
+                        )
+
+                    def assert_all_representative_mutations() -> None:
+                        assert_owned_file_mutated("config.yaml", desired_root)
+                        for profile in PROFILE_NAMES:
+                            assert_owned_file_mutated(
+                                f"profiles/{profile}/config.yaml",
+                                desired_profiles[profile],
+                            )
+                        assert_shared_repository_mutated()
+                        for profile in env_paths:
+                            assert_environment_mutated(profile)
+
+                    def assert_selected_phase_mutated(name: str) -> None:
+                        if name == "root-apply":
+                            assert_owned_file_mutated("config.yaml", desired_root)
+                        elif name.startswith("profile-apply:"):
+                            profile = name.partition(":")[2]
+                            assert_owned_file_mutated(
+                                f"profiles/{profile}/config.yaml",
+                                desired_profiles[profile],
+                            )
+                        elif name == "shared-apply:lifelog":
+                            assert_shared_repository_mutated()
+                        elif name.startswith("env-merge:"):
+                            assert_environment_mutated(name.partition(":")[2])
+                        else:
+                            self.assertIn(
+                                name, {"final-validation", "commit-cleanup"}
+                            )
+                            assert_all_representative_mutations()
+
                     def failpoint(name: str, selected: str = phase) -> None:
+                        nonlocal mutation_assertion, mutation_verified
                         observed_failpoints.append(name)
                         if name == selected:
+                            try:
+                                assert_selected_phase_mutated(name)
+                                mutation_verified = True
+                            except AssertionError as error:
+                                mutation_assertion = error
                             raise ApplyError("fixture failure")
 
                     with (
@@ -921,10 +1095,45 @@ class BootstrapFlowTests(unittest.TestCase):
                         with self.assertRaises(ApplyError):
                             app.apply(PRODUCTION_MANIFEST, self._payload())
 
+                    if mutation_assertion is not None:
+                        raise mutation_assertion
+                    self.assertTrue(
+                        mutation_verified,
+                        f"{phase} did not verify a real target mutation",
+                    )
                     self.assertIsNotNone(transaction_tree)
                     self.assertIsNotNone(transaction_remote)
                     assert transaction_tree is not None
                     assert transaction_remote is not None
+                    self.assertNotEqual(
+                        baseline_entry("config.yaml").payload,
+                        desired_root.encode("utf-8"),
+                    )
+                    for profile in PROFILE_NAMES:
+                        self.assertNotEqual(
+                            baseline_entry(
+                                f"profiles/{profile}/config.yaml"
+                            ).payload,
+                            desired_profiles[profile].encode("utf-8"),
+                        )
+                    for relative in env_paths.values():
+                        payload = baseline_entry(relative).payload
+                        self.assertIsInstance(payload, bytes)
+                        assert isinstance(payload, bytes)
+                        self.assertTrue(
+                            stale_marker in payload,
+                            "transaction baseline environment was not stale",
+                        )
+                    self.assertEqual(
+                        baseline_entry("core/lifelog").kind, "directory"
+                    )
+                    self.assertNotIn("shared/lifelog", transaction_tree)
+                    self.assertEqual(
+                        baseline_entry(
+                            f"core/lifelog/rollback-{revision}.md"
+                        ).payload,
+                        f"remote change {revision}\n".encode("utf-8"),
+                    )
                     self.assertIn(
                         ".bootstrap/transactions/.lock", transaction_tree
                     )
@@ -934,11 +1143,12 @@ class BootstrapFlowTests(unittest.TestCase):
                     self.assertTrue(
                         any(".git" in path.split("/") for path in transaction_tree)
                     )
-                    self.assertEqual(
+                    self.assertTrue(
                         self._snapshot_rollback_contract(
                             self._snapshot_tree(self.data_root)
-                        ),
-                        self._snapshot_rollback_contract(transaction_tree),
+                        )
+                        == self._snapshot_rollback_contract(transaction_tree),
+                        "rollback did not restore the exact transaction baseline",
                     )
                     selected_index = phases.index(phase)
                     self.assertEqual(
@@ -953,7 +1163,10 @@ class BootstrapFlowTests(unittest.TestCase):
                     self.assertNotEqual(transaction_remote, remote_before)
                     self.assertEqual(remote_after, transaction_remote)
                 finally:
-                    self._assert_no_live_children()
+                    try:
+                        self._initial_apply()
+                    finally:
+                        self._assert_no_live_children()
 
     def test_env_merge_preserves_unowned_content_and_canonicalizes_managed_keys(self) -> None:
         self._initial_apply()
