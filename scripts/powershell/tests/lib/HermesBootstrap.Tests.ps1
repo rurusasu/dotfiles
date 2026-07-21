@@ -1,0 +1,311 @@
+Describe "Get-HermesBootstrapSecretPlan" {
+    BeforeAll {
+        $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
+        if (Test-Path -LiteralPath $sourcePath) {
+            . $sourcePath
+        }
+    }
+
+    BeforeEach {
+        $script:dockerArguments = @()
+        $script:dockerExitCode = 0
+        $script:dockerOutput = @(
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+        )
+        function global:Invoke-Docker {
+            param([string[]]$Arguments)
+
+            $script:dockerArguments = @($Arguments)
+            $global:LASTEXITCODE = $script:dockerExitCode
+            return $script:dockerOutput
+        }
+    }
+
+    It "requests the non-secret plan with the exact Docker Compose argument array" {
+        $plan = Get-HermesBootstrapSecretPlan -ComposeFile "C:\dotfiles\docker\hermes-agent\compose.yml"
+
+        $script:dockerArguments | Should -Be @(
+            "compose", "-f", "C:\dotfiles\docker\hermes-agent\compose.yml",
+            "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "secret-plan"
+        )
+        $plan.schema_version | Should -Be 1
+        @($plan.items).Count | Should -Be 6
+    }
+
+    It "rejects plans that do not satisfy the exact six-item metadata schema" {
+        $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
+        $invalidPlans = @()
+
+        $wrongSchema = $validPlan.PSObject.Copy()
+        $wrongSchema.schema_version = 2
+        $invalidPlans += $wrongSchema
+
+        $stringSchema = $validPlan.PSObject.Copy()
+        $stringSchema.schema_version = "1"
+        $invalidPlans += $stringSchema
+
+        $booleanSchema = $validPlan.PSObject.Copy()
+        $booleanSchema.schema_version = $true
+        $invalidPlans += $booleanSchema
+
+        $wrongCount = $validPlan.PSObject.Copy()
+        $wrongCount.items = @($validPlan.items)[0..4]
+        $invalidPlans += $wrongCount
+
+        $duplicateKey = $validPlan.PSObject.Copy()
+        $duplicateKey.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
+        $duplicateKey.items[1].key = $duplicateKey.items[0].key
+        $invalidPlans += $duplicateKey
+
+        $blankVault = $validPlan.PSObject.Copy()
+        $blankVault.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
+        $blankVault.items[0].vault = " "
+        $invalidPlans += $blankVault
+
+        $paddedItem = $validPlan.PSObject.Copy()
+        $paddedItem.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
+        $paddedItem.items[0].item = " Hermes Agent Dashboard"
+        $invalidPlans += $paddedItem
+
+        $extraPlanProperty = $validPlan.PSObject.Copy()
+        $extraPlanProperty | Add-Member -NotePropertyName unexpected -NotePropertyValue "no"
+        $invalidPlans += $extraPlanProperty
+
+        $invalidField = $validPlan.PSObject.Copy()
+        $invalidField.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
+        $invalidField.items[0].fields = @([PSCustomObject]@{ canonical_name = ""; labels = @("username") })
+        $invalidPlans += $invalidField
+
+        $paddedField = $validPlan.PSObject.Copy()
+        $paddedField.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
+        $paddedField.items[0].fields = @([PSCustomObject]@{ canonical_name = "username"; labels = @(" username") })
+        $invalidPlans += $paddedField
+
+        foreach ($invalidPlan in $invalidPlans) {
+            $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
+
+            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+                Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
+        }
+    }
+}
+
+function global:New-HermesBootstrapFakeDocker {
+    param([Parameter(Mandatory)][string]$Directory)
+
+    if ($IsWindows) {
+        $path = Join-Path $Directory "docker.cmd"
+        @'
+@echo off
+setlocal
+set args=%HERMES_BOOTSTRAP_TEST_DIR%\arguments.txt
+set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
+> "%args%" (
+  for %%A in (%*) do echo %%~A
+)
+more > "%input%"
+if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" echo %HERMES_BOOTSTRAP_TEST_STDOUT%
+if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" echo %HERMES_BOOTSTRAP_TEST_STDERR% 1>&2
+exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
+'@ | Set-Content -LiteralPath $path -NoNewline
+        return $path
+    }
+
+    $path = Join-Path $Directory "docker"
+    @'
+#!/bin/sh
+printf '%s' "$$" > "$HERMES_BOOTSTRAP_TEST_DIR/pid"
+printf '%s\0' "$@" > "$HERMES_BOOTSTRAP_TEST_DIR/arguments.bin"
+cat > "$HERMES_BOOTSTRAP_TEST_DIR/stdin.txt"
+if [ "${HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT:-0}" = "1" ]; then
+  yes stdout | head -c 2097152
+  yes stderr | head -c 2097152 >&2
+fi
+printf '%s' "${HERMES_BOOTSTRAP_TEST_STDOUT:-}"
+printf '%s' "${HERMES_BOOTSTRAP_TEST_STDERR:-}" >&2
+exit "${HERMES_BOOTSTRAP_TEST_EXIT:-0}"
+'@ | Set-Content -LiteralPath $path -NoNewline
+    & chmod +x $path
+    return $path
+}
+
+Describe "Invoke-HermesBootstrap" {
+    BeforeAll {
+        $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
+        if (Test-Path -LiteralPath $sourcePath) {
+            . $sourcePath
+        }
+    }
+
+    BeforeEach {
+        $script:dockerOutput = @(
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+        )
+        function global:Invoke-Docker {
+            param([string[]]$Arguments)
+
+            $global:LASTEXITCODE = 0
+            return $script:dockerOutput
+        }
+
+        $script:originalPath = $env:PATH
+        $script:fakeDockerDirectory = Join-Path $TestDrive "bin"
+        New-Item -ItemType Directory -Path $script:fakeDockerDirectory -Force | Out-Null
+        New-HermesBootstrapFakeDocker -Directory $script:fakeDockerDirectory | Out-Null
+        $env:PATH = "$script:fakeDockerDirectory$([IO.Path]::PathSeparator)$script:originalPath"
+        $env:HERMES_BOOTSTRAP_TEST_DIR = $TestDrive
+        $env:HERMES_BOOTSTRAP_TEST_EXIT = "0"
+        $env:HERMES_BOOTSTRAP_TEST_STDOUT = "bootstrap complete"
+        $env:HERMES_BOOTSTRAP_TEST_STDERR = ""
+        $env:HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT = "0"
+        $script:onePasswordCalls = [System.Collections.Generic.List[string]]::new()
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPath
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_EXIT -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_STDOUT -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_STDERR -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT -ErrorAction SilentlyContinue
+    }
+
+    It "streams compact header, declared item records, and end directly to Docker stdin" {
+        $secret = "not-an-argument-secret"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+
+            $script:onePasswordCalls.Add(($Arguments -join "|")) | Out-Null
+            $itemName = $Arguments[2]
+            return @{ id = "id-$itemName"; fields = @(@{ label = "username"; value = $secret }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeTrue
+        $result.Changed | Should -BeTrue
+        $result.Message | Should -Be "Hermes bootstrap completed."
+        $global:LASTEXITCODE | Should -Be 0
+        $script:onePasswordCalls | Should -Be @(
+            "item|get|Hermes Agent Dashboard|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|GitHubUsedOpenClawPAT|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|SlackBot-OpenClaw|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|SlackBot-Rick|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|SlackBot-Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|SlackBot-Risarisa|--account|my.1password.com|--vault|openclaw|--format|json"
+        )
+
+        $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
+            Where-Object { $_.Length -gt 0 } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
+        @($records).Count | Should -Be 8
+        $records[0].type | Should -Be "header"
+        $records[0].schema_version | Should -Be 1
+        @($records[1..6] | ForEach-Object { $_.key }) | Should -Be @(
+            "dashboard", "github", "slack_default", "slack_rick", "slack_hoffman", "slack_risarisa"
+        )
+        $records[7].type | Should -Be "end"
+
+        $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
+        $source | Should -Match "ArgumentList\.Add"
+        $source | Should -Not -Match "New-TemporaryFile|GetTempFileName|Set-Content|Out-File"
+        $arguments = if ($IsWindows) {
+            Get-Content -LiteralPath (Join-Path $TestDrive "arguments.txt") -Raw
+        }
+        else {
+            [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Join-Path $TestDrive "arguments.bin")))
+        }
+        $arguments | Should -Not -Match ([regex]::Escape($secret))
+        $arguments | Should -Not -Match "--reveal"
+        $argumentList = if ($IsWindows) {
+            @(Get-Content -LiteralPath (Join-Path $TestDrive "arguments.txt"))
+        }
+        else {
+            @($arguments -split "`0" | Where-Object { $_.Length -gt 0 })
+        }
+        $argumentList | Should -Be @(
+            "compose", "-f", "compose.yml",
+            "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
+        )
+        $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
+                Where-Object { $_.Length -gt 0 })
+        $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
+        $rawLines[7] | Should -Be '{"type":"end"}'
+        foreach ($index in 1..6) {
+            $rawLines[$index] | Should -Match '^\{"type":"item","key":"[a-z_]+","item":\{'
+            $rawLines[$index] | Should -Not -Match '(?:\{|,)\s+"|,\s*\}'
+        }
+    }
+
+    It "returns a fixed producer failure when Docker cannot be started" {
+        $env:PATH = $TestDrive
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            throw "must not be called"
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeFalse
+        $result.Changed | Should -BeFalse
+        $result.Message | Should -Be "Hermes bootstrap secret retrieval failed."
+        $global:LASTEXITCODE | Should -Be 1
+    }
+
+    It "redacts all discovered field values from a failed bootstrap diagnostic and preserves its exit code" {
+        $secret = "diagnostic-secret-value"
+        $env:HERMES_BOOTSTRAP_TEST_EXIT = "23"
+        $env:HERMES_BOOTSTRAP_TEST_STDERR = "bootstrap saw $secret"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeFalse
+        $result.Changed | Should -BeFalse
+        $result.Message | Should -Match "exit code 23"
+        $result.Message | Should -Match "\[REDACTED\]"
+        $result.Message | Should -Not -Match ([regex]::Escape($secret))
+        $result.Message | Should -Not -Match '"fields"|"id"'
+        $global:LASTEXITCODE | Should -Be 23
+    }
+
+    It "closes stdin and reaps the Docker child when a later 1Password lookup fails" {
+        $script:producerCallCount = 0
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            $script:producerCallCount++
+            if ($script:producerCallCount -eq 2) { throw "lookup failed with a secret that must not surface" }
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "first-secret" }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Be "Hermes bootstrap secret retrieval failed."
+        $global:LASTEXITCODE | Should -Be 1
+        if (-not $IsWindows) {
+            $childProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "pid") -Raw)
+            { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
+        }
+        else {
+            @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$TestDrive*docker.cmd*" }).Count | Should -Be 0
+        }
+    }
+
+    It "drains large stdout and stderr without deadlocking" {
+        $env:HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT = "1"
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "safe-value" }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $watch.Stop()
+
+        $result.Success | Should -BeTrue
+        $watch.Elapsed.TotalSeconds | Should -BeLessThan 10
+    }
+}
