@@ -306,6 +306,7 @@ def _chmod_private(path: Path) -> None:
 def _atomic_write(path: Path, content: bytes) -> None:
     descriptor: int | None = None
     temporary: str | None = None
+    failure: ApplyError | None = None
     try:
         descriptor, temporary = tempfile.mkstemp(
             prefix=f"{path.name}.", suffix=".tmp", dir=path.parent
@@ -319,29 +320,48 @@ def _atomic_write(path: Path, content: bytes) -> None:
         os.replace(temporary, path)
         temporary = None
     except OSError:
-        raise ApplyError("could not atomically update environment file") from None
-    finally:
-        if descriptor is not None:
+        failure = ApplyError("could not atomically update environment file")
+
+    cleanup_failed = False
+    if descriptor is not None:
+        try:
             os.close(descriptor)
-        if temporary is not None:
-            try:
-                os.unlink(temporary)
-            except FileNotFoundError:
-                pass
-            except OSError:
-                pass
+        except OSError:
+            cleanup_failed = True
+    if temporary is not None:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            cleanup_failed = True
+
+    if failure is not None:
+        raise failure
+    if cleanup_failed:
+        raise ApplyError("could not atomically update environment file")
 
     _fsync_parent(path.parent)
 
 
 def _fsync_parent(parent: Path) -> None:
     descriptor: int | None = None
+    failure: ApplyError | None = None
     try:
         flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
         descriptor = os.open(parent, flags)
         os.fsync(descriptor)
     except OSError:
-        raise ApplyError("could not synchronize environment file directory") from None
-    finally:
-        if descriptor is not None:
+        failure = ApplyError("could not synchronize environment file directory")
+
+    cleanup_failed = False
+    if descriptor is not None:
+        try:
             os.close(descriptor)
+        except OSError:
+            cleanup_failed = True
+
+    if failure is not None:
+        raise failure
+    if cleanup_failed:
+        raise ApplyError("could not synchronize environment file directory")
