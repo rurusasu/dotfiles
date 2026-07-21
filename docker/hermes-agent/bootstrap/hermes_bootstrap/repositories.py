@@ -20,7 +20,6 @@ from .git import (
     _git_environment,
     _remote_identity,
     _run_git_bytes,
-    _safe_unlink,
     _same_remote_identity,
     _valid_auth,
     _valid_ref,
@@ -32,7 +31,8 @@ from .payload import SecretRedactor
 
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
-_STATUS_OUTPUT_MAX_BYTES = 4096
+_COMMAND_OUTPUT_MAX_BYTES = 64 * 1024
+_STATUS_OUTPUT_MAX_BYTES = 512 * 1024
 _FORBIDDEN_COMPONENT_MARKERS = ("auth", "token", "secret", "credential")
 _FORBIDDEN_DIRECTORIES = frozenset({"memories", "sessions", "logs", "cache", "caches", "generated", "runtime"})
 _RUNTIME_DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal")
@@ -62,6 +62,19 @@ class _Failure:
 class _MigrationFailure:
     canonical: Path | None = None
     legacy: Path | None = None
+
+
+@dataclass(frozen=True)
+class _IndexBackup:
+    index: Path
+    backup: Path
+
+
+@dataclass(frozen=True)
+class _PathIdentity:
+    device: int
+    inode: int
+    file_type: int
 
 
 class _LockBusy(Exception):
@@ -169,6 +182,7 @@ def synchronize_named_repository(
 def _synchronize_remote_boundary(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResult | _Failure:
     stage: Path | None = None
     askpass: Path | None = None
+    outcome: RemoteSyncResult | _Failure
     try:
         _validate_declaration(repo, auth)
         lock_path = _lock_path(repo)
@@ -186,18 +200,18 @@ def _synchronize_remote_boundary(repo: SharedRepository, auth: GitAuth) -> Remot
             else:
                 _verify_checkout_identity(repo, working_tree, environment)
             commit, pushed = _synchronize_checkout(repo, working_tree, environment)
-            if stage is not None:
-                stage = None
-            return RemoteSyncResult(repo.name, commit, pushed, working_tree)
+            outcome = RemoteSyncResult(repo.name, commit, pushed, working_tree)
     except _LockBusy as error:
-        return _Failure(str(error.path))
+        outcome = _Failure(str(error.path))
     except Exception:
-        return _Failure("could not synchronize shared repository")
-    finally:
-        if askpass is not None:
-            _safe_unlink(askpass)
-        if stage is not None:
-            _remove_tree(stage)
+        outcome = _Failure("could not synchronize shared repository")
+
+    cleanup_failed = askpass is not None and not _unlink_path(askpass)
+    if stage is not None and (isinstance(outcome, _Failure) or cleanup_failed):
+        cleanup_failed = not _remove_private_tree(stage) or cleanup_failed
+    if cleanup_failed:
+        return _Failure("could not clean private repository resources")
+    return outcome
 
 
 def _apply_shared_working_tree_boundary(
@@ -222,8 +236,7 @@ def _apply_shared_working_tree_boundary(
             _snapshot(tx, repo.target)
             _snapshot(tx, working_tree)
             _require_same_filesystem(working_tree, repo.target.parent)
-            tx.record_move(working_tree, repo.target)
-            os.replace(working_tree, repo.target)
+            _move_verified_working_tree(repo, working_tree, result.commit, tx)
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:
@@ -277,14 +290,27 @@ def _initialize_checkout(repo: SharedRepository, checkout: Path, environment: di
 def _verify_checkout_identity(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> None:
     if not _looks_like_checkout(checkout):
         raise ValueError("not a checkout")
-    remote = _git_ascii(("config", "--get", "remote.origin.url"), checkout, environment)
-    if remote is None or not _same_remote_identity(repo.source, remote):
+    _reject_redirecting_local_config(checkout, environment)
+    remotes = _nul_records(
+        _git_bytes(
+            ("config", "--local", "--no-includes", "--null", "--get-all", "remote.origin.url"),
+            checkout,
+            environment,
+        )
+    )
+    if len(remotes) != 1 or not _same_remote_identity(repo.source, os.fsdecode(remotes[0])):
         raise ValueError("remote identity mismatch")
 
 
 def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> tuple[str, bool]:
     if repo.mode == "read-only":
-        if _git_bytes(("status", "--porcelain=v1", "-z", "--untracked-files=all"), checkout, environment) != b"":
+        _validate_index(checkout, environment)
+        if _git_bytes(
+            ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
+            checkout,
+            environment,
+            max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+        ) != b"":
             raise ValueError("read-only checkout is dirty")
         remote_commit = _fetch_declared_commit(repo, checkout, environment)
         head = _head_commit(checkout, environment)
@@ -295,10 +321,33 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
             raise ValueError("read-only checkout did not reach declared commit")
         return remote_commit, False
 
-    _reject_forbidden_status_paths(_git_bytes(("status", "--porcelain=v1", "-z", "--untracked-files=all"), checkout, environment))
-    _require_git_success(("add", "-A", "--", "."), checkout, environment)
-    staged = _git_bytes(("diff", "--cached", "--name-only", "-z"), checkout, environment)
-    _reject_forbidden_name_list(staged)
+    status_output = _git_bytes(
+        ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
+        checkout,
+        environment,
+        max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+    )
+    _reject_forbidden_status_paths(status_output)
+    _validate_index(checkout, environment)
+    _fetch_declared_commit(repo, checkout, environment)
+    _validate_unpushed_commits(checkout, environment)
+    staged = b""
+    if status_output:
+        backup = _backup_index(checkout)
+        try:
+            _require_git_success(("add", "-A", "--", "."), checkout, environment)
+            _validate_index(checkout, environment)
+            staged = _git_bytes(
+                ("diff", "--cached", "--name-only", "-z"),
+                checkout,
+                environment,
+                max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+            )
+            _reject_forbidden_name_list(staged)
+        except Exception:
+            _restore_index(backup)
+            raise
+        _discard_index_backup(backup)
     if staged:
         _require_git_success(
             (
@@ -314,9 +363,11 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
             checkout,
             environment,
         )
-    remote_commit = _fetch_declared_commit(repo, checkout, environment)
-    if _git_bytes(("rebase", "FETCH_HEAD"), checkout, environment) is None:
-        if _git_bytes(("rebase", "--abort"), checkout, environment) is None:
+    remote_commit = _fetch_head_commit(checkout, environment)
+    _validate_index(checkout, environment)
+    _validate_unpushed_commits(checkout, environment)
+    if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, environment) is None:
+        if _try_git_bytes(("rebase", "--abort"), checkout, environment) is None:
             raise ValueError("could not abort rebase")
         raise ValueError("rebase failed")
     head = _head_commit(checkout, environment)
@@ -325,12 +376,16 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
         raise ValueError("could not count local commits")
     pushed = int(ahead) > 0
     if pushed:
-        _require_git_success(("push", "origin", f"HEAD:{repo.ref}"), checkout, environment)
+        _require_git_success(("push", "--", repo.source, f"HEAD:{repo.ref}"), checkout, environment)
     return head, pushed
 
 
 def _fetch_declared_commit(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> str:
-    _require_git_success(("fetch", "--no-tags", "origin", "--", repo.ref), checkout, environment)
+    _require_git_success(("fetch", "--no-tags", repo.source, "--", repo.ref), checkout, environment)
+    return _fetch_head_commit(checkout, environment)
+
+
+def _fetch_head_commit(checkout: Path, environment: dict[str, str]) -> str:
     commit = _git_ascii(("rev-parse", "--verify", "FETCH_HEAD^{commit}"), checkout, environment)
     if commit is None or _OBJECT_ID.fullmatch(commit.lower()) is None:
         raise ValueError("declared ref is not a commit")
@@ -348,11 +403,27 @@ def _is_ancestor(ancestor: str, descendant: str, checkout: Path, environment: di
     return _git_bytes(("merge-base", "--is-ancestor", ancestor, descendant), checkout, environment) is not None
 
 
-def _git_bytes(arguments: tuple[str, ...], checkout: Path, environment: dict[str, str]) -> bytes:
-    output = _run_git_bytes(arguments, checkout, environment, max_output_bytes=_STATUS_OUTPUT_MAX_BYTES)
+def _git_bytes(
+    arguments: tuple[str, ...],
+    checkout: Path,
+    environment: dict[str, str],
+    *,
+    max_output_bytes: int = _COMMAND_OUTPUT_MAX_BYTES,
+) -> bytes:
+    output = _try_git_bytes(arguments, checkout, environment, max_output_bytes=max_output_bytes)
     if output is None:
         raise ValueError("git command failed")
     return output
+
+
+def _try_git_bytes(
+    arguments: tuple[str, ...],
+    checkout: Path,
+    environment: dict[str, str],
+    *,
+    max_output_bytes: int = _COMMAND_OUTPUT_MAX_BYTES,
+) -> bytes | None:
+    return _run_git_bytes(arguments, checkout, environment, max_output_bytes=max_output_bytes)
 
 
 def _git_ascii(arguments: tuple[str, ...], checkout: Path, environment: dict[str, str]) -> str | None:
@@ -364,6 +435,109 @@ def _git_ascii(arguments: tuple[str, ...], checkout: Path, environment: dict[str
 
 def _require_git_success(arguments: tuple[str, ...], checkout: Path, environment: dict[str, str]) -> None:
     _git_bytes(arguments, checkout, environment)
+
+
+def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]) -> None:
+    names = _nul_records(
+        _git_bytes(
+            ("config", "--local", "--no-includes", "--null", "--name-only", "--list"),
+            checkout,
+            environment,
+            max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+        )
+    )
+    for raw_name in names:
+        name = os.fsdecode(raw_name).casefold()
+        if (
+            name == "remote.origin.pushurl"
+            or name == "include.path"
+            or (name.startswith("includeif.") and name.endswith(".path"))
+            or (name.startswith("url.") and name.endswith((".insteadof", ".pushinsteadof")))
+        ):
+            raise ValueError("redirecting local Git config is forbidden")
+
+
+def _validate_index(checkout: Path, environment: dict[str, str]) -> None:
+    records = _nul_records(
+        _git_bytes(
+            ("ls-files", "--stage", "-z"),
+            checkout,
+            environment,
+            max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+        )
+    )
+    for record in records:
+        metadata, separator, path = record.partition(b"\t")
+        fields = metadata.split(b" ")
+        if not separator or len(fields) != 3 or fields[0] == b"160000":
+            raise ValueError("unsafe index entry")
+        _reject_forbidden_path(path)
+
+
+def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
+    raw_commits = _git_bytes(
+        ("rev-list", "--reverse", "FETCH_HEAD..HEAD"),
+        checkout,
+        environment,
+        max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+    )
+    for raw_commit in raw_commits.splitlines():
+        try:
+            commit = raw_commit.decode("ascii", "strict")
+        except UnicodeError:
+            raise ValueError("invalid commit list") from None
+        if _OBJECT_ID.fullmatch(commit.lower()) is None:
+            raise ValueError("invalid commit list")
+        entries = _nul_records(
+            _git_bytes(
+                ("ls-tree", "-r", "-z", commit),
+                checkout,
+                environment,
+                max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+            )
+        )
+        for entry in entries:
+            metadata, separator, path = entry.partition(b"\t")
+            fields = metadata.split(b" ")
+            if not separator or len(fields) != 3 or fields[0] == b"160000":
+                raise ValueError("unsafe committed tree entry")
+            _reject_forbidden_path(path)
+
+
+def _backup_index(checkout: Path) -> _IndexBackup:
+    index = checkout / ".git" / "index"
+    mode = index.lstat().st_mode
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise ValueError("unsafe Git index")
+    descriptor, name = tempfile.mkstemp(prefix="hermes-index-", dir=index.parent)
+    os.close(descriptor)
+    backup = Path(name)
+    try:
+        shutil.copyfile(index, backup)
+        os.chmod(backup, 0o600)
+        return _IndexBackup(index, backup)
+    except Exception:
+        backup.unlink(missing_ok=True)
+        raise
+
+
+def _restore_index(backup: _IndexBackup) -> None:
+    os.replace(backup.backup, backup.index)
+
+
+def _discard_index_backup(backup: _IndexBackup) -> None:
+    if not _unlink_path(backup.backup):
+        _restore_index(backup)
+        raise ValueError("could not clean index backup")
+
+
+def _nul_records(output: bytes) -> list[bytes]:
+    if not output:
+        return []
+    records = output.split(b"\0")
+    if records.pop() != b"":
+        raise ValueError("Git output is not NUL delimited")
+    return records
 
 
 def _reject_forbidden_status_paths(status: bytes) -> None:
@@ -444,8 +618,69 @@ def _validate_working_tree(repo: SharedRepository, checkout: Path, commit: str) 
         if _head_commit(checkout, environment) != commit:
             raise ValueError("working tree commit mismatch")
     finally:
-        if askpass is not None:
-            _safe_unlink(askpass)
+        if askpass is not None and not _unlink_path(askpass):
+            raise ValueError("could not clean local validation askpass")
+
+
+def _move_verified_working_tree(
+    repo: SharedRepository,
+    source: Path,
+    commit: str,
+    tx: Transaction,
+) -> None:
+    source_identity = _directory_identity(source)
+    destination_identity = _optional_empty_directory_identity(repo.target)
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(source, flags)
+    try:
+        if _identity_from_stat(os.fstat(descriptor)) != source_identity:
+            raise ValueError("working tree identity changed")
+        tx.record_move(source, repo.target)
+        if _directory_identity(source) != source_identity:
+            raise ValueError("working tree path was swapped")
+        if _optional_empty_directory_identity(repo.target) != destination_identity:
+            raise ValueError("canonical target changed before move")
+        os.replace(source, repo.target)
+        try:
+            if _directory_identity(repo.target) != source_identity:
+                raise ValueError("moved working tree identity changed")
+            _validate_working_tree(repo, repo.target, commit)
+        except Exception:
+            _rollback_failed_move(source, repo.target)
+            raise
+    finally:
+        os.close(descriptor)
+
+
+def _rollback_failed_move(source: Path, target: Path) -> None:
+    if _lexists(source) or not _lexists(target):
+        raise ValueError("could not roll back invalid working tree move")
+    os.replace(target, source)
+
+
+def _directory_identity(path: Path) -> _PathIdentity:
+    identity = _identity_from_stat(path.lstat())
+    if identity.file_type != stat.S_IFDIR:
+        raise ValueError("working tree is not a directory")
+    return identity
+
+
+def _optional_empty_directory_identity(path: Path) -> _PathIdentity | None:
+    if not _lexists(path):
+        return None
+    identity = _directory_identity(path)
+    with os.scandir(path) as entries:
+        if next(entries, None) is not None:
+            raise ValueError("canonical target contains data")
+    return identity
+
+
+def _identity_from_stat(value: os.stat_result) -> _PathIdentity:
+    return _PathIdentity(value.st_dev, value.st_ino, stat.S_IFMT(value.st_mode))
 
 
 def _real_data_state(path: Path, *, allow_legacy_link: bool, repo: SharedRepository) -> bool:
@@ -549,11 +784,21 @@ def _snapshot(tx: Transaction, path: Path) -> None:
     tx.snapshot(path)
 
 
-def _remove_tree(path: Path) -> None:
+def _unlink_path(path: Path) -> bool:
     try:
-        if path.is_dir() and not path.is_symlink():
+        path.unlink()
+    except OSError:
+        return False
+    return not _lexists(path)
+
+
+def _remove_private_tree(path: Path) -> bool:
+    try:
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode) and not stat.S_ISLNK(mode):
             shutil.rmtree(path)
         else:
-            path.unlink(missing_ok=True)
+            path.unlink()
     except OSError:
-        pass
+        return False
+    return not _lexists(path)
