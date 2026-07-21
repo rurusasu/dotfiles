@@ -144,10 +144,10 @@ if os.environ.get("GH_WRAPPER_TEST_SWAP_ANCESTOR") == "1":
     Path.lstat = controlled_lstat
 PY
 
-docker build -t "$image" "$repo_root/docker/hermes-agent" >"$fixture/build.log" 2>&1 \
-  || fail 'final image build failed'
-docker run --rm --entrypoint sh "$image" -c 'test -x /usr/local/bin/gh' \
-  || fail 'final image does not contain an executable gh wrapper'
+docker build -t "$image" "$repo_root/docker/hermes-agent" >"$fixture/build.log" 2>&1 ||
+  fail 'final image build failed'
+docker run --rm --entrypoint sh "$image" -c 'test -x /usr/local/bin/gh' ||
+  fail 'final image does not contain an executable gh wrapper'
 
 run_wrapper() {
   hermes_home=$1
@@ -183,8 +183,8 @@ expect_capture() {
   index=0
   for expected_argument in "$@"; do
     printf '%s' "$expected_argument" >"$fixture/expected-argument"
-    cmp -s "$fixture/expected-argument" "$data/capture/argv/$index" \
-      || fail 'gh received the wrong argv'
+    cmp -s "$fixture/expected-argument" "$data/capture/argv/$index" ||
+      fail 'gh received the wrong argv'
     index=$((index + 1))
   done
   [ -z "$(cat "$data/capture/children")" ] || fail 'parser child remained when gh executed'
@@ -208,8 +208,8 @@ expect_failure() {
   [ "$status" -eq 1 ] || fail 'wrapper returned the wrong credential failure status'
   [ ! -s "$fixture/stdout" ] || fail 'failure wrote to stdout'
   [ "$(cat "$fixture/stderr")" = "$expected_message" ] || fail 'wrapper returned the wrong failure message'
-  ! grep -F -- "$secret_marker" "$fixture/stdout" "$fixture/stderr" >/dev/null 2>&1 \
-    || fail 'failure diagnostics exposed a token'
+  ! grep -F -- "$secret_marker" "$fixture/stdout" "$fixture/stderr" >/dev/null 2>&1 ||
+    fail 'failure diagnostics exposed a token'
   [ ! -e "$data/capture/token" ] || fail 'wrapper invoked gh after credential failure'
   [ ! -e "$data/capture/gh-config/hosts.yml" ] || fail 'wrapper created gh hosts.yml'
 }
@@ -388,8 +388,8 @@ wait_for_container_exit "$parser_container" 'parser signal target'
 status=$(docker inspect --format '{{.State.ExitCode}}' "$parser_container")
 [ "$status" -eq 143 ] || fail "wrapper did not preserve a signal during parsing (status $status)"
 [ "$(cat "$data/capture/parser-pid")" -eq 1 ] || fail 'parser did not replace the wrapper process'
-[ ! -s "$data/capture/parser-children" ] \
-  || fail "parser retained descendant process $(cat "$data/capture/parser-children")"
+[ ! -s "$data/capture/parser-children" ] ||
+  fail "parser retained descendant process $(cat "$data/capture/parser-children")"
 docker rm "$parser_container" >/dev/null
 parser_container=
 
