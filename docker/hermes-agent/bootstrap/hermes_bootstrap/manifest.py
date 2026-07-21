@@ -30,13 +30,41 @@ _GITHUB_SOURCE_PATTERN = re.compile(
 _T = TypeVar("_T")
 
 
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate keys in every mapping."""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[object, object]:
+        self.flatten_mapping(node)
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                duplicate = key in mapping
+            except TypeError as error:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found unacceptable key",
+                    key_node.start_mark,
+                ) from error
+            if duplicate:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found duplicate key",
+                    key_node.start_mark,
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+
 def load_manifest(path: Path) -> BootstrapManifest:
     """Load and validate a version-one manifest without reading secret values."""
 
     try:
         with path.open(encoding="utf-8") as handle:
-            raw = yaml.safe_load(handle)
-    except (OSError, yaml.YAMLError) as error:
+            raw = yaml.load(handle, Loader=_UniqueKeySafeLoader)
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise ValidationError(f"cannot load bootstrap manifest: {path}") from error
 
     manifest = _mapping(raw, "manifest")
@@ -79,26 +107,19 @@ def load_manifest(path: Path) -> BootstrapManifest:
         )
     )
 
+    _validate_target_namespaces(profiles, repositories, data_root)
+    canonical_targets = tuple(
+        source.target for source in (*profiles, *repositories)
+    )
+    _validate_non_overlapping(canonical_targets, "canonical managed targets")
+    _validate_legacy_targets(repositories, canonical_targets, data_root)
+
     _unique((item.key for item in onepassword_items), "1Password item keys")
     _unique((item.item for item in onepassword_items), "1Password item names")
     _unique(
         (source.name for source in (root_distribution, *profiles, *repositories)),
         "managed source names",
     )
-    _unique(
-        (source.target for source in (root_distribution, *profiles, *repositories)),
-        "managed targets",
-    )
-    _unique(
-        (
-            target
-            for repository in repositories
-            for target in (repository.target, repository.legacy_target)
-            if target is not None
-        ),
-        "repository targets including legacy targets",
-    )
-
     distribution_names = {root_distribution.name, *(profile.name for profile in profiles)}
     for repository in repositories:
         if repository.sync_owner is not None and repository.sync_owner not in distribution_names:
@@ -203,6 +224,58 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
     )
 
 
+def _validate_target_namespaces(
+    profiles: Sequence[DistributionSource],
+    repositories: Sequence[SharedRepository],
+    data_root: Path,
+) -> None:
+    for profile in profiles:
+        if profile.target != data_root / "profiles" / profile.name:
+            _invalid(f"profile {profile.name!r} target must use its profile namespace")
+    for repository in repositories:
+        if repository.target != data_root / "shared" / repository.name:
+            _invalid(f"shared repository {repository.name!r} target must use its repository namespace")
+
+
+def _validate_legacy_targets(
+    repositories: Sequence[SharedRepository],
+    canonical_targets: Sequence[Path],
+    data_root: Path,
+) -> None:
+    legacy_targets: list[Path] = []
+    for repository in repositories:
+        target = repository.legacy_target
+        if target is None:
+            continue
+        if target == data_root:
+            _invalid(f"shared repository {repository.name!r} legacy_target cannot be the data root")
+        if any(_paths_overlap(target, canonical) for canonical in canonical_targets):
+            _invalid(
+                f"shared repository {repository.name!r} legacy_target overlaps a canonical target"
+            )
+        if any(_paths_overlap(target, existing) for existing in legacy_targets):
+            _invalid(f"shared repository {repository.name!r} legacy_target overlaps another legacy target")
+        legacy_targets.append(target)
+
+
+def _validate_non_overlapping(paths: Sequence[Path], context: str) -> None:
+    for index, path in enumerate(paths):
+        if any(_paths_overlap(path, other) for other in paths[:index]):
+            _invalid(f"{context} must not overlap")
+
+
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return _is_within(left, right) or _is_within(right, left)
+
+
+def _is_within(path: Path, ancestor: Path) -> bool:
+    try:
+        path.relative_to(ancestor)
+    except ValueError:
+        return False
+    return True
+
+
 def _mapping(value: object, context: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
         _invalid(f"{context} must be a mapping")
@@ -256,12 +329,15 @@ def _github_source(value: object, context: str) -> str:
 
 def _ref(value: object, context: str) -> str:
     ref = _text(value, context)
+    components = ref.split("/")
     invalid = (
-        ref.startswith(("-", "/"))
-        or ref.endswith((".", "/", ".lock"))
+        ref == "@"
+        or ref.startswith(("-", "/"))
+        or ref.endswith((".", "/"))
         or ".." in ref
         or "@{" in ref
         or "//" in ref
+        or any(component.startswith(".") or component.endswith(".lock") for component in components)
         or any(character in ref for character in " ~^:?*[\\")
         or any(ord(character) < 32 or ord(character) == 127 for character in ref)
     )

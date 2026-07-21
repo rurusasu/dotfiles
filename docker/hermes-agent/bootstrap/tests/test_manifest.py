@@ -85,6 +85,16 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.load_data(data)
 
+    def assert_yaml_validation_error(self, content: str | bytes) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.yaml"
+            if isinstance(content, bytes):
+                path.write_bytes(content)
+            else:
+                path.write_text(content, encoding="utf-8")
+            with self.assertRaises(ValidationError):
+                load_manifest(path)
+
     def test_approved_manifest_loads_all_targets(self) -> None:
         manifest = load_manifest(APPROVED_MANIFEST)
 
@@ -124,6 +134,79 @@ class ManifestTests(unittest.TestCase):
     def test_target_outside_data_root_is_rejected(self) -> None:
         data = manifest_data()
         data["profiles"][0]["target"] = "/opt/data/../outside"
+
+        self.assert_validation_error(data)
+
+    def test_profile_targets_must_use_their_profile_namespace(self) -> None:
+        for target in (
+            "/opt/data/profiles/other",
+            "/opt/data/profiles/rick/child",
+            "/opt/data/shared/rick",
+        ):
+            with self.subTest(target=target):
+                data = manifest_data()
+                data["profiles"][0]["target"] = target
+
+                self.assert_validation_error(data)
+
+    def test_shared_targets_must_use_their_repository_namespace(self) -> None:
+        for target in (
+            "/opt/data/shared/other",
+            "/opt/data/shared/lifelog/child",
+            "/opt/data/profiles/lifelog",
+        ):
+            with self.subTest(target=target):
+                data = manifest_data()
+                data["shared_repositories"][0]["target"] = target
+
+                self.assert_validation_error(data)
+
+    def test_canonical_targets_cannot_collide_or_overlap(self) -> None:
+        for target in (
+            "/opt/data/profiles/rick",
+            "/opt/data/profiles",
+            "/opt/data/profiles/rick/child",
+        ):
+            with self.subTest(target=target):
+                data = manifest_data()
+                profile = dict(data["profiles"][0])
+                profile["name"] = "morty"
+                profile["source"] = "https://github.com/rurusasu/hermes-profile-morty.git"
+                profile["target"] = target
+                data["profiles"].append(profile)
+
+                self.assert_validation_error(data)
+
+    def test_legacy_target_cannot_equal_or_overlap_a_canonical_target(self) -> None:
+        for target in (
+            "/opt/data/profiles/rick",
+            "/opt/data/profiles",
+            "/opt/data/profiles/rick/legacy",
+        ):
+            with self.subTest(target=target):
+                data = manifest_data()
+                data["shared_repositories"][0]["legacy_target"] = target
+
+                self.assert_validation_error(data)
+
+    def test_legacy_target_cannot_equal_the_data_root(self) -> None:
+        data = manifest_data()
+        data["shared_repositories"][0]["legacy_target"] = "/opt/data"
+
+        self.assert_validation_error(data)
+
+    def test_legacy_targets_cannot_overlap_one_another(self) -> None:
+        data = manifest_data()
+        data["shared_repositories"].append(
+            {
+                "name": "notes",
+                "source": "https://github.com/rurusasu/notes.git",
+                "ref": "main",
+                "target": "/opt/data/shared/notes",
+                "legacy_target": "/opt/data/core/lifelog/archive",
+                "mode": "read-only",
+            }
+        )
 
         self.assert_validation_error(data)
 
@@ -171,11 +254,44 @@ class ManifestTests(unittest.TestCase):
 
         self.assert_validation_error(data)
 
-    def test_invalid_ref_is_rejected(self) -> None:
-        data = manifest_data()
-        data["profiles"][0]["ref"] = "main^{commit}"
+    def test_git_refs_follow_check_ref_format_component_rules(self) -> None:
+        valid_refs = ("main", "feature/add-thing", "release/v1.0")
+        invalid_refs = (
+            "@",
+            ".hidden",
+            "refs/.hidden/main",
+            "main.lock",
+            "/main",
+            "main/",
+            "main//next",
+            "-main",
+            "main.",
+            "main..next",
+            "main@{next",
+            "main next",
+            "main~next",
+            "main^next",
+            "main:next",
+            "main?next",
+            "main*next",
+            "main[next",
+            r"main\next",
+            "main\x7fnext",
+        )
 
-        self.assert_validation_error(data)
+        for ref in valid_refs:
+            with self.subTest(ref=ref, valid=True):
+                data = manifest_data()
+                data["profiles"][0]["ref"] = ref
+
+                self.load_data(data)
+
+        for ref in invalid_refs:
+            with self.subTest(ref=ref, valid=False):
+                data = manifest_data()
+                data["profiles"][0]["ref"] = ref
+
+                self.assert_validation_error(data)
 
     def test_non_github_https_source_is_rejected(self) -> None:
         data = manifest_data()
@@ -195,6 +311,27 @@ class ManifestTests(unittest.TestCase):
         del data["shared_repositories"][0]["sync_owner"]
 
         self.load_data(data)
+
+    def test_invalid_utf8_is_reported_as_a_validation_error(self) -> None:
+        self.assert_yaml_validation_error(b"schema_version: \xff\n")
+
+    def test_top_level_duplicate_yaml_key_is_rejected(self) -> None:
+        content = json.dumps(manifest_data()).replace(
+            '"schema_version": 1,',
+            '"schema_version": 1, "schema_version": 1,',
+            1,
+        )
+
+        self.assert_yaml_validation_error(content)
+
+    def test_nested_duplicate_yaml_key_is_rejected(self) -> None:
+        content = json.dumps(manifest_data()).replace(
+            '"name": "default",',
+            '"name": "default", "name": "default",',
+            1,
+        )
+
+        self.assert_yaml_validation_error(content)
 
     def test_unknown_sync_owner_is_rejected(self) -> None:
         data = manifest_data()
