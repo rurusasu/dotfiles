@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
-import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -13,11 +13,13 @@ import tempfile
 import threading
 import unittest
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
+
+from hermes_cli import profile_distribution
 
 
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[2]
@@ -34,20 +36,112 @@ from hermes_bootstrap.payload import SCHEMA_VERSION
 
 FIXTURE_TOKEN = "fixture-token-only"
 API_URL_ENV = "HERMES_BOOTSTRAP_GITHUB_API_URL"
+HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
+HOST_SECRET_VALUE = "planted-host-secret-marker"
 PRODUCTION_MANIFEST = BOOTSTRAP_ROOT.parent / "bootstrap-manifest.yaml"
 PROFILE_NAMES = ("rick", "hoffman", "risarisa")
+SAFE_PATH = "/usr/bin:/bin"
+PROCESS_TIMEOUT_SECONDS = 15.0
+PROCESS_STOP_TIMEOUT_SECONDS = 2.0
+SERVER_STOP_TIMEOUT_SECONDS = 2.0
+_REAL_POPEN = subprocess.Popen
+_CHILD_PROCESSES: list[subprocess.Popen[object]] = []
 
 
-def run_git(*arguments: str, cwd: Path | None = None) -> str:
-    completed = subprocess.run(
-        ("git", *arguments),
+@dataclass(frozen=True)
+class TreeEntry:
+    kind: str
+    mode: int
+    device: int
+    inode: int
+    links: int
+    size: int
+    payload: bytes | str | None
+
+
+def _minimal_environment(home: Path, **extra: str) -> dict[str, str]:
+    return {
+        "PATH": SAFE_PATH,
+        "HOME": str(home),
+        "LANG": "C",
+        "LC_ALL": "C",
+        **extra,
+    }
+
+
+def _stop_process(process: subprocess.Popen[object]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+    except OSError:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _run_bounded(
+    arguments: tuple[str, ...],
+    *,
+    cwd: Path | None = None,
+    environment: dict[str, str],
+    timeout: float = PROCESS_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    process = _REAL_POPEN(
+        arguments,
         cwd=cwd,
-        check=True,
+        env=environment,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        close_fds=True,
+        start_new_session=True,
     )
+    _CHILD_PROCESSES.append(process)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _stop_process(process)
+        raise AssertionError("fixture child process exceeded its timeout") from None
+    finally:
+        _stop_process(process)
+    return subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
+
+
+def run_git(*arguments: str, cwd: Path | None = None) -> str:
+    environment = _minimal_environment(
+        Path("/nonexistent"),
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_TERMINAL_PROMPT="0",
+    )
+    if HOST_SECRET_ENV in os.environ:
+        assert os.environ[HOST_SECRET_ENV] == HOST_SECRET_VALUE
+    assert HOST_SECRET_ENV not in environment
+    completed = _run_bounded(
+        ("git", *arguments),
+        cwd=cwd,
+        environment=environment,
+    )
+    visible_output = completed.stdout + completed.stderr
+    assert HOST_SECRET_ENV not in visible_output
+    assert HOST_SECRET_VALUE not in visible_output
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
     return completed.stdout.strip()
 
 
@@ -97,8 +191,20 @@ class FixtureGitHub:
                 self.wfile.write(body)
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server.daemon_threads = True
+        self.server.block_on_close = False
+        ready = threading.Event()
+
+        def serve() -> None:
+            ready.set()
+            assert self.server is not None
+            self.server.serve_forever(poll_interval=0.05)
+
+        self.thread = threading.Thread(target=serve, daemon=True)
         self.thread.start()
+        if not ready.wait(timeout=SERVER_STOP_TIMEOUT_SECONDS):
+            self.server.server_close()
+            raise AssertionError("fixture GitHub server did not start")
         return self
 
     @property
@@ -109,10 +215,12 @@ class FixtureGitHub:
 
     def __exit__(self, *_args: object) -> None:
         assert self.server is not None and self.thread is not None
-        self.server.shutdown()
+        shutdown = threading.Thread(target=self.server.shutdown, daemon=True)
+        shutdown.start()
+        shutdown.join(timeout=SERVER_STOP_TIMEOUT_SECONDS)
         self.server.server_close()
-        self.thread.join(timeout=2)
-        if self.thread.is_alive():
+        self.thread.join(timeout=SERVER_STOP_TIMEOUT_SECONDS)
+        if shutdown.is_alive() or self.thread.is_alive():
             raise AssertionError("fixture GitHub server did not stop")
 
 
@@ -120,9 +228,23 @@ class BootstrapFlowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
+        self.host_secret = mock.patch.dict(
+            os.environ, {HOST_SECRET_ENV: HOST_SECRET_VALUE}
+        )
+        self.host_secret.start()
+        self.addCleanup(self.host_secret.stop)
         self.fixture_root = Path(self.temporary.name)
+        self.child_process_offset = len(_CHILD_PROCESSES)
+        self.child_home = self.fixture_root / "child-home"
+        self.profile_tmpdir = self.fixture_root / "tmp"
+        self.child_home.mkdir()
+        self.profile_tmpdir.mkdir()
+        self.profile_tmpdir_before = self._snapshot_tree(
+            self.profile_tmpdir, include_root=False
+        )
         self.data_root = self.fixture_root / "data"
         self.data_root.mkdir()
+        app.Transaction.recover_if_needed(self.data_root)
         self.remotes = self.fixture_root / "remotes"
         self.seed_root = self.fixture_root / "seeds"
         self.remotes.mkdir()
@@ -135,7 +257,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self._write_runtime_sentinels()
 
     def tearDown(self) -> None:
-        self._assert_no_temporary_resources()
+        try:
+            self._assert_no_temporary_resources()
+        finally:
+            self._assert_no_live_children()
 
     def _create_sources(self) -> None:
         self._create_distribution(
@@ -230,11 +355,11 @@ class BootstrapFlowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _profile_manifest(name: str) -> str:
+    def _profile_manifest(name: str, version: str = "0.1.0") -> str:
         return "\n".join(
             [
                 f"name: {name}",
-                "version: 0.1.0",
+                f"version: {version}",
                 "hermes_requires: '>=0.18.2'",
                 "distribution_owned:",
                 "  - config.yaml",
@@ -293,33 +418,67 @@ class BootstrapFlowTests(unittest.TestCase):
                 api_identities.add(identity)
 
         with FixtureGitHub(api_identities) as github:
+            runtime_environment = _minimal_environment(self.child_home)
+            environment_with_api = {
+                **runtime_environment,
+                API_URL_ENV: github.url,
+            }
 
-            def client_factory(auth: object) -> GitHubClient:
-                return GitHubClient(auth, api_base=os.environ[API_URL_ENV])  # type: ignore[arg-type]
-
-            def source_identity(source: str) -> tuple[str, str] | None:
-                return self.source_identities.get(source, production_source_identity(source))
-
-            def local_stage(
-                source: DistributionSource, workdir: Path, auth: object
-            ) -> StagedSource:
-                fixture_name = "root" if source.name == "default" else source.name
-                transport = replace(
-                    source, source=str(self.source_remotes[fixture_name])
+            def audited_popen(*args: object, **kwargs: object) -> subprocess.Popen[object]:
+                environment = kwargs.get("env")
+                self.assertIsInstance(environment, dict)
+                assert isinstance(environment, dict)
+                self.assertNotIn(HOST_SECRET_ENV, environment)
+                self.assertNotIn(HOST_SECRET_VALUE, environment.values())
+                expected_base = _minimal_environment(self.child_home)
+                self.assertEqual(
+                    {key: environment.get(key) for key in expected_base},
+                    expected_base,
                 )
-                staged = stage_distribution(transport, workdir, auth)  # type: ignore[arg-type]
-                return replace(staged, declaration=source)
+                unexpected = {
+                    key
+                    for key in environment
+                    if key not in expected_base
+                    and not key.startswith("GIT_")
+                    and key != "HERMES_BOOTSTRAP_GITHUB_TOKEN"
+                }
+                self.assertEqual(unexpected, set())
+                process = _REAL_POPEN(*args, **kwargs)  # type: ignore[arg-type]
+                _CHILD_PROCESSES.append(process)
+                return process
 
-            with (
-                mock.patch.object(app, "load_manifest", return_value=self.manifest),
-                mock.patch.object(app, "GitHubClient", side_effect=client_factory),
-                mock.patch.object(app, "_source_identity", side_effect=source_identity),
-                mock.patch.object(app, "stage_distribution", side_effect=local_stage),
-                mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
-                mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe", return_value="fixture-signing-secret"),
-                mock.patch.dict(os.environ, {API_URL_ENV: github.url}),
-            ):
-                yield
+            with mock.patch.dict(os.environ, environment_with_api, clear=True):
+                api_base = os.environ.pop(API_URL_ENV)
+
+                def client_factory(auth: object) -> GitHubClient:
+                    return GitHubClient(auth, api_base=api_base)  # type: ignore[arg-type]
+
+                def source_identity(source: str) -> tuple[str, str] | None:
+                    return self.source_identities.get(
+                        source, production_source_identity(source)
+                    )
+
+                def local_stage(
+                    source: DistributionSource, workdir: Path, auth: object
+                ) -> StagedSource:
+                    fixture_name = "root" if source.name == "default" else source.name
+                    transport = replace(
+                        source, source=str(self.source_remotes[fixture_name])
+                    )
+                    staged = stage_distribution(transport, workdir, auth)  # type: ignore[arg-type]
+                    return replace(staged, declaration=source)
+
+                with (
+                    mock.patch.object(app, "load_manifest", return_value=self.manifest),
+                    mock.patch.object(app, "GitHubClient", side_effect=client_factory),
+                    mock.patch.object(app, "_source_identity", side_effect=source_identity),
+                    mock.patch.object(app, "stage_distribution", side_effect=local_stage),
+                    mock.patch.object(subprocess, "Popen", side_effect=audited_popen),
+                    mock.patch.object(tempfile, "tempdir", str(self.profile_tmpdir)),
+                    mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
+                    mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe", return_value="fixture-signing-secret"),
+                ):
+                    yield
 
     def _apply(self, token: str = FIXTURE_TOKEN) -> dict[str, object]:
         with self._patched_runtime():
@@ -335,12 +494,48 @@ class BootstrapFlowTests(unittest.TestCase):
     def _assert_no_temporary_resources(self) -> None:
         if not hasattr(self, "data_root"):
             return
-        names = [path.name for path in self.data_root.glob(".hermes-bootstrap-*")]
-        names.extend(path.name for path in self.data_root.glob(".hermes-repository-*"))
+        leaks: set[str] = set()
+        for root in (self.data_root, self.data_root / "shared"):
+            if not root.exists():
+                continue
+            for path in root.rglob("*"):
+                if path.name.startswith(
+                    (
+                        ".hermes-bootstrap-",
+                        ".hermes-repository-",
+                        "askpass-",
+                        "stage-",
+                    )
+                ) or ".bootstrap-" in path.name:
+                    leaks.add(path.relative_to(self.data_root).as_posix())
         journals = self.data_root / ".bootstrap" / "transactions"
         if journals.exists():
-            names.extend(path.name for path in journals.iterdir() if path.name != ".lock")
-        self.assertEqual(names, [])
+            leaks.update(
+                path.relative_to(self.data_root).as_posix()
+                for path in journals.iterdir()
+                if path.name != ".lock"
+            )
+        self.assertEqual(sorted(leaks), [])
+        self.assertEqual(
+            self._snapshot_tree(self.profile_tmpdir, include_root=False),
+            self.profile_tmpdir_before,
+        )
+
+    def _assert_no_live_children(self) -> None:
+        live: list[int] = []
+        for process in _CHILD_PROCESSES[self.child_process_offset :]:
+            if process.poll() is None:
+                live.append(process.pid)
+                _stop_process(process)
+        del _CHILD_PROCESSES[self.child_process_offset :]
+        self.assertEqual(live, [])
+        for _attempt in range(64):
+            try:
+                child, _status = os.waitpid(-1, os.WNOHANG)
+            except ChildProcessError:
+                return
+            self.assertNotEqual(child, 0, "an untracked live child process remains")
+        self.fail("too many exited child processes required reaping")
 
     @staticmethod
     def _mode(path: Path) -> int:
@@ -363,6 +558,22 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertTrue(legacy.is_symlink())
         self.assertEqual(os.readlink(legacy), "../shared/lifelog")
         self.assertEqual(self._validate()["status"], "valid")
+        leak = lifelog / "nested" / "askpass-review-probe"
+        leak.parent.mkdir()
+        leak.write_text("probe\n", encoding="utf-8")
+        try:
+            with self.assertRaises(AssertionError):
+                self._assert_no_temporary_resources()
+        finally:
+            leak.unlink()
+            leak.parent.rmdir()
+        profile_leak = self.profile_tmpdir / "hermes-profile-source-review-probe"
+        profile_leak.mkdir()
+        try:
+            with self.assertRaises(AssertionError):
+                self._assert_no_temporary_resources()
+        finally:
+            profile_leak.rmdir()
 
     def test_identical_second_apply_keeps_owned_inodes_and_runtime_untouched(self) -> None:
         self._initial_apply()
@@ -385,13 +596,32 @@ class BootstrapFlowTests(unittest.TestCase):
 
     def test_profile_update_replaces_only_owned_profile_content(self) -> None:
         self._initial_apply()
-        self._commit("rick", {"config.yaml": "profile: rick-updated\n"}, "update rick")
+        runtime = self.data_root / "profiles" / "rick" / "memories" / "runtime.txt"
+        runtime_before = (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime))
+        self._commit(
+            "rick",
+            {
+                "distribution.yaml": self._profile_manifest("rick", "0.2.0"),
+                "config.yaml": "profile: rick-updated\n",
+            },
+            "update rick",
+        )
 
         self._initial_apply()
 
         target = self.data_root / "profiles" / "rick"
+        installed = profile_distribution.read_manifest(target)
+        self.assertIsNotNone(installed)
+        self.assertEqual(installed.version, "0.2.0")
+        self.assertEqual(
+            installed.source,
+            next(source.source for source in self.manifest.profiles if source.name == "rick"),
+        )
         self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "profile: rick-updated\n")
-        self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), "rick memory\n")
+        self.assertEqual(
+            (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime)),
+            runtime_before,
+        )
         self.assertEqual((target / "sessions" / "runtime.txt").read_text(encoding="utf-8"), "rick session\n")
 
     def test_root_update_removes_retired_owned_path_without_runtime_loss(self) -> None:
@@ -439,20 +669,13 @@ class BootstrapFlowTests(unittest.TestCase):
         (checkout / ".env").unlink()
 
     def test_invalid_token_fails_before_scratch_transaction_or_target_mutation(self) -> None:
-        before = {
-            path.relative_to(self.data_root): path.read_bytes()
-            for path in self.data_root.rglob("*")
-            if path.is_file() and not path.is_relative_to(self.data_root / ".bootstrap")
-        }
+        before = self._snapshot_tree(self.data_root)
+        self.assertIn(".bootstrap/transactions/.lock", before)
 
         with self.assertRaises(CredentialError):
             self._apply("invalid-fixture-token")
 
-        after = {
-            path.relative_to(self.data_root): path.read_bytes()
-            for path in self.data_root.rglob("*")
-            if path.is_file() and not path.is_relative_to(self.data_root / ".bootstrap")
-        }
+        after = self._snapshot_tree(self.data_root)
         self.assertEqual(after, before)
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
@@ -519,12 +742,26 @@ class BootstrapFlowTests(unittest.TestCase):
         script = (
             "from pathlib import Path; import os; "
             "from hermes_bootstrap.transaction import Transaction; "
+            f"assert {HOST_SECRET_ENV!r} not in os.environ; "
             f"path=Path({str(target)!r}); tx=Transaction.begin(path.parents[0]); tx.snapshot(path); "
             "path.write_text('crashed mutation\\n', encoding='utf-8'); tx._release_lock(); os._exit(0)"
         )
         package_root = Path(app.__file__).resolve().parents[1]
-        environment = {**os.environ, "PYTHONPATH": str(package_root)}
-        subprocess.run((sys.executable, "-c", script), check=True, env=environment, stdin=subprocess.DEVNULL)
+        environment = _minimal_environment(
+            self.child_home,
+            PYTHONPATH=str(package_root),
+            TMPDIR=str(self.profile_tmpdir),
+        )
+        self.assertNotIn(HOST_SECRET_ENV, environment)
+        completed = _run_bounded(
+            (sys.executable, "-c", script),
+            environment=environment,
+            timeout=5.0,
+        )
+        child_output = completed.stdout + completed.stderr
+        self.assertNotIn(HOST_SECRET_ENV, child_output)
+        self.assertNotIn(HOST_SECRET_VALUE, child_output)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertNotEqual(target.read_text(encoding="utf-8"), expected)
         original_reader = app.read_secret_payload
 
@@ -556,6 +793,40 @@ class BootstrapFlowTests(unittest.TestCase):
                 snapshot[relative] = ("file", path.read_bytes(), self._mode(path))
             elif path.is_dir():
                 snapshot[relative] = ("dir", b"", self._mode(path))
+        return snapshot
+
+    @staticmethod
+    def _snapshot_tree(
+        root: Path, *, include_root: bool = True
+    ) -> dict[str, TreeEntry]:
+        paths = list(root.rglob("*"))
+        if include_root:
+            paths.append(root)
+        snapshot: dict[str, TreeEntry] = {}
+        for path in sorted(paths, key=lambda item: item.as_posix()):
+            metadata = path.lstat()
+            relative = "." if path == root else path.relative_to(root).as_posix()
+            if stat.S_ISLNK(metadata.st_mode):
+                kind = "symlink"
+                payload: bytes | str | None = os.readlink(path)
+            elif stat.S_ISREG(metadata.st_mode):
+                kind = "file"
+                payload = path.read_bytes()
+            elif stat.S_ISDIR(metadata.st_mode):
+                kind = "directory"
+                payload = None
+            else:
+                kind = "special"
+                payload = None
+            snapshot[relative] = TreeEntry(
+                kind=kind,
+                mode=stat.S_IMODE(metadata.st_mode),
+                device=metadata.st_dev,
+                inode=metadata.st_ino,
+                links=metadata.st_nlink,
+                size=metadata.st_size,
+                payload=payload,
+            )
         return snapshot
 
 
