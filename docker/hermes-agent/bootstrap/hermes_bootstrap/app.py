@@ -137,7 +137,7 @@ def _apply_sensitive(
             _failpoint(f"env-merge:{profile}")
 
         del dashboard
-        validate(manifest_path)
+        _validate_installed_layout(manifest, allow_active_transaction=True)
         _failpoint("final-validation")
         _failpoint("commit-cleanup")
         tx.commit()
@@ -176,7 +176,7 @@ def validate(manifest_path: Path) -> dict[str, object]:
     """Validate the installed runtime without network, recovery, or mutation."""
 
     manifest = load_manifest(manifest_path)
-    result = _validate_installed_layout(manifest)
+    result = _validate_installed_layout(manifest, allow_active_transaction=False)
     return {"status": "valid", **result}
 
 
@@ -321,7 +321,9 @@ def _read_env_token(path: Path) -> str | None:
     return token
 
 
-def _validate_installed_layout(manifest: BootstrapManifest) -> dict[str, list[str]]:
+def _validate_installed_layout(
+    manifest: BootstrapManifest, *, allow_active_transaction: bool
+) -> dict[str, list[str]]:
     try:
         root = manifest.data_root
         _require_safe_directory(root)
@@ -331,7 +333,8 @@ def _validate_installed_layout(manifest: BootstrapManifest) -> dict[str, list[st
         _validate_repositories(manifest)
         for _profile, target in _environment_targets(manifest):
             _validate_env_file(target / ".env")
-        _validate_no_transaction(root)
+        if not allow_active_transaction:
+            _validate_no_transaction(root)
     except ValidationError:
         raise
     except Exception:

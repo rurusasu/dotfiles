@@ -133,6 +133,18 @@ class AppTests(unittest.TestCase):
         repo.legacy_target.parent.mkdir(parents=True, exist_ok=True)
         repo.legacy_target.symlink_to(os.path.relpath(repo.target, repo.legacy_target.parent))
 
+    def write_valid_layout(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_root_state()
+        target = self.write_installed_profile()
+        (target / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_repository_metadata(self.manifest.shared_repositories[0].source)
+        env_content = "".join(f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS))
+        for env_path in (self.root / ".env", target / ".env"):
+            env_path.write_text(env_content, encoding="utf-8")
+            env_path.chmod(0o600)
+
     def test_apply_recovers_before_reading_secrets_and_network_before_transaction(self) -> None:
         from hermes_bootstrap import app
 
@@ -162,6 +174,14 @@ class AppTests(unittest.TestCase):
             events.append(f"sync:{repo.name}")
             return remote
 
+        def validate_installed(
+            loaded: BootstrapManifest, *, allow_active_transaction: bool
+        ) -> dict[str, list[str]]:
+            self.assertIs(loaded, self.manifest)
+            self.assertTrue(allow_active_transaction)
+            events.append("validate")
+            return {"profiles": ["rick"], "repositories": ["lifelog"]}
+
         with (
             mock.patch.object(app, "load_manifest", return_value=self.manifest),
             mock.patch.object(app.Transaction, "recover_if_needed", side_effect=recover),
@@ -176,7 +196,7 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
             mock.patch.object(app, "build_profile_environment", side_effect=lambda name, *_: {"PROFILE": name, "GH_TOKEN": "token"}),
             mock.patch.object(app, "merge_env_file", side_effect=lambda path, *_: events.append(f"env:{path.parent.name}")),
-            mock.patch.object(app, "validate", side_effect=lambda _: events.append("validate")),
+            mock.patch.object(app, "_validate_installed_layout", side_effect=validate_installed),
         ):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
@@ -274,20 +294,83 @@ class AppTests(unittest.TestCase):
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
         self.assertEqual(tx.events, ["rollback"])
 
-    def test_validate_is_network_free_and_rejects_an_incomplete_transaction(self) -> None:
+    def test_apply_rolls_back_when_internal_validation_fails_before_commit(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        tx = FakeTransaction(events)
+        secrets = mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))
+        remote = RemoteSyncResult("lifelog", "a" * 40, False, self.root / ".remote")
+
+        def validate_installed(
+            loaded: BootstrapManifest, *, allow_active_transaction: bool
+        ) -> dict[str, list[str]]:
+            self.assertIs(loaded, self.manifest)
+            self.assertTrue(allow_active_transaction)
+            events.append("validate")
+            raise ValidationError("installed layout failed")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(app, "read_secret_payload", return_value=secrets),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(app, "stage_distribution", return_value=mock.Mock()),
+            mock.patch.object(app, "synchronize_remote", return_value=remote),
+            mock.patch.object(app.Transaction, "begin", return_value=tx),
+            mock.patch.object(app, "apply_root_distribution", side_effect=lambda *_: events.append("root")),
+            mock.patch.object(app, "apply_profile_distribution", side_effect=lambda *_: events.append("profile:rick")),
+            mock.patch.object(app, "apply_shared_working_tree", side_effect=lambda *_: events.append("shared:lifelog")),
+            mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
+            mock.patch.object(app, "build_profile_environment", return_value={"GH_TOKEN": "token"}),
+            mock.patch.object(app, "merge_env_file", side_effect=lambda path, *_: events.append(f"env:{path.parent.name}")),
+            mock.patch.object(app, "_validate_installed_layout", side_effect=validate_installed),
+        ):
+            with self.assertRaisesRegex(ValidationError, "installed layout failed"):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(
+            events,
+            ["root", "profile:rick", "shared:lifelog", "env:data", "env:rick", "validate", "rollback"],
+        )
+        self.assertNotIn("commit", events)
+
+    def test_public_validate_is_network_free_and_disallows_active_transaction(self) -> None:
         from hermes_bootstrap import app
 
         with (
             mock.patch.object(app, "load_manifest", return_value=self.manifest),
             mock.patch.object(app.Transaction, "recover_if_needed") as recover,
             mock.patch.object(app, "GitHubClient") as github,
-            mock.patch.object(app, "_validate_installed_layout", return_value={"profiles": [], "repositories": []}),
+            mock.patch.object(app, "_validate_installed_layout", return_value={"profiles": [], "repositories": []}) as installed,
         ):
             result = app.validate(Path("manifest.yaml"))
 
         self.assertEqual(result, {"status": "valid", "profiles": [], "repositories": []})
+        installed.assert_called_once_with(self.manifest, allow_active_transaction=False)
         recover.assert_not_called()
         github.assert_not_called()
+
+    def test_active_transaction_is_allowed_only_by_internal_installed_validation(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        tx = app.Transaction.begin(self.root)
+        try:
+            result = app._validate_installed_layout(
+                self.manifest, allow_active_transaction=True
+            )
+            self.assertEqual(
+                result, {"profiles": ["rick"], "repositories": ["lifelog"]}
+            )
+            with mock.patch.object(app, "load_manifest", return_value=self.manifest):
+                with self.assertRaisesRegex(
+                    ValidationError, "incomplete bootstrap transaction"
+                ):
+                    app.validate(Path("manifest.yaml"))
+        finally:
+            tx.rollback()
 
     def test_sync_repository_uses_process_then_safe_env_files_without_executing_them(self) -> None:
         from hermes_bootstrap import app
@@ -467,7 +550,7 @@ class AppTests(unittest.TestCase):
                     mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
                     mock.patch.object(app, "build_profile_environment", return_value={"GH_TOKEN": "token"}),
                     mock.patch.object(app, "merge_env_file", side_effect=merge),
-                    mock.patch.object(app, "validate"),
+                    mock.patch.object(app, "_validate_installed_layout"),
                     mock.patch.object(app, "_failpoint", side_effect=failpoint),
                 ):
                     with self.assertRaisesRegex(ApplyError, "injected local failure"):
@@ -592,20 +675,16 @@ class AppTests(unittest.TestCase):
     def test_installed_layout_validation_accepts_valid_owned_and_user_paths_without_network(self) -> None:
         from hermes_bootstrap import app
 
-        self.write_root_state()
-        target = self.write_installed_profile()
-        (target / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_valid_layout()
+        target = self.root / "profiles" / "rick"
         user_owned = target / "memories"
         user_owned.mkdir()
         (user_owned / "outside-link").symlink_to(self.root.parent)
-        self.write_repository_metadata(self.manifest.shared_repositories[0].source)
-        env_content = "".join(f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS))
-        for env_path in (self.root / ".env", target / ".env"):
-            env_path.write_text(env_content, encoding="utf-8")
-            env_path.chmod(0o600)
 
         with mock.patch.object(app, "GitHubClient") as github:
-            result = app._validate_installed_layout(self.manifest)
+            result = app._validate_installed_layout(
+                self.manifest, allow_active_transaction=False
+            )
 
         self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
         github.assert_not_called()
