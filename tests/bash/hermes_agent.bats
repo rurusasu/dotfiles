@@ -414,12 +414,12 @@ trailing-garbage"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
-@test "does not recreate services when bootstrap apply fails" {
-	export BOOTSTRAP_STATUS=42
+@test "propagates bootstrap migration exit five without recreating services" {
+	export BOOTSTRAP_STATUS=5
 
 	run_start_stack
 
-	[ "$status" -eq 42 ]
+	[ "$status" -eq 5 ]
 	grep -q '<apply>' "$COMMAND_LOG"
 	! grep -q '<up>' "$COMMAND_LOG"
 	grep -q '<ps> <--all>' "$COMMAND_LOG"

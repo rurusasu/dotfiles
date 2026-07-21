@@ -14,6 +14,7 @@ import threading
 import unittest
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
@@ -25,7 +26,7 @@ from hermes_cli import profile_distribution
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
-from hermes_bootstrap import app
+from hermes_bootstrap import app, cli
 from hermes_bootstrap.errors import ApplyError, CredentialError, RepositoryError
 from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
@@ -40,6 +41,26 @@ HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
 HOST_SECRET_VALUE = "planted-host-secret-marker"
 PRODUCTION_MANIFEST = BOOTSTRAP_ROOT.parent / "bootstrap-manifest.yaml"
 PROFILE_NAMES = ("rick", "hoffman", "risarisa")
+PROFILE_IDENTITIES = {
+    "rick": {
+        "source": "https://github.com/rurusasu/hermes-profile-rick.git",
+        "version": "0.1.0",
+        "hermes_requires": ">=0.18.2",
+        "distribution_owned": ("SOUL.md", "config.yaml"),
+    },
+    "hoffman": {
+        "source": "https://github.com/rurusasu/hermes-profile-hoffman.git",
+        "version": "0.1.0",
+        "hermes_requires": ">=0.18.2",
+        "distribution_owned": ("SOUL.md", "config.yaml"),
+    },
+    "risarisa": {
+        "source": "https://github.com/rurusasu/hermes-profile-risarisa.git",
+        "version": "0.1.0",
+        "hermes_requires": ">=0.18.2",
+        "distribution_owned": ("SOUL.md", "config.yaml"),
+    },
+}
 SAFE_PATH = "/usr/bin:/bin"
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
@@ -575,24 +596,49 @@ class BootstrapFlowTests(unittest.TestCase):
         finally:
             profile_leak.rmdir()
 
-    def test_identical_second_apply_keeps_owned_inodes_and_runtime_untouched(self) -> None:
+    def test_profile_targets_keep_canonical_source_token_and_manifest_identity(self) -> None:
         self._initial_apply()
-        owned = self.data_root / "config.yaml"
-        root_sentinel = self.data_root / "memories" / "root.txt"
-        profile_sentinel = self.data_root / "profiles" / "rick" / "memories" / "runtime.txt"
-        before = {
-            "owned": (owned.stat().st_ino, owned.read_bytes()),
-            "root": (root_sentinel.read_bytes(), self._mode(root_sentinel)),
-            "profile": (profile_sentinel.read_bytes(), self._mode(profile_sentinel)),
-            "commits": run_git("rev-list", "--count", "HEAD", cwd=self.data_root / "shared" / "lifelog"),
-        }
+
+        for name, expected in PROFILE_IDENTITIES.items():
+            with self.subTest(profile=name):
+                target = self.data_root / "profiles" / name
+                self.assertTrue(target.is_dir())
+                self.assertFalse(target.is_symlink())
+                self.assertTrue((target / "distribution.yaml").is_file())
+                installed = profile_distribution.read_manifest(target)
+                self.assertIsNotNone(installed)
+                assert installed is not None
+                self.assertEqual(
+                    {
+                        "name": installed.name,
+                        "source": installed.source,
+                        "version": installed.version,
+                        "hermes_requires": installed.hermes_requires,
+                        "distribution_owned": tuple(sorted(installed.distribution_owned)),
+                    },
+                    {"name": name, **expected},
+                )
+                token = next(
+                    line.partition("=")[2]
+                    for line in (target / ".env").read_text(encoding="utf-8").splitlines()
+                    if line.startswith("GH_TOKEN=")
+                )
+                self.assertEqual(sha256(token.encode("utf-8")).digest(), sha256(FIXTURE_TOKEN.encode("utf-8")).digest())
+
+    def test_identical_second_apply_preserves_the_target_and_runtime_tree(self) -> None:
+        self._initial_apply()
+        before = self._snapshot_managed_tree()
+        locks_before = self._snapshot_coordination_locks()
+        lifelog = self.data_root / "shared" / "lifelog"
+        lifelog_head = run_git("rev-parse", "HEAD", cwd=lifelog)
+        lifelog_commits = run_git("rev-list", "--count", "HEAD", cwd=lifelog)
 
         self._initial_apply()
 
-        self.assertEqual((owned.stat().st_ino, owned.read_bytes()), before["owned"])
-        self.assertEqual((root_sentinel.read_bytes(), self._mode(root_sentinel)), before["root"])
-        self.assertEqual((profile_sentinel.read_bytes(), self._mode(profile_sentinel)), before["profile"])
-        self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=self.data_root / "shared" / "lifelog"), before["commits"])
+        self.assertEqual(self._snapshot_managed_tree(), before)
+        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=lifelog), lifelog_head)
+        self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=lifelog), lifelog_commits)
 
     def test_profile_update_replaces_only_owned_profile_content(self) -> None:
         self._initial_apply()
@@ -643,13 +689,51 @@ class BootstrapFlowTests(unittest.TestCase):
         run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(legacy))
         run_git("config", "user.name", "Fixture", cwd=legacy)
         run_git("config", "user.email", "fixture@example.test", cwd=legacy)
+        legacy_head = run_git("rev-parse", "HEAD", cwd=legacy)
 
         self._initial_apply()
 
         canonical = self.data_root / "shared" / "lifelog"
         self.assertTrue((canonical / ".git").is_dir())
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=canonical), legacy_head)
+        self.assertEqual((canonical / "README.md").read_text(encoding="utf-8"), "initial lifelog\n")
         self.assertTrue(legacy.is_symlink())
         self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+
+    def test_conflicting_real_lifelog_paths_return_exit_five_without_mutating_the_tree(self) -> None:
+        legacy = self.data_root / "core" / "lifelog"
+        canonical = self.data_root / "shared" / "lifelog"
+        for checkout in (legacy, canonical):
+            checkout.parent.mkdir(parents=True, exist_ok=True)
+            run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(checkout))
+        self._ensure_repository_lock()
+        with self._patched_runtime():
+            self.assertEqual(
+                app.sync_repository(
+                    PRODUCTION_MANIFEST,
+                    "lifelog",
+                    {"GH_TOKEN": FIXTURE_TOKEN},
+                )["status"],
+                "synchronized",
+            )
+        before = self._snapshot_tree(self.data_root)
+        locks_before = self._snapshot_coordination_locks()
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with self._patched_runtime():
+            exit_code = cli.main(
+                ["apply", "--manifest", str(PRODUCTION_MANIFEST)],
+                stdin=self._payload(),
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 5)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertNotIn(FIXTURE_TOKEN, stderr.getvalue())
+        self.assertEqual(self._snapshot_tree_contract(self._snapshot_tree(self.data_root)), self._snapshot_tree_contract(before))
+        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
 
     def test_lifelog_pushes_allowed_changes_and_rejects_forbidden_ones(self) -> None:
         self._initial_apply()
@@ -680,40 +764,52 @@ class BootstrapFlowTests(unittest.TestCase):
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
 
-    def test_distribution_failure_rolls_back_local_state_after_remote_sync(self) -> None:
+    def test_runtime_failpoints_rollback_each_mutation_phase_without_reversing_remote_pushes(self) -> None:
         self._initial_apply()
         checkout = self.data_root / "shared" / "lifelog"
-        (checkout / "remote-survives.md").write_text("remote change\n", encoding="utf-8")
-        remote_before = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
-        transaction_boundary: dict[str, object] = {}
-        real_begin = app.Transaction.begin
+        phases = (
+            "root-apply",
+            "profile-apply:rick",
+            "shared-apply:lifelog",
+            "env-merge:rick",
+            "final-validation",
+            "commit-cleanup",
+        )
+        for phase in phases:
+            with self.subTest(phase=phase):
+                (checkout / f"{phase}.md").write_text("remote change\n", encoding="utf-8")
+                remote_before = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
+                transaction_boundary: dict[str, object] = {}
+                real_begin = app.Transaction.begin
 
-        def begin(data_root: Path) -> object:
-            transaction_boundary["runtime"] = self._snapshot_runtime()
-            transaction_boundary["remote"] = run_git(
-                "--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"
-            )
-            return real_begin(data_root)
+                def begin(data_root: Path) -> object:
+                    transaction_boundary["tree"] = self._snapshot_managed_tree()
+                    transaction_boundary["remote"] = run_git(
+                        "--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"
+                    )
+                    return real_begin(data_root)
 
-        with (
-            self._patched_runtime(),
-            mock.patch.object(app.Transaction, "begin", side_effect=begin),
-            mock.patch.object(
-                app,
-                "_failpoint",
-                side_effect=lambda name: (_ for _ in ()).throw(ApplyError("fixture failure"))
-                if name == "env-merge:rick"
-                else None,
-            ),
-        ):
-            with self.assertRaises(ApplyError):
-                app.apply(PRODUCTION_MANIFEST, self._payload())
+                with (
+                    self._patched_runtime(),
+                    mock.patch.object(app.Transaction, "begin", side_effect=begin),
+                    mock.patch.object(
+                        app,
+                        "_failpoint",
+                        side_effect=lambda name, selected=phase: (_ for _ in ()).throw(
+                            ApplyError("fixture failure")
+                        )
+                        if name == selected
+                        else None,
+                    ),
+                ):
+                    with self.assertRaises(ApplyError):
+                        app.apply(PRODUCTION_MANIFEST, self._payload())
 
-        self.assertEqual(self._snapshot_runtime(), transaction_boundary["runtime"])
-        remote_after = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
-        self.assertNotEqual(remote_after, remote_before)
-        self.assertEqual(remote_after, transaction_boundary["remote"])
-        self.assertTrue((checkout / "remote-survives.md").exists())
+                self.assertEqual(self._snapshot_managed_tree(), transaction_boundary["tree"])
+                remote_after = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
+                self.assertNotEqual(transaction_boundary["remote"], remote_before)
+                self.assertEqual(remote_after, transaction_boundary["remote"])
+                self._assert_no_live_children()
 
     def test_env_merge_preserves_unowned_content_and_canonicalizes_managed_keys(self) -> None:
         self._initial_apply()
@@ -794,6 +890,51 @@ class BootstrapFlowTests(unittest.TestCase):
             elif path.is_dir():
                 snapshot[relative] = ("dir", b"", self._mode(path))
         return snapshot
+
+    def _ensure_repository_lock(self) -> None:
+        lock = self.data_root / "locks" / "repositories" / "lifelog.lock"
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.touch(exist_ok=True)
+        lock.chmod(0o600)
+
+    def _snapshot_coordination_locks(self) -> dict[str, TreeEntry | None]:
+        tree = self._snapshot_tree(self.data_root)
+        lock_paths = (
+            ".bootstrap/transactions/.lock",
+            "locks/repositories/lifelog.lock",
+        )
+        return {path: tree.get(path) for path in lock_paths}
+
+    @staticmethod
+    def _snapshot_tree_contract(
+        tree: dict[str, TreeEntry],
+    ) -> dict[str, tuple[str, int, int, int, bytes | str | None]]:
+        return {
+            path: (entry.kind, entry.mode, entry.links, entry.size, entry.payload)
+            for path, entry in tree.items()
+        }
+
+    def _snapshot_managed_tree(
+        self,
+    ) -> dict[str, tuple[str, int, int, int, bytes | str | None]]:
+        ignored = (
+            ".bootstrap/transactions",
+            "locks",
+            ".hermes-bootstrap-",
+            ".hermes-repository-",
+        )
+        return {
+            path: (entry.kind, entry.mode, entry.links, entry.size, entry.payload)
+            for path, entry in self._snapshot_tree(self.data_root).items()
+            if path != "."
+            and ".git" not in path.split("/")
+            and not any(
+                path == root
+                or path.startswith(f"{root}/")
+                or path.startswith(root)
+                for root in ignored
+            )
+        }
 
     @staticmethod
     def _snapshot_tree(
