@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import os
 import re
 import selectors
@@ -9,6 +11,7 @@ import signal
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -22,11 +25,17 @@ from .models import DistributionSource
 
 _GIT_TIMEOUT_SECONDS = 60.0
 _MAX_GIT_OUTPUT_BYTES = 4096
+_GIT_TERMINATION_TIMEOUT_SECONDS = 1.0
+_MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
+_MAX_GIT_REAP_ATTEMPTS = 32
+_MAX_GIT_REAPS_PER_ATTEMPT = 64
+_PR_SET_CHILD_SUBREAPER = 36
 _OBJECT_ID = re.compile(r"[0-9a-fA-F]{40,64}\Z")
 _GITHUB_OWNER_REPOSITORY_PATH = re.compile(
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?(?:\.git)?\Z"
 )
+_child_subreaper_enabled: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -225,6 +234,8 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
     output = bytearray()
     succeeded = False
     try:
+        if not _ensure_linux_child_subreaper():
+            return None
         process = subprocess.Popen(
             ("git", *arguments),
             cwd=cwd,
@@ -283,20 +294,98 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
 
 
 def _stop_git_process(process: subprocess.Popen[bytes]) -> None:
-    """Kill Git's process group and reap its direct child after any failure."""
+    """Kill and reap a failed Git process tree without touching other children."""
+
+    pgid = process.pid
+    _kill_git_process_group(process, pgid)
+    _wait_for_git_process(process, pgid)
+    _reap_git_process_group(process, pgid)
+
+
+def _ensure_linux_child_subreaper() -> bool:
+    """Make this Linux bootstrap process reap orphaned Git descendants."""
+
+    global _child_subreaper_enabled
+    if sys.platform != "linux":
+        return True
+    if _child_subreaper_enabled is True:
+        return True
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        prctl = libc.prctl
+        prctl.argtypes = (
+            ctypes.c_int,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+        )
+        prctl.restype = ctypes.c_int
+        if prctl(_PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+            return False
+    except (AttributeError, OSError, TypeError):
+        return False
+    _child_subreaper_enabled = True
+    return True
+
+
+def _kill_git_process_group(process: subprocess.Popen[bytes], pgid: int) -> None:
+    """Send SIGKILL to the isolated Git group, with a direct-child fallback."""
 
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        if os.name == "posix":
+            os.killpg(pgid, signal.SIGKILL)
+            return
     except OSError:
-        if process.poll() is None:
-            try:
-                process.kill()
-            except OSError:
-                pass
-    try:
-        process.wait()
-    except (OSError, subprocess.SubprocessError):
         pass
+    if process.poll() is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
+def _wait_for_git_process(process: subprocess.Popen[bytes], pgid: int) -> None:
+    """Give the direct Git child finite chances to report its termination."""
+
+    for _ in range(_MAX_GIT_DIRECT_WAIT_ATTEMPTS):
+        try:
+            process.wait(timeout=_GIT_TERMINATION_TIMEOUT_SECONDS)
+            return
+        except subprocess.TimeoutExpired:
+            _kill_git_process_group(process, pgid)
+        except (OSError, subprocess.SubprocessError):
+            _kill_git_process_group(process, pgid)
+
+
+def _reap_git_process_group(process: subprocess.Popen[bytes], pgid: int) -> None:
+    """Reap adopted children only from the failed Git process group."""
+
+    if os.name != "posix":
+        return
+    for attempt in range(_MAX_GIT_REAP_ATTEMPTS):
+        _kill_git_process_group(process, pgid)
+        if _drain_git_process_group(pgid):
+            return
+        if attempt + 1 < _MAX_GIT_REAP_ATTEMPTS:
+            time.sleep(_GIT_TERMINATION_TIMEOUT_SECONDS / _MAX_GIT_REAP_ATTEMPTS)
+
+
+def _drain_git_process_group(pgid: int) -> bool:
+    """Return when no child remains in ``pgid``; every polling pass is finite."""
+
+    for _ in range(_MAX_GIT_REAPS_PER_ATTEMPT):
+        try:
+            pid, _status = os.waitpid(-pgid, os.WNOHANG)
+        except ChildProcessError:
+            return True
+        except OSError as error:
+            if error.errno == errno.ECHILD:
+                return True
+            return False
+        if pid == 0:
+            return False
+    return False
 
 
 def _remove_git_metadata(stage: Path) -> None:
