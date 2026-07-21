@@ -8,13 +8,21 @@ import os
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TextIO
 
 from . import app
-from .errors import BootstrapError, InputError
+from .errors import ApplyError, BootstrapError, InputError
 
 
 DEFAULT_MANIFEST = "/usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml"
+
+
+@dataclass(frozen=True)
+class _CommandOutcome:
+    result: object | None = None
+    error_type: type[BootstrapError] | None = None
+    message: str | None = None
 
 
 def main(
@@ -37,6 +45,34 @@ def main(
     except BootstrapError as error:
         _write_error(stderr, str(error))
         return error.exit_code
+    debug = environ.get("HERMES_BOOTSTRAP_DEBUG") == "1"
+    outcome = _dispatch_boundary(args, stdin, environ)
+    del stdin, environ
+    try:
+        if outcome.error_type is not None:
+            error_type = outcome.error_type
+            message = outcome.message or "bootstrap command failed"
+            del outcome
+            raise error_type(message) from None
+        result = outcome.result
+        del outcome
+        _write_json(stdout, result)
+        return 0
+    except BrokenPipeError:
+        return 0
+    except BootstrapError as error:
+        _write_error(stderr, str(error))
+        _write_debug(stderr, error, debug)
+        return error.exit_code
+    except Exception as error:
+        _write_error(stderr, "bootstrap command failed")
+        _write_debug(stderr, error, debug)
+        return 6
+
+
+def _dispatch_boundary(
+    args: argparse.Namespace, stdin: TextIO, environ: Mapping[str, str]
+) -> _CommandOutcome:
     try:
         if args.command == "secret-plan":
             result = app.secret_plan(args.manifest)
@@ -46,18 +82,13 @@ def main(
             result = app.validate(args.manifest)
         else:
             result = app.sync_repository(args.manifest, args.name, environ)
-        _write_json(stdout, result)
-        return 0
-    except BrokenPipeError:
-        return 0
+        return _CommandOutcome(result=result)
     except BootstrapError as error:
-        _write_error(stderr, str(error))
-        _write_debug(stderr, error, environ)
-        return error.exit_code
-    except Exception as error:
-        _write_error(stderr, "bootstrap command failed")
-        _write_debug(stderr, error, environ)
-        return 6
+        outcome = _CommandOutcome(error_type=type(error), message=str(error))
+        del error
+        return outcome
+    except Exception:
+        return _CommandOutcome(error_type=ApplyError, message="bootstrap command failed")
 
 
 class _Parser(argparse.ArgumentParser):
@@ -96,8 +127,8 @@ def _write_error(stream: TextIO, message: str) -> None:
         pass
 
 
-def _write_debug(stream: TextIO, error: BaseException, environ: Mapping[str, str]) -> None:
-    if environ.get("HERMES_BOOTSTRAP_DEBUG") != "1":
+def _write_debug(stream: TextIO, error: BaseException, enabled: bool) -> None:
+    if not enabled:
         return
     try:
         stream.write("".join(traceback.format_exception(type(error), error, error.__traceback__)))

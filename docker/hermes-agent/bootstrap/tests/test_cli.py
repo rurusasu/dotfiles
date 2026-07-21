@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,6 +21,8 @@ from hermes_bootstrap.errors import (
     RollbackError,
     ValidationError,
 )
+from hermes_bootstrap.models import BootstrapManifest, DistributionSource
+from hermes_bootstrap.payload import SecretRedactor
 
 
 class CliTests(unittest.TestCase):
@@ -103,6 +106,61 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 8)
         self.assertIn("layout invalid", errors.getvalue())
         self.assertIn("ValidationError", errors.getvalue())
+
+    def test_apply_debug_traceback_frames_never_retain_stdin_token(self) -> None:
+        from hermes_bootstrap import cli
+
+        token = "cli-debug-token-marker"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "data"
+            root.mkdir()
+            manifest = BootstrapManifest(
+                1,
+                root,
+                (),
+                DistributionSource(
+                    "default", "https://github.com/example/root.git", "main", root,
+                    "root-distribution.yaml",
+                ),
+                (),
+                (),
+            )
+            inspected: list[str] = []
+
+            def inspect_traceback(_kind: object, _error: object, traceback: object) -> list[str]:
+                while traceback is not None:
+                    frame = traceback.tb_frame
+                    if frame.f_code.co_filename.endswith(("hermes_bootstrap/app.py", "hermes_bootstrap/cli.py")):
+                        inspected.append(frame.f_code.co_name)
+                        for value in frame.f_locals.values():
+                            self.assertNotIn(token, repr(value))
+                        self.assertTrue(
+                            set(frame.f_locals).isdisjoint(
+                                {"secrets", "auth", "dashboard", "environment", "token"}
+                            )
+                        )
+                    traceback = traceback.tb_next
+                return ["sanitized traceback\n"]
+
+            with (
+                mock.patch.object(cli.app, "load_manifest", return_value=manifest),
+                mock.patch.object(cli.app.Transaction, "recover_if_needed"),
+                mock.patch.object(cli.app, "read_secret_payload", return_value=mock.Mock(github_token=token, redactor=SecretRedactor((token,)))),
+                mock.patch.object(cli.app, "_validate_remote_credentials", side_effect=RuntimeError(token)),
+                mock.patch.object(cli.traceback, "format_exception", side_effect=inspect_traceback),
+            ):
+                errors = io.StringIO()
+                code = cli.main(
+                    ["apply", "--manifest", "/manifest.yaml"],
+                    stdin=io.StringIO(token),
+                    stdout=io.StringIO(),
+                    stderr=errors,
+                    environ={"HERMES_BOOTSTRAP_DEBUG": "1", "GH_TOKEN": token},
+                )
+
+        self.assertEqual(code, 6)
+        self.assertEqual(inspected, ["main"])
+        self.assertNotIn(token, errors.getvalue())
 
     def test_stdout_broken_pipe_is_a_silent_success(self) -> None:
         from hermes_bootstrap import cli

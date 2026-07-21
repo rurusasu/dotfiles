@@ -9,13 +9,16 @@ import shutil
 import stat
 import tempfile
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, TextIO
-from urllib.parse import urlsplit
 
-import yaml
-
-from .distributions import apply_profile_distribution, apply_root_distribution
+from .distributions import (
+    _normalize_owned_paths,
+    _read_profile_manifest_at,
+    apply_profile_distribution,
+    apply_root_distribution,
+)
 from .envfiles import (
     DASHBOARD_KEYS,
     GITHUB_KEYS,
@@ -25,7 +28,7 @@ from .envfiles import (
     merge_env_file,
 )
 from .errors import ApplyError, BootstrapError, CredentialError, RollbackError, ValidationError
-from .git import StagedSource, stage_distribution
+from .git import _remote_identity, _same_remote_identity, stage_distribution
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
@@ -47,6 +50,13 @@ _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
 
 
+@dataclass(frozen=True)
+class _ApplyOutcome:
+    result: dict[str, object] | None = None
+    error_type: type[BootstrapError] | None = None
+    message: str | None = None
+
+
 def secret_plan(manifest_path: Path) -> dict[str, object]:
     """Return the deterministic non-secret adapter plan."""
 
@@ -58,6 +68,37 @@ def apply(manifest_path: Path, input_stream: TextIO) -> dict[str, object]:
 
     manifest = load_manifest(manifest_path)
     Transaction.recover_if_needed(manifest.data_root)
+    outcome = _apply_sensitive_boundary(manifest_path, manifest, input_stream)
+    del input_stream
+    if outcome.error_type is not None:
+        error_type = outcome.error_type
+        message = outcome.message or "bootstrap apply failed"
+        del outcome
+        raise error_type(message) from None
+    result = outcome.result
+    del outcome
+    if result is None:
+        raise ApplyError("bootstrap apply failed") from None
+    return result
+
+
+def _apply_sensitive_boundary(
+    manifest_path: Path, manifest: BootstrapManifest, input_stream: TextIO
+) -> _ApplyOutcome:
+    try:
+        return _ApplyOutcome(result=_apply_sensitive(manifest_path, manifest, input_stream))
+    except BootstrapError as error:
+        outcome = _ApplyOutcome(error_type=type(error), message=str(error))
+        del error
+        return outcome
+    except Exception:
+        return _ApplyOutcome(error_type=ApplyError, message="bootstrap apply failed")
+
+
+def _apply_sensitive(
+    manifest_path: Path, manifest: BootstrapManifest, input_stream: TextIO
+) -> dict[str, object]:
+    """Own all secret-bearing values behind the non-raising boundary."""
 
     scratch: Path | None = None
     remote_results: list[tuple[SharedRepository, RemoteSyncResult]] = []
@@ -73,7 +114,8 @@ def apply(manifest_path: Path, input_stream: TextIO) -> dict[str, object]:
 
         scratch = _private_scratch(manifest.data_root)
         staged = [stage_distribution(source, scratch, auth) for source in _distributions(manifest)]
-        remote_results = [(repo, synchronize_remote(repo, auth)) for repo in manifest.shared_repositories]
+        for repo in manifest.shared_repositories:
+            remote_results.append((repo, synchronize_remote(repo, auth)))
 
         tx = Transaction.begin(manifest.data_root)
         root_stage = staged[0]
@@ -224,10 +266,12 @@ def _cleanup_apply_resources(
         success = _remove_tree(scratch) and success
     for repo, result in results:
         tree = result.working_tree
-        if tree is None or tree == repo.target:
+        if tree is None or tree == repo.target or tree == repo.legacy_target:
             continue
         # synchronize_remote only returns a private first-clone outside the canonical target.
-        if tree.parent == repo.target.parent and tree.name.startswith(".hermes-repository-"):
+        if not repo.target.is_relative_to(data_root):
+            success = False
+        elif tree.parent == repo.target.parent and tree.name.startswith(".hermes-repository-"):
             success = _remove_tree(tree) and success
     return success
 
@@ -237,8 +281,11 @@ def _runtime_token(manifest: BootstrapManifest, environ: Mapping[str, str]) -> s
     if isinstance(process, str) and process:
         return process
     home = environ.get("HERMES_HOME")
-    if isinstance(home, str) and home and Path(home).is_absolute() and _safe_absolute_directory(Path(home)):
-        token = _read_env_token(Path(home) / ".env")
+    if isinstance(home, str) and home:
+        runtime_home = Path(home)
+        if not _safe_runtime_home(manifest.data_root, runtime_home):
+            raise CredentialError("GitHub credentials are unavailable")
+        token = _read_env_token(runtime_home / ".env")
         if token is not None:
             return token
     token = _read_env_token(manifest.data_root / ".env")
@@ -298,6 +345,7 @@ def _validate_installed_layout(manifest: BootstrapManifest) -> dict[str, list[st
 def _validate_root_state(manifest: BootstrapManifest) -> None:
     # C5 owns this canonical state filename; no second state format is introduced here.
     state = manifest.data_root / ".bootstrap" / "root-distribution-state.json"
+    _require_safe_directory(state.parent)
     raw = _read_json_regular(state)
     if set(raw) != {"source", "ref", "commit", "version", "distribution_owned"}:
         raise ValidationError("installed root distribution state is invalid")
@@ -307,9 +355,14 @@ def _validate_root_state(manifest: BootstrapManifest) -> None:
         raise ValidationError("installed root distribution state is invalid")
     if _OBJECT_ID.fullmatch(raw["commit"]) is None or not isinstance(raw["distribution_owned"], list):
         raise ValidationError("installed root distribution state is invalid")
-    owned = _normalized_owned(raw["distribution_owned"])
+    try:
+        owned = _normalize_owned_paths(raw["distribution_owned"], None, require_sources=False)
+    except Exception:
+        raise ValidationError("installed root distribution state is invalid") from None
     for relative in owned:
-        _require_safe_owned_target(manifest.data_root / relative)
+        _require_safe_owned_tree(
+            manifest.data_root, manifest.data_root.joinpath(*relative.parts)
+        )
 
 
 def _validate_profiles(manifest: BootstrapManifest) -> None:
@@ -323,15 +376,20 @@ def _validate_profiles(manifest: BootstrapManifest) -> None:
         target = directory / name
         _require_safe_directory(target)
         _require_no_git(target)
-        manifest_path = target / "distribution.yaml"
-        raw = _read_yaml_regular(manifest_path)
-        if not isinstance(raw, dict) or any(not isinstance(key, str) for key in raw):
+        try:
+            installed, owned = _read_profile_manifest_at(target, name, require_sources=False)
+        except Exception:
+            raise ValidationError("installed profile distribution is invalid") from None
+        if getattr(installed, "source", None) != profile.source:
             raise ValidationError("installed profile distribution is invalid")
-        if any(not isinstance(raw.get(key), str) or not raw[key] for key in ("name", "source", "version", "hermes_requires")):
-            raise ValidationError("installed profile distribution is invalid")
-        if raw["name"] != name or raw["source"] != profile.source:
-            raise ValidationError("installed profile distribution is invalid")
-        _normalized_owned(raw.get("distribution_owned"))
+        _require_regular_file(target / "distribution.yaml")
+        for relative in owned:
+            destination = (
+                target / ".env.EXAMPLE"
+                if relative == PurePosixPath(".env.template")
+                else target.joinpath(*relative.parts)
+            )
+            _require_safe_owned_tree(target, destination)
 
 
 def _validate_repositories(manifest: BootstrapManifest) -> None:
@@ -340,7 +398,7 @@ def _validate_repositories(manifest: BootstrapManifest) -> None:
         git = repo.target / ".git"
         _require_safe_directory(git)
         remote = _git_remote_url(git / "config")
-        if not _same_source(remote, repo.source):
+        if remote is None or not _same_remote_identity(repo.source, remote):
             raise ValidationError("installed shared repository is invalid")
         _git_head(git)
         if repo.legacy_target is not None:
@@ -395,33 +453,48 @@ def _read_json_regular(path: Path) -> dict[str, object]:
     return value
 
 
-def _read_yaml_regular(path: Path) -> object:
-    _require_regular_file(path)
+def _require_safe_owned_tree(owner_root: Path, path: Path) -> None:
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError):
-        raise ValidationError("installed profile distribution is invalid") from None
+        relative = path.relative_to(owner_root)
+    except ValueError:
+        raise ValidationError("installed distribution target is invalid") from None
+    current = owner_root
+    for component in relative.parts[:-1]:
+        current = current / component
+        try:
+            metadata = current.lstat()
+        except OSError:
+            raise ValidationError("installed distribution target is invalid") from None
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ValidationError("installed distribution target is invalid")
 
+    inode_counts: dict[tuple[int, int], int] = {}
+    inode_links: dict[tuple[int, int], int] = {}
 
-def _normalized_owned(value: object) -> tuple[Path, ...]:
-    if not isinstance(value, list) or not value or any(not isinstance(item, str) for item in value):
-        raise ValidationError("installed distribution ownership is invalid")
-    result: list[Path] = []
-    for item in value:
-        pure = PurePosixPath(item)
-        if pure.is_absolute() or not pure.parts or any(part in {"", ".", ".."} for part in pure.parts):
-            raise ValidationError("installed distribution ownership is invalid")
-        path = Path(*pure.parts)
-        if path in result or any(path.is_relative_to(existing) or existing.is_relative_to(path) for existing in result):
-            raise ValidationError("installed distribution ownership is invalid")
-        result.append(path)
-    return tuple(result)
+    def walk(current: Path) -> None:
+        try:
+            metadata = current.lstat()
+        except OSError:
+            raise ValidationError("installed distribution target is invalid") from None
+        if stat.S_ISLNK(metadata.st_mode):
+            raise ValidationError("installed distribution target is invalid")
+        if stat.S_ISREG(metadata.st_mode):
+            identity = (metadata.st_dev, metadata.st_ino)
+            inode_counts[identity] = inode_counts.get(identity, 0) + 1
+            inode_links[identity] = metadata.st_nlink
+            return
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ValidationError("installed distribution target is invalid")
+        try:
+            entries = tuple(Path(entry.path) for entry in os.scandir(current))
+        except OSError:
+            raise ValidationError("installed distribution target is invalid") from None
+        for entry in entries:
+            walk(entry)
 
-
-def _require_safe_owned_target(path: Path) -> None:
-    metadata = path.lstat()
-    if stat.S_ISLNK(metadata.st_mode) or not (stat.S_ISREG(metadata.st_mode) or stat.S_ISDIR(metadata.st_mode)):
-        raise ValidationError("installed root distribution target is invalid")
+    walk(path)
+    if any(inode_counts[identity] != links for identity, links in inode_links.items()):
+        raise ValidationError("installed distribution target is invalid")
 
 
 def _require_no_git(path: Path) -> None:
@@ -450,12 +523,32 @@ def _safe_absolute_directory(path: Path) -> bool:
         current = current.parent
 
 
+def _safe_runtime_home(data_root: Path, candidate: Path) -> bool:
+    if not candidate.is_absolute() or not data_root.is_absolute():
+        return False
+    normalized = Path(os.path.normpath(candidate))
+    if candidate != normalized or not normalized.is_relative_to(data_root):
+        return False
+    if not _safe_absolute_directory(data_root):
+        return False
+    current = data_root
+    for component in normalized.relative_to(data_root).parts:
+        current = current / component
+        try:
+            metadata = current.lstat()
+        except OSError:
+            return False
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            return False
+    return True
+
+
 def _require_regular_file(path: Path) -> None:
     try:
         metadata = path.lstat()
     except OSError:
         raise ValidationError("installed Hermes layout is invalid") from None
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
         raise ValidationError("installed Hermes layout is invalid")
 
 
@@ -477,35 +570,40 @@ def _remove_tree(path: Path) -> bool:
 
 
 def _source_identity(source: str) -> tuple[str, str] | None:
-    parsed = urlsplit(source)
-    if parsed.scheme != "https" or parsed.hostname != "github.com" or parsed.username or parsed.password:
+    identity = _remote_identity(source)
+    if identity is None or identity[0] != "https":
         return None
-    parts = parsed.path.removesuffix(".git").strip("/").split("/")
+    parts = identity[2].strip("/").split("/")
     if len(parts) != 2 or not all(parts):
         return None
     return (parts[0], parts[1])
-
-
-def _same_source(left: str | None, right: str) -> bool:
-    return _source_identity(left or "") == _source_identity(right)
 
 
 def _git_remote_url(config: Path) -> str | None:
     _require_regular_file(config)
     section = ""
     url: str | None = None
+    origin_sections = 0
     try:
         for line in config.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
             if stripped.startswith("[") and stripped.endswith("]"):
                 section = stripped
-            elif section == '[remote "origin"]' and stripped.startswith("url") and "=" in stripped:
-                if url is not None:
+                if section.casefold().startswith("[include"):
                     raise ValueError
-                url = stripped.split("=", 1)[1].strip()
+                if section == '[remote "origin"]':
+                    origin_sections += 1
+                    if origin_sections != 1:
+                        raise ValueError
+            elif section == '[remote "origin"]' and "=" in stripped:
+                key, value = stripped.split("=", 1)
+                if key.strip().casefold() == "url":
+                    if url is not None or not value.strip():
+                        raise ValueError
+                    url = value.strip()
     except (OSError, UnicodeError, ValueError):
         raise ValidationError("installed shared repository is invalid") from None
-    return url
+    return url if origin_sections == 1 else None
 
 
 def _git_head(git: Path) -> str:

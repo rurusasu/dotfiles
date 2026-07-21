@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -75,6 +77,60 @@ class AppTests(unittest.TestCase):
         self.root = Path(self.temp.name) / "data"
         self.root.mkdir()
         self.manifest = manifest(self.root)
+
+    def write_installed_profile(
+        self,
+        *,
+        hermes_requires: str = ">=0.18.2",
+        owned: list[str] | None = None,
+    ) -> Path:
+        target = self.root / "profiles" / "rick"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "distribution.yaml").write_text(
+            json.dumps(
+                {
+                    "name": "rick",
+                    "version": "0.1.0",
+                    "hermes_requires": hermes_requires,
+                    "distribution_owned": ["config.yaml"] if owned is None else owned,
+                    "source": self.manifest.profiles[0].source,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return target
+
+    def write_root_state(self) -> Path:
+        bootstrap = self.root / ".bootstrap"
+        bootstrap.mkdir(exist_ok=True)
+        state = bootstrap / "root-distribution-state.json"
+        state.write_text(
+            json.dumps(
+                {
+                    "source": self.manifest.root_distribution.source,
+                    "ref": self.manifest.root_distribution.ref,
+                    "commit": "a" * 40,
+                    "version": "0.1.0",
+                    "distribution_owned": ["config.yaml"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.root / "config.yaml").write_text("config\n", encoding="utf-8")
+        return state
+
+    def write_repository_metadata(self, remote: str) -> None:
+        repo = self.manifest.shared_repositories[0]
+        git = repo.target / ".git"
+        git.mkdir(parents=True)
+        (git / "config").write_text(
+            f'[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = {remote}\n',
+            encoding="utf-8",
+        )
+        (git / "HEAD").write_text("a" * 40 + "\n", encoding="ascii")
+        assert repo.legacy_target is not None
+        repo.legacy_target.parent.mkdir(parents=True, exist_ok=True)
+        repo.legacy_target.symlink_to(os.path.relpath(repo.target, repo.legacy_target.parent))
 
     def test_apply_recovers_before_reading_secrets_and_network_before_transaction(self) -> None:
         from hermes_bootstrap import app
@@ -154,6 +210,37 @@ class AppTests(unittest.TestCase):
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
         tx.rollback.assert_called_once_with()
 
+    def test_apply_public_traceback_contains_no_sensitive_orchestration_frames(self) -> None:
+        from hermes_bootstrap import app
+
+        token = "traceback-token-marker"
+        secrets = mock.Mock(github_token=token, redactor=SecretRedactor((token,)))
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(app, "read_secret_payload", return_value=secrets),
+            mock.patch.object(app, "_validate_remote_credentials", side_effect=RuntimeError(token)),
+        ):
+            try:
+                app.apply(Path("manifest.yaml"), io.StringIO(token))
+            except ApplyError as error:
+                raised = error
+            else:
+                self.fail("ApplyError was not raised")
+
+        traceback = raised.__traceback__
+        frame_names: set[str] = set()
+        while traceback is not None:
+            if traceback.tb_frame.f_code.co_filename.endswith("hermes_bootstrap/app.py"):
+                frame_names.update(traceback.tb_frame.f_locals)
+                for value in traceback.tb_frame.f_locals.values():
+                    self.assertNotIn(token, repr(value))
+            traceback = traceback.tb_next
+        self.assertTrue(
+            frame_names.isdisjoint({"secrets", "auth", "dashboard", "environment", "token"})
+        )
+        self.assertIsNone(raised.__context__)
+
     def test_apply_rolls_back_when_a_deterministic_environment_failpoint_fires(self) -> None:
         from hermes_bootstrap import app
 
@@ -206,8 +293,8 @@ class AppTests(unittest.TestCase):
 
         root_env = self.root / ".env"
         root_env.write_text("GH_TOKEN=root-token\n", encoding="utf-8")
-        active = self.root.parent / "active"
-        active.mkdir()
+        active = self.root / "profiles" / "rick"
+        active.mkdir(parents=True)
         (active / ".env").write_text("$(touch should-not-exist)\nGH_TOKEN=active-token\n", encoding="utf-8")
         environ = {"HERMES_HOME": str(active)}
         with (
@@ -221,6 +308,180 @@ class AppTests(unittest.TestCase):
         auth = sync.call_args.args[2]
         self.assertEqual(auth.token, "active-token")
         self.assertTrue(sync.call_args.kwargs["require_canonical"])
+
+    def test_sync_repository_rejects_unrelated_or_symlinked_hermes_home(self) -> None:
+        from hermes_bootstrap import app
+
+        (self.root / ".env").write_text("GH_TOKEN=root-token\n", encoding="utf-8")
+        unrelated = self.root.parent / "unrelated"
+        unrelated.mkdir()
+        escaped = self.root.parent / "escaped"
+        escaped.mkdir()
+        (self.root / "linked").symlink_to(escaped, target_is_directory=True)
+
+        with mock.patch.object(app, "load_manifest", return_value=self.manifest):
+            for runtime_home in (unrelated, self.root / "linked"):
+                with self.subTest(runtime_home=runtime_home), self.assertRaises(CredentialError):
+                    app.sync_repository(Path("manifest.yaml"), "lifelog", {"HERMES_HOME": str(runtime_home)})
+
+    def test_apply_cleans_earlier_private_remote_stage_when_later_sync_fails(self) -> None:
+        from hermes_bootstrap import app
+
+        second = SharedRepository(
+            "notes", "https://github.com/example/notes.git", "main",
+            self.root / "shared" / "notes", "read-only", None, None,
+        )
+        configured = BootstrapManifest(
+            self.manifest.schema_version, self.root, self.manifest.onepassword_items,
+            self.manifest.root_distribution, self.manifest.profiles,
+            (*self.manifest.shared_repositories, second),
+        )
+        private = self.root / "shared" / ".hermes-repository-first"
+        private.parent.mkdir()
+        private.mkdir()
+        sentinel = self.root / "local-sentinel"
+        sentinel.write_bytes(b"unchanged")
+        sentinel.chmod(0o640)
+        first = RemoteSyncResult("lifelog", "a" * 40, False, private)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(app, "stage_distribution", return_value=mock.Mock()),
+            mock.patch.object(app, "synchronize_remote", side_effect=(first, ApplyError("second failed"))),
+            mock.patch.object(app.Transaction, "begin") as begin,
+        ):
+            with self.assertRaisesRegex(ApplyError, "second failed"):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+        self.assertFalse(private.exists())
+        self.assertEqual(sentinel.read_bytes(), b"unchanged")
+        self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o640)
+        begin.assert_not_called()
+
+    def test_remote_cleanup_failure_wins_and_never_removes_canonical_or_legacy(self) -> None:
+        from hermes_bootstrap import app
+
+        repo = self.manifest.shared_repositories[0]
+        private = repo.target.parent / ".hermes-repository-private"
+        private.parent.mkdir()
+        private.mkdir()
+        results = [
+            (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.target)),
+            (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.legacy_target)),
+            (repo, RemoteSyncResult(repo.name, "a" * 40, False, private)),
+        ]
+        with mock.patch.object(app, "_remove_tree", return_value=False) as remove:
+            self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
+        remove.assert_called_once_with(private)
+
+    def test_apply_surfaces_strict_scratch_cleanup_failure(self) -> None:
+        from hermes_bootstrap import app
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(app, "stage_distribution", side_effect=ApplyError("stage failed")),
+            mock.patch.object(app, "_remove_tree", return_value=False),
+        ):
+            with self.assertRaisesRegex(ApplyError, "clean bootstrap staging"):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+    def test_every_local_failpoint_restores_exact_state_and_retains_remote_result(self) -> None:
+        from hermes_bootstrap import app
+
+        failpoints = (
+            "root-apply",
+            "profile-apply:rick",
+            "shared-apply:lifelog",
+            "env-merge:default",
+            "env-merge:rick",
+            "final-validation",
+            "commit-cleanup",
+        )
+        for selected in failpoints:
+            with self.subTest(selected=selected), tempfile.TemporaryDirectory() as directory:
+                data_root = Path(directory) / "data"
+                data_root.mkdir()
+                configured = manifest(data_root)
+                root_file = data_root / "managed-root"
+                root_file.write_bytes(b"root-before")
+                root_file.chmod(0o640)
+                profile_root = data_root / "profiles" / "rick"
+                profile_root.mkdir(parents=True)
+                profile_link = profile_root / "managed-link"
+                profile_link.symlink_to("original-target")
+                root_env = data_root / ".env"
+                root_env.write_bytes(b"ROOT=before\n")
+                root_env.chmod(0o600)
+                profile_env = profile_root / ".env"
+                shared_marker = data_root / "shared-local"
+                remote_marker = Path(directory) / "remote-result"
+
+                def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
+                    return mock.Mock(declaration=source)
+
+                def sync(repo: SharedRepository, _auth: GitAuth):
+                    remote_marker.write_bytes(b"pushed")
+                    return RemoteSyncResult(repo.name, "a" * 40, True, repo.target)
+
+                def root_apply(_stage: object, _root: Path, tx: object) -> None:
+                    tx.snapshot(root_file)
+                    root_file.write_bytes(b"root-after")
+                    root_file.chmod(0o600)
+
+                def profile_apply(_stage: object, _root: Path, tx: object) -> None:
+                    tx.snapshot(profile_link)
+                    profile_link.unlink()
+                    profile_link.write_bytes(b"not-a-link")
+
+                def shared_apply(_repo: object, _result: object, tx: object) -> None:
+                    tx.snapshot(shared_marker)
+                    shared_marker.write_bytes(b"created")
+
+                def merge(path: Path, *_args: object) -> None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b"CHANGED=yes\n")
+                    path.chmod(0o600)
+
+                def failpoint(name: str) -> None:
+                    if name == selected:
+                        raise ApplyError("injected local failure")
+
+                with (
+                    mock.patch.object(app, "load_manifest", return_value=configured),
+                    mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
+                    mock.patch.object(app, "_validate_remote_credentials"),
+                    mock.patch.object(app, "_validate_profile_credentials"),
+                    mock.patch.object(app, "stage_distribution", side_effect=stage),
+                    mock.patch.object(app, "synchronize_remote", side_effect=sync),
+                    mock.patch.object(app, "apply_root_distribution", side_effect=root_apply),
+                    mock.patch.object(app, "apply_profile_distribution", side_effect=profile_apply),
+                    mock.patch.object(app, "apply_shared_working_tree", side_effect=shared_apply),
+                    mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
+                    mock.patch.object(app, "build_profile_environment", return_value={"GH_TOKEN": "token"}),
+                    mock.patch.object(app, "merge_env_file", side_effect=merge),
+                    mock.patch.object(app, "validate"),
+                    mock.patch.object(app, "_failpoint", side_effect=failpoint),
+                ):
+                    with self.assertRaisesRegex(ApplyError, "injected local failure"):
+                        app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+                self.assertEqual(root_file.read_bytes(), b"root-before")
+                self.assertEqual(stat.S_IMODE(root_file.stat().st_mode), 0o640)
+                self.assertTrue(profile_link.is_symlink())
+                self.assertEqual(os.readlink(profile_link), "original-target")
+                self.assertEqual(root_env.read_bytes(), b"ROOT=before\n")
+                self.assertEqual(stat.S_IMODE(root_env.stat().st_mode), 0o600)
+                self.assertFalse(profile_env.exists())
+                self.assertFalse(shared_marker.exists())
+                self.assertEqual(remote_marker.read_bytes(), b"pushed")
+                self.assertFalse(any(data_root.glob(".hermes-bootstrap-*")))
 
     def test_sync_repository_rejects_duplicate_or_unsafe_token_files(self) -> None:
         from hermes_bootstrap import app
@@ -237,3 +498,113 @@ class AppTests(unittest.TestCase):
             with self.assertRaises(ValidationError) as raised:
                 app.validate(Path("manifest.yaml"))
         self.assertNotIn(str(self.root), str(raised.exception))
+
+    def test_profile_validation_rejects_incompatible_hermes_and_missing_owned_target(self) -> None:
+        from hermes_bootstrap import app
+
+        target = self.write_installed_profile(hermes_requires=">99.0.0")
+        (target / "config.yaml").write_text("config\n", encoding="utf-8")
+        with self.assertRaises(ValidationError):
+            app._validate_profiles(self.manifest)
+
+        (target / "distribution.yaml").unlink()
+        (target / "config.yaml").unlink()
+        self.write_installed_profile()
+        with self.assertRaises(ValidationError):
+            app._validate_profiles(self.manifest)
+
+    def test_profile_validation_rejects_nested_symlink_and_external_hardlink(self) -> None:
+        from hermes_bootstrap import app
+
+        target = self.write_installed_profile(owned=["assets"])
+        assets = target / "assets"
+        assets.mkdir()
+        outside = self.root.parent / "outside"
+        outside.write_text("outside\n", encoding="utf-8")
+        (assets / "link").symlink_to(outside)
+        with self.assertRaises(ValidationError):
+            app._validate_profiles(self.manifest)
+
+        (assets / "link").unlink()
+        os.link(outside, assets / "hardlink")
+        with self.assertRaises(ValidationError):
+            app._validate_profiles(self.manifest)
+
+    def test_profile_validation_rejects_symlinked_owned_path_ancestor(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_installed_profile(owned=["assets/payload.txt"])
+        outside = self.root.parent / "outside-assets"
+        outside.mkdir()
+        (outside / "payload.txt").write_text("outside\n", encoding="utf-8")
+        (self.root / "profiles" / "rick" / "assets").symlink_to(
+            outside, target_is_directory=True
+        )
+
+        with self.assertRaises(ValidationError):
+            app._validate_profiles(self.manifest)
+
+    def test_root_state_rejects_symlinked_bootstrap_ancestor(self) -> None:
+        from hermes_bootstrap import app
+
+        outside = self.root.parent / "outside-bootstrap"
+        outside.mkdir()
+        state = outside / "root-distribution-state.json"
+        state.write_text(
+            json.dumps(
+                {
+                    "source": self.manifest.root_distribution.source,
+                    "ref": "main",
+                    "commit": "a" * 40,
+                    "version": "0.1.0",
+                    "distribution_owned": ["config.yaml"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.root / "config.yaml").write_text("config\n", encoding="utf-8")
+        (self.root / ".bootstrap").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ValidationError):
+            app._validate_root_state(self.manifest)
+
+    def test_repository_validation_rejects_credential_query_and_port_remotes(self) -> None:
+        from hermes_bootstrap import app
+
+        for remote in (
+            "https://user:password@github.com/example/lifelog.git",
+            "https://github.com/example/lifelog.git?token=value",
+            "https://github.com:8443/example/lifelog.git",
+        ):
+            with self.subTest(remote=remote):
+                if (self.root / "shared").exists():
+                    import shutil
+
+                    shutil.rmtree(self.root / "shared")
+                legacy = self.manifest.shared_repositories[0].legacy_target
+                assert legacy is not None
+                if legacy.is_symlink():
+                    legacy.unlink()
+                self.write_repository_metadata(remote)
+                with self.assertRaises(ValidationError):
+                    app._validate_repositories(self.manifest)
+
+    def test_installed_layout_validation_accepts_valid_owned_and_user_paths_without_network(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_root_state()
+        target = self.write_installed_profile()
+        (target / "config.yaml").write_text("config\n", encoding="utf-8")
+        user_owned = target / "memories"
+        user_owned.mkdir()
+        (user_owned / "outside-link").symlink_to(self.root.parent)
+        self.write_repository_metadata(self.manifest.shared_repositories[0].source)
+        env_content = "".join(f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS))
+        for env_path in (self.root / ".env", target / ".env"):
+            env_path.write_text(env_content, encoding="utf-8")
+            env_path.chmod(0o600)
+
+        with mock.patch.object(app, "GitHubClient") as github:
+            result = app._validate_installed_layout(self.manifest)
+
+        self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
+        github.assert_not_called()
