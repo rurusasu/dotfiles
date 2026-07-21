@@ -476,10 +476,12 @@ Describe 'HermesAgentHandler' {
             $taskfilePath = Join-Path $repoRoot "Taskfile.yml"
             $taskfileContent = Get-Content -LiteralPath $taskfilePath -Raw
 
-            $taskfileContent | Should -Match "(?m)^\s{2}hermes:profile:init:"
-            $taskfileContent | Should -Match "PROFILE: '{{.CLI_ARGS | default `"risarisa`"}}'"
-            $taskfileContent | Should -Match "docker exec hermes sh -lc"
-            $taskfileContent | Should -Match "git init -b main"
+            $taskfileContent | Should -Match "(?m)^\s{2}hermes:bootstrap:test:"
+            $taskfileContent | Should -Match ([regex]::Escape("docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent"))
+            $taskfileContent | Should -Match "(?m)^\s{2}hermes:bootstrap:config:"
+            $taskfileContent | Should -Match ([regex]::Escape("docker compose -f docker/hermes-agent/compose.yml config --quiet"))
+            $taskfileContent | Should -Not -Match "(?m)^\s{2}hermes:profile:init:"
+            $taskfileContent | Should -Not -Match "git init(?:\s|$)"
 
             foreach ($profile in @("rick", "hoffman", "risarisa")) {
                 $taskfileContent | Should -Match "(?m)^\s{2}hermes:$profile:up:"
