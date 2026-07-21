@@ -22,6 +22,7 @@ Describe 'HermesAgentHandler' {
         $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
         $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
         $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
+        $script:eventLog = [System.Collections.Generic.List[string]]::new()
 
         $script:ctx.Options['NixRebuildApplied'] = $true
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
@@ -43,9 +44,11 @@ Describe 'HermesAgentHandler' {
         Mock Invoke-Docker {
             param([string[]]$Arguments)
             $script:dockerCalls.Add(($Arguments -join ' '))
+            $script:eventLog.Add([string]$Arguments[3])
             $global:LASTEXITCODE = 0
         }
         Mock Invoke-HermesBootstrap {
+            $script:eventLog.Add('bootstrap')
             [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
         }
     }
@@ -133,6 +136,7 @@ Describe 'HermesAgentHandler' {
                 "compose -f $script:composeFile build hermes hermes-bootstrap",
                 "compose -f $script:composeFile up -d --force-recreate"
             )
+            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
             Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
                 $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
             }
@@ -193,6 +197,7 @@ Describe 'HermesAgentHandler' {
         It 'reports compose startup failure without stopping existing services' {
             Mock Invoke-Docker {
                 $script:dockerCalls.Add(($Arguments -join ' '))
+                $script:eventLog.Add([string]$Arguments[3])
                 if ($Arguments -contains 'up') {
                     $global:LASTEXITCODE = 19
                     return 'startup failure'
@@ -207,10 +212,153 @@ Describe 'HermesAgentHandler' {
             $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
             ($script:dockerCalls -join "`n") | Should -Not -Match '\b(down|stop)\b'
         }
+
+        It 'returns failure and stops after a compose validation exception' {
+            Mock Invoke-Docker {
+                $phase = [string]$Arguments[3]
+                $script:eventLog.Add($phase)
+                if ($phase -eq 'config') { throw 'config exception' }
+                $global:LASTEXITCODE = 0
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes Agent setup failed.'
+            $script:eventLog | Should -Be @('config')
+            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        }
+
+        It 'returns failure and stops after an image build exception' {
+            Mock Invoke-Docker {
+                $phase = [string]$Arguments[3]
+                $script:eventLog.Add($phase)
+                if ($phase -eq 'build') { throw 'build exception' }
+                $global:LASTEXITCODE = 0
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes Agent setup failed.'
+            $script:eventLog | Should -Be @('config', 'build')
+            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        }
+
+        It 'returns failure and never starts services after a bootstrap exception' {
+            Mock Invoke-HermesBootstrap {
+                $script:eventLog.Add('bootstrap')
+                throw 'bootstrap exception'
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes Agent setup failed.'
+            $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+            $script:eventLog | Should -Not -Contain 'up'
+        }
+
+        It 'returns failure after a compose startup exception with no later phase' {
+            Mock Invoke-Docker {
+                $phase = [string]$Arguments[3]
+                $script:eventLog.Add($phase)
+                if ($phase -eq 'up') { throw 'startup exception' }
+                $global:LASTEXITCODE = 0
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes Agent setup failed.'
+            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
+        }
+
+        It 'propagates migration exit code 5 without starting services or writing host content' {
+            $dataDir = Join-Path $TestDrive 'migration-data'
+            $browserDir = Join-Path $TestDrive 'migration-browser'
+            $env:HERMES_DATA_DIR = $dataDir
+            $env:HERMES_BROWSER_DATA_DIR = $browserDir
+            Mock Invoke-HermesBootstrap {
+                $script:eventLog.Add('bootstrap')
+                [PSCustomObject]@{
+                    Success = $false
+                    Changed = $false
+                    ExitCode = 5
+                    Message = 'Hermes bootstrap failed (exit code 5). Migration conflict.'
+                }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'exit code 5'
+            $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+            $script:eventLog | Should -Not -Contain 'up'
+            $dataDir | Should -Exist
+            $browserDir | Should -Exist
+            (Join-Path $dataDir '.xurl') | Should -Exist
+            @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count | Should -Be 0
+            @(Get-ChildItem -LiteralPath $browserDir -Recurse -File).Count | Should -Be 0
+            @(Get-ChildItem -LiteralPath $dataDir -Directory -Force | Select-Object -ExpandProperty Name) |
+                Should -Be @('.xurl')
+        }
     }
 
     Context 'loader and ownership boundary' {
-        It 'loads the bootstrap library through the standard installer loader without calling op in an elevated phase' {
+        It 'loads one Hermes handler and the actual bootstrap adapter in a separate PowerShell process' {
+            $pwshPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+            $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../../..')).Path
+            $loaderScriptPath = Join-Path $TestDrive 'loader-simulation.ps1'
+            $loaderScript = @'
+param([Parameter(Mandatory)][string]$RepositoryRoot)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$libPath = Join-Path $RepositoryRoot 'scripts/powershell/lib'
+. (Join-Path $libPath 'SetupHandler.ps1')
+. (Join-Path $libPath 'Invoke-ExternalCommand.ps1')
+. (Join-Path $libPath 'HermesBootstrap.ps1')
+
+$handlersPath = Join-Path $RepositoryRoot 'scripts/powershell/handlers'
+$handlers = Get-SetupHandler -HandlersPath $handlersPath
+$hermes = @($handlers | Where-Object { $_.Name -eq 'HermesAgent' })
+if ($hermes.Count -ne 1) { throw "Expected one Hermes handler, found $($hermes.Count)." }
+
+$adapter = Get-Command Invoke-HermesBootstrap -CommandType Function -ErrorAction Stop
+$expectedAdapterPath = (Resolve-Path -LiteralPath (Join-Path $libPath 'HermesBootstrap.ps1')).Path
+$actualAdapterPath = (Resolve-Path -LiteralPath $adapter.ScriptBlock.File).Path
+$types = @(
+    ('HermesBootstrapBoundedDrain' -as [type]),
+    ('HermesBootstrapErrorHistory' -as [type])
+)
+
+[PSCustomObject]@{
+    HermesCount = $hermes.Count
+    RequiresAdmin = $hermes[0].RequiresAdmin
+    Phase = $hermes[0].Phase
+    Order = $hermes[0].Order
+    AdapterIsActual = $actualAdapterPath -eq $expectedAdapterPath
+    BootstrapTypeCount = @($types | Where-Object { $null -ne $_ }).Count
+} | ConvertTo-Json -Compress
+'@
+            Set-Content -LiteralPath $loaderScriptPath -Value $loaderScript -Encoding utf8
+
+            $output = @(& $pwshPath -NoProfile -File $loaderScriptPath -RepositoryRoot $repoRoot 2>&1)
+            $exitCode = $LASTEXITCODE
+            $outputText = ($output | Out-String).Trim()
+
+            $exitCode | Should -Be 0 -Because $outputText
+            $loaded = $output[-1] | ConvertFrom-Json
+            $loaded.HermesCount | Should -Be 1
+            $loaded.RequiresAdmin | Should -BeFalse
+            $loaded.Phase | Should -Be 2
+            $loaded.Order | Should -Be 56
+            $loaded.AdapterIsActual | Should -BeTrue
+            $loaded.BootstrapTypeCount | Should -Be 2
+        }
+
+        It 'loads the bootstrap library in installer order without calling op in an elevated phase' {
             $installer = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../install.admin.ps1') -Raw
             $installer | Should -Match 'HermesBootstrap\.ps1'
             $installer | Should -Not -Match '(?im)^\s*(?:&\s*)?op\b'
