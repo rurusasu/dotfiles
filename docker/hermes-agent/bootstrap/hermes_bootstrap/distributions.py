@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -23,9 +24,16 @@ _ROOT_MANIFEST = "root-distribution.yaml"
 _ROOT_STATE = PurePosixPath(".bootstrap/root-distribution-state.json")
 _ROOT_KEYS = frozenset({"schema_version", "name", "version", "description", "hermes_requires", "distribution_owned"})
 _ROOT_REQUIRED_KEYS = frozenset({"schema_version", "name", "version", "hermes_requires", "distribution_owned"})
+_BOOTSTRAP_USER_DIRS = ("memories", "sessions", "skills", "skins", "logs", "plans", "workspace", "cron", "home")
+_GITHUB_HTTPS_SOURCE = re.compile(
+    r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
+    r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\.git\Z"
+)
+_LOWERCASE_OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _RESERVED_TOP_LEVEL = frozenset(
     {
         ".bootstrap",
+        ".browser",
         ".env",
         ".git",
         "core",
@@ -63,6 +71,10 @@ _RUNTIME_DATABASES = frozenset(
         "state.db-wal",
     }
 )
+_ROOT_RESERVED_TOP_LEVEL = _RESERVED_TOP_LEVEL | frozenset(
+    name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
+)
+_PROFILE_RESERVED_TOP_LEVEL = frozenset(name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE)
 
 
 class Transaction(Protocol):
@@ -214,9 +226,25 @@ def _apply_root_boundary(stage: StagedSource, data_root: Path, tx: Transaction) 
         state_path = data_root.joinpath(*_ROOT_STATE.parts)
         prior_owned = _read_prior_root_state(state_path)
         next_owned = manifest.distribution_owned
-        next_set = set(next_owned)
         changed: list[Path] = []
-        for owned in sorted(set(prior_owned) | next_set, key=lambda path: path.as_posix()):
+        stale_owned = tuple(
+            owned
+            for owned in prior_owned
+            if not any(owned.is_relative_to(candidate) for candidate in next_owned)
+        )
+        replacement_stale = tuple(
+            owned for owned in stale_owned if any(candidate.is_relative_to(owned) for candidate in next_owned)
+        )
+        deferred_stale = tuple(owned for owned in stale_owned if owned not in replacement_stale)
+        for owned in sorted(replacement_stale, key=lambda path: (len(path.parts), path.as_posix())):
+            destination = data_root.joinpath(*owned.parts)
+            _require_safe_managed_path(data_root, destination)
+            if _lexists(destination):
+                _snapshot(tx, destination)
+                _remove_destination(destination)
+                changed.append(destination)
+        next_set = set(next_owned)
+        for owned in sorted((*next_owned, *deferred_stale), key=lambda path: path.as_posix()):
             destination = data_root.joinpath(*owned.parts)
             _require_safe_managed_path(data_root, destination)
             if owned in next_set:
@@ -252,14 +280,15 @@ def _read_prior_root_state(state_path: Path) -> tuple[PurePosixPath, ...]:
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or set(raw) != {"source", "ref", "commit", "version", "distribution_owned"}:
         raise ValueError("invalid root state")
+    if not all(isinstance(raw[key], str) and raw[key] and raw[key] == raw[key].strip() for key in ("source", "ref", "commit", "version")):
+        raise ValueError("invalid root state")
     if (
-        not all(isinstance(raw[key], str) and raw[key] for key in ("source", "ref", "commit", "version"))
+        _GITHUB_HTTPS_SOURCE.fullmatch(raw["source"]) is None
+        or not _valid_git_ref(raw["ref"])
+        or _LOWERCASE_OBJECT_ID.fullmatch(raw["commit"]) is None
         or not isinstance(raw["distribution_owned"], list)
         or any(not isinstance(value, str) for value in raw["distribution_owned"])
     ):
-        raise ValueError("invalid root state")
-    commit = raw["commit"]
-    if len(commit) not in (40, 64) or any(character not in "0123456789abcdef" for character in commit.lower()):
         raise ValueError("invalid root state")
     return _normalize_owned_paths(raw["distribution_owned"], None, require_sources=False)
 
@@ -297,10 +326,10 @@ def _read_profile_manifest(stage: StagedSource) -> tuple[Any, tuple[PurePosixPat
     raw = yaml.load(manifest_path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
     if not isinstance(raw, dict) or any(not isinstance(key, str) for key in raw):
         raise ValueError("profile manifest must be a mapping")
-    raw_owned = raw.get("distribution_owned", [])
-    if not isinstance(raw_owned, list) or any(not isinstance(item, str) for item in raw_owned):
+    raw_owned = raw.get("distribution_owned")
+    if not isinstance(raw_owned, list) or not raw_owned or any(not isinstance(item, str) for item in raw_owned):
         raise ValueError("profile manifest owned paths invalid")
-    owned = _normalize_owned_paths(raw_owned, stage.path, require_sources=True)
+    owned = _normalize_owned_paths(raw_owned, stage.path, require_sources=True, profile=True)
     manifest = profile_distribution.read_manifest(stage.path)
     if manifest is None or manifest.name != stage.declaration.name:
         raise ValueError("profile manifest identity mismatch")
@@ -311,8 +340,9 @@ def _read_profile_manifest(stage: StagedSource) -> tuple[Any, tuple[PurePosixPat
 def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet | _Failure:
     sanitized: Path | None = None
     scratch_root: Path | None = None
-    prior_home: str | None = None
-    home_was_set = False
+    prior_home = os.environ.get("HERMES_HOME")
+    home_was_set = "HERMES_HOME" in os.environ
+    home_changed = False
     result: ChangeSet | None = None
     primary_failure = False
     cleanup_ok = True
@@ -329,29 +359,31 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
             raise ValueError("could not build sanitized profile")
         sanitized = build_result
         target = expected_target
-        snapshots = _profile_snapshots(target, owned, manifest, tx)
-        prior_home = os.environ.get("HERMES_HOME")
-        home_was_set = "HERMES_HOME" in os.environ
-        os.environ["HERMES_HOME"] = str(data_root)
-        profile_distribution.install_distribution(str(sanitized), name=stage.declaration.name, force=True)
-        if target.exists():
-            manifest_path = target / "distribution.yaml"
-            installed = profile_distribution.read_manifest(target)
-            if installed is None:
-                raise ValueError("profile installation did not write a manifest")
-            installed.source = stage.declaration.source
-            if target not in snapshots and manifest_path not in snapshots:
-                _snapshot(tx, manifest_path)
-                snapshots.append(manifest_path)
-            profile_distribution.write_manifest(target, installed)
-        result = ChangeSet(tuple(snapshots))
+        if _profile_is_current(target, sanitized, manifest, stage, owned):
+            result = ChangeSet(())
+        else:
+            snapshots = _profile_snapshots(target, owned, manifest, tx)
+            os.environ["HERMES_HOME"] = str(data_root)
+            home_changed = True
+            profile_distribution.install_distribution(str(sanitized), name=stage.declaration.name, force=True)
+            if target.exists():
+                manifest_path = target / "distribution.yaml"
+                installed = profile_distribution.read_manifest(target)
+                if installed is None:
+                    raise ValueError("profile installation did not write a manifest")
+                installed.source = stage.declaration.source
+                if target not in snapshots and manifest_path not in snapshots:
+                    _snapshot(tx, manifest_path)
+                    snapshots.append(manifest_path)
+                profile_distribution.write_manifest(target, installed)
+            result = ChangeSet(tuple(snapshots))
     except Exception:
         primary_failure = True
     finally:
-        if home_was_set:
+        if home_changed and home_was_set:
             if prior_home is not None:
                 os.environ["HERMES_HOME"] = prior_home
-        else:
+        elif home_changed:
             os.environ.pop("HERMES_HOME", None)
         if sanitized is not None:
             cleanup_ok = _safe_remove_tree(sanitized) and cleanup_ok
@@ -367,11 +399,17 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
 
 
 def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest: Any, tx: Transaction) -> list[Path]:
-    if not _lexists(target):
-        _snapshot(tx, target)
-        return [target]
-    _require_regular_directory(target)
     snapshots: list[Path] = []
+    profiles = target.parent
+    if not _lexists(profiles):
+        _snapshot(tx, profiles)
+        snapshots.append(profiles)
+    target_missing = not _lexists(target)
+    if target_missing:
+        _snapshot(tx, target)
+        snapshots.append(target)
+    else:
+        _require_regular_directory(target)
     top_levels = {path.parts[0] for path in owned}
     if ".env.template" in top_levels:
         top_levels.remove(".env.template")
@@ -379,25 +417,74 @@ def _profile_snapshots(target: Path, owned: tuple[PurePosixPath, ...], manifest:
     top_levels.add("distribution.yaml")
     if getattr(manifest, "env_requires", None):
         top_levels.add(".env.EXAMPLE")
-    for directory in ("skills", "skins", "cron"):
+    for directory in _BOOTSTRAP_USER_DIRS:
         if not _lexists(target / directory):
+            _snapshot(tx, target / directory)
+            snapshots.append(target / directory)
+        if directory in {"skills", "skins", "cron"}:
             top_levels.add(directory)
+    if target_missing:
+        return snapshots
     for name in sorted(top_levels):
+        destination = target / name
+        if destination in snapshots:
+            continue
         if name in profile_distribution.USER_OWNED_EXCLUDE:
             continue
-        destination = target / name
         _require_safe_managed_path(target, destination)
         _snapshot(tx, destination)
         snapshots.append(destination)
     return snapshots
 
 
+def _profile_is_current(
+    target: Path, sanitized: Path, manifest: Any, stage: StagedSource, owned: tuple[PurePosixPath, ...]
+) -> bool:
+    if not _lexists(target):
+        return False
+    _require_regular_directory(target)
+    try:
+        installed = profile_distribution.read_manifest(target)
+    except Exception:
+        return False
+    if installed is None or _manifest_identity(installed, None) != _manifest_identity(manifest, stage.declaration.source, owned):
+        return False
+    try:
+        payload = tuple(entry for entry in sanitized.iterdir() if entry.name != "distribution.yaml")
+        for source in payload:
+            destination = target / (".env.EXAMPLE" if source.name == ".env.template" else source.name)
+            if not _same_path(source, destination):
+                return False
+        if getattr(manifest, "env_requires", None) and not _is_regular_file(target / ".env.EXAMPLE"):
+            return False
+        return all(_is_regular_directory(target / name) for name in _BOOTSTRAP_USER_DIRS)
+    except OSError:
+        return False
+
+
+def _manifest_identity(manifest: Any, source: str | None, owned: tuple[PurePosixPath, ...] | None = None) -> str:
+    identity = {
+        "name": getattr(manifest, "name", ""),
+        "version": getattr(manifest, "version", ""),
+        "description": getattr(manifest, "description", ""),
+        "hermes_requires": getattr(manifest, "hermes_requires", ""),
+        "author": getattr(manifest, "author", ""),
+        "license": getattr(manifest, "license", ""),
+        "env_requires": [requirement.to_dict() for requirement in getattr(manifest, "env_requires", ())],
+        "distribution_owned": [path.as_posix() for path in owned]
+        if owned is not None
+        else sorted(str(path) for path in getattr(manifest, "distribution_owned", ())),
+        "source": getattr(manifest, "source", "") if source is None else source,
+    }
+    return json.dumps(identity, sort_keys=True, separators=(",", ":"))
+
+
 def _normalize_owned_paths(
-    entries: list[str], stage: Path | None, *, require_sources: bool
+    entries: list[str], stage: Path | None, *, require_sources: bool, profile: bool = False
 ) -> tuple[PurePosixPath, ...]:
     normalized: list[PurePosixPath] = []
     for value in entries:
-        if not isinstance(value, str) or not value or not value.strip() or "\\" in value:
+        if not isinstance(value, str) or not value or value != value.strip() or "\\" in value:
             raise ValueError("invalid distribution owned path")
         candidate = PurePosixPath(value)
         if (
@@ -409,7 +496,7 @@ def _normalize_owned_paths(
         ):
             raise ValueError("invalid distribution owned path")
         candidate = PurePosixPath(*candidate.parts)
-        _reject_reserved_path(candidate)
+        _reject_reserved_path(candidate, profile=profile)
         if candidate in normalized or any(
             candidate.is_relative_to(existing) or existing.is_relative_to(candidate) for existing in normalized
         ):
@@ -422,12 +509,28 @@ def _normalize_owned_paths(
     return tuple(sorted(normalized, key=lambda path: path.as_posix()))
 
 
-def _reject_reserved_path(path: PurePosixPath) -> None:
+def _reject_reserved_path(path: PurePosixPath, *, profile: bool = False) -> None:
     lowered = tuple(part.lower() for part in path.parts)
-    if lowered[0] in _RESERVED_TOP_LEVEL or any(part in _RESERVED_ANYWHERE for part in lowered):
+    reserved_top_level = _PROFILE_RESERVED_TOP_LEVEL if profile else _ROOT_RESERVED_TOP_LEVEL
+    if lowered[0] in reserved_top_level or any(part in _RESERVED_ANYWHERE for part in lowered):
         raise ValueError("reserved distribution owned path")
     if any(part in _RUNTIME_DATABASES for part in lowered):
         raise ValueError("reserved distribution owned path")
+
+
+def _valid_git_ref(ref: str) -> bool:
+    components = ref.split("/")
+    return not (
+        ref == "@"
+        or ref.startswith(("-", "/"))
+        or ref.endswith((".", "/"))
+        or ".." in ref
+        or "@{" in ref
+        or "//" in ref
+        or any(component.startswith(".") or component.endswith(".lock") for component in components)
+        or any(character in ref for character in " ~^:?*[\\")
+        or any(ord(character) < 32 or ord(character) == 127 for character in ref)
+    )
 
 
 def _validate_source_path(path: Path) -> None:
@@ -477,19 +580,32 @@ def _replace_from_source(source: Path, destination: Path, tx: Transaction) -> No
         if source.is_dir():
             shutil.rmtree(temporary)
             shutil.copytree(source, temporary, copy_function=shutil.copy2)
+            _fsync_tree(temporary)
         else:
             _copy_regular(source, temporary)
-        if _lexists(destination):
-            retired = _temporary_sibling(destination, directory=False)
-            if _lexists(retired):
-                _remove_raw(retired)
-            os.replace(destination, retired)
-        os.replace(temporary, destination)
-        temporary = None
+        try:
+            if _lexists(destination):
+                retired = _temporary_sibling(destination, directory=False)
+                if _lexists(retired):
+                    _remove_raw(retired)
+                os.replace(destination, retired)
+                _fsync_parent(destination.parent)
+            os.replace(temporary, destination)
+            temporary = None
+            _fsync_parent(destination.parent)
+        except Exception:
+            if retired is not None and _lexists(retired):
+                try:
+                    os.replace(retired, destination)
+                    retired = None
+                    _fsync_parent(destination.parent)
+                except Exception:
+                    pass
+            raise
     finally:
         if temporary is not None and _lexists(temporary):
-            _remove_raw(temporary)
-        if retired is not None and _lexists(retired):
+            _safe_remove_raw(temporary)
+        if retired is not None and _lexists(retired) and _lexists(destination):
             _remove_raw(retired)
 
 
@@ -497,19 +613,35 @@ def _remove_destination(destination: Path) -> None:
     retired = _temporary_sibling(destination, directory=False)
     if _lexists(retired):
         _remove_raw(retired)
+    moved = False
     try:
         os.replace(destination, retired)
-    finally:
-        if _lexists(retired):
-            _remove_raw(retired)
+        moved = True
+        _fsync_parent(destination.parent)
+        _remove_raw(retired)
+    except Exception:
+        if moved and _lexists(retired) and not _lexists(destination):
+            try:
+                os.replace(retired, destination)
+                _fsync_parent(destination.parent)
+            except Exception:
+                pass
+        elif not moved:
+            _safe_remove_raw(retired)
+        raise
 
 
 def _temporary_sibling(destination: Path, *, directory: bool) -> Path:
     if directory:
         return Path(tempfile.mkdtemp(prefix=f".{destination.name}.bootstrap-", dir=destination.parent))
     descriptor, name = tempfile.mkstemp(prefix=f".{destination.name}.bootstrap-", dir=destination.parent)
-    os.close(descriptor)
-    return Path(name)
+    path = Path(name)
+    try:
+        os.close(descriptor)
+    except Exception:
+        _safe_remove_raw(path)
+        raise
+    return path
 
 
 def _ensure_destination_parent(parent: Path, tx: Transaction) -> None:
@@ -522,6 +654,7 @@ def _ensure_destination_parent(parent: Path, tx: Transaction) -> None:
     for directory in reversed(missing):
         _snapshot(tx, directory)
         directory.mkdir(mode=0o700)
+        _fsync_parent(directory.parent)
     _require_regular_directory(parent)
 
 
@@ -531,6 +664,7 @@ def _ensure_state_parent(data_root: Path, parent: Path, tx: Transaction) -> None
         return
     _snapshot(tx, parent)
     parent.mkdir(mode=0o700, parents=False, exist_ok=False)
+    _fsync_parent(parent.parent)
 
 
 def _atomic_write(destination: Path, content: bytes, mode: int) -> None:
@@ -544,6 +678,7 @@ def _atomic_write(destination: Path, content: bytes, mode: int) -> None:
             os.fsync(handle.fileno())
         os.chmod(temporary, mode)
         os.replace(temporary, destination)
+        _fsync_parent(destination.parent)
         temporary = None
     finally:
         if temporary is not None and _lexists(temporary):
@@ -624,6 +759,7 @@ def _copy_regular(source: Path, destination: Path) -> None:
     if not source.is_file():
         raise ValueError("expected regular file")
     shutil.copy2(source, destination)
+    _fsync_file(destination)
 
 
 def _snapshot(tx: Transaction, path: Path) -> None:
@@ -640,6 +776,62 @@ def _remove_raw(path: Path) -> None:
         shutil.rmtree(path)
     else:
         path.unlink()
+    _fsync_parent(path.parent)
+
+
+def _safe_remove_raw(path: Path) -> None:
+    try:
+        _remove_raw(path)
+    except Exception:
+        pass
+
+
+def _fsync_file(path: Path) -> None:
+    descriptor: int | None = None
+    failure = False
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+        os.fsync(descriptor)
+    except OSError:
+        failure = True
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                failure = True
+    if failure:
+        raise ValueError("could not synchronize distribution file")
+
+
+def _fsync_tree(path: Path) -> None:
+    if path.is_file():
+        _fsync_file(path)
+        return
+    for current, directories, files in os.walk(path, topdown=False):
+        current_path = Path(current)
+        for name in files:
+            _fsync_file(current_path / name)
+        if directories or files:
+            _fsync_parent(current_path)
+
+
+def _fsync_parent(parent: Path) -> None:
+    descriptor: int | None = None
+    failure = False
+    try:
+        descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        os.fsync(descriptor)
+    except OSError:
+        failure = True
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                failure = True
+    if failure:
+        raise ValueError("could not synchronize distribution directory")
 
 
 def _safe_remove_tree(path: Path) -> bool:
@@ -648,3 +840,17 @@ def _safe_remove_tree(path: Path) -> bool:
     except Exception:
         return False
     return True
+
+
+def _is_regular_file(path: Path) -> bool:
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _is_regular_directory(path: Path) -> bool:
+    try:
+        return stat.S_ISDIR(path.lstat().st_mode)
+    except OSError:
+        return False

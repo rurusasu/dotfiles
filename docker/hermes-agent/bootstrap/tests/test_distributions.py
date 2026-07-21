@@ -255,6 +255,117 @@ class DistributionTests(unittest.TestCase):
                     lambda: apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
                 )
 
+    def test_root_apply_treats_previous_and_next_ownership_as_trees(self) -> None:
+        state = self.data_root / ".bootstrap" / "root-distribution-state.json"
+        state.parent.mkdir()
+
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "guide.md").write_text("new guide\n", encoding="utf-8")
+        (self.data_root / "docs").mkdir()
+        (self.data_root / "docs" / "guide.md").write_text("old guide\n", encoding="utf-8")
+        state.write_text(self.root_state(["docs/guide.md"]), encoding="utf-8")
+        self.write_root_manifest(["docs"])
+
+        apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertEqual((self.data_root / "docs" / "guide.md").read_text(encoding="utf-8"), "new guide\n")
+
+        shutil.rmtree(self.stage_root / "docs")
+        (self.stage_root / "docs").mkdir()
+        (self.stage_root / "docs" / "guide.md").write_text("child guide\n", encoding="utf-8")
+        (self.data_root / "docs" / "obsolete.md").write_text("retire parent\n", encoding="utf-8")
+        state.write_text(self.root_state(["docs"]), encoding="utf-8")
+        self.write_root_manifest(["docs/guide.md"])
+
+        apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertEqual((self.data_root / "docs" / "guide.md").read_text(encoding="utf-8"), "child guide\n")
+        self.assertFalse((self.data_root / "docs" / "obsolete.md").exists())
+
+    def test_root_replace_failure_restores_existing_destination_and_retains_copy_when_restore_fails(self) -> None:
+        (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
+        self.write_root_manifest(["config.yaml"])
+        target = self.data_root / "config.yaml"
+        target.write_text("old config\n", encoding="utf-8")
+        original_replace = os.replace
+        calls = 0
+
+        def fail_install_once(source: object, destination: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("install-secret-marker")
+            original_replace(source, destination)
+
+        with mock.patch("hermes_bootstrap.distributions.os.replace", side_effect=fail_install_once):
+            self.assert_apply_error(lambda: apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction()))
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "old config\n")
+
+        target.write_text("old config\n", encoding="utf-8")
+        calls = 0
+
+        def fail_install_and_restore(source: object, destination: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls in (2, 3):
+                raise OSError("restore-secret-marker")
+            original_replace(source, destination)
+
+        with mock.patch("hermes_bootstrap.distributions.os.replace", side_effect=fail_install_and_restore):
+            with self.assertRaises(ApplyError) as caught:
+                apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertFalse(target.exists())
+        retired = list(self.data_root.glob(".config.yaml.bootstrap-*"))
+        self.assertEqual(len(retired), 1)
+        self.assertEqual(retired[0].read_text(encoding="utf-8"), "old config\n")
+        self.assert_exception_hides_markers(caught.exception, "restore-secret-marker", str(self.stage_root))
+
+    def test_root_remove_failure_restores_existing_destination(self) -> None:
+        (self.stage_root / "config.yaml").write_text("new config\n", encoding="utf-8")
+        self.write_root_manifest(["config.yaml"])
+        target = self.data_root / "obsolete.txt"
+        target.write_text("retired config\n", encoding="utf-8")
+        state = self.data_root / ".bootstrap" / "root-distribution-state.json"
+        state.parent.mkdir()
+        state.write_text(self.root_state(["obsolete.txt"]), encoding="utf-8")
+
+        from hermes_bootstrap.distributions import _remove_raw as original_remove
+
+        def fail_retired_copy(path: Path) -> None:
+            if path.read_text(encoding="utf-8") == "retired config\n":
+                raise OSError("remove-secret-marker")
+            original_remove(path)
+
+        with mock.patch("hermes_bootstrap.distributions._remove_raw", side_effect=fail_retired_copy):
+            with self.assertRaises(ApplyError) as caught:
+                apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "retired config\n")
+        self.assert_exception_hides_markers(caught.exception, "remove-secret-marker", str(self.stage_root))
+
+    def test_root_apply_rejects_strict_unsafe_prior_state_metadata(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_root_manifest(["config.yaml"])
+        state = self.data_root / ".bootstrap" / "root-distribution-state.json"
+        state.parent.mkdir()
+        valid = json.loads(self.root_state(["obsolete.txt"]))
+        invalid = (
+            {**valid, "source": "https://token@github.com/rurusasu/hermes-home.git"},
+            {**valid, "source": "https://example.com/rurusasu/hermes-home.git"},
+            {**valid, "ref": "refs//heads/main"},
+            {**valid, "commit": "A" * 40},
+            {**valid, "version": " 0.1.0"},
+            {**valid, "distribution_owned": [" config.yaml"]},
+        )
+        for raw in invalid:
+            with self.subTest(raw=raw):
+                state.write_text(json.dumps(raw), encoding="utf-8")
+                self.assert_apply_error(
+                    lambda: apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+                )
+
     def test_root_apply_rejects_unsafe_data_root_and_managed_ancestor(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
         self.write_root_manifest(["config.yaml"])
@@ -339,6 +450,124 @@ class DistributionTests(unittest.TestCase):
                 (self.stage_root / "distribution.yaml").write_text(content, encoding="utf-8")
                 self.assert_apply_error(lambda: build_sanitized_profile_source(self.source("rick"), self.root / "scratch"))
 
+    def test_root_and_profile_reject_runtime_owned_namespaces_but_root_allows_skills_and_cron(self) -> None:
+        for name in (".browser", "browser_screenshots", "workspace", "home", "plans", "audio_cache", "document_cache", "image_cache"):
+            with self.subTest(root=name):
+                (self.stage_root / name).mkdir(exist_ok=True)
+                self.write_root_manifest([name])
+                self.assert_apply_error(lambda: load_root_manifest(self.stage_root))
+
+        for name in ("workspace", "home", "plans", "audio_cache", "document_cache", "image_cache", "browser_screenshots"):
+            with self.subTest(profile=name):
+                (self.stage_root / name).mkdir(exist_ok=True)
+                self.write_profile_manifest("rick", [f"{name}/payload"])
+                (self.stage_root / name / "payload").write_text("blocked\n", encoding="utf-8")
+                self.assert_apply_error(lambda: build_sanitized_profile_source(self.source("rick"), self.root / "scratch"))
+
+        for name in ("skills", "cron"):
+            (self.stage_root / name).mkdir(exist_ok=True)
+            (self.stage_root / name / "payload").write_text("allowed\n", encoding="utf-8")
+        self.write_root_manifest(["skills", "cron"])
+        self.assertEqual(load_root_manifest(self.stage_root).distribution_owned, (PurePosixPath("cron"), PurePosixPath("skills")))
+
+    def test_profile_preflight_snapshots_missing_parents_and_bootstrap_directories(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = RecordingTransaction()
+
+        with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution", side_effect=RuntimeError("preflight-secret-marker")):
+            with self.assertRaises(ApplyError) as caught:
+                apply_profile_distribution(self.source("rick"), self.data_root, tx)
+
+        target = self.data_root / "profiles" / "rick"
+        expected = [self.data_root / "profiles", target]
+        expected.extend(target / name for name in ("memories", "sessions", "skills", "skins", "logs", "plans", "workspace", "cron", "home"))
+        self.assertEqual(tx.snapshots, expected)
+        self.assert_exception_hides_markers(caught.exception, "preflight-secret-marker", str(self.stage_root))
+
+    def test_profile_apply_is_a_true_identical_noop_before_official_install(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        (self.stage_root / "assets").mkdir()
+        (self.stage_root / "assets" / "script.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        (self.stage_root / "assets" / "script.sh").chmod(0o755)
+        self.write_profile_manifest("rick", ["config.yaml", "assets"], env_requires=[{"name": "API_KEY", "description": "key"}])
+        apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+        target = self.data_root / "profiles" / "rick"
+        manifest_before = (target / "distribution.yaml").read_text(encoding="utf-8")
+        inodes = {path: path.stat().st_ino for path in (target / "config.yaml", target / "assets", target / "distribution.yaml")}
+
+        with mock.patch("hermes_bootstrap.distributions.profile_distribution.install_distribution") as install:
+            changed = apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+        self.assertEqual(changed, ChangeSet(()))
+        install.assert_not_called()
+        self.assertEqual((target / "distribution.yaml").read_text(encoding="utf-8"), manifest_before)
+        self.assertEqual({path: path.stat().st_ino for path in inodes}, inodes)
+
+    def test_profile_restores_home_without_mutating_it_when_preflight_fails(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        previous_home = os.environ.get("HERMES_HOME")
+        os.environ["HERMES_HOME"] = "preflight-home-marker"
+        self.addCleanup(self.restore_environment, "HERMES_HOME", previous_home)
+
+        with mock.patch("hermes_bootstrap.distributions._read_profile_manifest", side_effect=RuntimeError("early-secret-marker")):
+            with self.assertRaises(ApplyError) as caught:
+                apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+        self.assertEqual(os.environ["HERMES_HOME"], "preflight-home-marker")
+        self.assert_exception_hides_markers(caught.exception, "early-secret-marker", "preflight-home-marker", str(self.stage_root))
+
+    def test_root_mutations_fsync_parents_and_hide_cleanup_failures(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_root_manifest(["config.yaml"])
+        original_open = os.open
+        original_fsync = os.fsync
+        descriptor_paths: dict[int, Path] = {}
+        synchronized: set[Path] = set()
+
+        def record_open(path: object, *args: object, **kwargs: object) -> int:
+            descriptor = original_open(path, *args, **kwargs)
+            descriptor_paths[descriptor] = Path(path)
+            return descriptor
+
+        def record_fsync(descriptor: int) -> None:
+            if descriptor in descriptor_paths:
+                synchronized.add(descriptor_paths[descriptor])
+            original_fsync(descriptor)
+
+        with mock.patch("hermes_bootstrap.distributions.os.open", side_effect=record_open):
+            with mock.patch("hermes_bootstrap.distributions.os.fsync", side_effect=record_fsync):
+                apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertIn(self.data_root, synchronized)
+        self.assertIn(self.data_root / ".bootstrap", synchronized)
+
+        self.data_root = self.root / "close-failure-data"
+        self.data_root.mkdir()
+        descriptors_to_fail: set[int] = set()
+
+        def record_failure_open(path: object, *args: object, **kwargs: object) -> int:
+            descriptor = original_open(path, *args, **kwargs)
+            if Path(path) == self.data_root:
+                descriptors_to_fail.add(descriptor)
+            return descriptor
+
+        original_close = os.close
+
+        def fail_parent_close(descriptor: int) -> None:
+            original_close(descriptor)
+            if descriptor in descriptors_to_fail:
+                raise OSError("close-secret-marker")
+
+        with mock.patch("hermes_bootstrap.distributions.os.open", side_effect=record_failure_open):
+            with mock.patch("hermes_bootstrap.distributions.os.close", side_effect=fail_parent_close):
+                with self.assertRaises(ApplyError) as caught:
+                    apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+
+        self.assertEqual((self.data_root / "config.yaml").read_text(encoding="utf-8"), "config\n")
+        self.assert_exception_hides_markers(caught.exception, "close-secret-marker", str(self.stage_root))
+
     def test_profile_apply_rejects_a_symlinked_profile_namespace(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
         self.write_profile_manifest("rick", ["config.yaml"])
@@ -402,7 +631,14 @@ class DistributionTests(unittest.TestCase):
                 apply_profile_distribution(self.source("rick"), self.data_root, tx)
 
         target = self.data_root / "profiles" / "rick"
-        self.assertEqual(tx.snapshots, [target])
+        self.assertEqual(
+            tx.snapshots,
+            [
+                self.data_root / "profiles",
+                target,
+                *(target / name for name in ("memories", "sessions", "skills", "skins", "logs", "plans", "workspace", "cron", "home")),
+            ],
+        )
         self.assertNotIn("HERMES_HOME", os.environ)
         self.assertEqual(str(caught.exception), "could not apply the named profile distribution")
         self.assert_exception_hides_markers(caught.exception, "staged-secret-marker", str(self.stage_root))
@@ -454,6 +690,17 @@ class DistributionTests(unittest.TestCase):
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
+
+    def root_state(self, owned: list[str]) -> str:
+        return json.dumps(
+            {
+                "source": "https://github.com/rurusasu/hermes-home.git",
+                "ref": "main",
+                "commit": "b" * 40,
+                "version": "0.0.9",
+                "distribution_owned": owned,
+            }
+        )
 
     def assert_exception_hides_markers(self, error: BaseException, *markers: str) -> None:
         pending: list[object] = [error]
