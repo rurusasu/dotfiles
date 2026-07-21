@@ -99,6 +99,15 @@ assert_log_order() {
 	done
 }
 
+assert_plan_rejected_before_secret_lookup() {
+	: >"$COMMAND_LOG"
+	run_start_stack
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	! grep -q '^op' "$COMMAND_LOG"
+	! grep -q '<apply>' "$COMMAND_LOG"
+}
+
 @test "preserves Hermes data and browser directory helpers" {
 	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
 	export HERMES_BROWSER_DATA_DIR="$TEST_HOME/custom-browser"
@@ -166,34 +175,30 @@ dotfiles_hermes_browser_data_dir
 	! grep -q ' up ' "$COMMAND_LOG"
 }
 
-@test "rejects malformed secret-plan fields before looking up items" {
+@test "rejects malformed duplicate and wrong-count secret plans before looking up items" {
 	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[]}]}'
+	assert_plan_rejected_before_secret_lookup
 
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	! grep -q '^op' "$COMMAND_LOG"
-}
-
-@test "rejects duplicate or incomplete declared secret plans" {
 	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}'
+	assert_plan_rejected_before_secret_lookup
 
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	! grep -q '^op' "$COMMAND_LOG"
+	export PLAN_JSON='{"schema_version":1,"items":[]}'
+	assert_plan_rejected_before_secret_lookup
 }
 
-@test "rejects a secret plan with the wrong number of items" {
-	export PLAN_JSON='{"schema_version":1,"items":[]}'
+@test "rejects two valid secret-plan documents without looking up items or applying" {
+	valid_plan="$(valid_secret_plan)"
+	export PLAN_JSON="$valid_plan
+$valid_plan"
 
-	run_start_stack
+	assert_plan_rejected_before_secret_lookup
+}
 
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	! grep -q '^op' "$COMMAND_LOG"
+@test "rejects a valid secret plan followed by garbage without looking up items or applying" {
+	export PLAN_JSON="$(valid_secret_plan)
+trailing-garbage"
+
+	assert_plan_rejected_before_secret_lookup
 }
 
 @test "propagates an op failure, closes the apply stream, and does not recreate services" {

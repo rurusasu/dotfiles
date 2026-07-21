@@ -32,7 +32,9 @@ dotfiles_hermes_require_secret_tools() {
 }
 
 dotfiles_hermes_validate_secret_plan() {
-  jq -ce '
+  jq -Ssce '
+    if length == 1 and (.[0] | type == "object") then .[0] else false end
+    |
     . as $plan | (
     def nonblank_string:
       type == "string" and test("[^[:space:]]") and test("^[^[:cntrl:]]+$");
