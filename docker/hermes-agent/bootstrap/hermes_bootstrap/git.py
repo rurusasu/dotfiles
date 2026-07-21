@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import re
+import selectors
 import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -20,6 +22,10 @@ from .models import DistributionSource
 _GIT_TIMEOUT_SECONDS = 60.0
 _MAX_GIT_OUTPUT_BYTES = 4096
 _OBJECT_ID = re.compile(r"[0-9a-fA-F]{40,64}\Z")
+_GITHUB_OWNER_REPOSITORY_PATH = re.compile(
+    r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
+    r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?(?:\.git)?\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,11 @@ class StagedSource:
 
 @dataclass(frozen=True)
 class _StageFailure:
+    message: str
+
+
+@dataclass(frozen=True)
+class _TreeFailure:
     message: str
 
 
@@ -56,7 +67,7 @@ def _stage_distribution_boundary(
     stage: Path | None = None
     askpass: Path | None = None
     try:
-        if not _valid_auth(auth) or _remote_identity(source.source) is None:
+        if not _valid_auth(auth) or _remote_identity(source.source) is None or not _valid_ref(source.ref):
             return _StageFailure("could not stage the declared Git source")
         workdir.mkdir(mode=0o700, parents=True, exist_ok=True)
         if not _is_directory(workdir):
@@ -71,7 +82,7 @@ def _stage_distribution_boundary(
         remote = _run_git(("config", "--get", "remote.origin.url"), stage, environment)
         if remote is None or not _same_remote_identity(source.source, remote):
             return _StageFailure("the staged Git source does not match its declaration")
-        if _run_git(("fetch", "--no-tags", "origin", source.ref), stage, environment) is None:
+        if _run_git(("fetch", "--no-tags", "origin", "--", source.ref), stage, environment) is None:
             return _StageFailure("could not fetch the declared Git ref")
         commit = _run_git(("rev-parse", "--verify", "FETCH_HEAD^{commit}"), stage, environment)
         if commit is None or _OBJECT_ID.fullmatch(commit) is None:
@@ -100,17 +111,28 @@ def _stage_distribution_boundary(
 def assert_safe_distribution_tree(stage: StagedSource) -> None:
     """Require a distribution tree made exclusively from regular files and directories."""
 
-    root = stage.path
+    failure = _safe_distribution_tree_boundary(stage)
+    if failure is None:
+        return
+    message = failure.message
+    del failure
+    del stage
+    raise RepositoryError(message)
+
+
+def _safe_distribution_tree_boundary(stage: StagedSource) -> _TreeFailure | None:
+    """Keep staged paths and declarations out of public exception tracebacks."""
+
     try:
+        root = stage.path
         root_stat = root.lstat()
         if not stat.S_ISDIR(root_stat.st_mode) or stat.S_ISLNK(root_stat.st_mode):
             raise RepositoryError("staged Git source contains an unsafe filesystem entry")
         resolved_root = root.resolve(strict=True)
         _walk_safe_tree(root, resolved_root)
-    except RepositoryError:
-        raise
-    except (OSError, ValueError):
-        raise RepositoryError("staged Git source contains an unsafe filesystem entry") from None
+    except Exception:
+        return _TreeFailure("staged Git source contains an unsafe filesystem entry")
+    return None
 
 
 def _walk_safe_tree(directory: Path, resolved_root: Path) -> None:
@@ -170,11 +192,21 @@ def _create_askpass(workdir: Path) -> Path:
 
 
 def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
-    environment = os.environ.copy()
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("GIT_")
+        and key.upper() not in {"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE"}
+    }
     environment.update(
         {
             "GIT_ASKPASS": str(askpass),
             "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "",
             "HERMES_BOOTSTRAP_GITHUB_TOKEN": auth.token,
         }
     )
@@ -184,27 +216,76 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
 def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
     """Run Git without a shell and retain only a small, non-secret result."""
 
+    process: subprocess.Popen[bytes] | None = None
+    output_stream: object | None = None
+    selector: selectors.BaseSelector | None = None
+    output = bytearray()
     try:
-        with tempfile.TemporaryFile() as output_file:
-            result = subprocess.run(
-                ("git", *arguments),
-                cwd=cwd,
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                stdout=output_file,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=_GIT_TIMEOUT_SECONDS,
-            )
-            if result.returncode != 0 or output_file.tell() > _MAX_GIT_OUTPUT_BYTES:
-                return None
-            output_file.seek(0)
-            output = output_file.read(_MAX_GIT_OUTPUT_BYTES)
-        if not isinstance(output, bytes):
+        process = subprocess.Popen(
+            ("git", *arguments),
+            cwd=cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        output_stream = process.stdout
+        if output_stream is None:
             return None
-        return output.decode("ascii", "strict").strip()
-    except (OSError, subprocess.SubprocessError, UnicodeError):
+        descriptor = output_stream.fileno()
+        os.set_blocking(descriptor, False)
+        selector = selectors.DefaultSelector()
+        selector.register(output_stream, selectors.EVENT_READ)
+        deadline = time.monotonic() + _GIT_TIMEOUT_SECONDS
+        end_of_output = False
+
+        while not end_of_output:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _stop_git_process(process)
+                return None
+            for _key, _events in selector.select(remaining):
+                chunk = os.read(descriptor, _MAX_GIT_OUTPUT_BYTES + 1 - len(output))
+                if not chunk:
+                    selector.unregister(output_stream)
+                    end_of_output = True
+                    break
+                output.extend(chunk)
+                if len(output) > _MAX_GIT_OUTPUT_BYTES:
+                    _stop_git_process(process)
+                    return None
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or process.wait(timeout=remaining) != 0:
+            return None
+        return bytes(output).decode("ascii", "strict").strip()
+    except (BlockingIOError, OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         return None
+    finally:
+        if selector is not None:
+            selector.close()
+        if output_stream is not None:
+            try:
+                output_stream.close()
+            except OSError:
+                pass
+        if process is not None and process.poll() is None:
+            _stop_git_process(process)
+
+
+def _stop_git_process(process: subprocess.Popen[bytes]) -> None:
+    """Kill and reap a failed Git child before dropping its bounded output."""
+
+    if process.poll() is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        process.wait()
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def _remove_git_metadata(stage: Path) -> None:
@@ -230,12 +311,22 @@ def _same_remote_identity(declared: str, observed: str) -> bool:
 def _remote_identity(value: str) -> tuple[str, str, str] | None:
     parsed = urlsplit(value)
     if parsed.scheme:
-        if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        if (
+            parsed.scheme.casefold() != "https"
+            or parsed.netloc.casefold() != "github.com"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or _GITHUB_OWNER_REPOSITORY_PATH.fullmatch(parsed.path) is None
+        ):
             return None
-        path = parsed.path.rstrip("/")
+        path = parsed.path
         if path.endswith(".git"):
             path = path[:-4]
-        return (parsed.scheme.casefold(), parsed.netloc.casefold(), path.casefold())
+        return ("https", "github.com", path.casefold())
+    if not Path(value).is_absolute():
+        return None
     try:
         return ("file", "", str(Path(value).resolve(strict=False)))
     except (OSError, ValueError):
@@ -256,6 +347,23 @@ def _valid_auth(auth: object) -> bool:
         and isinstance(auth.token, str)
         and bool(auth.token)
         and auth.token == auth.token.strip()
+    )
+
+
+def _valid_ref(value: object) -> bool:
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    components = value.split("/")
+    return not (
+        value == "@"
+        or value.startswith(("-", "/"))
+        or value.endswith((".", "/"))
+        or ".." in value
+        or "@{" in value
+        or "//" in value
+        or any(component.startswith(".") or component.endswith(".lock") for component in components)
+        or any(character in value for character in " ~^:?*[\\")
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
     )
 
 
