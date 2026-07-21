@@ -88,6 +88,16 @@ Describe "Get-HermesBootstrapSecretPlan" {
                 Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
         }
     }
+
+    It "rejects a trailing second JSON document or trailing garbage" {
+        $validJson = $script:dockerOutput[0]
+        foreach ($suffix in @("`n$validJson", " trailing-garbage")) {
+            $script:dockerOutput = @("$validJson$suffix")
+
+            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+                Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
+        }
+    }
 }
 
 function global:New-HermesBootstrapFakeDocker {
@@ -104,19 +114,25 @@ set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
   for %%A in (%*) do echo %%~A
 )
 more > "%input%"
-if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" echo %HERMES_BOOTSTRAP_TEST_STDOUT%
-if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" echo %HERMES_BOOTSTRAP_TEST_STDERR% 1>&2
+if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" ping 127.0.0.1 -n 3 >nul
+if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
+if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
 exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
 '@ | Set-Content -LiteralPath $path -NoNewline
         return $path
     }
 
     $path = Join-Path $Directory "docker"
-    @'
+    $content = @'
 #!/bin/sh
 printf '%s' "$$" > "$HERMES_BOOTSTRAP_TEST_DIR/pid"
 printf '%s\0' "$@" > "$HERMES_BOOTSTRAP_TEST_DIR/arguments.bin"
 cat > "$HERMES_BOOTSTRAP_TEST_DIR/stdin.txt"
+if [ "${HERMES_BOOTSTRAP_TEST_HANG:-0}" = "1" ]; then
+  sleep 2 &
+  printf '%s' "$!" > "$HERMES_BOOTSTRAP_TEST_DIR/descendant-pid"
+  wait "$!"
+fi
 if [ "${HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT:-0}" = "1" ]; then
   yes stdout | head -c 2097152
   yes stderr | head -c 2097152 >&2
@@ -124,9 +140,62 @@ fi
 printf '%s' "${HERMES_BOOTSTRAP_TEST_STDOUT:-}"
 printf '%s' "${HERMES_BOOTSTRAP_TEST_STDERR:-}" >&2
 exit "${HERMES_BOOTSTRAP_TEST_EXIT:-0}"
-'@ | Set-Content -LiteralPath $path -NoNewline
+'@
+    $content.Replace("`r`n", "`n") | Set-Content -LiteralPath $path -NoNewline
     & chmod +x $path
     return $path
+}
+
+function global:Test-HermesBootstrapErrorGraphContains {
+    param(
+        [object[]]$Roots,
+        [Parameter(Mandatory)][string]$Marker
+    )
+
+    $pending = [System.Collections.Generic.Stack[object]]::new()
+    foreach ($root in @($Roots)) {
+        if ($null -ne $root) { $pending.Push($root) }
+    }
+    $visited = [System.Collections.Generic.HashSet[int]]::new()
+    while ($pending.Count -gt 0) {
+        $value = $pending.Pop()
+        if ($null -eq $value) { continue }
+        if ($value -is [string]) {
+            if ($value.Contains($Marker, [StringComparison]::Ordinal)) { return $true }
+            continue
+        }
+
+        $identity = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($value)
+        if (-not $visited.Add($identity)) { continue }
+        if ($value -is [System.Management.Automation.ErrorRecord]) {
+            foreach ($child in @(
+                    $value.Exception, $value.ErrorDetails, $value.InvocationInfo,
+                    $value.ScriptStackTrace, $value.TargetObject
+                )) {
+                if ($null -ne $child) { $pending.Push($child) }
+            }
+            continue
+        }
+        if ($value -is [System.Exception]) {
+            foreach ($child in @($value.Message, $value.StackTrace, $value.InnerException, $value.Data)) {
+                if ($null -ne $child) { $pending.Push($child) }
+            }
+            continue
+        }
+        if ($value -is [System.Management.Automation.InvocationInfo]) {
+            foreach ($child in @($value.Line, $value.PositionMessage, $value.InvocationName)) {
+                if ($null -ne $child) { $pending.Push($child) }
+            }
+            continue
+        }
+        if ($value -is [System.Collections.IDictionary]) {
+            foreach ($key in $value.Keys) {
+                $pending.Push($key)
+                $pending.Push($value[$key])
+            }
+        }
+    }
+    return $false
 }
 
 Describe "Invoke-HermesBootstrap" {
@@ -158,6 +227,10 @@ Describe "Invoke-HermesBootstrap" {
         $env:HERMES_BOOTSTRAP_TEST_STDOUT = "bootstrap complete"
         $env:HERMES_BOOTSTRAP_TEST_STDERR = ""
         $env:HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT = "0"
+        $env:HERMES_BOOTSTRAP_TEST_HANG = "0"
+        $script:HermesBootstrapProcessTimeoutMilliseconds = 30 * 60 * 1000
+        $script:HermesBootstrapTerminationTimeoutMilliseconds = 5000
+        $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
         $script:onePasswordCalls = [System.Collections.Generic.List[string]]::new()
     }
 
@@ -168,6 +241,7 @@ Describe "Invoke-HermesBootstrap" {
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_STDOUT -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_STDERR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_HANG -ErrorAction SilentlyContinue
     }
 
     It "streams compact header, declared item records, and end directly to Docker stdin" {
@@ -251,6 +325,42 @@ Describe "Invoke-HermesBootstrap" {
         $global:LASTEXITCODE | Should -Be 1
     }
 
+    It "removes producer ErrorRecords without clearing pre-existing error history" {
+        try { throw "pre-existing-error-history" } catch { }
+        $preExistingError = $Error[0]
+        $errorCountBefore = $Error.Count
+        $secretMarker = "producer-secret-marker-秘密"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            throw $secretMarker
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeFalse
+        $Error.Count | Should -Be $errorCountBefore
+        [object]::ReferenceEquals($Error[0], $preExistingError) | Should -BeTrue
+        Test-HermesBootstrapErrorGraphContains -Roots @($Error) -Marker $secretMarker | Should -BeFalse
+    }
+
+    It "removes nested item JSON parsing errors from global error history" {
+        try { throw "pre-existing-json-history" } catch { }
+        $preExistingError = $Error[0]
+        $errorCountBefore = $Error.Count
+        $secretMarker = "nested-json-secret-marker-秘密"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return "{`"value`":`"$secretMarker`""
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Success | Should -BeFalse
+        $Error.Count | Should -Be $errorCountBefore
+        [object]::ReferenceEquals($Error[0], $preExistingError) | Should -BeTrue
+        Test-HermesBootstrapErrorGraphContains -Roots @($Error) -Marker $secretMarker | Should -BeFalse
+    }
+
     It "redacts all discovered field values from a failed bootstrap diagnostic and preserves its exit code" {
         $secret = "diagnostic-secret-value"
         $env:HERMES_BOOTSTRAP_TEST_EXIT = "23"
@@ -271,7 +381,27 @@ Describe "Invoke-HermesBootstrap" {
         $global:LASTEXITCODE | Should -Be 23
     }
 
+    It "decodes Docker output as UTF-8 before redacting a non-ASCII secret" {
+        $secret = "認証情報-秘密値"
+        $env:HERMES_BOOTSTRAP_TEST_EXIT = "24"
+        $env:HERMES_BOOTSTRAP_TEST_STDERR = "Windows-style diagnostic: $secret"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+
+        $result.Message | Should -Match "\[REDACTED\]"
+        $result.Message | Should -Not -Match ([regex]::Escape($secret))
+        $global:LASTEXITCODE | Should -Be 24
+        $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
+        $source | Should -Match 'StandardOutputEncoding\s*=\s*\$utf8Encoding'
+        $source | Should -Match 'StandardErrorEncoding\s*=\s*\$utf8Encoding'
+    }
+
     It "closes stdin and reaps the Docker child when a later 1Password lookup fails" {
+        $env:HERMES_BOOTSTRAP_TEST_HANG = "1"
         $script:producerCallCount = 0
         $invoker = {
             param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
@@ -280,17 +410,101 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "first-secret" }) } | ConvertTo-Json -Compress
         }
 
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
         $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $watch.Stop()
 
         $result.Success | Should -BeFalse
         $result.Message | Should -Be "Hermes bootstrap secret retrieval failed."
         $global:LASTEXITCODE | Should -Be 1
+        $watch.Elapsed.TotalSeconds | Should -BeLessThan 1.8
         if (-not $IsWindows) {
             $childProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "pid") -Raw)
             { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
+            $descendantPidPath = Join-Path $TestDrive "descendant-pid"
+            if (Test-Path -LiteralPath $descendantPidPath) {
+                $descendantProcessId = [int](Get-Content -LiteralPath $descendantPidPath -Raw)
+                { Get-Process -Id $descendantProcessId -ErrorAction Stop } | Should -Throw
+            }
         }
         else {
             @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$TestDrive*docker.cmd*" }).Count | Should -Be 0
+        }
+    }
+
+    It "bounds normal bootstrap execution and reaps the process tree on timeout" {
+        $env:HERMES_BOOTSTRAP_TEST_HANG = "1"
+        $script:HermesBootstrapProcessTimeoutMilliseconds = 100
+        $script:HermesBootstrapTerminationTimeoutMilliseconds = 1000
+        $script:HermesBootstrapDrainTimeoutMilliseconds = 1000
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "timeout-secret" }) } | ConvertTo-Json -Compress
+        }
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $watch.Stop()
+
+        $result.Success | Should -BeFalse
+        $result.Changed | Should -BeFalse
+        $result.Message | Should -Be "Hermes bootstrap timed out."
+        $global:LASTEXITCODE | Should -Be 124
+        $watch.Elapsed.TotalSeconds | Should -BeLessThan 1.8
+        if (-not $IsWindows) {
+            $childProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "pid") -Raw)
+            { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
+            $descendantProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "descendant-pid") -Raw)
+            { Get-Process -Id $descendantProcessId -ErrorAction Stop } | Should -Throw
+        }
+        else {
+            @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$TestDrive*docker.cmd*" }).Count | Should -Be 0
+        }
+        $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
+        $source | Should -Not -Match 'WaitForExit\(\)|GetAwaiter\(\)\.GetResult\(\)'
+        $source | Should -Match '\.Kill\(\$true\)'
+        $source | Should -Match 'WaitForExit\(\$TimeoutMilliseconds\)'
+        $source | Should -Match '\.Wait\(\$TimeoutMilliseconds\)'
+    }
+
+    It "does not leak process or redirected-stream handles across repeated invocations" {
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "repeat-secret" }) } | ConvertTo-Json -Compress
+        }
+        $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+        $before = if ($IsWindows) {
+            $currentProcess.HandleCount
+        }
+        else {
+            [System.IO.Directory]::GetFiles("/dev/fd").Count
+        }
+
+        foreach ($iteration in 1..12) {
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result.Success | Should -BeTrue
+        }
+        $after = if ($IsWindows) {
+            $currentProcess.Refresh()
+            $currentProcess.HandleCount
+        }
+        else {
+            [System.IO.Directory]::GetFiles("/dev/fd").Count
+        }
+
+        ($after - $before) | Should -BeLessOrEqual 4
+        $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
+        foreach ($pattern in @(
+                '\$process\.StandardInput\.Dispose\(\)',
+                '\$process\.StandardOutput\.Dispose\(\)',
+                '\$process\.StandardError\.Dispose\(\)',
+                '\$stdoutDrain\.Dispose\(\)',
+                '\$stderrDrain\.Dispose\(\)',
+                '\$drainCancellation\.Dispose\(\)',
+                '\$drain\.Dispose\(\)',
+                '\$process\.Dispose\(\)'
+            )) {
+            $source | Should -Match $pattern
         }
     }
 

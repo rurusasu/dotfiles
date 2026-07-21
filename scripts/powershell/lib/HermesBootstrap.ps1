@@ -3,39 +3,54 @@
     Streams the Hermes bootstrap 1Password payload to the container.
 #>
 
-if (-not ("HermesBootstrapDrain" -as [type])) {
+if (-not ("HermesBootstrapBoundedDrain" -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
-public sealed class HermesBootstrapDrain
+public sealed class HermesBootstrapBoundedDrain : IDisposable
 {
     private readonly object syncRoot = new object();
     private readonly StringBuilder buffer = new StringBuilder();
     private readonly int maximum;
 
-    public HermesBootstrapDrain(int maximum) { this.maximum = maximum; }
+    public HermesBootstrapBoundedDrain(int maximum) { this.maximum = maximum; }
 
-    public async Task DrainAsync(StreamReader reader)
+    public async Task DrainAsync(StreamReader reader, CancellationToken cancellationToken)
     {
         var chars = new char[4096];
-        int count;
-        while ((count = await reader.ReadAsync(chars, 0, chars.Length).ConfigureAwait(false)) > 0)
+        try
         {
-            lock (syncRoot)
+            int count;
+            while ((count = await reader.ReadAsync(chars.AsMemory(0, chars.Length), cancellationToken).ConfigureAwait(false)) > 0)
             {
-                var remaining = maximum - buffer.Length;
-                if (remaining > 0) { buffer.Append(chars, 0, Math.Min(remaining, count)); }
+                lock (syncRoot)
+                {
+                    var remaining = maximum - buffer.Length;
+                    if (remaining > 0) { buffer.Append(chars, 0, Math.Min(remaining, count)); }
+                }
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested) { }
     }
 
     public string Text { get { lock (syncRoot) { return buffer.ToString(); } } }
+
+    public void Dispose()
+    {
+        lock (syncRoot) { buffer.Clear(); }
+    }
 }
 '@
 }
+
+$script:HermesBootstrapProcessTimeoutMilliseconds = 30 * 60 * 1000
+$script:HermesBootstrapTerminationTimeoutMilliseconds = 5000
+$script:HermesBootstrapDrainTimeoutMilliseconds = 5000
 
 function Get-HermesBootstrapSecretPlan {
     [CmdletBinding()]
@@ -154,99 +169,193 @@ function Invoke-HermesBootstrap {
     )
 
     $plan = Get-HermesBootstrapSecretPlan -ComposeFile $ComposeFile
+    $errorCountBeforeProducer = $Error.Count
     $process = $null
+    $processStarted = $false
     $producerFailed = $false
     $secretValues = [System.Collections.Generic.List[string]]::new()
-    $drain = [HermesBootstrapDrain]::new(65536)
+    $drain = [HermesBootstrapBoundedDrain]::new(65536)
+    $drainCancellation = [System.Threading.CancellationTokenSource]::new()
     $stdoutDrain = $null
     $stderrDrain = $null
+    $invokerOutput = $null
+    $item = $null
+    $record = $null
 
     try {
-        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = "docker"
-        $startInfo.UseShellExecute = $false
-        $startInfo.CreateNoWindow = $true
-        $startInfo.RedirectStandardInput = $true
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
-        $startInfo.StandardInputEncoding = [System.Text.UTF8Encoding]::new($false)
-        $startInfo.Environment["HERMES_DATA_DIR"] = $DataDir
-        foreach ($argument in @(
-                "compose", "-f", $ComposeFile,
-                "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
-            )) {
-            [void]$startInfo.ArgumentList.Add($argument)
-        }
-
-        $process = [System.Diagnostics.Process]::new()
-        $process.StartInfo = $startInfo
-        if (-not $process.Start()) {
-            throw [System.InvalidOperationException]::new("Hermes bootstrap process could not be started.")
-        }
-        $stdoutDrain = $drain.DrainAsync($process.StandardOutput)
-        $stderrDrain = $drain.DrainAsync($process.StandardError)
-        $process.StandardInput.NewLine = "`n"
-        $process.StandardInput.WriteLine('{"type":"header","schema_version":1}')
-
-        foreach ($planItem in @($plan.items)) {
-            $onePasswordArguments = @(
-                "item", "get", $planItem.item,
-                "--account", $planItem.account,
-                "--vault", $planItem.vault,
-                "--format", "json"
-            )
-            $invokerOutput = @(& $InvokeOnePasswordItem @onePasswordArguments)
-            $item = ConvertTo-HermesBootstrapItemObject -Output $invokerOutput
-            foreach ($value in Get-HermesBootstrapItemFieldValues -Item $item) {
-                $secretValues.Add($value)
+        try {
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = "docker"
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardInput = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            $utf8Encoding = [System.Text.UTF8Encoding]::new($false)
+            $startInfo.StandardInputEncoding = $utf8Encoding
+            $startInfo.StandardOutputEncoding = $utf8Encoding
+            $startInfo.StandardErrorEncoding = $utf8Encoding
+            $startInfo.Environment["HERMES_DATA_DIR"] = $DataDir
+            foreach ($argument in @(
+                    "compose", "-f", $ComposeFile,
+                    "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
+                )) {
+                [void]$startInfo.ArgumentList.Add($argument)
             }
 
-            $record = [ordered]@{ type = "item"; key = $planItem.key; item = $item }
-            $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
-            if ($item -is [System.IDisposable]) { $item.Dispose() }
-            $item = $null
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $startInfo
+            if (-not $process.Start()) {
+                throw [System.InvalidOperationException]::new("Hermes bootstrap process could not be started.")
+            }
+            $processStarted = $true
+            $stdoutDrain = $drain.DrainAsync($process.StandardOutput, $drainCancellation.Token)
+            $stderrDrain = $drain.DrainAsync($process.StandardError, $drainCancellation.Token)
+            $process.StandardInput.NewLine = "`n"
+            $process.StandardInput.WriteLine('{"type":"header","schema_version":1}')
+
+            foreach ($planItem in @($plan.items)) {
+                try {
+                    $onePasswordArguments = @(
+                        "item", "get", $planItem.item,
+                        "--account", $planItem.account,
+                        "--vault", $planItem.vault,
+                        "--format", "json"
+                    )
+                    $invokerOutput = @(& $InvokeOnePasswordItem @onePasswordArguments)
+                    $item = ConvertTo-HermesBootstrapItemObject -Output $invokerOutput
+                    foreach ($value in Get-HermesBootstrapItemFieldValues -Item $item) {
+                        $secretValues.Add($value)
+                    }
+
+                    $record = [ordered]@{ type = "item"; key = $planItem.key; item = $item }
+                    $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
+                }
+                finally {
+                    if ($item -is [System.IDisposable]) { $item.Dispose() }
+                    $record = $null
+                    $item = $null
+                    $invokerOutput = $null
+                }
+            }
+            $process.StandardInput.WriteLine('{"type":"end"}')
         }
-        $process.StandardInput.WriteLine('{"type":"end"}')
-    }
-    catch {
-        $producerFailed = $true
+        catch {
+            $producerFailed = $true
+        }
+        finally {
+            if ($processStarted) {
+                try { $process.StandardInput.Close() } catch { }
+            }
+        }
+
+        if ($producerFailed) {
+            $terminated = Stop-HermesBootstrapProcess `
+                -Process $process `
+                -TimeoutMilliseconds $script:HermesBootstrapTerminationTimeoutMilliseconds
+            [void](Complete-HermesBootstrapProcessDrain `
+                    -Process $process `
+                    -StdoutDrain $stdoutDrain `
+                    -StderrDrain $stderrDrain `
+                    -Cancellation $drainCancellation `
+                    -TimeoutMilliseconds $script:HermesBootstrapDrainTimeoutMilliseconds)
+            $global:LASTEXITCODE = 1
+            $message = if ($terminated) {
+                "Hermes bootstrap secret retrieval failed."
+            }
+            else {
+                "Hermes bootstrap process termination failed."
+            }
+            return [PSCustomObject]@{ Success = $false; Changed = $false; Message = $message }
+        }
+
+        $completed = Wait-HermesBootstrapProcess `
+            -Process $process `
+            -TimeoutMilliseconds $script:HermesBootstrapProcessTimeoutMilliseconds
+        if (-not $completed) {
+            [void](Stop-HermesBootstrapProcess `
+                    -Process $process `
+                    -TimeoutMilliseconds $script:HermesBootstrapTerminationTimeoutMilliseconds)
+            [void](Complete-HermesBootstrapProcessDrain `
+                    -Process $process `
+                    -StdoutDrain $stdoutDrain `
+                    -StderrDrain $stderrDrain `
+                    -Cancellation $drainCancellation `
+                    -TimeoutMilliseconds $script:HermesBootstrapDrainTimeoutMilliseconds)
+            $global:LASTEXITCODE = 124
+            return [PSCustomObject]@{
+                Success = $false
+                Changed = $false
+                Message = "Hermes bootstrap timed out."
+            }
+        }
+
+        $exitCode = $process.ExitCode
+        $global:LASTEXITCODE = $exitCode
+        $drainsCompleted = Complete-HermesBootstrapProcessDrain `
+            -Process $process `
+            -StdoutDrain $stdoutDrain `
+            -StderrDrain $stderrDrain `
+            -Cancellation $drainCancellation `
+            -TimeoutMilliseconds $script:HermesBootstrapDrainTimeoutMilliseconds
+        if (-not $drainsCompleted) {
+            return [PSCustomObject]@{
+                Success = $false
+                Changed = $false
+                Message = "Hermes bootstrap output drain timed out."
+            }
+        }
+        if ($exitCode -eq 0) {
+            return [PSCustomObject]@{
+                Success = $true
+                Changed = $true
+                Message = "Hermes bootstrap completed."
+            }
+        }
+
+        $diagnostics = ConvertTo-HermesBootstrapRedactedText -Text $drain.Text -Values $secretValues
+        $message = "Hermes bootstrap failed (exit code $exitCode)."
+        if (-not [string]::IsNullOrWhiteSpace($diagnostics)) {
+            $message = "$message $diagnostics"
+        }
+        return [PSCustomObject]@{ Success = $false; Changed = $false; Message = $message }
     }
     finally {
-        if ($process -and $process.StartInfo.RedirectStandardInput) {
-            try { $process.StandardInput.Close() } catch { }
+        if ($item -is [System.IDisposable]) {
+            try { $item.Dispose() } catch { }
         }
-    }
-
-    if ($producerFailed) {
-        Stop-HermesBootstrapProcess -Process $process
-        Complete-HermesBootstrapProcessDrain -Process $process -StdoutDrain $stdoutDrain -StderrDrain $stderrDrain
-        $global:LASTEXITCODE = 1
-        return [PSCustomObject]@{
-            Success = $false
-            Changed = $false
-            Message = "Hermes bootstrap secret retrieval failed."
+        if ($processStarted -and -not (Wait-HermesBootstrapProcess -Process $process -TimeoutMilliseconds 0)) {
+            [void](Stop-HermesBootstrapProcess `
+                    -Process $process `
+                    -TimeoutMilliseconds $script:HermesBootstrapTerminationTimeoutMilliseconds)
         }
-    }
-
-    Complete-HermesBootstrapProcessDrain -Process $process -StdoutDrain $stdoutDrain -StderrDrain $stderrDrain
-    $global:LASTEXITCODE = $process.ExitCode
-    if ($process.ExitCode -eq 0) {
-        return [PSCustomObject]@{
-            Success = $true
-            Changed = $true
-            Message = "Hermes bootstrap completed."
+        if (($stdoutDrain -and -not $stdoutDrain.IsCompleted) -or
+            ($stderrDrain -and -not $stderrDrain.IsCompleted)) {
+            try { $drainCancellation.Cancel() } catch { }
         }
-    }
-
-    $diagnostics = ConvertTo-HermesBootstrapRedactedText -Text $drain.Text -Values $secretValues
-    $message = "Hermes bootstrap failed (exit code $($process.ExitCode))."
-    if (-not [string]::IsNullOrWhiteSpace($diagnostics)) {
-        $message = "$message $diagnostics"
-    }
-    return [PSCustomObject]@{
-        Success = $false
-        Changed = $false
-        Message = $message
+        if ($process) {
+            try { $process.StandardInput.Dispose() } catch { }
+            try { $process.StandardOutput.Dispose() } catch { }
+            try { $process.StandardError.Dispose() } catch { }
+        }
+        if ($stdoutDrain -and $stdoutDrain.IsCompleted) {
+            try { $stdoutDrain.Dispose() } catch { }
+        }
+        if ($stderrDrain -and $stderrDrain.IsCompleted) {
+            try { $stderrDrain.Dispose() } catch { }
+        }
+        try { $drainCancellation.Dispose() } catch { }
+        try { $drain.Dispose() } catch { }
+        if ($process) {
+            try { $process.Dispose() } catch { }
+        }
+        $record = $null
+        $item = $null
+        $invokerOutput = $null
+        $secretValues = $null
+        while ($Error.Count -gt $errorCountBeforeProducer) {
+            $Error.RemoveAt(0)
+        }
     }
 }
 
@@ -303,20 +412,41 @@ function ConvertTo-HermesBootstrapRedactedText {
 
 function Stop-HermesBootstrapProcess {
     [CmdletBinding()]
-    param([System.Diagnostics.Process]$Process)
+    param(
+        [System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory)]
+        [int]$TimeoutMilliseconds
+    )
 
-    if ($null -eq $Process) { return }
-    try {
-        if ($Process.HasExited) { return }
-    }
-    catch {
-        return
-    }
+    if ($null -eq $Process) { return $true }
+    if (Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds 0) { return $true }
     try {
         $Process.Kill($true)
     }
     catch {
         try { $Process.Kill() } catch { }
+    }
+    if (Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds $TimeoutMilliseconds) { return $true }
+
+    try { $Process.Kill() } catch { }
+    return Wait-HermesBootstrapProcess -Process $Process -TimeoutMilliseconds $TimeoutMilliseconds
+}
+
+function Wait-HermesBootstrapProcess {
+    [CmdletBinding()]
+    param(
+        [System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory)]
+        [int]$TimeoutMilliseconds
+    )
+
+    if ($null -eq $Process) { return $true }
+    try {
+        if ($Process.HasExited) { return $true }
+        return $Process.WaitForExit($TimeoutMilliseconds)
+    }
+    catch {
+        return $true
     }
 }
 
@@ -326,15 +456,33 @@ function Complete-HermesBootstrapProcessDrain {
         [Parameter(Mandatory)]
         [System.Diagnostics.Process]$Process,
         [System.Threading.Tasks.Task]$StdoutDrain,
-        [System.Threading.Tasks.Task]$StderrDrain
+        [System.Threading.Tasks.Task]$StderrDrain,
+        [Parameter(Mandatory)]
+        [System.Threading.CancellationTokenSource]$Cancellation,
+        [Parameter(Mandatory)]
+        [int]$TimeoutMilliseconds
     )
 
-    try {
-        if (-not $Process.HasExited) { $Process.WaitForExit() }
+    $completed = $true
+    foreach ($task in @($StdoutDrain, $StderrDrain)) {
+        if ($null -eq $task) { continue }
+        try {
+            if (-not $task.Wait($TimeoutMilliseconds)) { $completed = $false }
+        }
+        catch {
+            $completed = $false
+        }
     }
-    catch {
-        return
+    if ($completed) { return $true }
+
+    try { $Cancellation.Cancel() } catch { }
+    if ($Process) {
+        try { $Process.StandardOutput.Dispose() } catch { }
+        try { $Process.StandardError.Dispose() } catch { }
     }
-    if ($StdoutDrain) { $StdoutDrain.GetAwaiter().GetResult() }
-    if ($StderrDrain) { $StderrDrain.GetAwaiter().GetResult() }
+    foreach ($task in @($StdoutDrain, $StderrDrain)) {
+        if ($null -eq $task -or $task.IsCompleted) { continue }
+        try { [void]$task.Wait($TimeoutMilliseconds) } catch { }
+    }
+    return $false
 }
