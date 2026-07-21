@@ -244,7 +244,9 @@ let
       category = "editors";
     };
     vscode = {
-      pkg = pkgs.vscode;
+      # VS Code 1.129.1's macOS arm64 archive omits the bundled ripgrep
+      # binary, so use the separately packaged ripgrep instead.
+      pkg = pkgs.vscode.override { useVSCodeRipgrep = false; };
       winget = "Microsoft.VisualStudioCode";
       category = "editors";
       support = {
