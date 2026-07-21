@@ -123,6 +123,7 @@
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
+          "ciSkipInstall": true,
           "installTimeoutSeconds": 900,
           "pathEntries": [
             "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin",

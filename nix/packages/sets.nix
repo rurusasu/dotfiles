@@ -244,7 +244,25 @@ let
       category = "editors";
     };
     vscode = {
-      pkg = pkgs.vscode;
+      # VS Code 1.129.1's macOS arm64 archive omits the bundled ripgrep
+      # binary, so use the separately packaged ripgrep instead.
+      pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
+        old:
+        if pkgs.stdenv.isDarwin then
+          {
+            postPatch =
+              lib.replaceStrings
+                [
+                  "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nln -s"
+                ]
+                [
+                  "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nmkdir -p Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64\nln -s"
+                ]
+                old.postPatch;
+          }
+        else
+          { }
+      );
       winget = "Microsoft.VisualStudioCode";
       category = "editors";
       support = {
@@ -1029,9 +1047,10 @@ lib.mapAttrs (_: resolve) grouped
   # Packages kept in the catalog but skipped by the normal Windows installer.
   wingetSkipInstall = { };
 
-  # Upstream nightly winget manifests and Microsoft Store installs can drift or
-  # hang in CI. Avoid making CI depend on their live installer behavior.
+  # Upstream installers and Microsoft Store installs can drift, require
+  # elevation, or hang in CI. Avoid making CI depend on their live behavior.
   wingetCiSkipInstall = {
+    google-cloud-sdk = true;
     wezterm = true;
     "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
