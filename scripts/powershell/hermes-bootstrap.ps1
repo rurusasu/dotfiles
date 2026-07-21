@@ -129,67 +129,107 @@ function Invoke-HermesBootstrapEntrypoint {
             -DataDir $DataDir `
             -BrowserDataDir $BrowserDataDir
 
-        if (-not (Test-Path -LiteralPath $paths.ComposeFile -PathType Leaf)) {
-            return New-HermesBootstrapEntrypointResult -ExitCode 2 -Message 'Hermes Compose file was not found.'
+        $dataEnvironmentPath = 'Env:\HERMES_DATA_DIR'
+        $browserEnvironmentPath = 'Env:\HERMES_BROWSER_DATA_DIR'
+        $dataEnvironmentExists = Test-Path -LiteralPath $dataEnvironmentPath
+        $browserEnvironmentExists = Test-Path -LiteralPath $browserEnvironmentPath
+        $dataEnvironmentValue = if ($dataEnvironmentExists) {
+            (Get-Item -LiteralPath $dataEnvironmentPath).Value
         }
-
-        foreach ($commandName in @('docker', 'op')) {
-            if (-not (Get-Command -Name $commandName -CommandType Application -ErrorAction SilentlyContinue)) {
-                return New-HermesBootstrapEntrypointResult `
-                    -ExitCode 127 `
-                    -Message "Required command is unavailable: $commandName."
-            }
+        else {
+            $null
         }
-
-        $docker = Invoke-HermesBootstrapDockerPhase `
-            -Arguments @('info') `
-            -FailureMessage 'Docker Desktop is not ready.'
-        if ($docker.ExitCode -ne 0) { return $docker }
-
-        $compose = Invoke-HermesBootstrapDockerPhase `
-            -Arguments @('compose', 'version') `
-            -FailureMessage 'Docker Compose is unavailable.'
-        if ($compose.ExitCode -ne 0) { return $compose }
-
-        foreach ($directory in @($paths.DataDir, (Join-Path $paths.DataDir '.xurl'), $paths.BrowserDataDir)) {
-            $null = New-Item -ItemType Directory -Path $directory -Force
+        $browserEnvironmentValue = if ($browserEnvironmentExists) {
+            (Get-Item -LiteralPath $browserEnvironmentPath).Value
         }
-
-        $config = Invoke-HermesBootstrapDockerPhase `
-            -Arguments @('compose', '-f', $paths.ComposeFile, 'config', '--quiet') `
-            -FailureMessage 'Hermes Compose validation failed.'
-        if ($config.ExitCode -ne 0) { return $config }
-
-        $build = Invoke-HermesBootstrapDockerPhase `
-            -Arguments @('compose', '-f', $paths.ComposeFile, 'build', 'hermes', 'hermes-bootstrap') `
-            -FailureMessage 'Hermes image build failed.'
-        if ($build.ExitCode -ne 0) { return $build }
+        else {
+            $null
+        }
 
         try {
-            $global:LASTEXITCODE = 0
-            $bootstrap = Invoke-HermesBootstrap -ComposeFile $paths.ComposeFile -DataDir $paths.DataDir
-        }
-        catch {
-            return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message 'Hermes bootstrap failed.'
-        }
-        if (-not $bootstrap.Success) {
-            $message = if ([string]::IsNullOrWhiteSpace([string]$bootstrap.Message)) {
-                'Hermes bootstrap failed.'
-            }
-            else {
-                [string]$bootstrap.Message
-            }
-            return New-HermesBootstrapEntrypointResult `
-                -ExitCode (Get-HermesBootstrapEntrypointExitCode) `
-                -Message $message
-        }
+            Set-Item -LiteralPath $dataEnvironmentPath -Value $paths.DataDir
+            Set-Item -LiteralPath $browserEnvironmentPath -Value $paths.BrowserDataDir
 
-        $startup = Invoke-HermesBootstrapDockerPhase `
-            -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
-            -FailureMessage 'Hermes Compose startup failed.'
-        if ($startup.ExitCode -ne 0) { return $startup }
+            if (-not (Test-Path -LiteralPath $paths.ComposeFile -PathType Leaf)) {
+                return New-HermesBootstrapEntrypointResult -ExitCode 2 -Message 'Hermes Compose file was not found.'
+            }
 
-        return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message 'Hermes bootstrap completed.'
+            foreach ($commandName in @('docker', 'op')) {
+                if (-not (Get-Command -Name $commandName -CommandType Application -ErrorAction SilentlyContinue)) {
+                    return New-HermesBootstrapEntrypointResult `
+                        -ExitCode 127 `
+                        -Message "Required command is unavailable: $commandName."
+                }
+            }
+
+            $docker = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('info') `
+                -FailureMessage 'Docker Desktop is not ready.'
+            if ($docker.ExitCode -ne 0) { return $docker }
+
+            $compose = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('compose', 'version') `
+                -FailureMessage 'Docker Compose is unavailable.'
+            if ($compose.ExitCode -ne 0) { return $compose }
+
+            foreach ($directory in @($paths.DataDir, (Join-Path $paths.DataDir '.xurl'), $paths.BrowserDataDir)) {
+                $null = New-Item -ItemType Directory -Path $directory -Force
+            }
+
+            $config = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('compose', '-f', $paths.ComposeFile, 'config', '--quiet') `
+                -FailureMessage 'Hermes Compose validation failed.'
+            if ($config.ExitCode -ne 0) { return $config }
+
+            $build = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('compose', '-f', $paths.ComposeFile, 'build', 'hermes', 'hermes-bootstrap') `
+                -FailureMessage 'Hermes image build failed.'
+            if ($build.ExitCode -ne 0) { return $build }
+
+            try {
+                $global:LASTEXITCODE = 0
+                $bootstrap = Invoke-HermesBootstrap -ComposeFile $paths.ComposeFile -DataDir $paths.DataDir
+            }
+            catch {
+                return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message 'Hermes bootstrap failed.'
+            }
+            if (-not $bootstrap.Success) {
+                $message = if ([string]::IsNullOrWhiteSpace([string]$bootstrap.Message)) {
+                    'Hermes bootstrap failed.'
+                }
+                else {
+                    [string]$bootstrap.Message
+                }
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode (Get-HermesBootstrapEntrypointExitCode) `
+                    -Message $message
+            }
+
+            $startup = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
+                -FailureMessage 'Hermes Compose startup failed.'
+            if ($startup.ExitCode -ne 0) { return $startup }
+
+            return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message 'Hermes bootstrap completed.'
+        }
+        finally {
+            try {
+                if ($dataEnvironmentExists) {
+                    Set-Item -LiteralPath $dataEnvironmentPath -Value $dataEnvironmentValue
+                }
+                else {
+                    Remove-Item -LiteralPath $dataEnvironmentPath -ErrorAction SilentlyContinue
+                }
+            }
+            finally {
+                if ($browserEnvironmentExists) {
+                    Set-Item -LiteralPath $browserEnvironmentPath -Value $browserEnvironmentValue
+                }
+                else {
+                    Remove-Item -LiteralPath $browserEnvironmentPath -ErrorAction SilentlyContinue
+                }
+            }
+        }
     }
     catch {
         return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message 'Hermes bootstrap entrypoint failed.'
