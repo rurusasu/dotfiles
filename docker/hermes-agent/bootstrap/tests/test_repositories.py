@@ -26,6 +26,7 @@ from hermes_bootstrap.repositories import (
     synchronize_named_repository,
     synchronize_remote,
 )
+from hermes_bootstrap.transaction import Transaction
 
 
 def run_git(*arguments: str, cwd: Path | None = None) -> str:
@@ -172,6 +173,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertEqual(transaction.moves, [(result.working_tree, repo.target)])
         self.assertIn(repo.target, transaction.snapshots)
+        self.assertNotIn(result.working_tree, transaction.snapshots)
+        self.assertIn(repo.legacy_target, transaction.snapshots)
         self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
@@ -619,6 +622,64 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn(repo.target, changes.changed_paths)
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertTrue(repo.legacy_target.is_symlink())
+
+    def test_real_legacy_migration_rolls_back_with_identity_and_can_retry(self) -> None:
+        repo = self.repository()
+        assert repo.legacy_target is not None
+        self.clone(repo.legacy_target)
+        run_git(
+            "config",
+            "--local",
+            "hermes.fixture-migration-id",
+            "legacy-checkout-only",
+            cwd=repo.legacy_target,
+        )
+        metadata = repo.legacy_target.stat()
+        identity = (metadata.st_dev, metadata.st_ino)
+        result = synchronize_remote(repo, self.auth)
+        tx = Transaction.begin(self.data_root)
+
+        apply_shared_working_tree(repo, result, tx)
+        self.assertTrue(repo.target.is_dir())
+        self.assertTrue(repo.legacy_target.is_symlink())
+        tx.rollback()
+
+        self.assertTrue(repo.legacy_target.is_dir())
+        self.assertFalse(repo.legacy_target.is_symlink())
+        self.assertEqual(
+            (repo.legacy_target.stat().st_dev, repo.legacy_target.stat().st_ino),
+            identity,
+        )
+        self.assertEqual(
+            run_git(
+                "config",
+                "--local",
+                "--get",
+                "hermes.fixture-migration-id",
+                cwd=repo.legacy_target,
+            ),
+            "legacy-checkout-only",
+        )
+        self.assertFalse(os.path.lexists(repo.target))
+
+        retry = synchronize_remote(repo, self.auth)
+        retry_tx = Transaction.begin(self.data_root)
+        apply_shared_working_tree(repo, retry, retry_tx)
+        retry_tx.commit()
+
+        self.assertTrue(repo.target.is_dir())
+        self.assertTrue(repo.legacy_target.is_symlink())
+        self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
+        self.assertEqual(
+            run_git(
+                "config",
+                "--local",
+                "--get",
+                "hermes.fixture-migration-id",
+                cwd=repo.target,
+            ),
+            "legacy-checkout-only",
+        )
 
     def test_unknown_named_repository_is_rejected(self) -> None:
         repo = self.repository()

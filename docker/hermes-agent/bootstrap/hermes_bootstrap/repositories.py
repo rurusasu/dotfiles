@@ -231,16 +231,17 @@ def _apply_shared_working_tree_boundary(
             raise ValueError("missing synchronized checkout")
         _validate_working_tree(repo, repo.target if canonical_real else working_tree, result.commit)
         changed: list[Path] = []
+        moved_from_legacy = False
         if not canonical_real:
             _ensure_parent_for_transaction(repo.target.parent, tx, changed)
             _snapshot(tx, repo.target)
-            _snapshot(tx, working_tree)
+            moved_from_legacy = repo.legacy_target is not None and working_tree == repo.legacy_target
             _require_same_filesystem(working_tree, repo.target.parent)
             _move_verified_working_tree(repo, working_tree, result.commit, tx)
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:
-            _create_legacy_link(repo, tx, changed)
+            _create_legacy_link(repo, tx, changed, moved_from_legacy=moved_from_legacy)
         return ChangeSet(tuple(changed))
     except Exception:
         return _Failure("could not apply the shared repository working tree")
@@ -697,10 +698,18 @@ def _real_data_state(path: Path, *, allow_legacy_link: bool, repo: SharedReposit
         return next(entries, None) is not None
 
 
-def _create_legacy_link(repo: SharedRepository, tx: Transaction, changed: list[Path]) -> None:
+def _create_legacy_link(
+    repo: SharedRepository,
+    tx: Transaction,
+    changed: list[Path],
+    *,
+    moved_from_legacy: bool,
+) -> None:
     legacy = repo.legacy_target
     if legacy is None or _is_correct_legacy_link(repo):
         return
+    if moved_from_legacy and _lexists(legacy):
+        raise ValueError("legacy move source was recreated")
     if _lexists(legacy):
         mode = legacy.lstat().st_mode
         if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
@@ -709,7 +718,8 @@ def _create_legacy_link(repo: SharedRepository, tx: Transaction, changed: list[P
             if next(entries, None) is not None:
                 raise ValueError("legacy target contains data")
     _ensure_parent_for_transaction(legacy.parent, tx, changed)
-    _snapshot(tx, legacy)
+    if not moved_from_legacy:
+        _snapshot(tx, legacy)
     if _lexists(legacy):
         legacy.rmdir()
     os.symlink(os.path.relpath(repo.target, legacy.parent), legacy)

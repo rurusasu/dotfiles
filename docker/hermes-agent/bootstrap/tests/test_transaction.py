@@ -218,6 +218,70 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(source.read_text(encoding="utf-8"), "before")
         self.assertFalse(os.path.lexists(target))
 
+    def test_record_move_reverses_its_exact_target_symlink(self) -> None:
+        source = self.root / "core" / "lifelog"
+        target = self.root / "shared" / "lifelog"
+        source.mkdir(parents=True)
+        target.parent.mkdir(parents=True)
+        (source / "entry.md").write_text("before\n", encoding="utf-8")
+        identity = (source.stat().st_dev, source.stat().st_ino)
+        tx = Transaction.begin(self.root)
+
+        tx.record_move(source, target)
+        os.replace(source, target)
+        os.symlink(os.path.relpath(target, source.parent), source)
+        tx.rollback()
+
+        self.assertTrue(source.is_dir())
+        self.assertFalse(source.is_symlink())
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_record_move_rejects_a_different_source_symlink_and_retains_journal(self) -> None:
+        source = self.root / "core" / "lifelog"
+        target = self.root / "shared" / "lifelog"
+        source.mkdir(parents=True)
+        target.parent.mkdir(parents=True)
+        (source / "entry.md").write_text("before\n", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+
+        tx.record_move(source, target)
+        os.replace(source, target)
+        os.symlink("../shared/not-lifelog", source)
+
+        with self.assertRaises(RollbackError):
+            tx.rollback()
+
+        self.assertTrue(source.is_symlink())
+        self.assertEqual(os.readlink(source), "../shared/not-lifelog")
+        self.assertTrue(target.is_dir())
+        self.assertEqual((target / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertTrue(self.journal_paths())
+
+    def test_crash_recovery_reverses_an_exact_move_target_symlink(self) -> None:
+        source = self.root / "core" / "lifelog"
+        target = self.root / "shared" / "lifelog"
+        source.mkdir(parents=True)
+        target.parent.mkdir(parents=True)
+        (source / "entry.md").write_text("before\n", encoding="utf-8")
+        identity = (source.stat().st_dev, source.stat().st_ino)
+        tx = Transaction.begin(self.root)
+        tx.record_move(source, target)
+        os.replace(source, target)
+        os.symlink(os.path.relpath(target, source.parent), source)
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertTrue(source.is_dir())
+        self.assertFalse(source.is_symlink())
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
     def test_record_move_allows_a_target_that_was_snapshotted_first(self) -> None:
         source = self.root / "source"
         target = self.root / "target"

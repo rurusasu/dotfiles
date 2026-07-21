@@ -595,8 +595,35 @@ def _reverse_move(data_root: Path, entry: dict[str, Any]) -> None:
         _verify_managed_parent(data_root, target, target_parent)
         source_kind = _entry_kind_at(source_parent, source.name)
         target_kind = _entry_kind_at(target_parent, target.name)
-        if source_kind != "absent" and target_kind == "absent":
-            return
+        if target_kind == "absent":
+            if source_kind != "absent" and _identity_at(source_parent, source.name, source_kind) == entry["identity"]:
+                return
+            raise ValueError
+        if source_kind == "symlink":
+            expected_link = os.path.relpath(target, source.parent)
+            target_identity = _identity_at(target_parent, target.name, target_kind)
+            source_identity = _identity_at(source_parent, source.name, source_kind)
+            if target_identity != entry["identity"] or _readlink_at(source_parent, source.name) != expected_link:
+                raise ValueError
+            _verify_managed_parent(data_root, source, source_parent)
+            _verify_managed_parent(data_root, target, target_parent)
+            if (
+                _entry_kind_at(source_parent, source.name) != "symlink"
+                or _identity_at(source_parent, source.name, "symlink") != source_identity
+                or _readlink_at(source_parent, source.name) != expected_link
+                or _entry_kind_at(target_parent, target.name) != target_kind
+                or _identity_at(target_parent, target.name, target_kind) != entry["identity"]
+            ):
+                raise ValueError
+            _remove_safe_at(source_parent, source.name)
+            os.fsync(source_parent)
+            _verify_managed_parent(data_root, source, source_parent)
+            _verify_managed_parent(data_root, target, target_parent)
+            if _entry_kind_at(source_parent, source.name) != "absent":
+                raise ValueError
+            _fsync_directory(source.parent)
+            source_kind = "absent"
+            target_kind = _entry_kind_at(target_parent, target.name)
         if (
             source_kind == "absent"
             and target_kind != "absent"
@@ -811,6 +838,13 @@ def _entry_kind_at(parent: int, name: str) -> str:
     if stat.S_ISLNK(info.st_mode):
         return "symlink"
     raise ApplyError("managed path is unsafe")
+
+
+def _readlink_at(parent: int, name: str) -> str:
+    try:
+        return os.readlink(name, dir_fd=parent)
+    except OSError:
+        raise ApplyError("managed path is unsafe") from None
 
 
 def _identity_at(parent: int, name: str, kind: str) -> list[Any]:
