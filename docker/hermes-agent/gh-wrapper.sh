@@ -6,64 +6,79 @@ if [ -n "${GH_TOKEN:-}" ]; then
   exec /usr/bin/gh "$@"
 fi
 
-if token=$(
-  /opt/hermes/.venv/bin/python - "${HERMES_HOME:-}" <<'PY'
+exec /opt/hermes/.venv/bin/python - "$@" 3<&0 <<'PY'
 import os
+import signal
 import stat
 import sys
-from pathlib import Path
 
 
 LIMIT = 1024 * 1024
 KEYS = ("GH_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_TOKEN")
+ROOT = "/opt/data"
+DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+FILE_FLAGS = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC
+SAVED_STDIN = 3
+MISSING_MESSAGE = "GitHub credentials are missing; rerun the Hermes installer."
+INVALID_MESSAGE = "GitHub credentials are invalid; rerun the Hermes installer."
 
 
 class InvalidEnvironment(Exception):
     pass
 
 
-def safe_directory(path):
-    if not path.is_absolute():
-        return False
-    current = path
-    while True:
-        try:
-            metadata = current.lstat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-            return False
-        if current.parent == current:
-            return True
-        current = current.parent
+def home_components(candidate):
+    if not candidate:
+        return ()
+    if candidate == ROOT:
+        return ()
+    prefix = ROOT + "/"
+    if not candidate.startswith(prefix) or os.path.normpath(candidate) != candidate:
+        raise InvalidEnvironment
+    components = tuple(candidate[len(prefix) :].split("/"))
+    if not components or any(component in ("", ".", "..") for component in components):
+        raise InvalidEnvironment
+    return components
 
 
-def safe_home(root, candidate):
-    if not candidate.is_absolute():
-        return False
-    normalized = Path(os.path.normpath(candidate))
-    if candidate != normalized:
-        return False
+def directory_identity(metadata):
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise InvalidEnvironment
+    return metadata.st_dev, metadata.st_ino
+
+
+def file_identity(metadata):
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or metadata.st_size > LIMIT
+    ):
+        raise InvalidEnvironment
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def open_directory(path, directory_fd=None):
     try:
-        relative = normalized.relative_to(root)
-    except ValueError:
-        return False
-    if not safe_directory(root):
-        return False
-    current = root
-    for component in relative.parts:
-        current /= component
+        if directory_fd is None:
+            descriptor = os.open(path, DIRECTORY_FLAGS)
+        else:
+            descriptor = os.open(path, DIRECTORY_FLAGS, dir_fd=directory_fd)
+        directory_identity(os.fstat(descriptor))
+        return descriptor
+    except (OSError, InvalidEnvironment) as error:
         try:
-            metadata = current.lstat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-            return False
-    return True
-
-
-def unbalanced_quotes(value):
-    return value.count("'") % 2 or value.count('"') % 2
+            os.close(descriptor)
+        except (NameError, OSError):
+            pass
+        raise InvalidEnvironment from error
 
 
 def is_malformed_supported_line(line):
@@ -76,33 +91,17 @@ def is_malformed_supported_line(line):
     return False
 
 
-def read_environment(path):
+def read_environment(directory_fd, descriptors):
     try:
-        metadata = path.lstat()
+        descriptor = os.open(".env", FILE_FLAGS, dir_fd=directory_fd)
     except FileNotFoundError:
         return None
     except OSError as error:
         raise InvalidEnvironment from error
-    if (
-        stat.S_ISLNK(metadata.st_mode)
-        or not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_nlink != 1
-        or metadata.st_size > LIMIT
-    ):
-        raise InvalidEnvironment
+    descriptors.append(descriptor)
 
-    descriptor = None
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        opened = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or opened.st_dev != metadata.st_dev
-            or opened.st_ino != metadata.st_ino
-            or opened.st_size > LIMIT
-        ):
-            raise InvalidEnvironment
+        before = file_identity(os.fstat(descriptor))
         chunks = []
         size = 0
         while True:
@@ -113,14 +112,17 @@ def read_environment(path):
             if size > LIMIT:
                 raise InvalidEnvironment
             chunks.append(chunk)
+        after = file_identity(os.fstat(descriptor))
+        if after != before:
+            raise InvalidEnvironment
+        verification = os.open(".env", FILE_FLAGS, dir_fd=directory_fd)
+        try:
+            if file_identity(os.fstat(verification)) != after:
+                raise InvalidEnvironment
+        finally:
+            os.close(verification)
     except (OSError, InvalidEnvironment) as error:
         raise InvalidEnvironment from error
-    finally:
-        if descriptor is not None:
-            try:
-                os.close(descriptor)
-            except OSError as error:
-                raise InvalidEnvironment from error
 
     try:
         text = b"".join(chunks).decode("utf-8")
@@ -139,46 +141,109 @@ def read_environment(path):
         if key in values:
             raise InvalidEnvironment
         value = line[len(key) + 1 :]
-        if "\r" in value or "\n" in value or unbalanced_quotes(value):
+        if "\r" in value or "\n" in value:
             raise InvalidEnvironment
         values[key] = value
     return next((values[key] for key in KEYS if values.get(key)), None)
 
 
-def main():
-    root = Path("/opt/data")
-    active = sys.argv[1]
-    paths = [root / ".env"]
-    if active:
-        home = Path(active)
-        if not safe_home(root, home):
+def verify_directories(descriptors, components):
+    verification = open_directory(ROOT)
+    try:
+        if directory_identity(os.fstat(verification)) != directory_identity(os.fstat(descriptors[0])):
             raise InvalidEnvironment
-        active_path = home / ".env"
-        paths = [active_path] if active_path == paths[0] else [active_path, paths[0]]
-    for path in paths:
-        token = read_environment(path)
-        if token is not None:
-            sys.stdout.write(token)
-            return 0
-    return 3
+    finally:
+        os.close(verification)
+    for index, component in enumerate(components):
+        verification = open_directory(component, descriptors[index])
+        try:
+            if directory_identity(os.fstat(verification)) != directory_identity(
+                os.fstat(descriptors[index + 1])
+            ):
+                raise InvalidEnvironment
+        finally:
+            os.close(verification)
 
 
-try:
-    raise SystemExit(main())
-except InvalidEnvironment:
-    raise SystemExit(1)
+def resolve_token(active_home):
+    descriptors = []
+    components = home_components(active_home)
+    try:
+        root_descriptor = open_directory(ROOT)
+        descriptors.append(root_descriptor)
+        active_descriptor = root_descriptor
+        for component in components:
+            active_descriptor = open_directory(component, active_descriptor)
+            descriptors.append(active_descriptor)
+
+        directories = [active_descriptor]
+        if active_descriptor != root_descriptor:
+            directories.append(root_descriptor)
+        token = None
+        for directory in directories:
+            token = read_environment(directory, descriptors)
+            if token is not None:
+                break
+        verify_directories(descriptors, components)
+        return token
+    finally:
+        close_failed = False
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                close_failed = True
+        if close_failed:
+            raise InvalidEnvironment
+
+
+def fail(message):
+    try:
+        os.close(SAVED_STDIN)
+    except OSError:
+        pass
+    sys.stderr.write(message + "\n")
+    return 1
+
+
+def terminate_for_signal(signum, _frame):
+    os._exit(128 + signum)
+
+
+def reap_inherited_children():
+    while True:
+        try:
+            os.waitpid(-1, 0)
+        except ChildProcessError:
+            return
+
+
+def main():
+    for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, terminate_for_signal)
+    reap_inherited_children()
+    try:
+        token = resolve_token(os.environ.get("HERMES_HOME", ""))
+    except InvalidEnvironment:
+        return fail(INVALID_MESSAGE)
+    if token is None:
+        return fail(MISSING_MESSAGE)
+
+    try:
+        os.dup2(SAVED_STDIN, 0)
+        os.close(SAVED_STDIN)
+    except OSError:
+        return fail(INVALID_MESSAGE)
+
+    environment = os.environ.copy()
+    environment.pop("GITHUB_PERSONAL_ACCESS_TOKEN", None)
+    environment.pop("GITHUB_TOKEN", None)
+    environment["GH_TOKEN"] = token
+    try:
+        os.execve("/usr/bin/gh", ["/usr/bin/gh", *sys.argv[1:]], environment)
+    except OSError:
+        return fail(INVALID_MESSAGE)
+
+
+raise SystemExit(main())
 PY
-); then
-  unset GITHUB_PERSONAL_ACCESS_TOKEN GITHUB_TOKEN
-  export GH_TOKEN="$token"
-  exec /usr/bin/gh "$@"
-else
-  status=$?
-fi
-
-if [ "$status" -eq 3 ]; then
-  printf '%s\n' 'GitHub credentials are missing; rerun the Hermes installer.' >&2
-else
-  printf '%s\n' 'GitHub credentials are invalid; rerun the Hermes installer.' >&2
-fi
-exit 1
