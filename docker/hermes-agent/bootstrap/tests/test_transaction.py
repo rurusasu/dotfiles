@@ -36,6 +36,26 @@ class TransactionTests(unittest.TestCase):
     def crash(self, tx: Transaction) -> None:
         tx._release_lock()
 
+    def compatibility_move(self) -> tuple[Path, Path, tuple[int, int], Transaction]:
+        source = self.root / "core" / "lifelog"
+        target = self.root / "shared" / "lifelog"
+        source.mkdir(parents=True)
+        target.parent.mkdir(parents=True)
+        (source / "entry.md").write_text("before\n", encoding="utf-8")
+        identity = (source.stat().st_dev, source.stat().st_ino)
+        tx = Transaction.begin(self.root)
+        tx.record_move(source, target)
+        os.replace(source, target)
+        os.symlink(os.path.relpath(target, source.parent), source)
+        return source, target, identity, tx
+
+    def move_quarantines(self) -> tuple[Path, Path]:
+        journal_path, _ = self.journal()
+        return (
+            journal_path.parent / "move-000000-source-link",
+            journal_path.parent / "move-000000-target-object",
+        )
+
     def test_snapshot_absent_removes_new_target_on_rollback(self) -> None:
         path = self.root / "new.txt"
         tx = Transaction.begin(self.root)
@@ -281,6 +301,176 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
         self.assertFalse(os.path.lexists(target))
         self.assertEqual(self.journal_paths(), [])
+
+    def test_move_rollback_preserves_source_replacement_injected_before_quarantine(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+        replacement_link = "../shared/attacker"
+
+        def replace_source(name: str) -> None:
+            if name == "move-source-before-quarantine":
+                source.unlink()
+                os.symlink(replacement_link, source)
+
+        with mock.patch.object(transaction_module, "_failpoint", side_effect=replace_source):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        source_quarantine, _ = self.move_quarantines()
+        preserved = [
+            path
+            for path in (source, source_quarantine)
+            if path.is_symlink() and os.readlink(path) == replacement_link
+        ]
+        self.assertEqual(len(preserved), 1)
+        self.assertTrue(target.is_dir())
+        self.assertEqual((target / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertTrue(self.journal_paths())
+
+        preserved[0].unlink()
+        os.symlink(os.path.relpath(target, source.parent), source)
+        Transaction.recover_if_needed(self.root)
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_rollback_preserves_source_recreated_after_quarantine(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+
+        def recreate_source(name: str) -> None:
+            if name == "move-target-before-restore":
+                source.mkdir()
+                (source / "attacker-sentinel").write_text("preserve", encoding="utf-8")
+
+        with mock.patch.object(transaction_module, "_failpoint", side_effect=recreate_source):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        source_quarantine, target_quarantine = self.move_quarantines()
+        self.assertEqual((source / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertTrue(target_quarantine.is_dir())
+        self.assertEqual((target_quarantine / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertTrue(self.journal_paths())
+
+        shutil.rmtree(source)
+        Transaction.recover_if_needed(self.root)
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_rollback_restores_target_replacement_injected_before_quarantine(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+        parked_target = self.root.parent / "parked-target"
+
+        def replace_target(name: str) -> None:
+            if name == "move-target-before-quarantine":
+                os.replace(target, parked_target)
+                target.mkdir()
+                (target / "attacker-sentinel").write_text("preserve", encoding="utf-8")
+
+        with mock.patch.object(transaction_module, "_failpoint", side_effect=replace_target):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        self.assertEqual((target / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
+        self.assertEqual((parked_target.stat().st_dev, parked_target.stat().st_ino), identity)
+        self.assertEqual((parked_target / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertTrue(self.journal_paths())
+
+        shutil.rmtree(target)
+        os.replace(parked_target, target)
+        Transaction.recover_if_needed(self.root)
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_recovery_resumes_after_source_link_quarantine(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (_ for _ in ()).throw(OSError())
+            if name == "move-source-quarantined"
+            else None,
+        ):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        source_quarantine, target_quarantine = self.move_quarantines()
+        self.assertFalse(os.path.lexists(source))
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertTrue(target.is_dir())
+        self.assertFalse(os.path.lexists(target_quarantine))
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_recovery_resumes_after_target_object_quarantine(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (_ for _ in ()).throw(OSError())
+            if name == "move-target-quarantined"
+            else None,
+        ):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        source_quarantine, target_quarantine = self.move_quarantines()
+        self.assertFalse(os.path.lexists(source))
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual((target_quarantine.stat().st_dev, target_quarantine.stat().st_ino), identity)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_recovery_resumes_after_target_object_restore(self) -> None:
+        source, target, identity, tx = self.compatibility_move()
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (_ for _ in ()).throw(OSError())
+            if name == "move-target-restored"
+            else None,
+        ):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        source_quarantine, target_quarantine = self.move_quarantines()
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertTrue(source_quarantine.is_symlink())
+        self.assertFalse(os.path.lexists(target))
+        self.assertFalse(os.path.lexists(target_quarantine))
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
+        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_move_rollback_fails_closed_when_renameat2_is_unavailable(self) -> None:
+        source, target, _identity, tx = self.compatibility_move()
+
+        with mock.patch.object(transaction_module, "_renameat2", None):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        self.assertTrue(source.is_symlink())
+        self.assertTrue(target.is_dir())
+        self.assertTrue(self.journal_paths())
 
     def test_record_move_allows_a_target_that_was_snapshotted_first(self) -> None:
         source = self.root / "source"

@@ -909,6 +909,18 @@ class BootstrapFlowTests(unittest.TestCase):
         canonical = self.data_root / "shared" / "lifelog"
         legacy = self.data_root / "core" / "lifelog"
 
+        def reset_phase_fixture() -> list[Exception]:
+            errors: list[Exception] = []
+            try:
+                self._initial_apply()
+            except Exception as error:
+                errors.append(error)
+            try:
+                self._assert_no_live_children()
+            except Exception as error:
+                errors.append(error)
+            return errors
+
         for revision, phase in enumerate(phases, start=2):
             with self.subTest(phase=phase):
                 try:
@@ -1162,11 +1174,20 @@ class BootstrapFlowTests(unittest.TestCase):
                     )
                     self.assertNotEqual(transaction_remote, remote_before)
                     self.assertEqual(remote_after, transaction_remote)
-                finally:
-                    try:
-                        self._initial_apply()
-                    finally:
-                        self._assert_no_live_children()
+                except Exception as primary_error:
+                    for cleanup_error in reset_phase_fixture():
+                        primary_error.add_note(
+                            f"phase cleanup also failed: {cleanup_error}"
+                        )
+                    raise
+                cleanup_errors = reset_phase_fixture()
+                if cleanup_errors:
+                    primary_cleanup_error = cleanup_errors[0]
+                    for cleanup_error in cleanup_errors[1:]:
+                        primary_cleanup_error.add_note(
+                            f"additional phase cleanup failure: {cleanup_error}"
+                        )
+                    raise primary_cleanup_error
 
     def test_env_merge_preserves_unowned_content_and_canonicalizes_managed_keys(self) -> None:
         self._initial_apply()
