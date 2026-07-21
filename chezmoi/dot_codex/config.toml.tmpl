@@ -7,11 +7,11 @@
 # モデル設定
 ################################################################################
 
-# 使用するデフォルトモデル
-model = "gpt-5.5"
+# 使用するデフォルトモデル: 高速で費用効率のよい coding agent
+model = "gpt-5.6-luna"
 
-# 推論努力: 自律実行ではエラーリカバリと設計判断の質を優先して xhigh
-model_reasoning_effort = "xhigh"
+# 推論努力: 自律実行で複雑なロジック、前提、エッジケースを検証する
+model_reasoning_effort = "high"
 
 # Plan モードは戦略立案なので最大限の推論を割り当てる
 plan_mode_reasoning_effort = "high"
@@ -42,13 +42,6 @@ approval_policy = "never"
 # Git 操作まで自律実行できるよう、ファイルシステム sandbox は無効化する。
 sandbox_mode = "danger-full-access"
 
-[sandbox_workspace_write]
-# ビルド・テストツール (pytest, npm 等) が一時ディレクトリを使えるようにする
-exclude_slash_tmp = false
-exclude_tmpdir_env_var = false
-# パッケージ取得や API 呼び出しを伴うタスクをサンドボックス内で完結させる
-network_access = true
-
 ################################################################################
 # ウェブ検索
 ################################################################################
@@ -57,21 +50,15 @@ network_access = true
 web_search = "live"
 
 ################################################################################
-# 認証設定
+# workspace-write 時だけ適用するサンドボックスの追加設定
 ################################################################################
 
-# MCP OAuth 認証情報の優先保存先: auto (デフォルト) | file | keyring
-mcp_oauth_credentials_store = "auto"
-
-################################################################################
-# エージェント出力
-################################################################################
-
-# 出力から内部的な推論イベントを隠す (デフォルト: false)
-hide_agent_reasoning = false
-
-# 利用可能な場合、生の推論コンテンツを表示する (デフォルト: false)
-show_raw_agent_reasoning = false
+[sandbox_workspace_write]
+# ビルド・テストツール (pytest, npm 等) が一時ディレクトリを使えるようにする
+exclude_slash_tmp = false
+exclude_tmpdir_env_var = false
+# パッケージ取得や API 呼び出しを伴うタスクをサンドボックス内で完結させる
+network_access = true
 
 ################################################################################
 # シェル環境ポリシー
@@ -116,28 +103,9 @@ TMP = '{{ $tmp }}'
 ################################################################################
 
 [features]
-# Windows サンドボックスを有効にする (workspace-write の前提)
-elevated_windows_sandbox = true
-# 繰り返しコマンドを高速化する
-shell_snapshot = true
-# サブエージェント (Multi-agent mode)
-multi_agent = true
-# ライフサイクルフック (保護ブランチ deny 等)
-hooks = true
-# 統合 exec ツール (旧 experimental_use_unified_exec_tool の後継)
+# Windows でも統合 exec ツールを使い、実行経路を全 OS で統一する
 unified_exec = true
-# ファイル変更の undo スナップショット (自律実行の安全網)
-undo = true
-# セッションをまたいだメモリ
-memories = true
-# 長時間タスク中の OS スリープを防ぐ
-prevent_idle_sleep = true
-# 長いセッションでのリクエスト圧縮
-enable_request_compression = true
-
-# 開発中機能の警告を抑制する
-suppress_unstable_features_warning = true
-# Gmail / Google Calendar などの app connector を Codex に露出する
+# Gmail / Google Calendar などの plugin-bundled app connector を Codex に露出する
 apps = true
 
 ################################################################################
