@@ -8,6 +8,7 @@ import unittest
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from types import MappingProxyType
+from types import FrameType, TracebackType
 
 
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +73,17 @@ def payload_stream(items: dict[str, object], *, include_end: bool = True) -> io.
     return io.StringIO("".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records))
 
 
+def capture_payload_error(stream: io.IOBase, manifest: object) -> BaseException:
+    """Catch below the test frame so its input stream is not part of the graph."""
+
+    try:
+        read_secret_payload(stream, manifest)
+    except (InputError, CredentialError, ValidationError) as error:
+        del stream
+        return error
+    raise AssertionError("expected secret payload parsing to fail")
+
+
 class PayloadTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = load_manifest(APPROVED_MANIFEST)
@@ -79,6 +91,37 @@ class PayloadTests(unittest.TestCase):
     def assert_input_error(self, stream: io.IOBase) -> None:
         with self.assertRaises(InputError):
             read_secret_payload(stream, self.manifest)
+
+    def assert_exception_hides_markers(self, error: BaseException, *markers: str) -> None:
+        """Inspect exception links plus traceback locals without retaining it."""
+
+        pending: list[object] = [error]
+        visited: set[int] = set()
+        while pending:
+            value = pending.pop()
+            identifier = id(value)
+            if identifier in visited:
+                continue
+            visited.add(identifier)
+
+            if isinstance(value, str):
+                for marker in markers:
+                    self.assertNotIn(marker, value)
+            elif isinstance(value, bytes):
+                for marker in markers:
+                    self.assertNotIn(marker.encode("utf-8"), value)
+            elif isinstance(value, BaseException):
+                pending.extend((value.__cause__, value.__context__, value.__traceback__, value.args))
+            elif isinstance(value, TracebackType):
+                pending.extend((value.tb_frame, value.tb_next))
+            elif isinstance(value, FrameType):
+                pending.extend(value.f_locals.values())
+            elif isinstance(value, MappingProxyType):
+                pending.extend(value.values())
+            elif isinstance(value, dict):
+                pending.extend((*value.keys(), *value.values()))
+            elif isinstance(value, (list, tuple, set, frozenset)):
+                pending.extend(value)
 
     def test_build_secret_plan_is_exact_ordered_non_secret_metadata(self) -> None:
         self.assertEqual(
@@ -162,19 +205,18 @@ class PayloadTests(unittest.TestCase):
         undeclared["not-declared"] = raw_item("unknown", {"credential": "must-not-leak"})
         self.assert_input_error(payload_stream(undeclared))
 
-    def test_invalid_utf8_json_and_record_shape_are_stable_input_errors_without_payload_echo(self) -> None:
-        for stream, secret in (
-            (io.BytesIO(b'{"type":"header","schema_version":1}\nsecret-bytes-retained\xff\n'), "secret-bytes-retained"),
-            (io.StringIO('{"type":"header","schema_version":1}\n{not json secret-json-retained}\n'), "secret-json-retained"),
-            (io.StringIO('{"type":"header","schema_version":1}\n["secret-contents"]\n'), "secret-contents"),
+    def test_invalid_utf8_and_json_errors_discard_payload_tracebacks(self) -> None:
+        for stream, marker in (
+            (io.BytesIO(b'{"type":"header","schema_version":1}\nutf8-trace-marker\xff\n'), "utf8-trace-marker"),
+            (io.StringIO('{"type":"header","schema_version":1}\n{json-trace-marker\n'), "json-trace-marker"),
         ):
             with self.subTest(stream=type(stream).__name__):
-                with self.assertRaises(InputError) as caught:
-                    read_secret_payload(stream, self.manifest)
-                self.assertNotIn(secret, str(caught.exception))
-                self.assertNotIn(secret, repr(caught.exception))
-                self.assertIsNone(caught.exception.__cause__)
-                self.assertIsNone(caught.exception.__context__)
+                error = capture_payload_error(stream, self.manifest)
+                self.assertIsInstance(error, InputError)
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
+                self.assert_exception_hides_markers(error, marker)
+                del error
 
     def test_schema_version_must_be_the_exact_integer_one(self) -> None:
         for schema_version in (True, 1.0, "1", 0, 2):
@@ -200,6 +242,29 @@ class PayloadTests(unittest.TestCase):
             read_secret_payload(payload_stream(ambiguous), self.manifest)
         self.assertNotIn("first-secret", str(caught.exception))
         self.assertNotIn("second-secret", str(caught.exception))
+
+    def test_item_validation_errors_discard_raw_item_tracebacks(self) -> None:
+        malformed = secret_items()
+        malformed["github"] = {"id": "malformed-id-marker", "fields": "malformed-secret-marker"}
+        duplicate = secret_items()
+        duplicate["github"] = raw_item(
+            "duplicate-id-marker", {"token": "duplicate-secret-one", "PAT": "duplicate-secret-two"}
+        )
+        missing = secret_items()
+        missing["github"] = raw_item("missing-id-marker", {"other": "missing-secret-marker"})
+
+        for items, expected_type, markers in (
+            (malformed, ValidationError, ("malformed-id-marker", "malformed-secret-marker")),
+            (duplicate, ValidationError, ("duplicate-id-marker", "duplicate-secret-one", "duplicate-secret-two")),
+            (missing, CredentialError, ("missing-id-marker", "missing-secret-marker")),
+        ):
+            with self.subTest(expected_type=expected_type.__name__):
+                error = capture_payload_error(payload_stream(items), self.manifest)
+                self.assertIsInstance(error, expected_type)
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
+                self.assert_exception_hides_markers(error, *markers)
+                del error
 
     def test_label_normalization_is_case_insensitive_and_ignores_spaces_hyphens_and_underscores(self) -> None:
         normalized = secret_items()

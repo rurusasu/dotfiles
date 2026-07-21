@@ -10,7 +10,7 @@ from typing import BinaryIO, TextIO
 from types import MappingProxyType
 from urllib.parse import quote
 
-from .errors import CredentialError, InputError, ValidationError
+from .errors import BootstrapError, CredentialError, InputError, ValidationError
 from .models import BootstrapManifest, OnePasswordItem
 
 
@@ -48,6 +48,14 @@ class SecretBundle:
 
     def __repr__(self) -> str:
         return "SecretBundle(<redacted>)"
+
+
+@dataclass(frozen=True)
+class _PayloadFailure:
+    """A non-sensitive description of a payload validation failure."""
+
+    error_type: type[BootstrapError]
+    message: str
 
 
 class SecretRedactor:
@@ -114,7 +122,36 @@ def build_secret_plan(manifest: BootstrapManifest) -> dict[str, object]:
 
 
 def read_secret_payload(stream: TextIO, manifest: BootstrapManifest) -> SecretBundle:
-    """Read bounded NDJSON from stdin and immediately extract typed secrets."""
+    """Read bounded NDJSON from stdin and immediately extract typed secrets.
+
+    The parser works behind an exception boundary because caught exceptions retain
+    traceback frames (and their sensitive payload locals).  Only an error class
+    and fixed message cross that boundary on failure.
+    """
+
+    outcome = _read_secret_payload_boundary(stream, manifest)
+    del stream
+    if isinstance(outcome, _PayloadFailure):
+        error_type = outcome.error_type
+        message = outcome.message
+        del outcome
+        raise error_type(message)
+    return outcome
+
+
+def _read_secret_payload_boundary(
+    stream: TextIO, manifest: BootstrapManifest
+) -> SecretBundle | _PayloadFailure:
+    """Contain payload-bearing tracebacks before exposing a public error."""
+
+    try:
+        return _read_secret_payload(stream, manifest)
+    except BootstrapError as error:
+        return _PayloadFailure(type(error), str(error))
+
+
+def _read_secret_payload(stream: TextIO, manifest: BootstrapManifest) -> SecretBundle:
+    """Parse secrets while kept inside the sensitive exception boundary."""
 
     declared = {item.key: item for item in manifest.onepassword_items}
     parsed: dict[str, dict[str, str]] = {}
