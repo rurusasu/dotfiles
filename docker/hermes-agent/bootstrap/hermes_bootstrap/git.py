@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import selectors
+import signal
 import shutil
 import stat
 import subprocess
@@ -77,7 +78,9 @@ def _stage_distribution_boundary(
         askpass = _create_askpass(workdir)
         environment = _git_environment(auth, askpass)
 
-        if _run_git(("clone", "--no-checkout", source.source, str(stage)), workdir, environment) is None:
+        if _run_git(("init", "--quiet"), stage, environment) is None:
+            return _StageFailure("could not stage the declared Git source")
+        if _run_git(("remote", "add", "origin", "--", source.source), stage, environment) is None:
             return _StageFailure("could not stage the declared Git source")
         remote = _run_git(("config", "--get", "remote.origin.url"), stage, environment)
         if remote is None or not _same_remote_identity(source.source, remote):
@@ -220,6 +223,7 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
     output_stream: object | None = None
     selector: selectors.BaseSelector | None = None
     output = bytearray()
+    succeeded = False
     try:
         process = subprocess.Popen(
             ("git", *arguments),
@@ -229,6 +233,7 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             close_fds=True,
+            start_new_session=True,
         )
         output_stream = process.stdout
         if output_stream is None:
@@ -243,7 +248,6 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
         while not end_of_output:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _stop_git_process(process)
                 return None
             for _key, _events in selector.select(remaining):
                 chunk = os.read(descriptor, _MAX_GIT_OUTPUT_BYTES + 1 - len(output))
@@ -253,35 +257,42 @@ def _run_git(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str])
                     break
                 output.extend(chunk)
                 if len(output) > _MAX_GIT_OUTPUT_BYTES:
-                    _stop_git_process(process)
                     return None
 
         remaining = deadline - time.monotonic()
         if remaining <= 0 or process.wait(timeout=remaining) != 0:
             return None
-        return bytes(output).decode("ascii", "strict").strip()
+        result = bytes(output).decode("ascii", "strict").strip()
+        succeeded = True
+        return result
     except (BlockingIOError, OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         return None
     finally:
+        if process is not None and not succeeded:
+            _stop_git_process(process)
         if selector is not None:
-            selector.close()
+            try:
+                selector.close()
+            except OSError:
+                pass
         if output_stream is not None:
             try:
                 output_stream.close()
             except OSError:
                 pass
-        if process is not None and process.poll() is None:
-            _stop_git_process(process)
 
 
 def _stop_git_process(process: subprocess.Popen[bytes]) -> None:
-    """Kill and reap a failed Git child before dropping its bounded output."""
+    """Kill Git's process group and reap its direct child after any failure."""
 
-    if process.poll() is None:
-        try:
-            process.kill()
-        except OSError:
-            pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except OSError:
+        if process.poll() is None:
+            try:
+                process.kill()
+            except OSError:
+                pass
     try:
         process.wait()
     except (OSError, subprocess.SubprocessError):

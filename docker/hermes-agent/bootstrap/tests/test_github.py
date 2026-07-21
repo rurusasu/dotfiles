@@ -3,7 +3,9 @@ from __future__ import annotations
 import io
 import json
 import sys
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import FrameType, TracebackType
 from urllib.error import HTTPError
@@ -35,6 +37,24 @@ class FakeResponse:
 
     def close(self) -> None:
         return None
+
+
+class LocalHTTPServer:
+    def __init__(self, handler: type[BaseHTTPRequestHandler]) -> None:
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+
+    @property
+    def base_url(self) -> str:
+        host, port = self._server.server_address[:2]
+        return f"http://{host}:{port}"
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=2)
 
 
 def auth() -> GitAuth:
@@ -103,6 +123,75 @@ class GitHubClientTests(unittest.TestCase):
         self.assertIsNone(error.__cause__)
         self.assertIsNone(error.__context__)
         self.assert_hidden(error, "github-token-marker", marker)
+
+    def test_default_opener_rejects_cross_origin_redirect_before_sending_authorization(self) -> None:
+        target_requests: list[str | None] = []
+
+        class TargetHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                target_requests.append(self.headers.get("Authorization"))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"login":"attacker"}')
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return None
+
+        target = LocalHTTPServer(TargetHandler)
+        self.addCleanup(target.close)
+        origin_requests: list[str | None] = []
+
+        class OriginHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                origin_requests.append(self.headers.get("Authorization"))
+                self.send_response(302)
+                self.send_header("Location", f"{target.base_url}/user")
+                self.end_headers()
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return None
+
+        origin = LocalHTTPServer(OriginHandler)
+        self.addCleanup(origin.close)
+
+        error = capture_error(lambda: GitHubClient(auth(), api_base=origin.base_url).authenticated_login())
+
+        self.assertIsInstance(error, CredentialError)
+        self.assertIsNone(error.__cause__)
+        self.assertIsNone(error.__context__)
+        self.assert_hidden(error, "github-token-marker")
+        self.assertEqual(origin_requests, ["Bearer github-token-marker"])
+        self.assertEqual(target_requests, [])
+
+    def test_default_opener_accepts_same_origin_redirect(self) -> None:
+        requests: list[tuple[str, str | None]] = []
+
+        class OriginHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                requests.append((self.path, self.headers.get("Authorization")))
+                if self.path == "/user":
+                    self.send_response(302)
+                    self.send_header("Location", "/redirected-user")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"login":"octocat"}')
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return None
+
+        origin = LocalHTTPServer(OriginHandler)
+        self.addCleanup(origin.close)
+
+        self.assertEqual(GitHubClient(auth(), api_base=origin.base_url).authenticated_login(), "octocat")
+        self.assertEqual(
+            requests,
+            [
+                ("/user", "Bearer github-token-marker"),
+                ("/redirected-user", "Bearer github-token-marker"),
+            ],
+        )
 
     def test_rejects_redirect_malformed_and_oversized_user_responses(self) -> None:
         cases = (

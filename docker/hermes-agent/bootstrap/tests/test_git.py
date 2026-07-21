@@ -235,6 +235,49 @@ class GitStagingTests(unittest.TestCase):
 
         self.assertIn(("fetch", "--no-tags", "origin", "--", "main"), observed)
 
+    def test_fetch_does_not_import_an_unrequested_remote_branch(self) -> None:
+        git("checkout", "-b", "extra", cwd=self.checkout)
+        (self.checkout / "extra-only.yaml").write_text("must not be fetched\n", encoding="utf-8")
+        git("add", "extra-only.yaml", cwd=self.checkout)
+        git("commit", "-m", "extra", cwd=self.checkout)
+        extra_commit = git("rev-parse", "HEAD", cwd=self.checkout)
+        git("push", "-u", "origin", "extra", cwd=self.checkout)
+        git("checkout", "main", cwd=self.checkout)
+        observed_extra_ref: list[int] = []
+        observed_extra_object: list[int] = []
+        real_run = git_module._run_git
+
+        def inspect(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
+            output = real_run(arguments, cwd, environment)
+            if arguments == ("fetch", "--no-tags", "origin", "--", "main"):
+                observed_extra_ref.append(
+                    subprocess.run(
+                        ("git", "show-ref", "--verify", "--quiet", "refs/remotes/origin/extra"),
+                        cwd=cwd,
+                        env=environment,
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
+                )
+                observed_extra_object.append(
+                    subprocess.run(
+                        ("git", "cat-file", "-e", f"{extra_commit}^{{commit}}"),
+                        cwd=cwd,
+                        env=environment,
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
+                )
+            return output
+
+        with mock.patch("hermes_bootstrap.git._run_git", side_effect=inspect):
+            stage_distribution(self.source(), self.workdir, auth())
+
+        self.assertEqual(observed_extra_ref, [1])
+        self.assertTrue(all(returncode != 0 for returncode in observed_extra_object))
+
     def test_oversized_git_output_is_killed_and_partial_stage_is_removed(self) -> None:
         bin_dir = self.root / "bin"
         bin_dir.mkdir()
@@ -270,6 +313,57 @@ class GitStagingTests(unittest.TestCase):
             time.sleep(0.01)
         else:
             self.fail("infinite Git output process was not reaped")
+
+    def test_git_output_overflow_kills_the_entire_process_group(self) -> None:
+        bin_dir = self.root / "process-tree-bin"
+        bin_dir.mkdir()
+        direct_pid_file = self.root / "direct-git.pid"
+        descendant_pid_file = self.root / "descendant-git.pid"
+        fake_git = bin_dir / "git"
+        fake_git.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$$\" > \"$HERMES_TEST_DIRECT_PID\"\n"
+            "(while :; do sleep 1; done) &\n"
+            "printf '%s\\n' \"$!\" > \"$HERMES_TEST_DESCENDANT_PID\"\n"
+            "while :; do printf 'infinite-git-output-marker'; done\n",
+            encoding="utf-8",
+        )
+        fake_git.chmod(0o700)
+
+        def terminate_recorded_processes() -> None:
+            for pid_file in (direct_pid_file, descendant_pid_file):
+                try:
+                    pid = int(pid_file.read_text(encoding="utf-8").strip())
+                    os.kill(pid, 9)
+                except (OSError, ValueError):
+                    pass
+
+        self.addCleanup(terminate_recorded_processes)
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "PATH": str(bin_dir),
+                "HERMES_BOOTSTRAP_GITHUB_TOKEN": "git-token-marker",
+                "HERMES_TEST_DIRECT_PID": str(direct_pid_file),
+                "HERMES_TEST_DESCENDANT_PID": str(descendant_pid_file),
+            }
+        )
+
+        self.assertIsNone(git_module._run_git(("anything",), self.root, environment))
+        self.assertTrue(direct_pid_file.exists())
+        self.assertTrue(descendant_pid_file.exists())
+        for pid_file in (direct_pid_file, descendant_pid_file):
+            pid = int(pid_file.read_text(encoding="utf-8").strip())
+            for _ in range(100):
+                try:
+                    os.kill(pid, 0)
+                except OSError as error:
+                    if error.errno == errno.ESRCH:
+                        break
+                    raise
+                time.sleep(0.01)
+            else:
+                self.fail(f"Git process {pid} was not terminated")
 
     def test_git_environment_strips_inherited_control_and_askpass_settings(self) -> None:
         askpass = self.root / "askpass"

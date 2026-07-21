@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .errors import CredentialError, RepositoryError
 from .payload import SecretRedactor
@@ -18,6 +18,27 @@ from .payload import SecretRedactor
 _MAX_RESPONSE_BYTES = 1024 * 1024
 _TIMEOUT_SECONDS = 10.0
 _COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+
+
+class _SameOriginRedirectHandler(HTTPRedirectHandler):
+    """Reject a redirect before urllib can replay request headers."""
+
+    def redirect_request(
+        self,
+        request: Request,
+        file_pointer: object,
+        code: int,
+        message: str,
+        headers: object,
+        new_url: str,
+    ) -> Request | None:
+        if not _same_origin(request.full_url, new_url):
+            raise HTTPError(request.full_url, code, "cross-origin redirect", headers, file_pointer)
+        return super().redirect_request(request, file_pointer, code, message, headers, new_url)
+
+
+def _default_opener(request: Request, *, timeout: float) -> object:
+    return build_opener(_SameOriginRedirectHandler()).open(request, timeout=timeout)
 
 
 @dataclass(frozen=True, repr=False)
@@ -44,12 +65,12 @@ class GitHubClient:
         self,
         auth: GitAuth,
         *,
-        opener: Callable[..., Any] = urlopen,
+        opener: Callable[..., Any] | None = None,
         api_base: str = "https://api.github.com",
         timeout: float = _TIMEOUT_SECONDS,
     ) -> None:
         self._auth = auth
-        self._opener = opener
+        self._opener = _default_opener if opener is None else opener
         self._api_base = _validated_api_base(api_base)
         self._timeout = timeout if isinstance(timeout, (int, float)) and timeout > 0 else _TIMEOUT_SECONDS
 
@@ -186,11 +207,26 @@ def _close_response(response: object) -> None:
 
 
 def _same_origin(url: object, expected_base: str) -> bool:
+    actual = _origin(url)
+    expected = _origin(expected_base)
+    return actual is not None and actual == expected
+
+
+def _origin(url: object) -> tuple[str, str, int] | None:
     if not isinstance(url, str):
-        return False
-    actual = urlsplit(url)
-    expected = urlsplit(expected_base)
-    return actual.scheme == expected.scheme and actual.netloc.casefold() == expected.netloc.casefold()
+        return None
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.casefold()
+    host = parsed.hostname
+    if scheme not in {"http", "https"} or host is None:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if port is None:
+        port = 443 if scheme == "https" else 80
+    return (scheme, host.casefold(), port)
 
 
 def _valid_component(value: object) -> bool:
