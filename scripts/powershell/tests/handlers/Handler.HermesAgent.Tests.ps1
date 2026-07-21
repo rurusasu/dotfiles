@@ -110,7 +110,7 @@ Describe 'HermesAgentHandler' {
             $ghWrapperPath | Should -Exist
 
             $dockerfileContent = Get-Content -LiteralPath $dockerfilePath -Raw
-            $dockerfileContent | Should -Match "nousresearch/hermes-agent:latest"
+            $dockerfileContent | Should -Match ([regex]::Escape("docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731"))
             $dockerfileContent | Should -Match "apt-get"
             $dockerfileContent | Should -Match "(?m)\bgh\b"
             $dockerfileContent | Should -Match "/usr/bin/gh --version"
@@ -130,7 +130,7 @@ Describe 'HermesAgentHandler' {
 
             $ghWrapperContent = Get-Content -LiteralPath $ghWrapperPath -Raw
             $ghWrapperContent | Should -Match "GITHUB_PERSONAL_ACCESS_TOKEN"
-            $ghWrapperContent | Should -Match "export GH_TOKEN="
+            $ghWrapperContent | Should -Match ([regex]::Escape('environment["GH_TOKEN"] = token'))
             $ghWrapperContent | Should -Match "exec /usr/bin/gh"
         }
 
@@ -186,7 +186,7 @@ Describe 'HermesAgentHandler' {
             $composePath = Join-Path $repoRoot "docker\hermes-agent\compose.yml"
             $composeContent = Get-Content -LiteralPath $composePath -Raw
 
-            $composeContent | Should -Match "(?m)^\s*LIFELOG_ROOT:\s*/opt/data/core/lifelog\s*$"
+            $composeContent | Should -Match "(?m)^\s*LIFELOG_ROOT:\s*/opt/data/shared/lifelog\s*$"
             $composeContent | Should -Not -Match ([regex]::Escape('source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/core'))
         }
 

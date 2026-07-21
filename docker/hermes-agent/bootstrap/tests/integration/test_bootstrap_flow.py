@@ -25,6 +25,7 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap import app
 from hermes_bootstrap.errors import ApplyError, CredentialError, RepositoryError
+from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
 from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource, SharedRepository
@@ -123,9 +124,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.data_root = self.fixture_root / "data"
         self.data_root.mkdir()
         self.remotes = self.fixture_root / "remotes"
-        self.seeds = self.fixture_root / "seeds"
+        self.seed_root = self.fixture_root / "seeds"
         self.remotes.mkdir()
-        self.seeds.mkdir()
+        self.seed_root.mkdir()
+        self.seeds: dict[str, Path] = {}
         self.source_remotes: dict[str, Path] = {}
         self.source_identities: dict[str, tuple[str, str]] = {}
         self._create_sources()
@@ -157,7 +159,7 @@ class BootstrapFlowTests(unittest.TestCase):
 
     def _create_distribution(self, name: str, files: dict[str, str]) -> None:
         remote = self.remotes / f"{name}.git"
-        seed = self.seeds / name
+        seed = self.seed_root / name
         run_git("init", "--bare", str(remote))
         run_git("init", "--initial-branch=main", str(seed))
         run_git("config", "user.name", "Fixture", cwd=seed)
@@ -167,16 +169,16 @@ class BootstrapFlowTests(unittest.TestCase):
         run_git("commit", "-m", "initial fixture", cwd=seed)
         run_git("remote", "add", "origin", str(remote), cwd=seed)
         run_git("push", "origin", "main", cwd=seed)
+        self.seeds[name] = seed
         self.source_remotes[name] = remote
         self.source_identities[str(remote)] = ("fixture", name)
 
     def _local_manifest(self) -> BootstrapManifest:
         parsed = load_manifest(PRODUCTION_MANIFEST)
-        root = replace(parsed.root_distribution, source=str(self.source_remotes["root"]), target=self.data_root)
+        root = replace(parsed.root_distribution, target=self.data_root)
         profiles = tuple(
             replace(
                 source,
-                source=str(self.source_remotes[source.name]),
                 target=self.data_root / "profiles" / source.name,
             )
             for source in parsed.profiles
@@ -283,14 +285,36 @@ class BootstrapFlowTests(unittest.TestCase):
 
     @contextmanager
     def _patched_runtime(self) -> Iterator[None]:
-        with FixtureGitHub(set(self.source_identities.values())) as github:
+        production_source_identity = app._source_identity
+        api_identities = set(self.source_identities.values())
+        for source in (self.manifest.root_distribution, *self.manifest.profiles):
+            identity = production_source_identity(source.source)
+            if identity is not None:
+                api_identities.add(identity)
+
+        with FixtureGitHub(api_identities) as github:
+
             def client_factory(auth: object) -> GitHubClient:
                 return GitHubClient(auth, api_base=os.environ[API_URL_ENV])  # type: ignore[arg-type]
+
+            def source_identity(source: str) -> tuple[str, str] | None:
+                return self.source_identities.get(source, production_source_identity(source))
+
+            def local_stage(
+                source: DistributionSource, workdir: Path, auth: object
+            ) -> StagedSource:
+                fixture_name = "root" if source.name == "default" else source.name
+                transport = replace(
+                    source, source=str(self.source_remotes[fixture_name])
+                )
+                staged = stage_distribution(transport, workdir, auth)  # type: ignore[arg-type]
+                return replace(staged, declaration=source)
 
             with (
                 mock.patch.object(app, "load_manifest", return_value=self.manifest),
                 mock.patch.object(app, "GitHubClient", side_effect=client_factory),
-                mock.patch.object(app, "_source_identity", side_effect=self.source_identities.__getitem__),
+                mock.patch.object(app, "_source_identity", side_effect=source_identity),
+                mock.patch.object(app, "stage_distribution", side_effect=local_stage),
                 mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
                 mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe", return_value="fixture-signing-secret"),
                 mock.patch.dict(os.environ, {API_URL_ENV: github.url}),
@@ -386,7 +410,7 @@ class BootstrapFlowTests(unittest.TestCase):
     def test_legacy_lifelog_checkout_migrates_to_canonical_relative_link(self) -> None:
         legacy = self.data_root / "core" / "lifelog"
         legacy.parent.mkdir(parents=True)
-        run_git("clone", str(self.source_remotes["lifelog"]), str(legacy))
+        run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(legacy))
         run_git("config", "user.name", "Fixture", cwd=legacy)
         run_git("config", "user.email", "fixture@example.test", cwd=legacy)
 
@@ -435,22 +459,37 @@ class BootstrapFlowTests(unittest.TestCase):
 
     def test_distribution_failure_rolls_back_local_state_after_remote_sync(self) -> None:
         self._initial_apply()
-        before = self._snapshot_runtime()
         checkout = self.data_root / "shared" / "lifelog"
         (checkout / "remote-survives.md").write_text("remote change\n", encoding="utf-8")
         remote_before = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
+        transaction_boundary: dict[str, object] = {}
+        real_begin = app.Transaction.begin
 
-        with self._patched_runtime(), mock.patch.object(
-            app,
-            "_failpoint",
-            side_effect=lambda name: (_ for _ in ()).throw(ApplyError("fixture failure")) if name == "env-merge:rick" else None,
+        def begin(data_root: Path) -> object:
+            transaction_boundary["runtime"] = self._snapshot_runtime()
+            transaction_boundary["remote"] = run_git(
+                "--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"
+            )
+            return real_begin(data_root)
+
+        with (
+            self._patched_runtime(),
+            mock.patch.object(app.Transaction, "begin", side_effect=begin),
+            mock.patch.object(
+                app,
+                "_failpoint",
+                side_effect=lambda name: (_ for _ in ()).throw(ApplyError("fixture failure"))
+                if name == "env-merge:rick"
+                else None,
+            ),
         ):
             with self.assertRaises(ApplyError):
                 app.apply(PRODUCTION_MANIFEST, self._payload())
 
-        self.assertEqual(self._snapshot_runtime(), before)
+        self.assertEqual(self._snapshot_runtime(), transaction_boundary["runtime"])
         remote_after = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
         self.assertNotEqual(remote_after, remote_before)
+        self.assertEqual(remote_after, transaction_boundary["remote"])
         self.assertTrue((checkout / "remote-survives.md").exists())
 
     def test_env_merge_preserves_unowned_content_and_canonicalizes_managed_keys(self) -> None:
@@ -483,7 +522,8 @@ class BootstrapFlowTests(unittest.TestCase):
             f"path=Path({str(target)!r}); tx=Transaction.begin(path.parents[0]); tx.snapshot(path); "
             "path.write_text('crashed mutation\\n', encoding='utf-8'); tx._release_lock(); os._exit(0)"
         )
-        environment = {**os.environ, "PYTHONPATH": str(BOOTSTRAP_ROOT)}
+        package_root = Path(app.__file__).resolve().parents[1]
+        environment = {**os.environ, "PYTHONPATH": str(package_root)}
         subprocess.run((sys.executable, "-c", script), check=True, env=environment, stdin=subprocess.DEVNULL)
         self.assertNotEqual(target.read_text(encoding="utf-8"), expected)
         original_reader = app.read_secret_payload
@@ -501,7 +541,13 @@ class BootstrapFlowTests(unittest.TestCase):
         snapshot: dict[str, tuple[str, bytes | str, int]] = {}
         for path in sorted(self.data_root.rglob("*")):
             relative = path.relative_to(self.data_root).as_posix()
-            if relative.startswith(".bootstrap/transactions/"):
+            if relative.startswith(
+                (
+                    ".bootstrap/transactions/",
+                    ".hermes-bootstrap-",
+                    ".hermes-repository-",
+                )
+            ):
                 continue
             metadata = path.lstat()
             if path.is_symlink():
