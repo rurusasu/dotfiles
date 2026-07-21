@@ -1047,9 +1047,10 @@ lib.mapAttrs (_: resolve) grouped
   # Packages kept in the catalog but skipped by the normal Windows installer.
   wingetSkipInstall = { };
 
-  # Upstream nightly winget manifests and Microsoft Store installs can drift or
-  # hang in CI. Avoid making CI depend on their live installer behavior.
+  # Upstream installers and Microsoft Store installs can drift, require
+  # elevation, or hang in CI. Avoid making CI depend on their live behavior.
   wingetCiSkipInstall = {
+    google-cloud-sdk = true;
     wezterm = true;
     "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
