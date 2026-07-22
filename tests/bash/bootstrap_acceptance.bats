@@ -67,6 +67,8 @@ EOF
 @test "acceptance compose serves health from nginx and BusyBox document roots" {
 	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
 
+	grep -Fq 'exec /bin/httpd -f -p 80 -h /www' "$compose"
+	grep -Fq "exec nginx -g 'daemon off;'" "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
 }
