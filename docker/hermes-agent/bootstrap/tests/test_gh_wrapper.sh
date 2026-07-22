@@ -317,6 +317,18 @@ printf '%s\n' 'GH_TOKEN = malformed' >"$data/.env"
 expect_failure "$invalid_message" malformed /opt/data '' api /user
 
 reset_fixture
+printf '%s\n' 'export GH_TOKEN' >"$data/.env"
+docker run --rm \
+  -v "$data:/opt/data" \
+  -e 'PYTHONPATH=/usr/local/lib/hermes-bootstrap' \
+  --entrypoint /opt/hermes/.venv/bin/python \
+  "$image" -c \
+  'from pathlib import Path; from hermes_bootstrap.envfiles import merge_env_file; merge_env_file(Path("/opt/data/.env"), {"GH_TOKEN": "repaired-token"}, frozenset())' ||
+  fail 'bootstrap merge could not repair a malformed managed line'
+run_success /opt/data '' api /user
+expect_capture repaired-token api /user
+
+reset_fixture
 dd if=/dev/zero of="$data/.env" bs=1024 count=1025 >/dev/null 2>&1
 expect_failure "$invalid_message" oversized /opt/data '' api /user
 

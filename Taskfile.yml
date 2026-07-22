@@ -182,12 +182,13 @@ tasks:
         platforms: [windows]
 
   hermes:bootstrap:test:
-    desc: Build and run the Hermes bootstrap container test stage
+    desc: Run the Hermes bootstrap container and gh wrapper suites
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+      - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
 
   hermes:bootstrap:config:
     desc: Validate the Hermes bootstrap Compose configuration

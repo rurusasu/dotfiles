@@ -93,6 +93,76 @@ function Get-HermesBootstrapEntrypointExitCode {
     return 1
 }
 
+function Get-HermesBootstrapEnvironmentInteger {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+        [Parameter(Mandatory)]
+        [int]$DefaultValue,
+        [switch]$AllowZero
+    )
+
+    $rawValue = [Environment]::GetEnvironmentVariable($Name, 'Process')
+    $parsedValue = 0
+    $isValid = [int]::TryParse($rawValue, [ref]$parsedValue) -and (
+        ($AllowZero -and $parsedValue -ge 0) -or
+        (-not $AllowZero -and $parsedValue -gt 0)
+    )
+    if ($isValid) {
+        return $parsedValue
+    }
+    return $DefaultValue
+}
+
+function Wait-HermesBootstrapApi {
+    [CmdletBinding()]
+    param()
+
+    $attempts = Get-HermesBootstrapEnvironmentInteger `
+        -Name 'HERMES_API_READY_ATTEMPTS' `
+        -DefaultValue 30
+    $delaySeconds = Get-HermesBootstrapEnvironmentInteger `
+        -Name 'HERMES_API_READY_DELAY_SECONDS' `
+        -DefaultValue 2 `
+        -AllowZero
+    $timeoutSeconds = Get-HermesBootstrapEnvironmentInteger `
+        -Name 'HERMES_API_PROBE_TIMEOUT_SECONDS' `
+        -DefaultValue 2
+    $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_API_PORT)) {
+        '8642'
+    }
+    else {
+        $env:HERMES_API_PORT
+    }
+    $healthUrl = "http://127.0.0.1:$port/health"
+
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        try {
+            $response = Invoke-WebRequest `
+                -Uri $healthUrl `
+                -Method Get `
+                -UseBasicParsing `
+                -TimeoutSec $timeoutSeconds `
+                -ErrorAction Stop
+            if ($null -ne $response -and
+                [int]$response.StatusCode -ge 200 -and
+                [int]$response.StatusCode -lt 300) {
+                return $true
+            }
+        }
+        catch {
+            $null = $_
+        }
+
+        if ($attempt -lt $attempts) {
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+
+    return $false
+}
+
 function Invoke-HermesBootstrapDockerPhase {
     [CmdletBinding()]
     param(
@@ -209,6 +279,23 @@ function Invoke-HermesBootstrapEntrypoint {
                 -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
                 -FailureMessage 'Hermes Compose startup failed.'
             if ($startup.ExitCode -ne 0) { return $startup }
+
+            if (-not (Wait-HermesBootstrapApi)) {
+                try {
+                    Invoke-Docker `
+                        -Arguments @('compose', '-f', $paths.ComposeFile, 'ps', '--all') |
+                        Out-Host
+                }
+                catch {
+                    $null = $_
+                }
+                $attempts = Get-HermesBootstrapEnvironmentInteger `
+                    -Name 'HERMES_API_READY_ATTEMPTS' `
+                    -DefaultValue 30
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode 1 `
+                    -Message "Hermes API did not become ready after $attempts attempts."
+            }
 
             return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message 'Hermes bootstrap completed.'
         }

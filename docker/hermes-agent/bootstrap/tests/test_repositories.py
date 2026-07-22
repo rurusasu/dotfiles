@@ -16,6 +16,7 @@ from types import FrameType, TracebackType
 from unittest import mock
 
 import hermes_bootstrap.repositories as repositories_module
+import hermes_bootstrap.transaction as transaction_module
 from hermes_bootstrap.errors import MigrationError, RepositoryError
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import BootstrapManifest, SharedRepository
@@ -642,9 +643,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(repo.legacy_target.is_symlink())
         self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
 
-    def test_apply_ignores_empty_paths_and_runtime_requires_canonical_checkout(self) -> None:
+    def test_apply_removes_empty_legacy_and_runtime_requires_canonical_checkout(self) -> None:
         repo = self.repository()
-        repo.target.mkdir(parents=True)
         repo.legacy_target.parent.mkdir(parents=True)
         repo.legacy_target.mkdir()
         result = synchronize_remote(repo, self.auth)
@@ -668,6 +668,46 @@ class RepositoryTests(unittest.TestCase):
         self.assertFalse(repo.target.exists())
         self.assertIsNotNone(transaction.held)
         self.assertTrue((transaction.held / ".git").is_dir())
+
+    def test_apply_preserves_a_target_created_at_the_publication_boundary(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+        transaction = RecordingTransaction()
+        raced_identity: tuple[int, int] | None = None
+
+        def race_before_publish(source_parent: int, source: str, target_parent: int, target: str) -> None:
+            nonlocal raced_identity
+            repo.target.mkdir()
+            metadata = repo.target.stat()
+            raced_identity = (metadata.st_dev, metadata.st_ino)
+            transaction_module._rename_noreplace(source_parent, source, target_parent, target)
+
+        with mock.patch.object(
+            repositories_module,
+            "_rename_noreplace",
+            create=True,
+            side_effect=race_before_publish,
+        ):
+            with self.assertRaises(RepositoryError):
+                apply_shared_working_tree(repo, result, transaction)
+
+        self.assertIsNotNone(raced_identity)
+        self.assertEqual((repo.target.stat().st_dev, repo.target.stat().st_ino), raced_identity)
+        self.assertTrue((result.working_tree / ".git").is_dir())
+        self.assertEqual(transaction.moves, [(result.working_tree, repo.target)])
+
+    def test_apply_preserves_an_existing_empty_canonical_target(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+        repo.target.mkdir()
+        initial_metadata = repo.target.stat()
+        expected_identity = (initial_metadata.st_dev, initial_metadata.st_ino)
+
+        with self.assertRaises(RepositoryError):
+            apply_shared_working_tree(repo, result, RecordingTransaction())
+
+        self.assertEqual((repo.target.stat().st_dev, repo.target.stat().st_ino), expected_identity)
+        self.assertTrue((result.working_tree / ".git").is_dir())
 
     def test_apply_can_retry_after_a_later_transaction_rollback(self) -> None:
         repo = self.repository()

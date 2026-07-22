@@ -22,6 +22,8 @@ setup() {
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
+	export OP_DELAY_SECONDS=0
+	export BOOTSTRAP_EXIT_EARLY=0
 	export API_READY_AFTER=1
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
@@ -37,6 +39,9 @@ printf "\n" >>"$COMMAND_LOG"
 if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
 	exit 17
 fi
+if [[ $OP_DELAY_SECONDS != 0 ]]; then
+	/bin/sleep "$OP_DELAY_SECONDS"
+fi
 printf "%s\n" "$OP_ITEM_JSON"
 '
 	write_stub docker '
@@ -48,7 +53,13 @@ if [ "${1:-}" != "compose" ]; then
 fi
 case " $* " in
   *" secret-plan "*) printf "%s\n" "$PLAN_JSON" ;;
-  *" apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$BOOTSTRAP_STATUS" ;;
+  *" apply "*)
+    if [[ $BOOTSTRAP_EXIT_EARLY == 1 ]]; then
+      exit "$BOOTSTRAP_STATUS"
+    fi
+    cat >"$PAYLOAD_CAPTURE"
+    exit "$BOOTSTRAP_STATUS"
+    ;;
 esac
 '
 	write_stub curl '
@@ -460,6 +471,20 @@ trailing-garbage"
 	! grep -q '<up>' "$COMMAND_LOG"
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "preserves a typed bootstrap exit when the apply consumer closes stdin early" {
+	export BOOTSTRAP_STATUS=3
+	export BOOTSTRAP_EXIT_EARLY=1
+	export OP_DELAY_SECONDS=0.1
+
+	run_start_stack
+
+	[ "$status" -eq 3 ]
+	grep -q '<apply>' "$COMMAND_LOG"
+	! grep -q '<up>' "$COMMAND_LOG"
+	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 

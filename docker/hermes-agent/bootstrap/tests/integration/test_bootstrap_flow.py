@@ -417,10 +417,26 @@ class BootstrapFlowTests(unittest.TestCase):
         values = {
             "dashboard": {"username": "fixture-user", "password": "fixture-password"},
             "github": {"credential": token},
-            "slack_default": {"bot_token": "default-bot", "app_token": "default-app", "allowed_users": "UDEFAULT"},
-            "slack_rick": {"bot_token": "rick-bot", "app_token": "rick-app", "allowed_users": "URICK"},
-            "slack_hoffman": {"bot_token": "hoffman-bot", "app_token": "hoffman-app", "allowed_users": "UHOFFMAN"},
-            "slack_risarisa": {"bot_token": "risarisa-bot", "app_token": "risarisa-app", "allowed_users": "URISARISA"},
+            "slack_default": {
+                "bot_token": "xoxb-default-bot",
+                "app_token": "xapp-default-app",
+                "allowed_users": "UDEFAULT",
+            },
+            "slack_rick": {
+                "bot_token": "xoxb-rick-bot",
+                "app_token": "xapp-rick-app",
+                "allowed_users": "URICK",
+            },
+            "slack_hoffman": {
+                "bot_token": "xoxb-hoffman-bot",
+                "app_token": "xapp-hoffman-app",
+                "allowed_users": "UHOFFMAN",
+            },
+            "slack_risarisa": {
+                "bot_token": "xoxb-risarisa-bot",
+                "app_token": "xapp-risarisa-app",
+                "allowed_users": "URISARISA",
+            },
         }
         for item in self.manifest.onepassword_items:
             fields = [

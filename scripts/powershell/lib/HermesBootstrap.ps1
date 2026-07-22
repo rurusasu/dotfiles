@@ -226,6 +226,7 @@ function Invoke-HermesBootstrap {
     $process = $null
     $processStarted = $false
     $producerFailed = $false
+    $payloadWriteFailed = $false
     $secretValues = [System.Collections.Generic.List[string]]::new()
     $drain = [HermesBootstrapBoundedDrain]::new(65536)
     $drainCancellation = [System.Threading.CancellationTokenSource]::new()
@@ -268,7 +269,13 @@ function Invoke-HermesBootstrap {
             $stdoutDrain = $drain.DrainAsync($process.StandardOutput, $drainCancellation.Token)
             $stderrDrain = $drain.DrainAsync($process.StandardError, $drainCancellation.Token)
             $process.StandardInput.NewLine = "`n"
-            $process.StandardInput.WriteLine('{"type":"header","schema_version":1}')
+            try {
+                $process.StandardInput.WriteLine('{"type":"header","schema_version":1}')
+            }
+            catch {
+                $payloadWriteFailed = $true
+                throw
+            }
 
             foreach ($planItem in @($plan.items)) {
                 try {
@@ -285,7 +292,13 @@ function Invoke-HermesBootstrap {
                     }
 
                     $record = [ordered]@{ type = "item"; key = $planItem.key; item = $item }
-                    $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
+                    try {
+                        $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
+                    }
+                    catch {
+                        $payloadWriteFailed = $true
+                        throw
+                    }
                 }
                 finally {
                     if ($item -is [System.IDisposable]) {
@@ -296,7 +309,13 @@ function Invoke-HermesBootstrap {
                     $invokerOutput = $null
                 }
             }
-            $process.StandardInput.WriteLine('{"type":"end"}')
+            try {
+                $process.StandardInput.WriteLine('{"type":"end"}')
+            }
+            catch {
+                $payloadWriteFailed = $true
+                throw
+            }
         }
         catch {
             $producerFailed = $true
@@ -309,6 +328,34 @@ function Invoke-HermesBootstrap {
         }
 
         if ($producerFailed) {
+            $consumerCompleted = $payloadWriteFailed -and $processStarted -and (
+                Wait-HermesBootstrapProcess -Process $process -TimeoutMilliseconds 1000
+            )
+            if ($consumerCompleted -and $process.ExitCode -ne 0) {
+                $exitCode = $process.ExitCode
+                $global:LASTEXITCODE = $exitCode
+                $drainsCompleted = Complete-HermesBootstrapProcessDrain `
+                    -Process $process `
+                    -StdoutDrain $stdoutDrain `
+                    -StderrDrain $stderrDrain `
+                    -Cancellation $drainCancellation `
+                    -TimeoutMilliseconds $script:HermesBootstrapDrainTimeoutMilliseconds
+                if (-not $drainsCompleted) {
+                    return [PSCustomObject]@{
+                        Success = $false
+                        Changed = $false
+                        Message = "Hermes bootstrap output drain timed out."
+                    }
+                }
+
+                $diagnostics = ConvertTo-HermesBootstrapRedactedText -Text $drain.Text -Values $secretValues
+                $message = "Hermes bootstrap failed (exit code $exitCode)."
+                if (-not [string]::IsNullOrWhiteSpace($diagnostics)) {
+                    $message = "$message $diagnostics"
+                }
+                return [PSCustomObject]@{ Success = $false; Changed = $false; Message = $message }
+            }
+
             $terminated = Stop-HermesBootstrapProcess `
                 -Process $process `
                 -TimeoutMilliseconds $script:HermesBootstrapTerminationTimeoutMilliseconds
@@ -458,6 +505,7 @@ function ConvertTo-HermesBootstrapRedactedText {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyString()]
         [string]$Text,
         [Parameter(Mandatory)]
         [System.Collections.Generic.List[string]]$Values

@@ -141,6 +141,10 @@ class AppTests(unittest.TestCase):
 
         def environment(keys: frozenset[str]) -> str:
             values = {key: "value" for key in keys}
+            values.update({key: "github-token" for key in app.GITHUB_KEYS & keys})
+            values["SLACK_BOT_TOKEN"] = "xoxb-valid"
+            values["SLACK_APP_TOKEN"] = "xapp-valid"
+            values["SLACK_ALLOWED_USERS"] = "UVALID"
             values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"] = secret_body
             if "API_SERVER_KEY" in keys:
                 values["API_SERVER_KEY"] = f"hermes-bootstrap-v1_{secret_body}"
@@ -715,6 +719,101 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
         github.assert_not_called()
+
+    def test_installed_layout_validation_preserves_unmanaged_profile_entries(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        profiles = self.root / "profiles"
+        extra_profile = profiles / "local"
+        extra_profile.mkdir()
+        (extra_profile / "notes.txt").write_text("keep me\n", encoding="utf-8")
+        metadata = profiles / ".DS_Store"
+        metadata.write_bytes(b"finder metadata")
+
+        result = app._validate_installed_layout(
+            self.manifest, allow_active_transaction=False
+        )
+
+        self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
+        self.assertEqual((extra_profile / "notes.txt").read_text(encoding="utf-8"), "keep me\n")
+        self.assertEqual(metadata.read_bytes(), b"finder metadata")
+
+        (profiles / "rick" / "config.yaml").unlink()
+        with self.assertRaisesRegex(
+            ValidationError, "installed distribution target is invalid"
+        ):
+            app._validate_installed_layout(
+                self.manifest, allow_active_transaction=False
+            )
+
+    def test_installed_layout_validation_rejects_empty_required_values(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        root_env = self.root / ".env"
+        valid = root_env.read_text(encoding="utf-8")
+        for key in sorted(app._MANAGED_ENV_KEYS):
+            with self.subTest(key=key):
+                content = "\n".join(
+                    f"{key}=" if line.startswith(f"{key}=") else line
+                    for line in valid.splitlines()
+                )
+                root_env.write_text(content + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ValidationError, "installed environment file is invalid"
+                ):
+                    app._validate_installed_layout(
+                        self.manifest, allow_active_transaction=False
+                    )
+
+    def test_installed_layout_validation_rejects_mismatched_github_aliases_without_secret_details(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        root_env = self.root / ".env"
+        marker = "github-mismatch-secret-marker"
+        content = root_env.read_text(encoding="utf-8").replace(
+            "GITHUB_TOKEN=github-token", f"GITHUB_TOKEN={marker}"
+        )
+        root_env.write_text(content, encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            ValidationError, "installed environment file is invalid"
+        ) as raised:
+            app._validate_installed_layout(
+                self.manifest, allow_active_transaction=False
+            )
+        self.assertNotIn(marker, str(raised.exception))
+        self.assertNotIn(marker, repr(raised.exception))
+
+    def test_installed_layout_validation_rejects_invalid_slack_token_formats_without_secret_details(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        root_env = self.root / ".env"
+        valid = root_env.read_text(encoding="utf-8")
+        invalid_values = {
+            "SLACK_BOT_TOKEN": "xapp-wrong-role-secret-marker",
+            "SLACK_APP_TOKEN": "xoxb-wrong-role-secret-marker",
+        }
+        for key, marker in invalid_values.items():
+            with self.subTest(key=key):
+                content = "\n".join(
+                    f"{key}={marker}" if line.startswith(f"{key}=") else line
+                    for line in valid.splitlines()
+                )
+                root_env.write_text(content + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ValidationError, "installed environment file is invalid"
+                ) as raised:
+                    app._validate_installed_layout(
+                        self.manifest, allow_active_transaction=False
+                    )
+                self.assertNotIn(marker, str(raised.exception))
+                self.assertNotIn(marker, repr(raised.exception))
 
     def test_installed_layout_validation_rejects_weak_root_runtime_secrets(self) -> None:
         from hermes_bootstrap import app

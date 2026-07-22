@@ -17,6 +17,7 @@ install -m 0755 "$FIXTURE_ROOT/hermes-bootstrap-fixture.sh" \
 
 export DOTFILES_ACCEPTANCE_REPO_ROOT="$REPO_ROOT"
 export DOTFILES_ACCEPTANCE_FIXTURE_ROOT="$FIXTURE_ROOT"
+export DOTFILES_HERMES_OP_EXECUTABLE="$FIXTURE_ROOT/bin/op"
 export PATH="$FIXTURE_ROOT/bin:$PATH"
 
 exec "$REPO_ROOT/install.sh" "$@"

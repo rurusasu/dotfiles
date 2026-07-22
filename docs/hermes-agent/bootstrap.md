@@ -187,9 +187,10 @@ the host adapter. The adapter prints only redacted diagnostics and never runs
 
 Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
 the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
-pinned Docker test stage in the `Hermes Bootstrap Tests` workflow, so the
-container transaction and payload suite is a publication gate rather than an
-optional manual check.
+pinned Docker test stage and the `gh` wrapper security suite in the
+`Hermes Bootstrap Tests` workflow, so the container transaction, payload, and
+runtime credential path are publication gates rather than optional manual
+checks.
 
 The four source repositories use the same `fast` and `full` validator. Local
 validator exits are `0` pass, `1` validation failure, `2` prerequisite blocked,

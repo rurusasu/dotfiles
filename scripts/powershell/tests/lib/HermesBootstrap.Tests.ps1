@@ -175,6 +175,7 @@ set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
 > "%args%" (
   for %%A in (%*) do echo %%~A
 )
+if "%HERMES_BOOTSTRAP_TEST_EXIT_EARLY%"=="1" exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
 more > "%input%"
 if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" ping 127.0.0.1 -n 3 >nul
 if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" pwsh -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
@@ -190,6 +191,9 @@ exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
 #!/bin/sh
 printf '%s' "$$" > "$HERMES_BOOTSTRAP_TEST_DIR/pid"
 printf '%s\0' "$@" > "$HERMES_BOOTSTRAP_TEST_DIR/arguments.bin"
+if [ "${HERMES_BOOTSTRAP_TEST_EXIT_EARLY:-0}" = "1" ]; then
+  exit "${HERMES_BOOTSTRAP_TEST_EXIT:-0}"
+fi
 cat > "$HERMES_BOOTSTRAP_TEST_DIR/stdin.txt"
 if [ "${HERMES_BOOTSTRAP_TEST_HANG:-0}" = "1" ]; then
   sleep 2 &
@@ -327,6 +331,7 @@ Describe "Invoke-HermesBootstrap" {
         $env:HERMES_BOOTSTRAP_TEST_STDERR = ""
         $env:HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT = "0"
         $env:HERMES_BOOTSTRAP_TEST_HANG = "0"
+        $env:HERMES_BOOTSTRAP_TEST_EXIT_EARLY = "0"
         $script:HermesBootstrapProcessTimeoutMilliseconds = 30 * 60 * 1000
         $script:HermesBootstrapTerminationTimeoutMilliseconds = 5000
         $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
@@ -341,6 +346,7 @@ Describe "Invoke-HermesBootstrap" {
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_STDERR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BOOTSTRAP_TEST_HANG -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_BOOTSTRAP_TEST_EXIT_EARLY -ErrorAction SilentlyContinue
     }
 
     It "streams compact header, declared item records, and end directly to Docker stdin" {
@@ -573,6 +579,24 @@ Describe "Invoke-HermesBootstrap" {
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
         $result.Message | Should -Not -Match '"fields"|"id"'
         $global:LASTEXITCODE | Should -Be 23
+    }
+
+    It "preserves a typed container exit when the consumer closes stdin early" {
+        $env:HERMES_BOOTSTRAP_TEST_EXIT = "3"
+        $env:HERMES_BOOTSTRAP_TEST_EXIT_EARLY = "1"
+        $invoker = {
+            param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+            Start-Sleep -Milliseconds 100
+            return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "early-exit-secret" }) } | ConvertTo-Json -Compress
+        }
+
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+
+        $result.Success | Should -BeFalse
+        $result.Changed | Should -BeFalse
+        $result.Message | Should -Match "exit code 3"
+        $result.Message | Should -Not -Match "early-exit-secret"
+        $global:LASTEXITCODE | Should -Be 3
     }
 
     It "decodes Docker output as UTF-8 before redacting a non-ASCII secret" {

@@ -48,6 +48,8 @@ from .transaction import Transaction
 
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
+_SLACK_BOT_TOKEN = re.compile(r"xoxb-[A-Za-z0-9-]+\Z")
+_SLACK_APP_TOKEN = re.compile(r"xapp-[A-Za-z0-9-]+\Z")
 _MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | SLACK_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
@@ -387,9 +389,6 @@ def _validate_profiles(manifest: BootstrapManifest) -> None:
     directory = manifest.data_root / "profiles"
     _require_safe_directory(directory)
     expected = {profile.name: profile for profile in manifest.profiles}
-    actual = {entry.name for entry in directory.iterdir()}
-    if actual != set(expected):
-        raise ValidationError("installed profile set is invalid")
     for name, profile in expected.items():
         target = directory / name
         _require_safe_directory(target)
@@ -437,6 +436,15 @@ def _validate_env_file(path: Path, required: frozenset[str]) -> None:
     except BootstrapError:
         raise ValidationError("installed environment file is invalid") from None
     if set(values) != required:
+        raise ValidationError("installed environment file is invalid")
+    if any(not values[key].strip() for key in required):
+        raise ValidationError("installed environment file is invalid")
+    if len({values[key] for key in GITHUB_KEYS}) != 1:
+        raise ValidationError("installed environment file is invalid")
+    if (
+        _SLACK_BOT_TOKEN.fullmatch(values["SLACK_BOT_TOKEN"]) is None
+        or _SLACK_APP_TOKEN.fullmatch(values["SLACK_APP_TOKEN"]) is None
+    ):
         raise ValidationError("installed environment file is invalid")
     if not _is_reusable_signing_secret(
         values.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET")

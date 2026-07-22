@@ -26,8 +26,22 @@ dotfiles_hermes_prepare_runtime_home() {
   mkdir -p "$data_dir" "$data_dir/.xurl" "$browser_data_dir"
 }
 
+dotfiles_hermes_op_command() {
+  local configured="${DOTFILES_HERMES_OP_EXECUTABLE:-}"
+
+  if [[ -n $configured ]]; then
+    [[ $configured == /* && -x $configured ]] || return 1
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  dotfiles_have op || return 1
+  command -v op
+}
+
 dotfiles_hermes_require_secret_tools() {
-  dotfiles_have op || dotfiles_die "1Password CLI (op) is required for Hermes bootstrap."
+  dotfiles_hermes_op_command >/dev/null ||
+    dotfiles_die "1Password CLI (op) is required for Hermes bootstrap."
   dotfiles_have jq || dotfiles_die "jq is required for Hermes bootstrap."
   dotfiles_have curl || dotfiles_die "curl is required for Hermes readiness checks."
 }
@@ -87,20 +101,28 @@ dotfiles_hermes_secret_plan() {
 
 dotfiles_hermes_emit_secret_payload() {
   local compact_plan="$1"
-  local item_plan key account vault item
+  local item_plan key account vault item op_command
+  local -a lookup_statuses
 
-  printf '%s\n' '{"type":"header","schema_version":1}'
+  op_command="$(dotfiles_hermes_op_command)" || return 1
+  printf '%s\n' '{"type":"header","schema_version":1}' || return $?
   while IFS= read -r item_plan; do
     key="$(printf '%s\n' "$item_plan" | jq -r '.key')"
     account="$(printf '%s\n' "$item_plan" | jq -r '.account')"
     vault="$(printf '%s\n' "$item_plan" | jq -r '.vault')"
     item="$(printf '%s\n' "$item_plan" | jq -r '.item')"
-    if ! op item get "$item" --account "$account" --vault "$vault" --format json |
+    if "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
       jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'; then
+      :
+    else
+      lookup_statuses=("${PIPESTATUS[@]}")
+      if ((${lookup_statuses[0]:-1} == 141 || ${lookup_statuses[1]:-1} == 141)); then
+        return 141
+      fi
       return 1
     fi
   done < <(printf '%s\n' "$compact_plan" | jq -c '.items[]')
-  printf '%s\n' '{"type":"end"}'
+  printf '%s\n' '{"type":"end"}' || return $?
 }
 
 dotfiles_hermes_run_bootstrap() {
@@ -118,6 +140,9 @@ dotfiles_hermes_run_bootstrap() {
     statuses=("${PIPESTATUS[@]}")
     producer_status="${statuses[0]:-1}"
     docker_status="${statuses[1]:-1}"
+    if ((producer_status == 141 && docker_status != 0)); then
+      return "$docker_status"
+    fi
     if ((producer_status != 0)); then
       return 1
     fi

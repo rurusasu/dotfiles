@@ -125,6 +125,8 @@ class EnvFileTests(unittest.TestCase):
             b"KEEP=one=two\r\n"
             b" export GH_TOKEN = old-one\r\n"
             b"GH_TOKEN=old-two\r\n"
+            b"export GH_TOKEN\r\n"
+            b"GH_TOKEN malformed\r\n"
             b" export OLD_SLACK = stale\r\n"
             b"HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=old-plaintext\r\n"
             b"# another comment\r\n"
@@ -154,6 +156,25 @@ class EnvFileTests(unittest.TestCase):
 
         self.assertTrue(changed)
         self.assertEqual(self.path.read_bytes(), b"# preserve without newline\n")
+
+    def test_replaces_an_entire_quoted_multiline_managed_assignment(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_bytes(
+            b"KEEP=before\n"
+            b'GH_TOKEN="\n'
+            b"old-secret-continuation\n"
+            b'"\n'
+            b"KEEP_AFTER=yes\n"
+        )
+
+        changed = merge_env_file(self.path, {"GH_TOKEN": "new-token"}, frozenset())
+
+        self.assertTrue(changed)
+        self.assertEqual(
+            self.path.read_bytes(),
+            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN=new-token\n",
+        )
+        self.assertNotIn(b"old-secret-continuation", self.path.read_bytes())
 
     def test_managed_block_preserves_mapping_insertion_order(self) -> None:
         changed = merge_env_file(

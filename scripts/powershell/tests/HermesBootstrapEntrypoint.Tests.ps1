@@ -44,6 +44,16 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $script:environmentObservations = [System.Collections.Generic.List[object]]::new()
         $script:originalDataEnvironment = Get-HermesTestEnvironmentVariableState -Name 'HERMES_DATA_DIR'
         $script:originalBrowserEnvironment = Get-HermesTestEnvironmentVariableState -Name 'HERMES_BROWSER_DATA_DIR'
+        $script:readinessEnvironment = @{}
+        foreach ($name in @(
+                'HERMES_API_PORT',
+                'HERMES_API_READY_ATTEMPTS',
+                'HERMES_API_READY_DELAY_SECONDS',
+                'HERMES_API_PROBE_TIMEOUT_SECONDS'
+            )) {
+            $script:readinessEnvironment[$name] = Get-HermesTestEnvironmentVariableState -Name $name
+            Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue
+        }
         $global:LASTEXITCODE = 0
 
         Mock Get-Command {
@@ -84,6 +94,12 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
                 Message = 'Hermes bootstrap completed.'
             }
         }
+
+        Mock Invoke-WebRequest {
+            [PSCustomObject]@{ StatusCode = 200 }
+        }
+
+        Mock Start-Sleep
     }
 
     AfterEach {
@@ -93,6 +109,11 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Restore-HermesTestEnvironmentVariable `
             -Name 'HERMES_BROWSER_DATA_DIR' `
             -State $script:originalBrowserEnvironment
+        foreach ($name in $script:readinessEnvironment.Keys) {
+            Restore-HermesTestEnvironmentVariable `
+                -Name $name `
+                -State $script:readinessEnvironment[$name]
+        }
     }
 
     It 'should run the focused Docker phases in order and create only runtime directories' {
@@ -137,6 +158,58 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
             $ComposeFile -eq $script:composeFile -and $DataDir -eq $script:dataDir
         }
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+            $Uri -eq 'http://127.0.0.1:8642/health' -and
+            $Method -eq 'Get' -and
+            $TimeoutSec -eq 2
+        }
+        Should -Invoke Start-Sleep -Times 0 -Exactly
+    }
+
+    It 'should retry readiness until the API returns a successful status' {
+        $env:HERMES_API_PORT = '9864'
+        $env:HERMES_API_READY_ATTEMPTS = '3'
+        $env:HERMES_API_READY_DELAY_SECONDS = '0'
+        $env:HERMES_API_PROBE_TIMEOUT_SECONDS = '1'
+        $script:probeCount = 0
+        Mock Invoke-WebRequest {
+            $script:probeCount++
+            if ($script:probeCount -lt 3) {
+                throw 'not ready'
+            }
+            [PSCustomObject]@{ StatusCode = 204 }
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 0
+        Should -Invoke Invoke-WebRequest -Times 3 -Exactly -ParameterFilter {
+            $Uri -eq 'http://127.0.0.1:9864/health' -and
+            $Method -eq 'Get' -and
+            $TimeoutSec -eq 1
+        }
+        Should -Invoke Start-Sleep -Times 2 -Exactly -ParameterFilter { $Seconds -eq 0 }
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'ps --all'
+    }
+
+    It 'should stop after bounded readiness attempts and print Compose diagnostics' {
+        $env:HERMES_API_READY_ATTEMPTS = '2'
+        $env:HERMES_API_READY_DELAY_SECONDS = '0'
+        Mock Invoke-WebRequest { throw 'still starting' }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes API did not become ready after 2 attempts.'
+        Should -Invoke Invoke-WebRequest -Times 2 -Exactly
+        Should -Invoke Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 0 }
+        $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile ps --all"
     }
 
     It 'should make the Windows task use the focused pwsh entrypoint without installer skip gates' {

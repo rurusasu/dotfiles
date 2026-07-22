@@ -56,8 +56,6 @@ host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
 │   └── risarisa/
 ├── shared/
 │   └── lifelog/                   writable independent Git repository
-├── core/
-│   └── lifelog -> ../shared/lifelog
 ├── memories/                      root runtime state
 ├── sessions/
 └── logs/

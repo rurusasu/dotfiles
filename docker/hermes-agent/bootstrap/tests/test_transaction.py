@@ -8,6 +8,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -36,6 +37,13 @@ class TransactionTests(unittest.TestCase):
     def crash(self, tx: Transaction) -> None:
         tx._release_lock()
 
+    def make_private_store(self, root: Path) -> Path:
+        bootstrap = root / ".bootstrap"
+        bootstrap.mkdir(mode=0o700)
+        store = bootstrap / "transactions"
+        store.mkdir(mode=0o700)
+        return store
+
     def compatibility_move(self) -> tuple[Path, Path, tuple[int, int], Transaction]:
         source = self.root / "core" / "lifelog"
         target = self.root / "shared" / "lifelog"
@@ -55,6 +63,67 @@ class TransactionTests(unittest.TestCase):
             journal_path.parent / "move-000000-source-link",
             journal_path.parent / "move-000000-target-object",
         )
+
+    def private_recovery_hierarchy(
+        self,
+        root: Path,
+        *,
+        bootstrap_mode: int = 0o700,
+    ) -> tuple[dict[str, Path], Path]:
+        source = root / "trust-boundary-secret"
+        nested = source / "nested"
+        nested.mkdir(mode=0o700, parents=True)
+        (nested / "file").write_text("before", encoding="utf-8")
+        source.chmod(0o700)
+        bootstrap = root / ".bootstrap"
+        bootstrap.mkdir(mode=bootstrap_mode)
+        bootstrap.chmod(bootstrap_mode)
+        tx = Transaction.begin(root)
+        tx.snapshot(source)
+        journal_path = next((root / ".bootstrap" / "transactions").glob("*/journal.json"))
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        journal["status"] = "committed"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+        backup = journal_path.parent / journal["entries"][0]["backup"]
+        return (
+            {
+                "bootstrap": bootstrap,
+                "store": root / ".bootstrap" / "transactions",
+                "journal": journal_path.parent,
+                "backup": backup,
+                "nested-backup": backup / "nested",
+            },
+            journal_path,
+        )
+
+    def reported_owner(self, path: Path, owner: int) -> ExitStack:
+        identity = (path.lstat().st_dev, path.lstat().st_ino)
+        original_lstat = os.lstat
+        original_stat = os.stat
+        original_fstat = os.fstat
+
+        def change_owner(info: os.stat_result) -> os.stat_result:
+            if (info.st_dev, info.st_ino) != identity:
+                return info
+            values = list(info)
+            values[4] = owner
+            return os.stat_result(values)
+
+        def lstat(*args: object, **kwargs: object) -> os.stat_result:
+            return change_owner(original_lstat(*args, **kwargs))
+
+        def stat_path(*args: object, **kwargs: object) -> os.stat_result:
+            return change_owner(original_stat(*args, **kwargs))
+
+        def fstat(*args: object, **kwargs: object) -> os.stat_result:
+            return change_owner(original_fstat(*args, **kwargs))
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch.object(transaction_module.os, "lstat", side_effect=lstat))
+        stack.enter_context(mock.patch.object(transaction_module.os, "stat", side_effect=stat_path))
+        stack.enter_context(mock.patch.object(transaction_module.os, "fstat", side_effect=fstat))
+        return stack
 
     def test_snapshot_absent_removes_new_target_on_rollback(self) -> None:
         path = self.root / "new.txt"
@@ -124,9 +193,33 @@ class TransactionTests(unittest.TestCase):
         self.assertNotEqual(first.stat().st_ino, outside_inode)
         self.assertEqual(outside.read_text(encoding="utf-8"), "shared")
 
+    def test_directory_backup_is_private_and_recovery_restores_directory_metadata(self) -> None:
+        tree = self.root / "tree"
+        nested = tree / "nested"
+        nested.mkdir(parents=True)
+        tree.chmod(0o751)
+        nested.chmod(0o710)
+        (nested / "file").write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+
+        tx.snapshot(tree)
+        journal_path, journal = self.journal()
+        backup = journal_path.parent / journal["entries"][0]["backup"]
+        for directory in (backup, backup / "nested"):
+            info = directory.lstat()
+            self.assertEqual(info.st_uid, os.geteuid())
+            self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        shutil.rmtree(tree)
+        self.crash(tx)
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual((nested / "file").read_text(encoding="utf-8"), "before")
+        self.assertEqual(stat.S_IMODE(tree.lstat().st_mode), 0o751)
+        self.assertEqual(stat.S_IMODE(nested.lstat().st_mode), 0o710)
+
     def test_directory_backup_rejects_a_hardlink_escaping_the_transaction(self) -> None:
         tree = self.root / "tree"
-        tree.mkdir()
+        tree.mkdir(mode=0o700)
         path = tree / "file"
         path.write_text("before", encoding="utf-8")
         tx = Transaction.begin(self.root)
@@ -667,8 +760,7 @@ class TransactionTests(unittest.TestCase):
         Transaction.begin(self.root).rollback()
 
     def test_symlinked_lock_is_rejected_without_touching_its_target(self) -> None:
-        store = self.root / ".bootstrap" / "transactions"
-        store.mkdir(parents=True)
+        store = self.make_private_store(self.root)
         outside = self.root.parent / "outside-lock"
         outside.write_text("outside-lock-content", encoding="utf-8")
         outside.chmod(0o644)
@@ -693,8 +785,7 @@ class TransactionTests(unittest.TestCase):
         self.assertTrue((store / ".lock").is_symlink())
 
     def test_persistent_lock_inode_is_private_and_regular(self) -> None:
-        store = self.root / ".bootstrap" / "transactions"
-        store.mkdir(parents=True)
+        store = self.make_private_store(self.root)
         lock = store / ".lock"
         lock.write_text("", encoding="utf-8")
         lock.chmod(0o666)
@@ -707,8 +798,7 @@ class TransactionTests(unittest.TestCase):
         tx.rollback()
 
     def test_hardlinked_lock_is_rejected_without_touching_the_external_inode(self) -> None:
-        store = self.root / ".bootstrap" / "transactions"
-        store.mkdir(parents=True)
+        store = self.make_private_store(self.root)
         outside = self.root.parent / "outside-lock-hardlink"
         outside.write_text("outside-lock-content", encoding="utf-8")
         outside.chmod(0o644)
@@ -744,6 +834,96 @@ class TransactionTests(unittest.TestCase):
         Transaction.recover_if_needed(self.root)
         self.assertEqual(path.read_text(encoding="utf-8"), "before")
 
+    def test_recovery_rejects_non_private_transaction_directory_hierarchy(self) -> None:
+        for name in ("store", "journal", "backup", "nested-backup"):
+            with self.subTest(directory=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                hierarchy, journal_path = self.private_recovery_hierarchy(root)
+                hierarchy[name].chmod(0o750)
+
+                with self.assertRaises(ApplyError) as captured:
+                    Transaction.recover_if_needed(root)
+
+                self.assertNotIn("trust-boundary-secret", str(captured.exception))
+                self.assertNotIn(str(root), str(captured.exception))
+                self.assertTrue(journal_path.exists())
+
+    def test_recovery_rejects_transaction_directory_hierarchy_owned_by_another_euid(self) -> None:
+        different_owner = os.geteuid() + 1
+        for name in ("bootstrap", "store", "journal", "backup", "nested-backup"):
+            with self.subTest(directory=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                hierarchy, journal_path = self.private_recovery_hierarchy(root)
+
+                with self.reported_owner(hierarchy[name], different_owner):
+                    with self.assertRaises(ApplyError) as captured:
+                        Transaction.recover_if_needed(root)
+
+                self.assertNotIn("trust-boundary-secret", str(captured.exception))
+                self.assertNotIn(str(root), str(captured.exception))
+                self.assertTrue(journal_path.exists())
+
+    def test_recovery_rejects_group_or_other_writable_bootstrap_parent(self) -> None:
+        for mode in (0o770, 0o707):
+            with self.subTest(mode=oct(mode)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                hierarchy, journal_path = self.private_recovery_hierarchy(root)
+                hierarchy["bootstrap"].chmod(mode)
+
+                with self.assertRaises(ApplyError) as captured:
+                    Transaction.recover_if_needed(root)
+
+                self.assertNotIn("trust-boundary-secret", str(captured.exception))
+                self.assertNotIn(str(root), str(captured.exception))
+                self.assertTrue(journal_path.exists())
+
+    def test_recovery_accepts_private_transaction_directory_hierarchy(self) -> None:
+        hierarchy, journal_path = self.private_recovery_hierarchy(self.root, bootstrap_mode=0o755)
+
+        Transaction.recover_if_needed(self.root)
+
+        bootstrap_info = hierarchy["bootstrap"].lstat()
+        self.assertEqual(bootstrap_info.st_uid, os.geteuid())
+        self.assertEqual(stat.S_IMODE(bootstrap_info.st_mode), 0o755)
+        info = hierarchy["store"].lstat()
+        self.assertEqual(info.st_uid, os.geteuid())
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        for name in ("journal", "backup", "nested-backup"):
+            path = hierarchy[name]
+            self.assertFalse(path.exists())
+        self.assertFalse(journal_path.exists())
+
+    def test_recovery_rejects_invalid_directory_metadata_without_disclosing_it(self) -> None:
+        for mutation in ("traversal", "missing-directory"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "data"
+                root.mkdir()
+                _, journal_path = self.private_recovery_hierarchy(root)
+                journal = json.loads(journal_path.read_text(encoding="utf-8"))
+                directories = journal["entries"][0]["directories"]
+                if mutation == "traversal":
+                    directories.append(
+                        {
+                            "path": "../trust-boundary-secret",
+                            "mode": 0o700,
+                            "uid": os.geteuid(),
+                            "gid": os.getegid(),
+                        }
+                    )
+                else:
+                    directories.pop()
+                journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+                with self.assertRaises(ApplyError) as captured:
+                    Transaction.recover_if_needed(root)
+
+                self.assertNotIn("trust-boundary-secret", str(captured.exception))
+                self.assertNotIn(str(root), str(captured.exception))
+                self.assertTrue(journal_path.exists())
+
     def test_initial_journal_failure_and_empty_directory_recovery_are_safe(self) -> None:
         with mock.patch.object(transaction_module, "_atomic_write_json", side_effect=OSError()):
             with self.assertRaises(ApplyError):
@@ -752,12 +932,12 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual([path for path in store.iterdir() if path.name != ".lock"], [])
 
         empty = store / "00000000-0000-4000-8000-000000000000"
-        empty.mkdir()
+        empty.mkdir(mode=0o700)
         Transaction.recover_if_needed(self.root)
         self.assertFalse(empty.exists())
 
         nonempty = store / "00000000-0000-4000-8000-000000000001"
-        nonempty.mkdir()
+        nonempty.mkdir(mode=0o700)
         (nonempty / "unexpected").write_text("unsafe", encoding="utf-8")
         with self.assertRaises(ApplyError):
             Transaction.recover_if_needed(self.root)
@@ -971,11 +1151,10 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(source.read_text(encoding="utf-8"), "tampered")
 
     def test_malformed_or_traversing_journal_is_rejected_before_targets_are_touched(self) -> None:
-        store = self.root / ".bootstrap" / "transactions"
-        store.mkdir(parents=True)
+        store = self.make_private_store(self.root)
         (store / ".lock").touch()
         journal_dir = store / "00000000-0000-4000-8000-000000000000"
-        journal_dir.mkdir()
+        journal_dir.mkdir(mode=0o700)
         journal = journal_dir / "journal.json"
         journal.write_text(
             json.dumps({"version": 1, "status": "active", "entries": [{"kind": "snapshot", "path": "../escape", "state": "ready", "original": "absent", "backup": "backup-000000"}]}),

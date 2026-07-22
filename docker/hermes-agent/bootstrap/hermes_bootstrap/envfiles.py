@@ -45,7 +45,9 @@ SLACK_KEYS = frozenset(
 )
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_ASSIGNMENT = re.compile(r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=")
+_ENVIRONMENT_LINE_KEY = re.compile(
+    r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)(?=[ \t=]|$)"
+)
 _API_SERVER_KEY_PREFIX = "hermes-bootstrap-v1_"
 _RANDOM_SECRET_BODY = re.compile(r"[A-Za-z0-9_-]{64}\Z")
 
@@ -345,6 +347,7 @@ def _read_regular_file(path: Path) -> bytes | None:
 def _canonical_environment_bytes(
     original: bytes | None, managed: Mapping[str, str], remove: AbstractSet[str]
 ) -> bytes:
+    owned = set(managed) | set(remove) | {_PLAINTEXT_DASHBOARD_PASSWORD}
     if original is None:
         lines: list[str] = []
     else:
@@ -353,20 +356,30 @@ def _canonical_environment_bytes(
         except UnicodeDecodeError:
             raise ApplyError("environment file is not valid UTF-8") from None
         source = source.replace("\r\n", "\n").replace("\r", "\n")
-        lines = source.split("\n")
+        preserved_source = "".join(
+            binding.original.string
+            for binding in parse_stream(StringIO(source))
+            if _binding_environment_key(binding.key, binding.original.string) not in owned
+        )
+        lines = preserved_source.split("\n")
         if lines and lines[-1] == "":
             lines.pop()
 
-    owned = set(managed) | set(remove) | {_PLAINTEXT_DASHBOARD_PASSWORD}
-    preserved = [line for line in lines if _assignment_key(line) not in owned]
     managed_lines = [f"{key}={managed[key]}" for key in managed]
-    if preserved and managed_lines and preserved[-1] != "":
-        preserved.append("")
-    return ("\n".join([*preserved, *managed_lines]) + "\n").encode("utf-8")
+    if lines and managed_lines and lines[-1] != "":
+        lines.append("")
+    return ("\n".join([*lines, *managed_lines]) + "\n").encode("utf-8")
 
 
-def _assignment_key(line: str) -> str | None:
-    match = _ASSIGNMENT.match(line)
+def _binding_environment_key(key: str | None, original: str) -> str | None:
+    if key is not None:
+        return key
+    first_line = original.split("\n", 1)[0]
+    return _environment_line_key(first_line)
+
+
+def _environment_line_key(line: str) -> str | None:
+    match = _ENVIRONMENT_LINE_KEY.match(line)
     return match.group(1) if match else None
 
 

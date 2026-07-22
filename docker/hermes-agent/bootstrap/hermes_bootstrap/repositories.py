@@ -27,6 +27,7 @@ from .git import (
 from .github import GitAuth
 from .models import BootstrapManifest, SharedRepository
 from .payload import SecretRedactor
+from .transaction import _rename_noreplace
 
 
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
@@ -145,7 +146,7 @@ def synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResul
 
 
 def apply_shared_working_tree(repo: SharedRepository, result: RemoteSyncResult, tx: Transaction) -> ChangeSet:
-    """Move an already synchronized checkout to its canonical path and link legacy users."""
+    """Move a synchronized checkout to its canonical path and remove the legacy target."""
 
     outcome = _apply_shared_working_tree_boundary(repo, result, tx)
     if isinstance(outcome, _MigrationFailure):
@@ -649,22 +650,32 @@ def _move_verified_working_tree(
     tx: Transaction,
 ) -> None:
     source_identity = _directory_identity(source)
-    destination_identity = _optional_empty_directory_identity(repo.target)
+    if _optional_empty_directory_identity(repo.target) is not None:
+        raise ValueError("canonical target already exists")
     flags = os.O_RDONLY | os.O_CLOEXEC
     if hasattr(os, "O_DIRECTORY"):
         flags |= os.O_DIRECTORY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(source, flags)
+    source_parent_descriptor: int | None = None
+    target_parent_descriptor: int | None = None
     try:
+        source_parent_descriptor = os.open(source.parent, flags)
+        target_parent_descriptor = os.open(repo.target.parent, flags)
         if _identity_from_stat(os.fstat(descriptor)) != source_identity:
             raise ValueError("working tree identity changed")
         tx.record_move(source, repo.target)
         if _directory_identity(source) != source_identity:
             raise ValueError("working tree path was swapped")
-        if _optional_empty_directory_identity(repo.target) != destination_identity:
+        if _optional_empty_directory_identity(repo.target) is not None:
             raise ValueError("canonical target changed before move")
-        os.replace(source, repo.target)
+        _rename_noreplace(
+            source_parent_descriptor,
+            source.name,
+            target_parent_descriptor,
+            repo.target.name,
+        )
         try:
             if _directory_identity(repo.target) != source_identity:
                 raise ValueError("moved working tree identity changed")
@@ -673,6 +684,10 @@ def _move_verified_working_tree(
             _rollback_failed_move(source, repo.target)
             raise
     finally:
+        if target_parent_descriptor is not None:
+            os.close(target_parent_descriptor)
+        if source_parent_descriptor is not None:
+            os.close(source_parent_descriptor)
         os.close(descriptor)
 
 

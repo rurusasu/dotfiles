@@ -70,6 +70,7 @@ class Transaction:
                 raise ApplyError("a previous bootstrap transaction requires recovery")
             directory = store / str(uuid.uuid4())
             directory.mkdir(mode=0o700)
+            directory.chmod(0o700)
             _fsync_directory(store)
             journal: dict[str, Any] = {"version": _VERSION, "status": "active", "entries": []}
             tx = cls(root, store, directory, lock, journal)
@@ -132,7 +133,9 @@ class Transaction:
             }
             self._journal["entries"].append(entry)
             self._write_journal()
-            _publish_backup(path, self._directory / entry["backup"], original)
+            directory_metadata = _publish_backup(path, self._directory / entry["backup"], original)
+            if directory_metadata is not None:
+                entry["directories"] = directory_metadata
             entry["state"] = "ready"
             self._write_journal()
             _failpoint("entry-ready")
@@ -253,6 +256,7 @@ class Transaction:
                         self._data_root / entry["path"],
                         self._directory / entry["backup"],
                         entry["original"],
+                        entry.get("directories"),
                     )
                 else:
                     _reverse_move(self._data_root, self._directory, index, entry)
@@ -337,15 +341,17 @@ def _open_store(data_root: Path) -> Path:
     try:
         bootstrap = data_root / ".bootstrap"
         if _lexists(bootstrap):
-            _require_directory(bootstrap)
+            _require_trusted_parent_directory(bootstrap)
         else:
             bootstrap.mkdir(mode=0o700)
+            bootstrap.chmod(0o700)
             _fsync_directory(data_root)
         store = bootstrap / "transactions"
         if _lexists(store):
-            _require_directory(store)
+            _require_private_directory(store)
         else:
             store.mkdir(mode=0o700)
+            store.chmod(0o700)
             _fsync_directory(bootstrap)
         return store
     except ApplyError:
@@ -409,6 +415,7 @@ def _journal_directories(store: Path) -> list[Path]:
                     continue
                 if not _TRANSACTION_ID.fullmatch(entry.name) or not entry.is_dir(follow_symlinks=False):
                     raise ValueError
+                _require_private_directory(path)
                 directories.append(path)
         return sorted(directories, key=lambda path: path.name)
     except Exception:
@@ -456,12 +463,14 @@ def _identity(path: Path, kind: str) -> list[Any]:
     return [info.st_dev, info.st_ino, kind]
 
 
-def _publish_backup(path: Path, backup: Path, original: str) -> None:
+def _publish_backup(path: Path, backup: Path, original: str) -> list[dict[str, Any]] | None:
     temporary: Path | None = None
+    directory_metadata: list[dict[str, Any]] | None = None
     try:
         if original == "dir":
             temporary = Path(tempfile.mkdtemp(prefix=f".{backup.name}.", dir=backup.parent))
-            _copy_directory(path, temporary)
+            directory_metadata = []
+            _copy_directory(path, temporary, directory_metadata=directory_metadata)
         else:
             descriptor, name = tempfile.mkstemp(prefix=f".{backup.name}.", dir=backup.parent)
             temporary = Path(name)
@@ -482,6 +491,7 @@ def _publish_backup(path: Path, backup: Path, original: str) -> None:
         temporary = None
         _fsync_directory(backup.parent)
         _failpoint("backup-published")
+        return directory_metadata
     finally:
         if temporary is not None:
             _safe_remove(temporary)
@@ -504,12 +514,24 @@ def _copy_directory(
     source: Path,
     destination: Path,
     hardlinks: dict[tuple[int, int], Path] | None = None,
+    *,
+    directory_metadata: list[dict[str, Any]] | None = None,
+    relative: str = ".",
 ) -> None:
     info = source.lstat()
     if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
         raise ValueError
     if hardlinks is None:
         hardlinks = {}
+    if directory_metadata is not None:
+        directory_metadata.append(
+            {
+                "path": relative,
+                "mode": stat.S_IMODE(info.st_mode),
+                "uid": info.st_uid,
+                "gid": info.st_gid,
+            }
+        )
     with os.scandir(source) as entries:
         for entry in entries:
             child_source = Path(entry.path)
@@ -528,14 +550,24 @@ def _copy_directory(
                     os.link(linked, child_destination, follow_symlinks=False)
             elif kind == "dir":
                 child_destination.mkdir(mode=0o700)
-                _copy_directory(child_source, child_destination, hardlinks)
+                child_relative = entry.name if relative == "." else f"{relative}/{entry.name}"
+                _copy_directory(
+                    child_source,
+                    child_destination,
+                    hardlinks,
+                    directory_metadata=directory_metadata,
+                    relative=child_relative,
+                )
             elif kind == "symlink":
                 os.symlink(os.readlink(child_source), child_destination)
                 _copy_ownership(child_source, child_destination, follow_symlinks=False)
             else:
                 raise ValueError
-    os.chmod(destination, stat.S_IMODE(info.st_mode))
-    _copy_ownership(source, destination)
+    if directory_metadata is None:
+        os.chmod(destination, stat.S_IMODE(info.st_mode))
+        _copy_ownership(source, destination)
+    else:
+        os.chmod(destination, 0o700)
     _fsync_directory(destination)
 
 
@@ -547,7 +579,13 @@ def _copy_ownership(source: Path, destination: Path, *, follow_symlinks: bool = 
         pass
 
 
-def _restore_snapshot(data_root: Path, target: Path, backup: Path, original: str) -> None:
+def _restore_snapshot(
+    data_root: Path,
+    target: Path,
+    backup: Path,
+    original: str,
+    directory_metadata: object | None = None,
+) -> None:
     if original == "absent":
         parent = _open_managed_parent(data_root, target)
         try:
@@ -562,12 +600,18 @@ def _restore_snapshot(data_root: Path, target: Path, backup: Path, original: str
             _safe_close(parent)
         _failpoint("restore")
         return
-    _validate_backup(backup, original)
-    _replace_from_backup(data_root, backup, target, original)
+    _validate_backup(backup, original, directory_metadata)
+    _replace_from_backup(data_root, backup, target, original, directory_metadata)
     _failpoint("restore")
 
 
-def _replace_from_backup(data_root: Path, backup: Path, target: Path, original: str) -> None:
+def _replace_from_backup(
+    data_root: Path,
+    backup: Path,
+    target: Path,
+    original: str,
+    directory_metadata: object | None,
+) -> None:
     parent = _open_managed_parent(data_root, target)
     temporary: str | None = None
     retired: str | None = None
@@ -579,6 +623,8 @@ def _replace_from_backup(data_root: Path, backup: Path, target: Path, original: 
             _copy_file(backup, temporary_path)
         elif original == "dir":
             _copy_directory(backup, temporary_path)
+            if directory_metadata is not None:
+                _restore_directory_metadata(temporary_path, directory_metadata)
         elif original == "symlink":
             _remove_safe_at(parent, temporary)
             os.symlink(os.readlink(backup), temporary, dir_fd=parent)
@@ -819,7 +865,7 @@ def _restore_quarantine_if_possible(
 
 def _read_journal(directory: Path) -> dict[str, Any]:
     try:
-        _require_directory(directory)
+        _require_private_directory(directory)
         journal_path = directory / _JOURNAL_NAME
         info = journal_path.lstat()
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
@@ -846,11 +892,17 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
             if not isinstance(entry, dict) or entry.get("state") not in {"preparing", "ready", "restored"}:
                 raise ValueError
             if entry.get("kind") == "snapshot":
-                if set(entry) != {"kind", "path", "state", "original", "backup"}:
+                fields = {"kind", "path", "state", "original", "backup"}
+                if frozenset(entry) not in {frozenset(fields), frozenset(fields | {"directories"})}:
                     raise ValueError
                 relative = _validate_relative(entry["path"])
                 if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
                     raise ValueError
+                directory_metadata = entry.get("directories")
+                if directory_metadata is not None:
+                    if entry["original"] != "dir":
+                        raise ValueError
+                    _validate_directory_metadata(directory_metadata)
                 _validate_journal_managed_path(relative)
                 if entry["state"] != "preparing" and any(_overlaps(relative, endpoint) for endpoint in moves):
                     raise ValueError
@@ -860,8 +912,11 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
                     raise ValueError
                 snapshots.append(relative)
                 backups.add(entry["backup"])
-                if journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
-                    _validate_backup(directory / entry["backup"], entry["original"])
+                backup = directory / entry["backup"]
+                if _lexists(backup):
+                    _validate_backup(backup, entry["original"], directory_metadata)
+                elif journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
+                    raise ValueError
             elif entry.get("kind") == "move":
                 if set(entry) != {"kind", "source", "target", "state", "identity"}:
                     raise ValueError
@@ -1127,7 +1182,7 @@ def _valid_identity(value: object) -> bool:
     )
 
 
-def _validate_backup(backup: Path, original: str) -> None:
+def _validate_backup(backup: Path, original: str, directory_metadata: object | None = None) -> None:
     if _BACKUP_ID.fullmatch(backup.name) is None or not backup.parent.is_dir() or backup.parent.is_symlink():
         raise ValueError
     kind = _entry_kind(backup)
@@ -1137,25 +1192,38 @@ def _validate_backup(backup: Path, original: str) -> None:
     elif kind != original:
         raise ValueError
     if kind == "dir":
-        _validate_backup_tree(backup)
+        _validate_backup_tree(backup, directory_metadata)
+    elif directory_metadata is not None:
+        raise ValueError
     elif kind == "file" and backup.lstat().st_nlink != 1:
         raise ValueError
 
 
-def _validate_backup_tree(path: Path) -> None:
+def _validate_backup_tree(path: Path, directory_metadata: object | None = None) -> None:
     links: dict[tuple[int, int], tuple[int, int]] = {}
-    _collect_backup_links(path, links)
+    directories: set[str] = set()
+    _collect_backup_links(path, links, directories)
     if any(count != link_count for count, link_count in links.values()):
+        raise ValueError
+    if directory_metadata is not None and set(_validate_directory_metadata(directory_metadata)) != directories:
         raise ValueError
 
 
-def _collect_backup_links(path: Path, links: dict[tuple[int, int], tuple[int, int]]) -> None:
+def _collect_backup_links(
+    path: Path,
+    links: dict[tuple[int, int], tuple[int, int]],
+    directories: set[str],
+    relative: str = ".",
+) -> None:
+    _require_private_directory(path)
+    directories.add(relative)
     with os.scandir(path) as entries:
         for entry in entries:
             child = Path(entry.path)
             kind = _entry_kind(child)
             if kind == "dir":
-                _collect_backup_links(child, links)
+                child_relative = entry.name if relative == "." else f"{relative}/{entry.name}"
+                _collect_backup_links(child, links, directories, child_relative)
             elif kind == "file":
                 info = child.lstat()
                 identity = (info.st_dev, info.st_ino)
@@ -1165,6 +1233,53 @@ def _collect_backup_links(path: Path, links: dict[tuple[int, int], tuple[int, in
                 links[identity] = (count + 1, link_count)
             elif kind != "symlink":
                 raise ValueError
+
+
+def _validate_directory_metadata(value: object) -> dict[str, tuple[int, int, int]]:
+    if not isinstance(value, list) or not value:
+        raise ValueError
+    metadata: dict[str, tuple[int, int, int]] = {}
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"path", "mode", "uid", "gid"}:
+            raise ValueError
+        relative = item["path"]
+        if relative != ".":
+            relative = _validate_relative(relative)
+        mode = item["mode"]
+        uid = item["uid"]
+        gid = item["gid"]
+        if (
+            relative in metadata
+            or type(mode) is not int
+            or stat.S_IMODE(mode) != mode
+            or type(uid) is not int
+            or uid < 0
+            or type(gid) is not int
+            or gid < 0
+        ):
+            raise ValueError
+        metadata[relative] = (mode, uid, gid)
+    if "." not in metadata:
+        raise ValueError
+    return metadata
+
+
+def _restore_directory_metadata(root: Path, value: object) -> None:
+    metadata = _validate_directory_metadata(value)
+    ordered = sorted(
+        metadata.items(),
+        key=lambda item: 0 if item[0] == "." else len(Path(item[0]).parts),
+        reverse=True,
+    )
+    for relative, (mode, uid, gid) in ordered:
+        directory = root if relative == "." else root / relative
+        _require_directory(directory)
+        try:
+            os.chown(directory, uid, gid)
+        except (NotImplementedError, PermissionError, OSError):
+            pass
+        os.chmod(directory, mode)
+        _fsync_directory(directory)
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -1433,6 +1548,30 @@ def _remove_safe(path: Path) -> None:
 def _require_directory(path: Path) -> None:
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ValueError
+
+
+def _require_private_directory(path: Path) -> None:
+    info = path.lstat()
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+    ):
+        raise ValueError
+
+
+def _require_trusted_parent_directory(path: Path) -> None:
+    info = path.lstat()
+    mode = stat.S_IMODE(info.st_mode)
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or mode & 0o700 != 0o700
+        or mode & 0o022
+    ):
         raise ValueError
 
 
