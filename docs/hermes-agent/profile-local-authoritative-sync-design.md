@@ -2,8 +2,8 @@
 
 ## Status
 
-The design has been approved section by section and is awaiting final review of
-this written specification. Implementation begins only after that review.
+Approved on 2026-07-23. Implementation follows the companion plan under
+`docs/hermes-agent/plans/`.
 
 This document supersedes the named-profile source-of-truth statements in
 `bootstrap-design.md`. The root Hermes distribution and shared repositories keep
@@ -422,11 +422,12 @@ exact local allowlist projection.
 Delivery order is:
 
 1. Merge the `dotfiles` synchronization engine and tests.
-2. Rebuild the Hermes image and bootstrap the new command.
-3. Add and merge the `hermes-home` wrapper and cron distribution changes.
-4. Apply the updated root distribution.
-5. Run `sync-profiles --dry-run` and inspect all planned remote trees.
-6. Run the real aggregate sync.
+2. Rebuild the Hermes image without running bootstrap apply.
+3. Run `sync-profiles --dry-run` and inspect all planned remote trees.
+4. Run the real aggregate sync and verify local snapshot hashes are unchanged.
+5. Add and merge the `hermes-home` wrapper and cron distribution changes.
+6. Run bootstrap to apply the updated root distribution; profile sync should be
+   idempotently `unchanged` during this apply.
 7. Manually run the installed cron job and confirm Slack delivery.
 
 This order ensures the distributed cron wrapper never refers to a command that
