@@ -1,4 +1,12 @@
 Describe "Hermes bootstrap type loading" {
+    It "uses stream APIs available in Windows PowerShell 5.1" {
+        $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
+        $source = Get-Content -LiteralPath $sourcePath -Raw
+
+        $source | Should -Not -Match '\.AsMemory\('
+        $source | Should -Match 'ReadAsync\(chars,\s*0,\s*chars\.Length\)'
+    }
+
     It "loads error-history support when an older drain type already exists in the session" {
         $sourcePath = (Resolve-Path (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1")).ProviderPath
         $escapedSourcePath = $sourcePath.Replace("'", "''")
@@ -614,8 +622,8 @@ Describe "Invoke-HermesBootstrap" {
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
         $global:LASTEXITCODE | Should -Be 24
         $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
-        $source | Should -Match 'StandardOutputEncoding\s*=\s*\$utf8Encoding'
-        $source | Should -Match 'StandardErrorEncoding\s*=\s*\$utf8Encoding'
+        $source | Should -Match '"StandardInputEncoding",\s*"StandardOutputEncoding",\s*"StandardErrorEncoding"'
+        $source | Should -Match 'StandardInput\.BaseStream'
     }
 
     It "closes stdin and reaps the Docker child when a later 1Password lookup fails" {

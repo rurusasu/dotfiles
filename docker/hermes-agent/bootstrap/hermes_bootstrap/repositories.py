@@ -39,6 +39,23 @@ _FORBIDDEN_CREDENTIAL_STEMS = frozenset(
 )
 _FORBIDDEN_DIRECTORIES = frozenset({"memories", "sessions", "logs", "cache", "caches", "generated", "runtime"})
 _RUNTIME_DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal")
+_EXECUTABLE_LOCAL_CONFIG = frozenset(
+    {
+        "core.askpass",
+        "core.attributesfile",
+        "core.editor",
+        "core.fsmonitor",
+        "core.gitproxy",
+        "core.hookspath",
+        "core.sshcommand",
+        "credential.helper",
+        "diff.external",
+        "gpg.program",
+        "gpg.ssh.defaultkeycommand",
+        "interactive.difffilter",
+        "sequence.editor",
+    }
+)
 _LOCAL_VALIDATION_AUTH = GitAuth("local-validation", SecretRedactor(("local-validation",)))
 
 
@@ -208,10 +225,11 @@ def _synchronize_remote_boundary(
                 working_tree = stage
             askpass = _create_askpass(working_tree.parent)
             environment = _git_environment(auth, askpass)
+            local_environment = _local_git_environment(environment)
             if stage is not None:
                 _initialize_checkout(repo, stage, environment)
             else:
-                _verify_checkout_identity(repo, working_tree, environment)
+                _verify_checkout_identity(repo, working_tree, local_environment)
             commit, pushed = _synchronize_checkout(repo, working_tree, environment)
             outcome = RemoteSyncResult(repo.name, commit, pushed, working_tree)
     except _LockBusy as error:
@@ -322,47 +340,50 @@ def _verify_checkout_identity(repo: SharedRepository, checkout: Path, environmen
 
 
 def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> tuple[str, bool]:
+    local_environment = _local_git_environment(environment)
     if repo.mode == "read-only":
-        _validate_index(checkout, environment)
+        _validate_index(checkout, local_environment)
         if _git_bytes(
             ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
             checkout,
-            environment,
+            local_environment,
             max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
         ) != b"":
             raise ValueError("read-only checkout is dirty")
         remote_commit = _fetch_declared_commit(repo, checkout, environment)
-        head = _head_commit(checkout, environment)
-        if not _is_ancestor(head, remote_commit, checkout, environment):
+        head = _head_commit(checkout, local_environment)
+        if not _is_ancestor(head, remote_commit, checkout, local_environment):
             raise ValueError("read-only checkout is not fast-forwardable")
-        _require_git_success(("merge", "--ff-only", "FETCH_HEAD"), checkout, environment)
-        if _head_commit(checkout, environment) != remote_commit:
+        _require_git_success(("merge", "--ff-only", "FETCH_HEAD"), checkout, local_environment)
+        if _head_commit(checkout, local_environment) != remote_commit:
             raise ValueError("read-only checkout did not reach declared commit")
         return remote_commit, False
 
     status_output = _git_bytes(
         ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
         checkout,
-        environment,
+        local_environment,
         max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
     )
     _reject_forbidden_status_paths(status_output)
-    _validate_index(checkout, environment)
+    _validate_index(checkout, local_environment)
+    _reject_external_hardlinks(checkout)
     _fetch_declared_commit(repo, checkout, environment)
-    _validate_unpushed_commits(checkout, environment)
+    _validate_unpushed_commits(checkout, local_environment)
     staged = b""
     if status_output:
         backup = _backup_index(checkout)
         try:
-            _require_git_success(("add", "-A", "--", "."), checkout, environment)
-            _validate_index(checkout, environment)
+            _require_git_success(("add", "-A", "--", "."), checkout, local_environment)
+            _validate_index(checkout, local_environment)
             staged = _git_bytes(
                 ("diff", "--cached", "--name-only", "-z"),
                 checkout,
-                environment,
+                local_environment,
                 max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
             )
             _reject_forbidden_name_list(staged)
+            _reject_external_hardlinks(checkout)
         except Exception:
             _restore_index(backup)
             raise
@@ -380,17 +401,17 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
                 f"chore: sync Hermes {repo.name}",
             ),
             checkout,
-            environment,
+            local_environment,
         )
-    remote_commit = _fetch_head_commit(checkout, environment)
-    _validate_index(checkout, environment)
-    _validate_unpushed_commits(checkout, environment)
-    if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, environment) is None:
-        if _try_git_bytes(("rebase", "--abort"), checkout, environment) is None:
+    remote_commit = _fetch_head_commit(checkout, local_environment)
+    _validate_index(checkout, local_environment)
+    _validate_unpushed_commits(checkout, local_environment)
+    if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, local_environment) is None:
+        if _try_git_bytes(("rebase", "--abort"), checkout, local_environment) is None:
             raise ValueError("could not abort rebase")
         raise ValueError("rebase failed")
-    head = _head_commit(checkout, environment)
-    ahead = _git_ascii(("rev-list", "--count", "FETCH_HEAD..HEAD"), checkout, environment)
+    head = _head_commit(checkout, local_environment)
+    ahead = _git_ascii(("rev-list", "--count", "FETCH_HEAD..HEAD"), checkout, local_environment)
     if ahead is None or not ahead.isdecimal():
         raise ValueError("could not count local commits")
     pushed = int(ahead) > 0
@@ -456,6 +477,12 @@ def _require_git_success(arguments: tuple[str, ...], checkout: Path, environment
     _git_bytes(arguments, checkout, environment)
 
 
+def _local_git_environment(environment: dict[str, str]) -> dict[str, str]:
+    local_environment = environment.copy()
+    local_environment.pop("HERMES_BOOTSTRAP_GITHUB_TOKEN", None)
+    return local_environment
+
+
 def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]) -> None:
     names = _nul_records(
         _git_bytes(
@@ -472,8 +499,53 @@ def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]
             or name == "include.path"
             or (name.startswith("includeif.") and name.endswith(".path"))
             or (name.startswith("url.") and name.endswith((".insteadof", ".pushinsteadof")))
+            or _is_executable_local_config(name)
         ):
-            raise ValueError("redirecting local Git config is forbidden")
+            raise ValueError("unsafe local Git config is forbidden")
+
+
+def _is_executable_local_config(name: str) -> bool:
+    return (
+        name in _EXECUTABLE_LOCAL_CONFIG
+        or name.startswith("http.")
+        or (name.startswith("credential.") and name.endswith(".helper"))
+        or (name.startswith("diff.") and name.endswith((".command", ".textconv")))
+        or (name.startswith("difftool.") and name.endswith(".cmd"))
+        or (name.startswith("filter.") and name.endswith((".clean", ".smudge", ".process")))
+        or (name.startswith("merge.") and name.endswith(".driver"))
+        or (name.startswith("mergetool.") and name.endswith(".cmd"))
+        or (name.startswith("submodule.") and name.endswith(".update"))
+    )
+
+
+def _reject_external_hardlinks(checkout: Path) -> None:
+    identities: dict[tuple[int, int], tuple[int, int]] = {}
+    pending = [checkout]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = tuple(os.scandir(directory))
+        except OSError:
+            raise ValueError("could not inspect repository files") from None
+        for entry in entries:
+            if directory == checkout and entry.name == ".git":
+                continue
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError:
+                raise ValueError("could not inspect repository files") from None
+            if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
+                pending.append(Path(entry.path))
+                continue
+            if not stat.S_ISREG(metadata.st_mode):
+                continue
+            identity = (metadata.st_dev, metadata.st_ino)
+            count, expected = identities.get(identity, (0, metadata.st_nlink))
+            if expected != metadata.st_nlink:
+                raise ValueError("repository file link count changed")
+            identities[identity] = (count + 1, expected)
+    if any(count != expected for count, expected in identities.values()):
+        raise ValueError("repository file has an external hard link")
 
 
 def _validate_index(checkout: Path, environment: dict[str, str]) -> None:

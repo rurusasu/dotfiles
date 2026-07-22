@@ -259,6 +259,76 @@ class RepositoryTests(unittest.TestCase):
         run_git("fetch", "origin", "main", cwd=self.seed)
         self.assertEqual(retried.commit, run_git("rev-parse", "FETCH_HEAD", cwd=self.seed))
 
+    def test_read_write_does_not_run_checkout_hooks_with_the_github_token(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        marker = self.root / "hook-token-marker"
+        hook = repo.target / ".git" / "hooks" / "pre-commit"
+        hook.write_text(
+            f"#!/bin/sh\nprintf '%s' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" > '{marker}'\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o700)
+        (repo.target / "entry.md").write_text("entry\n", encoding="utf-8")
+
+        result = synchronize_remote(repo, self.auth)
+
+        self.assertTrue(result.pushed)
+        self.assertFalse(marker.exists())
+
+    def test_read_write_rejects_external_hardlinks_before_committing_or_pushing(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        outside_secret = self.data_root / ".env"
+        outside_secret.parent.mkdir(parents=True, exist_ok=True)
+        outside_secret.write_text("external-hardlink-secret-marker\n", encoding="utf-8")
+        os.link(outside_secret, repo.target / "notes.md")
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "external-hardlink-secret-marker",
+            "fixture-token",
+        )
+
+    def test_read_write_rejects_external_hardlinks_in_a_prior_unpushed_commit(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        outside_secret = self.data_root / ".env"
+        outside_secret.parent.mkdir(parents=True, exist_ok=True)
+        outside_secret.write_text("prior-hardlink-secret-marker\n", encoding="utf-8")
+        os.link(outside_secret, repo.target / "notes.md")
+        run_git("add", "notes.md", cwd=repo.target)
+        run_git("commit", "-m", "prior hardlink", cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "prior-hardlink-secret-marker",
+            "fixture-token",
+        )
+
+    def test_read_write_allows_hardlinks_fully_contained_in_the_checkout(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        first = repo.target / "first.md"
+        second = repo.target / "second.md"
+        first.write_text("shared inode\n", encoding="utf-8")
+        os.link(first, second)
+
+        result = synchronize_remote(repo, self.auth)
+
+        self.assertTrue(result.pushed)
+        self.assertEqual(self.remote_head(), run_git("rev-parse", "HEAD", cwd=repo.target))
+
     def test_read_write_rebases_onto_the_declared_remote_commit_before_pushing(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
@@ -331,16 +401,27 @@ class RepositoryTests(unittest.TestCase):
         run_git("commit", "-m", "race", cwd=self.seed)
         race_commit = run_git("rev-parse", "HEAD", cwd=self.seed)
         run_git("push", "origin", "HEAD:refs/heads/race", cwd=self.seed)
-        hook = repo.target / ".git" / "hooks" / "pre-push"
-        hook.write_text(
-            f"#!/bin/sh\nexec git --git-dir='{self.remote}' update-ref refs/heads/main {race_commit}\n",
-            encoding="utf-8",
-        )
-        hook.chmod(0o700)
+        real_runner = repositories_module._run_git_bytes
+        raced = False
 
-        with self.assertRaises(RepositoryError):
-            synchronize_remote(repo, self.auth)
+        def race_before_push(
+            arguments: tuple[str, ...],
+            cwd: Path,
+            environment: dict[str, str],
+            *,
+            max_output_bytes: int,
+        ) -> bytes | None:
+            nonlocal raced
+            if arguments and arguments[0] == "push" and not raced:
+                raced = True
+                run_git("--git-dir", str(self.remote), "update-ref", "refs/heads/main", race_commit)
+            return real_runner(arguments, cwd, environment, max_output_bytes=max_output_bytes)
 
+        with mock.patch.object(repositories_module, "_run_git_bytes", side_effect=race_before_push):
+            with self.assertRaises(RepositoryError):
+                synchronize_remote(repo, self.auth)
+
+        self.assertTrue(raced)
         self.assertEqual(self.remote_head(), race_commit)
         self.assertNotEqual(run_git("rev-parse", "HEAD", cwd=repo.target), race_commit)
 
@@ -377,6 +458,35 @@ class RepositoryTests(unittest.TestCase):
                     synchronize_remote(repo, self.auth)
 
                 self.assert_hidden_in_bootstrap_error_graph(caught.exception, "secret-marker", "fixture-token")
+
+    def test_rejects_local_filter_commands_before_they_can_read_the_github_token(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        marker = self.root / "filter-token-marker"
+        command = f"sh -c 'printf %s \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" > {marker}'"
+        run_git("config", "--local", "filter.capture.clean", command, cwd=repo.target)
+        (repo.target / ".gitattributes").write_text("*.md filter=capture\n", encoding="utf-8")
+        (repo.target / "entry.md").write_text("entry\n", encoding="utf-8")
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertFalse(marker.exists())
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
+    def test_rejects_local_http_transport_overrides_before_fetching(self) -> None:
+        for key, value in (("http.proxy", "http://127.0.0.1:9"), ("http.sslVerify", "false")):
+            with self.subTest(key=key):
+                repo = self.repository()
+                if repo.target.exists():
+                    shutil.rmtree(repo.target)
+                self.clone(repo.target)
+                run_git("config", "--local", key, value, cwd=repo.target)
+
+                with self.assertRaises(RepositoryError) as caught:
+                    synchronize_remote(repo, self.auth)
+
+                self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
 
     def test_explicit_destination_ignores_remote_transport_overrides(self) -> None:
         repo = self.repository()

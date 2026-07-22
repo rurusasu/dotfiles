@@ -217,9 +217,15 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
             "GIT_TERMINAL_PROMPT": "0",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_COUNT": "4",
             "GIT_CONFIG_KEY_0": "credential.helper",
             "GIT_CONFIG_VALUE_0": "",
+            "GIT_CONFIG_KEY_1": "core.hooksPath",
+            "GIT_CONFIG_VALUE_1": os.devnull,
+            "GIT_CONFIG_KEY_2": "core.fsmonitor",
+            "GIT_CONFIG_VALUE_2": "false",
+            "GIT_CONFIG_KEY_3": "protocol.ext.allow",
+            "GIT_CONFIG_VALUE_3": "never",
             "HERMES_BOOTSTRAP_GITHUB_TOKEN": auth.token,
         }
     )

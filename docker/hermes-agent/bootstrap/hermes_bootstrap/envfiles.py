@@ -290,7 +290,11 @@ def _validate_environment_mapping(managed: Mapping[str, str], remove: AbstractSe
         raise InputError("environment mapping is invalid") from None
     for key, value in items:
         _validate_environment_key(key)
-        if not isinstance(value, str) or any(character in value for character in "\x00\r\n"):
+        if (
+            not isinstance(value, str)
+            or any(character in value for character in "\x00\r\n")
+            or "${" in value
+        ):
             raise InputError("environment value is invalid")
     for key in removed:
         _validate_environment_key(key)
@@ -369,10 +373,14 @@ def _canonical_environment_bytes(
         if lines and lines[-1] == "":
             lines.pop()
 
-    managed_lines = [f"{key}={managed[key]}" for key in managed]
+    managed_lines = [f"{key}={_quote_environment_value(managed[key])}" for key in managed]
     if lines and managed_lines and lines[-1] != "":
         lines.append("")
     return ("\n".join([*lines, *managed_lines]) + "\n").encode("utf-8")
+
+
+def _quote_environment_value(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def _binding_environment_key(key: str | None, original: str) -> str | None:

@@ -11,6 +11,9 @@ import os
 import signal
 import stat
 import sys
+from io import StringIO
+
+from dotenv.parser import parse_stream
 
 
 LIMIT = 1024 * 1024
@@ -140,7 +143,21 @@ def read_environment(directory_fd, descriptors):
             continue
         if key in values:
             raise InvalidEnvironment
-        value = line[len(key) + 1 :]
+        raw_value = line[len(key) + 1 :]
+        value = raw_value
+        if raw_value.startswith(("'", '"')):
+            quote = raw_value[0]
+            if not raw_value.endswith(quote):
+                raise InvalidEnvironment
+            bindings = tuple(parse_stream(StringIO(line + "\n")))
+            if (
+                len(bindings) != 1
+                or bindings[0].error
+                or bindings[0].key != key
+                or not isinstance(bindings[0].value, str)
+            ):
+                raise InvalidEnvironment
+            value = bindings[0].value
         if "\r" in value or "\n" in value:
             raise InvalidEnvironment
         values[key] = value

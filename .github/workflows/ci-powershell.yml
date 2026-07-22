@@ -363,6 +363,33 @@ jobs:
           $runner = [scriptblock]::Create((Get-Content -LiteralPath .\Invoke-Tests.ps1 -Raw -Encoding UTF8))
           & $runner -Path .\lib\Invoke-ExternalCommand.Tests.ps1 -MinimumCoverage 0
 
+      - name: Load Hermes bootstrap library on Windows PowerShell
+        shell: powershell
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          . .\scripts\powershell\lib\HermesBootstrap.ps1
+          if (-not ("HermesBootstrapBoundedDrain" -as [type])) {
+            throw 'Hermes bootstrap drain type did not load'
+          }
+          if ([HermesBootstrapProcessArgument]::Quote('argument with spaces') -ne '"argument with spaces"') {
+            throw 'Hermes bootstrap argument quoting is invalid'
+          }
+          $startInfo = New-HermesBootstrapProcessStartInfo `
+            -Executable 'docker.exe' `
+            -Arguments @('compose', '-f', 'C:\path with spaces\compose.yml') `
+            -DataDir 'C:\Users\runner\.hermes'
+          if ($startInfo.Arguments -ne 'compose -f "C:\path with spaces\compose.yml"') {
+            throw "Hermes bootstrap Windows PowerShell arguments are invalid: $($startInfo.Arguments)"
+          }
+          if ($startInfo.EnvironmentVariables['HERMES_DATA_DIR'] -ne 'C:\Users\runner\.hermes') {
+            throw 'Hermes bootstrap data directory environment is invalid'
+          }
+          $parsed = ConvertFrom-HermesBootstrapJson -Json '{"value":1}' -Depth 8
+          if ($parsed.value -ne 1) {
+            throw 'Hermes bootstrap JSON compatibility helper is invalid'
+          }
+
       - name: Run install.cmd fallback without pwsh
         shell: powershell
         timeout-minutes: 5

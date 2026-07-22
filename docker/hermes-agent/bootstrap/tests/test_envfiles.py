@@ -5,10 +5,13 @@ import stat
 import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from types import MappingProxyType
 from types import FrameType, TracebackType
 from unittest import mock
+
+from dotenv import dotenv_values
 
 
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
@@ -114,7 +117,7 @@ class EnvFileTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(
             self.path.read_bytes(),
-            b"GH_TOKEN=token=value\nSLACK_APP_TOKEN=app\n",
+            b"GH_TOKEN='token=value'\nSLACK_APP_TOKEN='app'\n",
         )
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
@@ -145,7 +148,7 @@ class EnvFileTests(unittest.TestCase):
             b"KEEP=one=two\n"
             b"# another comment\n"
             b"\n"
-            b"GH_TOKEN=new=token\n",
+            b"GH_TOKEN='new=token'\n",
         )
 
     def test_missing_final_newline_is_normalized_and_empty_managed_block_is_allowed(self) -> None:
@@ -172,7 +175,7 @@ class EnvFileTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(
             self.path.read_bytes(),
-            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN=new-token\n",
+            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN='new-token'\n",
         )
         self.assertNotIn(b"old-secret-continuation", self.path.read_bytes())
 
@@ -190,7 +193,7 @@ class EnvFileTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(
             self.path.read_bytes(),
-            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN=new-token\n",
+            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN='new-token'\n",
         )
 
     def test_managed_block_preserves_mapping_insertion_order(self) -> None:
@@ -201,7 +204,29 @@ class EnvFileTests(unittest.TestCase):
         )
 
         self.assertTrue(changed)
-        self.assertEqual(self.path.read_bytes(), b"Z_LAST=first\nA_FIRST=second\n")
+        self.assertEqual(self.path.read_bytes(), b"Z_LAST='first'\nA_FIRST='second'\n")
+
+    def test_managed_values_round_trip_without_comments_or_interpolation(self) -> None:
+        value = "literal # comment $EXPANDED 'quote' \\ tail"
+
+        changed = merge_env_file(self.path, {"GH_TOKEN": value}, frozenset())
+
+        self.assertTrue(changed)
+        rendered = self.path.read_text(encoding="utf-8")
+        self.assertEqual(
+            dotenv_values(stream=StringIO(rendered), interpolate=True)["GH_TOKEN"],
+            value,
+        )
+        self.assertEqual(read_environment_values(self.path, GITHUB_KEYS)["GH_TOKEN"], value)
+
+    def test_managed_values_reject_braced_interpolation_without_writing_it(self) -> None:
+        value = "literal-${EXPANDED}-secret-marker"
+
+        with self.assertRaises(InputError) as caught:
+            merge_env_file(self.path, {"GH_TOKEN": value}, frozenset())
+
+        self.assertFalse(self.path.exists())
+        self.assertNotIn(value, str(caught.exception))
 
     def test_invalid_key_or_value_fails_without_exposing_or_writing_secret(self) -> None:
         self.path.parent.mkdir(parents=True)
@@ -219,7 +244,7 @@ class EnvFileTests(unittest.TestCase):
 
     def test_idempotent_apply_preserves_inode_and_enforces_mode(self) -> None:
         self.path.parent.mkdir(parents=True)
-        self.path.write_bytes(b"KEEP=yes\n\nGH_TOKEN=token\n")
+        self.path.write_bytes(b"KEEP=yes\n\nGH_TOKEN='token'\n")
         os.chmod(self.path, 0o644)
         inode = self.path.stat().st_ino
 
@@ -237,7 +262,7 @@ class EnvFileTests(unittest.TestCase):
         self.assertTrue(merge_env_file(self.path, {"GH_TOKEN": "new"}, frozenset()))
 
         self.assertNotEqual(self.path.stat().st_ino, original_inode)
-        self.assertEqual(self.path.read_bytes(), b"GH_TOKEN=new\n")
+        self.assertEqual(self.path.read_bytes(), b"GH_TOKEN='new'\n")
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
     def test_symlink_and_nonregular_targets_are_rejected_without_modifying_target(self) -> None:

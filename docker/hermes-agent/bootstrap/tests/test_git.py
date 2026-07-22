@@ -511,9 +511,15 @@ class GitStagingTests(unittest.TestCase):
         self.assertEqual(environment["GIT_TERMINAL_PROMPT"], "0")
         self.assertEqual(environment["GIT_CONFIG_NOSYSTEM"], "1")
         self.assertEqual(environment["GIT_CONFIG_GLOBAL"], os.devnull)
-        self.assertEqual(environment["GIT_CONFIG_COUNT"], "1")
+        self.assertEqual(environment["GIT_CONFIG_COUNT"], "4")
         self.assertEqual(environment["GIT_CONFIG_KEY_0"], "credential.helper")
         self.assertEqual(environment["GIT_CONFIG_VALUE_0"], "")
+        self.assertEqual(environment["GIT_CONFIG_KEY_1"], "core.hooksPath")
+        self.assertEqual(environment["GIT_CONFIG_VALUE_1"], os.devnull)
+        self.assertEqual(environment["GIT_CONFIG_KEY_2"], "core.fsmonitor")
+        self.assertEqual(environment["GIT_CONFIG_VALUE_2"], "false")
+        self.assertEqual(environment["GIT_CONFIG_KEY_3"], "protocol.ext.allow")
+        self.assertEqual(environment["GIT_CONFIG_VALUE_3"], "never")
         self.assertEqual(environment["HERMES_BOOTSTRAP_GITHUB_TOKEN"], "git-token-marker")
         for key, value in inherited.items():
             if key in {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_ASKPASS"}:

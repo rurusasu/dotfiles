@@ -133,6 +133,8 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow | Should -Match 'shell:\s+powershell'
         $powershellWorkflow | Should -Match 'Get-Content -LiteralPath \.\\Invoke-Tests\.ps1 -Raw -Encoding UTF8'
         $powershellWorkflow | Should -Match '& \$runner -Path \.\\lib\\Invoke-ExternalCommand\.Tests\.ps1 -MinimumCoverage 0'
+        $powershellWorkflow | Should -Match '- name: Load Hermes bootstrap library on Windows PowerShell'
+        $powershellWorkflow | Should -Match 'New-HermesBootstrapProcessStartInfo'
         $powershellWorkflow | Should -Not -Match '\$pesterConfig\.Filter\.FullName = "\*Invoke-VerifyCommand\*"'
         $windowsPowerShellInstall | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/Pester/\$pesterVersion'
         $windowsPowerShellInstall | Should -Match 'Expand-Archive -LiteralPath \$packagePath -DestinationPath \$pesterPath'

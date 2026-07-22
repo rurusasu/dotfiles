@@ -29,6 +29,7 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap import app, cli
 from hermes_bootstrap.errors import ApplyError, CredentialError, RepositoryError
+from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
 from hermes_bootstrap.manifest import load_manifest
@@ -694,11 +695,7 @@ class BootstrapFlowTests(unittest.TestCase):
                     },
                     {"name": name, **expected},
                 )
-                token = next(
-                    line.partition("=")[2]
-                    for line in (target / ".env").read_text(encoding="utf-8").splitlines()
-                    if line.startswith("GH_TOKEN=")
-                )
+                token = read_environment_values(target / ".env", GITHUB_KEYS)["GH_TOKEN"]
                 self.assertEqual(sha256(token.encode("utf-8")).digest(), sha256(FIXTURE_TOKEN.encode("utf-8")).digest())
 
     def test_identical_second_apply_preserves_the_target_and_runtime_tree(self) -> None:

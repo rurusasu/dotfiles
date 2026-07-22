@@ -25,8 +25,11 @@ public sealed class HermesBootstrapBoundedDrain : IDisposable
         try
         {
             int count;
-            while ((count = await reader.ReadAsync(chars.AsMemory(0, chars.Length), cancellationToken).ConfigureAwait(false)) > 0)
+            while (true)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                count = await reader.ReadAsync(chars, 0, chars.Length).ConfigureAwait(false);
+                if (count <= 0) { break; }
                 lock (syncRoot)
                 {
                     var remaining = maximum - buffer.Length;
@@ -34,8 +37,14 @@ public sealed class HermesBootstrapBoundedDrain : IDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested) { }
+        catch (OperationCanceledException)
+        {
+            if (!cancellationToken.IsCancellationRequested) { throw; }
+        }
+        catch (ObjectDisposedException)
+        {
+            if (!cancellationToken.IsCancellationRequested) { throw; }
+        }
     }
 
     public string Text { get { lock (syncRoot) { return buffer.ToString(); } } }
@@ -43,6 +52,50 @@ public sealed class HermesBootstrapBoundedDrain : IDisposable
     public void Dispose()
     {
         lock (syncRoot) { buffer.Clear(); }
+    }
+}
+'@
+}
+
+if (-not ("HermesBootstrapProcessArgument" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+
+public static class HermesBootstrapProcessArgument
+{
+    public static string Quote(string argument)
+    {
+        if (argument == null) { throw new ArgumentNullException("argument"); }
+        if (argument.Length > 0 && argument.IndexOfAny(new[] { ' ', '\t', '\n', '\v', '"' }) < 0)
+        {
+            return argument;
+        }
+
+        var quoted = new StringBuilder(argument.Length + 2);
+        quoted.Append('"');
+        var backslashes = 0;
+        foreach (var character in argument)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+            if (character == '"')
+            {
+                quoted.Append('\\', backslashes * 2 + 1);
+                quoted.Append('"');
+                backslashes = 0;
+                continue;
+            }
+            quoted.Append('\\', backslashes);
+            backslashes = 0;
+            quoted.Append(character);
+        }
+        quoted.Append('\\', backslashes * 2);
+        quoted.Append('"');
+        return quoted.ToString();
     }
 }
 '@
@@ -80,6 +133,61 @@ $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "slack_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Risarisa" }
 )
 
+function ConvertFrom-HermesBootstrapJson {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Json,
+        [Parameter(Mandatory)]
+        [int]$Depth
+    )
+
+    $command = Get-Command -Name ConvertFrom-Json -CommandType Cmdlet -ErrorAction Stop
+    if ($command.Parameters.ContainsKey("Depth")) {
+        return ($Json | ConvertFrom-Json -Depth $Depth -ErrorAction Stop)
+    }
+    return ($Json | ConvertFrom-Json -ErrorAction Stop)
+}
+
+function New-HermesBootstrapProcessStartInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Executable,
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]]$Arguments,
+        [Parameter(Mandatory)]
+        [string]$DataDir
+    )
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $Executable
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $utf8Encoding = [System.Text.UTF8Encoding]::new($false)
+    foreach ($property in @("StandardInputEncoding", "StandardOutputEncoding", "StandardErrorEncoding")) {
+        if ($null -ne $startInfo.PSObject.Properties[$property]) {
+            $startInfo.$property = $utf8Encoding
+        }
+    }
+    $startInfo.EnvironmentVariables["HERMES_DATA_DIR"] = $DataDir
+    if ($null -ne $startInfo.PSObject.Properties["ArgumentList"]) {
+        foreach ($argument in $Arguments) {
+            [void]$startInfo.ArgumentList.Add($argument)
+        }
+    }
+    else {
+        $startInfo.Arguments = @(
+            $Arguments | ForEach-Object { [HermesBootstrapProcessArgument]::Quote($_) }
+        ) -join " "
+    }
+    return $startInfo
+}
+
 function Get-HermesBootstrapSecretPlan {
     [CmdletBinding()]
     param(
@@ -97,7 +205,7 @@ function Get-HermesBootstrapSecretPlan {
     }
 
     try {
-        $plan = (($output -join "`n") | ConvertFrom-Json -Depth 32 -ErrorAction Stop)
+        $plan = ConvertFrom-HermesBootstrapJson -Json ($output -join "`n") -Depth 32
         if (-not (Test-HermesBootstrapSecretPlan -Plan $plan)) {
             throw [System.InvalidOperationException]::new("Hermes bootstrap secret plan is invalid.")
         }
@@ -235,30 +343,18 @@ function Invoke-HermesBootstrap {
     $invokerOutput = $null
     $item = $null
     $record = $null
+    $processInput = $null
 
     try {
         try {
-            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-            $startInfo.FileName = $DockerExecutable
-            $startInfo.UseShellExecute = $false
-            $startInfo.CreateNoWindow = $true
-            $startInfo.RedirectStandardInput = $true
-            $startInfo.RedirectStandardOutput = $true
-            $startInfo.RedirectStandardError = $true
-            $utf8Encoding = [System.Text.UTF8Encoding]::new($false)
-            $startInfo.StandardInputEncoding = $utf8Encoding
-            $startInfo.StandardOutputEncoding = $utf8Encoding
-            $startInfo.StandardErrorEncoding = $utf8Encoding
-            $startInfo.Environment["HERMES_DATA_DIR"] = $DataDir
-            foreach ($argument in @($DockerPrefixArguments)) {
-                [void]$startInfo.ArgumentList.Add($argument)
-            }
-            foreach ($argument in @(
-                    "compose", "-f", $ComposeFile,
-                    "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
-                )) {
-                [void]$startInfo.ArgumentList.Add($argument)
-            }
+            $processArguments = @($DockerPrefixArguments) + @(
+                "compose", "-f", $ComposeFile,
+                "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
+            )
+            $startInfo = New-HermesBootstrapProcessStartInfo `
+                -Executable $DockerExecutable `
+                -Arguments $processArguments `
+                -DataDir $DataDir
 
             $process = [System.Diagnostics.Process]::new()
             $process.StartInfo = $startInfo
@@ -266,11 +362,24 @@ function Invoke-HermesBootstrap {
                 throw [System.InvalidOperationException]::new("Hermes bootstrap process could not be started.")
             }
             $processStarted = $true
+            $processInput = if ($null -ne $startInfo.PSObject.Properties["StandardInputEncoding"]) {
+                $process.StandardInput
+            }
+            else {
+                $writer = [System.IO.StreamWriter]::new(
+                    $process.StandardInput.BaseStream,
+                    [System.Text.UTF8Encoding]::new($false),
+                    4096,
+                    $false
+                )
+                $writer.AutoFlush = $true
+                $writer
+            }
             $stdoutDrain = $drain.DrainAsync($process.StandardOutput, $drainCancellation.Token)
             $stderrDrain = $drain.DrainAsync($process.StandardError, $drainCancellation.Token)
-            $process.StandardInput.NewLine = "`n"
+            $processInput.NewLine = "`n"
             try {
-                $process.StandardInput.WriteLine('{"type":"header","schema_version":1}')
+                $processInput.WriteLine('{"type":"header","schema_version":1}')
             }
             catch {
                 $payloadWriteFailed = $true
@@ -293,7 +402,7 @@ function Invoke-HermesBootstrap {
 
                     $record = [ordered]@{ type = "item"; key = $planItem.key; item = $item }
                     try {
-                        $process.StandardInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
+                        $processInput.WriteLine(($record | ConvertTo-Json -Compress -Depth 64))
                     }
                     catch {
                         $payloadWriteFailed = $true
@@ -310,7 +419,7 @@ function Invoke-HermesBootstrap {
                 }
             }
             try {
-                $process.StandardInput.WriteLine('{"type":"end"}')
+                $processInput.WriteLine('{"type":"end"}')
             }
             catch {
                 $payloadWriteFailed = $true
@@ -323,7 +432,7 @@ function Invoke-HermesBootstrap {
         }
         finally {
             if ($processStarted) {
-                [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Close() })
+                [void](Invoke-HermesBootstrapCleanup -Action { $processInput.Close() })
             }
         }
 
@@ -439,6 +548,9 @@ function Invoke-HermesBootstrap {
             ($stderrDrain -and -not $stderrDrain.IsCompleted)) {
             [void](Invoke-HermesBootstrapCleanup -Action { $drainCancellation.Cancel() })
         }
+        if ($processInput) {
+            [void](Invoke-HermesBootstrapCleanup -Action { $processInput.Dispose() })
+        }
         if ($process) {
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Dispose() })
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardOutput.Dispose() })
@@ -478,7 +590,7 @@ function ConvertTo-HermesBootstrapItemObject {
     }
     $json = @($Output | ForEach-Object { [string]$_ }) -join "`n"
     try {
-        return ($json | ConvertFrom-Json -Depth 64 -ErrorAction Stop)
+        return (ConvertFrom-HermesBootstrapJson -Json $json -Depth 64)
     }
     catch {
         throw [System.InvalidOperationException]::new("Hermes bootstrap 1Password retrieval failed.")
