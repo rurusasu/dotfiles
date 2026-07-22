@@ -157,7 +157,8 @@ EOF
 	config_path="$TEST_HOME/.hermes/config.yaml"
 	grep -q '^model:$' "$config_path"
 	grep -q '^  provider: openai-codex$' "$config_path"
-	grep -q '^  default: gpt-5\.5$' "$config_path"
+	grep -q '^  default: gpt-5\.6-luna$' "$config_path"
+	grep -q '^  reasoning_effort: high$' "$config_path"
 	grep -q '^slack:$' "$config_path"
 	grep -q '^  require_mention: true$' "$config_path"
 	grep -q '^  strict_mention: false$' "$config_path"
@@ -166,6 +167,26 @@ EOF
 	grep -q '^terminal:$' "$config_path"
 	grep -q '^agent:$' "$config_path"
 	! grep -q 'stale-model\|allow_bots: none' "$config_path"
+}
+
+@test "configures the requested model and effort for existing Hermes profiles" {
+	mkdir -p "$TEST_HOME/.hermes/profiles/nancy"
+	cat >"$TEST_HOME/.hermes/profiles/nancy/config.yaml" <<'EOF'
+model:
+  provider: auto
+  default: stale-model
+agent:
+  max_turns: 60
+EOF
+
+	run_hermes_config_helper
+
+	[ "$status" -eq 0 ]
+	for config_path in "$TEST_HOME/.hermes/config.yaml" "$TEST_HOME/.hermes/profiles/nancy/config.yaml"; do
+		grep -q '^  default: gpt-5\.6-luna$' "$config_path"
+		grep -q '^  reasoning_effort: high$' "$config_path"
+	done
+	grep -q '^  max_turns: 60$' "$TEST_HOME/.hermes/profiles/nancy/config.yaml"
 }
 
 @test "configures Slack environment from the 1Password item" {

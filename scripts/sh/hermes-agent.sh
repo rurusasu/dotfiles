@@ -383,6 +383,26 @@ dotfiles_hermes_existing_slack_child_lines() {
 	' "$config_path"
 }
 
+dotfiles_hermes_existing_agent_child_lines() {
+  local config_path="$1"
+  [[ -f $config_path ]] || return 0
+
+  awk '
+		function top_level(line) {
+			return line ~ /^[^[:space:]#][^:]*:/
+		}
+		top_level($0) {
+			in_agent = ($0 ~ /^agent:[[:space:]]*($|#)/)
+			next
+		}
+		in_agent && $0 ~ /^  [A-Za-z0-9_-]+:[[:space:]]*/ {
+			if ($0 !~ /^  reasoning_effort:[[:space:]]*/) {
+				print
+			}
+		}
+	' "$config_path"
+}
+
 dotfiles_hermes_write_config_block() {
   local config_path="$1"
   local key="$2"
@@ -400,8 +420,30 @@ dotfiles_hermes_write_config_block() {
   mv "$tmp" "$config_path"
 }
 
+dotfiles_hermes_write_model_configuration() {
+  local config_path="$1"
+  local provider="$2"
+  local model="$3"
+  local effort="$4"
+  local preserved block
+
+  block="model:
+  provider: $provider
+  default: $model"
+  dotfiles_hermes_write_config_block "$config_path" model "$block"
+
+  preserved="$(dotfiles_hermes_existing_agent_child_lines "$config_path")"
+  block="agent:
+  reasoning_effort: $effort"
+  if [[ -n $preserved ]]; then
+    block="$block
+$preserved"
+  fi
+  dotfiles_hermes_write_config_block "$config_path" agent "$block"
+}
+
 dotfiles_hermes_ensure_model_configuration() {
-  local data_dir config_path provider model block
+  local data_dir config_path profiles_dir profile_dir provider model effort
 
   if dotfiles_is_falsey "${DOTFILES_HERMES_AGENT_MODEL_CONFIG_ENABLED:-true}"; then
     return
@@ -411,11 +453,16 @@ dotfiles_hermes_ensure_model_configuration() {
   data_dir="$(dotfiles_hermes_data_dir)"
   config_path="$data_dir/config.yaml"
   provider="${DOTFILES_HERMES_AGENT_MODEL_PROVIDER:-openai-codex}"
-  model="${DOTFILES_HERMES_AGENT_MODEL_DEFAULT:-gpt-5.5}"
-  block="model:
-  provider: $provider
-  default: $model"
-  dotfiles_hermes_write_config_block "$config_path" model "$block"
+  model="${DOTFILES_HERMES_AGENT_MODEL_DEFAULT:-gpt-5.6-luna}"
+  effort="${DOTFILES_HERMES_AGENT_REASONING_EFFORT:-high}"
+  dotfiles_hermes_write_model_configuration "$config_path" "$provider" "$model" "$effort"
+
+  profiles_dir="$data_dir/profiles"
+  [[ -d $profiles_dir ]] || return 0
+  for profile_dir in "$profiles_dir"/*; do
+    [[ -d $profile_dir ]] || continue
+    dotfiles_hermes_write_model_configuration "$profile_dir/config.yaml" "$provider" "$model" "$effort"
+  done
 }
 
 dotfiles_hermes_ensure_slack_mention_configuration() {
