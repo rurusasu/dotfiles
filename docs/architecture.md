@@ -78,6 +78,26 @@ Full support の共通フローは `preflight → Nix/bootstrap → system switc
 | ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
 
+## Hermes Bootstrap Ownership
+
+Hermes uses one containerized bootstrap across supported operating systems. The
+runtime mount is `/opt/data`, not a Git checkout. The root and named profile
+homes are applied from source repositories, while live secrets, memories,
+sessions, logs, and browser state remain local runtime data.
+
+| Owner                 | Source                                                                                  | Responsibility                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Dotfiles              | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                               | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
+| Root distribution     | [rurusasu/hermes-home](https://github.com/rurusasu/hermes-home)                         | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
+| Rick distribution     | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)         | Official `distribution.yaml` and Rick declarative content                                   |
+| Hoffman distribution  | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)   | Official `distribution.yaml` and Hoffman declarative content                                |
+| Risarisa distribution | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa) | Official `distribution.yaml` and Risarisa declarative content                               |
+| Shared data           | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                 | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
+
+`/opt/data/core/lifelog` is migration-only and is absent after bootstrap;
+profile homes are never Git repositories. The default profile owns
+shared-lifelog synchronization through the common bootstrap command.
+
 ## パッケージ管理フロー
 
 ```
@@ -280,3 +300,8 @@ Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2
 - [chezmoi ドキュメント](./chezmoi/)
 - [フォーマッター設定](./formatter/)
 - [ハンドラー開発ガイド](./scripts/powershell/handler-development.md)
+- [Hermes bootstrap design](./hermes-agent/bootstrap-design.md)
+- [Hermes bootstrap core plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-core.md)
+- [Hermes installer integration plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-integration.md)
+- [Hermes distribution repositories plan](./hermes-agent/plans/2026-07-21-hermes-distributions.md)
+- [Hermes bootstrap operations](./hermes-agent/bootstrap.md)

@@ -2,17 +2,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/hermes-agent.sh"
 
-COMPOSE_FILE="$ROOT/docker/hermes-agent/compose.yml"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
-SERVICE_WAIT_ATTEMPTS="${DOTFILES_SERVICE_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
@@ -94,7 +94,6 @@ stop_existing_docker_desktop() {
 apply_darwin_system() {
   export DOTFILES_USER="${SUDO_USER:-$USER}"
   export DOTFILES_HOME="$HOME"
-  export DOTFILES_ROOT="$ROOT"
   local nix_bin
   nix_bin="$(command -v nix)"
 
@@ -141,38 +140,6 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-show_compose_diagnostics() {
-  docker compose -f "$COMPOSE_FILE" ps || true
-  docker compose -f "$COMPOSE_FILE" logs --tail=100 || true
-}
-
-start_hermes_stack() {
-  dotfiles_log "Preparing Hermes runtime home..."
-  dotfiles_hermes_prepare_runtime_home
-  dotfiles_log "Validating Hermes Docker Compose configuration..."
-  docker compose -f "$COMPOSE_FILE" config
-  dotfiles_log "Building Hermes images..."
-  docker compose -f "$COMPOSE_FILE" build --pull
-  dotfiles_log "Ensuring Hermes dashboard auth..."
-  dotfiles_hermes_ensure_dashboard_auth docker
-  dotfiles_log "Ensuring Hermes runtime configuration..."
-  dotfiles_hermes_ensure_runtime_configuration
-  dotfiles_log "Ensuring Hermes Slack environment..."
-  dotfiles_hermes_ensure_slack_environment
-  dotfiles_log "Starting Hermes services..."
-  if ! docker compose -f "$COMPOSE_FILE" up -d --force-recreate --wait; then
-    show_compose_diagnostics
-    dotfiles_die "Hermes Docker Compose startup failed."
-  fi
-  docker compose -f "$COMPOSE_FILE" ps
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes API port" \
-    nc -z 127.0.0.1 "${HERMES_API_PORT:-8642}"
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes dashboard port" \
-    nc -z 127.0.0.1 "${HERMES_DASHBOARD_PORT:-9119}"
-  dotfiles_wait_for "$SERVICE_WAIT_ATTEMPTS" "Hermes browser viewer port" \
-    nc -z 127.0.0.1 "${HERMES_BROWSER_VIEW_PORT:-6080}"
-}
-
 main() {
   preflight
   ensure_command_line_tools
@@ -183,7 +150,7 @@ main() {
   apply_darwin_system
   setup_docker_runtime
   apply_chezmoi
-  start_hermes_stack
+  dotfiles_hermes_start_stack docker "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
   "$VERIFY_ENVIRONMENT" --runtime
   dotfiles_log "macOS setup complete."
 }

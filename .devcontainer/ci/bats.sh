@@ -6,5 +6,5 @@ if [ ! -d tests/bash ]; then
   exit 0
 fi
 
-apt-get install -y -qq --no-install-recommends bats
+apt-get install -y -qq --no-install-recommends bats jq
 bats tests/bash/

@@ -173,6 +173,31 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
+  hermes:bootstrap:
+    desc: Bootstrap the Hermes runtime through the supported host adapter
+    cmds:
+      - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1
+        platforms: [windows]
+
+  hermes:bootstrap:test:
+    desc: Run the Hermes bootstrap container and gh wrapper suites
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+      - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
+
+  hermes:bootstrap:config:
+    desc: Validate the Hermes bootstrap Compose configuration
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f docker/hermes-agent/compose.yml config --quiet
+
   hermes:pull:
     desc: Rebuild the Hermes Agent Docker images with the latest base images
     preconditions:
@@ -246,31 +271,6 @@ tasks:
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp
-
-  hermes:profile:init:
-    desc: Initialize a Hermes profile home as a separate Git repository
-    vars:
-      PROFILE: '{{.CLI_ARGS | default "risarisa"}}'
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - >
-        docker exec hermes sh -lc
-        'set -eu;
-        profile="{{.PROFILE}}";
-        dir="/opt/data/profiles/$profile";
-        test -d "$dir" || { echo "Hermes profile not found: $profile" >&2; exit 1; };
-        if [ -d "$dir/.git" ]; then chown -R hermes:hermes "$dir/.git"; fi'
-      - >
-        docker exec --user hermes hermes sh -lc
-        'set -eu;
-        profile="{{.PROFILE}}";
-        dir="/opt/data/profiles/$profile";
-        test -d "$dir" || { echo "Hermes profile not found: $profile" >&2; exit 1; };
-        cd "$dir";
-        if [ ! -d .git ]; then git init -b main >/dev/null 2>&1 || git init >/dev/null; fi;
-        git status --short --branch'
 
   hermes:rick:up:
     desc: Start Rick Hermes profile gateway in the Hermes container

@@ -1,7 +1,31 @@
 services:
+  hermes:
+    image: nginx:1.29-alpine
+
   acceptance:
     image: nginx:1.29-alpine
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -x /bin/httpd ]; then
+          exec /bin/httpd -f -p 80 -h /www
+        fi
+        exec nginx -g 'daemon off;'
     ports:
       - "127.0.0.1:8642:80"
       - "127.0.0.1:9119:80"
       - "127.0.0.1:6080:80"
+    volumes:
+      - ./hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro
+      - ./hermes-bootstrap-fixture.sh:/www/health:ro
+
+  hermes-bootstrap:
+    image: nginx:1.29-alpine
+    profiles:
+      - bootstrap
+    entrypoint:
+      - /bin/sh
+      - /fixture/hermes-bootstrap.sh
+    volumes:
+      - ./hermes-bootstrap-fixture.sh:/fixture/hermes-bootstrap.sh:ro

@@ -24,11 +24,28 @@ services:
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
         target: /root/.xurl
     environment:
+      API_SERVER_HOST: "0.0.0.0"
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
-      LIFELOG_ROOT: /opt/data/core/lifelog
+      LIFELOG_ROOT: /opt/data/shared/lifelog
     networks:
       - hermes-browser
+
+  hermes-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/hermes-agent-gh:latest
+    profiles:
+      - bootstrap
+    entrypoint: /usr/local/bin/hermes-bootstrap
+    command: apply
+    volumes:
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+        target: /opt/data
+    environment:
+      HERMES_HOME: /opt/data
 
   chromium:
     platform: linux/amd64

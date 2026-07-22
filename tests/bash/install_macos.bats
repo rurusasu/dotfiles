@@ -8,19 +8,25 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
 	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
 	FAKE_USER_PROFILE_ROOT="$BATS_TEST_TMPDIR/etc/profiles/per-user"
+	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN"
 	: >"$COMMAND_LOG"
+	: >"$PAYLOAD_CAPTURE"
 	: >"$FAKE_NIX_PROFILE"
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
+	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
+	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
+	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
@@ -28,10 +34,8 @@ setup() {
 	export DOTFILES_ZSHRC_PATH="$FAKE_ZSHRC"
 	export DOTFILES_USER_PROFILE_ROOT="$FAKE_USER_PROFILE_ROOT"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
-	export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-		export DOTFILES_WAIT_SLEEP_SECONDS=0
-		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
+	export DOTFILES_WAIT_SLEEP_SECONDS=0
+	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 
 	write_stub uname '
 case "${1:-}" in
@@ -48,6 +52,10 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
 exit 0
@@ -59,6 +67,11 @@ printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 exec "$@"
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub jq 'exec "$REAL_JQ" "$@"'
+	write_stub op '
+printf "op %s\n" "$*" >>"$COMMAND_LOG"
+printf "%s\n" "$HERMES_ITEM_JSON"
+'
 }
 
 write_stub() {
@@ -72,6 +85,12 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
+valid_secret_plan() {
+	cat <<'JSON'
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}
+JSON
+}
+
 write_docker_app() {
 	mkdir -p "$FAKE_DOCKER_APP/Contents/MacOS" "$FAKE_DOCKER_APP/Contents/Resources/bin"
 	cat >"$FAKE_DOCKER_APP/Contents/MacOS/install" <<'EOF'
@@ -81,10 +100,10 @@ EOF
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf 'generated-password\nscrypt$hash\ngenerated-secret\n'
-fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf '%s\n' "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 EOF
 	chmod +x \
 		"$FAKE_DOCKER_APP/Contents/MacOS/install" \
@@ -100,10 +119,10 @@ write_installed_stubs() {
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
-fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 '
 	ln -s "$REPO_ROOT" "$HOME/.dotfiles"
 }
@@ -112,6 +131,7 @@ write_fresh_install_stubs() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
+	*/health*) exit 0 ;;
 	*nixos.org/nix/install*)
 		cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
@@ -121,17 +141,17 @@ set -euo pipefail
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "run" ]; then
 	mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin"
-	cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
+		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
 #!/usr/bin/env bash
 printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
 DOCKER_INSTALL
 		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
 #!/usr/bin/env bash
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
-fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 DOCKER
 	cat >"$STUB_BIN/chezmoi" <<'"'"'CHEZMOI'"'"'
 #!/usr/bin/env bash
@@ -168,20 +188,34 @@ assert_log_order() {
 
 	[ "$status" -eq 0 ]
 	grep -q "^sudo /usr/bin/env .*DOTFILES_USER=test-user .* $STUB_BIN/nix run .#darwin-rebuild -- switch --flake .#macos --impure$" "$COMMAND_LOG"
-		assert_log_order \
-			"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-			"chezmoi init --source $REPO_ROOT/chezmoi" \
-			"chezmoi apply --force" \
-			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
-			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull" \
-			"docker run --rm --entrypoint /opt/hermes/.venv/bin/python" \
-			"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait" \
-			"verify-environment --runtime"
-		grep -q '^  provider: openai-codex$' "$HOME/.hermes/config.yaml"
-		grep -q '^  require_mention: true$' "$HOME/.hermes/config.yaml"
-		! grep -q 'brew install --cask' "$COMMAND_LOG"
+	assert_log_order \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"chezmoi init --source $REPO_ROOT/chezmoi" \
+		"chezmoi apply --force" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
+		"verify-environment --runtime"
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 6 ]
+	[ -s "$PAYLOAD_CAPTURE" ]
+	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "Hermes bootstrap failure stops macOS before service recreation and acceptance" {
+	write_installed_stubs
+	export HERMES_BOOTSTRAP_STATUS=45
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 45 ]
+	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
+	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
 @test "existing shell rc files are preserved before nix-darwin activation" {
@@ -208,13 +242,13 @@ assert_log_order() {
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf 'generated-password\nscrypt$hash\ngenerated-secret\n'
-fi
 if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"; then
 	exit 1
 fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf '%s\n' "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 

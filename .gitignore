@@ -51,6 +51,8 @@ docs/plans/
 # Temporary files
 *.tmp
 *.log
+__pycache__/
+*.py[cod]
 coverage.xml
 scripts/powershell/coverage.xml
 test-results.xml

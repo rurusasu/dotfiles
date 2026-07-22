@@ -6,25 +6,29 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	NIXOS_MARKER="$BATS_TEST_TMPDIR/NIXOS"
 	CURRENT_SYSTEM="$BATS_TEST_TMPDIR/current-system"
 	HARDWARE_CONFIG="$BATS_TEST_TMPDIR/hardware-configuration.nix"
+	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$CURRENT_SYSTEM"
 	: >"$COMMAND_LOG"
+	: >"$PAYLOAD_CAPTURE"
 	: >"$NIXOS_MARKER"
 	printf '{ ... }: { fileSystems."/" = { device = "/dev/vda"; fsType = "ext4"; }; }\n' >"$HARDWARE_CONFIG"
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
+	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
+	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
+	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
 	export DOTFILES_CURRENT_SYSTEM_PATH="$CURRENT_SYSTEM"
 	export DOTFILES_NIXOS_HARDWARE_CONFIG="$HARDWARE_CONFIG"
-		export DOTFILES_WAIT_SLEEP_SECONDS=0
-		export DOTFILES_SERVICE_WAIT_ATTEMPTS=2
-		export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-		export DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0
+	export DOTFILES_WAIT_SLEEP_SECONDS=0
+	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 
 	write_stub uname '
 case "${1:-}" in
@@ -58,20 +62,35 @@ printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 exec "$@"
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub jq 'exec "$REAL_JQ" "$@"'
+	write_stub op '
+printf "op %s\n" "$*" >>"$COMMAND_LOG"
+printf "%s\n" "$HERMES_ITEM_JSON"
+'
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
-fi
-exit 0
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
+esac
 '
 	write_stub nc 'exit 0'
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub verify-environment '
 printf "verify-environment layer=%s args=%s\n" "${DOTFILES_VERIFY_SYSTEM_LAYER:-}" "$*" >>"$COMMAND_LOG"
 '
 	ln -s "$REPO_ROOT" "$HOME/.dotfiles"
+}
+
+valid_secret_plan() {
+	cat <<'JSON'
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["SLACK_BOT_TOKEN"]}]}]}
+JSON
 }
 
 write_stub() {
@@ -97,10 +116,26 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull")" -lt "$(line_of 'docker run --rm --entrypoint /opt/hermes/.venv/bin/python')" ]
-	[ "$(line_of 'docker run --rm --entrypoint /opt/hermes/.venv/bin/python')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
+	[ "$(line_of 'hermes-bootstrap secret-plan')" -lt "$(line_of 'hermes-bootstrap apply')" ]
+	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" ]
 	[ "$(line_of 'docker compose')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 6 ]
+	[ -s "$PAYLOAD_CAPTURE" ]
+}
+
+@test "Hermes bootstrap failure stops NixOS before service recreation and acceptance" {
+	export HERMES_BOOTSTRAP_STATUS=45
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 45 ]
+	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
+	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
 @test "NixOS refuses activation without a readable hardware profile" {
@@ -146,16 +181,17 @@ exit 42
 @test "NixOS Compose failure stops before acceptance" {
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	printf "generated-password\nscrypt\$hash\ngenerated-secret\n"
-fi
-if [[ $* == *" up -d --force-recreate --wait"* ]]; then exit 43; fi
+case " $* " in
+  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
+  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE" ;;
+  *" up -d --force-recreate "*) exit 43 ;;
+esac
 '
 
 	run "$INSTALLER"
 
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"Hermes Docker Compose startup failed"* ]]
+	[ "$status" -eq 43 ]
+	grep -q ' ps --all$' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
