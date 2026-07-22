@@ -179,6 +179,54 @@ class RepositoryTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(repo.legacy_target))
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
+    def test_rejects_an_existing_checkout_beneath_a_symlinked_shared_parent(self) -> None:
+        repo = self.repository()
+        outside_shared = self.root / "outside-shared"
+        outside_checkout = outside_shared / repo.name
+        self.clone(outside_checkout)
+        outside_head = run_git("rev-parse", "HEAD", cwd=outside_checkout)
+        source_head = self.remote_head()
+        self.data_root.mkdir(parents=True)
+        repo.target.parent.symlink_to(outside_shared, target_is_directory=True)
+        (outside_checkout / "entry.md").write_text("outside\n", encoding="utf-8")
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=outside_checkout), outside_head)
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
+    def test_rejects_an_existing_legacy_checkout_beneath_a_symlinked_parent(self) -> None:
+        repo = self.repository()
+        outside_core = self.root / "outside-core"
+        outside_checkout = outside_core / repo.name
+        self.clone(outside_checkout)
+        outside_head = run_git("rev-parse", "HEAD", cwd=outside_checkout)
+        source_head = self.remote_head()
+        self.data_root.mkdir(parents=True)
+        repo.legacy_target.parent.symlink_to(outside_core, target_is_directory=True)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=outside_checkout), outside_head)
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
+    def test_rejects_a_symlinked_lock_parent_before_creating_a_lock(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        outside_locks = self.root / "outside-locks"
+        outside_locks.mkdir()
+        (self.data_root / "locks").symlink_to(outside_locks, target_is_directory=True)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(tuple(outside_locks.iterdir()), ())
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
     def test_read_only_fast_forwards_and_rejects_dirty_or_diverged_checkouts(self) -> None:
         repo = self.repository(mode="read-only")
         self.clone(repo.target)
@@ -345,6 +393,46 @@ class RepositoryTests(unittest.TestCase):
             "deleted-hardlink-secret-marker",
             "fixture-token",
         )
+
+    def test_read_write_rejects_unpushed_history_hidden_by_replace_refs(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        hidden = repo.target / "notes.md"
+        hidden.write_text("replace-ref-secret-marker\n", encoding="utf-8")
+        run_git("add", "notes.md", cwd=repo.target)
+        run_git("commit", "-m", "add hidden history", cwd=repo.target)
+        hidden.unlink()
+        run_git("add", "-A", cwd=repo.target)
+        run_git("commit", "-m", "hide prior history", cwd=repo.target)
+        replaced_head = run_git("rev-parse", "HEAD", cwd=repo.target)
+        run_git("replace", replaced_head, source_head, cwd=repo.target)
+        (repo.target / "entry.md").write_text("entry\n", encoding="utf-8")
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "replace-ref-secret-marker",
+            "fixture-token",
+        )
+
+    def test_rejects_replace_refs_even_when_the_checkout_appears_unchanged(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        run_git("commit", "--allow-empty", "-m", "replacement object", cwd=repo.target)
+        replacement = run_git("rev-parse", "HEAD", cwd=repo.target)
+        run_git("reset", "--hard", source_head, cwd=repo.target)
+        run_git("replace", source_head, replacement, cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
 
     def test_read_write_allows_hardlinks_fully_contained_in_the_checkout(self) -> None:
         repo = self.repository()

@@ -501,6 +501,7 @@ class GitStagingTests(unittest.TestCase):
             "GIT_CONFIG_VALUE_0": "!/tmp/credential-helper-marker",
             "GIT_ASKPASS": "/tmp/git-askpass-marker",
             "GIT_SSH_COMMAND": "ssh -F /tmp/git-ssh-marker",
+            "GIT_NO_REPLACE_OBJECTS": "0",
             "SSH_ASKPASS": "/tmp/ssh-askpass-marker",
             "SSH_ASKPASS_REQUIRE": "force",
         }
@@ -509,6 +510,7 @@ class GitStagingTests(unittest.TestCase):
 
         self.assertEqual(environment["GIT_ASKPASS"], str(askpass))
         self.assertEqual(environment["GIT_TERMINAL_PROMPT"], "0")
+        self.assertEqual(environment["GIT_NO_REPLACE_OBJECTS"], "1")
         self.assertEqual(environment["GIT_CONFIG_NOSYSTEM"], "1")
         self.assertEqual(environment["GIT_CONFIG_GLOBAL"], os.devnull)
         self.assertEqual(environment["GIT_CONFIG_COUNT"], "4")
@@ -522,7 +524,14 @@ class GitStagingTests(unittest.TestCase):
         self.assertEqual(environment["GIT_CONFIG_VALUE_3"], "never")
         self.assertEqual(environment["HERMES_BOOTSTRAP_GITHUB_TOKEN"], "git-token-marker")
         for key, value in inherited.items():
-            if key in {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_ASKPASS"}:
+            if key in {
+                "GIT_CONFIG_GLOBAL",
+                "GIT_CONFIG_COUNT",
+                "GIT_CONFIG_KEY_0",
+                "GIT_CONFIG_VALUE_0",
+                "GIT_ASKPASS",
+                "GIT_NO_REPLACE_OBJECTS",
+            }:
                 self.assertNotEqual(environment[key], value)
             else:
                 self.assertNotIn(key, environment)

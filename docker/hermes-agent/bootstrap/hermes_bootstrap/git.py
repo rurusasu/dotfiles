@@ -215,6 +215,7 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
         {
             "GIT_ASKPASS": str(askpass),
             "GIT_TERMINAL_PROMPT": "0",
+            "GIT_NO_REPLACE_OBJECTS": "1",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_COUNT": "4",

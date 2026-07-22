@@ -105,12 +105,13 @@ class _LockBusy(Exception):
 
 
 class _RepositoryLock:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, data_root: Path) -> None:
         self._path = path
+        self._data_root = data_root
         self._descriptor: int | None = None
 
     def __enter__(self) -> None:
-        _ensure_safe_directory(self._path.parent)
+        _ensure_safe_managed_directory(self._path.parent, self._data_root)
         if _lexists(self._path):
             mode = self._path.lstat().st_mode
             if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
@@ -215,13 +216,15 @@ def _synchronize_remote_boundary(
     outcome: RemoteSyncResult | _Failure
     try:
         _validate_declaration(repo, auth)
+        data_root = _repository_data_root(repo)
+        _require_safe_repository_parents(repo)
         lock_path = _lock_path(repo)
-        with _RepositoryLock(lock_path):
+        with _RepositoryLock(lock_path, data_root):
             working_tree = _selected_working_tree(repo)
             if isinstance(working_tree, _MigrationFailure):
                 return working_tree
             if working_tree is None:
-                _ensure_safe_directory(repo.target.parent)
+                _ensure_safe_managed_directory(repo.target.parent, data_root)
                 stage = Path(tempfile.mkdtemp(prefix=".hermes-repository-", dir=repo.target.parent))
                 os.chmod(stage, 0o700)
                 working_tree = stage
@@ -252,6 +255,7 @@ def _apply_shared_working_tree_boundary(
 ) -> ChangeSet | _Failure | _MigrationFailure:
     try:
         _validate_result(repo, result)
+        _require_safe_repository_parents(repo)
         canonical_real = _real_data_state(repo.target, allow_legacy_link=False, repo=repo)
         legacy_real = False
         if repo.legacy_target is not None:
@@ -281,6 +285,14 @@ def _apply_shared_working_tree_boundary(
 
 
 def _validate_declaration(repo: SharedRepository, auth: GitAuth) -> None:
+    data_root = repo.target.parent.parent if isinstance(repo, SharedRepository) else None
+    legacy_within_root = True
+    if isinstance(repo, SharedRepository) and repo.legacy_target is not None:
+        try:
+            legacy_relative = repo.legacy_target.relative_to(data_root)
+            legacy_within_root = bool(legacy_relative.parts) and ".." not in legacy_relative.parts
+        except (TypeError, ValueError):
+            legacy_within_root = False
     if (
         not isinstance(repo, SharedRepository)
         or _REPOSITORY_NAME.fullmatch(repo.name) is None
@@ -291,6 +303,8 @@ def _validate_declaration(repo: SharedRepository, auth: GitAuth) -> None:
         or not repo.target.is_absolute()
         or repo.target.name != repo.name
         or repo.target.parent.name != "shared"
+        or repo.target != data_root / "shared" / repo.name
+        or not legacy_within_root
         or (repo.mode == "read-write" and not repo.sync_owner)
     ):
         raise ValueError("invalid repository declaration")
@@ -330,6 +344,7 @@ def _verify_checkout_identity(repo: SharedRepository, checkout: Path, environmen
     if not _looks_like_checkout(checkout):
         raise ValueError("not a checkout")
     _reject_redirecting_local_config(checkout, environment)
+    _reject_replace_refs(checkout, environment)
     _verify_effective_worktree(checkout, environment)
     remotes = _nul_records(
         _git_bytes(
@@ -535,6 +550,16 @@ def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]
             or _is_executable_local_config(name)
         ):
             raise ValueError("unsafe local Git config is forbidden")
+
+
+def _reject_replace_refs(checkout: Path, environment: dict[str, str]) -> None:
+    if _git_bytes(
+        ("for-each-ref", "--format=%(refname)", "refs/replace"),
+        checkout,
+        environment,
+        max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+    ):
+        raise ValueError("Git replace refs are forbidden")
 
 
 def _is_executable_local_config(name: str) -> bool:
@@ -929,6 +954,50 @@ def _ensure_safe_directory(path: Path) -> None:
         raise ValueError("unsafe directory")
     for directory in reversed(missing):
         directory.mkdir(mode=0o700)
+
+
+def _repository_data_root(repo: SharedRepository) -> Path:
+    return repo.target.parent.parent
+
+
+def _require_safe_repository_parents(repo: SharedRepository) -> None:
+    data_root = _repository_data_root(repo)
+    _ensure_safe_directory(data_root)
+    _require_safe_managed_directory(repo.target.parent, data_root)
+    if repo.legacy_target is not None:
+        _require_safe_managed_directory(repo.legacy_target.parent, data_root)
+
+
+def _require_safe_managed_directory(path: Path, data_root: Path) -> None:
+    try:
+        relative = path.relative_to(data_root)
+    except ValueError:
+        raise ValueError("managed path is outside the data root") from None
+    if not _safe_directory(data_root):
+        raise ValueError("data root is unsafe")
+    current = data_root
+    for component in relative.parts:
+        current /= component
+        if not _lexists(current):
+            return
+        if not _safe_directory(current):
+            raise ValueError("managed parent is unsafe")
+
+
+def _ensure_safe_managed_directory(path: Path, data_root: Path) -> None:
+    _ensure_safe_directory(data_root)
+    try:
+        relative = path.relative_to(data_root)
+    except ValueError:
+        raise ValueError("managed path is outside the data root") from None
+    current = data_root
+    for component in relative.parts:
+        current /= component
+        if _lexists(current):
+            if not _safe_directory(current):
+                raise ValueError("managed directory is unsafe")
+            continue
+        current.mkdir(mode=0o700)
 
 
 def _safe_directory(path: Path) -> bool:
