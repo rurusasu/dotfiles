@@ -185,6 +185,12 @@ the host adapter. The adapter prints only redacted diagnostics and never runs
 
 ## Source Validation Gate
 
+Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
+the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
+pinned Docker test stage in the `Hermes Bootstrap Tests` workflow, so the
+container transaction and payload suite is a publication gate rather than an
+optional manual check.
+
 The four source repositories use the same `fast` and `full` validator. Local
 validator exits are `0` pass, `1` validation failure, `2` prerequisite blocked,
 and `3` validator internal error. A result is current only when its `head_sha`

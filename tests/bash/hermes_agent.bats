@@ -431,7 +431,9 @@ trailing-garbage"
 	grep -q '<apply>' "$COMMAND_LOG"
 	! grep -q '<up>' "$COMMAND_LOG"
 	! grep -q '"type":"end"' "$PAYLOAD_CAPTURE"
-	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
+		false
+	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
@@ -472,7 +474,9 @@ trailing-garbage"
 	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
 	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
 	assert_log_order '<up> <-d> <--force-recreate>' '^curl '
-	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
+		false
+	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
@@ -487,7 +491,9 @@ trailing-garbage"
 	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
-	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
+		false
+	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 

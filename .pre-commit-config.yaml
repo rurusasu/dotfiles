@@ -23,3 +23,10 @@ repos:
         language: system
         pass_filenames: false
         files: '\.tmpl$'
+      - id: hermes-bootstrap-tests
+        name: hermes bootstrap container tests
+        entry: task hermes:bootstrap:test
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: "^docker/hermes-agent/"

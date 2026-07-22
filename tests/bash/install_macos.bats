@@ -52,6 +52,10 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
 exit 0
@@ -127,6 +131,7 @@ write_fresh_install_stubs() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
+	*/health*) exit 0 ;;
 	*nixos.org/nix/install*)
 		cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"

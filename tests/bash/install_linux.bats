@@ -55,6 +55,10 @@ case "${1:-}" in
 esac
 '
 	write_stub nc 'exit 0'
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
@@ -109,6 +113,9 @@ fi
 write_fresh_nix_installer_stub() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == *"/health"* ]]; then
+	exit 0
+fi
 cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
 cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'

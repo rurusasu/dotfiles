@@ -816,20 +816,40 @@ class BootstrapFlowTests(unittest.TestCase):
             checkout.parent.mkdir(parents=True, exist_ok=True)
             run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(checkout))
         self._ensure_repository_lock()
-        with self._patched_runtime():
-            self.assertEqual(
-                app.sync_repository(
-                    PRODUCTION_MANIFEST,
-                    "lifelog",
-                    {"GH_TOKEN": FIXTURE_TOKEN},
-                )["status"],
-                "synchronized",
-            )
         before = self._snapshot_tree(self.data_root)
         locks_before = self._snapshot_coordination_locks()
+        remote_before = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
         stdout = io.StringIO()
         stderr = io.StringIO()
 
+        with self._patched_runtime():
+            sync_exit_code = cli.main(
+                [
+                    "sync-repository",
+                    "lifelog",
+                    "--manifest",
+                    str(PRODUCTION_MANIFEST),
+                ],
+                stdout=stdout,
+                stderr=stderr,
+                environ={"GH_TOKEN": FIXTURE_TOKEN},
+            )
+
+        self.assertEqual(sync_exit_code, 5)
+        self.assertEqual(stdout.getvalue(), "")
+        self._assert_no_protected_output(stderr.getvalue(), "failed sync output")
+        self.assertEqual(
+            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
+            self._snapshot_tree_contract(before),
+        )
+        self.assertEqual(
+            run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"),
+            remote_before,
+        )
+        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
         with self._patched_runtime():
             exit_code = cli.main(
                 ["apply", "--manifest", str(PRODUCTION_MANIFEST)],

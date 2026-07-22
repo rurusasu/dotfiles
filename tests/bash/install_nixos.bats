@@ -75,6 +75,10 @@ case " $* " in
 esac
 '
 	write_stub nc 'exit 0'
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 0
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub verify-environment '

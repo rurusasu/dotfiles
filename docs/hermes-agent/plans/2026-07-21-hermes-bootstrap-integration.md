@@ -319,6 +319,10 @@ pre-commit run --all-files
 git diff --check
 ```
 
+- [ ] Keep `hermes-bootstrap-tests` as a path-scoped local pre-commit hook and
+      the `Hermes Bootstrap Tests` pull-request workflow as the remote gate for the
+      same pinned Docker test stage.
+
 - [ ] Inspect `git status --short` and `git diff --stat`; stage only Hermes bootstrap, adapter, test, Taskfile, and documentation files.
 
 - [ ] Commit through the repository's supported commit task when it targets this worktree; otherwise run the equivalent scoped pre-commit checks and a path-scoped Git commit so another checkout is not staged.
