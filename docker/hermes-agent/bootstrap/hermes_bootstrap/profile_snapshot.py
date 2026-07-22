@@ -221,8 +221,12 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
         output_status = os.fstat(output_fd)
         if output_identity != (output_status.st_dev, output_status.st_ino):
             raise ValueError("unsafe output directory")
-        expected_files.append(
-            _write_private_file_at(output_fd, "distribution.yaml", manifest_bytes, 0o644)
+        _write_private_file_at(
+            output_fd,
+            "distribution.yaml",
+            manifest_bytes,
+            0o644,
+            expected_files,
         )
         entries: list[SnapshotEntry] = []
         casefolded = {
@@ -247,7 +251,13 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
         verify_absolute_directory(declaration.target, source_fd)
         entries.sort(key=lambda entry: entry.path.as_posix())
         gitignore_bytes = _render_gitignore(owned, frozenset(directory_paths))
-        expected_files.append(_write_private_file_at(output_fd, ".gitignore", gitignore_bytes, 0o644))
+        _write_private_file_at(
+            output_fd,
+            ".gitignore",
+            gitignore_bytes,
+            0o644,
+            expected_files,
+        )
         digest = _snapshot_digest(manifest_bytes, gitignore_bytes, entries)
         snapshot = ProfileSnapshot(declaration, output, manifest_bytes, gitignore_bytes, tuple(entries), digest)
         result = _PreparedSnapshot(
@@ -773,8 +783,21 @@ def _write_private_file_at(
     name: str,
     content: bytes,
     mode: ProfileMode,
+    expected_files: list[_ExpectedFile],
 ) -> _ExpectedFile:
     descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
+    created = os.fstat(descriptor)
+    expected_index = len(expected_files)
+    expected_files.append(
+        _ExpectedFile(
+            PurePosixPath(name),
+            mode,
+            0,
+            "",
+            created.st_dev,
+            created.st_ino,
+        )
+    )
     try:
         _write_descriptor(descriptor, content)
         os.fchmod(descriptor, mode)
@@ -786,16 +809,18 @@ def _write_private_file_at(
             mode,
             len(content),
         )
+        expected = _ExpectedFile(
+            PurePosixPath(name),
+            mode,
+            len(content),
+            hashlib.sha256(content).hexdigest(),
+            status.st_dev,
+            status.st_ino,
+        )
+        expected_files[expected_index] = expected
+        return expected
     finally:
         os.close(descriptor)
-    return _ExpectedFile(
-        PurePosixPath(name),
-        mode,
-        len(content),
-        hashlib.sha256(content).hexdigest(),
-        status.st_dev,
-        status.st_ino,
-    )
 
 
 def _verify_destination_descriptor(
@@ -1367,8 +1392,9 @@ def _remove_cleanup_file(
                 or (status.st_dev, status.st_ino) != expected_identity
             ):
                 raise OSError("snapshot cleanup file changed")
-        os.ftruncate(descriptor, 0)
-        os.fsync(descriptor)
+        if actual.st_nlink == 1:
+            os.ftruncate(descriptor, 0)
+            os.fsync(descriptor)
         actual = os.fstat(descriptor)
         if (
             not stat.S_ISREG(actual.st_mode)

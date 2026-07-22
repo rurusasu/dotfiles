@@ -598,6 +598,40 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
+    def test_final_attestation_rejects_a_snapshot_output_hardlink_without_damaging_it(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        content = b"snapshot-output-hardlink\n"
+        (home / "SOUL.md").write_bytes(content)
+        external_link = self.root / "snapshot-output-hardlink"
+        original_attest = profile_snapshot._final_attest_prepared_snapshot
+        linked = False
+
+        def link_then_attest(*args: object, **kwargs: object) -> None:
+            nonlocal linked
+            if not linked:
+                os.link(self.scratch / "rick" / "SOUL.md", external_link)
+                linked = True
+            original_attest(*args, **kwargs)
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_final_attest_prepared_snapshot",
+            side_effect=link_then_attest,
+        ) as attest:
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertTrue(linked)
+        attest.assert_called_once()
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(external_link.read_bytes(), content)
+        self.assertEqual(external_link.stat().st_nlink, 1)
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_rejects_same_uid_destination_replacement_before_return(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         content = b"canonical-snapshot-content\n"
@@ -724,6 +758,71 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "cleanup_failed")
         self.assertEqual(str(caught.exception), "profile snapshot rejected (cleanup_failed)")
 
+    def test_control_files_are_registered_before_post_write_verification(self) -> None:
+        for index, control in enumerate(("distribution.yaml", ".gitignore")):
+            with self.subTest(control=control):
+                name = f"controlrace{index}"
+                home = self.write_profile(name, ["SOUL.md"])
+                (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+                scratch = self.root / f"control-race-{index}"
+                scratch.mkdir(mode=0o700)
+                replacement = self.root / f"control-replacement-{index}"
+                original_verify = profile_snapshot._verify_destination_descriptor
+                replacement_status: os.stat_result | None = None
+                replacement_payload: bytes | None = None
+                expected_inode: int | None = None
+                replacements = 0
+
+                def replace_then_verify(
+                    parent_fd: int,
+                    candidate: str,
+                    descriptor: int,
+                    mode: int,
+                    size: int,
+                ) -> os.stat_result:
+                    nonlocal expected_inode, replacement_payload, replacement_status, replacements
+                    if candidate == control:
+                        self.assertEqual(replacements, 0)
+                        expected_inode = os.fstat(descriptor).st_ino
+                        replacement_payload = b"R" * size
+                        replacement.write_bytes(replacement_payload)
+                        replacement.chmod(mode)
+                        replacement_status = replacement.stat()
+                        os.replace(replacement, scratch / name / candidate)
+                        replacements += 1
+                    return original_verify(
+                        parent_fd, candidate, descriptor, mode, size
+                    )
+
+                with mock.patch.object(
+                    profile_snapshot,
+                    "_verify_destination_descriptor",
+                    side_effect=replace_then_verify,
+                ):
+                    with self.assertRaises(ProfileSnapshotError) as caught:
+                        prepare_profile_snapshots(
+                            self.manifest(self.profile(name)),
+                            scratch,
+                            allow_missing=False,
+                        )
+
+                self.assertEqual(replacements, 1)
+                self.assertIsNotNone(expected_inode)
+                self.assertIsNotNone(replacement_payload)
+                self.assertIsNotNone(replacement_status)
+                assert replacement_payload is not None
+                assert replacement_status is not None
+                retained = scratch / name / control
+                self.assertEqual(caught.exception.category, "cleanup_failed")
+                self.assertEqual(retained.stat().st_ino, replacement_status.st_ino)
+                self.assertEqual(retained.stat().st_mode, replacement_status.st_mode)
+                self.assertEqual(retained.read_bytes(), replacement_payload)
+                self.assertNotEqual(retained.stat().st_ino, expected_inode)
+                self.assertEqual(
+                    [path for path in (scratch / name).iterdir() if path.is_file()],
+                    [retained],
+                )
+
     def test_rejects_gitignore_destination_replacement_before_return(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -734,9 +833,15 @@ class ProfileSnapshotTests(unittest.TestCase):
         original_write = profile_snapshot._write_private_file_at
         replaced = False
 
-        def write_then_replace(parent_fd: int, name: str, content: bytes, mode: int):
+        def write_then_replace(
+            parent_fd: int,
+            name: str,
+            content: bytes,
+            mode: int,
+            expected_files: list[object],
+        ):
             nonlocal replaced
-            result = original_write(parent_fd, name, content, mode)
+            result = original_write(parent_fd, name, content, mode, expected_files)
             if name == ".gitignore" and not replaced:
                 os.replace(replacement, self.scratch / "rick" / name)
                 replaced = True
@@ -1178,11 +1283,15 @@ class ProfileSnapshotTests(unittest.TestCase):
                 parser_returned = False
                 alternate_replaced = False
                 canonical_inode_restored = False
+                parser_calls = 0
+                require_sources_calls: list[bool] = []
 
                 def read_alternate_then_restore(
                     root: Path, expected_name: str, *, require_sources: bool
                 ):
-                    nonlocal alternate_replaced, canonical_inode_restored, parser_returned
+                    nonlocal alternate_replaced, canonical_inode_restored, parser_calls, parser_returned
+                    parser_calls += 1
+                    require_sources_calls.append(require_sources)
                     manifest_path = root / "distribution.yaml"
                     canonical_inode = manifest_path.stat().st_ino
                     backup_path = root / f".canonical-{index}.yaml"
@@ -1221,6 +1330,8 @@ class ProfileSnapshotTests(unittest.TestCase):
                 self.assertTrue(alternate_replaced)
                 self.assertTrue(parser_returned)
                 self.assertTrue(canonical_inode_restored)
+                self.assertEqual(parser_calls, 1)
+                self.assertEqual(require_sources_calls, [True])
                 self.assertEqual(caught.exception.category, "invalid_local_profile")
                 self.assertEqual(
                     str(caught.exception),
