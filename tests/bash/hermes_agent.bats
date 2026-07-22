@@ -275,6 +275,8 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
+		DOTFILES_BASHRC_PATH="$fixture_root/etc/bashrc" \
+		DOTFILES_ZSHRC_PATH="$fixture_root/etc/zshrc" \
 		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
 		DOTFILES_SYSTEMD_DIR="$systemd_dir" \
 		DOTFILES_OS_RELEASE_FILE="$os_release" \

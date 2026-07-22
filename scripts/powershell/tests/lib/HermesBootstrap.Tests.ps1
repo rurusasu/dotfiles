@@ -368,7 +368,7 @@ Describe "Invoke-HermesBootstrap" {
             "item|get|SlackBot-Risarisa|--account|my.1password.com|--vault|openclaw|--format|json"
         )
 
-        $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
+        $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
         @($records).Count | Should -Be 8
         $records[0].type | Should -Be "header"
@@ -399,7 +399,7 @@ Describe "Invoke-HermesBootstrap" {
             "compose", "-f", "compose.yml",
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
         )
-        $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
+        $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
         $rawLines[7] | Should -Be '{"type":"end"}'
