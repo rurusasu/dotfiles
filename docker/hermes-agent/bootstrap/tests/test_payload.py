@@ -165,6 +165,7 @@ class PayloadTests(unittest.TestCase):
                             ("slack_rick", "SlackBot-Rick"),
                             ("slack_hoffman", "SlackBot-Hoffman"),
                             ("slack_risarisa", "SlackBot-Risarisa"),
+                            ("slack_nancy", "SlackBot-Nancy"),
                         )
                     ],
                 ],

@@ -105,7 +105,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest.root_distribution.target, Path("/opt/data"))
         self.assertEqual(
             tuple(profile.name for profile in manifest.profiles),
-            ("rick", "hoffman", "risarisa"),
+            ("rick", "hoffman", "risarisa", "nancy"),
         )
         self.assertEqual(
             tuple(profile.target for profile in manifest.profiles),
@@ -113,9 +113,10 @@ class ManifestTests(unittest.TestCase):
                 Path("/opt/data/profiles/rick"),
                 Path("/opt/data/profiles/hoffman"),
                 Path("/opt/data/profiles/risarisa"),
+                Path("/opt/data/profiles/nancy"),
             ),
         )
-        self.assertEqual(len(manifest.onepassword_items), 6)
+        self.assertEqual(len(manifest.onepassword_items), 7)
         self.assertEqual(
             tuple(item.item for item in manifest.onepassword_items),
             (
@@ -125,6 +126,7 @@ class ManifestTests(unittest.TestCase):
                 "SlackBot-Rick",
                 "SlackBot-Hoffman",
                 "SlackBot-Risarisa",
+                "SlackBot-Nancy",
             ),
         )
         self.assertEqual(manifest.shared_repositories[0].sync_owner, "default")

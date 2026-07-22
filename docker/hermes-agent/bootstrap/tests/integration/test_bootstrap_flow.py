@@ -42,7 +42,7 @@ API_URL_ENV = "HERMES_BOOTSTRAP_GITHUB_API_URL"
 HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
 HOST_SECRET_VALUE = "planted-host-secret-marker"
 PRODUCTION_MANIFEST = BOOTSTRAP_ROOT.parent / "bootstrap-manifest.yaml"
-PROFILE_NAMES = ("rick", "hoffman", "risarisa")
+PROFILE_NAMES = ("rick", "hoffman", "risarisa", "nancy")
 PROFILE_IDENTITIES = {
     "rick": {
         "source": "https://github.com/rurusasu/hermes-profile-rick.git",
@@ -58,6 +58,12 @@ PROFILE_IDENTITIES = {
     },
     "risarisa": {
         "source": "https://github.com/rurusasu/hermes-profile-risarisa.git",
+        "version": "0.1.0",
+        "hermes_requires": ">=0.18.2",
+        "distribution_owned": ("SOUL.md", "config.yaml"),
+    },
+    "nancy": {
+        "source": "https://github.com/rurusasu/hermes-profile-nancy.git",
         "version": "0.1.0",
         "hermes_requires": ">=0.18.2",
         "distribution_owned": ("SOUL.md", "config.yaml"),
@@ -438,6 +444,11 @@ class BootstrapFlowTests(unittest.TestCase):
                 "app_token": "xapp-risarisa-app",
                 "allowed_users": "URISARISA",
             },
+            "slack_nancy": {
+                "bot_token": "xoxb-nancy-bot",
+                "app_token": "xapp-nancy-app",
+                "allowed_users": "UNANCY",
+            },
         }
         for item in self.manifest.onepassword_items:
             fields = [
@@ -675,7 +686,7 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             command_stdout.getvalue(),
-            '{"profiles":["rick","hoffman","risarisa"],'
+            '{"profiles":["rick","hoffman","risarisa","nancy"],'
             '"repositories":["lifelog"],"status":"applied"}\n',
         )
         self.assertEqual(command_stderr.getvalue(), "")
@@ -934,11 +945,13 @@ class BootstrapFlowTests(unittest.TestCase):
             "profile-apply:rick",
             "profile-apply:hoffman",
             "profile-apply:risarisa",
+            "profile-apply:nancy",
             "shared-apply:lifelog",
             "env-merge:default",
             "env-merge:rick",
             "env-merge:hoffman",
             "env-merge:risarisa",
+            "env-merge:nancy",
             "final-validation",
             "commit-cleanup",
         )
