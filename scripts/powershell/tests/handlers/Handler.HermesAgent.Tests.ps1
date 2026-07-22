@@ -1499,6 +1499,23 @@ Describe 'HermesAgentHandler' {
             }
         }
 
+        It 'should load root Hermes env before requiring the article news Slack token' {
+            $dataDir = Join-Path $script:userProfile ".hermes"
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $newsScriptPath = Join-Path $dataDir "scripts\article_news_slack.sh"
+            $newsScriptPath | Should -Exist
+            $newsScript = Get-Content -LiteralPath $newsScriptPath -Raw
+            $loadIndex = $newsScript.IndexOf("load_article_news_environment")
+            $requiredIndex = $newsScript.IndexOf("SLACK_BOT_TOKEN is required")
+            $loadIndex | Should -BeGreaterOrEqual 0
+            $requiredIndex | Should -BeGreaterThan $loadIndex
+            $newsScript | Should -Match ([regex]::Escape('done < "$HERMES_HOME_DIR/.env"'))
+            $newsScript | Should -Match ([regex]::Escape('SLACK_BOT_TOKEN) [ -z "${SLACK_BOT_TOKEN:-}" ] && export SLACK_BOT_TOKEN="$value" ;;'))
+        }
+
         It 'should update an existing lifelog cron job without removing runtime fields' {
             $dataDir = Join-Path $script:userProfile ".hermes"
             $cronDir = Join-Path $dataDir "cron"
