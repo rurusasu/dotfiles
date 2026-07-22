@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
-import errno
 import fcntl
 import json
 import os
@@ -12,45 +10,38 @@ import shutil
 import stat
 import tempfile
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 from .errors import ApplyError, RollbackError
 
 
-_VERSION = 1
+_VERSION = 2
 _JOURNAL_NAME = "journal.json"
 _LOCK_NAME = ".lock"
 _TRANSACTION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
 _BACKUP_ID = re.compile(r"backup-[0-9]{6}\Z")
-_RENAME_NOREPLACE = 1
 _failpoint: Callable[[str], None] = lambda _name: None
 
 
-def _load_renameat2() -> Any | None:
-    try:
-        libc = ctypes.CDLL(None, use_errno=True)
-        function = libc.renameat2
-        function.argtypes = (
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        )
-        function.restype = ctypes.c_int
-        return function
-    except (AttributeError, OSError, TypeError):
-        return None
-
-
-_renameat2 = _load_renameat2()
+@dataclass(frozen=True)
+class _TransactionLock:
+    store: int
+    file: int
 
 
 class Transaction:
     """A single-writer journal whose ready records can be replayed backwards."""
 
-    def __init__(self, data_root: Path, store: Path, directory: Path, lock: int, journal: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        store: Path,
+        directory: Path,
+        lock: _TransactionLock,
+        journal: dict[str, Any],
+    ) -> None:
         self._data_root = data_root
         self._store = store
         self._directory = directory
@@ -96,7 +87,7 @@ class Transaction:
                     _remove_empty_transaction(directory, store)
                     continue
                 journal = _read_journal(directory)
-                _validate_journal(root, directory, journal)
+                _validate_journal(directory, journal)
                 tx = Transaction(root, store, directory, lock, journal)
                 if journal["status"] == "committed":
                     tx._cleanup_or_raise()
@@ -118,8 +109,6 @@ class Transaction:
         relative = _managed_relative(self._data_root, self._store, path)
         if self._covered_by_snapshot(relative):
             return
-        if self._overlaps_active_move(relative):
-            raise ApplyError("snapshot follows managed move")
         if self._has_snapshot_descendant(relative):
             raise ApplyError("snapshot parent follows child")
         original = _entry_kind(path)
@@ -145,42 +134,6 @@ class Transaction:
         except Exception:
             self._abandon()
             raise ApplyError("could not snapshot managed path") from None
-
-    def record_move(self, source: Path, target: Path) -> None:
-        self._require_active()
-        source_relative = _managed_relative(self._data_root, self._store, source)
-        target_relative = _managed_relative(self._data_root, self._store, target)
-        if _overlaps(source_relative, target_relative):
-            raise ApplyError("managed move paths overlap")
-        source_kind = _entry_kind(source)
-        target_kind = _entry_kind(target)
-        if source_kind == "absent" or (target_kind != "absent" and not self._covered_by_snapshot(target_relative)):
-            raise ApplyError("managed move is unsafe")
-        identity = _identity(source, source_kind)
-        for existing in self._journal["entries"]:
-            if existing["kind"] != "move" or existing["state"] == "restored":
-                continue
-            if source_relative in (existing["source"], existing["target"]) or target_relative in (existing["source"], existing["target"]):
-                raise ApplyError("incompatible managed move")
-        try:
-            entry = {
-                "kind": "move",
-                "source": source_relative,
-                "target": target_relative,
-                "state": "preparing",
-                "identity": identity,
-            }
-            self._journal["entries"].append(entry)
-            self._write_journal()
-            entry["state"] = "ready"
-            self._write_journal()
-            _failpoint("entry-ready")
-        except ApplyError:
-            self._abandon()
-            raise
-        except Exception:
-            self._abandon()
-            raise ApplyError("could not record managed move") from None
 
     def commit(self) -> None:
         if self._closed:
@@ -250,16 +203,13 @@ class Transaction:
                 continue
             try:
                 _failpoint("before-restore")
-                if entry["kind"] == "snapshot":
-                    _restore_snapshot(
-                        self._data_root,
-                        self._data_root / entry["path"],
-                        self._directory / entry["backup"],
-                        entry["original"],
-                        entry.get("directories"),
-                    )
-                else:
-                    _reverse_move(self._data_root, self._directory, index, entry)
+                _restore_snapshot(
+                    self._data_root,
+                    self._data_root / entry["path"],
+                    self._directory / entry["backup"],
+                    entry["original"],
+                    entry.get("directories"),
+                )
                 entry["state"] = "restored"
                 self._write_journal()
             except Exception:
@@ -276,7 +226,7 @@ class Transaction:
 
     def _cleanup_or_raise(self) -> None:
         try:
-            _cleanup_transaction(self._data_root, self._directory, self._store, self._journal)
+            _cleanup_transaction(self._directory, self._store)
         except Exception:
             raise ApplyError("could not clean up bootstrap transaction") from None
 
@@ -298,14 +248,6 @@ class Transaction:
             for entry in self._journal["entries"]
         )
 
-    def _overlaps_active_move(self, relative: str) -> bool:
-        return any(
-            entry["kind"] == "move"
-            and entry["state"] != "restored"
-            and (_overlaps(relative, entry["source"]) or _overlaps(relative, entry["target"]))
-            for entry in self._journal["entries"]
-        )
-
     def _require_active(self) -> None:
         if self._closed or self._journal["status"] != "active":
             raise ApplyError("bootstrap transaction is not active")
@@ -316,9 +258,9 @@ class Transaction:
         self._release_lock()
 
     def _release_lock(self) -> None:
-        if self._lock >= 0:
+        if self._lock is not None:
             _release_lock(self._lock)
-            self._lock = -1
+            self._lock = None
 
     def __del__(self) -> None:
         self._release_lock()
@@ -360,9 +302,22 @@ def _open_store(data_root: Path) -> Path:
         raise ApplyError("bootstrap transaction store is unsafe") from None
 
 
-def _acquire_lock(store: Path) -> int:
-    descriptor: int | None = None
+def _acquire_lock(store: Path) -> _TransactionLock:
+    store_descriptor: int | None = None
+    file_descriptor: int | None = None
     try:
+        directory_flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0)
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        store_descriptor = os.open(store, directory_flags | nofollow)
+        store_info = store.lstat()
+        opened_store = os.fstat(store_descriptor)
+        if (
+            stat.S_ISLNK(store_info.st_mode)
+            or not stat.S_ISDIR(opened_store.st_mode)
+            or (store_info.st_dev, store_info.st_ino) != (opened_store.st_dev, opened_store.st_ino)
+        ):
+            raise OSError
+        fcntl.flock(store_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         lock_path = store / _LOCK_NAME
         before: os.stat_result | None = None
         if _lexists(lock_path):
@@ -370,8 +325,8 @@ def _acquire_lock(store: Path) -> int:
             if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
                 raise OSError
         flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(lock_path, flags, 0o600)
-        opened = os.fstat(descriptor)
+        file_descriptor = os.open(lock_path, flags, 0o600)
+        opened = os.fstat(file_descriptor)
         after = lock_path.lstat()
         if (
             not stat.S_ISREG(opened.st_mode)
@@ -384,23 +339,26 @@ def _acquire_lock(store: Path) -> int:
             and (before.st_nlink != 1 or (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino))
         ):
             raise OSError
-        os.fchmod(descriptor, 0o600)
-        os.fsync(descriptor)
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.fchmod(file_descriptor, 0o600)
+        os.fsync(file_descriptor)
+        fcntl.flock(file_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _fsync_directory(store)
-        return descriptor
+        return _TransactionLock(store_descriptor, file_descriptor)
     except Exception:
-        if descriptor is not None:
-            _safe_close(descriptor)
+        if file_descriptor is not None:
+            _safe_close(file_descriptor)
+        if store_descriptor is not None:
+            _safe_close(store_descriptor)
         raise ApplyError("bootstrap transaction is already active") from None
 
 
-def _release_lock(descriptor: int) -> None:
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-    except OSError:
-        pass
-    _safe_close(descriptor)
+def _release_lock(lock: _TransactionLock) -> None:
+    for descriptor in (lock.file, lock.store):
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        _safe_close(descriptor)
 
 
 def _journal_directories(store: Path) -> list[Path]:
@@ -456,11 +414,6 @@ def _entry_kind(path: Path) -> str:
     if stat.S_ISLNK(info.st_mode):
         return "symlink"
     raise ApplyError("managed path is unsafe")
-
-
-def _identity(path: Path, kind: str) -> list[Any]:
-    info = path.lstat()
-    return [info.st_dev, info.st_ino, kind]
 
 
 def _publish_backup(path: Path, backup: Path, original: str) -> list[dict[str, Any]] | None:
@@ -654,215 +607,6 @@ def _replace_from_backup(
         _safe_close(parent)
 
 
-def _reverse_move(
-    data_root: Path,
-    transaction_directory: Path,
-    entry_index: int,
-    entry: dict[str, Any],
-) -> None:
-    source = data_root / entry["source"]
-    target = data_root / entry["target"]
-    source_quarantine, target_quarantine = _move_quarantine_names(entry_index)
-    expected_link = os.path.relpath(target, source.parent)
-    source_parent = _open_managed_parent(data_root, source)
-    target_parent: int | None = None
-    transaction_parent: int | None = None
-    try:
-        # Deterministic private names make every atomic rename state recoverable
-        # without extending the version 1 journal schema.
-        target_parent = _open_managed_parent(data_root, target)
-        transaction_parent = _open_real_directory(transaction_directory)
-        _verify_managed_parent(data_root, source, source_parent)
-        _verify_managed_parent(data_root, target, target_parent)
-        _verify_real_directory(transaction_directory, transaction_parent)
-        source_kind = _entry_kind_at(source_parent, source.name)
-        target_kind = _entry_kind_at(target_parent, target.name)
-        source_quarantine_kind = _entry_kind_at(transaction_parent, source_quarantine)
-        target_quarantine_kind = _entry_kind_at(transaction_parent, target_quarantine)
-
-        if source_quarantine_kind != "absent" and not _exact_move_link(
-            transaction_parent, source_quarantine, expected_link
-        ):
-            _restore_quarantine_if_possible(
-                transaction_parent,
-                source_quarantine,
-                source_parent,
-                source.name,
-            )
-            raise ValueError
-
-        if target_quarantine_kind == "absent":
-            if source_kind != "absent" and _identity_at(source_parent, source.name, source_kind) == entry["identity"]:
-                if target_kind != "absent":
-                    raise ValueError
-                if source_quarantine_kind == "absent":
-                    return
-                if not _exact_move_link(transaction_parent, source_quarantine, expected_link):
-                    raise ValueError
-                return
-            if source_quarantine_kind != "absent" and source_kind != "absent":
-                raise ValueError
-            if source_quarantine_kind == "absent" and source_kind == "symlink":
-                source_identity = _identity_at(source_parent, source.name, source_kind)
-                _failpoint("move-source-before-quarantine")
-                _rename_noreplace(
-                    source_parent,
-                    source.name,
-                    transaction_parent,
-                    source_quarantine,
-                )
-                _sync_rename(source_parent, transaction_parent)
-                _verify_managed_parent(data_root, source, source_parent)
-                _verify_real_directory(transaction_directory, transaction_parent)
-                if (
-                    _entry_kind_at(transaction_parent, source_quarantine) != "symlink"
-                    or _identity_at(transaction_parent, source_quarantine, "symlink") != source_identity
-                    or _readlink_at(transaction_parent, source_quarantine) != expected_link
-                ):
-                    _restore_quarantine_if_possible(
-                        transaction_parent,
-                        source_quarantine,
-                        source_parent,
-                        source.name,
-                    )
-                    raise ValueError
-                source_kind = _entry_kind_at(source_parent, source.name)
-                source_quarantine_kind = "symlink"
-                _failpoint("move-source-quarantined")
-            elif source_kind != "absent":
-                raise ValueError
-
-            if source_kind != "absent":
-                raise ValueError
-            target_kind = _entry_kind_at(target_parent, target.name)
-            if target_kind == "absent":
-                raise ValueError
-            _failpoint("move-target-before-quarantine")
-            _rename_noreplace(
-                target_parent,
-                target.name,
-                transaction_parent,
-                target_quarantine,
-            )
-            _sync_rename(target_parent, transaction_parent)
-            _verify_managed_parent(data_root, target, target_parent)
-            _verify_real_directory(transaction_directory, transaction_parent)
-            target_quarantine_kind = _entry_kind_at(transaction_parent, target_quarantine)
-            if (
-                target_quarantine_kind == "absent"
-                or _identity_at(transaction_parent, target_quarantine, target_quarantine_kind)
-                != entry["identity"]
-            ):
-                _restore_quarantine_if_possible(
-                    transaction_parent,
-                    target_quarantine,
-                    target_parent,
-                    target.name,
-                )
-                raise ValueError
-            _failpoint("move-target-quarantined")
-
-        if (
-            target_quarantine_kind == "absent"
-            or _identity_at(transaction_parent, target_quarantine, target_quarantine_kind)
-            != entry["identity"]
-        ):
-            if target_quarantine_kind != "absent":
-                _restore_quarantine_if_possible(
-                    transaction_parent,
-                    target_quarantine,
-                    target_parent,
-                    target.name,
-                )
-            raise ValueError
-        source_kind = _entry_kind_at(source_parent, source.name)
-        target_kind = _entry_kind_at(target_parent, target.name)
-        if source_kind != "absent" or target_kind != "absent":
-            raise ValueError
-
-        _failpoint("move-target-before-restore")
-        _rename_noreplace(
-            transaction_parent,
-            target_quarantine,
-            source_parent,
-            source.name,
-        )
-        _sync_rename(transaction_parent, source_parent)
-        _verify_real_directory(transaction_directory, transaction_parent)
-        _verify_managed_parent(data_root, source, source_parent)
-        _verify_managed_parent(data_root, target, target_parent)
-        source_kind = _entry_kind_at(source_parent, source.name)
-        if (
-            source_kind == "absent"
-            or _identity_at(source_parent, source.name, source_kind) != entry["identity"]
-            or _entry_kind_at(target_parent, target.name) != "absent"
-            or _entry_kind_at(transaction_parent, target_quarantine) != "absent"
-        ):
-            raise ValueError
-        _fsync_directory(source.parent)
-        if target.parent != source.parent:
-            _fsync_directory(target.parent)
-        _failpoint("move-target-restored")
-        _failpoint("restore")
-    finally:
-        if transaction_parent is not None:
-            _safe_close(transaction_parent)
-        if target_parent is not None:
-            _safe_close(target_parent)
-        _safe_close(source_parent)
-
-
-def _move_quarantine_names(entry_index: int) -> tuple[str, str]:
-    return (
-        f"move-{entry_index:06d}-source-link",
-        f"move-{entry_index:06d}-target-object",
-    )
-
-
-def _exact_move_link(parent: int, name: str, expected_link: str) -> bool:
-    return _entry_kind_at(parent, name) == "symlink" and _readlink_at(parent, name) == expected_link
-
-
-def _rename_noreplace(source_parent: int, source: str, target_parent: int, target: str) -> None:
-    if _renameat2 is None:
-        raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
-    ctypes.set_errno(0)
-    result = _renameat2(
-        source_parent,
-        os.fsencode(source),
-        target_parent,
-        os.fsencode(target),
-        _RENAME_NOREPLACE,
-    )
-    if result == 0:
-        return
-    error = ctypes.get_errno()
-    if error == errno.EEXIST:
-        raise FileExistsError(error, "atomic no-replace destination exists")
-    if error == errno.ENOENT:
-        raise FileNotFoundError(error, "atomic no-replace source is absent")
-    raise OSError(error, "atomic no-replace rename failed")
-
-
-def _sync_rename(source_parent: int, target_parent: int) -> None:
-    os.fsync(source_parent)
-    if target_parent != source_parent:
-        os.fsync(target_parent)
-
-
-def _restore_quarantine_if_possible(
-    quarantine_parent: int,
-    quarantine: str,
-    endpoint_parent: int,
-    endpoint: str,
-) -> None:
-    try:
-        _rename_noreplace(quarantine_parent, quarantine, endpoint_parent, endpoint)
-        _sync_rename(quarantine_parent, endpoint_parent)
-    except Exception:
-        return
-
-
 def _read_journal(directory: Path) -> dict[str, Any]:
     try:
         _require_private_directory(directory)
@@ -878,62 +622,45 @@ def _read_journal(directory: Path) -> dict[str, Any]:
         raise ApplyError("bootstrap transaction journal is invalid") from None
 
 
-def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any]) -> None:
+def _validate_journal(directory: Path, journal: dict[str, Any]) -> None:
     try:
         if set(journal) != {"version", "status", "entries"} or journal["version"] != _VERSION:
             raise ValueError
         if journal["status"] not in {"active", "rolling_back", "committed", "rolled_back"} or not isinstance(journal["entries"], list):
             raise ValueError
         snapshots: list[str] = []
-        moves: set[str] = set()
         backups: set[str] = set()
-        quarantines: dict[str, str] = {}
         for index, entry in enumerate(journal["entries"]):
             if not isinstance(entry, dict) or entry.get("state") not in {"preparing", "ready", "restored"}:
                 raise ValueError
-            if entry.get("kind") == "snapshot":
-                fields = {"kind", "path", "state", "original", "backup"}
-                if frozenset(entry) not in {frozenset(fields), frozenset(fields | {"directories"})}:
+            fields = {"kind", "path", "state", "original", "backup"}
+            if entry.get("kind") != "snapshot" or frozenset(entry) not in {
+                frozenset(fields),
+                frozenset(fields | {"directories"}),
+            }:
+                raise ValueError
+            relative = _validate_relative(entry["path"])
+            if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
+                raise ValueError
+            directory_metadata = entry.get("directories")
+            if directory_metadata is not None:
+                if entry["original"] != "dir":
                     raise ValueError
-                relative = _validate_relative(entry["path"])
-                if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
-                    raise ValueError
-                directory_metadata = entry.get("directories")
-                if directory_metadata is not None:
-                    if entry["original"] != "dir":
-                        raise ValueError
-                    _validate_directory_metadata(directory_metadata)
-                _validate_journal_managed_path(relative)
-                if entry["state"] != "preparing" and any(_overlaps(relative, endpoint) for endpoint in moves):
-                    raise ValueError
-                if any(relative == known or _is_descendant(relative, known) for known in snapshots):
-                    raise ValueError
-                if any(_is_descendant(known, relative) for known in snapshots):
-                    raise ValueError
-                snapshots.append(relative)
-                backups.add(entry["backup"])
-                backup = directory / entry["backup"]
-                if _lexists(backup):
-                    _validate_backup(backup, entry["original"], directory_metadata)
-                elif journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
-                    raise ValueError
-            elif entry.get("kind") == "move":
-                if set(entry) != {"kind", "source", "target", "state", "identity"}:
-                    raise ValueError
-                source = _validate_relative(entry["source"])
-                target = _validate_relative(entry["target"])
-                if _overlaps(source, target) or source in moves or target in moves or not _valid_identity(entry["identity"]):
-                    raise ValueError
-                _validate_journal_managed_path(source)
-                _validate_journal_managed_path(target)
-                moves.update((source, target))
-                source_quarantine, target_quarantine = _move_quarantine_names(index)
-                quarantines[source_quarantine] = "source"
-                quarantines[target_quarantine] = "target"
-            else:
+                _validate_directory_metadata(directory_metadata)
+            _validate_journal_managed_path(relative)
+            if any(relative == known or _is_descendant(relative, known) for known in snapshots):
+                raise ValueError
+            if any(_is_descendant(known, relative) for known in snapshots):
+                raise ValueError
+            snapshots.append(relative)
+            backups.add(entry["backup"])
+            backup = directory / entry["backup"]
+            if _lexists(backup):
+                _validate_backup(backup, entry["original"], directory_metadata)
+            elif journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
                 raise ValueError
         _validate_entry_states(journal["status"], journal["entries"])
-        _validate_journal_storage(directory, backups, quarantines, journal["status"])
+        _validate_journal_storage(directory, backups)
     except ApplyError:
         raise ApplyError("bootstrap transaction journal is invalid") from None
     except Exception:
@@ -943,8 +670,6 @@ def _validate_journal(data_root: Path, directory: Path, journal: dict[str, Any])
 def _validate_journal_storage(
     directory: Path,
     backups: set[str],
-    quarantines: dict[str, str],
-    status: str,
 ) -> None:
     with os.scandir(directory) as entries:
         for entry in entries:
@@ -956,13 +681,6 @@ def _validate_journal_storage(
                     raise ValueError
             elif entry.name.startswith(".journal-"):
                 if not entry.is_file(follow_symlinks=False):
-                    raise ValueError
-            elif entry.name in quarantines:
-                role = quarantines[entry.name]
-                if status != "rolling_back" and not (status == "rolled_back" and role == "source"):
-                    raise ValueError
-                kind = _entry_kind(Path(entry.path))
-                if role == "source" and kind != "symlink":
                     raise ValueError
             else:
                 raise ValueError
@@ -1043,58 +761,6 @@ def _verify_real_directory(path: Path, descriptor: int) -> None:
         _safe_close(current)
 
 
-def _managed_path_is_absent(data_root: Path, path: Path) -> bool:
-    descriptor: int | None = None
-    try:
-        relative = path.relative_to(data_root)
-        if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
-            raise ValueError
-        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | os.O_CLOEXEC
-        nofollow = getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(data_root, flags | nofollow)
-        root_info = data_root.lstat()
-        opened = os.fstat(descriptor)
-        if not stat.S_ISDIR(opened.st_mode) or (root_info.st_dev, root_info.st_ino) != (
-            opened.st_dev,
-            opened.st_ino,
-        ):
-            raise ValueError
-        current = data_root
-        for part in relative.parts[:-1]:
-            try:
-                child = os.open(part, flags | nofollow, dir_fd=descriptor)
-            except FileNotFoundError:
-                _verify_real_directory(current, descriptor)
-                if _lexists_at(descriptor, part):
-                    raise ValueError
-                return True
-            try:
-                child_path_info = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
-                child_info = os.fstat(child)
-                if (
-                    not stat.S_ISDIR(child_info.st_mode)
-                    or stat.S_ISLNK(child_path_info.st_mode)
-                    or (child_path_info.st_dev, child_path_info.st_ino)
-                    != (child_info.st_dev, child_info.st_ino)
-                ):
-                    raise ValueError
-            except Exception:
-                os.close(child)
-                raise
-            os.close(descriptor)
-            descriptor = child
-            current /= part
-        _verify_real_directory(current, descriptor)
-        return _entry_kind_at(descriptor, path.name) == "absent"
-    except ApplyError:
-        raise
-    except Exception:
-        raise ApplyError("managed path is unsafe") from None
-    finally:
-        if descriptor is not None:
-            _safe_close(descriptor)
-
-
 def _open_managed_parent(data_root: Path, path: Path) -> int:
     descriptor: int | None = None
     try:
@@ -1156,30 +822,6 @@ def _entry_kind_at(parent: int, name: str) -> str:
     if stat.S_ISLNK(info.st_mode):
         return "symlink"
     raise ApplyError("managed path is unsafe")
-
-
-def _readlink_at(parent: int, name: str) -> str:
-    try:
-        return os.readlink(name, dir_fd=parent)
-    except OSError:
-        raise ApplyError("managed path is unsafe") from None
-
-
-def _identity_at(parent: int, name: str, kind: str) -> list[Any]:
-    info = os.stat(name, dir_fd=parent, follow_symlinks=False)
-    return [info.st_dev, info.st_ino, kind]
-
-
-def _valid_identity(value: object) -> bool:
-    return (
-        isinstance(value, list)
-        and len(value) == 3
-        and type(value[0]) is int
-        and type(value[1]) is int
-        and value[0] >= 0
-        and value[1] >= 0
-        and value[2] in {"file", "dir", "symlink"}
-    )
 
 
 def _validate_backup(backup: Path, original: str, directory_metadata: object | None = None) -> None:
@@ -1302,19 +944,10 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _cleanup_transaction(
-    data_root: Path,
     directory: Path,
     store: Path,
-    journal: dict[str, Any],
 ) -> None:
     _require_directory(directory)
-    quarantines: dict[str, tuple[str, int, dict[str, Any]]] = {}
-    for index, entry in enumerate(journal["entries"]):
-        if entry["kind"] != "move":
-            continue
-        source_quarantine, target_quarantine = _move_quarantine_names(index)
-        quarantines[source_quarantine] = ("source", index, entry)
-        quarantines[target_quarantine] = ("target", index, entry)
     with os.scandir(directory) as entries:
         names = [entry.name for entry in entries]
     transaction_parent = _open_real_directory(directory)
@@ -1328,55 +961,8 @@ def _cleanup_transaction(
                 _remove_safe(directory / name)
                 _fsync_directory(directory)
                 _cleanup_failpoint("cleanup-temp")
-            elif name in quarantines:
-                role, entry_index, entry = quarantines[name]
-                if journal["status"] != "rolled_back" or role != "source":
-                    raise ValueError
-                quarantine_identity = _verify_move_cleanup_state(
-                    data_root,
-                    directory,
-                    transaction_parent,
-                    entry_index,
-                    entry,
-                    require_source_quarantine=True,
-                )
-                assert quarantine_identity is not None
-                _failpoint("cleanup-quarantine-before-unlink")
-                _verify_move_cleanup_state(
-                    data_root,
-                    directory,
-                    transaction_parent,
-                    entry_index,
-                    entry,
-                    require_source_quarantine=True,
-                    source_quarantine_identity=quarantine_identity,
-                )
-                # This mode-0700 directory is the trust boundary for the final
-                # private unlink; managed endpoint changes use RENAME_NOREPLACE.
-                os.unlink(name, dir_fd=transaction_parent)
-                os.fsync(transaction_parent)
-                _cleanup_failpoint("cleanup-quarantine")
             elif name != _JOURNAL_NAME:
                 raise ValueError
-    finally:
-        _safe_close(transaction_parent)
-    transaction_parent = _open_real_directory(directory)
-    try:
-        if journal["status"] == "rolled_back":
-            for entry_index, entry in enumerate(journal["entries"]):
-                if (
-                    entry["kind"] == "move"
-                    and entry["state"] == "restored"
-                    and _requires_exact_move_cleanup(journal["entries"], entry_index, entry)
-                ):
-                    _verify_move_cleanup_state(
-                        data_root,
-                        directory,
-                        transaction_parent,
-                        entry_index,
-                        entry,
-                        require_source_quarantine=False,
-                    )
         _verify_real_directory(directory, transaction_parent)
         if _lexists_at(transaction_parent, _JOURNAL_NAME):
             if _entry_kind_at(transaction_parent, _JOURNAL_NAME) != "file":
@@ -1389,83 +975,6 @@ def _cleanup_transaction(
     directory.rmdir()
     _fsync_directory(store)
     _cleanup_failpoint("cleanup-directory")
-
-
-def _verify_move_cleanup_state(
-    data_root: Path,
-    transaction_directory: Path,
-    transaction_parent: int,
-    entry_index: int,
-    entry: dict[str, Any],
-    *,
-    require_source_quarantine: bool,
-    source_quarantine_identity: list[Any] | None = None,
-) -> list[Any] | None:
-    source = data_root / entry["source"]
-    target = data_root / entry["target"]
-    source_quarantine, target_quarantine = _move_quarantine_names(entry_index)
-    expected_link = os.path.relpath(target, source.parent)
-    source_parent = _open_managed_parent(data_root, source)
-    target_parent: int | None = None
-    try:
-        try:
-            target_parent = _open_managed_parent(data_root, target)
-        except ApplyError:
-            if not _managed_path_is_absent(data_root, target):
-                raise
-        _verify_real_directory(transaction_directory, transaction_parent)
-        _verify_managed_parent(data_root, source, source_parent)
-        if target_parent is not None:
-            _verify_managed_parent(data_root, target, target_parent)
-        source_kind = _entry_kind_at(source_parent, source.name)
-        if source_kind == "absent" or _identity_at(source_parent, source.name, source_kind) != entry["identity"]:
-            raise ValueError
-        if target_parent is not None and _entry_kind_at(target_parent, target.name) != "absent":
-            raise ValueError
-        if _entry_kind_at(transaction_parent, target_quarantine) != "absent":
-            raise ValueError
-        source_quarantine_kind = _entry_kind_at(transaction_parent, source_quarantine)
-        if require_source_quarantine:
-            if source_quarantine_kind != "symlink" or _readlink_at(
-                transaction_parent, source_quarantine
-            ) != expected_link:
-                raise ValueError
-            current_identity = _identity_at(transaction_parent, source_quarantine, "symlink")
-            if source_quarantine_identity is not None and current_identity != source_quarantine_identity:
-                raise ValueError
-            return current_identity
-        if source_quarantine_kind != "absent":
-            raise ValueError
-        return None
-    finally:
-        if target_parent is not None:
-            _safe_close(target_parent)
-        _safe_close(source_parent)
-
-
-def _requires_exact_move_cleanup(
-    entries: list[dict[str, Any]],
-    entry_index: int,
-    move: dict[str, Any],
-) -> bool:
-    preceding = entries[:entry_index]
-    source = move["source"]
-    target = move["target"]
-    if any(
-        entry["kind"] == "snapshot"
-        and (entry["path"] == source or _is_descendant(source, entry["path"]))
-        for entry in preceding
-    ):
-        return False
-    target_snapshots = [
-        entry
-        for entry in preceding
-        if entry["kind"] == "snapshot"
-        and (entry["path"] == target or _is_descendant(target, entry["path"]))
-    ]
-    if not target_snapshots:
-        return True
-    return len(target_snapshots) == 1 and target_snapshots[0]["original"] == "absent"
 
 
 def _cleanup_failpoint(name: str) -> None:
@@ -1511,10 +1020,24 @@ def _temporary_sibling_at(parent: int, basename: str, directory: bool) -> str:
 
 
 def _descriptor_child(descriptor: int, name: str) -> Path:
-    base = Path("/proc/self/fd")
-    if not base.is_dir():
-        base = Path("/dev/fd")
-    return base / str(descriptor) / name
+    proc_descriptor = Path("/proc/self/fd") / str(descriptor)
+    if proc_descriptor.is_dir():
+        return proc_descriptor / name
+    get_path = getattr(fcntl, "F_GETPATH", None)
+    if get_path is None:
+        raise ApplyError("managed path is unsafe")
+    try:
+        raw_path = fcntl.fcntl(descriptor, get_path, b"\0" * 1024)
+        base = Path(os.fsdecode(raw_path.split(b"\0", 1)[0]))
+        info = base.lstat()
+        opened = os.fstat(descriptor)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(opened.st_mode):
+            raise ValueError
+        if (info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino):
+            raise ValueError
+        return base / name
+    except Exception:
+        raise ApplyError("managed path is unsafe") from None
 
 
 def _lexists_at(parent: int, name: str) -> bool:
@@ -1617,11 +1140,5 @@ def _is_descendant(candidate: str, parent: str) -> bool:
     return candidate.startswith(parent + "/")
 
 
-def _overlaps(first: str, second: str) -> bool:
-    return first == second or _is_descendant(first, second) or _is_descendant(second, first)
-
-
 def _entry_paths(entry: dict[str, Any]) -> list[str]:
-    if entry["kind"] == "snapshot":
-        return [entry["path"]]
-    return [entry["source"], entry["target"]]
+    return [entry["path"]]

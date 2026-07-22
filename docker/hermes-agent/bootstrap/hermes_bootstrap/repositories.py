@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import errno
 import fcntl
 import os
@@ -11,10 +12,11 @@ import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from .distributions import ChangeSet
 from .errors import MigrationError, RepositoryError
+from .filesystem import open_absolute_directory, verify_absolute_directory
 from .git import (
     _create_askpass,
     _git_environment,
@@ -27,9 +29,6 @@ from .git import (
 from .github import GitAuth
 from .models import BootstrapManifest, SharedRepository
 from .payload import SecretRedactor
-from .transaction import _rename_noreplace
-
-
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 _COMMAND_OUTPUT_MAX_BYTES = 64 * 1024
@@ -37,10 +36,61 @@ _STATUS_OUTPUT_MAX_BYTES = 8 * 1024 * 1024
 _FORBIDDEN_CREDENTIAL_STEMS = frozenset(
     {"auth", "token", "tokens", "secret", "secrets", "credential", "credentials"}
 )
+_ALLOWED_ENV_TEMPLATES = frozenset({".env.example"})
 _FORBIDDEN_DIRECTORIES = frozenset({"memories", "sessions", "logs", "cache", "caches", "generated", "runtime"})
 _RUNTIME_DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal")
+_ALLOWED_BLOB_MODES = frozenset({b"100644", b"100755"})
+_RENAME_NOREPLACE = 1
+_FORBIDDEN_GIT_METADATA = (
+    Path("commondir"),
+    Path("info/grafts"),
+    Path("objects/info/alternates"),
+    Path("objects/info/http-alternates"),
+)
+
+
+def _load_renameat2() -> Any | None:
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        function = libc.renameat2
+        function.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        function.restype = ctypes.c_int
+        return function
+    except (AttributeError, OSError, TypeError):
+        return None
+
+
+_renameat2 = _load_renameat2()
+
+
+def _rename_noreplace(source_parent: int, source: str, target_parent: int, target: str) -> None:
+    if _renameat2 is None:
+        raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
+    ctypes.set_errno(0)
+    result = _renameat2(
+        source_parent,
+        os.fsencode(source),
+        target_parent,
+        os.fsencode(target),
+        _RENAME_NOREPLACE,
+    )
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error == errno.EEXIST:
+        raise FileExistsError(error, "atomic no-replace destination exists")
+    if error == errno.ENOENT:
+        raise FileNotFoundError(error, "atomic no-replace source is absent")
+    raise OSError(error, "atomic no-replace rename failed")
 _EXECUTABLE_LOCAL_CONFIG = frozenset(
     {
+        "core.alternaterefscommand",
         "core.askpass",
         "core.attributesfile",
         "core.editor",
@@ -53,9 +103,11 @@ _EXECUTABLE_LOCAL_CONFIG = frozenset(
         "diff.external",
         "gpg.program",
         "gpg.ssh.defaultkeycommand",
+        "gc.recentobjectshook",
         "interactive.difffilter",
         "extensions.worktreeconfig",
         "sequence.editor",
+        "uploadpack.packobjectshook",
     }
 )
 _LOCAL_VALIDATION_AUTH = GitAuth("local-validation", SecretRedactor(("local-validation",)))
@@ -71,8 +123,6 @@ class RemoteSyncResult:
 
 class Transaction(Protocol):
     def snapshot(self, path: Path) -> None: ...
-
-    def record_move(self, source: Path, target: Path) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -109,21 +159,39 @@ class _RepositoryLock:
         self._path = path
         self._data_root = data_root
         self._descriptor: int | None = None
+        self._parent_descriptor: int | None = None
+        self._root_descriptor: int | None = None
+        self._identity: tuple[int, int] | None = None
 
-    def __enter__(self) -> None:
-        _ensure_safe_managed_directory(self._path.parent, self._data_root)
-        if _lexists(self._path):
-            mode = self._path.lstat().st_mode
-            if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-                raise ValueError("lock is unsafe")
+    def __enter__(self) -> _RepositoryLock:
+        _ensure_safe_directory(self._data_root)
+        root_descriptor = open_absolute_directory(self._data_root)
+        parent_descriptor: int | None = None
+        descriptor: int | None = None
         flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(self._path, flags, 0o600)
         try:
-            mode = os.fstat(descriptor).st_mode
-            if not stat.S_ISREG(mode):
-                raise ValueError("lock is not regular")
+            verify_absolute_directory(self._data_root, root_descriptor)
+            try:
+                fcntl.flock(root_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as error:
+                if error.errno in {errno.EACCES, errno.EAGAIN}:
+                    raise _LockBusy(self._path) from None
+                raise
+            _ensure_safe_managed_directory(self._path.parent, self._data_root)
+            parent_descriptor = open_absolute_directory(self._path.parent)
+            verify_absolute_directory(self._path.parent, parent_descriptor)
+            try:
+                fcntl.flock(parent_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as error:
+                if error.errno in {errno.EACCES, errno.EAGAIN}:
+                    raise _LockBusy(self._path) from None
+                raise
+            descriptor = os.open(self._path.name, flags, 0o600, dir_fd=parent_descriptor)
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError("lock is unsafe")
             os.fchmod(descriptor, 0o600)
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -132,18 +200,79 @@ class _RepositoryLock:
                     raise _LockBusy(self._path) from None
                 raise
             self._descriptor = descriptor
+            self._parent_descriptor = parent_descriptor
+            self._root_descriptor = root_descriptor
+            self._identity = (metadata.st_dev, metadata.st_ino)
+            self.require_held()
+            return self
         except Exception:
-            os.close(descriptor)
+            self._descriptor = None
+            self._parent_descriptor = None
+            self._root_descriptor = None
+            self._identity = None
+            if descriptor is not None:
+                os.close(descriptor)
+            if parent_descriptor is not None:
+                os.close(parent_descriptor)
+            os.close(root_descriptor)
             raise
 
-    def __exit__(self, _kind: object, _value: object, _traceback: object) -> None:
-        if self._descriptor is None:
-            return
+    def require_held(self) -> None:
+        if (
+            self._descriptor is None
+            or self._parent_descriptor is None
+            or self._root_descriptor is None
+            or self._identity is None
+        ):
+            raise ValueError("repository lock is not held")
         try:
-            fcntl.flock(self._descriptor, fcntl.LOCK_UN)
-        finally:
-            os.close(self._descriptor)
-            self._descriptor = None
+            verify_absolute_directory(self._data_root, self._root_descriptor)
+            verify_absolute_directory(self._path.parent, self._parent_descriptor)
+            opened = os.fstat(self._descriptor)
+            current = os.stat(
+                self._path.name,
+                dir_fd=self._parent_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError:
+            raise ValueError("repository lock path changed") from None
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+            or opened.st_nlink != 1
+            or current.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != self._identity
+            or (current.st_dev, current.st_ino) != self._identity
+        ):
+            raise ValueError("repository lock path changed")
+
+    def __exit__(self, kind: object, _value: object, _traceback: object) -> None:
+        integrity_error = False
+        try:
+            self.require_held()
+        except ValueError:
+            integrity_error = True
+        if self._descriptor is not None:
+            try:
+                fcntl.flock(self._descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(self._descriptor)
+                self._descriptor = None
+        if self._parent_descriptor is not None:
+            try:
+                fcntl.flock(self._parent_descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(self._parent_descriptor)
+                self._parent_descriptor = None
+        if self._root_descriptor is not None:
+            try:
+                fcntl.flock(self._root_descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(self._root_descriptor)
+                self._root_descriptor = None
+        self._identity = None
+        if integrity_error and kind is None:
+            raise ValueError("repository lock path changed")
 
 
 def synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResult:
@@ -219,7 +348,8 @@ def _synchronize_remote_boundary(
         data_root = _repository_data_root(repo)
         _require_safe_repository_parents(repo)
         lock_path = _lock_path(repo)
-        with _RepositoryLock(lock_path, data_root):
+        with _RepositoryLock(lock_path, data_root) as repository_lock:
+            repository_lock.require_held()
             working_tree = _selected_working_tree(repo)
             if isinstance(working_tree, _MigrationFailure):
                 return working_tree
@@ -232,10 +362,13 @@ def _synchronize_remote_boundary(
             environment = _git_environment(auth, askpass)
             local_environment = _local_git_environment(environment)
             if stage is not None:
+                repository_lock.require_held()
                 _initialize_checkout(repo, stage, environment)
             else:
                 _verify_checkout_identity(repo, working_tree, local_environment)
+            repository_lock.require_held()
             commit, pushed = _synchronize_checkout(repo, working_tree, environment)
+            repository_lock.require_held()
             outcome = RemoteSyncResult(repo.name, commit, pushed, working_tree)
     except _LockBusy as error:
         outcome = _Failure(str(error.path))
@@ -254,6 +387,21 @@ def _apply_shared_working_tree_boundary(
     repo: SharedRepository, result: RemoteSyncResult, tx: Transaction
 ) -> ChangeSet | _Failure | _MigrationFailure:
     try:
+        data_root = _repository_data_root(repo)
+        with _RepositoryLock(_lock_path(repo), data_root) as repository_lock:
+            repository_lock.require_held()
+            return _apply_shared_working_tree_locked(repo, result, tx)
+    except _LockBusy as error:
+        return _Failure(str(error.path))
+    except Exception:
+        return _Failure("could not apply the shared repository working tree")
+
+
+def _apply_shared_working_tree_locked(
+    repo: SharedRepository, result: RemoteSyncResult, tx: Transaction
+) -> ChangeSet | _Failure | _MigrationFailure:
+    publication_copy: Path | None = None
+    try:
         _validate_result(repo, result)
         _require_safe_repository_parents(repo)
         canonical_real = _real_data_state(repo.target, allow_legacy_link=False, repo=repo)
@@ -268,19 +416,26 @@ def _apply_shared_working_tree_boundary(
             raise ValueError("missing synchronized checkout")
         _validate_working_tree(repo, repo.target if canonical_real else working_tree, result.commit)
         changed: list[Path] = []
-        moved_from_legacy = False
+        migrated_legacy = False
         if not canonical_real:
             _ensure_parent_for_transaction(repo.target.parent, tx, changed)
             _snapshot(tx, repo.target)
-            moved_from_legacy = repo.legacy_target is not None and working_tree == repo.legacy_target
-            _require_same_filesystem(working_tree, repo.target.parent)
-            _move_verified_working_tree(repo, working_tree, result.commit, tx)
+            migrated_legacy = repo.legacy_target is not None and working_tree == repo.legacy_target
+            publication_source = working_tree
+            if migrated_legacy:
+                publication_copy = _copy_working_tree_for_publication(repo, working_tree, result.commit)
+                publication_source = publication_copy
+            _require_same_filesystem(publication_source, repo.target.parent)
+            _move_verified_working_tree(repo, publication_source, result.commit)
+            publication_copy = None
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:
-            _remove_legacy_target(repo, tx, changed, moved_from_legacy=moved_from_legacy)
+            _remove_legacy_target(repo, tx, changed, allow_populated=migrated_legacy)
         return ChangeSet(tuple(changed))
     except Exception:
+        if publication_copy is not None and not _remove_private_tree(publication_copy):
+            return _Failure("could not clean private repository resources")
         return _Failure("could not apply the shared repository working tree")
 
 
@@ -331,10 +486,13 @@ def _selected_working_tree(repo: SharedRepository) -> Path | _MigrationFailure |
 
 
 def _initialize_checkout(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> None:
+    _require_safe_checkout_location(repo, checkout)
     _require_git_success(("init", "--quiet"), checkout, environment)
     _require_git_success(("remote", "add", "origin", "--", repo.source), checkout, environment)
     _verify_checkout_identity(repo, checkout, environment)
     remote_commit = _fetch_declared_commit(repo, checkout, environment)
+    _validate_commit_tree(checkout, _local_git_environment(environment), remote_commit)
+    _require_safe_checkout_location(repo, checkout)
     _require_git_success(("checkout", "--detach", remote_commit), checkout, environment)
     if _head_commit(checkout, environment) != remote_commit:
         raise ValueError("checkout commit mismatch")
@@ -343,6 +501,9 @@ def _initialize_checkout(repo: SharedRepository, checkout: Path, environment: di
 def _verify_checkout_identity(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> None:
     if not _looks_like_checkout(checkout):
         raise ValueError("not a checkout")
+    _require_safe_checkout_location(repo, checkout)
+    _reject_unsafe_git_metadata(checkout)
+    _verify_git_metadata_location(checkout, environment)
     _reject_redirecting_local_config(checkout, environment)
     _reject_replace_refs(checkout, environment)
     _verify_effective_worktree(checkout, environment)
@@ -361,6 +522,7 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
     local_environment = _local_git_environment(environment)
     if repo.mode == "read-only":
         _validate_index(checkout, local_environment)
+        _reject_external_hardlinks(checkout)
         if _git_bytes(
             ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
             checkout,
@@ -369,10 +531,14 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
         ) != b"":
             raise ValueError("read-only checkout is dirty")
         remote_commit = _fetch_declared_commit(repo, checkout, environment)
+        _validate_commit_tree(checkout, local_environment, remote_commit)
         head = _head_commit(checkout, local_environment)
         if not _is_ancestor(head, remote_commit, checkout, local_environment):
             raise ValueError("read-only checkout is not fast-forwardable")
+        _require_safe_checkout_location(repo, checkout)
         _require_git_success(("merge", "--ff-only", "FETCH_HEAD"), checkout, local_environment)
+        _validate_index(checkout, local_environment)
+        _reject_external_hardlinks(checkout)
         if _head_commit(checkout, local_environment) != remote_commit:
             raise ValueError("read-only checkout did not reach declared commit")
         return remote_commit, False
@@ -387,11 +553,13 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
     _validate_index(checkout, local_environment)
     _reject_external_hardlinks(checkout)
     remote_commit = _fetch_declared_commit(repo, checkout, environment)
+    _validate_commit_tree(checkout, local_environment, remote_commit)
     _reject_preexisting_unpushed_commits(checkout, local_environment)
     staged = b""
     if status_output:
         backup = _backup_index(checkout)
         try:
+            _require_safe_checkout_location(repo, checkout)
             _require_git_success(("add", "-A", "--", "."), checkout, local_environment)
             _validate_index(checkout, local_environment)
             staged = _git_bytes(
@@ -408,6 +576,7 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
         _discard_index_backup(backup)
     created_commit = False
     if staged:
+        _require_safe_checkout_location(repo, checkout)
         _require_git_success(
             (
                 "-c",
@@ -423,38 +592,67 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
             local_environment,
         )
         created_commit = True
+    publication_confirmed = False
     try:
         if _fetch_head_commit(checkout, local_environment) != remote_commit:
             raise ValueError("fetched commit changed unexpectedly")
         _validate_index(checkout, local_environment)
         _validate_unpushed_commits(checkout, local_environment)
+        _require_safe_checkout_location(repo, checkout)
         if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, local_environment) is None:
+            _require_safe_checkout_location(repo, checkout)
             if _try_git_bytes(("rebase", "--abort"), checkout, local_environment) is None:
                 raise ValueError("could not abort rebase")
             raise ValueError("rebase failed")
+        _validate_index(checkout, local_environment)
+        _reject_external_hardlinks(checkout)
         head = _head_commit(checkout, local_environment)
         ahead = _git_ascii(("rev-list", "--count", "FETCH_HEAD..HEAD"), checkout, local_environment)
         if ahead is None or not ahead.isdecimal():
             raise ValueError("could not count local commits")
         pushed = int(ahead) > 0
-        if pushed and _try_git_bytes(
-            ("push", "--", repo.source, f"HEAD:{repo.ref}"), checkout, environment
-        ) is None:
-            confirmed = None
-            try:
-                confirmed = _fetch_declared_commit(repo, checkout, environment)
-            except ValueError:
-                pass
-            if confirmed != head:
-                raise ValueError("push failed")
+        if pushed:
+            _require_safe_checkout_location(repo, checkout)
+            if _try_git_bytes(
+                ("push", "--", repo.source, f"HEAD:{repo.ref}"), checkout, environment
+            ) is None:
+                confirmed = None
+                try:
+                    confirmed = _fetch_declared_commit(repo, checkout, environment)
+                except ValueError:
+                    pass
+                if confirmed is None:
+                    raise ValueError("push failed")
+                if confirmed == head:
+                    publication_confirmed = True
+                elif _is_ancestor(head, confirmed, checkout, local_environment):
+                    publication_confirmed = True
+                    _validate_commit_tree(checkout, local_environment, confirmed)
+                    _require_safe_checkout_location(repo, checkout)
+                    _require_git_success(
+                        ("merge", "--ff-only", "FETCH_HEAD"), checkout, local_environment
+                    )
+                    _validate_index(checkout, local_environment)
+                    _reject_external_hardlinks(checkout)
+                    head = confirmed
+                else:
+                    raise ValueError("push failed")
+            else:
+                publication_confirmed = True
         return head, pushed
     except Exception:
-        if created_commit:
-            _try_git_bytes(("reset", "--mixed", remote_commit), checkout, local_environment)
+        if created_commit and not publication_confirmed:
+            try:
+                _require_safe_checkout_location(repo, checkout)
+            except ValueError:
+                pass
+            else:
+                _try_git_bytes(("reset", "--mixed", remote_commit), checkout, local_environment)
         raise
 
 
 def _fetch_declared_commit(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> str:
+    _require_safe_checkout_location(repo, checkout)
     _require_git_success(("fetch", "--no-tags", repo.source, "--", repo.ref), checkout, environment)
     return _fetch_head_commit(checkout, environment)
 
@@ -518,17 +716,49 @@ def _local_git_environment(environment: dict[str, str]) -> dict[str, str]:
 
 
 def _verify_effective_worktree(checkout: Path, environment: dict[str, str]) -> None:
-    raw_worktree = _git_bytes(
-        ("rev-parse", "--path-format=absolute", "--show-toplevel"),
-        checkout,
-        environment,
+    effective = _git_path(
+        ("rev-parse", "--path-format=absolute", "--show-toplevel"), checkout, environment
     )
     try:
-        effective = Path(os.fsdecode(raw_worktree.rstrip(b"\n")))
         if not effective.samefile(checkout):
             raise ValueError("Git worktree does not match checkout")
     except OSError:
         raise ValueError("could not verify Git worktree") from None
+
+
+def _verify_git_metadata_location(checkout: Path, environment: dict[str, str]) -> None:
+    expected = checkout / ".git"
+    git_directory = _git_path(("rev-parse", "--absolute-git-dir"), checkout, environment)
+    common_directory = _git_path(
+        ("rev-parse", "--path-format=absolute", "--git-common-dir"), checkout, environment
+    )
+    try:
+        if not git_directory.samefile(expected) or not common_directory.samefile(expected):
+            raise ValueError("Git metadata is outside the checkout")
+    except OSError:
+        raise ValueError("could not verify Git metadata") from None
+
+
+def _git_path(
+    arguments: tuple[str, ...], checkout: Path, environment: dict[str, str]
+) -> Path:
+    raw = _git_bytes(arguments, checkout, environment)
+    if raw.endswith(b"\n"):
+        raw = raw[:-1]
+    if not raw or any(character in raw for character in (b"\x00", b"\r", b"\n")):
+        raise ValueError("Git returned an invalid path")
+    return Path(os.fsdecode(raw))
+
+
+def _reject_unsafe_git_metadata(checkout: Path) -> None:
+    metadata_root = checkout / ".git"
+    if any(_lexists(metadata_root / relative) for relative in _FORBIDDEN_GIT_METADATA):
+        raise ValueError("external Git metadata is forbidden")
+    _reject_external_hardlinks_in_tree(
+        metadata_root,
+        skip_top_level_git=False,
+        reject_nonregular=True,
+    )
 
 
 def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]) -> None:
@@ -565,20 +795,41 @@ def _reject_replace_refs(checkout: Path, environment: dict[str, str]) -> None:
 def _is_executable_local_config(name: str) -> bool:
     return (
         name in _EXECUTABLE_LOCAL_CONFIG
+        or (name.startswith("alias.") and name.endswith(".command"))
+        or (name.startswith("browser.") and name.endswith(".cmd"))
         or name.startswith("http.")
         or (name.startswith("credential.") and name.endswith(".helper"))
         or (name.startswith("diff.") and name.endswith((".command", ".textconv")))
         or (name.startswith("difftool.") and name.endswith(".cmd"))
         or (name.startswith("filter.") and name.endswith((".clean", ".smudge", ".process")))
+        or (name.startswith("gpg.") and name.endswith(".program"))
+        or (name.startswith("guitool.") and name.endswith(".cmd"))
+        or (name.startswith("hook.") and name.endswith(".command"))
+        or (name.startswith("man.") and name.endswith(".cmd"))
         or (name.startswith("merge.") and name.endswith(".driver"))
         or (name.startswith("mergetool.") and name.endswith(".cmd"))
+        or (name.startswith("sendemail.") and name.endswith("cmd"))
         or (name.startswith("submodule.") and name.endswith(".update"))
+        or (name.startswith("trailer.") and name.endswith((".cmd", ".command")))
     )
 
 
 def _reject_external_hardlinks(checkout: Path) -> None:
+    _reject_external_hardlinks_in_tree(
+        checkout,
+        skip_top_level_git=True,
+        reject_nonregular=False,
+    )
+
+
+def _reject_external_hardlinks_in_tree(
+    root: Path,
+    *,
+    skip_top_level_git: bool,
+    reject_nonregular: bool,
+) -> None:
     identities: dict[tuple[int, int], tuple[int, int]] = {}
-    pending = [checkout]
+    pending = [root]
     while pending:
         directory = pending.pop()
         try:
@@ -586,7 +837,7 @@ def _reject_external_hardlinks(checkout: Path) -> None:
         except OSError:
             raise ValueError("could not inspect repository files") from None
         for entry in entries:
-            if directory == checkout and entry.name == ".git":
+            if skip_top_level_git and directory == root and entry.name == ".git":
                 continue
             try:
                 metadata = entry.stat(follow_symlinks=False)
@@ -596,6 +847,8 @@ def _reject_external_hardlinks(checkout: Path) -> None:
                 pending.append(Path(entry.path))
                 continue
             if not stat.S_ISREG(metadata.st_mode):
+                if reject_nonregular:
+                    raise ValueError("Git metadata contains an unsafe filesystem entry")
                 continue
             identity = (metadata.st_dev, metadata.st_ino)
             count, expected = identities.get(identity, (0, metadata.st_nlink))
@@ -618,7 +871,13 @@ def _validate_index(checkout: Path, environment: dict[str, str]) -> None:
     for record in records:
         metadata, separator, _path = record.partition(b"\t")
         fields = metadata.split(b" ")
-        if not separator or len(fields) != 3 or fields[0] == b"160000":
+        if (
+            not separator
+            or len(fields) != 3
+            or fields[0] not in _ALLOWED_BLOB_MODES
+            or re.fullmatch(rb"[0-9a-fA-F]{40,64}", fields[1]) is None
+            or fields[2] != b"0"
+        ):
             raise ValueError("unsafe index entry")
 
 
@@ -648,20 +907,30 @@ def _reject_preexisting_unpushed_commits(checkout: Path, environment: dict[str, 
 
 def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
     for commit in _unpushed_commit_ids(checkout, environment):
-        entries = _nul_records(
-            _git_bytes(
-                ("ls-tree", "-r", "-z", commit),
-                checkout,
-                environment,
-                max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
-            )
+        _validate_commit_tree(checkout, environment, commit)
+
+
+def _validate_commit_tree(checkout: Path, environment: dict[str, str], commit: str) -> None:
+    entries = _nul_records(
+        _git_bytes(
+            ("ls-tree", "-r", "-z", commit),
+            checkout,
+            environment,
+            max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
         )
-        for entry in entries:
-            metadata, separator, path = entry.partition(b"\t")
-            fields = metadata.split(b" ")
-            if not separator or len(fields) != 3 or fields[0] == b"160000":
-                raise ValueError("unsafe committed tree entry")
-            _reject_forbidden_path(path)
+    )
+    for entry in entries:
+        metadata, separator, path = entry.partition(b"\t")
+        fields = metadata.split(b" ")
+        if (
+            not separator
+            or len(fields) != 3
+            or fields[0] not in _ALLOWED_BLOB_MODES
+            or fields[1] != b"blob"
+            or re.fullmatch(rb"[0-9a-fA-F]{40,64}", fields[2]) is None
+        ):
+            raise ValueError("unsafe committed tree entry")
+        _reject_forbidden_path(path)
 
 
 def _backup_index(checkout: Path) -> _IndexBackup:
@@ -744,7 +1013,7 @@ def _reject_forbidden_path(raw: bytes) -> None:
         if (
             folded == ".git"
             or folded == ".env"
-            or folded.startswith(".env.")
+            or (folded.startswith(".env.") and folded not in _ALLOWED_ENV_TEMPLATES)
             or folded in _FORBIDDEN_DIRECTORIES
             or stem in _FORBIDDEN_CREDENTIAL_STEMS
             or folded.endswith(_RUNTIME_DATABASE_SUFFIXES)
@@ -778,6 +1047,16 @@ def _validate_working_tree(repo: SharedRepository, checkout: Path, commit: str) 
         askpass = _create_askpass(checkout.parent)
         environment = _git_environment(_LOCAL_VALIDATION_AUTH, askpass)
         _verify_checkout_identity(repo, checkout, environment)
+        _validate_index(checkout, environment)
+        _validate_commit_tree(checkout, environment, commit)
+        _reject_external_hardlinks(checkout)
+        if _git_bytes(
+            ("status", "--porcelain=v1", "-z", "--untracked-files=all"),
+            checkout,
+            environment,
+            max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
+        ) != b"":
+            raise ValueError("working tree is dirty")
         if _head_commit(checkout, environment) != commit:
             raise ValueError("working tree commit mismatch")
     finally:
@@ -789,7 +1068,6 @@ def _move_verified_working_tree(
     repo: SharedRepository,
     source: Path,
     commit: str,
-    tx: Transaction,
 ) -> None:
     source_identity = _directory_identity(source)
     if _optional_empty_directory_identity(repo.target) is not None:
@@ -807,11 +1085,14 @@ def _move_verified_working_tree(
         target_parent_descriptor = os.open(repo.target.parent, flags)
         if _identity_from_stat(os.fstat(descriptor)) != source_identity:
             raise ValueError("working tree identity changed")
-        tx.record_move(source, repo.target)
         if _directory_identity(source) != source_identity:
             raise ValueError("working tree path was swapped")
         if _optional_empty_directory_identity(repo.target) is not None:
             raise ValueError("canonical target changed before move")
+        _reject_unsafe_git_metadata(source)
+        _reject_external_hardlinks(source)
+        if _directory_identity(source) != source_identity:
+            raise ValueError("working tree identity changed before move")
         _rename_noreplace(
             source_parent_descriptor,
             source.name,
@@ -831,6 +1112,23 @@ def _move_verified_working_tree(
         if source_parent_descriptor is not None:
             os.close(source_parent_descriptor)
         os.close(descriptor)
+
+
+def _copy_working_tree_for_publication(
+    repo: SharedRepository,
+    source: Path,
+    commit: str,
+) -> Path:
+    copy = Path(tempfile.mkdtemp(prefix=".hermes-repository-", dir=repo.target.parent))
+    try:
+        shutil.copytree(source, copy, symlinks=True, dirs_exist_ok=True)
+        os.chmod(copy, 0o700)
+        _validate_working_tree(repo, copy, commit)
+        return copy
+    except Exception:
+        if not _remove_private_tree(copy):
+            raise ValueError("could not clean private repository copy") from None
+        raise
 
 
 def _rollback_failed_move(source: Path, target: Path) -> None:
@@ -879,14 +1177,10 @@ def _remove_legacy_target(
     tx: Transaction,
     changed: list[Path],
     *,
-    moved_from_legacy: bool,
+    allow_populated: bool,
 ) -> None:
     legacy = repo.legacy_target
     if legacy is None:
-        return
-    if moved_from_legacy:
-        if _lexists(legacy):
-            raise ValueError("legacy move source was recreated")
         return
     if not _lexists(legacy):
         return
@@ -896,13 +1190,14 @@ def _remove_legacy_target(
             raise ValueError("unexpected legacy target")
     elif stat.S_ISDIR(mode):
         with os.scandir(legacy) as entries:
-            if next(entries, None) is not None:
+            if next(entries, None) is not None and not allow_populated:
                 raise ValueError("legacy target contains data")
     else:
         raise ValueError("unexpected legacy target")
     _snapshot(tx, legacy)
     if stat.S_ISDIR(mode):
-        legacy.rmdir()
+        if not _remove_private_tree(legacy):
+            raise ValueError("could not remove legacy repository")
     else:
         legacy.unlink()
     changed.append(legacy)
@@ -966,6 +1261,21 @@ def _require_safe_repository_parents(repo: SharedRepository) -> None:
     _require_safe_managed_directory(repo.target.parent, data_root)
     if repo.legacy_target is not None:
         _require_safe_managed_directory(repo.legacy_target.parent, data_root)
+
+
+def _require_safe_checkout_location(repo: SharedRepository, checkout: Path) -> None:
+    _require_safe_repository_parents(repo)
+    allowed = {repo.target}
+    if repo.legacy_target is not None:
+        allowed.add(repo.legacy_target)
+    staged = (
+        checkout.parent == repo.target.parent
+        and checkout.name.startswith(".hermes-repository-")
+    )
+    if checkout not in allowed and not staged:
+        raise ValueError("checkout is outside the managed repository paths")
+    if not _safe_directory(checkout):
+        raise ValueError("checkout directory is unsafe")
 
 
 def _require_safe_managed_directory(path: Path, data_root: Path) -> None:

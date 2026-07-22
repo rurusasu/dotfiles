@@ -126,12 +126,13 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 0
-        $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
         $script:dockerCalls | Should -Be @(
             'info',
             'compose version',
             "compose -f $script:composeFile config --quiet",
             "compose -f $script:composeFile build hermes hermes-bootstrap",
+            "compose -f $script:composeFile stop hermes",
             "compose -f $script:composeFile up -d --force-recreate"
         )
         $script:environmentObservations.Phase | Should -Be @(
@@ -139,6 +140,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             'compose version',
             'config',
             'build',
+            'stop',
             'bootstrap',
             'up'
         )
@@ -379,7 +381,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $result.ExitCode | Should -Be 23
         $result.Message | Should -Be 'Hermes bootstrap failed (exit code 23). [REDACTED]'
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
-        $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
     }
 
@@ -399,7 +401,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $result.ExitCode | Should -Not -Be 0
         $result.Message | Should -Be 'Hermes bootstrap failed.'
         $result.Message | Should -Not -Match 'secret-bearing'
-        $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
         (Test-Path -LiteralPath Env:\HERMES_DATA_DIR) | Should -BeFalse
         (Test-Path -LiteralPath Env:\HERMES_BROWSER_DATA_DIR) | Should -BeTrue
@@ -425,7 +427,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 29
-        $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
         $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
     }
 }

@@ -597,6 +597,92 @@ class AppTests(unittest.TestCase):
             with self.assertRaises(CredentialError):
                 app.sync_repository(Path("manifest.yaml"), "lifelog", {})
 
+    def test_sync_repository_rejects_a_hardlinked_token_file(self) -> None:
+        from hermes_bootstrap import app
+
+        external = self.root.parent / "external-token.env"
+        external.write_text("GH_TOKEN=external-token-marker\n", encoding="utf-8")
+        os.link(external, self.root / ".env")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "synchronize_named_repository") as sync,
+            self.assertRaises(CredentialError) as caught,
+        ):
+            app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        self.assertNotIn("external-token-marker", str(caught.exception))
+        sync.assert_not_called()
+
+    def test_sync_repository_rejects_a_fifo_token_file_without_blocking(self) -> None:
+        from hermes_bootstrap import app
+
+        os.mkfifo(self.root / ".env")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "synchronize_named_repository") as sync,
+            self.assertRaises(CredentialError),
+        ):
+            app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        sync.assert_not_called()
+
+    def test_read_env_token_closes_the_anchored_parent_when_the_file_is_absent(self) -> None:
+        from hermes_bootstrap import app
+
+        opened: list[int] = []
+        closed: list[int] = []
+        real_close = os.close
+
+        def open_parent(path: Path) -> int:
+            descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            opened.append(descriptor)
+            return descriptor
+
+        def record_close(descriptor: int) -> None:
+            closed.append(descriptor)
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(app, "open_absolute_directory", side_effect=open_parent),
+            mock.patch.object(app.os, "close", side_effect=record_close),
+        ):
+            self.assertIsNone(app._read_env_token(self.root / "missing.env"))
+
+        self.assertEqual(closed, opened)
+
+    def test_sync_repository_rejects_a_token_file_beneath_a_swapped_ancestor(self) -> None:
+        from hermes_bootstrap import app
+
+        active = self.root / "profiles" / "default"
+        active.mkdir(parents=True)
+        (active / ".env").write_text("GH_TOKEN=original-token\n", encoding="utf-8")
+        held = self.root / "held-runtime"
+        outside = self.root / "outside-runtime"
+        outside.mkdir()
+        (outside / ".env").write_text("GH_TOKEN=attacker-token-marker\n", encoding="utf-8")
+
+        def swap_runtime_ancestor(_data_root: Path, _candidate: Path) -> bool:
+            active.rename(held)
+            active.symlink_to(outside, target_is_directory=True)
+            return True
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "_safe_runtime_home", side_effect=swap_runtime_ancestor),
+            mock.patch.object(app, "synchronize_named_repository") as sync,
+            self.assertRaises(CredentialError) as caught,
+        ):
+            app.sync_repository(
+                Path("manifest.yaml"),
+                "lifelog",
+                {"HERMES_HOME": str(active)},
+            )
+
+        self.assertNotIn("attacker-token-marker", str(caught.exception))
+        sync.assert_not_called()
+
     def test_validate_fails_closed_for_missing_state_without_leaking_paths(self) -> None:
         from hermes_bootstrap import app
 

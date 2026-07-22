@@ -35,6 +35,7 @@ from .envfiles import (
     read_environment_values,
 )
 from .errors import ApplyError, BootstrapError, CredentialError, RollbackError, ValidationError
+from .filesystem import open_absolute_directory
 from .git import _remote_identity, _same_remote_identity, stage_distribution
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
@@ -311,18 +312,40 @@ def _runtime_token(manifest: BootstrapManifest, environ: Mapping[str, str]) -> s
 
 def _read_env_token(path: Path) -> str | None:
     try:
-        metadata = path.lstat()
+        parent_descriptor = open_absolute_directory(path.parent)
     except FileNotFoundError:
         return None
-    except OSError:
+    except (OSError, ValueError):
         raise CredentialError("GitHub credentials are unavailable") from None
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _ENV_LIMIT:
-        raise CredentialError("GitHub credentials are unavailable")
+    descriptor: int | None = None
     try:
-        data = path.read_bytes()
-        text = data.decode("utf-8")
-    except (OSError, UnicodeError):
-        raise CredentialError("GitHub credentials are unavailable") from None
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(path.name, flags, dir_fd=parent_descriptor)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            raise CredentialError("GitHub credentials are unavailable") from None
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_size > _ENV_LIMIT
+            ):
+                raise CredentialError("GitHub credentials are unavailable")
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = None
+                data = stream.read(_ENV_LIMIT + 1)
+            text = data.decode("utf-8")
+        except (OSError, UnicodeError):
+            raise CredentialError("GitHub credentials are unavailable") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        os.close(parent_descriptor)
     if len(data) > _ENV_LIMIT or "\x00" in text:
         raise CredentialError("GitHub credentials are unavailable")
     token: str | None = None

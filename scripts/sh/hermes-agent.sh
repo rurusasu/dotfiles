@@ -221,6 +221,13 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
+  if "$docker_runner" compose -f "$compose_file" stop hermes; then
+    :
+  else
+    status=$?
+    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    return "$status"
+  fi
   if dotfiles_hermes_run_bootstrap "$docker_runner" "$compose_file"; then
     :
   else

@@ -254,29 +254,31 @@ so the same wrapper works for default and named profiles.
 ## Apply Sequence
 
 1. Build the Hermes image and validate the Compose model.
-2. Request and validate the non-secret 1Password item plan.
-3. Start `hermes-bootstrap`, retrieving each required item on the host and
+2. Stop the Hermes gateway before secrets or runtime data can change.
+3. Request and validate the non-secret 1Password item plan.
+4. Start `hermes-bootstrap`, retrieving each required item on the host and
    streaming it directly to stdin.
-4. Parse the payload without logging it.
-5. Validate all required fields, GitHub authentication, manifests, refs, and
+5. Parse the payload without logging it.
+6. Validate all required fields, GitHub authentication, manifests, refs, and
    repository access.
-6. Stage root and profile distributions before modifying runtime targets.
-7. Acquire each shared-repository lock and complete remote synchronization.
-8. Snapshot every locally managed target and record a transaction journal.
-9. Apply the root distribution.
-10. Apply each named profile through the Hermes distribution API.
-11. Clone, migrate, or synchronize shared working trees under
+7. Stage root and profile distributions before modifying runtime targets.
+8. Acquire each shared-repository lock and complete remote synchronization;
+   reacquire it during local publication and legacy cleanup.
+9. Snapshot every locally managed target and record a transaction journal.
+10. Apply the root distribution.
+11. Apply each named profile through the Hermes distribution API.
+12. Clone, migrate, or synchronize shared working trees under
     `/opt/data/shared/`.
-12. Atomically update root and profile `.env` files with mode `0600` while
+13. Atomically update root and profile `.env` files with mode `0600` while
     preserving unmanaged keys.
-13. Validate the final layout and `gh` authentication in every profile context.
-14. Remove the transaction journal and report changed targets without values.
-15. Recreate the Hermes gateway and run health checks.
+14. Validate the final layout and `gh` authentication in every profile context.
+15. Remove the transaction journal and report changed targets without values.
+16. Recreate the Hermes gateway and run health checks.
 
-An existing gateway may remain running during validation and staging. Runtime
-files are replaced atomically, and the gateway is recreated only after the
-transaction succeeds. On failure, the bootstrap rolls back and the installer
-returns non-zero without replacing the running gateway.
+The gateway remains stopped during validation, staging, and apply. Runtime files
+are replaced atomically, and the gateway is recreated only after the transaction
+succeeds. On failure, bootstrap rolls back, returns non-zero, and leaves the
+gateway stopped so it cannot observe partially validated runtime state.
 
 Remote commit and push operations are outside the local transaction boundary
 because they cannot be rolled back safely. They complete before local runtime
@@ -293,8 +295,9 @@ browser data, X credentials, and other runtime paths do not move.
   by `root-distribution.yaml`.
 - Existing named profiles without `distribution.yaml` are converted with
   `hermes profile install --force`; Hermes preserves user-owned paths.
-- An existing `/opt/data/core/lifelog` checkout moves atomically to
-  `/opt/data/shared/lifelog`; the old path is then absent.
+- An existing `/opt/data/core/lifelog` checkout is copied to a private sibling,
+  validated, and atomically published at `/opt/data/shared/lifelog`. The legacy
+  path is snapshotted before removal and is absent after success.
 - If both old and new lifelog paths contain data, bootstrap stops and reports a
   migration conflict rather than merging automatically.
 - Existing `.env` files retain unmanaged keys. Managed secret keys are replaced

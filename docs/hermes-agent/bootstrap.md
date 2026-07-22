@@ -118,38 +118,47 @@ rolled back safely.
 
 The local transaction uses a single-writer lock and journals snapshots under
 `/opt/data/.bootstrap/transactions/`. Root-owned paths, named profiles, shared
-working-tree moves, deprecated-path cleanup, and `.env` files are staged or
-snapshotted before replacement. Environment files are atomically renamed with
-mode `0600`, preserve unmanaged keys, and replace managed secret keys.
+working-tree publication, deprecated-path cleanup, and `.env` files are staged
+or snapshotted before replacement. Environment files are atomically renamed
+with mode `0600`, preserve unmanaged keys, and replace managed secret keys.
 
 The gateway binds its authenticated API to `0.0.0.0:8642` inside the container
 so Docker port forwarding can reach it. Compose publishes that port only on
 host loopback (`127.0.0.1`); Hermes refuses to start the API without the managed
 strong `API_SERVER_KEY`.
 
-If a local apply or final validation fails, bootstrap restores all recorded
-local paths and leaves the existing Compose stack running. A remote lifelog
-commit or push completed before the transaction is not reversed; the next run
-resumes from that valid remote state. If the process is interrupted, the next
-`apply` recovers or cleans the journal before accepting a new transaction.
+The host adapter stops the Hermes gateway before requesting secrets or changing
+runtime data. If a local apply or final validation fails, bootstrap restores
+all recorded local paths and leaves Hermes stopped; rerun bootstrap after
+resolving the reported failure. A remote lifelog commit or push completed
+before the transaction is not reversed; the next run resumes from that valid
+remote state. If the process is interrupted, the next `apply` recovers or
+cleans the journal before accepting a new transaction.
 
-Repository synchronization uses
-`/opt/data/locks/repositories/<name>.lock`. Lock contention fails immediately
-instead of waiting indefinitely. After confirming that the other bootstrap or
-sync process has exited, rerun the same command.
+Repository synchronization and working-tree publication use
+`/opt/data/locks/repositories/<name>.lock`. The lock remains held while a
+verified legacy copy is published and the old path is removed. Lock contention
+fails immediately instead of waiting indefinitely. After confirming that the
+other bootstrap or sync process has exited, rerun the same command.
 
 Git status, index, staged-path, and unpushed-history inspection is bounded to
 8 MiB per command and fails closed above that limit. The declared remote tree
 may contain ordinary knowledge filenames such as `authentication-guide.md`.
 Local synchronization still rejects credential artifacts such as `.env`,
 `auth.json`, and `token.txt`, runtime state directories, databases, and nested
-Git repositories before it can commit or push them.
+Git repositories before it can commit or push them. The repository-root
+`.env.example` template is allowed; other `.env.*` variants remain rejected.
+Authenticated Git operations execute the root-owned `/usr/bin/git` from the
+pinned image and replace inherited `PATH` with the system default before Git or
+its helpers receive credentials.
 
 ## Migration And Conflicts
 
-- A legacy real checkout at `/opt/data/core/lifelog` is moved atomically to
-  `/opt/data/shared/lifelog`. The old path is absent after success. The
-  manifest's `legacy_target` is migration input, not a runtime alias.
+- A legacy real checkout at `/opt/data/core/lifelog` is copied to a private
+  sibling, validated, and atomically published at `/opt/data/shared/lifelog`.
+  The old path is removed only after it has been snapshotted, and is absent
+  after success. The manifest's `legacy_target` is migration input, not a
+  runtime alias.
 - An empty legacy directory or compatibility symlink created by an older
   bootstrap version is removed transactionally.
 - If both lifelog paths contain real data, bootstrap exits with migration code

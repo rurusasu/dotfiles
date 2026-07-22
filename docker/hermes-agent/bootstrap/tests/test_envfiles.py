@@ -18,6 +18,7 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 API_KEY_BODY = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
+import hermes_bootstrap.envfiles as envfiles_module
 from hermes_bootstrap.errors import ApplyError, InputError
 from hermes_bootstrap.payload import DashboardSecret, SecretBundle, SecretRedactor, SlackSecret
 from hermes_bootstrap.envfiles import (
@@ -254,6 +255,29 @@ class EnvFileTests(unittest.TestCase):
         self.assertEqual(self.path.stat().st_ino, inode)
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
+    def test_idempotent_apply_rejects_a_file_replaced_before_chmod(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text("GH_TOKEN='token'\n", encoding="utf-8")
+        self.path.chmod(0o644)
+        real_chmod = envfiles_module._chmod_private_at
+
+        def replace_then_chmod(parent_descriptor: int, name: str, *arguments: object) -> None:
+            self.path.unlink()
+            self.path.write_text("GH_TOKEN='attacker'\n", encoding="utf-8")
+            self.path.chmod(0o644)
+            real_chmod(parent_descriptor, name, *arguments)
+
+        with mock.patch.object(
+            envfiles_module,
+            "_chmod_private_at",
+            side_effect=replace_then_chmod,
+        ):
+            with self.assertRaises(ApplyError):
+                merge_env_file(self.path, {"GH_TOKEN": "token"}, frozenset())
+
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "GH_TOKEN='attacker'\n")
+        self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o644)
+
     def test_changed_content_replaces_file_atomically(self) -> None:
         self.path.parent.mkdir(parents=True)
         self.path.write_text("GH_TOKEN=old\n", encoding="utf-8")
@@ -280,6 +304,73 @@ class EnvFileTests(unittest.TestCase):
         with self.assertRaises(ApplyError):
             merge_env_file(self.path, {"GH_TOKEN": "secret"}, frozenset())
 
+    def test_hardlinked_target_is_rejected_without_reading_or_chmodding_the_external_file(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        external = self.root / "external.env"
+        external.write_bytes(b"KEEP=external-secret-marker\n")
+        os.chmod(external, 0o644)
+        os.link(external, self.path)
+
+        with self.assertRaises(ApplyError) as caught:
+            merge_env_file(self.path, {"GH_TOKEN": "token"}, frozenset())
+
+        self.assertNotIn("external-secret-marker", str(caught.exception))
+        self.assertEqual(external.read_bytes(), b"KEEP=external-secret-marker\n")
+        self.assertEqual(stat.S_IMODE(external.stat().st_mode), 0o644)
+
+    def test_swapped_parent_is_rejected_without_reading_or_updating_the_external_file(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text("GH_TOKEN=original\n", encoding="utf-8")
+        held = self.root / "held-profile"
+        outside = self.root / "outside-profile"
+        outside.mkdir()
+        outside_env = outside / ".env"
+        outside_env.write_text("KEEP=external-secret-marker\n", encoding="utf-8")
+        real_ensure_parent = envfiles_module._ensure_parent_directory
+
+        def swap_parent(parent: Path) -> None:
+            real_ensure_parent(parent)
+            parent.rename(held)
+            parent.symlink_to(outside, target_is_directory=True)
+
+        with mock.patch.object(
+            envfiles_module,
+            "_ensure_parent_directory",
+            side_effect=swap_parent,
+        ):
+            with self.assertRaises(ApplyError) as caught:
+                merge_env_file(self.path, {"GH_TOKEN": "new-token"}, frozenset())
+
+        self.assertNotIn("external-secret-marker", str(caught.exception))
+        self.assertEqual(outside_env.read_text(encoding="utf-8"), "KEEP=external-secret-marker\n")
+
+    def test_parent_swapped_after_open_is_rejected_before_any_environment_update(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text("GH_TOKEN=original\n", encoding="utf-8")
+        held = self.root / "held-after-open"
+        outside = self.root / "outside-after-open"
+        outside.mkdir()
+        outside_env = outside / ".env"
+        outside_env.write_text("KEEP=external\n", encoding="utf-8")
+        real_open_parent = envfiles_module._open_environment_parent
+
+        def open_then_swap(parent: Path) -> int:
+            descriptor = real_open_parent(parent)
+            parent.rename(held)
+            parent.symlink_to(outside, target_is_directory=True)
+            return descriptor
+
+        with mock.patch.object(
+            envfiles_module,
+            "_open_environment_parent",
+            side_effect=open_then_swap,
+        ):
+            with self.assertRaises(ApplyError):
+                merge_env_file(self.path, {"GH_TOKEN": "new-token"}, frozenset())
+
+        self.assertEqual((held / ".env").read_text(encoding="utf-8"), "GH_TOKEN=original\n")
+        self.assertEqual(outside_env.read_text(encoding="utf-8"), "KEEP=external\n")
+
     def test_replace_failure_keeps_original_and_cleans_up_temporary_files(self) -> None:
         self.path.parent.mkdir(parents=True)
         self.path.write_text("KEEP=original\n", encoding="utf-8")
@@ -295,10 +386,14 @@ class EnvFileTests(unittest.TestCase):
         self.path.parent.mkdir(parents=True)
         self.path.write_text("KEEP=original\n", encoding="utf-8")
         real_close = os.close
+        failed_regular_closes: list[int] = []
 
         def close_then_fail(descriptor: int) -> None:
+            regular = stat.S_ISREG(os.fstat(descriptor).st_mode)
             real_close(descriptor)
-            raise OSError("close failed")
+            if regular:
+                failed_regular_closes.append(descriptor)
+                raise OSError("close failed")
 
         with mock.patch("hermes_bootstrap.envfiles.os.fchmod", side_effect=OSError("chmod failed")):
             with mock.patch("hermes_bootstrap.envfiles.os.close", side_effect=close_then_fail) as close:
@@ -310,7 +405,8 @@ class EnvFileTests(unittest.TestCase):
                     )
 
         self.assertEqual(str(caught.exception), "could not atomically update environment file")
-        self.assertEqual(close.call_count, 1)
+        self.assertGreater(close.call_count, 1)
+        self.assertEqual(len(failed_regular_closes), 2)
         self.assertIsNone(caught.exception.__cause__)
         self.assertIsNone(caught.exception.__context__)
         self.assert_exception_hides_markers(caught.exception, "atomic-cleanup-secret-marker")
@@ -319,25 +415,34 @@ class EnvFileTests(unittest.TestCase):
 
     def test_parent_fsync_cleanup_failure_preserves_primary_error_without_secret_traceback(self) -> None:
         self.path.parent.mkdir(parents=True)
-        parent_descriptor = 12345
+        parent_info = self.path.parent.stat()
+        parent_identity = (parent_info.st_dev, parent_info.st_ino)
         real_fsync = os.fsync
-        real_open = os.open
+        real_close = os.close
+        failed_parent_closes: list[int] = []
 
-        def open_parent_only(*args: object, **kwargs: object) -> int:
-            if Path(args[0]) == self.path.parent:
-                return parent_descriptor
-            return real_open(*args, **kwargs)
+        def is_parent(descriptor: int) -> bool:
+            info = os.fstat(descriptor)
+            return stat.S_ISDIR(info.st_mode) and (info.st_dev, info.st_ino) == parent_identity
 
         def fsync_parent_only(descriptor: int) -> None:
-            if descriptor == parent_descriptor:
+            if is_parent(descriptor):
                 raise OSError("parent fsync failed")
             real_fsync(descriptor)
 
-        with mock.patch("hermes_bootstrap.envfiles.os.open", side_effect=open_parent_only):
+        def close_parent_then_fail(descriptor: int) -> None:
+            parent = is_parent(descriptor)
+            real_close(descriptor)
+            if parent:
+                failed_parent_closes.append(descriptor)
+                raise OSError("close failed")
+
+        with (
+            mock.patch.object(envfiles_module, "_ensure_parent_directory"),
+            mock.patch.object(envfiles_module, "verify_absolute_directory"),
+        ):
             with mock.patch("hermes_bootstrap.envfiles.os.fsync", side_effect=fsync_parent_only):
-                with mock.patch(
-                    "hermes_bootstrap.envfiles.os.close", side_effect=OSError("close failed")
-                ) as close:
+                with mock.patch("hermes_bootstrap.envfiles.os.close", side_effect=close_parent_then_fail):
                     with self.assertRaises(ApplyError) as caught:
                         merge_env_file(
                             self.path,
@@ -346,40 +451,40 @@ class EnvFileTests(unittest.TestCase):
                         )
 
         self.assertEqual(str(caught.exception), "could not synchronize environment file directory")
-        self.assertEqual(close.call_args_list, [mock.call(parent_descriptor)])
+        self.assertGreaterEqual(len(failed_parent_closes), 1)
         self.assertIsNone(caught.exception.__cause__)
         self.assertIsNone(caught.exception.__context__)
         self.assert_exception_hides_markers(caught.exception, "parent-fsync-secret-marker")
 
     def test_parent_close_failure_is_sanitized_after_successful_fsync(self) -> None:
         self.path.parent.mkdir(parents=True)
-        parent_descriptor = 12345
-        real_fsync = os.fsync
-        real_open = os.open
+        parent_info = self.path.parent.stat()
+        parent_identity = (parent_info.st_dev, parent_info.st_ino)
+        real_close = os.close
+        failed_parent_closes: list[int] = []
 
-        def open_parent_only(*args: object, **kwargs: object) -> int:
-            if Path(args[0]) == self.path.parent:
-                return parent_descriptor
-            return real_open(*args, **kwargs)
+        def close_parent_then_fail(descriptor: int) -> None:
+            info = os.fstat(descriptor)
+            parent = stat.S_ISDIR(info.st_mode) and (info.st_dev, info.st_ino) == parent_identity
+            real_close(descriptor)
+            if parent:
+                failed_parent_closes.append(descriptor)
+                raise OSError("close failed")
 
-        def fsync_parent_only(descriptor: int) -> None:
-            if descriptor != parent_descriptor:
-                real_fsync(descriptor)
-
-        with mock.patch("hermes_bootstrap.envfiles.os.open", side_effect=open_parent_only):
-            with mock.patch("hermes_bootstrap.envfiles.os.fsync", side_effect=fsync_parent_only):
-                with mock.patch(
-                    "hermes_bootstrap.envfiles.os.close", side_effect=OSError("close failed")
-                ) as close:
-                    with self.assertRaises(ApplyError) as caught:
-                        merge_env_file(
-                            self.path,
-                            {"GH_TOKEN": "parent-close-secret-marker"},
-                            frozenset(),
-                        )
+        with (
+            mock.patch.object(envfiles_module, "_ensure_parent_directory"),
+            mock.patch.object(envfiles_module, "verify_absolute_directory"),
+        ):
+            with mock.patch("hermes_bootstrap.envfiles.os.close", side_effect=close_parent_then_fail):
+                with self.assertRaises(ApplyError) as caught:
+                    merge_env_file(
+                        self.path,
+                        {"GH_TOKEN": "parent-close-secret-marker"},
+                        frozenset(),
+                    )
 
         self.assertEqual(str(caught.exception), "could not synchronize environment file directory")
-        self.assertEqual(close.call_args_list, [mock.call(parent_descriptor)])
+        self.assertGreaterEqual(len(failed_parent_closes), 1)
         self.assertIsNone(caught.exception.__cause__)
         self.assertIsNone(caught.exception.__context__)
         self.assert_exception_hides_markers(caught.exception, "parent-close-secret-marker")

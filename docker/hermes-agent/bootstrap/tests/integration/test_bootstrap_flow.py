@@ -477,6 +477,13 @@ class BootstrapFlowTests(unittest.TestCase):
                     "child environment contained a protected host value",
                 )
                 expected_base = _minimal_environment(self.child_home)
+                command = args[0] if args else kwargs.get("args")
+                if (
+                    isinstance(command, (list, tuple))
+                    and command
+                    and command[0] == "/usr/bin/git"
+                ):
+                    expected_base["PATH"] = os.defpath
                 self.assertEqual(
                     {key: environment.get(key) for key in expected_base},
                     expected_base,
@@ -786,7 +793,14 @@ class BootstrapFlowTests(unittest.TestCase):
     def test_legacy_lifelog_checkout_migrates_to_canonical_relative_link(self) -> None:
         legacy = self.data_root / "core" / "lifelog"
         legacy.parent.mkdir(parents=True)
-        run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(legacy))
+        run_git(
+            "clone",
+            "--no-hardlinks",
+            "--branch",
+            "main",
+            str(self.source_remotes["lifelog"]),
+            str(legacy),
+        )
         run_git("config", "user.name", "Fixture", cwd=legacy)
         run_git("config", "user.email", "fixture@example.test", cwd=legacy)
         run_git(
@@ -805,7 +819,7 @@ class BootstrapFlowTests(unittest.TestCase):
         canonical = self.data_root / "shared" / "lifelog"
         self.assertTrue((canonical / ".git").is_dir())
         canonical_metadata = canonical.stat()
-        self.assertEqual(
+        self.assertNotEqual(
             (canonical_metadata.st_dev, canonical_metadata.st_ino), legacy_identity
         )
         self.assertEqual(
@@ -827,7 +841,14 @@ class BootstrapFlowTests(unittest.TestCase):
         canonical = self.data_root / "shared" / "lifelog"
         for checkout in (legacy, canonical):
             checkout.parent.mkdir(parents=True, exist_ok=True)
-            run_git("clone", "--branch", "main", str(self.source_remotes["lifelog"]), str(checkout))
+            run_git(
+                "clone",
+                "--no-hardlinks",
+                "--branch",
+                "main",
+                str(self.source_remotes["lifelog"]),
+                str(checkout),
+            )
         self._ensure_repository_lock()
         before = self._snapshot_tree(self.data_root)
         locks_before = self._snapshot_coordination_locks()
@@ -1099,7 +1120,7 @@ class BootstrapFlowTests(unittest.TestCase):
                         self.assertTrue(canonical.is_dir())
                         self.assertFalse(os.path.lexists(legacy))
                         metadata = canonical.stat()
-                        self.assertEqual(
+                        self.assertNotEqual(
                             (metadata.st_dev, metadata.st_ino),
                             (before.device, before.inode),
                         )

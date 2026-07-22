@@ -256,6 +256,11 @@ function Invoke-HermesBootstrapEntrypoint {
                 -FailureMessage 'Hermes image build failed.'
             if ($build.ExitCode -ne 0) { return $build }
 
+            $stop = Invoke-HermesBootstrapDockerPhase `
+                -Arguments @('compose', '-f', $paths.ComposeFile, 'stop', 'hermes') `
+                -FailureMessage 'Hermes gateway stop failed.'
+            if ($stop.ExitCode -ne 0) { return $stop }
+
             try {
                 $global:LASTEXITCODE = 0
                 $bootstrap = Invoke-HermesBootstrap -ComposeFile $paths.ComposeFile -DataDir $paths.DataDir

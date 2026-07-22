@@ -194,6 +194,7 @@ assert_log_order() {
 		"chezmoi apply --force" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \

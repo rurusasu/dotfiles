@@ -44,26 +44,6 @@ class TransactionTests(unittest.TestCase):
         store.mkdir(mode=0o700)
         return store
 
-    def compatibility_move(self) -> tuple[Path, Path, tuple[int, int], Transaction]:
-        source = self.root / "core" / "lifelog"
-        target = self.root / "shared" / "lifelog"
-        source.mkdir(parents=True)
-        target.parent.mkdir(parents=True)
-        (source / "entry.md").write_text("before\n", encoding="utf-8")
-        identity = (source.stat().st_dev, source.stat().st_ino)
-        tx = Transaction.begin(self.root)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        os.symlink(os.path.relpath(target, source.parent), source)
-        return source, target, identity, tx
-
-    def move_quarantines(self) -> tuple[Path, Path]:
-        journal_path, _ = self.journal()
-        return (
-            journal_path.parent / "move-000000-source-link",
-            journal_path.parent / "move-000000-target-object",
-        )
-
     def private_recovery_hierarchy(
         self,
         root: Path,
@@ -135,6 +115,14 @@ class TransactionTests(unittest.TestCase):
 
         self.assertFalse(os.path.lexists(path))
         self.assertEqual(self.journal_paths(), [])
+
+    def test_snapshot_only_journal_uses_schema_version_two(self) -> None:
+        tx = Transaction.begin(self.root)
+
+        _journal_path, journal = self.journal()
+        self.assertEqual(journal["version"], 2)
+
+        tx.rollback()
 
     def test_snapshot_regular_file_restores_bytes_and_executable_mode(self) -> None:
         path = self.root / "tool"
@@ -326,445 +314,6 @@ class TransactionTests(unittest.TestCase):
         with self.assertRaises(ApplyError):
             tx.snapshot(parent)
         tx.rollback()
-
-    def test_record_move_is_durable_before_rename_and_reverses_after_rename(self) -> None:
-        source = self.root / "source"
-        target = self.root / "target"
-        source.write_text("before", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-
-        tx.record_move(source, target)
-        _, journal = self.journal()
-        self.assertEqual(journal["entries"][-1]["kind"], "move")
-        tx.rollback()
-        self.assertTrue(source.exists())
-        self.assertFalse(target.exists())
-
-        tx = Transaction.begin(self.root)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        tx.rollback()
-        self.assertEqual(source.read_text(encoding="utf-8"), "before")
-        self.assertFalse(os.path.lexists(target))
-
-    def test_record_move_reverses_its_exact_target_symlink(self) -> None:
-        source = self.root / "core" / "lifelog"
-        target = self.root / "shared" / "lifelog"
-        source.mkdir(parents=True)
-        target.parent.mkdir(parents=True)
-        (source / "entry.md").write_text("before\n", encoding="utf-8")
-        identity = (source.stat().st_dev, source.stat().st_ino)
-        tx = Transaction.begin(self.root)
-
-        tx.record_move(source, target)
-        os.replace(source, target)
-        os.symlink(os.path.relpath(target, source.parent), source)
-        tx.rollback()
-
-        self.assertTrue(source.is_dir())
-        self.assertFalse(source.is_symlink())
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_record_move_rejects_a_different_source_symlink_and_retains_journal(self) -> None:
-        source = self.root / "core" / "lifelog"
-        target = self.root / "shared" / "lifelog"
-        source.mkdir(parents=True)
-        target.parent.mkdir(parents=True)
-        (source / "entry.md").write_text("before\n", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-
-        tx.record_move(source, target)
-        os.replace(source, target)
-        os.symlink("../shared/not-lifelog", source)
-
-        with self.assertRaises(RollbackError):
-            tx.rollback()
-
-        self.assertTrue(source.is_symlink())
-        self.assertEqual(os.readlink(source), "../shared/not-lifelog")
-        self.assertTrue(target.is_dir())
-        self.assertEqual((target / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertTrue(self.journal_paths())
-
-    def test_crash_recovery_reverses_an_exact_move_target_symlink(self) -> None:
-        source = self.root / "core" / "lifelog"
-        target = self.root / "shared" / "lifelog"
-        source.mkdir(parents=True)
-        target.parent.mkdir(parents=True)
-        (source / "entry.md").write_text("before\n", encoding="utf-8")
-        identity = (source.stat().st_dev, source.stat().st_ino)
-        tx = Transaction.begin(self.root)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        os.symlink(os.path.relpath(target, source.parent), source)
-        self.crash(tx)
-
-        Transaction.recover_if_needed(self.root)
-
-        self.assertTrue(source.is_dir())
-        self.assertFalse(source.is_symlink())
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_rollback_preserves_source_replacement_injected_before_quarantine(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-        replacement_link = "../shared/attacker"
-
-        def replace_source(name: str) -> None:
-            if name == "move-source-before-quarantine":
-                source.unlink()
-                os.symlink(replacement_link, source)
-
-        with mock.patch.object(transaction_module, "_failpoint", side_effect=replace_source):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        source_quarantine, _ = self.move_quarantines()
-        preserved = [
-            path
-            for path in (source, source_quarantine)
-            if path.is_symlink() and os.readlink(path) == replacement_link
-        ]
-        self.assertEqual(len(preserved), 1)
-        self.assertTrue(target.is_dir())
-        self.assertEqual((target / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertTrue(self.journal_paths())
-
-        preserved[0].unlink()
-        os.symlink(os.path.relpath(target, source.parent), source)
-        Transaction.recover_if_needed(self.root)
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_rollback_preserves_source_recreated_after_quarantine(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-
-        def recreate_source(name: str) -> None:
-            if name == "move-target-before-restore":
-                source.mkdir()
-                (source / "attacker-sentinel").write_text("preserve", encoding="utf-8")
-
-        with mock.patch.object(transaction_module, "_failpoint", side_effect=recreate_source):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        source_quarantine, target_quarantine = self.move_quarantines()
-        self.assertEqual((source / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertTrue(target_quarantine.is_dir())
-        self.assertEqual((target_quarantine / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertTrue(self.journal_paths())
-
-        shutil.rmtree(source)
-        Transaction.recover_if_needed(self.root)
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_rollback_restores_target_replacement_injected_before_quarantine(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-        parked_target = self.root.parent / "parked-target"
-
-        def replace_target(name: str) -> None:
-            if name == "move-target-before-quarantine":
-                os.replace(target, parked_target)
-                target.mkdir()
-                (target / "attacker-sentinel").write_text("preserve", encoding="utf-8")
-
-        with mock.patch.object(transaction_module, "_failpoint", side_effect=replace_target):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        self.assertEqual((target / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
-        self.assertEqual((parked_target.stat().st_dev, parked_target.stat().st_ino), identity)
-        self.assertEqual((parked_target / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertTrue(self.journal_paths())
-
-        shutil.rmtree(target)
-        os.replace(parked_target, target)
-        Transaction.recover_if_needed(self.root)
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_recovery_resumes_after_source_link_quarantine(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-
-        with mock.patch.object(
-            transaction_module,
-            "_failpoint",
-            side_effect=lambda name: (_ for _ in ()).throw(OSError())
-            if name == "move-source-quarantined"
-            else None,
-        ):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        source_quarantine, target_quarantine = self.move_quarantines()
-        self.assertFalse(os.path.lexists(source))
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertTrue(target.is_dir())
-        self.assertFalse(os.path.lexists(target_quarantine))
-
-        Transaction.recover_if_needed(self.root)
-
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_recovery_resumes_after_target_object_quarantine(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-
-        with mock.patch.object(
-            transaction_module,
-            "_failpoint",
-            side_effect=lambda name: (_ for _ in ()).throw(OSError())
-            if name == "move-target-quarantined"
-            else None,
-        ):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        source_quarantine, target_quarantine = self.move_quarantines()
-        self.assertFalse(os.path.lexists(source))
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual((target_quarantine.stat().st_dev, target_quarantine.stat().st_ino), identity)
-
-        Transaction.recover_if_needed(self.root)
-
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_recovery_resumes_after_target_object_restore(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-
-        with mock.patch.object(
-            transaction_module,
-            "_failpoint",
-            side_effect=lambda name: (_ for _ in ()).throw(OSError())
-            if name == "move-target-restored"
-            else None,
-        ):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        source_quarantine, target_quarantine = self.move_quarantines()
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertFalse(os.path.lexists(target))
-        self.assertFalse(os.path.lexists(target_quarantine))
-
-        Transaction.recover_if_needed(self.root)
-
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertEqual((source / "entry.md").read_text(encoding="utf-8"), "before\n")
-        self.assertFalse(os.path.lexists(target))
-        self.assertEqual(self.journal_paths(), [])
-
-    def test_move_rollback_fails_closed_when_renameat2_is_unavailable(self) -> None:
-        source, target, _identity, tx = self.compatibility_move()
-
-        with mock.patch.object(transaction_module, "_renameat2", None):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        self.assertTrue(source.is_symlink())
-        self.assertTrue(target.is_dir())
-        self.assertTrue(self.journal_paths())
-
-    def test_move_rollback_rejects_target_replacement_before_move(self) -> None:
-        source = self.root / "source"
-        target = self.root / "target"
-        source.mkdir()
-        (source / "original").write_text("source", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-        tx.snapshot(target)
-        tx.record_move(source, target)
-        target.mkdir()
-        sentinel = target / "attacker-sentinel"
-        sentinel.write_text("preserve", encoding="utf-8")
-
-        with self.assertRaises(RollbackError):
-            tx.rollback()
-
-        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
-        self.assertEqual((source / "original").read_text(encoding="utf-8"), "source")
-        self.assertTrue(self.journal_paths())
-
-    def test_move_cleanup_preserves_restored_source_replacement(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-        source_quarantine, target_quarantine = self.move_quarantines()
-        parked_source = self.root.parent / "parked-restored-source"
-        injected = False
-
-        def replace_restored_source(name: str) -> None:
-            nonlocal injected
-            if name != "cleanup-quarantine-before-unlink" or injected:
-                return
-            injected = True
-            _, journal = self.journal()
-            self.assertEqual(journal["status"], "rolled_back")
-            self.assertEqual(journal["entries"][0]["state"], "restored")
-            os.replace(source, parked_source)
-            source.mkdir()
-            (source / "attacker-sentinel").write_text("preserve", encoding="utf-8")
-
-        with mock.patch.object(
-            transaction_module,
-            "_failpoint",
-            side_effect=replace_restored_source,
-        ):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        self.assertTrue(injected)
-        self.assertEqual((source / "attacker-sentinel").read_text(encoding="utf-8"), "preserve")
-        self.assertEqual((parked_source.stat().st_dev, parked_source.stat().st_ino), identity)
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertEqual(os.readlink(source_quarantine), os.path.relpath(target, source.parent))
-        self.assertFalse(os.path.lexists(target_quarantine))
-        self.assertTrue(self.journal_paths())
-
-    def test_move_cleanup_preserves_private_quarantine_replacement(self) -> None:
-        source, target, identity, tx = self.compatibility_move()
-        source_quarantine, target_quarantine = self.move_quarantines()
-        parked_quarantine = self.root.parent / "parked-source-quarantine"
-        replacement_link = "attacker-sentinel"
-        injected = False
-
-        def replace_private_quarantine(name: str) -> None:
-            nonlocal injected
-            if name != "cleanup-quarantine-before-unlink" or injected:
-                return
-            injected = True
-            _, journal = self.journal()
-            self.assertEqual(journal["status"], "rolled_back")
-            self.assertEqual(journal["entries"][0]["state"], "restored")
-            os.replace(source_quarantine, parked_quarantine)
-            os.symlink(replacement_link, source_quarantine)
-
-        with mock.patch.object(
-            transaction_module,
-            "_failpoint",
-            side_effect=replace_private_quarantine,
-        ):
-            with self.assertRaises(RollbackError):
-                tx.rollback()
-
-        self.assertTrue(injected)
-        self.assertEqual((source.stat().st_dev, source.stat().st_ino), identity)
-        self.assertFalse(os.path.lexists(target))
-        self.assertFalse(os.path.lexists(target_quarantine))
-        self.assertTrue(source_quarantine.is_symlink())
-        self.assertEqual(os.readlink(source_quarantine), replacement_link)
-        self.assertTrue(parked_quarantine.is_symlink())
-        self.assertEqual(os.readlink(parked_quarantine), os.path.relpath(target, source.parent))
-        self.assertTrue(self.journal_paths())
-
-    def test_record_move_allows_a_target_that_was_snapshotted_first(self) -> None:
-        source = self.root / "source"
-        target = self.root / "target"
-        source.write_text("source", encoding="utf-8")
-        target.write_text("target", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-
-        tx.snapshot(target)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        tx.rollback()
-
-        self.assertEqual(source.read_text(encoding="utf-8"), "source")
-        self.assertEqual(target.read_text(encoding="utf-8"), "target")
-
-    def test_snapshot_after_move_rejects_each_endpoint_and_overlap_then_rolls_back(self) -> None:
-        for candidate_name in ("source", "target", "target/child", "."):
-            with self.subTest(candidate=candidate_name), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary) / "data"
-                namespace = root / "namespace"
-                namespace.mkdir(parents=True)
-                source = namespace / "source"
-                target = namespace / "target"
-                source.mkdir()
-                (source / "payload").write_text("source", encoding="utf-8")
-                tx = Transaction.begin(root)
-                tx.record_move(source, target)
-                os.replace(source, target)
-                candidate = namespace if candidate_name == "." else namespace / candidate_name
-
-                with self.assertRaises(ApplyError):
-                    tx.snapshot(candidate)
-                tx.rollback()
-
-                self.assertEqual((source / "payload").read_text(encoding="utf-8"), "source")
-                self.assertFalse(os.path.lexists(target))
-
-    def test_recovery_rejects_a_snapshot_reordered_after_a_move_before_restore(self) -> None:
-        source = self.root / "source"
-        target = self.root / "target"
-        source.write_text("source", encoding="utf-8")
-        target.write_text("target", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-        tx.snapshot(target)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        journal_path, journal = self.journal()
-        snapshot, move = journal["entries"]
-        old_backup = journal_path.parent / snapshot["backup"]
-        snapshot["backup"] = "backup-000001"
-        os.replace(old_backup, journal_path.parent / snapshot["backup"])
-        journal["entries"] = [move, snapshot]
-        journal_path.write_text(json.dumps(journal), encoding="utf-8")
-        self.crash(tx)
-
-        with self.assertRaises(ApplyError):
-            Transaction.recover_if_needed(self.root)
-
-        self.assertEqual(target.read_text(encoding="utf-8"), "source")
-        self.assertTrue(journal_path.exists())
-
-    def test_reverse_order_restores_move_before_related_snapshots(self) -> None:
-        source = self.root / "source"
-        target = self.root / "target"
-        source.write_text("before", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-
-        tx.snapshot(target)
-        tx.snapshot(source)
-        tx.record_move(source, target)
-        os.replace(source, target)
-        tx.rollback()
-
-        self.assertEqual(source.read_text(encoding="utf-8"), "before")
-        self.assertFalse(os.path.lexists(target))
-
-    def test_move_rejects_overlap_existing_target_and_identity_mismatch(self) -> None:
-        source = self.root / "source"
-        source.write_text("source", encoding="utf-8")
-        target = self.root / "target"
-        target.write_text("target", encoding="utf-8")
-        tx = Transaction.begin(self.root)
-
-        with self.assertRaises(ApplyError):
-            tx.record_move(source, source / "child")
-        with self.assertRaises(ApplyError):
-            tx.record_move(source, target)
-        target.unlink()
-        tx.record_move(source, target)
-        os.replace(source, target)
-        target.unlink()
-        target.mkdir()
-        with self.assertRaises(RollbackError):
-            tx.rollback()
-        self.assertTrue(self.journal_paths())
 
     def test_second_writer_is_rejected_until_the_first_finishes(self) -> None:
         tx = Transaction.begin(self.root)
@@ -1094,6 +643,23 @@ class TransactionTests(unittest.TestCase):
                 self.assertEqual(second.read_text(encoding="utf-8"), "second-after")
                 self.assertTrue(journal_path.exists())
 
+    def test_journal_rejects_the_removed_inode_based_move_kind(self) -> None:
+        path = self.root / "file"
+        path.write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_text("after", encoding="utf-8")
+        journal_path, journal = self.journal()
+        journal["entries"][0]["kind"] = "move"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        with self.assertRaises(ApplyError):
+            Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_text(encoding="utf-8"), "after")
+        self.assertTrue(journal_path.exists())
+
     def test_rolling_back_journal_accepts_only_a_restored_reverse_suffix(self) -> None:
         first = self.root / "first"
         second = self.root / "second"
@@ -1121,16 +687,17 @@ class TransactionTests(unittest.TestCase):
         target = self.root / "target"
         source.write_text("source-before", encoding="utf-8")
         tx = Transaction.begin(self.root)
-        tx.record_move(source, target)
+        tx.snapshot(source)
+        tx.snapshot(target)
         os.replace(source, target)
         journal_path, journal = self.journal()
         journal["entries"].append(
             {
                 "kind": "snapshot",
-                "path": "target",
+                "path": "trailing",
                 "state": "preparing",
-                "original": "file",
-                "backup": "backup-000001",
+                "original": "absent",
+                "backup": "backup-000002",
             }
         )
         journal_path.write_text(json.dumps(journal), encoding="utf-8")
@@ -1149,7 +716,10 @@ class TransactionTests(unittest.TestCase):
 
         journal_path, journal = self.journal()
         self.assertEqual(journal["status"], "rolled_back")
-        self.assertEqual([entry["state"] for entry in journal["entries"]], ["restored", "preparing"])
+        self.assertEqual(
+            [entry["state"] for entry in journal["entries"]],
+            ["restored", "restored", "preparing"],
+        )
         Transaction.recover_if_needed(self.root)
         self.assertEqual(source.read_text(encoding="utf-8"), "source-before")
         self.assertFalse(os.path.lexists(target))
@@ -1173,7 +743,7 @@ class TransactionTests(unittest.TestCase):
         journal_dir.mkdir(mode=0o700)
         journal = journal_dir / "journal.json"
         journal.write_text(
-            json.dumps({"version": 1, "status": "active", "entries": [{"kind": "snapshot", "path": "../escape", "state": "ready", "original": "absent", "backup": "backup-000000"}]}),
+            json.dumps({"version": 2, "status": "active", "entries": [{"kind": "snapshot", "path": "../escape", "state": "ready", "original": "absent", "backup": "backup-000000"}]}),
             encoding="utf-8",
         )
         victim = self.root.parent / "escape"

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -16,7 +18,6 @@ from types import FrameType, TracebackType
 from unittest import mock
 
 import hermes_bootstrap.repositories as repositories_module
-import hermes_bootstrap.transaction as transaction_module
 from hermes_bootstrap.errors import MigrationError, RepositoryError
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import BootstrapManifest, SharedRepository
@@ -66,17 +67,9 @@ class RecordingTransaction:
         self.moves.append((source, target))
 
 
-class SwappingTransaction(RecordingTransaction):
-    def __init__(self) -> None:
-        super().__init__()
-        self.held: Path | None = None
-
+class SnapshotOnlyTransaction(RecordingTransaction):
     def record_move(self, source: Path, target: Path) -> None:
-        super().record_move(source, target)
-        held = source.with_name(f"{source.name}-held")
-        source.rename(held)
-        source.symlink_to(held)
-        self.held = held
+        raise AssertionError(f"publication must not journal an inode-based move: {source} -> {target}")
 
 
 class RepositoryTests(unittest.TestCase):
@@ -113,7 +106,7 @@ class RepositoryTests(unittest.TestCase):
 
     def clone(self, target: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
-        run_git("clone", "--branch", "main", str(self.remote), str(target))
+        run_git("clone", "--no-hardlinks", "--branch", "main", str(self.remote), str(target))
         run_git("config", "user.name", "Fixture", cwd=target)
         run_git("config", "user.email", "fixture@example.test", cwd=target)
 
@@ -172,11 +165,20 @@ class RepositoryTests(unittest.TestCase):
         transaction = RecordingTransaction()
         changes = apply_shared_working_tree(repo, result, transaction)
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
-        self.assertEqual(transaction.moves, [(result.working_tree, repo.target)])
+        self.assertEqual(transaction.moves, [])
         self.assertIn(repo.target, transaction.snapshots)
         self.assertNotIn(result.working_tree, transaction.snapshots)
         self.assertNotIn(repo.legacy_target, transaction.snapshots)
         self.assertFalse(os.path.lexists(repo.legacy_target))
+
+    def test_publication_uses_snapshots_without_an_inode_based_move_journal(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+
+        changes = apply_shared_working_tree(repo, result, SnapshotOnlyTransaction())
+
+        self.assertIn(repo.target, changes.changed_paths)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
     def test_rejects_an_existing_checkout_beneath_a_symlinked_shared_parent(self) -> None:
@@ -266,6 +268,35 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(result, RemoteSyncResult("lifelog", expected, False, repo.target))
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=repo.target), commit_count)
         self.assertEqual(self.remote_head(), expected)
+
+    def test_rejects_a_remote_symlink_before_updating_the_checkout(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        local_head = run_git("rev-parse", "HEAD", cwd=repo.target)
+        (self.seed / "escape").symlink_to("../../outside-secret")
+        run_git("add", "escape", cwd=self.seed)
+        run_git("commit", "-m", "add escaping symlink", cwd=self.seed)
+        run_git("push", "origin", "main", cwd=self.seed)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), local_head)
+        self.assertFalse(os.path.lexists(repo.target / "escape"))
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
+    def test_rejects_a_staged_symlink_before_committing_or_pushing(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        (repo.target / "escape").symlink_to("../../outside-secret")
+        run_git("add", "escape", cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
 
     def test_declared_remote_credential_named_knowledge_remains_writable(self) -> None:
         repo = self.repository()
@@ -434,6 +465,63 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.remote_head(), source_head)
         self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
 
+    def test_rejects_history_rewriting_or_external_object_metadata(self) -> None:
+        for relative, content in (
+            (Path("info/grafts"), b"graft-secret-marker\n"),
+            (Path("objects/info/alternates"), b"/outside/alternate-secret-marker\n"),
+            (Path("objects/info/http-alternates"), b"https://alternate-secret-marker.invalid/\n"),
+            (Path("commondir"), b"/outside/common-secret-marker\n"),
+        ):
+            with self.subTest(relative=relative):
+                repo = self.repository()
+                if repo.target.exists():
+                    shutil.rmtree(repo.target)
+                self.clone(repo.target)
+                metadata = repo.target / ".git" / relative
+                metadata.parent.mkdir(parents=True, exist_ok=True)
+                metadata.write_bytes(content)
+
+                with self.assertRaises(RepositoryError) as caught:
+                    synchronize_remote(repo, self.auth)
+
+                self.assert_hidden_in_bootstrap_error_graph(
+                    caught.exception,
+                    "secret-marker",
+                    "fixture-token",
+                )
+
+    def test_rejects_hardlinked_git_metadata_without_reading_the_external_file(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        external = self.root / "external-git-metadata"
+        external.write_text("git-metadata-secret-marker\n", encoding="utf-8")
+        exclude = repo.target / ".git" / "info" / "exclude"
+        exclude.unlink()
+        os.link(external, exclude)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(external.read_text(encoding="utf-8"), "git-metadata-secret-marker\n")
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "git-metadata-secret-marker",
+            "fixture-token",
+        )
+
+    def test_rejects_alternate_refs_command_before_authenticated_git(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        marker = self.root / "alternate-refs-token-marker"
+        command = f"sh -c 'printf %s \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" > {marker}'"
+        run_git("config", "--local", "core.alternateRefsCommand", command, cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertFalse(marker.exists())
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
     def test_read_write_allows_hardlinks_fully_contained_in_the_checkout(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
@@ -540,6 +628,88 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(raced)
         self.assertEqual(self.remote_head(), race_commit)
         self.assertNotEqual(run_git("rev-parse", "HEAD", cwd=repo.target), race_commit)
+
+    def test_lost_push_response_accepts_a_remote_descendant_of_the_published_commit(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        (repo.target / "local-published.md").write_text("local\n", encoding="utf-8")
+        real_runner = repositories_module._run_git_bytes
+        simulated = False
+
+        def lose_response_after_remote_advances(
+            arguments: tuple[str, ...],
+            cwd: Path,
+            environment: dict[str, str],
+            *,
+            max_output_bytes: int,
+        ) -> bytes | None:
+            nonlocal simulated
+            output = real_runner(arguments, cwd, environment, max_output_bytes=max_output_bytes)
+            if arguments and arguments[0] == "push" and not simulated:
+                self.assertIsNotNone(output)
+                simulated = True
+                run_git("fetch", "origin", "main", cwd=self.seed)
+                run_git("reset", "--hard", "FETCH_HEAD", cwd=self.seed)
+                (self.seed / "remote-after.md").write_text("remote after publication\n", encoding="utf-8")
+                run_git("add", "remote-after.md", cwd=self.seed)
+                run_git("commit", "-m", "advance after publication", cwd=self.seed)
+                run_git("push", "origin", "main", cwd=self.seed)
+                return None
+            return output
+
+        with mock.patch.object(
+            repositories_module,
+            "_run_git_bytes",
+            side_effect=lose_response_after_remote_advances,
+        ):
+            result = synchronize_remote(repo, self.auth)
+
+        self.assertTrue(simulated)
+        self.assertTrue(result.pushed)
+        self.assertEqual(result.commit, self.remote_head())
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
+        self.assertEqual((repo.target / "remote-after.md").read_text(encoding="utf-8"), "remote after publication\n")
+
+    def test_lost_push_response_does_not_rollback_when_the_remote_descendant_is_unsafe(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        (repo.target / "local-published.md").write_text("local\n", encoding="utf-8")
+        real_runner = repositories_module._run_git_bytes
+        published_commit: str | None = None
+
+        def lose_response_before_unsafe_remote_advance(
+            arguments: tuple[str, ...],
+            cwd: Path,
+            environment: dict[str, str],
+            *,
+            max_output_bytes: int,
+        ) -> bytes | None:
+            nonlocal published_commit
+            output = real_runner(arguments, cwd, environment, max_output_bytes=max_output_bytes)
+            if arguments and arguments[0] == "push" and published_commit is None:
+                self.assertIsNotNone(output)
+                published_commit = run_git("rev-parse", "HEAD", cwd=cwd)
+                run_git("fetch", "origin", "main", cwd=self.seed)
+                run_git("reset", "--hard", "FETCH_HEAD", cwd=self.seed)
+                (self.seed / "unsafe-link").symlink_to("../../outside")
+                run_git("add", "unsafe-link", cwd=self.seed)
+                run_git("commit", "-m", "unsafe advance after publication", cwd=self.seed)
+                run_git("push", "origin", "main", cwd=self.seed)
+                return None
+            return output
+
+        with mock.patch.object(
+            repositories_module,
+            "_run_git_bytes",
+            side_effect=lose_response_before_unsafe_remote_advance,
+        ):
+            with self.assertRaises(RepositoryError):
+                synchronize_remote(repo, self.auth)
+
+        self.assertIsNotNone(published_commit)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), published_commit)
+        self.assertNotEqual(self.remote_head(), published_commit)
+        self.assertEqual(run_git_bytes("status", "--porcelain=v1", "-z", cwd=repo.target), b"")
 
     def test_rejects_pushurl_before_it_can_redirect_a_real_push(self) -> None:
         repo = self.repository()
@@ -746,6 +916,18 @@ class RepositoryTests(unittest.TestCase):
         with self.assertRaises(RepositoryError):
             synchronize_remote(repo, self.auth)
 
+    def test_read_write_accepts_env_example_but_rejects_other_env_variants(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        (repo.target / ".env.example").write_text("KEY=placeholder\n", encoding="utf-8")
+
+        result = synchronize_remote(repo, self.auth)
+
+        self.assertTrue(result.pushed)
+        (repo.target / ".env.production").write_text("KEY=secret\n", encoding="utf-8")
+        with self.assertRaises(RepositoryError):
+            synchronize_remote(repo, self.auth)
+
     def test_rejects_wrong_origin_and_lock_contention_without_secret_output(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
@@ -761,6 +943,27 @@ class RepositoryTests(unittest.TestCase):
                 synchronize_remote(repo, self.auth)
         self.assertNotIn("fixture-token", str(caught.exception))
         self.assertEqual(list(repo.target.parent.glob("askpass-*")), [])
+
+    def test_rejects_a_hardlinked_repository_lock_without_chmodding_the_external_file(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        external = self.root / "external-lock"
+        external.write_text("external-lock-marker\n", encoding="utf-8")
+        external.chmod(0o644)
+        lock = self.data_root / "locks" / "repositories" / "lifelog.lock"
+        lock.parent.mkdir(parents=True)
+        os.link(external, lock)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(external.read_text(encoding="utf-8"), "external-lock-marker\n")
+        self.assertEqual(stat.S_IMODE(external.stat().st_mode), 0o644)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "external-lock-marker",
+            "fixture-token",
+        )
 
     def test_lock_contention_from_a_second_process_reports_only_the_lock_path(self) -> None:
         repo = self.repository()
@@ -791,6 +994,15 @@ class RepositoryTests(unittest.TestCase):
             else:
                 self.fail("lock holder did not acquire the lock")
 
+            with lock.open("a+", encoding="utf-8") as probe:
+                try:
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    pass
+                else:
+                    fcntl.flock(probe, fcntl.LOCK_UN)
+                    self.skipTest("filesystem does not preserve legacy file-flock contention")
+
             with self.assertRaises(RepositoryError) as caught:
                 synchronize_remote(repo, self.auth)
             self.assertEqual(str(caught.exception), str(lock))
@@ -799,6 +1011,39 @@ class RepositoryTests(unittest.TestCase):
                 process.stdin.write(b"x")
                 process.stdin.close()
             process.wait(timeout=5)
+
+    def test_lock_path_replacement_does_not_create_a_second_lock_domain(self) -> None:
+        lock = self.data_root / "locks" / "repositories" / "lifelog.lock"
+        replacement: Path | None = None
+
+        with self.assertRaises(ValueError):
+            with repositories_module._RepositoryLock(lock, self.data_root) as held:
+                lock.unlink()
+                lock.write_text("replacement\n", encoding="utf-8")
+                replacement = lock
+
+                with self.assertRaises(repositories_module._LockBusy):
+                    with repositories_module._RepositoryLock(lock, self.data_root):
+                        pass
+                held.require_held()
+
+        self.assertIsNotNone(replacement)
+
+    def test_lock_parent_replacement_does_not_create_a_second_lock_domain(self) -> None:
+        lock = self.data_root / "locks" / "repositories" / "lifelog.lock"
+        held_parent = lock.parent.with_name("repositories-held")
+
+        with self.assertRaises(ValueError):
+            with repositories_module._RepositoryLock(lock, self.data_root) as held:
+                lock.parent.rename(held_parent)
+                lock.parent.mkdir()
+
+                with self.assertRaises(repositories_module._LockBusy):
+                    with repositories_module._RepositoryLock(lock, self.data_root):
+                        pass
+                held.require_held()
+
+        self.assertTrue((held_parent / lock.name).is_file())
 
     def test_askpass_unlink_failure_turns_an_unchanged_success_into_a_fixed_error(self) -> None:
         repo = self.repository()
@@ -913,17 +1158,45 @@ class RepositoryTests(unittest.TestCase):
         with self.assertRaises(RepositoryError):
             synchronize_named_repository("lifelog", manifest, self.auth, require_canonical=True)
 
-    def test_apply_rejects_a_source_swapped_after_record_move_before_touching_canonical(self) -> None:
+    def test_apply_rejects_a_source_swapped_before_publication_without_touching_canonical(self) -> None:
         repo = self.repository()
         result = synchronize_remote(repo, self.auth)
-        transaction = SwappingTransaction()
+        transaction = RecordingTransaction()
+        held = result.working_tree.with_name(f"{result.working_tree.name}-held")
+        real_rename = repositories_module._rename_noreplace
 
-        with self.assertRaises(RepositoryError):
-            apply_shared_working_tree(repo, result, transaction)
+        def swap_before_publish(source_parent: int, source: str, target_parent: int, target: str) -> None:
+            result.working_tree.rename(held)
+            result.working_tree.symlink_to(held)
+            real_rename(source_parent, source, target_parent, target)
+
+        with mock.patch.object(repositories_module, "_rename_noreplace", side_effect=swap_before_publish):
+            with self.assertRaises(RepositoryError):
+                apply_shared_working_tree(repo, result, transaction)
 
         self.assertFalse(repo.target.exists())
-        self.assertIsNotNone(transaction.held)
-        self.assertTrue((transaction.held / ".git").is_dir())
+        self.assertTrue((held / ".git").is_dir())
+        self.assertTrue(result.working_tree.is_symlink())
+
+    def test_apply_rechecks_external_hardlinks_at_the_publication_boundary(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+        external = self.root / "publication-race-hardlink"
+        transaction = RecordingTransaction()
+        real_rename = repositories_module._rename_noreplace
+
+        def hardlink_before_publish(source_parent: int, source: str, target_parent: int, target: str) -> None:
+            os.link(result.working_tree / "README.md", external)
+            real_rename(source_parent, source, target_parent, target)
+
+        with mock.patch.object(repositories_module, "_rename_noreplace", side_effect=hardlink_before_publish):
+            with self.assertRaises(RepositoryError):
+                apply_shared_working_tree(repo, result, transaction)
+
+        self.assertFalse(repo.target.exists())
+        self.assertTrue((result.working_tree / ".git").is_dir())
+        self.assertTrue(external.exists())
+        self.assertEqual(transaction.moves, [])
 
     def test_apply_preserves_a_target_created_at_the_publication_boundary(self) -> None:
         repo = self.repository()
@@ -936,7 +1209,7 @@ class RepositoryTests(unittest.TestCase):
             repo.target.mkdir()
             metadata = repo.target.stat()
             raced_identity = (metadata.st_dev, metadata.st_ino)
-            transaction_module._rename_noreplace(source_parent, source, target_parent, target)
+            repositories_module._rename_noreplace(source_parent, source, target_parent, target)
 
         with mock.patch.object(
             repositories_module,
@@ -950,7 +1223,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIsNotNone(raced_identity)
         self.assertEqual((repo.target.stat().st_dev, repo.target.stat().st_ino), raced_identity)
         self.assertTrue((result.working_tree / ".git").is_dir())
-        self.assertEqual(transaction.moves, [(result.working_tree, repo.target)])
+        self.assertEqual(transaction.moves, [])
 
     def test_apply_preserves_an_existing_empty_canonical_target(self) -> None:
         repo = self.repository()
@@ -978,6 +1251,48 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertFalse(os.path.lexists(repo.legacy_target))
 
+    def test_apply_rejects_a_legacy_checkout_modified_after_synchronization(self) -> None:
+        repo = self.repository()
+        assert repo.legacy_target is not None
+        self.clone(repo.legacy_target)
+        result = synchronize_remote(repo, self.auth)
+        (repo.legacy_target / "README.md").write_text("changed after sync\n", encoding="utf-8")
+
+        with self.assertRaises(RepositoryError):
+            apply_shared_working_tree(repo, result, RecordingTransaction())
+
+        self.assertFalse(repo.target.exists())
+        self.assertEqual(
+            (repo.legacy_target / "README.md").read_text(encoding="utf-8"),
+            "changed after sync\n",
+        )
+
+    def test_apply_holds_the_repository_lock_through_legacy_publication(self) -> None:
+        repo = self.repository()
+        assert repo.legacy_target is not None
+        self.clone(repo.legacy_target)
+        result = synchronize_remote(repo, self.auth)
+        real_copy = repositories_module._copy_working_tree_for_publication
+
+        def assert_locked(source_repo: SharedRepository, source: Path, commit: str) -> Path:
+            with self.assertRaises(repositories_module._LockBusy):
+                with repositories_module._RepositoryLock(
+                    repositories_module._lock_path(repo),
+                    self.data_root,
+                ):
+                    pass
+            return real_copy(source_repo, source, commit)
+
+        with mock.patch.object(
+            repositories_module,
+            "_copy_working_tree_for_publication",
+            side_effect=assert_locked,
+        ):
+            changes = apply_shared_working_tree(repo, result, RecordingTransaction())
+
+        self.assertIn(repo.target, changes.changed_paths)
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+
     def test_real_legacy_migration_rolls_back_with_identity_and_can_retry(self) -> None:
         repo = self.repository()
         assert repo.legacy_target is not None
@@ -989,8 +1304,6 @@ class RepositoryTests(unittest.TestCase):
             "legacy-checkout-only",
             cwd=repo.legacy_target,
         )
-        metadata = repo.legacy_target.stat()
-        identity = (metadata.st_dev, metadata.st_ino)
         result = synchronize_remote(repo, self.auth)
         tx = Transaction.begin(self.data_root)
 
@@ -1001,10 +1314,6 @@ class RepositoryTests(unittest.TestCase):
 
         self.assertTrue(repo.legacy_target.is_dir())
         self.assertFalse(repo.legacy_target.is_symlink())
-        self.assertEqual(
-            (repo.legacy_target.stat().st_dev, repo.legacy_target.stat().st_ino),
-            identity,
-        )
         self.assertEqual(
             run_git(
                 "config",
@@ -1057,7 +1366,16 @@ class RepositoryTests(unittest.TestCase):
         repo = self.repository()
         self.clone(repo.target)
         raw_name = b"entry-\xff.md"
-        descriptor = os.open(os.fsencode(repo.target) + b"/" + raw_name, os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+            descriptor = os.open(
+                os.fsencode(repo.target) + b"/" + raw_name,
+                os.O_WRONLY | os.O_CREAT,
+                0o600,
+            )
+        except OSError as caught:
+            if caught.errno in {errno.EILSEQ, errno.EINVAL, errno.ENOTSUP}:
+                self.skipTest("filesystem cannot create undecodable byte paths")
+            raise
         try:
             os.write(descriptor, b"surrogateescape\n")
         finally:

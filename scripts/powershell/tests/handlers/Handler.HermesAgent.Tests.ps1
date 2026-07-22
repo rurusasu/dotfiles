@@ -29,7 +29,6 @@ Describe 'HermesAgentHandler' {
         $script:eventLog = [System.Collections.Generic.List[string]]::new()
         $script:readinessAttempts = 0
 
-        $script:ctx.Options['NixRebuildApplied'] = $true
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
         Set-Content -LiteralPath $script:composeFile -Value 'services: {}' -Encoding utf8
@@ -48,8 +47,6 @@ Describe 'HermesAgentHandler' {
             [PSCustomObject]@{ Name = 'docker'; Source = 'C:\\Program Files\\Docker\\docker.exe' }
         } -ParameterFilter { $Name -eq 'docker' }
         Mock Test-DockerDaemon { $true }
-        Mock Test-WslAvailable { $true }
-        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
         Mock Invoke-Docker {
             param([string[]]$Arguments)
             $script:dockerCalls.Add(($Arguments -join ' '))
@@ -99,7 +96,7 @@ Describe 'HermesAgentHandler' {
             $handler.Order | Should -BeGreaterThan ([NixRebuildHandler]::new().Order)
         }
 
-        It 'honors its enable option and compose, Docker, and Nix readiness checks' {
+        It 'honors its enable option and native Docker readiness checks' {
             $ctx.Options['SkipHermesAgent'] = $true
             $handler.CanApply($ctx) | Should -BeFalse
 
@@ -116,8 +113,10 @@ Describe 'HermesAgentHandler' {
             $handler.CanApply($ctx) | Should -BeFalse
 
             Mock Test-DockerDaemon { $true }
+            Mock Test-WslAvailable { $false }
             $ctx.Options['NixRebuildApplied'] = $false
-            $handler.CanApply($ctx) | Should -BeFalse
+            $handler.CanApply($ctx) | Should -BeTrue
+            Should -Invoke Test-WslAvailable -Times 0 -Exactly
         }
     }
 
@@ -153,9 +152,10 @@ Describe 'HermesAgentHandler' {
             $script:dockerCalls | Should -Be @(
                 "compose -f $script:composeFile config --quiet",
                 "compose -f $script:composeFile build hermes hermes-bootstrap",
+                "compose -f $script:composeFile stop hermes",
                 "compose -f $script:composeFile up -d --force-recreate"
             )
-            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up', 'health')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up', 'health')
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
                 $Uri -eq 'http://127.0.0.1:8642/health' -and
                 $Method -eq 'Get' -and
@@ -199,7 +199,25 @@ Describe 'HermesAgentHandler' {
             $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
         }
 
-        It 'returns a redacted bootstrap failure without recreating or stopping existing services' {
+        It 'fails before requesting secrets when the running gateway cannot be stopped' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'stop') {
+                    $global:LASTEXITCODE = 20
+                    return 'stop failure'
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'stop failure'
+            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
+        }
+
+        It 'returns a redacted bootstrap failure without recreating the stopped gateway' {
             $secret = 'bootstrap-secret-value'
             Mock Invoke-HermesBootstrap {
                 [PSCustomObject]@{
@@ -215,10 +233,10 @@ Describe 'HermesAgentHandler' {
             $result.Message | Should -Match '\[REDACTED\]'
             $result.Message | Should -Not -Match ([regex]::Escape($secret))
             $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
-            ($script:dockerCalls -join "`n") | Should -Not -Match '\b(down|stop)\b'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
         }
 
-        It 'reports compose startup failure without stopping existing services' {
+        It 'reports compose startup failure after the existing gateway was stopped' {
             Mock Invoke-Docker {
                 $script:dockerCalls.Add(($Arguments -join ' '))
                 $script:eventLog.Add([string]$Arguments[3])
@@ -234,7 +252,7 @@ Describe 'HermesAgentHandler' {
             $result.Success | Should -BeFalse
             $result.Message | Should -Match 'startup failure'
             $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
-            ($script:dockerCalls -join "`n") | Should -Not -Match '\b(down|stop)\b'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
         }
 
         It 'waits through transient API failures before reporting startup success' {
@@ -314,7 +332,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
             $script:eventLog | Should -Not -Contain 'up'
         }
 
@@ -330,7 +348,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
         }
 
         It 'propagates migration exit code 5 without starting services or writing host content' {
@@ -352,7 +370,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Match 'exit code 5'
-            $script:eventLog | Should -Be @('config', 'build', 'bootstrap')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
             $script:eventLog | Should -Not -Contain 'up'
             $dataDir | Should -Exist
             $browserDir | Should -Exist

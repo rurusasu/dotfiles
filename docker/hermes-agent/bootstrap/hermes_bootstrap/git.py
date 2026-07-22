@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import functools
 import os
 import re
 import selectors
@@ -19,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .errors import RepositoryError
+from .filesystem import open_absolute_directory, verify_absolute_directory
 from .github import GitAuth
 from .models import DistributionSource
 
@@ -31,6 +33,7 @@ _MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
 _MAX_GIT_REAP_ATTEMPTS = 32
 _MAX_GIT_REAPS_PER_ATTEMPT = 64
 _PR_SET_CHILD_SUBREAPER = 36
+_GIT_EXECUTABLE = "/usr/bin/git"
 _OBJECT_ID = re.compile(r"[0-9a-fA-F]{40,64}\Z")
 _GITHUB_OWNER_REPOSITORY_PATH = re.compile(
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
@@ -230,6 +233,7 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
             "HERMES_BOOTSTRAP_GITHUB_TOKEN": auth.token,
         }
     )
+    environment["PATH"] = os.defpath
     return environment
 
 
@@ -259,19 +263,26 @@ def _run_git_bytes(
     selector: selectors.BaseSelector | None = None
     output = bytearray()
     succeeded = False
+    cwd_descriptor: int | None = None
     try:
         if type(max_output_bytes) is not int or not 0 < max_output_bytes <= _MAX_GIT_RAW_OUTPUT_BYTES:
             return None
         if not _ensure_linux_child_subreaper():
             return None
+        git_executable = _trusted_git_executable(environment)
+        if git_executable is None:
+            return None
+        cwd_descriptor = open_absolute_directory(cwd)
+        verify_absolute_directory(cwd, cwd_descriptor)
         process = subprocess.Popen(
-            ("git", *arguments),
-            cwd=cwd,
+            (git_executable, *arguments),
             env=environment,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             close_fds=True,
+            pass_fds=(cwd_descriptor,),
+            preexec_fn=functools.partial(os.fchdir, cwd_descriptor),
             start_new_session=True,
         )
         output_stream = process.stdout
@@ -318,6 +329,27 @@ def _run_git_bytes(
                 output_stream.close()
             except OSError:
                 pass
+        if cwd_descriptor is not None:
+            _safe_close(cwd_descriptor)
+
+
+def _trusted_git_executable(environment: dict[str, str]) -> str | None:
+    """Use only the root-owned Git executable installed in the pinned image."""
+
+    del environment
+    executable = Path(_GIT_EXECUTABLE)
+    try:
+        metadata = executable.lstat()
+    except OSError:
+        return None
+    if (
+        not executable.is_absolute()
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != 0
+        or stat.S_IMODE(metadata.st_mode) & 0o022
+    ):
+        return None
+    return str(executable)
 
 
 def _stop_git_process(process: subprocess.Popen[bytes]) -> None:

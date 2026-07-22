@@ -40,7 +40,7 @@ class GitStagingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.remote = self.root / "source.git"
         self.checkout = self.root / "checkout"
         self.workdir = self.root / "work"
@@ -167,7 +167,10 @@ class GitStagingTests(unittest.TestCase):
         )
 
         timeout = 0.1 if not output else git_module._GIT_TIMEOUT_SECONDS
-        with mock.patch.object(git_module, "_GIT_TIMEOUT_SECONDS", timeout):
+        with (
+            mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.object(git_module, "_GIT_TIMEOUT_SECONDS", timeout),
+        ):
             if bytes_runner:
                 self.assertIsNone(
                     git_module._run_git_bytes(("anything",), self.root, environment, max_output_bytes=64)
@@ -355,10 +358,16 @@ class GitStagingTests(unittest.TestCase):
         )
         fake_git.chmod(0o700)
 
-        with mock.patch.dict(
-            os.environ,
-            {"PATH": str(bin_dir), "HERMES_TEST_GIT_PID": str(pid_file)},
-            clear=False,
+        with (
+            mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.dict(
+                os.environ,
+                {
+                    "PATH": str(bin_dir),
+                    "HERMES_TEST_GIT_PID": str(pid_file),
+                },
+                clear=False,
+            ),
         ):
             with self.assertRaises(RepositoryError) as caught:
                 stage_distribution(self.source(), self.workdir, auth())
@@ -398,14 +407,87 @@ class GitStagingTests(unittest.TestCase):
         fake_git.chmod(0o700)
         environment = {"PATH": str(bin_dir)}
 
-        self.assertEqual(
-            git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=64),
-            b"plain\0\xc3\xa9\0",
+        with mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)):
+            self.assertEqual(
+                git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=64),
+                b"plain\0\xc3\xa9\0",
+            )
+            self.assertIsNone(git_module._run_git(("status",), self.root, environment))
+            fake_git.write_text("#!/bin/sh\nprintf 'plain\\n'\n", encoding="utf-8")
+            self.assertEqual(git_module._run_git_bytes(("status",), self.root, environment), b"plain\n")
+            self.assertEqual(git_module._run_git(("status",), self.root, environment), "plain")
+
+    def test_git_runner_keeps_the_opened_cwd_when_its_path_is_replaced(self) -> None:
+        trusted = self.root / "trusted-cwd"
+        attacker = self.root / "attacker-cwd"
+        held = self.root / "trusted-cwd-held"
+        for directory, identity in ((trusted, "trusted"), (attacker, "attacker")):
+            git("init", "--quiet", str(directory))
+            git("config", "hermes.identity", identity, cwd=directory)
+        real_popen = subprocess.Popen
+        replaced = False
+
+        def replace_before_spawn(command: object, **keywords: object) -> object:
+            nonlocal replaced
+            if not replaced:
+                trusted.rename(held)
+                trusted.symlink_to(attacker, target_is_directory=True)
+                replaced = True
+            return real_popen(command, **keywords)
+
+        try:
+            with mock.patch.object(git_module.subprocess, "Popen", side_effect=replace_before_spawn):
+                observed = git_module._run_git(
+                    ("config", "--local", "hermes.identity"),
+                    trusted,
+                    os.environ.copy(),
+                )
+            self.assertEqual(observed, "trusted")
+        finally:
+            if trusted.is_symlink():
+                trusted.unlink()
+            if held.exists():
+                held.rename(trusted)
+
+    def test_git_runner_rejects_a_checkout_relative_executable_path(self) -> None:
+        checkout = self.root / "relative-path-checkout"
+        binary_directory = checkout / "bin"
+        marker = self.root / "relative-path-marker"
+        binary_directory.mkdir(parents=True)
+        fake_git = binary_directory / "git"
+        fake_git.write_text(
+            "#!/bin/sh\nprintf 'executed' > \"$HERMES_TEST_MARKER\"\nprintf 'attacker\\n'\n",
+            encoding="utf-8",
         )
-        self.assertIsNone(git_module._run_git(("status",), self.root, environment))
-        fake_git.write_text("#!/bin/sh\nprintf 'plain\\n'\n", encoding="utf-8")
-        self.assertEqual(git_module._run_git_bytes(("status",), self.root, environment), b"plain\n")
-        self.assertEqual(git_module._run_git(("status",), self.root, environment), "plain")
+        fake_git.chmod(0o700)
+        environment = {
+            "PATH": "bin",
+            "HERMES_BOOTSTRAP_GITHUB_TOKEN": "relative-path-token-marker",
+            "HERMES_TEST_MARKER": str(marker),
+        }
+
+        self.assertIsNone(git_module._run_git(("status",), checkout, environment))
+        self.assertFalse(marker.exists())
+
+    def test_git_runner_rejects_a_checkout_controlled_absolute_executable_path(self) -> None:
+        checkout = self.root / "absolute-path-checkout"
+        binary_directory = checkout / "bin"
+        marker = self.root / "absolute-path-marker"
+        binary_directory.mkdir(parents=True)
+        fake_git = binary_directory / "git"
+        fake_git.write_text(
+            "#!/bin/sh\nprintf 'executed' > \"$HERMES_TEST_MARKER\"\nprintf 'attacker\\n'\n",
+            encoding="utf-8",
+        )
+        fake_git.chmod(0o700)
+        environment = {
+            "PATH": str(binary_directory),
+            "HERMES_BOOTSTRAP_GITHUB_TOKEN": "absolute-path-token-marker",
+            "HERMES_TEST_MARKER": str(marker),
+        }
+
+        self.assertIsNone(git_module._run_git(("status",), checkout, environment))
+        self.assertFalse(marker.exists())
 
     def test_bytes_runner_rejects_invalid_bounds_before_spawning_git(self) -> None:
         environment = os.environ.copy()
@@ -427,11 +509,12 @@ class GitStagingTests(unittest.TestCase):
         fake_git.chmod(0o700)
         environment = {"PATH": str(bin_dir), "HERMES_TEST_OUTPUT": str(payload)}
 
-        self.assertEqual(
-            git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=5000),
-            b"x" * 5000,
-        )
-        self.assertIsNone(git_module._run_git(("status",), self.root, environment))
+        with mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)):
+            self.assertEqual(
+                git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=5000),
+                b"x" * 5000,
+            )
+            self.assertIsNone(git_module._run_git(("status",), self.root, environment))
 
     @unittest.skipUnless(sys.platform == "linux" and Path("/proc").is_dir(), "requires Linux /proc")
     def test_bytes_runner_output_overflow_reaps_direct_and_descendant_processes(self) -> None:
@@ -535,6 +618,13 @@ class GitStagingTests(unittest.TestCase):
                 self.assertNotEqual(environment[key], value)
             else:
                 self.assertNotIn(key, environment)
+
+    def test_git_environment_replaces_an_inherited_writable_absolute_path(self) -> None:
+        askpass = self.root / "askpass"
+        with mock.patch.dict(os.environ, {"PATH": str(self.root)}, clear=False):
+            environment = git_module._git_environment(auth(), askpass)
+
+        self.assertEqual(environment["PATH"], os.defpath)
 
     def test_git_failures_hide_token_and_stderr(self) -> None:
         missing = DistributionSource(

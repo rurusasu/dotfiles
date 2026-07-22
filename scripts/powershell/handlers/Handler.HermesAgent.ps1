@@ -41,21 +41,6 @@ class HermesAgentHandler : SetupHandlerBase {
             return $false
         }
 
-        if (-not (Test-WslAvailable)) {
-            $this.Log('WSL is not available; skipping Hermes Agent.', 'Gray')
-            return $false
-        }
-
-        if (-not $this.TestNixOsReady($ctx.DistroName)) {
-            $this.Log("$($ctx.DistroName) is not ready; skipping Hermes Agent.", 'Gray')
-            return $false
-        }
-
-        if (-not $this.IsTruthy($ctx.GetOption('NixRebuildApplied', $false))) {
-            $this.Log('NixOS configuration has not been applied; skipping Hermes Agent.', 'Gray')
-            return $false
-        }
-
         return $true
     }
 
@@ -79,6 +64,11 @@ class HermesAgentHandler : SetupHandlerBase {
             $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap'))
             if (-not $build.Success) {
                 return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
+            }
+
+            $stop = $this.InvokeCompose($composeFile, @('stop', 'hermes'))
+            if (-not $stop.Success) {
+                return $this.CreateFailureResult("Hermes Agent stop failed: $($stop.Message)")
             }
 
             $bootstrap = Invoke-HermesBootstrap -ComposeFile $composeFile -DataDir $dataDir
@@ -126,20 +116,6 @@ class HermesAgentHandler : SetupHandlerBase {
 
     hidden [string] GetComposeFilePath([SetupContext]$ctx) {
         return Join-Path $ctx.DotfilesPath 'docker\hermes-agent\compose.yml'
-    }
-
-    hidden [bool] TestNixOsReady([string]$distroName) {
-        if ([string]::IsNullOrWhiteSpace($distroName)) { return $false }
-
-        try {
-            Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @(
-                '-d', $distroName, '-u', 'root', '--', 'true'
-            ) | Out-Null
-            return $LASTEXITCODE -eq 0
-        }
-        catch {
-            return $false
-        }
     }
 
     hidden [string] GetDataDir() {
