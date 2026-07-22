@@ -101,28 +101,24 @@ dotfiles_hermes_secret_plan() {
 
 dotfiles_hermes_emit_secret_payload() {
   local compact_plan="$1"
-  local item_plan key account vault item op_command
-  local -a lookup_statuses
+  local item_plan key account vault item op_command item_record
 
   op_command="$(dotfiles_hermes_op_command)" || return 1
-  printf '%s\n' '{"type":"header","schema_version":1}' || return $?
+  printf '%s\n' '{"type":"header","schema_version":1}' || return 141
   while IFS= read -r item_plan; do
     key="$(printf '%s\n' "$item_plan" | jq -r '.key')"
     account="$(printf '%s\n' "$item_plan" | jq -r '.account')"
     vault="$(printf '%s\n' "$item_plan" | jq -r '.vault')"
     item="$(printf '%s\n' "$item_plan" | jq -r '.item')"
-    if "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
-      jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'; then
-      :
-    else
-      lookup_statuses=("${PIPESTATUS[@]}")
-      if ((${lookup_statuses[0]:-1} == 141 || ${lookup_statuses[1]:-1} == 141)); then
-        return 141
-      fi
+    if ! item_record="$(
+      "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+        jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'
+    )"; then
       return 1
     fi
+    printf '%s\n' "$item_record" || return 141
   done < <(printf '%s\n' "$compact_plan" | jq -c '.items[]')
-  printf '%s\n' '{"type":"end"}' || return $?
+  printf '%s\n' '{"type":"end"}' || return 141
 }
 
 dotfiles_hermes_run_bootstrap() {

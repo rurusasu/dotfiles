@@ -27,7 +27,7 @@ fail() {
 
 reset_fixture() {
   rm -rf "$data"
-  mkdir -p "$data/capture"
+  mkdir -p "$data/capture/argv"
 }
 
 wait_for_file() {
