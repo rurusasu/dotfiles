@@ -1274,10 +1274,10 @@ def _restore_directory_metadata(root: Path, value: object) -> None:
     for relative, (mode, uid, gid) in ordered:
         directory = root if relative == "." else root / relative
         _require_directory(directory)
-        try:
-            os.chown(directory, uid, gid)
-        except (NotImplementedError, PermissionError, OSError):
-            pass
+        os.chown(directory, uid, gid, follow_symlinks=False)
+        restored = directory.lstat()
+        if restored.st_uid != uid or restored.st_gid != gid:
+            raise OSError
         os.chmod(directory, mode)
         _fsync_directory(directory)
 

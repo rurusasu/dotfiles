@@ -99,9 +99,36 @@ dotfiles_hermes_secret_plan() {
   printf '%s\n' "$compact_plan"
 }
 
+dotfiles_hermes_emit_secret_item() {
+  local op_command="$1"
+  local key="$2"
+  local account="$3"
+  local vault="$4"
+  local item="$5"
+  local item_record status=0 xtrace_enabled=0
+
+  if [[ $- == *x* ]]; then
+    xtrace_enabled=1
+    set +x
+  fi
+  if ! item_record="$(
+    "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+      jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'
+  )"; then
+    status=1
+  elif ! printf '%s\n' "$item_record"; then
+    status=141
+  fi
+  unset item_record
+  if ((xtrace_enabled)); then
+    set -x
+  fi
+  return "$status"
+}
+
 dotfiles_hermes_emit_secret_payload() {
   local compact_plan="$1"
-  local item_plan key account vault item op_command item_record
+  local item_plan key account vault item op_command
 
   op_command="$(dotfiles_hermes_op_command)" || return 1
   printf '%s\n' '{"type":"header","schema_version":1}' || return 141
@@ -110,13 +137,7 @@ dotfiles_hermes_emit_secret_payload() {
     account="$(printf '%s\n' "$item_plan" | jq -r '.account')"
     vault="$(printf '%s\n' "$item_plan" | jq -r '.vault')"
     item="$(printf '%s\n' "$item_plan" | jq -r '.item')"
-    if ! item_record="$(
-      "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
-        jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'
-    )"; then
-      return 1
-    fi
-    printf '%s\n' "$item_record" || return 141
+    dotfiles_hermes_emit_secret_item "$op_command" "$key" "$account" "$vault" "$item" || return $?
   done < <(printf '%s\n' "$compact_plan" | jq -c '.items[]')
   printf '%s\n' '{"type":"end"}' || return 141
 }

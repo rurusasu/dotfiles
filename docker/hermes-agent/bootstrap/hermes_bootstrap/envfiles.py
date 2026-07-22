@@ -356,11 +356,15 @@ def _canonical_environment_bytes(
         except UnicodeDecodeError:
             raise ApplyError("environment file is not valid UTF-8") from None
         source = source.replace("\r\n", "\n").replace("\r", "\n")
-        preserved_source = "".join(
-            binding.original.string
-            for binding in parse_stream(StringIO(source))
-            if _binding_environment_key(binding.key, binding.original.string) not in owned
-        )
+        preserved: list[str] = []
+        discard_continuation = False
+        for binding in parse_stream(StringIO(source)):
+            original_binding = binding.original.string
+            discard = discard_continuation or _binding_environment_key(binding.key, original_binding) in owned
+            if not discard:
+                preserved.append(original_binding)
+            discard_continuation = discard and _has_trailing_line_continuation(original_binding)
+        preserved_source = "".join(preserved)
         lines = preserved_source.split("\n")
         if lines and lines[-1] == "":
             lines.pop()
@@ -376,6 +380,14 @@ def _binding_environment_key(key: str | None, original: str) -> str | None:
         return key
     first_line = original.split("\n", 1)[0]
     return _environment_line_key(first_line)
+
+
+def _has_trailing_line_continuation(original: str) -> bool:
+    if not original.endswith("\n"):
+        return False
+    final_line = original[:-1].rsplit("\n", 1)[-1]
+    trailing_backslashes = len(final_line) - len(final_line.rstrip("\\"))
+    return trailing_backslashes % 2 == 1
 
 
 def _environment_line_key(line: str) -> str | None:

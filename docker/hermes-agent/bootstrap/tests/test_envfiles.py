@@ -176,6 +176,23 @@ class EnvFileTests(unittest.TestCase):
         )
         self.assertNotIn(b"old-secret-continuation", self.path.read_bytes())
 
+    def test_removes_a_backslash_continuation_after_a_managed_assignment(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_bytes(
+            b"KEEP=before\n"
+            b"GH_TOKEN=old-secret\\\n"
+            b"LD_PRELOAD=/tmp/unintended\n"
+            b"KEEP_AFTER=yes\n"
+        )
+
+        changed = merge_env_file(self.path, {"GH_TOKEN": "new-token"}, frozenset())
+
+        self.assertTrue(changed)
+        self.assertEqual(
+            self.path.read_bytes(),
+            b"KEEP=before\nKEEP_AFTER=yes\n\nGH_TOKEN=new-token\n",
+        )
+
     def test_managed_block_preserves_mapping_insertion_order(self) -> None:
         changed = merge_env_file(
             self.path,

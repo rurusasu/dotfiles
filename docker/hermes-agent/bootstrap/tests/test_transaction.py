@@ -217,6 +217,22 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(tree.lstat().st_mode), 0o751)
         self.assertEqual(stat.S_IMODE(nested.lstat().st_mode), 0o710)
 
+    def test_directory_rollback_fails_closed_when_ownership_cannot_be_restored(self) -> None:
+        tree = self.root / "tree"
+        tree.mkdir()
+        path = tree / "file"
+        path.write_text("before", encoding="utf-8")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(tree)
+        path.write_text("after", encoding="utf-8")
+
+        with mock.patch.object(transaction_module.os, "chown", side_effect=PermissionError):
+            with self.assertRaises(RollbackError):
+                tx.rollback()
+
+        self.assertEqual(path.read_text(encoding="utf-8"), "after")
+        self.assertTrue(self.journal_paths())
+
     def test_directory_backup_rejects_a_hardlink_escaping_the_transaction(self) -> None:
         tree = self.root / "tree"
         tree.mkdir(mode=0o700)

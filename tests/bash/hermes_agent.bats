@@ -488,6 +488,19 @@ trailing-garbage"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
+@test "does not expose secret payload records when the caller enables xtrace" {
+	run env DOTFILES_TEST_MISSING_COMMAND="" bash -x -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
+'
+
+	[ "$status" -eq 0 ]
+	grep -q "$SECRET_MARKER" "$PAYLOAD_CAPTURE"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
 @test "streams an ordered versioned payload and recreates services after success" {
 	run_start_stack
 
