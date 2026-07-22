@@ -17,6 +17,7 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource
+from hermes_bootstrap import profile_snapshot
 from hermes_bootstrap.profile_snapshot import ProfileSnapshotError, prepare_profile_snapshots
 
 
@@ -131,11 +132,45 @@ class ProfileSnapshotTests(unittest.TestCase):
             with self.subTest(unsafe=unsafe), self.assertRaises(ProfileSnapshotError):
                 self.prepare("rick", owned=[unsafe])
 
-        for content in (b"ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", b"xoxb-1234567890-abcdefgh", b"-----BEGIN PRIVATE KEY-----"):
+        for index, content in enumerate((
+            b"ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
+            b"xoxb-1234567890-abcdefgh",
+            b"-----BEGIN PRIVATE KEY-----",
+        )):
             with self.subTest(content=content), self.assertRaises(ProfileSnapshotError):
-                self.prepare("rick", owned=["SOUL.md"])
-                (self.profile("rick").target / "SOUL.md").write_bytes(content)
-                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+                home = self.write_profile("rick", ["SOUL.md"])
+                (home / "SOUL.md").write_bytes(content)
+                scratch = self.root / f"secret-{index}"
+                scratch.mkdir(mode=0o700)
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+
+    def test_rejects_a_secret_crossing_the_streaming_chunk_boundary(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        token = b"ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
+        (home / "SOUL.md").write_bytes(b"x" * (64 * 1024 - 5) + b"!" + token)
+        scratch = self.root / "boundary-secret"
+        scratch.mkdir(mode=0o700)
+
+        with mock.patch.object(profile_snapshot, "_reject_sensitive_bytes", wraps=profile_snapshot._reject_sensitive_bytes) as reject:
+            with self.assertRaises(ProfileSnapshotError):
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+
+        self.assertGreater(reject.call_count, 2)
+        self.assertFalse((scratch / "rick").exists())
+
+    def test_accepts_an_owned_file_larger_than_sixteen_mebibytes(self) -> None:
+        home = self.write_profile("rick", ["archive.bin"])
+        large = home / "archive.bin"
+        with large.open("wb") as handle:
+            handle.seek(16 * 1024 * 1024)
+            handle.write(b"\0")
+        scratch = self.root / "large-file"
+        scratch.mkdir(mode=0o700)
+
+        snapshot = prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False).snapshots[0]
+
+        self.assertEqual(snapshot.entries[0].size, 16 * 1024 * 1024 + 1)
+        self.assertEqual((snapshot.root / "archive.bin").stat().st_size, 16 * 1024 * 1024 + 1)
 
     def test_rejects_links_special_files_hardlinks_and_unreadable_files(self) -> None:
         home = self.write_profile("rick", ["assets"])

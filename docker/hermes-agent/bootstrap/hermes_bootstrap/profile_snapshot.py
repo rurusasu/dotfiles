@@ -26,7 +26,8 @@ _DECLARATIVE_KEYS = (
     "license", "env_requires", "distribution_owned",
 )
 _RUNTIME_KEYS = frozenset({"source", "installed_at"})
-_MAX_FILE_BYTES = 16 * 1024 * 1024
+_READ_CHUNK_BYTES = 64 * 1024
+_SECRET_OVERLAP_BYTES = 256
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
 _GITHUB_TOKEN = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
 _SLACK_TOKEN = re.compile(rb"\bxox(?:b|p|a|r|s)-[A-Za-z0-9-]{8,}\b")
@@ -260,43 +261,71 @@ def _copy_directory(
 
 
 def _copy_regular(parent_fd: int, name: str, relative: PurePosixPath, destination: Path, entries: list[SnapshotEntry]) -> None:
-    content, source = _read_regular(parent_fd, name)
-    _reject_sensitive_bytes(content)
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    _write_private_file(destination, content, _git_mode(source.st_mode))
-    entries.append(SnapshotEntry(relative, _git_mode(source.st_mode), len(content), hashlib.sha256(content).hexdigest()))
+    source_fd = _open_regular(parent_fd, name)
+    destination_fd: int | None = None
+    try:
+        before = os.fstat(source_fd)
+        destination_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+        digest = hashlib.sha256()
+        size = 0
+        overlap = b""
+        while chunk := os.read(source_fd, _READ_CHUNK_BYTES):
+            _reject_sensitive_bytes(overlap + chunk)
+            _write_descriptor(destination_fd, chunk)
+            digest.update(chunk)
+            size += len(chunk)
+            overlap = (overlap + chunk)[-_SECRET_OVERLAP_BYTES:]
+        _verify_regular(parent_fd, name, source_fd, before, size)
+        os.fsync(destination_fd)
+    finally:
+        os.close(source_fd)
+        if destination_fd is not None:
+            os.close(destination_fd)
+    mode = _git_mode(before.st_mode)
+    os.chmod(destination, mode)
+    entries.append(SnapshotEntry(relative, mode, size, digest.hexdigest()))
 
 
 def _read_regular(parent_fd: int, name: str) -> tuple[bytes, os.stat_result]:
-    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(name, flags, dir_fd=parent_fd)
+    descriptor = _open_regular(parent_fd, name)
     try:
         before = os.fstat(descriptor)
-        _require_safe_source(before)
-        if not before.st_mode & 0o444 or before.st_size > _MAX_FILE_BYTES:
-            raise ValueError("unreadable source")
         chunks: list[bytes] = []
-        remaining = _MAX_FILE_BYTES + 1
-        while remaining:
-            chunk = os.read(descriptor, min(65536, remaining))
-            if not chunk:
-                break
+        while chunk := os.read(descriptor, _READ_CHUNK_BYTES):
             chunks.append(chunk)
-            remaining -= len(chunk)
         content = b"".join(chunks)
-        after = os.fstat(descriptor)
-        if (
-            len(content) != before.st_size
-            or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-        ):
-            raise ValueError("source changed")
-        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
-            raise ValueError("source replaced")
+        _verify_regular(parent_fd, name, descriptor, before, len(content))
         return content, before
     finally:
         os.close(descriptor)
+
+
+def _open_regular(parent_fd: int, name: str) -> int:
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(name, flags, dir_fd=parent_fd)
+    try:
+        source = os.fstat(descriptor)
+        _require_safe_source(source)
+        if not source.st_mode & 0o444:
+            raise ValueError("unreadable source")
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _verify_regular(parent_fd: int, name: str, descriptor: int, before: os.stat_result, size: int) -> None:
+    after = os.fstat(descriptor)
+    if (
+        size != before.st_size
+        or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+        != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+    ):
+        raise ValueError("source changed")
+    current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
+        raise ValueError("source replaced")
 
 
 def _open_directory(parent_fd: int, name: str) -> int:
@@ -338,14 +367,18 @@ def _git_mode(mode: int) -> ProfileMode:
 def _write_private_file(path: Path, content: bytes, mode: ProfileMode) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
     try:
-        view = memoryview(content)
-        while view:
-            written = os.write(descriptor, view)
-            view = view[written:]
+        _write_descriptor(descriptor, content)
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
     os.chmod(path, mode)
+
+
+def _write_descriptor(descriptor: int, content: bytes) -> None:
+    view = memoryview(content)
+    while view:
+        written = os.write(descriptor, view)
+        view = view[written:]
 
 
 def _render_gitignore(owned: tuple[PurePosixPath, ...], directory_paths: frozenset[PurePosixPath]) -> bytes:
