@@ -7,7 +7,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 import yaml
@@ -233,6 +232,39 @@ class ProfileSnapshotTests(unittest.TestCase):
         with self.assertRaises(ProfileSnapshotError):
             prepare_profile_snapshots(self.manifest(profile), self.scratch, allow_missing=False)
 
+    def test_rejects_group_or_world_accessible_scratch(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        self.scratch.chmod(0o750)
+        with self.assertRaises(ValueError):
+            prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+
+    def test_scratch_rename_and_symlink_swap_cannot_redirect_snapshot_writes(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        scratch = self.root / "swap-scratch"
+        scratch.mkdir(mode=0o700)
+        moved = self.root / "moved-scratch"
+        outside = self.root / "outside"
+        outside.mkdir()
+        original_chmod = os.chmod
+        swapped = False
+
+        def chmod_then_swap(path: str | os.PathLike[str], mode: int, *args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            original_chmod(path, mode, *args, **kwargs)
+            if not swapped:
+                swapped = True
+                scratch.rename(moved)
+                scratch.symlink_to(outside, target_is_directory=True)
+
+        with mock.patch("hermes_bootstrap.profile_snapshot.os.chmod", side_effect=chmod_then_swap):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((outside / "rick" / "SOUL.md").exists())
+        self.assertFalse((moved / "rick").exists())
+
     def test_rejects_profile_names_that_cannot_be_safe_scratch_components(self) -> None:
         for index, name in enumerate(("../outside", "rick/morty", r"rick\morty", ".", "..", "Rick", "rick_", "rick.", "rick ")):
             with self.subTest(name=name):
@@ -312,6 +344,31 @@ class ProfileSnapshotTests(unittest.TestCase):
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertFalse((self.scratch / "rick").exists())
 
+    def test_real_nested_directory_replacement_is_rejected_and_cleaned_up(self) -> None:
+        home = self.write_profile("rick", ["assets"])
+        nested = home / "assets" / "nested"
+        nested.mkdir(parents=True)
+        (nested / "avatar.png").write_bytes(b"nested-avatar")
+        replacement = self.root / "replacement-assets"
+        replacement.mkdir()
+        (replacement / "replacement.png").write_bytes(b"replacement")
+        original_write = profile_snapshot._write_descriptor
+        replaced = False
+
+        def write_then_replace_nested(directory: int, content: bytes) -> None:
+            nonlocal replaced
+            original_write(directory, content)
+            if content == b"nested-avatar" and not replaced:
+                replaced = True
+                os.replace(home / "assets", self.root / "stale-assets")
+                os.replace(replacement, home / "assets")
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_replace_nested):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
     def test_rejects_a_manifest_replaced_after_descriptor_read(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"], description="original")
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -324,16 +381,22 @@ class ProfileSnapshotTests(unittest.TestCase):
             encoding="utf-8",
         )
         original_read = profile_snapshot._read_regular
+        source_stat = home.stat()
+        replaced = False
 
         def read_then_replace(parent_fd: int, name: str):
+            nonlocal replaced
             result = original_read(parent_fd, name)
-            if name == "distribution.yaml":
+            if name == "distribution.yaml" and os.fstat(parent_fd).st_ino == source_stat.st_ino and not replaced:
+                replaced = True
                 os.replace(replacement, home / "distribution.yaml")
             return result
 
         with mock.patch("hermes_bootstrap.profile_snapshot._read_regular", side_effect=read_then_replace):
-            with self.assertRaises(ProfileSnapshotError):
+            with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
     def test_rejects_private_manifest_replaced_during_hermes_validation(self) -> None:
@@ -347,26 +410,27 @@ class ProfileSnapshotTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        original_validate = profile_snapshot.distributions._read_profile_manifest_at
+        original_parse = profile_snapshot.profile_distribution.DistributionManifest.from_dict
 
-        def validate_then_replace(root: Path, expected_name: str, *, require_sources: bool):
-            result = original_validate(root, expected_name, require_sources=require_sources)
-            if root != home:
-                os.replace(replacement, root / "distribution.yaml")
+        def parse_then_replace(data: object):
+            result = original_parse(data)
+            os.replace(replacement, self.scratch / "rick" / "distribution.yaml")
             return result
 
-        with mock.patch("hermes_bootstrap.profile_snapshot.distributions._read_profile_manifest_at", side_effect=validate_then_replace):
+        with mock.patch.object(profile_snapshot.profile_distribution.DistributionManifest, "from_dict", side_effect=parse_then_replace):
             with self.assertRaises(ProfileSnapshotError):
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertFalse((self.scratch / "rick").exists())
 
-    def test_rejects_a_manifest_that_changes_after_hermes_compatibility_validation(self) -> None:
+    def test_rejects_incompatible_hermes_requirement(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
-        parsed = SimpleNamespace(name="rick", version="0.1.0", hermes_requires=">999.0.0")
-        with mock.patch("hermes_bootstrap.profile_snapshot.distributions._read_profile_manifest_at", return_value=(parsed, ())):
-            with self.assertRaises(ProfileSnapshotError):
-                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        (home / "distribution.yaml").write_text(
+            yaml.safe_dump({"name": "rick", "version": "0.1.0", "hermes_requires": ">999.0.0", "distribution_owned": ["SOUL.md"]}),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ProfileSnapshotError):
+            prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
 
 
 if __name__ == "__main__":

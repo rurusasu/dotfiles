@@ -12,6 +12,8 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 
 import yaml
+from hermes_cli import __version__ as HERMES_VERSION
+from hermes_cli import profile_distribution
 
 from . import distributions
 from .errors import RepositoryError
@@ -85,6 +87,11 @@ def prepare_profile_snapshots(
 
     _require_private_scratch(scratch_root)
     scratch_fd = open_absolute_directory(scratch_root)
+    try:
+        _require_private_scratch_status(os.fstat(scratch_fd))
+    except Exception:
+        os.close(scratch_fd)
+        raise ValueError("scratch unavailable") from None
     snapshots: list[ProfileSnapshot] = []
     missing: list[DistributionSource] = []
     created: list[str] = []
@@ -136,21 +143,21 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
         _reject_sensitive_bytes(manifest_bytes)
         os.mkdir(declaration.name, mode=0o700, dir_fd=scratch_fd)
         output_created = True
-        output_fd = _open_directory(scratch_fd, declaration.name)
-        _write_private_file(output / "distribution.yaml", manifest_bytes, 0o644)
+        output_fd = _open_output_directory(scratch_fd, declaration.name)
+        _write_private_file_at(output_fd, "distribution.yaml", manifest_bytes, 0o644)
         entries: list[SnapshotEntry] = []
         casefolded: set[str] = set()
         directory_paths: set[PurePosixPath] = set()
         for owned_path in owned:
-            is_directory = _copy_declared_path(source_fd, owned_path, output, entries, casefolded)
+            is_directory = _copy_declared_path(source_fd, owned_path, output_fd, entries, casefolded)
             if is_directory:
                 directory_paths.add(owned_path)
-        _validate_canonical_manifest(output, output_fd, declaration, owned, manifest_bytes)
+        _validate_canonical_manifest(output_fd, declaration, owned, manifest_bytes)
         _verify_manifest_current(source_fd, manifest_stat)
         verify_absolute_directory(declaration.target, source_fd)
         entries.sort(key=lambda entry: entry.path.as_posix())
         gitignore_bytes = _render_gitignore(owned, frozenset(directory_paths))
-        _write_private_file(output / ".gitignore", gitignore_bytes, 0o644)
+        _write_private_file_at(output_fd, ".gitignore", gitignore_bytes, 0o644)
         verify_absolute_directory(output, output_fd)
         verify_absolute_directory(scratch_root, scratch_fd)
         digest = _snapshot_digest(manifest_bytes, gitignore_bytes, entries)
@@ -186,7 +193,6 @@ def _read_manifest_compatibly(declaration: DistributionSource, source_fd: int) -
 
 
 def _validate_canonical_manifest(
-    root: Path,
     root_fd: int,
     declaration: DistributionSource,
     owned: tuple[PurePosixPath, ...],
@@ -194,9 +200,15 @@ def _validate_canonical_manifest(
 ) -> None:
     """Use Hermes on the exact bytes and copied sources that will be published."""
 
-    if _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
+    current_bytes, _ = _read_regular(root_fd, "distribution.yaml")
+    if current_bytes != expected_bytes:
         raise ValueError("manifest changed")
-    _, parsed_owned = distributions._read_profile_manifest_at(root, declaration.name, require_sources=True)
+    raw = yaml.load(current_bytes.decode("utf-8"), Loader=distributions._UniqueKeyLoader)
+    parsed = profile_distribution.DistributionManifest.from_dict(raw)
+    if parsed.name != declaration.name or parsed.hermes_requires != raw["hermes_requires"]:
+        raise ValueError("manifest identity")
+    profile_distribution.check_hermes_requires(parsed.hermes_requires, HERMES_VERSION)
+    parsed_owned = distributions._normalize_owned_paths(raw["distribution_owned"], None, require_sources=False, profile=True)
     if parsed_owned != owned or _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
         raise ValueError("manifest ownership")
 
@@ -244,38 +256,56 @@ def _canonical_manifest(raw: dict[str, object], owned: tuple[PurePosixPath, ...]
 def _copy_declared_path(
     source_fd: int,
     path: PurePosixPath,
-    output: Path,
+    output_fd: int,
     entries: list[SnapshotEntry],
     casefolded: set[str],
 ) -> bool:
-    parent_fd = os.dup(source_fd)
+    source_fds = [os.dup(source_fd)]
+    output_fds = [os.dup(output_fd)]
+    ancestors: list[tuple[int, str, int, tuple[os.stat_result, os.stat_result]]] = []
     try:
         for component in path.parts[:-1]:
-            child_fd = _open_directory(parent_fd, component)
-            os.close(parent_fd)
-            parent_fd = child_fd
-        source = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            source_child_fd, source_identity = _open_source_directory(source_fds[-1], component)
+            output_child_fd = _create_output_directory(output_fds[-1], component)
+            ancestors.append((source_fds[-1], component, source_child_fd, source_identity))
+            source_fds.append(source_child_fd)
+            output_fds.append(output_child_fd)
+        source_parent_fd = source_fds[-1]
+        output_parent_fd = output_fds[-1]
+        source = os.stat(path.name, dir_fd=source_parent_fd, follow_symlinks=False)
         _require_safe_source(source)
-        destination = output.joinpath(*path.parts)
         _check_casefold(path, casefolded)
         if stat.S_ISDIR(source.st_mode):
-            directory_fd = _open_directory(parent_fd, path.name)
+            source_child_fd, source_identity = _open_source_directory(source_parent_fd, path.name)
+            output_child_fd = _create_output_directory(output_parent_fd, path.name)
             try:
-                destination.mkdir(mode=0o700, parents=True)
-                _copy_directory(directory_fd, path, destination, entries, casefolded)
+                _copy_directory(
+                    source_child_fd, source_parent_fd, path.name, source_identity, path, output_child_fd, entries, casefolded
+                )
             finally:
-                os.close(directory_fd)
-            return True
-        _copy_regular(parent_fd, path.name, path, destination, entries)
-        return False
+                os.close(source_child_fd)
+                os.close(output_child_fd)
+            result = True
+        else:
+            _copy_regular(source_parent_fd, path.name, path, output_parent_fd, entries)
+            result = False
+        for parent_fd, name, descriptor, identity in reversed(ancestors):
+            _verify_source_directory(parent_fd, name, descriptor, identity)
+        return result
     finally:
-        os.close(parent_fd)
+        for descriptor in reversed(source_fds):
+            os.close(descriptor)
+        for descriptor in reversed(output_fds):
+            os.close(descriptor)
 
 
 def _copy_directory(
     source_fd: int,
+    source_parent_fd: int,
+    source_name: str,
+    source_identity: tuple[os.stat_result, os.stat_result],
     prefix: PurePosixPath,
-    destination: Path,
+    output_fd: int,
     entries: list[SnapshotEntry],
     casefolded: set[str],
 ) -> None:
@@ -287,25 +317,27 @@ def _copy_directory(
         _check_casefold(relative, casefolded)
         source = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
         _require_safe_source(source)
-        child = destination / name
         if stat.S_ISDIR(source.st_mode):
-            child_fd = _open_directory(source_fd, name)
+            source_child_fd, child_identity = _open_source_directory(source_fd, name)
+            output_child_fd = _create_output_directory(output_fd, name)
             try:
-                child.mkdir(mode=0o700)
-                _copy_directory(child_fd, relative, child, entries, casefolded)
+                _copy_directory(
+                    source_child_fd, source_fd, name, child_identity, relative, output_child_fd, entries, casefolded
+                )
             finally:
-                os.close(child_fd)
+                os.close(source_child_fd)
+                os.close(output_child_fd)
         else:
-            _copy_regular(source_fd, name, relative, child, entries)
+            _copy_regular(source_fd, name, relative, output_fd, entries)
+    _verify_source_directory(source_parent_fd, source_name, source_fd, source_identity)
 
 
-def _copy_regular(parent_fd: int, name: str, relative: PurePosixPath, destination: Path, entries: list[SnapshotEntry]) -> None:
-    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+def _copy_regular(parent_fd: int, name: str, relative: PurePosixPath, output_fd: int, entries: list[SnapshotEntry]) -> None:
     source_fd = _open_regular(parent_fd, name)
     destination_fd: int | None = None
     try:
         before = os.fstat(source_fd)
-        destination_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+        destination_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=output_fd)
         digest = hashlib.sha256()
         size = 0
         overlap = b""
@@ -322,7 +354,7 @@ def _copy_regular(parent_fd: int, name: str, relative: PurePosixPath, destinatio
         if destination_fd is not None:
             os.close(destination_fd)
     mode = _git_mode(before.st_mode)
-    os.chmod(destination, mode)
+    os.chmod(name, mode, dir_fd=output_fd, follow_symlinks=False)
     entries.append(SnapshotEntry(relative, mode, size, digest.hexdigest()))
 
 
@@ -379,7 +411,53 @@ def _verify_manifest_current(source_fd: int, before: os.stat_result) -> None:
         raise ValueError("manifest changed")
 
 
-def _open_directory(parent_fd: int, name: str) -> int:
+def _open_source_directory(parent_fd: int, name: str) -> tuple[int, tuple[os.stat_result, os.stat_result]]:
+    expected = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(name, flags, dir_fd=parent_fd)
+    try:
+        actual = os.fstat(descriptor)
+        if (
+            stat.S_ISLNK(expected.st_mode)
+            or not stat.S_ISDIR(actual.st_mode)
+            or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino)
+        ):
+            raise ValueError("unsafe directory")
+        return descriptor, (expected, actual)
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _verify_source_directory(
+    parent_fd: int,
+    name: str,
+    descriptor: int,
+    before: tuple[os.stat_result, os.stat_result],
+) -> None:
+    current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    actual = os.fstat(descriptor)
+    expected, opened = before
+    if any(
+        _directory_identity(item) != _directory_identity(expected)
+        for item in (opened, current, actual)
+    ):
+        raise ValueError("source directory changed")
+
+
+def _directory_identity(status: os.stat_result) -> tuple[int, int, int, int]:
+    return status.st_dev, status.st_ino, status.st_mode, status.st_mtime_ns
+
+
+def _create_output_directory(parent_fd: int, name: str) -> int:
+    try:
+        os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+    except FileExistsError:
+        pass
+    return _open_output_directory(parent_fd, name)
+
+
+def _open_output_directory(parent_fd: int, name: str) -> int:
     flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(name, flags, dir_fd=parent_fd)
     try:
@@ -390,7 +468,7 @@ def _open_directory(parent_fd: int, name: str) -> int:
             or not stat.S_ISDIR(actual.st_mode)
             or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino)
         ):
-            raise ValueError("unsafe directory")
+            raise ValueError("unsafe output directory")
         return descriptor
     except Exception:
         os.close(descriptor)
@@ -415,14 +493,14 @@ def _git_mode(mode: int) -> ProfileMode:
     return 0o755 if mode & 0o111 else 0o644
 
 
-def _write_private_file(path: Path, content: bytes, mode: ProfileMode) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+def _write_private_file_at(parent_fd: int, name: str, content: bytes, mode: ProfileMode) -> None:
+    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
     try:
         _write_descriptor(descriptor, content)
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    os.chmod(path, mode)
+    os.chmod(name, mode, dir_fd=parent_fd, follow_symlinks=False)
 
 
 def _write_descriptor(descriptor: int, content: bytes) -> None:
@@ -475,7 +553,16 @@ def _require_private_scratch(path: Path) -> None:
         status = path.lstat()
     except OSError as error:
         raise ValueError("scratch unavailable") from error
-    if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(status.st_mode):
+    _require_private_scratch_status(status)
+
+
+def _require_private_scratch_status(status: os.stat_result) -> None:
+    if (
+        stat.S_ISLNK(status.st_mode)
+        or not stat.S_ISDIR(status.st_mode)
+        or status.st_uid != os.geteuid()
+        or stat.S_IMODE(status.st_mode) & 0o077
+    ):
         raise ValueError("scratch unavailable")
 
 
