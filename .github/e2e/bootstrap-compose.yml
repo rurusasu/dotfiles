@@ -8,6 +8,9 @@ services:
       - "127.0.0.1:8642:80"
       - "127.0.0.1:9119:80"
       - "127.0.0.1:6080:80"
+    volumes:
+      - ./hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro
+      - ./hermes-bootstrap-fixture.sh:/www/health:ro
 
   hermes-bootstrap:
     image: nginx:1.29-alpine

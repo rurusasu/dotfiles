@@ -63,3 +63,10 @@ EOF
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -ne 0 ]
 }
+
+@test "acceptance compose serves health from nginx and BusyBox document roots" {
+	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
+
+	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
+	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
+}

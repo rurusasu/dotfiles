@@ -246,7 +246,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'systemd systemd-sysv dbus'
         ([regex]::Matches($workflow, '(?m)^\s+- "flake\.nix"\s*$')).Count | Should -Be 2
         ([regex]::Matches($workflow, '(?m)^\s+- "flake\.lock"\s*$')).Count | Should -Be 2
-        ([regex]::Matches($workflow, '(?m)^\s*(?:sudo\s+)?\./install\.sh\s*$')).Count | Should -BeGreaterOrEqual 2
+        ([regex]::Matches($workflow, '(?m)^\s*\./\.github/e2e/run-bootstrap-acceptance\.sh\s*$')).Count | Should -BeGreaterOrEqual 2
         ([regex]::Matches($workflow, 'scripts/sh/verify-environment\.sh --runtime')).Count | Should -BeGreaterOrEqual 2
         $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
         $workflow | Should -Match 'if:\s+always\(\)'
@@ -267,11 +267,11 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'cp -r \$\{dotfilesSource\} /home/nixos/dotfiles'
-        $test | Should -Match '/home/nixos/dotfiles/install\.sh'
+        $test | Should -Match '/home/nixos/dotfiles/\.github/e2e/run-bootstrap-acceptance\.sh'
         $test | Should -Not -Match 'sg docker -c'
         ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
         $test | Should -Match 'verify-environment\.sh --runtime'
-        $test | Should -Match 'bootstrap-compose\.yml'
+        $test | Should -Match 'docker/hermes-agent/compose\.yml'
         $test | Should -Match 'docker compose.*ps'
     }
 
