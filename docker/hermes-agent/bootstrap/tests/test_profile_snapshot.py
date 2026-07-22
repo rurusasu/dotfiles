@@ -134,6 +134,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         for index, content in enumerate((
             b"ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
             b"xoxb-1234567890-abcdefgh",
+            b"xapp-valid",
             b"-----BEGIN PRIVATE KEY-----",
         )):
             with self.subTest(content=content), self.assertRaises(ProfileSnapshotError):
@@ -155,6 +156,19 @@ class ProfileSnapshotTests(unittest.TestCase):
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
 
         self.assertGreater(reject.call_count, 2)
+        self.assertFalse((scratch / "rick").exists())
+
+    def test_rejects_an_xapp_secret_crossing_the_streaming_chunk_boundary(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        token = b"xapp-1234567890-abcdefgh"
+        (home / "SOUL.md").write_bytes(b"x" * (64 * 1024 - 3) + b"!" + token)
+        scratch = self.root / "xapp-boundary-secret"
+        scratch.mkdir(mode=0o700)
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((scratch / "rick").exists())
 
     def test_accepts_an_owned_file_larger_than_sixteen_mebibytes(self) -> None:
@@ -247,18 +261,18 @@ class ProfileSnapshotTests(unittest.TestCase):
         moved = self.root / "moved-scratch"
         outside = self.root / "outside"
         outside.mkdir()
-        original_chmod = os.chmod
+        original_fchmod = os.fchmod
         swapped = False
 
-        def chmod_then_swap(path: str | os.PathLike[str], mode: int, *args: object, **kwargs: object) -> None:
+        def fchmod_then_swap(descriptor: int, mode: int) -> None:
             nonlocal swapped
-            original_chmod(path, mode, *args, **kwargs)
+            original_fchmod(descriptor, mode)
             if not swapped:
                 swapped = True
                 scratch.rename(moved)
                 scratch.symlink_to(outside, target_is_directory=True)
 
-        with mock.patch("hermes_bootstrap.profile_snapshot.os.chmod", side_effect=chmod_then_swap):
+        with mock.patch("hermes_bootstrap.profile_snapshot.os.fchmod", side_effect=fchmod_then_swap):
             with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
         self.assertEqual(caught.exception.category, "invalid_local_profile")
@@ -325,6 +339,172 @@ class ProfileSnapshotTests(unittest.TestCase):
             with self.assertRaises(ProfileSnapshotError):
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertFalse((self.scratch / "rick").exists())
+
+    def test_rejects_case_colliding_ancestors_and_control_name_variants(self) -> None:
+        home = self.write_profile("rick", ["Assets/a.txt", "assets/b.txt"])
+        (home / "Assets").mkdir()
+        (home / "Assets" / "a.txt").write_text("one\n", encoding="utf-8")
+        (home / "assets").mkdir()
+        (home / "assets" / "b.txt").write_text("two\n", encoding="utf-8")
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+        for index, control in enumerate(("Distribution.yaml", ".GitIgnore")):
+            with self.subTest(control=control):
+                name = f"control{index}"
+                profile_home = self.write_profile(name, [control])
+                (profile_home / control).write_text("not a control file\n", encoding="utf-8")
+                scratch = self.root / f"control-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+                with self.assertRaises(ProfileSnapshotError) as control_error:
+                    prepare_profile_snapshots(self.manifest(self.profile(name)), scratch, allow_missing=False)
+                self.assertEqual(control_error.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_rejects_git_metadata_names_at_any_depth(self) -> None:
+        for index, control in enumerate((".git", ".gitignore", ".gitattributes", ".gitmodules")):
+            with self.subTest(control=control):
+                name = f"nested{index}"
+                home = self.write_profile(name, ["assets"])
+                nested = home / "assets" / "nested"
+                nested.mkdir(parents=True)
+                candidate = nested / control
+                if control == ".git":
+                    candidate.mkdir()
+                    (candidate / "config").write_text("[core]\n", encoding="utf-8")
+                else:
+                    candidate.write_text("unsafe\n", encoding="utf-8")
+                scratch = self.root / f"nested-control-{index}"
+                scratch.mkdir(mode=0o700)
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(self.manifest(self.profile(name)), scratch, allow_missing=False)
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_rejects_a_hardlink_created_while_streaming(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        content = b"link-during-copy\n"
+        source = home / "SOUL.md"
+        source.write_bytes(content)
+        external_link = self.root / "late-hardlink"
+        original_write = profile_snapshot._write_descriptor
+        linked = False
+
+        def write_then_link(descriptor: int, chunk: bytes) -> None:
+            nonlocal linked
+            original_write(descriptor, chunk)
+            if chunk == content and not linked:
+                os.link(source, external_link)
+                linked = True
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_link):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(linked)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+    def test_rejects_same_uid_destination_replacement_before_return(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        content = b"canonical-snapshot-content\n"
+        (home / "SOUL.md").write_bytes(content)
+        replacement = self.root / "destination-replacement"
+        replacement.write_bytes(b"altered-after-copy\n")
+        original_write = profile_snapshot._write_descriptor
+        replaced = False
+
+        def write_then_replace(descriptor: int, chunk: bytes) -> None:
+            nonlocal replaced
+            original_write(descriptor, chunk)
+            if chunk == content and not replaced:
+                os.replace(replacement, self.scratch / "rick" / "SOUL.md")
+                replaced = True
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_replace):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+    def test_rejects_gitignore_destination_replacement_before_return(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        replacement = self.root / "gitignore-replacement"
+        replacement.write_bytes(b"*\n")
+        replacement.chmod(0o644)
+        original_write = profile_snapshot._write_private_file_at
+        replaced = False
+
+        def write_then_replace(parent_fd: int, name: str, content: bytes, mode: int):
+            nonlocal replaced
+            result = original_write(parent_fd, name, content, mode)
+            if name == ".gitignore" and not replaced:
+                os.replace(replacement, self.scratch / "rick" / name)
+                replaced = True
+            return result
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_private_file_at", side_effect=write_then_replace):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+    def test_output_root_rename_cleanup_removes_exact_tree_and_preserves_replacement(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        content = b"rename-output-root\n"
+        (home / "SOUL.md").write_bytes(content)
+        moved = self.scratch / "retired-rick"
+        replacement = self.scratch / "rick"
+        original_write = profile_snapshot._write_descriptor
+        swapped = False
+
+        def write_then_swap(descriptor: int, chunk: bytes) -> None:
+            nonlocal swapped
+            original_write(descriptor, chunk)
+            if chunk == content and not swapped:
+                (self.scratch / "rick").rename(moved)
+                replacement.mkdir(mode=0o700)
+                (replacement / "marker").write_text("replacement\n", encoding="utf-8")
+                swapped = True
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_swap):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(swapped)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse(moved.exists())
+        self.assertEqual((replacement / "marker").read_text(encoding="utf-8"), "replacement\n")
+
+    def test_output_root_cleanup_failure_is_redacted_and_surfaced(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        content = b"escape-output-root\n"
+        (home / "SOUL.md").write_bytes(content)
+        escaped = self.root / "escaped-rick"
+        replacement = self.scratch / "rick"
+        original_write = profile_snapshot._write_descriptor
+        swapped = False
+
+        def write_then_escape(descriptor: int, chunk: bytes) -> None:
+            nonlocal swapped
+            original_write(descriptor, chunk)
+            if chunk == content and not swapped:
+                (self.scratch / "rick").rename(escaped)
+                replacement.mkdir(mode=0o700)
+                (replacement / "marker").write_text("replacement\n", encoding="utf-8")
+                swapped = True
+
+        with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_escape):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(swapped)
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertEqual((replacement / "marker").read_text(encoding="utf-8"), "replacement\n")
+        self.assertTrue(escaped.is_dir())
+        self.assertEqual(list(escaped.iterdir()), [])
 
     def test_real_directory_ancestor_replacement_is_detected_before_a_snapshot_escapes(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -410,16 +590,24 @@ class ProfileSnapshotTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        original_parse = profile_snapshot.profile_distribution.DistributionManifest.from_dict
+        original_read = profile_snapshot.distributions._read_profile_manifest_at
+        calls: list[bool] = []
+        replaced = False
 
-        def parse_then_replace(data: object):
-            result = original_parse(data)
-            os.replace(replacement, self.scratch / "rick" / "distribution.yaml")
+        def read_then_replace(root: Path, expected_name: str, *, require_sources: bool):
+            nonlocal replaced
+            calls.append(require_sources)
+            result = original_read(root, expected_name, require_sources=require_sources)
+            os.replace(replacement, root / "distribution.yaml")
+            replaced = True
             return result
 
-        with mock.patch.object(profile_snapshot.profile_distribution.DistributionManifest, "from_dict", side_effect=parse_then_replace):
-            with self.assertRaises(ProfileSnapshotError):
+        with mock.patch.object(profile_snapshot.distributions, "_read_profile_manifest_at", side_effect=read_then_replace):
+            with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(calls, [True])
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
     def test_rejects_incompatible_hermes_requirement(self) -> None:
