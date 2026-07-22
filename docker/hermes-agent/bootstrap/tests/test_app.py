@@ -137,13 +137,17 @@ class AppTests(unittest.TestCase):
         target = self.write_installed_profile()
         (target / "config.yaml").write_text("config\n", encoding="utf-8")
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
-        root_env = "".join(
-            f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS)
-        )
-        profile_env = "".join(
-            f"{key}=value\n"
-            for key in sorted(app._MANAGED_ENV_KEYS - app.API_SERVER_KEYS)
-        )
+        secret_body = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+        def environment(keys: frozenset[str]) -> str:
+            values = {key: "value" for key in keys}
+            values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"] = secret_body
+            if "API_SERVER_KEY" in keys:
+                values["API_SERVER_KEY"] = f"hermes-bootstrap-v1_{secret_body}"
+            return "".join(f"{key}={values[key]}\n" for key in sorted(keys))
+
+        root_env = environment(app._MANAGED_ENV_KEYS)
+        profile_env = environment(app._MANAGED_ENV_KEYS - app.API_SERVER_KEYS)
         for env_path, content in (
             (self.root / ".env", root_env),
             (target / ".env", profile_env),
@@ -711,6 +715,30 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
         github.assert_not_called()
+
+    def test_installed_layout_validation_rejects_weak_root_runtime_secrets(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_valid_layout()
+        root_env = self.root / ".env"
+        valid = root_env.read_text(encoding="utf-8")
+        for key in (
+            "API_SERVER_KEY",
+            "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
+        ):
+            with self.subTest(key=key):
+                content = "\n".join(
+                    f"{key}=aaaaaaaaaaaaaaaa" if line.startswith(f"{key}=") else line
+                    for line in valid.splitlines()
+                )
+                root_env.write_text(content + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ValidationError, "installed environment file is invalid"
+                ):
+                    app._validate_installed_layout(
+                        self.manifest, allow_active_transaction=False
+                    )
 
     def test_git_head_rejects_symbolic_ref_symlink_escape(self) -> None:
         from hermes_bootstrap import app

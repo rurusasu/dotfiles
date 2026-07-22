@@ -15,7 +15,6 @@ from types import MappingProxyType
 from typing import AbstractSet
 
 from dotenv.parser import parse_stream
-from hermes_cli.auth import has_usable_secret
 from plugins.dashboard_auth.basic import _verify_password, hash_password
 
 from .errors import ApplyError, BootstrapError, InputError
@@ -48,7 +47,7 @@ _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ASSIGNMENT = re.compile(r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=")
 _API_SERVER_KEY_PREFIX = "hermes-bootstrap-v1_"
-_API_SERVER_KEY_BODY = re.compile(r"[A-Za-z0-9_-]{64}\Z")
+_RANDOM_SECRET_BODY = re.compile(r"[A-Za-z0-9_-]{64}\Z")
 
 
 class _SecretEnvironmentValue(str):
@@ -179,8 +178,7 @@ def _build_dashboard_environment(
         existing_secret = existing.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET", "")
         signing_secret = (
             existing_secret
-            if isinstance(existing_secret, str)
-            and has_usable_secret(existing_secret, min_length=16)
+            if _is_reusable_signing_secret(existing_secret)
             else secrets.token_urlsafe(48)
         )
         existing_api_key = existing.get("API_SERVER_KEY", "")
@@ -265,7 +263,15 @@ def _is_reusable_api_server_key(value: object) -> bool:
     if not isinstance(value, str) or not value.startswith(_API_SERVER_KEY_PREFIX):
         return False
     body = value.removeprefix(_API_SERVER_KEY_PREFIX)
-    return _API_SERVER_KEY_BODY.fullmatch(body) is not None and len(set(body)) >= 16
+    return _is_reusable_random_secret(body)
+
+
+def _is_reusable_signing_secret(value: object) -> bool:
+    return isinstance(value, str) and _is_reusable_random_secret(value)
+
+
+def _is_reusable_random_secret(value: str) -> bool:
+    return _RANDOM_SECRET_BODY.fullmatch(value) is not None and len(set(value)) >= 16
 
 
 def _private_mapping(values: Mapping[str, str]) -> Mapping[str, str]:

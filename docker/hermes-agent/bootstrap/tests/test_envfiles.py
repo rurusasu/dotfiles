@@ -438,7 +438,7 @@ class EnvFileTests(unittest.TestCase):
         existing = MappingProxyType(
             {
                 "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "existing-hash",
-                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "existing-signing-secret-that-is-long-enough",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": API_KEY_BODY[::-1],
                 "API_SERVER_KEY": f"hermes-bootstrap-v1_{API_KEY_BODY}",
             }
         )
@@ -457,7 +457,7 @@ class EnvFileTests(unittest.TestCase):
         )
         self.assertEqual(
             dashboard["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
-            "existing-signing-secret-that-is-long-enough",
+            API_KEY_BODY[::-1],
         )
         self.assertEqual(
             dashboard["API_SERVER_KEY"],
@@ -468,7 +468,7 @@ class EnvFileTests(unittest.TestCase):
         existing = MappingProxyType(
             {
                 "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "existing-hash",
-                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "existing-signing-secret-that-is-long-enough",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": API_KEY_BODY[::-1],
                 "API_SERVER_KEY": f"hermes-bootstrap-v1_{'a' * 64}",
             }
         )
@@ -484,6 +484,30 @@ class EnvFileTests(unittest.TestCase):
         self.assertEqual(
             dashboard["API_SERVER_KEY"],
             f"hermes-bootstrap-v1_{API_KEY_BODY[::-1]}",
+        )
+
+    def test_dashboard_rotates_a_weak_existing_signing_secret(self) -> None:
+        existing = MappingProxyType(
+            {
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "existing-hash",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "a" * 64,
+                "API_SERVER_KEY": f"hermes-bootstrap-v1_{API_KEY_BODY}",
+            }
+        )
+
+        with mock.patch("hermes_bootstrap.envfiles._verify_password", return_value=True):
+            with mock.patch(
+                "hermes_bootstrap.envfiles.secrets.token_urlsafe",
+                return_value=API_KEY_BODY[::-1],
+            ) as token_urlsafe:
+                dashboard = build_dashboard_environment(secret_bundle(), existing)
+
+        token_urlsafe.assert_called_once_with(48)
+        self.assertEqual(
+            dashboard["HERMES_DASHBOARD_BASIC_AUTH_SECRET"], API_KEY_BODY[::-1]
+        )
+        self.assertEqual(
+            dashboard["API_SERVER_KEY"], f"hermes-bootstrap-v1_{API_KEY_BODY}"
         )
 
     def test_reads_only_unique_requested_values_from_a_regular_environment_file(self) -> None:

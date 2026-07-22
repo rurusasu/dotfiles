@@ -20,6 +20,8 @@ from .distributions import (
     apply_root_distribution,
 )
 from .envfiles import (
+    _is_reusable_api_server_key,
+    _is_reusable_signing_secret,
     API_SERVER_KEYS,
     DASHBOARD_KEYS,
     GITHUB_KEYS,
@@ -46,7 +48,6 @@ from .transaction import Transaction
 
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
-_ENV_ASSIGNMENT = re.compile(r"(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=")
 _MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | SLACK_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
@@ -427,22 +428,23 @@ def _validate_env_file(path: Path, required: frozenset[str]) -> None:
         metadata = path.lstat()
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
             raise ValueError
-        text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError, ValueError):
         raise ValidationError("installed environment file is invalid") from None
-    seen: set[str] = set()
-    for line in text.splitlines():
-        match = _ENV_ASSIGNMENT.match(line)
-        if match is None:
-            continue
-        key = match.group(1)
-        if key in _MANAGED_ENV_KEYS:
-            if key in seen:
-                raise ValidationError("installed environment file is invalid")
-            seen.add(key)
-        if key == _PLAINTEXT_DASHBOARD_PASSWORD:
-            raise ValidationError("installed environment file is invalid")
-    if seen != required:
+    try:
+        values = read_environment_values(
+            path, _MANAGED_ENV_KEYS | {_PLAINTEXT_DASHBOARD_PASSWORD}
+        )
+    except BootstrapError:
+        raise ValidationError("installed environment file is invalid") from None
+    if set(values) != required:
+        raise ValidationError("installed environment file is invalid")
+    if not _is_reusable_signing_secret(
+        values.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET")
+    ):
+        raise ValidationError("installed environment file is invalid")
+    if "API_SERVER_KEY" in required and not _is_reusable_api_server_key(
+        values.get("API_SERVER_KEY")
+    ):
         raise ValidationError("installed environment file is invalid")
 
 
