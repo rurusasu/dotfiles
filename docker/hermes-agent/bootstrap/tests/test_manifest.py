@@ -21,6 +21,7 @@ from hermes_bootstrap.errors import (
     RollbackError,
     ValidationError,
 )
+import hermes_bootstrap.manifest as manifest_module
 from hermes_bootstrap.manifest import load_manifest
 
 
@@ -209,6 +210,21 @@ class ManifestTests(unittest.TestCase):
         )
 
         self.assert_validation_error(data)
+
+    def test_managed_path_keeps_an_installed_compatibility_symlink_lexical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_root = Path(directory)
+            canonical = data_root / "shared" / "lifelog"
+            canonical.mkdir(parents=True)
+            legacy = data_root / "core" / "lifelog"
+            legacy.parent.mkdir()
+            legacy.symlink_to("../shared/lifelog")
+
+            managed = manifest_module._managed_path(
+                str(legacy), "manifest.shared_repositories[0].legacy_target", data_root
+            )
+
+            self.assertEqual(managed, legacy)
 
     def test_read_write_repository_requires_sync_owner(self) -> None:
         data = manifest_data()

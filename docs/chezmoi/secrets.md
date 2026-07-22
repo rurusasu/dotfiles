@@ -101,7 +101,8 @@ channel, profile の `.env` を変更しない。
 
 The runtime root is `/opt/data`; named profile homes are official distribution
 targets, not Git repositories. The canonical shared repository is
-`/opt/data/shared/lifelog`; `/opt/data/core/lifelog` is compatibility-only.
+`/opt/data/shared/lifelog`; `/opt/data/core/lifelog` is migration-only and is
+absent after bootstrap.
 Browser lifecycle and source-owned MCP configuration are described in
 [Hermes Browser MCP](../hermes-agent/browser-mcp.md).
 

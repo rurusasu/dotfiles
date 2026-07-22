@@ -160,7 +160,7 @@ class RepositoryTests(unittest.TestCase):
             elif isinstance(value, (list, tuple, set, frozenset)):
                 pending.extend(value)
 
-    def test_initial_clone_is_staged_then_moved_and_linked(self) -> None:
+    def test_initial_clone_is_staged_then_moved_without_a_legacy_path(self) -> None:
         repo = self.repository()
 
         result = synchronize_remote(repo, self.auth)
@@ -174,8 +174,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(transaction.moves, [(result.working_tree, repo.target)])
         self.assertIn(repo.target, transaction.snapshots)
         self.assertNotIn(result.working_tree, transaction.snapshots)
-        self.assertIn(repo.legacy_target, transaction.snapshots)
-        self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
+        self.assertNotIn(repo.legacy_target, transaction.snapshots)
+        self.assertFalse(os.path.lexists(repo.legacy_target))
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
     def test_read_only_fast_forwards_and_rejects_dirty_or_diverged_checkouts(self) -> None:
@@ -593,13 +593,29 @@ class RepositoryTests(unittest.TestCase):
         transaction = RecordingTransaction()
         apply_shared_working_tree(repo, result, transaction)
         self.assertTrue(repo.target.is_dir())
-        self.assertTrue(repo.legacy_target.is_symlink())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
         self.assertEqual(apply_shared_working_tree(repo, result, RecordingTransaction()).changed_paths, ())
 
-        repo.legacy_target.unlink()
         self.clone(repo.legacy_target)
         with self.assertRaises(MigrationError):
             apply_shared_working_tree(repo, result, RecordingTransaction())
+
+    def test_apply_removes_an_old_compatibility_link_and_rollback_restores_it(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        assert repo.legacy_target is not None
+        repo.legacy_target.parent.mkdir(parents=True)
+        repo.legacy_target.symlink_to("../shared/lifelog")
+        result = synchronize_remote(repo, self.auth)
+        tx = Transaction.begin(self.data_root)
+
+        changes = apply_shared_working_tree(repo, result, tx)
+
+        self.assertIn(repo.legacy_target, changes.changed_paths)
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+        tx.rollback()
+        self.assertTrue(repo.legacy_target.is_symlink())
+        self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
 
     def test_apply_ignores_empty_paths_and_runtime_requires_canonical_checkout(self) -> None:
         repo = self.repository()
@@ -608,6 +624,7 @@ class RepositoryTests(unittest.TestCase):
         repo.legacy_target.mkdir()
         result = synchronize_remote(repo, self.auth)
         apply_shared_working_tree(repo, result, RecordingTransaction())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
         manifest = BootstrapManifest(1, self.data_root, (), None, (), (repo,))  # type: ignore[arg-type]
         synced = synchronize_named_repository("lifelog", manifest, self.auth, require_canonical=True)
         self.assertEqual(synced.working_tree, repo.target)
@@ -632,14 +649,13 @@ class RepositoryTests(unittest.TestCase):
         result = synchronize_remote(repo, self.auth)
         first = RecordingTransaction()
         apply_shared_working_tree(repo, result, first)
-        repo.legacy_target.unlink()
         os.replace(repo.target, result.working_tree)
 
         changes = apply_shared_working_tree(repo, result, RecordingTransaction())
 
         self.assertIn(repo.target, changes.changed_paths)
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
-        self.assertTrue(repo.legacy_target.is_symlink())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
 
     def test_real_legacy_migration_rolls_back_with_identity_and_can_retry(self) -> None:
         repo = self.repository()
@@ -659,7 +675,7 @@ class RepositoryTests(unittest.TestCase):
 
         apply_shared_working_tree(repo, result, tx)
         self.assertTrue(repo.target.is_dir())
-        self.assertTrue(repo.legacy_target.is_symlink())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
         tx.rollback()
 
         self.assertTrue(repo.legacy_target.is_dir())
@@ -686,8 +702,7 @@ class RepositoryTests(unittest.TestCase):
         retry_tx.commit()
 
         self.assertTrue(repo.target.is_dir())
-        self.assertTrue(repo.legacy_target.is_symlink())
-        self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
+        self.assertFalse(os.path.lexists(repo.legacy_target))
         self.assertEqual(
             run_git(
                 "config",

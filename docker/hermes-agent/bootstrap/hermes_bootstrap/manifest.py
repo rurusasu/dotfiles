@@ -359,13 +359,14 @@ def _managed_path(value: object, context: str, data_root: Path | None) -> Path:
     path = Path(text)
     if not path.is_absolute():
         _invalid(f"{context} must be absolute")
-    resolved = path.resolve(strict=False)
+    if ".." in path.parts:
+        _invalid(f"{context} must not contain traversal")
     if data_root is not None:
         try:
-            resolved.relative_to(data_root)
+            path.relative_to(data_root)
         except ValueError:
-            _invalid(f"{context} must resolve beneath the data root")
-    return resolved
+            _invalid(f"{context} must be beneath the data root")
+    return path
 
 
 def _unique(values: Iterable[_T], context: str) -> None:

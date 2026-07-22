@@ -50,5 +50,5 @@ task hermes:browser:restart
 ```
 
 Browser が lifelog を参照する場合も canonical path は
-`/opt/data/shared/lifelog` である。互換性用の `/opt/data/core/lifelog` を新しい
-設定へ追加しない。
+`/opt/data/shared/lifelog` である。migration-only の
+`/opt/data/core/lifelog` を runtime 設定へ追加しない。

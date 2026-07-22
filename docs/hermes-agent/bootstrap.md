@@ -87,8 +87,7 @@ layout is:
 ```text
 /opt/data/
 ├── profiles/{rick,hoffman,risarisa}/
-├── shared/lifelog/
-└── core/lifelog -> ../shared/lifelog
+└── shared/lifelog/
 ```
 
 The root source is `rurusasu/hermes-home` at `main`; its
@@ -108,7 +107,7 @@ rolled back safely.
 
 The local transaction uses a single-writer lock and journals snapshots under
 `/opt/data/.bootstrap/transactions/`. Root-owned paths, named profiles, shared
-working-tree moves, compatibility links, and `.env` files are staged or
+working-tree moves, deprecated-path cleanup, and `.env` files are staged or
 snapshotted before replacement. Environment files are atomically renamed with
 mode `0600`, preserve unmanaged keys, and replace managed secret keys.
 
@@ -133,8 +132,10 @@ Git repositories before it can commit or push them.
 ## Migration And Conflicts
 
 - A legacy real checkout at `/opt/data/core/lifelog` is moved atomically to
-  `/opt/data/shared/lifelog`, then replaced by the relative compatibility
-  symlink `../shared/lifelog`.
+  `/opt/data/shared/lifelog`. The old path is absent after success. The
+  manifest's `legacy_target` is migration input, not a runtime alias.
+- An empty legacy directory or compatibility symlink created by an older
+  bootstrap version is removed transactionally.
 - If both lifelog paths contain real data, bootstrap exits with migration code
   `5`. It does not merge, delete, or choose between them; reconcile or back up
   one path explicitly, then rerun.

@@ -68,9 +68,9 @@ repository containing profile distributions, shared repositories, secrets, and
 live state.
 
 `/opt/data/shared/<name>` is the canonical location for repositories shared by
-all profiles. `/opt/data/core/lifelog` remains as a compatibility symlink during
-migration. New configuration and documentation use
-`/opt/data/shared/lifelog`.
+all profiles. `/opt/data/core/lifelog` is accepted only as a migration source
+and is absent after a successful apply. New configuration and documentation
+use `/opt/data/shared/lifelog`.
 
 ## Source Repositories
 
@@ -286,7 +286,7 @@ browser data, X credentials, and other runtime paths do not move.
 - Existing named profiles without `distribution.yaml` are converted with
   `hermes profile install --force`; Hermes preserves user-owned paths.
 - An existing `/opt/data/core/lifelog` checkout moves atomically to
-  `/opt/data/shared/lifelog`, then the compatibility symlink is created.
+  `/opt/data/shared/lifelog`; the old path is then absent.
 - If both old and new lifelog paths contain data, bootstrap stops and reports a
   migration conflict rather than merging automatically.
 - Existing `.env` files retain unmanaged keys. Managed secret keys are replaced
@@ -355,7 +355,7 @@ verify without printing token values:
 - each named profile reports distribution source and version;
 - root and every profile pass `gh auth status` or an equivalent API check;
 - `/opt/data/shared/lifelog` is one shared checkout visible to all profiles;
-- `/opt/data/core/lifelog` resolves to the compatibility target;
+- `/opt/data/core/lifelog` does not exist after migration;
 - root and profile Slack gateways start with their own app credentials;
 - root API, dashboard, browser viewer, cron ticker, and profile gateways are
   healthy;

@@ -94,10 +94,9 @@ sessions, logs, and browser state remain local runtime data.
 | Risarisa distribution | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa) | Official `distribution.yaml` and Risarisa declarative content                               |
 | Shared data           | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                 | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
 
-`/opt/data/core/lifelog` is only a compatibility symlink to
-`../shared/lifelog`; profile homes are never Git repositories. The default
-profile owns shared-lifelog synchronization through the common bootstrap
-command.
+`/opt/data/core/lifelog` is migration-only and is absent after bootstrap;
+profile homes are never Git repositories. The default profile owns
+shared-lifelog synchronization through the common bootstrap command.
 
 ## パッケージ管理フロー
 

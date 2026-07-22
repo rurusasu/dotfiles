@@ -35,8 +35,8 @@ host ~/.hermes/                    container /opt/data/
   logs, workspaces, and gateway state, but are not Git repositories.
 - `shared/lifelog` is the canonical shared repository. The default profile owns
   its locked read-write Git synchronization; every profile uses the same path.
-- `core/lifelog` is only the compatibility symlink for older scripts. New
-  configuration and documentation use `/opt/data/shared/lifelog`.
+- `core/lifelog` is accepted only as an old migration source and is absent
+  after bootstrap. All runtime configuration uses `/opt/data/shared/lifelog`.
 - Root and named-profile source repositories own declarative config, policy,
   cron, scripts, and MCP declarations. The bootstrap stages those sources and
   applies them transactionally without turning runtime homes into Git working

@@ -129,9 +129,6 @@ class AppTests(unittest.TestCase):
             encoding="utf-8",
         )
         (git / "HEAD").write_text("a" * 40 + "\n", encoding="ascii")
-        assert repo.legacy_target is not None
-        repo.legacy_target.parent.mkdir(parents=True, exist_ok=True)
-        repo.legacy_target.symlink_to(os.path.relpath(repo.target, repo.legacy_target.parent))
 
     def write_valid_layout(self) -> None:
         from hermes_bootstrap import app
@@ -676,6 +673,18 @@ class AppTests(unittest.TestCase):
                 self.write_repository_metadata(remote)
                 with self.assertRaises(ValidationError):
                     app._validate_repositories(self.manifest)
+
+    def test_repository_validation_rejects_a_remaining_legacy_path(self) -> None:
+        from hermes_bootstrap import app
+
+        self.write_repository_metadata(self.manifest.shared_repositories[0].source)
+        legacy = self.manifest.shared_repositories[0].legacy_target
+        assert legacy is not None
+        legacy.parent.mkdir(parents=True)
+        legacy.symlink_to(os.path.relpath(self.manifest.shared_repositories[0].target, legacy.parent))
+
+        with self.assertRaises(ValidationError):
+            app._validate_repositories(self.manifest)
 
     def test_installed_layout_validation_accepts_valid_owned_and_user_paths_without_network(self) -> None:
         from hermes_bootstrap import app

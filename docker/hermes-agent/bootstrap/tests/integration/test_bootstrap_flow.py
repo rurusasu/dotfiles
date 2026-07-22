@@ -591,8 +591,7 @@ class BootstrapFlowTests(unittest.TestCase):
         lifelog = self.data_root / "shared" / "lifelog"
         legacy = self.data_root / "core" / "lifelog"
         self.assertTrue((lifelog / ".git").is_dir())
-        self.assertTrue(legacy.is_symlink())
-        self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+        self.assertFalse(os.path.lexists(legacy))
         self.assertEqual(self._validate()["status"], "valid")
         leak = lifelog / "nested" / "askpass-review-probe"
         leak.parent.mkdir()
@@ -797,8 +796,7 @@ class BootstrapFlowTests(unittest.TestCase):
         )
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=canonical), legacy_head)
         self.assertEqual((canonical / "README.md").read_text(encoding="utf-8"), "initial lifelog\n")
-        self.assertTrue(legacy.is_symlink())
-        self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+        self.assertFalse(os.path.lexists(legacy))
 
     def test_conflicting_real_lifelog_paths_return_exit_five_without_mutating_the_tree(self) -> None:
         legacy = self.data_root / "core" / "lifelog"
@@ -975,9 +973,8 @@ class BootstrapFlowTests(unittest.TestCase):
                         self.assertEqual(self._mode(path), 0o600)
 
                     self.assertTrue(canonical.is_dir())
-                    self.assertTrue(legacy.is_symlink())
-                    self.assertEqual(os.readlink(legacy), "../shared/lifelog")
-                    legacy.unlink()
+                    self.assertFalse(os.path.lexists(legacy))
+                    legacy.parent.mkdir(parents=True, exist_ok=True)
                     canonical.rename(legacy)
                     lifelog_change = legacy / f"rollback-{revision}.md"
                     lifelog_change.write_text(
@@ -1050,8 +1047,7 @@ class BootstrapFlowTests(unittest.TestCase):
                         self.assertEqual(before.kind, "directory")
                         self.assertNotIn("shared/lifelog", transaction_tree)
                         self.assertTrue(canonical.is_dir())
-                        self.assertTrue(legacy.is_symlink())
-                        self.assertEqual(os.readlink(legacy), "../shared/lifelog")
+                        self.assertFalse(os.path.lexists(legacy))
                         metadata = canonical.stat()
                         self.assertEqual(
                             (metadata.st_dev, metadata.st_ino),

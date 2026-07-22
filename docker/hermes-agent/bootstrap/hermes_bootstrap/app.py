@@ -404,12 +404,8 @@ def _validate_repositories(manifest: BootstrapManifest) -> None:
         if remote is None or not _same_remote_identity(repo.source, remote):
             raise ValidationError("installed shared repository is invalid")
         _git_head(git)
-        if repo.legacy_target is not None:
-            if not repo.legacy_target.is_symlink():
-                raise ValidationError("shared repository compatibility link is invalid")
-            expected = os.path.relpath(repo.target, repo.legacy_target.parent)
-            if os.readlink(repo.legacy_target) != expected:
-                raise ValidationError("shared repository compatibility link is invalid")
+        if repo.legacy_target is not None and os.path.lexists(repo.legacy_target):
+            raise ValidationError("deprecated shared repository path remains")
 
 
 def _validate_env_file(path: Path) -> None:

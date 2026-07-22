@@ -243,7 +243,7 @@ def _apply_shared_working_tree_boundary(
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:
-            _create_legacy_link(repo, tx, changed, moved_from_legacy=moved_from_legacy)
+            _remove_legacy_target(repo, tx, changed, moved_from_legacy=moved_from_legacy)
         return ChangeSet(tuple(changed))
     except Exception:
         return _Failure("could not apply the shared repository working tree")
@@ -702,7 +702,7 @@ def _real_data_state(path: Path, *, allow_legacy_link: bool, repo: SharedReposit
         return next(entries, None) is not None
 
 
-def _create_legacy_link(
+def _remove_legacy_target(
     repo: SharedRepository,
     tx: Transaction,
     changed: list[Path],
@@ -710,23 +710,29 @@ def _create_legacy_link(
     moved_from_legacy: bool,
 ) -> None:
     legacy = repo.legacy_target
-    if legacy is None or _is_correct_legacy_link(repo):
+    if legacy is None:
         return
-    if moved_from_legacy and _lexists(legacy):
-        raise ValueError("legacy move source was recreated")
-    if _lexists(legacy):
-        mode = legacy.lstat().st_mode
-        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+    if moved_from_legacy:
+        if _lexists(legacy):
+            raise ValueError("legacy move source was recreated")
+        return
+    if not _lexists(legacy):
+        return
+    mode = legacy.lstat().st_mode
+    if stat.S_ISLNK(mode):
+        if not _is_correct_legacy_link(repo):
             raise ValueError("unexpected legacy target")
+    elif stat.S_ISDIR(mode):
         with os.scandir(legacy) as entries:
             if next(entries, None) is not None:
                 raise ValueError("legacy target contains data")
-    _ensure_parent_for_transaction(legacy.parent, tx, changed)
-    if not moved_from_legacy:
-        _snapshot(tx, legacy)
-    if _lexists(legacy):
+    else:
+        raise ValueError("unexpected legacy target")
+    _snapshot(tx, legacy)
+    if stat.S_ISDIR(mode):
         legacy.rmdir()
-    os.symlink(os.path.relpath(repo.target, legacy.parent), legacy)
+    else:
+        legacy.unlink()
     changed.append(legacy)
 
 
