@@ -15,7 +15,8 @@ case "$3" in
 	"SlackBot-OpenClaw" | \
 	"SlackBot-Rick" | \
 	"SlackBot-Hoffman" | \
-	"SlackBot-Risarisa") ;;
+	"SlackBot-Risarisa" | \
+	"SlackBot-Nancy") ;;
 *)
 	printf 'acceptance op fixture rejected item: %s\n' "$3" >&2
 	exit 2
