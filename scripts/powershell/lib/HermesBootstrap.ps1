@@ -214,7 +214,11 @@ function Invoke-HermesBootstrap {
         [string]$ComposeFile,
         [Parameter(Mandatory)]
         [string]$DataDir,
-        [scriptblock]$InvokeOnePasswordItem = $script:DefaultOnePasswordInvoker
+        [scriptblock]$InvokeOnePasswordItem = $script:DefaultOnePasswordInvoker,
+        [ValidateNotNullOrEmpty()]
+        [string]$DockerExecutable = "docker",
+        [AllowEmptyCollection()]
+        [string[]]$DockerPrefixArguments = @()
     )
 
     $plan = Get-HermesBootstrapSecretPlan -ComposeFile $ComposeFile
@@ -234,7 +238,7 @@ function Invoke-HermesBootstrap {
     try {
         try {
             $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-            $startInfo.FileName = "docker"
+            $startInfo.FileName = $DockerExecutable
             $startInfo.UseShellExecute = $false
             $startInfo.CreateNoWindow = $true
             $startInfo.RedirectStandardInput = $true
@@ -245,6 +249,9 @@ function Invoke-HermesBootstrap {
             $startInfo.StandardOutputEncoding = $utf8Encoding
             $startInfo.StandardErrorEncoding = $utf8Encoding
             $startInfo.Environment["HERMES_DATA_DIR"] = $DataDir
+            foreach ($argument in @($DockerPrefixArguments)) {
+                [void]$startInfo.ArgumentList.Add($argument)
+            }
             foreach ($argument in @(
                     "compose", "-f", $ComposeFile,
                     "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"

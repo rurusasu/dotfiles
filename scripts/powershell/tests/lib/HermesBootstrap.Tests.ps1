@@ -177,6 +177,7 @@ set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
 )
 more > "%input%"
 if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" ping 127.0.0.1 -n 3 >nul
+if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" pwsh -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
 if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
 if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
 exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
@@ -306,7 +307,19 @@ Describe "Invoke-HermesBootstrap" {
         $script:originalPath = $env:PATH
         $script:fakeDockerDirectory = Join-Path $TestDrive "bin"
         New-Item -ItemType Directory -Path $script:fakeDockerDirectory -Force | Out-Null
-        New-HermesBootstrapFakeDocker -Directory $script:fakeDockerDirectory | Out-Null
+        $fakeDockerPath = New-HermesBootstrapFakeDocker -Directory $script:fakeDockerDirectory
+        $script:dockerProcessParameters = if ($IsWindows) {
+            @{
+                DockerExecutable = $env:ComSpec
+                DockerPrefixArguments = @("/d", "/c", $fakeDockerPath)
+            }
+        }
+        else {
+            @{
+                DockerExecutable = $fakeDockerPath
+                DockerPrefixArguments = @()
+            }
+        }
         $env:PATH = "$script:fakeDockerDirectory$([IO.Path]::PathSeparator)$script:originalPath"
         $env:HERMES_BOOTSTRAP_TEST_DIR = $TestDrive
         $env:HERMES_BOOTSTRAP_TEST_EXIT = "0"
@@ -340,7 +353,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$itemName"; fields = @(@{ label = "username"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Success | Should -BeTrue
         $result.Changed | Should -BeTrue
@@ -397,14 +410,17 @@ Describe "Invoke-HermesBootstrap" {
     }
 
     It "returns a fixed producer failure when Docker cannot be started" {
-        $env:PATH = $TestDrive
+        $missingDockerProcessParameters = @{
+            DockerExecutable = Join-Path $TestDrive "missing-docker"
+            DockerPrefixArguments = @()
+        }
         $invoker = {
             param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
             [void]$Arguments
             throw "must not be called"
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @missingDockerProcessParameters
 
         $result.Success | Should -BeFalse
         $result.Changed | Should -BeFalse
@@ -437,7 +453,7 @@ Describe "Invoke-HermesBootstrap" {
             }.GetNewClosure()
             $watch = [System.Diagnostics.Stopwatch]::StartNew()
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
             $watch.Stop()
 
             $result.Success | Should -BeFalse
@@ -473,7 +489,7 @@ Describe "Invoke-HermesBootstrap" {
                 throw $secretMarker
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $global:Error.Count | Should -Be 0
@@ -499,7 +515,7 @@ Describe "Invoke-HermesBootstrap" {
                 throw $secretMarker
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $actual = @($global:Error)
@@ -527,7 +543,7 @@ Describe "Invoke-HermesBootstrap" {
                 return "{`"value`":`"$secretMarker`""
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $global:Error.Count | Should -Be 1
@@ -548,7 +564,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Success | Should -BeFalse
         $result.Changed | Should -BeFalse
@@ -568,7 +584,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Message | Should -Match "\[REDACTED\]"
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
@@ -589,7 +605,7 @@ Describe "Invoke-HermesBootstrap" {
         }
 
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeFalse
@@ -621,7 +637,7 @@ Describe "Invoke-HermesBootstrap" {
         }
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeFalse
@@ -659,7 +675,7 @@ Describe "Invoke-HermesBootstrap" {
         }
 
         foreach ($iteration in 1..12) {
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
             $result.Success | Should -BeTrue
         }
         $after = if ($IsWindows) {
@@ -694,7 +710,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "safe-value" }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker
+        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeTrue
