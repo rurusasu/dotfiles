@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import secrets
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -31,7 +32,7 @@ _PROFILE_NAME = re.compile(r"[a-z][a-z0-9-]*\Z")
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
 _GITHUB_TOKEN = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
 _SLACK_TOKEN = re.compile(
-    rb"\b(?:xox(?:b|p|a|r|s)-[A-Za-z0-9-]{8,}|xapp-[A-Za-z0-9-]+)\b"
+    rb"(?<![A-Za-z0-9_])(?:xox(?:b|p|a|r|s)|xapp)-[A-Za-z0-9-]+(?![A-Za-z0-9_-])"
 )
 _PRIVATE_KEY = re.compile(rb"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")
 _GIT_CONTROL_COMPONENTS = frozenset({".git", ".gitignore", ".gitattributes", ".gitmodules"})
@@ -124,17 +125,19 @@ def prepare_profile_snapshots(
     try:
         for declaration in manifest.profiles:
             try:
-                _validate_profile_name(declaration.name)
-            except Exception:
-                raise ProfileSnapshotError(declaration.name, "invalid_profile_name") from None
-            if declaration.target != manifest.data_root / "profiles" / declaration.name:
-                raise ProfileSnapshotError(declaration.name, "invalid_profile_target")
-            if not _path_exists(declaration.target):
-                if allow_missing:
-                    missing.append(declaration)
-                    continue
-                raise ProfileSnapshotError(declaration.name, "missing_profile")
-            try:
+                try:
+                    _validate_profile_name(declaration.name)
+                except Exception:
+                    raise ProfileSnapshotError(
+                        declaration.name, "invalid_profile_name"
+                    ) from None
+                if declaration.target != manifest.data_root / "profiles" / declaration.name:
+                    raise ProfileSnapshotError(declaration.name, "invalid_profile_target")
+                if not _path_exists(declaration.target):
+                    if allow_missing:
+                        missing.append(declaration)
+                        continue
+                    raise ProfileSnapshotError(declaration.name, "missing_profile")
                 item = _prepare_one(declaration, scratch_root, scratch_fd)
             except ProfileSnapshotError:
                 raise
@@ -144,6 +147,11 @@ def prepare_profile_snapshots(
         for item in prepared:
             try:
                 _verify_prepared_snapshot(scratch_root, scratch_fd, item)
+            except Exception as error:
+                raise ProfileSnapshotError(item.snapshot.declaration.name, _category(error)) from None
+        for item in prepared:
+            try:
+                _final_attest_prepared_snapshot(scratch_root, scratch_fd, item)
             except Exception as error:
                 raise ProfileSnapshotError(item.snapshot.declaration.name, _category(error)) from None
     except ProfileSnapshotError:
@@ -280,14 +288,39 @@ def _validate_canonical_manifest(
     current_bytes, _ = _read_regular(root_fd, "distribution.yaml")
     if current_bytes != expected_bytes:
         raise ValueError("manifest changed")
+    expected_raw = yaml.load(
+        expected_bytes.decode("utf-8"), Loader=distributions._UniqueKeyLoader
+    )
+    if not isinstance(expected_raw, dict):
+        raise ValueError("manifest shape")
+    expected_manifest = distributions.profile_distribution.DistributionManifest.from_dict(
+        expected_raw
+    )
     projection = _descriptor_projection(root_fd)
-    _manifest, parsed_owned = distributions._read_profile_manifest_at(
+    parsed_manifest, parsed_owned = distributions._read_profile_manifest_at(
         projection,
         declaration.name,
         require_sources=True,
     )
-    if parsed_owned != owned or _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
+    if parsed_owned != owned:
         raise ValueError("manifest ownership")
+    if _manifest_semantics(parsed_manifest, parsed_owned) != _manifest_semantics(
+        expected_manifest, owned
+    ):
+        raise ValueError("manifest semantics")
+    if _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
+        raise ValueError("manifest changed")
+
+
+def _manifest_semantics(
+    manifest: object, owned: tuple[PurePosixPath, ...]
+) -> dict[str, object]:
+    serialized = manifest.to_dict()  # type: ignore[attr-defined]
+    if not isinstance(serialized, dict):
+        raise ValueError("manifest semantics")
+    semantics = {key: serialized.get(key) for key in _DECLARATIVE_KEYS}
+    semantics["distribution_owned"] = [path.as_posix() for path in owned]
+    return semantics
 
 
 def _normalize_owned(values: object) -> tuple[PurePosixPath, ...]:
@@ -317,11 +350,11 @@ def _validate_path(path: PurePosixPath) -> None:
             or lowered in _GIT_CONTROL_COMPONENTS
         ):
             raise ValueError("reserved path")
+        stem = component.rsplit(".", 1)[0].casefold()
+        if stem in _CREDENTIAL_STEMS:
+            raise ValueError("credential filename")
         if index and path.parts[0].casefold() == "cron" and lowered in {"output", "state"}:
             raise ValueError("reserved path")
-    stem = path.name.rsplit(".", 1)[0].casefold()
-    if stem in _CREDENTIAL_STEMS:
-        raise ValueError("credential filename")
 
 
 def _canonical_manifest(raw: dict[str, object], owned: tuple[PurePosixPath, ...]) -> bytes:
@@ -518,7 +551,12 @@ def _read_regular(parent_fd: int, name: str) -> tuple[bytes, os.stat_result]:
 
 
 def _open_regular(parent_fd: int, name: str) -> int:
-    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
     descriptor = os.open(name, flags, dir_fd=parent_fd)
     try:
         source = os.fstat(descriptor)
@@ -768,6 +806,25 @@ def _verify_prepared_snapshot(
     scratch_fd: int,
     prepared: _PreparedSnapshot,
 ) -> None:
+    _verify_prepared_snapshot_passes(scratch_root, scratch_fd, prepared, tree_passes=1)
+
+
+def _final_attest_prepared_snapshot(
+    scratch_root: Path,
+    scratch_fd: int,
+    prepared: _PreparedSnapshot,
+) -> None:
+    _verify_prepared_snapshot_passes(scratch_root, scratch_fd, prepared, tree_passes=2)
+
+
+def _verify_prepared_snapshot_passes(
+    scratch_root: Path,
+    scratch_fd: int,
+    prepared: _PreparedSnapshot,
+    *,
+    tree_passes: int,
+) -> None:
+    _require_private_scratch_status(os.fstat(scratch_fd))
     verify_absolute_directory(scratch_root, scratch_fd)
     _verify_output_root(
         scratch_fd,
@@ -777,7 +834,8 @@ def _verify_prepared_snapshot(
     )
     verify_absolute_directory(prepared.snapshot.root, prepared.output_fd)
     os.fsync(prepared.output_fd)
-    _verify_snapshot_tree(prepared.output_fd, prepared.files, prepared.directories)
+    for _pass in range(tree_passes):
+        _verify_snapshot_tree(prepared.output_fd, prepared.files, prepared.directories)
     _verify_output_root(
         scratch_fd,
         prepared.snapshot.declaration.name,
@@ -785,6 +843,7 @@ def _verify_prepared_snapshot(
         prepared.output_identity,
     )
     verify_absolute_directory(prepared.snapshot.root, prepared.output_fd)
+    _require_private_scratch_status(os.fstat(scratch_fd))
     verify_absolute_directory(scratch_root, scratch_fd)
 
 
@@ -837,8 +896,14 @@ def _verify_snapshot_directory(
     seen_files: set[PurePosixPath],
     seen_directories: set[PurePosixPath],
 ) -> None:
-    with os.scandir(directory_fd) as iterator:
-        names = sorted(entry.name for entry in iterator)
+    expected_names = {
+        path.name
+        for path in (*expected_files, *expected_directories)
+        if path.parent == prefix
+    }
+    names = _snapshot_directory_names(directory_fd)
+    if set(names) != expected_names:
+        raise ValueError("snapshot inventory changed")
     for name in names:
         relative = prefix / name
         current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
@@ -869,6 +934,13 @@ def _verify_snapshot_directory(
             seen_files.add(relative)
         else:
             raise ValueError("unsafe snapshot entry")
+    if set(_snapshot_directory_names(directory_fd)) != expected_names:
+        raise ValueError("snapshot inventory changed")
+
+
+def _snapshot_directory_names(directory_fd: int) -> list[str]:
+    with os.scandir(directory_fd) as iterator:
+        return sorted(entry.name for entry in iterator)
 
 
 def _verify_expected_file(parent_fd: int, name: str, expected: _ExpectedFile) -> None:
@@ -998,17 +1070,22 @@ def _remove_snapshot(
         name = _find_snapshot_name(scratch_fd, expected_identity)
         if name is None:
             raise OSError("snapshot cleanup parent changed")
-        current_fd = _open_output_directory(scratch_fd, name)
-        try:
-            current = os.fstat(current_fd)
-            if (current.st_dev, current.st_ino) != expected_identity:
-                raise OSError("snapshot cleanup target changed")
-            with os.scandir(current_fd) as iterator:
-                if next(iterator, None) is not None:
-                    raise OSError("snapshot cleanup target not empty")
-            os.rmdir(name, dir_fd=scratch_fd)
-        finally:
-            os.close(current_fd)
+        quarantine = _quarantine_cleanup_entry(
+            scratch_fd, name, expected_identity, directory=True
+        )
+        current = os.stat(quarantine, dir_fd=scratch_fd, follow_symlinks=False)
+        actual = os.fstat(cleanup_fd)
+        if (
+            not stat.S_ISDIR(current.st_mode)
+            or not stat.S_ISDIR(actual.st_mode)
+            or (current.st_dev, current.st_ino) != expected_identity
+            or (actual.st_dev, actual.st_ino) != expected_identity
+        ):
+            raise OSError("snapshot cleanup target changed")
+        with os.scandir(cleanup_fd) as iterator:
+            if next(iterator, None) is not None:
+                raise OSError("snapshot cleanup target not empty")
+        os.rmdir(quarantine, dir_fd=scratch_fd)
         if _find_snapshot_name(scratch_fd, expected_identity) is not None:
             raise OSError("snapshot cleanup incomplete")
     finally:
@@ -1033,35 +1110,121 @@ def _find_snapshot_name(scratch_fd: int, expected_identity: tuple[int, int]) -> 
 
 
 def _clear_output_directory(directory_fd: int) -> None:
-    for _attempt in range(8):
-        with os.scandir(directory_fd) as iterator:
-            names = sorted(entry.name for entry in iterator)
-        if not names:
-            return
-        for name in names:
-            status = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-            if stat.S_ISDIR(status.st_mode):
-                child_fd = _open_output_directory(directory_fd, name)
-                try:
-                    child_identity = (status.st_dev, status.st_ino)
-                    actual = os.fstat(child_fd)
-                    if (actual.st_dev, actual.st_ino) != child_identity:
-                        raise OSError("snapshot cleanup directory changed")
-                    _clear_output_directory(child_fd)
-                    current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-                    actual = os.fstat(child_fd)
-                    if (
-                        not stat.S_ISDIR(current.st_mode)
-                        or (current.st_dev, current.st_ino) != child_identity
-                        or (actual.st_dev, actual.st_ino) != child_identity
-                    ):
-                        raise OSError("snapshot cleanup directory changed")
-                    os.rmdir(name, dir_fd=directory_fd)
-                finally:
-                    os.close(child_fd)
-            else:
-                os.unlink(name, dir_fd=directory_fd)
-    raise OSError("snapshot cleanup did not quiesce")
+    with os.scandir(directory_fd) as iterator:
+        entries = sorted(
+            (
+                entry.name,
+                os.stat(entry.name, dir_fd=directory_fd, follow_symlinks=False),
+            )
+            for entry in iterator
+        )
+    for name, expected in entries:
+        if stat.S_ISDIR(expected.st_mode):
+            _remove_cleanup_directory(directory_fd, name, expected)
+        elif stat.S_ISREG(expected.st_mode):
+            _remove_cleanup_file(directory_fd, name, expected)
+        else:
+            raise OSError("unsafe snapshot cleanup entry")
+    with os.scandir(directory_fd) as iterator:
+        if next(iterator, None) is not None:
+            raise OSError("snapshot cleanup did not quiesce")
+
+
+def _remove_cleanup_directory(
+    parent_fd: int, name: str, expected: os.stat_result
+) -> None:
+    expected_identity = (expected.st_dev, expected.st_ino)
+    child_fd = _open_output_directory(parent_fd, name)
+    try:
+        actual = os.fstat(child_fd)
+        if (actual.st_dev, actual.st_ino) != expected_identity:
+            raise OSError("snapshot cleanup directory changed")
+        _clear_output_directory(child_fd)
+        quarantine = _quarantine_cleanup_entry(
+            parent_fd, name, expected_identity, directory=True
+        )
+        current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+        actual = os.fstat(child_fd)
+        if (
+            not stat.S_ISDIR(current.st_mode)
+            or not stat.S_ISDIR(actual.st_mode)
+            or (current.st_dev, current.st_ino) != expected_identity
+            or (actual.st_dev, actual.st_ino) != expected_identity
+        ):
+            raise OSError("snapshot cleanup directory changed")
+        with os.scandir(child_fd) as iterator:
+            if next(iterator, None) is not None:
+                raise OSError("snapshot cleanup directory not empty")
+        os.rmdir(quarantine, dir_fd=parent_fd)
+    finally:
+        os.close(child_fd)
+
+
+def _remove_cleanup_file(parent_fd: int, name: str, expected: os.stat_result) -> None:
+    expected_identity = (expected.st_dev, expected.st_ino)
+    flags = (
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(name, flags, dir_fd=parent_fd)
+    try:
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        actual = os.fstat(descriptor)
+        for status in (current, actual):
+            if (
+                not stat.S_ISREG(status.st_mode)
+                or (status.st_dev, status.st_ino) != expected_identity
+            ):
+                raise OSError("snapshot cleanup file changed")
+        quarantine = _quarantine_cleanup_entry(
+            parent_fd, name, expected_identity, directory=False
+        )
+        current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+        actual = os.fstat(descriptor)
+        for status in (current, actual):
+            if (
+                not stat.S_ISREG(status.st_mode)
+                or (status.st_dev, status.st_ino) != expected_identity
+            ):
+                raise OSError("snapshot cleanup file changed")
+        os.unlink(quarantine, dir_fd=parent_fd)
+    finally:
+        os.close(descriptor)
+
+
+def _quarantine_cleanup_entry(
+    parent_fd: int,
+    name: str,
+    expected_identity: tuple[int, int],
+    *,
+    directory: bool,
+) -> str:
+    quarantine = _unused_cleanup_name(parent_fd)
+    os.rename(
+        name,
+        quarantine,
+        src_dir_fd=parent_fd,
+        dst_dir_fd=parent_fd,
+    )
+    current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+    if (
+        stat.S_ISDIR(current.st_mode) != directory
+        or (current.st_dev, current.st_ino) != expected_identity
+    ):
+        raise OSError("snapshot cleanup entry changed")
+    return quarantine
+
+
+def _unused_cleanup_name(parent_fd: int) -> str:
+    for _attempt in range(16):
+        candidate = f".snapshot-cleanup-{secrets.token_hex(16)}"
+        try:
+            os.stat(candidate, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return candidate
+    raise OSError("snapshot cleanup quarantine unavailable")
 
 
 def _category(error: Exception) -> str:

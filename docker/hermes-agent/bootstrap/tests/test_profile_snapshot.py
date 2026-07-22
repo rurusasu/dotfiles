@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import stat
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -133,7 +135,11 @@ class ProfileSnapshotTests(unittest.TestCase):
 
         for index, content in enumerate((
             b"ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
-            b"xoxb-1234567890-abcdefgh",
+            b"xoxb-valid",
+            b"xoxp-valid",
+            b"xoxa-valid",
+            b"xoxr-valid",
+            b"xoxs-valid",
             b"xapp-valid",
             b"-----BEGIN PRIVATE KEY-----",
         )):
@@ -143,6 +149,30 @@ class ProfileSnapshotTests(unittest.TestCase):
                 scratch = self.root / f"secret-{index}"
                 scratch.mkdir(mode=0o700)
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+
+    def test_rejects_credential_stems_in_every_path_component(self) -> None:
+        unsafe_paths = (
+            "token.json/payload.txt",
+            "credentials.pem/nested/data.txt",
+            "secret.txt/archive/payload.txt",
+        )
+        for index, unsafe in enumerate(unsafe_paths):
+            with self.subTest(unsafe=unsafe):
+                name = f"credential{index}"
+                home = self.write_profile(name, [unsafe])
+                candidate = home / unsafe
+                candidate.parent.mkdir(parents=True)
+                candidate.write_text("safe\n", encoding="utf-8")
+                scratch = self.root / f"credential-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)), scratch, allow_missing=False
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
 
     def test_rejects_a_secret_crossing_the_streaming_chunk_boundary(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -163,6 +193,19 @@ class ProfileSnapshotTests(unittest.TestCase):
         token = b"xapp-1234567890-abcdefgh"
         (home / "SOUL.md").write_bytes(b"x" * (64 * 1024 - 3) + b"!" + token)
         scratch = self.root / "xapp-boundary-secret"
+        scratch.mkdir(mode=0o700)
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
+
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((scratch / "rick").exists())
+
+    def test_rejects_a_short_xoxb_secret_crossing_the_streaming_chunk_boundary(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        token = b"xoxb-valid"
+        (home / "SOUL.md").write_bytes(b"x" * (64 * 1024 - 3) + b"!" + token)
+        scratch = self.root / "xoxb-boundary-secret"
         scratch.mkdir(mode=0o700)
 
         with self.assertRaises(ProfileSnapshotError) as caught:
@@ -216,6 +259,34 @@ class ProfileSnapshotTests(unittest.TestCase):
                 if kind == "hardlink":
                     (home / "extra-link").unlink()
 
+    def test_rejects_a_manifest_fifo_without_waiting_for_a_writer(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        (home / "distribution.yaml").unlink()
+        os.mkfifo(home / "distribution.yaml")
+        timed_out = False
+
+        def stop_blocking(_signum: int, _frame: object) -> None:
+            nonlocal timed_out
+            timed_out = True
+            raise TimeoutError("manifest FIFO open blocked")
+
+        previous = signal.signal(signal.SIGALRM, stop_blocking)
+        started = time.monotonic()
+        signal.setitimer(signal.ITIMER_REAL, 0.5)
+        try:
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                )
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+
+        self.assertFalse(timed_out, "opening a manifest FIFO blocked")
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+
     def test_snapshot_is_deterministic_and_contains_only_owned_projection(self) -> None:
         rick = self.write_profile("rick", ["assets", "SOUL.md"])
         (rick / "SOUL.md").write_text("Rick\n", encoding="utf-8")
@@ -252,6 +323,66 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.scratch.chmod(0o750)
         with self.assertRaises(ValueError):
             prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+
+    def test_rejects_scratch_permissions_changed_after_snapshot_verification(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        original_verify = profile_snapshot._verify_prepared_snapshot
+        verify_calls = 0
+        changed = False
+
+        def verify_then_chmod(*args: object, **kwargs: object) -> None:
+            nonlocal verify_calls, changed
+            original_verify(*args, **kwargs)
+            verify_calls += 1
+            if verify_calls == 2:
+                self.scratch.chmod(0o755)
+                changed = True
+
+        try:
+            with mock.patch.object(
+                profile_snapshot, "_verify_prepared_snapshot", side_effect=verify_then_chmod
+            ):
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                    )
+        finally:
+            self.scratch.chmod(0o700)
+
+        self.assertTrue(changed)
+        self.assertEqual(verify_calls, 2)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+    def test_target_probe_error_is_redacted_and_cleans_earlier_snapshots(self) -> None:
+        rick = self.write_profile("rick", ["SOUL.md"])
+        (rick / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        hoffman = self.write_profile("hoffman", ["portfolio.pdf"])
+        (hoffman / "portfolio.pdf").write_bytes(b"portfolio")
+        original_exists = profile_snapshot._path_exists
+        probe_failed = False
+
+        def fail_second_probe(path: Path) -> bool:
+            nonlocal probe_failed
+            if path == hoffman:
+                probe_failed = True
+                raise PermissionError("private probe detail")
+            return original_exists(path)
+
+        with mock.patch.object(profile_snapshot, "_path_exists", side_effect=fail_second_probe):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick"), self.profile("hoffman")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertTrue(probe_failed)
+        self.assertEqual(caught.exception.profile, "hoffman")
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(str(caught.exception), "profile snapshot rejected (invalid_local_profile)")
+        self.assertFalse((self.scratch / "rick").exists())
 
     def test_scratch_rename_and_symlink_swap_cannot_redirect_snapshot_writes(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -429,6 +560,50 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
+    def test_final_recursive_attestation_rejects_late_inventory_mutations(self) -> None:
+        for index, mutation in enumerate(("insert", "delete", "replace")):
+            with self.subTest(mutation=mutation):
+                name = f"late{index}"
+                home = self.write_profile(name, ["SOUL.md"])
+                (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+                scratch = self.root / f"late-attestation-{index}"
+                scratch.mkdir(mode=0o700)
+                replacement = self.root / f"late-replacement-{index}"
+                replacement.write_bytes(b"evil\n")
+                original_verify_file = profile_snapshot._verify_expected_file
+                file_checks = 0
+                mutated = False
+
+                def verify_file_then_mutate(*args: object, **kwargs: object) -> None:
+                    nonlocal file_checks, mutated
+                    original_verify_file(*args, **kwargs)
+                    file_checks += 1
+                    if file_checks != 9:
+                        return
+                    snapshot_root = scratch / name
+                    if mutation == "insert":
+                        (snapshot_root / "late-unowned.txt").write_text(
+                            "late\n", encoding="utf-8"
+                        )
+                    elif mutation == "delete":
+                        (snapshot_root / "SOUL.md").unlink()
+                    else:
+                        os.replace(replacement, snapshot_root / "SOUL.md")
+                    mutated = True
+
+                with mock.patch.object(
+                    profile_snapshot, "_verify_expected_file", side_effect=verify_file_then_mutate
+                ):
+                    with self.assertRaises(ProfileSnapshotError) as caught:
+                        prepare_profile_snapshots(
+                            self.manifest(self.profile(name)), scratch, allow_missing=False
+                        )
+
+                self.assertTrue(mutated)
+                self.assertGreaterEqual(file_checks, 9)
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
     def test_rejects_gitignore_destination_replacement_before_return(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -506,22 +681,95 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertTrue(escaped.is_dir())
         self.assertEqual(list(escaped.iterdir()), [])
 
+    def test_output_root_swap_after_verification_preserves_replacement(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        moved = self.scratch / "retired-rick"
+        replacement = self.scratch / "rick"
+        original_verify = profile_snapshot._verify_prepared_snapshot
+        verify_calls = 0
+        swapped = False
+
+        def verify_then_swap(*args: object, **kwargs: object) -> None:
+            nonlocal verify_calls, swapped
+            original_verify(*args, **kwargs)
+            verify_calls += 1
+            if verify_calls == 2:
+                replacement.rename(moved)
+                replacement.mkdir(mode=0o700)
+                (replacement / "marker").write_text("replacement\n", encoding="utf-8")
+                swapped = True
+
+        with mock.patch.object(
+            profile_snapshot, "_verify_prepared_snapshot", side_effect=verify_then_swap
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                )
+
+        self.assertTrue(swapped)
+        self.assertEqual(verify_calls, 2)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse(moved.exists())
+        self.assertEqual((replacement / "marker").read_text(encoding="utf-8"), "replacement\n")
+
+    def test_output_root_escape_after_verification_surfaces_cleanup_failure(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        escaped = self.root / "escaped-after-verification"
+        replacement = self.scratch / "rick"
+        original_verify = profile_snapshot._verify_prepared_snapshot
+        verify_calls = 0
+        swapped = False
+
+        def verify_then_escape(*args: object, **kwargs: object) -> None:
+            nonlocal verify_calls, swapped
+            original_verify(*args, **kwargs)
+            verify_calls += 1
+            if verify_calls == 2:
+                replacement.rename(escaped)
+                replacement.mkdir(mode=0o700)
+                (replacement / "marker").write_text("replacement\n", encoding="utf-8")
+                swapped = True
+
+        with mock.patch.object(
+            profile_snapshot, "_verify_prepared_snapshot", side_effect=verify_then_escape
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                )
+
+        self.assertTrue(swapped)
+        self.assertEqual(verify_calls, 2)
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertEqual((replacement / "marker").read_text(encoding="utf-8"), "replacement\n")
+        self.assertTrue(escaped.is_dir())
+        self.assertEqual(list(escaped.iterdir()), [])
+
     def test_real_directory_ancestor_replacement_is_detected_before_a_snapshot_escapes(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
         profiles = home.parent
         moved = self.root / "moved-profiles"
         original_write = profile_snapshot._write_descriptor
+        swapped = False
 
         def write_then_swap(descriptor: int, content: bytes) -> None:
+            nonlocal swapped
             original_write(descriptor, content)
-            profiles.rename(moved)
-            profiles.mkdir()
-            (profiles / "rick").mkdir()
+            if content == b"safe\n" and not swapped:
+                profiles.rename(moved)
+                profiles.mkdir()
+                (profiles / "rick").mkdir()
+                swapped = True
 
         with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_swap):
-            with self.assertRaises(ProfileSnapshotError):
+            with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(swapped)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
     def test_real_nested_directory_replacement_is_rejected_and_cleaned_up(self) -> None:
@@ -608,6 +856,73 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertTrue(replaced)
         self.assertEqual(calls, [True])
         self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertFalse((self.scratch / "rick").exists())
+
+    def test_rejects_transient_hermes_manifest_semantic_mismatch(self) -> None:
+        home = self.write_profile(
+            "rick",
+            ["SOUL.md", "assets"],
+            description="original description",
+            author="Original Author",
+            license="MIT",
+            env_requires=[
+                {"name": "ORIGINAL_ENV", "description": "original", "required": False}
+            ],
+        )
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        (home / "assets").mkdir()
+        alternate = yaml.safe_dump(
+            {
+                "name": "rick",
+                "version": "0.1.0",
+                "description": "alternate description",
+                "hermes_requires": ">=0.18.2",
+                "author": "Alternate Author",
+                "license": "Apache-2.0",
+                "env_requires": [
+                    {"name": "ALTERNATE_ENV", "description": "alternate", "required": True}
+                ],
+                "distribution_owned": ["assets", "SOUL.md"],
+            },
+            sort_keys=False,
+        ).encode("utf-8")
+        original_read = profile_snapshot.distributions._read_profile_manifest_at
+        parser_saw_alternate = False
+        restored_before_return = False
+
+        def read_alternate_then_restore(
+            root: Path, expected_name: str, *, require_sources: bool
+        ):
+            nonlocal parser_saw_alternate, restored_before_return
+            manifest_path = root / "distribution.yaml"
+            canonical = manifest_path.read_bytes()
+            manifest_path.write_bytes(alternate)
+            try:
+                parsed = original_read(root, expected_name, require_sources=require_sources)
+                parser_saw_alternate = (
+                    parsed[0].description == "alternate description"
+                    and parsed[0].env_requires[0].name == "ALTERNATE_ENV"
+                    and [path.as_posix() for path in parsed[1]] == ["SOUL.md", "assets"]
+                )
+            finally:
+                manifest_path.write_bytes(canonical)
+                restored_before_return = manifest_path.read_bytes() == canonical
+            return parsed
+
+        with mock.patch.object(
+            profile_snapshot.distributions,
+            "_read_profile_manifest_at",
+            side_effect=read_alternate_then_restore,
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                )
+
+        self.assertTrue(parser_saw_alternate)
+        self.assertTrue(restored_before_return)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(str(caught.exception), "profile snapshot rejected (invalid_local_profile)")
         self.assertFalse((self.scratch / "rick").exists())
 
     def test_rejects_incompatible_hermes_requirement(self) -> None:
