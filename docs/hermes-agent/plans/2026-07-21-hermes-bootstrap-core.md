@@ -217,6 +217,7 @@ DASHBOARD_KEYS = frozenset({
     "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
     "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
 })
+API_SERVER_KEYS = frozenset({"API_SERVER_KEY"})
 SLACK_KEYS = frozenset({
     "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"
 })
@@ -226,7 +227,7 @@ Implement exact callables `merge_env_file(path: Path, managed: Mapping[str, str]
 
 - [ ] Preserve every unmanaged line in original order, remove all existing instances of managed keys, append one canonical managed block, write LF, fsync the temporary file, rename atomically, and enforce `0600` even when content is unchanged.
 
-- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for the signing secret. Build this dashboard mapping exactly once per bootstrap run and reuse it for root and every named profile so all targets receive the same credentials. The plaintext 1Password password is never written.
+- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for independent signing and API secrets. Reuse an installed hash only after verifying the current 1Password password and preserve only valid strong secrets. Build this mapping exactly once per bootstrap run and reuse it for root and every named profile so all targets receive the same credentials. The plaintext 1Password password is never written.
 
 - [ ] Write the same GitHub and dashboard values to root and all managed profiles; write each profile's own Slack values and remove stale shared Slack values before appending.
 
@@ -329,7 +330,7 @@ Expected: root and profile tests pass without touching host `~/.hermes`.
 - Create: `docker/hermes-agent/bootstrap/hermes_bootstrap/repositories.py`
 - Create: `docker/hermes-agent/bootstrap/tests/test_repositories.py`
 
-- [ ] Write failing tests for first clone, read-only fast-forward, non-fast-forward rejection, read-write commit/rebase/push, unchanged sync, lock contention, wrong origin, dirty forbidden paths, legacy-path migration, old/new path collision, compatibility symlink creation, and retry after a later local rollback.
+- [ ] Write failing tests for first clone, read-only fast-forward, non-fast-forward rejection, read-write commit/rebase/push, unchanged sync, lock contention, wrong origin, dirty forbidden paths, legacy-path migration and removal, old/new path collision, and retry after a later local rollback.
 
 - [ ] Define these interfaces:
 
@@ -407,7 +408,7 @@ hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-boot
 
 `sync-repository` reads the GitHub token from process `GH_TOKEN`, then active `${HERMES_HOME}/.env`, then `/opt/data/.env`, using the same non-executing env parser as `gh-wrapper.sh`. It accepts only a declared shared-repository name, requires its canonical checkout to exist, and calls the same `synchronize_named_repository` implementation used by `apply`; it does not apply distributions or rewrite `.env`.
 
-- [ ] Implement final validation for root ownership state, installed profile names and distribution versions, profile user-owned paths, canonical lifelog identity, compatibility symlink, `.env` mode, required managed keys, and no `.git` at `/opt/data` or `/opt/data/profiles/*`.
+- [ ] Implement final validation for root ownership state, installed profile names and distribution versions, profile user-owned paths, canonical lifelog identity, absence of the legacy path, `.env` mode, required managed keys, and no `.git` at `/opt/data` or `/opt/data/profiles/*`.
 
 - [ ] During credential validation, run an API-equivalent check for each profile environment rather than persisting `gh auth login` state. Report profile names and status only.
 
@@ -433,7 +434,7 @@ hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-boot
 
 - [ ] Add `hermes-bootstrap` to Compose with the same build/image and `/opt/data` bind mount as `hermes`, no ports, no restart policy, no dependency on browser services, `HERMES_HOME=/opt/data`, bootstrap profile `bootstrap`, entrypoint `/usr/local/bin/hermes-bootstrap`, and default command `apply`.
 
-- [ ] Change `LIFELOG_ROOT` for the gateway from `/opt/data/core/lifelog` to `/opt/data/shared/lifelog`; retain the compatibility symlink for old scripts.
+- [ ] Change `LIFELOG_ROOT` for the gateway from `/opt/data/core/lifelog` to `/opt/data/shared/lifelog`; remove the legacy runtime path after transactional migration.
 
 - [ ] Add contract tests that parse `docker compose config --format json` and assert volume identity, no published ports, no secret environment keys, profile isolation, and the exact entrypoint.
 

@@ -20,12 +20,14 @@ from .distributions import (
     apply_root_distribution,
 )
 from .envfiles import (
+    API_SERVER_KEYS,
     DASHBOARD_KEYS,
     GITHUB_KEYS,
     SLACK_KEYS,
     build_dashboard_environment,
     build_profile_environment,
     merge_env_file,
+    read_environment_values,
 )
 from .errors import ApplyError, BootstrapError, CredentialError, RollbackError, ValidationError
 from .git import _remote_identity, _same_remote_identity, stage_distribution
@@ -45,7 +47,7 @@ from .transaction import Transaction
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _ENV_ASSIGNMENT = re.compile(r"(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=")
-_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | SLACK_KEYS
+_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | SLACK_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
 
@@ -110,7 +112,13 @@ def _apply_sensitive(
         secrets = read_secret_payload(input_stream, manifest)
         auth = GitAuth(secrets.github_token, secrets.redactor)
         _validate_remote_credentials(manifest, auth)
-        _validate_profile_credentials(manifest, secrets)
+        dashboard = _validate_profile_credentials(
+            manifest,
+            secrets,
+            read_environment_values(
+                manifest.data_root / ".env", DASHBOARD_KEYS | API_SERVER_KEYS
+            ),
+        )
 
         scratch = _private_scratch(manifest.data_root)
         staged = [stage_distribution(source, scratch, auth) for source in _distributions(manifest)]
@@ -128,7 +136,6 @@ def _apply_sensitive(
             apply_shared_working_tree(repo, result, tx)
             _failpoint(f"shared-apply:{repo.name}")
 
-        dashboard = build_dashboard_environment(secrets)
         for profile, target in _environment_targets(manifest):
             environment = build_profile_environment(profile, secrets, dashboard)
             env_path = target / ".env"
@@ -220,19 +227,21 @@ def _validate_remote_credentials(manifest: BootstrapManifest, auth: GitAuth) -> 
             seen.add(identity)
 
 
-def _validate_profile_credentials(manifest: BootstrapManifest, secrets: object) -> None:
+def _validate_profile_credentials(
+    manifest: BootstrapManifest,
+    secrets: object,
+    existing: Mapping[str, str],
+) -> Mapping[str, str]:
     """Exercise the credentials that each resulting profile will receive."""
 
-    dashboard = build_dashboard_environment(secrets)  # type: ignore[arg-type]
-    try:
-        for profile, _target in _environment_targets(manifest):
-            environment = build_profile_environment(profile, secrets, dashboard)  # type: ignore[arg-type]
-            token = environment.get("GH_TOKEN")
-            if not isinstance(token, str) or not token:
-                raise CredentialError("GitHub credentials are unavailable")
-            GitHubClient(GitAuth(token, SecretRedactor((token,)))).authenticated_login()
-    finally:
-        del dashboard
+    dashboard = build_dashboard_environment(secrets, existing)  # type: ignore[arg-type]
+    for profile, _target in _environment_targets(manifest):
+        environment = build_profile_environment(profile, secrets, dashboard)  # type: ignore[arg-type]
+        token = environment.get("GH_TOKEN")
+        if not isinstance(token, str) or not token:
+            raise CredentialError("GitHub credentials are unavailable")
+        GitHubClient(GitAuth(token, SecretRedactor((token,)))).authenticated_login()
+    return dashboard
 
 
 def _distributions(manifest: BootstrapManifest) -> tuple[DistributionSource, ...]:

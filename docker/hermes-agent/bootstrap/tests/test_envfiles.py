@@ -17,12 +17,14 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 from hermes_bootstrap.errors import ApplyError, InputError
 from hermes_bootstrap.payload import DashboardSecret, SecretBundle, SecretRedactor, SlackSecret
 from hermes_bootstrap.envfiles import (
+    API_SERVER_KEYS,
     DASHBOARD_KEYS,
     GITHUB_KEYS,
     SLACK_KEYS,
     build_dashboard_environment,
     build_profile_environment,
     merge_env_file,
+    read_environment_values,
 )
 
 
@@ -99,6 +101,7 @@ class EnvFileTests(unittest.TestCase):
             SLACK_KEYS,
             frozenset({"SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"}),
         )
+        self.assertEqual(API_SERVER_KEYS, frozenset({"API_SERVER_KEY"}))
 
     def test_absent_file_creates_parents_and_canonical_managed_block(self) -> None:
         changed = merge_env_file(
@@ -372,11 +375,14 @@ class EnvFileTests(unittest.TestCase):
     def test_dashboard_is_hashed_once_and_profile_environment_reuses_it_without_plaintext(self) -> None:
         secrets = secret_bundle()
         with mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="hashed-password") as hash_password:
-            with mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe", return_value="signing-secret") as token_urlsafe:
+            with mock.patch(
+                "hermes_bootstrap.envfiles.secrets.token_urlsafe",
+                side_effect=("signing-secret", "api-server-key"),
+            ) as token_urlsafe:
                 dashboard = build_dashboard_environment(secrets)
 
         self.assertEqual(hash_password.call_args_list, [mock.call("dashboard-password")])
-        self.assertEqual(token_urlsafe.call_args_list, [mock.call(48)])
+        self.assertEqual(token_urlsafe.call_args_list, [mock.call(48), mock.call(48)])
         self.assertIsInstance(dashboard, MappingProxyType)
         self.assertEqual(
             dashboard,
@@ -384,9 +390,16 @@ class EnvFileTests(unittest.TestCase):
                 "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": "dashboard-user",
                 "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "hashed-password",
                 "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "signing-secret",
+                "API_SERVER_KEY": "api-server-key",
             },
         )
-        for secret in ("dashboard-user", "dashboard-password", "hashed-password", "signing-secret"):
+        for secret in (
+            "dashboard-user",
+            "dashboard-password",
+            "hashed-password",
+            "signing-secret",
+            "api-server-key",
+        ):
             self.assertNotIn(secret, repr(dashboard))
 
         root_environment = build_profile_environment("default", secrets, dashboard)
@@ -394,7 +407,7 @@ class EnvFileTests(unittest.TestCase):
         self.assertIsInstance(root_environment, MappingProxyType)
         self.assertEqual(root_environment["SLACK_BOT_TOKEN"], "default-bot")
         self.assertEqual(rick_environment["SLACK_BOT_TOKEN"], "rick-bot")
-        for key in GITHUB_KEYS | DASHBOARD_KEYS:
+        for key in GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS:
             self.assertEqual(root_environment[key], rick_environment[key])
         for environment in (root_environment, rick_environment):
             for secret in (
@@ -414,6 +427,56 @@ class EnvFileTests(unittest.TestCase):
             self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD", environment)
         with self.assertRaises(TypeError):
             root_environment["GH_TOKEN"] = "changed"
+
+    def test_dashboard_reuses_matching_hash_and_strong_signing_secret(self) -> None:
+        existing = MappingProxyType(
+            {
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "existing-hash",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "existing-signing-secret-that-is-long-enough",
+                "API_SERVER_KEY": "existing-independent-api-key-that-is-long-enough",
+            }
+        )
+
+        with mock.patch("hermes_bootstrap.envfiles._verify_password", return_value=True) as verify_password:
+            with mock.patch("hermes_bootstrap.envfiles.hash_password") as hash_password:
+                with mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe") as token_urlsafe:
+                    dashboard = build_dashboard_environment(secret_bundle(), existing)
+
+        verify_password.assert_called_once_with("dashboard-password", "existing-hash")
+        hash_password.assert_not_called()
+        token_urlsafe.assert_not_called()
+        self.assertEqual(
+            dashboard["HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH"],
+            "existing-hash",
+        )
+        self.assertEqual(
+            dashboard["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
+            "existing-signing-secret-that-is-long-enough",
+        )
+        self.assertEqual(
+            dashboard["API_SERVER_KEY"],
+            "existing-independent-api-key-that-is-long-enough",
+        )
+
+    def test_reads_only_unique_requested_values_from_a_regular_environment_file(self) -> None:
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(
+            "KEEP=visible\n"
+            "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=existing-hash\n"
+            "HERMES_DASHBOARD_BASIC_AUTH_SECRET=existing-secret\n",
+            encoding="utf-8",
+        )
+
+        values = read_environment_values(self.path, DASHBOARD_KEYS | API_SERVER_KEYS)
+
+        self.assertEqual(
+            values,
+            {
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "existing-hash",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "existing-secret",
+            },
+        )
+        self.assertNotIn("existing-secret", repr(values))
 
     def test_profile_environment_rejects_unknown_profile_without_secret_error(self) -> None:
         secrets = secret_bundle()

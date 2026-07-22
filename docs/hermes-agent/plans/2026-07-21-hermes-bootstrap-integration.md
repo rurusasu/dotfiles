@@ -197,7 +197,7 @@ install.sh -> OS installer -> shell adapter -> hermes-bootstrap -> compose up
 install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter -> hermes-bootstrap -> compose up
 ```
 
-- [ ] In `profile-home-layout.md`, document `/opt/data` as runtime root, official named distributions under `profiles/`, shared repositories under `shared/`, and compatibility symlinks under `core/`.
+- [ ] In `profile-home-layout.md`, document `/opt/data` as runtime root, official named distributions under `profiles/`, shared repositories under `shared/`, and the absence of legacy runtime paths under `core/` after migration.
 
 - [ ] In `bootstrap.md`, document prerequisites, the six 1Password item names and fields without values, failure exit codes, transaction recovery, lock contention, migration conflicts, rerun behavior, and redacted diagnostics.
 
@@ -225,7 +225,7 @@ pre-commit run --files docs/hermes-agent/bootstrap-design.md docs/hermes-agent/b
 
 - [ ] Add a fixture matching the current runtime shape: default profile only, existing root `.env`, optional named-profile directories without distribution metadata, `/opt/data/core/lifelog` as a real checkout, and mutable memory/session sentinels.
 
-- [ ] Verify first migration moves the lifelog checkout to `/opt/data/shared/lifelog`, creates the relative compatibility symlink, installs three distributions, applies root-owned files, preserves all sentinels and unmanaged env keys, and writes each profile's own Slack tokens.
+- [ ] Verify first migration moves the lifelog checkout to `/opt/data/shared/lifelog`, removes the legacy path, installs three distributions, applies root-owned files, preserves all sentinels and unmanaged env keys, and writes each profile's own Slack tokens.
 
 - [ ] Add a fixture where both old and new lifelog paths contain data. Assert migration exit code `5`, no distribution/env changes, no Compose recreation, and a conflict message naming both paths.
 

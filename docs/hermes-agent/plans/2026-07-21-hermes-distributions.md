@@ -15,7 +15,7 @@
 - Keep `main` as the declared source ref and use pull requests; merge profile repositories before enabling the dotfiles bootstrap.
 - Use `hermes_requires: ">=0.18.2"` and start every new distribution manifest at version `0.1.0`.
 - Treat `config.yaml`, `SOUL.md`, policy docs, cron definitions, scripts, and MCP declarations as source-repository-owned content after this migration.
-- Keep `/opt/data/shared/lifelog` as the canonical runtime path. `/opt/data/core/lifelog` is only a compatibility symlink created by bootstrap.
+- Keep `/opt/data/shared/lifelog` as the canonical runtime path. Bootstrap uses `/opt/data/core/lifelog` only as migration metadata and leaves that legacy path absent after success.
 - Run secret scans and inspect every staged diff before pushing.
 - Every distribution repository must contain `.github/workflows/distribution.yml`, `.pre-commit-config.yaml`, `scripts/validate_distribution.py`, tests for that driver, and an ignored `.hermes-validation/` report directory.
 - The validator interface is exactly `python3 scripts/validate_distribution.py {fast,full} [--json] [--output PATH]`; validator/schema versions are `1.0.0`/`1`, and exit codes are `0` pass, `1` validation failure, `2` prerequisite unavailable, and `3` internal error.

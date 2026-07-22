@@ -13,7 +13,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import AbstractSet
 
-from plugins.dashboard_auth.basic import hash_password
+from hermes_cli.auth import has_usable_secret
+from plugins.dashboard_auth.basic import _verify_password, hash_password
 
 from .errors import ApplyError, BootstrapError, InputError
 from .payload import SecretBundle
@@ -33,6 +34,7 @@ DASHBOARD_KEYS = frozenset(
         "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
     }
 )
+API_SERVER_KEYS = frozenset({"API_SERVER_KEY"})
 SLACK_KEYS = frozenset(
     {
         "SLACK_BOT_TOKEN",
@@ -103,11 +105,44 @@ def _merge_env_file(path: Path, managed: Mapping[str, str], remove: AbstractSet[
     return True
 
 
-def build_dashboard_environment(bundle: SecretBundle) -> Mapping[str, str]:
+def read_environment_values(path: Path, keys: AbstractSet[str]) -> Mapping[str, str]:
+    """Read unique requested assignments without exposing values in diagnostics."""
+
+    for key in keys:
+        _validate_environment_key(key)
+    original = _read_regular_file(path)
+    if original is None:
+        return _private_mapping({})
+    try:
+        text = original.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        lines = text.split("\n")
+    except UnicodeDecodeError:
+        raise ApplyError("environment file is not valid UTF-8") from None
+
+    values: dict[str, str] = {}
+    duplicates: set[str] = set()
+    for line in lines:
+        match = _ASSIGNMENT.match(line)
+        if match is None:
+            continue
+        key = match.group(1)
+        if key not in keys or key in duplicates:
+            continue
+        if key in values:
+            values.pop(key)
+            duplicates.add(key)
+            continue
+        values[key] = line[match.end() :]
+    return _private_mapping(values)
+
+
+def build_dashboard_environment(
+    bundle: SecretBundle, existing: Mapping[str, str] | None = None
+) -> Mapping[str, str]:
     """Derive the one shared, plaintext-free dashboard environment mapping."""
 
-    outcome = _build_dashboard_environment_boundary(bundle)
-    del bundle
+    outcome = _build_dashboard_environment_boundary(bundle, existing or {})
+    del bundle, existing
     if isinstance(outcome, _EnvironmentFailure):
         error_type = outcome.error_type
         message = outcome.message
@@ -117,24 +152,46 @@ def build_dashboard_environment(bundle: SecretBundle) -> Mapping[str, str]:
 
 
 def _build_dashboard_environment_boundary(
-    bundle: SecretBundle,
+    bundle: SecretBundle, existing: Mapping[str, str]
 ) -> Mapping[str, str] | _EnvironmentFailure:
     try:
-        return _build_dashboard_environment(bundle)
+        return _build_dashboard_environment(bundle, existing)
     except BootstrapError as error:
         return _EnvironmentFailure(type(error), str(error))
 
 
-def _build_dashboard_environment(bundle: SecretBundle) -> Mapping[str, str]:
+def _build_dashboard_environment(
+    bundle: SecretBundle, existing: Mapping[str, str]
+) -> Mapping[str, str]:
     try:
         username = bundle.dashboard.username
         password = bundle.dashboard.password
-        password_hash = hash_password(password)
-        signing_secret = secrets.token_urlsafe(48)
+        existing_hash = existing.get("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH", "")
+        password_hash = (
+            existing_hash
+            if isinstance(existing_hash, str)
+            and _verify_password(password, existing_hash)
+            else hash_password(password)
+        )
+        existing_secret = existing.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET", "")
+        signing_secret = (
+            existing_secret
+            if isinstance(existing_secret, str)
+            and has_usable_secret(existing_secret, min_length=16)
+            else secrets.token_urlsafe(48)
+        )
+        existing_api_key = existing.get("API_SERVER_KEY", "")
+        api_key = (
+            existing_api_key
+            if isinstance(existing_api_key, str)
+            and has_usable_secret(existing_api_key, min_length=16)
+            else secrets.token_urlsafe(48)
+        )
         result = {
             "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": username,
             "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": password_hash,
             "HERMES_DASHBOARD_BASIC_AUTH_SECRET": signing_secret,
+            "API_SERVER_KEY": api_key,
         }
         _validate_environment_mapping(result, frozenset())
     except (AttributeError, TypeError, ValueError):
@@ -195,7 +252,7 @@ def _build_profile_environment(
 
 
 def _validate_dashboard_mapping(dashboard: Mapping[str, str]) -> None:
-    if set(dashboard) != DASHBOARD_KEYS:
+    if set(dashboard) != DASHBOARD_KEYS | API_SERVER_KEYS:
         raise InputError("dashboard environment mapping is invalid")
     _validate_environment_mapping(dashboard, frozenset())
 

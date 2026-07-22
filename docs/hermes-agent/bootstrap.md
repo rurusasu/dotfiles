@@ -79,6 +79,15 @@ The bootstrap validates GitHub authentication and repository access, then writes
 only managed keys to root/profile `.env` files. Secret values never belong in
 this repository or these docs.
 
+Managed runtime keys include the three GitHub token aliases, the dashboard
+username/hash/signing secret, `API_SERVER_KEY`, and each profile's Slack
+credentials. The API key and dashboard signing secret are independently
+generated strong values read by Hermes from the private `.env`; neither is
+embedded in Compose. On a repeat apply, bootstrap verifies the current
+dashboard password against the installed scrypt hash and preserves that hash,
+a valid signing secret, and a valid API key. This keeps repeat runs idempotent
+while still rotating material when its source or installed value is invalid.
+
 ## Sources And Layout
 
 `/opt/data` is the runtime root, not a Git checkout. Its canonical managed
@@ -110,6 +119,11 @@ The local transaction uses a single-writer lock and journals snapshots under
 working-tree moves, deprecated-path cleanup, and `.env` files are staged or
 snapshotted before replacement. Environment files are atomically renamed with
 mode `0600`, preserve unmanaged keys, and replace managed secret keys.
+
+The gateway binds its authenticated API to `0.0.0.0:8642` inside the container
+so Docker port forwarding can reach it. Compose publishes that port only on
+host loopback (`127.0.0.1`); Hermes refuses to start the API without the managed
+strong `API_SERVER_KEY`.
 
 If a local apply or final validation fails, bootstrap restores all recorded
 local paths and leaves the existing Compose stack running. A remote lifelog

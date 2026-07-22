@@ -24,6 +24,7 @@ services:
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
         target: /root/.xurl
     environment:
+      API_SERVER_HOST: "0.0.0.0"
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
       LIFELOG_ROOT: /opt/data/shared/lifelog

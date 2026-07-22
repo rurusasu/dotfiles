@@ -46,6 +46,11 @@ class ComposeContractTests(unittest.TestCase):
     def test_gateway_uses_the_canonical_shared_lifelog_path(self) -> None:
         self.assertEqual(self.hermes["environment"]["LIFELOG_ROOT"], "/opt/data/shared/lifelog")
 
+    def test_gateway_exposes_the_authenticated_api_on_the_container_interface(self) -> None:
+        self.assertEqual(self.hermes["environment"]["API_SERVER_HOST"], "0.0.0.0")
+        self.assertIn("127.0.0.1:${HERMES_API_PORT:-8642}:8642", self.hermes["ports"])
+        self.assertNotIn("API_SERVER_KEY", self.hermes["environment"])
+
     def test_dockerfile_builds_runtime_test_and_final_stages(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
         pinned_base = (

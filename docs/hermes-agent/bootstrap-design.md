@@ -227,6 +227,14 @@ Slack and dashboard fields are also mandatory. Managed profile Slack tokens are
 profile-specific and replace any cloned or stale platform token before a
 profile gateway can restart.
 
+Bootstrap generates independent strong random values for `API_SERVER_KEY` and
+`HERMES_DASHBOARD_BASIC_AUTH_SECRET`. It persists them only in private
+root/profile `.env` files. A repeat apply verifies the supplied dashboard
+password against the installed scrypt hash and reuses a valid hash, signing
+secret, and API key, avoiding unintended credential rotation. Compose sets
+only `API_SERVER_HOST=0.0.0.0` in the container and publishes port `8642` on
+host loopback.
+
 ## Runtime `gh` Authentication
 
 `docker/hermes-agent/gh-wrapper.sh` resolves credentials in this order:
@@ -290,7 +298,8 @@ browser data, X credentials, and other runtime paths do not move.
 - If both old and new lifelog paths contain data, bootstrap stops and reports a
   migration conflict rather than merging automatically.
 - Existing `.env` files retain unmanaged keys. Managed secret keys are replaced
-  from 1Password.
+  from 1Password, while a matching dashboard hash and valid independent
+  signing/API secrets are preserved for repeat-run idempotency.
 - Backups remain until final validation succeeds and are removed only after the
   transaction commits.
 
