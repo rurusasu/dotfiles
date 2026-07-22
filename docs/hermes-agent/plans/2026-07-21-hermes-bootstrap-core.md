@@ -227,9 +227,9 @@ Implement exact callables `merge_env_file(path: Path, managed: Mapping[str, str]
 
 - [ ] Preserve every unmanaged line in original order, remove all existing instances of managed keys, append one canonical managed block, write LF, fsync the temporary file, rename atomically, and enforce `0600` even when content is unchanged.
 
-- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for independent signing and API secrets. Reuse an installed hash only after verifying the current 1Password password and preserve only valid strong secrets. Build this mapping exactly once per bootstrap run and reuse it for root and every named profile so all targets receive the same credentials. The plaintext 1Password password is never written.
+- [ ] Use `plugins.dashboard_auth.basic.hash_password` from the pinned Hermes image to derive the dashboard password hash, and use `secrets.token_urlsafe(48)` for independent signing and API secrets. Reuse an installed hash only after verifying the current 1Password password and preserve only valid strong secrets. Build this mapping exactly once per bootstrap run; share the dashboard values with every target, write the API key only to root/default, and remove stale API keys from named profiles. The plaintext 1Password password is never written.
 
-- [ ] Write the same GitHub and dashboard values to root and all managed profiles; write each profile's own Slack values and remove stale shared Slack values before appending.
+- [ ] Write the same GitHub and dashboard values to root and all managed profiles; write each profile's own Slack values, keep the API key root-only, and remove stale shared Slack/API values before appending.
 
 - [ ] Run the unit suite.
 
@@ -353,7 +353,7 @@ Implement `synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSy
 
 - [ ] Keep remote synchronization outside the local rollback boundary. A successful commit/push is valid even when a later distribution apply fails.
 
-- [ ] Inside the local transaction, clone a missing canonical checkout at `RemoteSyncResult.commit`, or atomically move the legacy checkout to the canonical target. If both paths contain real data, raise migration exit code `5`. Create `/opt/data/core/lifelog -> ../shared/lifelog` only after the canonical target is valid.
+- [ ] Inside the local transaction, clone a missing canonical checkout at `RemoteSyncResult.commit`, or atomically move the legacy checkout to the canonical target. If both paths contain real data, raise migration exit code `5`. Remove an empty legacy directory or compatibility symlink transactionally after the canonical target is valid.
 
 - [ ] Run repository tests with local bare remotes and two competing lock processes.
 

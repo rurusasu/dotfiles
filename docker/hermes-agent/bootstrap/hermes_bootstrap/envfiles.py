@@ -9,10 +9,12 @@ import stat
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 from types import MappingProxyType
 from typing import AbstractSet
 
+from dotenv.parser import parse_stream
 from hermes_cli.auth import has_usable_secret
 from plugins.dashboard_auth.basic import _verify_password, hash_password
 
@@ -45,6 +47,8 @@ SLACK_KEYS = frozenset(
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ASSIGNMENT = re.compile(r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=")
+_API_SERVER_KEY_PREFIX = "hermes-bootstrap-v1_"
+_API_SERVER_KEY_BODY = re.compile(r"[A-Za-z0-9_-]{64}\Z")
 
 
 class _SecretEnvironmentValue(str):
@@ -115,24 +119,23 @@ def read_environment_values(path: Path, keys: AbstractSet[str]) -> Mapping[str, 
         return _private_mapping({})
     try:
         text = original.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
-        lines = text.split("\n")
     except UnicodeDecodeError:
         raise ApplyError("environment file is not valid UTF-8") from None
 
     values: dict[str, str] = {}
     duplicates: set[str] = set()
-    for line in lines:
-        match = _ASSIGNMENT.match(line)
-        if match is None:
+    for binding in parse_stream(StringIO(text)):
+        key = binding.key
+        if binding.error or key is None or key not in keys or key in duplicates:
             continue
-        key = match.group(1)
-        if key not in keys or key in duplicates:
+        value = binding.value
+        if not isinstance(value, str):
             continue
         if key in values:
             values.pop(key)
             duplicates.add(key)
             continue
-        values[key] = line[match.end() :]
+        values[key] = value
     return _private_mapping(values)
 
 
@@ -183,9 +186,8 @@ def _build_dashboard_environment(
         existing_api_key = existing.get("API_SERVER_KEY", "")
         api_key = (
             existing_api_key
-            if isinstance(existing_api_key, str)
-            and has_usable_secret(existing_api_key, min_length=16)
-            else secrets.token_urlsafe(48)
+            if _is_reusable_api_server_key(existing_api_key)
+            else _API_SERVER_KEY_PREFIX + secrets.token_urlsafe(48)
         )
         result = {
             "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": username,
@@ -239,7 +241,9 @@ def _build_profile_environment(
         "GITHUB_TOKEN": secrets.github_token,
     }
     _validate_dashboard_mapping(dashboard)
-    environment.update(dashboard)
+    environment.update({key: dashboard[key] for key in DASHBOARD_KEYS})
+    if profile == "default":
+        environment.update({key: dashboard[key] for key in API_SERVER_KEYS})
     environment.update(
         {
             "SLACK_BOT_TOKEN": slack.bot_token,
@@ -255,6 +259,13 @@ def _validate_dashboard_mapping(dashboard: Mapping[str, str]) -> None:
     if set(dashboard) != DASHBOARD_KEYS | API_SERVER_KEYS:
         raise InputError("dashboard environment mapping is invalid")
     _validate_environment_mapping(dashboard, frozenset())
+
+
+def _is_reusable_api_server_key(value: object) -> bool:
+    if not isinstance(value, str) or not value.startswith(_API_SERVER_KEY_PREFIX):
+        return False
+    body = value.removeprefix(_API_SERVER_KEY_PREFIX)
+    return _API_SERVER_KEY_BODY.fullmatch(body) is not None and len(set(body)) >= 16
 
 
 def _private_mapping(values: Mapping[str, str]) -> Mapping[str, str]:

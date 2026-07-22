@@ -15,8 +15,6 @@ host ~/.hermes/                    container /opt/data/
 │   └── risarisa/                  official Hermes distribution target
 ├── shared/
 │   └── lifelog/                   the one writable shared Git checkout
-├── core/
-│   └── lifelog -> ../shared/lifelog
 ├── memories/                      runtime state
 ├── sessions/
 └── logs/

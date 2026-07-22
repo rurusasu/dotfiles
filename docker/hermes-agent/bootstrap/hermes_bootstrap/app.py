@@ -340,8 +340,13 @@ def _validate_installed_layout(
         _validate_root_state(manifest)
         _validate_profiles(manifest)
         _validate_repositories(manifest)
-        for _profile, target in _environment_targets(manifest):
-            _validate_env_file(target / ".env")
+        for profile, target in _environment_targets(manifest):
+            required = (
+                _MANAGED_ENV_KEYS
+                if profile == "default"
+                else _MANAGED_ENV_KEYS - API_SERVER_KEYS
+            )
+            _validate_env_file(target / ".env", required)
         if not allow_active_transaction:
             _validate_no_transaction(root)
     except ValidationError:
@@ -417,7 +422,7 @@ def _validate_repositories(manifest: BootstrapManifest) -> None:
             raise ValidationError("deprecated shared repository path remains")
 
 
-def _validate_env_file(path: Path) -> None:
+def _validate_env_file(path: Path, required: frozenset[str]) -> None:
     try:
         metadata = path.lstat()
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
@@ -437,7 +442,7 @@ def _validate_env_file(path: Path) -> None:
             seen.add(key)
         if key == _PLAINTEXT_DASHBOARD_PASSWORD:
             raise ValidationError("installed environment file is invalid")
-    if seen != _MANAGED_ENV_KEYS:
+    if seen != required:
         raise ValidationError("installed environment file is invalid")
 
 

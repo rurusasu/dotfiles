@@ -137,9 +137,18 @@ class AppTests(unittest.TestCase):
         target = self.write_installed_profile()
         (target / "config.yaml").write_text("config\n", encoding="utf-8")
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
-        env_content = "".join(f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS))
-        for env_path in (self.root / ".env", target / ".env"):
-            env_path.write_text(env_content, encoding="utf-8")
+        root_env = "".join(
+            f"{key}=value\n" for key in sorted(app._MANAGED_ENV_KEYS)
+        )
+        profile_env = "".join(
+            f"{key}=value\n"
+            for key in sorted(app._MANAGED_ENV_KEYS - app.API_SERVER_KEYS)
+        )
+        for env_path, content in (
+            (self.root / ".env", root_env),
+            (target / ".env", profile_env),
+        ):
+            env_path.write_text(content, encoding="utf-8")
             env_path.chmod(0o600)
 
     def transaction_lock_path(self) -> Path:

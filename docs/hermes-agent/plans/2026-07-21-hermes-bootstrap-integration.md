@@ -263,7 +263,7 @@ op item get GitHubUsedOpenClawPAT --account my.1password.com --vault openclaw --
 ```bash
 docker exec hermes /opt/hermes/.venv/bin/hermes profile list
 docker exec hermes test -d /opt/data/shared/lifelog/.git
-docker exec hermes sh -c 'test "$(readlink /opt/data/core/lifelog)" = ../shared/lifelog'
+docker exec hermes test ! -e /opt/data/core/lifelog
 docker exec hermes test ! -e /opt/data/.git
 docker exec hermes test ! -e /opt/data/profiles/rick/.git
 docker exec hermes test ! -e /opt/data/profiles/hoffman/.git
@@ -286,7 +286,7 @@ Expected: all four commands authenticate as `rurusasu`.
 - [ ] Verify root/profile environment permissions and required key names without printing values.
 
 ```bash
-docker exec hermes sh -c 'for f in /opt/data/.env /opt/data/profiles/rick/.env /opt/data/profiles/hoffman/.env /opt/data/profiles/risarisa/.env; do test "$(stat -c %a "$f")" = 600; grep -q "^GH_TOKEN=" "$f"; grep -q "^SLACK_BOT_TOKEN=" "$f"; done'
+docker exec hermes sh -c 'for f in /opt/data/.env /opt/data/profiles/rick/.env /opt/data/profiles/hoffman/.env /opt/data/profiles/risarisa/.env; do test "$(stat -c %a "$f")" = 600; grep -q "^GH_TOKEN=" "$f"; grep -q "^SLACK_BOT_TOKEN=" "$f"; done; grep -q "^API_SERVER_KEY=" /opt/data/.env; for f in /opt/data/profiles/rick/.env /opt/data/profiles/hoffman/.env /opt/data/profiles/risarisa/.env; do ! grep -q "^API_SERVER_KEY=" "$f"; done'
 ```
 
 - [ ] Verify root API/dashboard/browser and all profile gateways.

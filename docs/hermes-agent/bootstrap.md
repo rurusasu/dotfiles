@@ -80,13 +80,15 @@ only managed keys to root/profile `.env` files. Secret values never belong in
 this repository or these docs.
 
 Managed runtime keys include the three GitHub token aliases, the dashboard
-username/hash/signing secret, `API_SERVER_KEY`, and each profile's Slack
-credentials. The API key and dashboard signing secret are independently
-generated strong values read by Hermes from the private `.env`; neither is
-embedded in Compose. On a repeat apply, bootstrap verifies the current
-dashboard password against the installed scrypt hash and preserves that hash,
-a valid signing secret, and a valid API key. This keeps repeat runs idempotent
-while still rotating material when its source or installed value is invalid.
+username/hash/signing secret, and each profile's Slack credentials. Root also
+owns `API_SERVER_KEY`; bootstrap removes that key from named-profile `.env`
+files so their gateways do not compete for the root API port. The API key and
+dashboard signing secret are independently generated strong values read by
+Hermes from private `.env` files; neither is embedded in Compose. On a repeat
+apply, bootstrap verifies the current dashboard password against the installed
+scrypt hash and preserves that hash, a valid signing secret, and a valid
+bootstrap-issued root API key. This keeps repeat runs idempotent while rotating
+material when its source or installed value is invalid.
 
 ## Sources And Layout
 

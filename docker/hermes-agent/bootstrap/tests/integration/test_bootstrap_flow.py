@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -14,7 +15,7 @@ import threading
 import unittest
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
-from hashlib import sha256
+from hashlib import sha256, sha384
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
@@ -263,6 +264,7 @@ class BootstrapFlowTests(unittest.TestCase):
         self.profile_tmpdir_before = self._snapshot_tree(
             self.profile_tmpdir, include_root=False
         )
+        self.generated_secret_counter = 0
         self.data_root = self.fixture_root / "data"
         self.data_root.mkdir()
         app.Transaction.recover_if_needed(self.data_root)
@@ -503,9 +505,18 @@ class BootstrapFlowTests(unittest.TestCase):
                     mock.patch.object(subprocess, "Popen", side_effect=audited_popen),
                     mock.patch.object(tempfile, "tempdir", str(self.profile_tmpdir)),
                     mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
-                    mock.patch("hermes_bootstrap.envfiles.secrets.token_urlsafe", return_value="fixture-signing-secret"),
+                    mock.patch(
+                        "hermes_bootstrap.envfiles.secrets.token_urlsafe",
+                        side_effect=self._next_fixture_secret,
+                    ),
                 ):
                     yield
+
+    def _next_fixture_secret(self, nbytes: int) -> str:
+        self.assertEqual(nbytes, 48)
+        self.generated_secret_counter += 1
+        digest = sha384(f"fixture-secret-{self.generated_secret_counter}".encode()).digest()
+        return base64.urlsafe_b64encode(digest).decode("ascii")
 
     def _apply(self, token: str = FIXTURE_TOKEN) -> dict[str, object]:
         with self._patched_runtime():
@@ -885,6 +896,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
                 "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
                 "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
+                "API_SERVER_KEY",
                 "SLACK_BOT_TOKEN",
                 "SLACK_APP_TOKEN",
                 "SLACK_ALLOWED_USERS",
@@ -961,6 +973,11 @@ class BootstrapFlowTests(unittest.TestCase):
                                 line = f"{key}=stale-managed-{revision}-{profile}"
                                 replaced.add(key)
                             stale_lines.append(line)
+                        if "API_SERVER_KEY" not in replaced:
+                            stale_lines.append(
+                                f"API_SERVER_KEY=stale-managed-{revision}-{profile}"
+                            )
+                            replaced.add("API_SERVER_KEY")
                         self.assertEqual(replaced, managed_env_keys)
                         self.assertTrue(
                             unmanaged_env_markers[profile]
@@ -1199,11 +1216,73 @@ class BootstrapFlowTests(unittest.TestCase):
             "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
             "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
             "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
+            "API_SERVER_KEY",
             "SLACK_BOT_TOKEN",
             "SLACK_APP_TOKEN",
             "SLACK_ALLOWED_USERS",
         ):
             self.assertEqual(sum(line.startswith(f"{key}=") for line in root_env.splitlines()), 1)
+        root_values = dict(
+            line.partition("=")[::2]
+            for line in root_env.splitlines()
+            if "=" in line
+        )
+        self.assertNotEqual(
+            root_values["API_SERVER_KEY"],
+            root_values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
+        )
+
+        for profile in PROFILE_NAMES:
+            profile_env = (
+                self.data_root / "profiles" / profile / ".env"
+            ).read_text(encoding="utf-8")
+            self.assertFalse(
+                any(
+                    line.startswith("API_SERVER_KEY=")
+                    for line in profile_env.splitlines()
+                )
+            )
+
+        original_api_key = root_values["API_SERVER_KEY"]
+        root_path = self.data_root / ".env"
+        root_path.write_text(
+            root_path.read_text(encoding="utf-8")
+            + f"API_SERVER_KEY={original_api_key}\n",
+            encoding="utf-8",
+        )
+        for profile in PROFILE_NAMES:
+            profile_path = self.data_root / "profiles" / profile / ".env"
+            profile_path.write_text(
+                profile_path.read_text(encoding="utf-8")
+                + "API_SERVER_KEY=stale-named-profile-key\n",
+                encoding="utf-8",
+            )
+
+        self.assertEqual(self._apply()["status"], "applied")
+
+        refreshed_root = root_path.read_text(encoding="utf-8")
+        refreshed_values = dict(
+            line.partition("=")[::2]
+            for line in refreshed_root.splitlines()
+            if "=" in line
+        )
+        self.assertEqual(
+            sum(
+                line.startswith("API_SERVER_KEY=")
+                for line in refreshed_root.splitlines()
+            ),
+            1,
+        )
+        self.assertNotEqual(refreshed_values["API_SERVER_KEY"], original_api_key)
+        self.assertNotEqual(
+            refreshed_values["API_SERVER_KEY"],
+            refreshed_values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
+        )
+        for profile in PROFILE_NAMES:
+            profile_env = (
+                self.data_root / "profiles" / profile / ".env"
+            ).read_text(encoding="utf-8")
+            self.assertNotIn("API_SERVER_KEY=", profile_env)
 
     def test_next_apply_recovers_crashed_durable_transaction_before_reading_payload(self) -> None:
         self._initial_apply()
