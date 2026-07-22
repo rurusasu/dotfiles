@@ -62,6 +62,10 @@ def secret_items() -> dict[str, dict[str, object]]:
             "slack-risarisa-id",
             {"bot_token": "xoxb-risarisa", "app_token": "xapp-risarisa", "allowed_users": "URISARISA"},
         ),
+        "slack_nancy": raw_item(
+            "slack-nancy-id",
+            {"bot_token": "xoxb-nancy", "app_token": "xapp-nancy", "allowed_users": "UNANCY"},
+        ),
     }
 
 
