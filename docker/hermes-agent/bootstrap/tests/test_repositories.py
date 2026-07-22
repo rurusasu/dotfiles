@@ -586,6 +586,31 @@ class RepositoryTests(unittest.TestCase):
         for leftover in leftovers:
             real_rmtree(leftover)
 
+    def test_synchronize_rejects_two_real_paths_before_committing_or_pushing_canonical_changes(
+        self,
+    ) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        self.clone(repo.legacy_target)
+        (repo.target / "local.md").write_text("local\n", encoding="utf-8")
+        canonical_head = run_git("rev-parse", "HEAD", cwd=repo.target)
+        canonical_status = run_git_bytes(
+            "status", "--porcelain=v1", "-z", "--untracked-files=all", cwd=repo.target
+        )
+        remote_head = self.remote_head()
+
+        with self.assertRaises(MigrationError):
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), canonical_head)
+        self.assertEqual(
+            run_git_bytes(
+                "status", "--porcelain=v1", "-z", "--untracked-files=all", cwd=repo.target
+            ),
+            canonical_status,
+        )
+        self.assertEqual(self.remote_head(), remote_head)
+
     def test_apply_migrates_legacy_rejects_two_real_paths_and_is_idempotent(self) -> None:
         repo = self.repository()
         self.clone(repo.legacy_target)

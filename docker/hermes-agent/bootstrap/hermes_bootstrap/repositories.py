@@ -129,6 +129,12 @@ def synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResul
     """Synchronize one declared repository without entering the local transaction."""
 
     result = _synchronize_remote_boundary(repo, auth)
+    if isinstance(result, _MigrationFailure):
+        message = f"shared repository data exists at {result.canonical} and {result.legacy}"
+        del result
+        del repo
+        del auth
+        raise MigrationError(message)
     if isinstance(result, _Failure):
         message = result.message
         del result
@@ -181,7 +187,9 @@ def synchronize_named_repository(
     return synchronize_remote(selected, auth)
 
 
-def _synchronize_remote_boundary(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResult | _Failure:
+def _synchronize_remote_boundary(
+    repo: SharedRepository, auth: GitAuth
+) -> RemoteSyncResult | _Failure | _MigrationFailure:
     stage: Path | None = None
     askpass: Path | None = None
     outcome: RemoteSyncResult | _Failure
@@ -190,6 +198,8 @@ def _synchronize_remote_boundary(repo: SharedRepository, auth: GitAuth) -> Remot
         lock_path = _lock_path(repo)
         with _RepositoryLock(lock_path):
             working_tree = _selected_working_tree(repo)
+            if isinstance(working_tree, _MigrationFailure):
+                return working_tree
             if working_tree is None:
                 _ensure_safe_directory(repo.target.parent)
                 stage = Path(tempfile.mkdtemp(prefix=".hermes-repository-", dir=repo.target.parent))
@@ -271,11 +281,16 @@ def _lock_path(repo: SharedRepository) -> Path:
     return repo.target.parent.parent / "locks" / "repositories" / f"{repo.name}.lock"
 
 
-def _selected_working_tree(repo: SharedRepository) -> Path | None:
+def _selected_working_tree(repo: SharedRepository) -> Path | _MigrationFailure | None:
     canonical = _real_data_state(repo.target, allow_legacy_link=False, repo=repo)
+    legacy = False
+    if repo.legacy_target is not None:
+        legacy = _real_data_state(repo.legacy_target, allow_legacy_link=True, repo=repo)
+    if canonical and legacy:
+        return _MigrationFailure(repo.target, repo.legacy_target)
     if canonical:
         return repo.target
-    if repo.legacy_target is not None and _real_data_state(repo.legacy_target, allow_legacy_link=True, repo=repo):
+    if legacy:
         return repo.legacy_target
     return None
 
