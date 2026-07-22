@@ -155,6 +155,12 @@ class ProfileSnapshotTests(unittest.TestCase):
             "token.json/payload.txt",
             "credentials.pem/nested/data.txt",
             "secret.txt/archive/payload.txt",
+            "secrets.json/payload.txt",
+            "token.backup.json/archive/payload.txt",
+            "credentials.prod.yaml/nested/data.txt",
+            "assets/runtime/cache.bin",
+            "assets/cron/state/checkpoint.json",
+            "nested/cron/output/latest.log",
         )
         for index, unsafe in enumerate(unsafe_paths):
             with self.subTest(unsafe=unsafe):
@@ -173,6 +179,24 @@ class ProfileSnapshotTests(unittest.TestCase):
 
                 self.assertEqual(caught.exception.category, "invalid_local_profile")
                 self.assertEqual(list(scratch.iterdir()), [])
+
+        safe_home = self.write_profile(
+            "legitimate", ["assets/avatar.png", "portfolio.pdf"]
+        )
+        (safe_home / "assets").mkdir()
+        (safe_home / "assets" / "avatar.png").write_bytes(b"avatar")
+        (safe_home / "portfolio.pdf").write_bytes(b"portfolio")
+        safe_scratch = self.root / "legitimate-scratch"
+        safe_scratch.mkdir(mode=0o700)
+
+        snapshot = prepare_profile_snapshots(
+            self.manifest(self.profile("legitimate")), safe_scratch, allow_missing=False
+        ).snapshots[0]
+
+        self.assertEqual(
+            [entry.path.as_posix() for entry in snapshot.entries],
+            ["assets/avatar.png", "portfolio.pdf"],
+        )
 
     def test_rejects_a_secret_crossing_the_streaming_chunk_boundary(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -317,6 +341,38 @@ class ProfileSnapshotTests(unittest.TestCase):
         with self.assertRaises(ProfileSnapshotError):
             prepare_profile_snapshots(self.manifest(profile), self.scratch, allow_missing=False)
 
+    def test_all_missing_profiles_still_recheck_scratch_at_the_end(self) -> None:
+        profiles = (self.profile("rick"), self.profile("hoffman"))
+        original_exists = profile_snapshot._path_exists
+        probes = 0
+        changed = False
+
+        def probe_then_chmod(path: Path) -> bool:
+            nonlocal probes, changed
+            exists = original_exists(path)
+            probes += 1
+            if probes == len(profiles):
+                self.scratch.chmod(0o755)
+                changed = True
+            return exists
+
+        try:
+            with mock.patch.object(
+                profile_snapshot, "_path_exists", side_effect=probe_then_chmod
+            ):
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(*profiles), self.scratch, allow_missing=True
+                    )
+        finally:
+            self.scratch.chmod(0o700)
+
+        self.assertTrue(changed)
+        self.assertEqual(probes, 2)
+        self.assertEqual(caught.exception.profile, "hoffman")
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_rejects_group_or_world_accessible_scratch(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -460,15 +516,20 @@ class ProfileSnapshotTests(unittest.TestCase):
         replacement = self.root / "replacement.txt"
         replacement.write_text("replacement\n", encoding="utf-8")
         original_write = profile_snapshot._write_descriptor
+        replaced = False
 
         def write_then_replace(descriptor: int, content: bytes) -> None:
+            nonlocal replaced
             original_write(descriptor, content)
-            if content == b"one":
+            if content == b"one" and not replaced:
                 os.replace(replacement, home / "assets" / "Avatar.png")
+                replaced = True
 
         with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_replace):
-            with self.assertRaises(ProfileSnapshotError):
+            with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
     def test_rejects_case_colliding_ancestors_and_control_name_variants(self) -> None:
@@ -542,7 +603,9 @@ class ProfileSnapshotTests(unittest.TestCase):
         content = b"canonical-snapshot-content\n"
         (home / "SOUL.md").write_bytes(content)
         replacement = self.root / "destination-replacement"
-        replacement.write_bytes(b"altered-after-copy\n")
+        marker = b"altered-after-copy\n"
+        replacement.write_bytes(marker)
+        replacement_inode = replacement.stat().st_ino
         original_write = profile_snapshot._write_descriptor
         replaced = False
 
@@ -557,8 +620,10 @@ class ProfileSnapshotTests(unittest.TestCase):
             with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertTrue(replaced)
-        self.assertEqual(caught.exception.category, "invalid_local_profile")
-        self.assertFalse((self.scratch / "rick").exists())
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        retained = self.scratch / "rick" / "SOUL.md"
+        self.assertEqual(retained.stat().st_ino, replacement_inode)
+        self.assertEqual(retained.read_bytes(), marker)
 
     def test_final_recursive_attestation_rejects_late_inventory_mutations(self) -> None:
         for index, mutation in enumerate(("insert", "delete", "replace")):
@@ -570,6 +635,7 @@ class ProfileSnapshotTests(unittest.TestCase):
                 scratch.mkdir(mode=0o700)
                 replacement = self.root / f"late-replacement-{index}"
                 replacement.write_bytes(b"evil\n")
+                replacement_inode = replacement.stat().st_ino
                 original_verify_file = profile_snapshot._verify_expected_file
                 file_checks = 0
                 mutated = False
@@ -601,8 +667,62 @@ class ProfileSnapshotTests(unittest.TestCase):
 
                 self.assertTrue(mutated)
                 self.assertGreaterEqual(file_checks, 9)
-                self.assertEqual(caught.exception.category, "invalid_local_profile")
-                self.assertEqual(list(scratch.iterdir()), [])
+                expected_category = (
+                    "invalid_local_profile" if mutation == "insert" else "cleanup_failed"
+                )
+                self.assertEqual(caught.exception.category, expected_category)
+                if mutation == "replace":
+                    retained = scratch / name / "SOUL.md"
+                    self.assertEqual(retained.stat().st_ino, replacement_inode)
+                    self.assertEqual(retained.read_bytes(), b"evil\n")
+                else:
+                    self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_final_attestation_regular_to_fifo_swap_does_not_block(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        original_verify_file = profile_snapshot._verify_expected_file
+        file_checks = 0
+        swapped = False
+        timed_out = False
+
+        def swap_then_verify(*args: object, **kwargs: object) -> None:
+            nonlocal file_checks, swapped
+            file_checks += 1
+            if file_checks == 8:
+                snapshot_file = self.scratch / "rick" / "SOUL.md"
+                snapshot_file.unlink()
+                os.mkfifo(snapshot_file)
+                swapped = True
+            original_verify_file(*args, **kwargs)
+
+        def stop_blocking(_signum: int, _frame: object) -> None:
+            nonlocal timed_out
+            timed_out = True
+            raise TimeoutError("final snapshot FIFO open blocked")
+
+        previous = signal.signal(signal.SIGALRM, stop_blocking)
+        started = time.monotonic()
+        signal.setitimer(signal.ITIMER_REAL, 0.5)
+        try:
+            with mock.patch.object(
+                profile_snapshot, "_verify_expected_file", side_effect=swap_then_verify
+            ):
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile("rick")),
+                        self.scratch,
+                        allow_missing=False,
+                    )
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+
+        self.assertTrue(swapped)
+        self.assertFalse(timed_out, "final snapshot FIFO open blocked")
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertEqual(str(caught.exception), "profile snapshot rejected (cleanup_failed)")
 
     def test_rejects_gitignore_destination_replacement_before_return(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -610,6 +730,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         replacement = self.root / "gitignore-replacement"
         replacement.write_bytes(b"*\n")
         replacement.chmod(0o644)
+        replacement_inode = replacement.stat().st_ino
         original_write = profile_snapshot._write_private_file_at
         replaced = False
 
@@ -625,8 +746,10 @@ class ProfileSnapshotTests(unittest.TestCase):
             with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertTrue(replaced)
-        self.assertEqual(caught.exception.category, "invalid_local_profile")
-        self.assertFalse((self.scratch / "rick").exists())
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        retained = self.scratch / "rick" / ".gitignore"
+        self.assertEqual(retained.stat().st_ino, replacement_inode)
+        self.assertEqual(retained.read_bytes(), b"*\n")
 
     def test_output_root_rename_cleanup_removes_exact_tree_and_preserves_replacement(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
@@ -748,6 +871,129 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertTrue(escaped.is_dir())
         self.assertEqual(list(escaped.iterdir()), [])
 
+    def test_cleanup_quarantine_never_overwrites_a_collision(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        marker = b"quarantine-collision-survived\n"
+        original_unused = profile_snapshot._unused_cleanup_name
+        collision_created = False
+
+        def create_collision(parent_fd: int) -> str:
+            nonlocal collision_created
+            candidate = original_unused(parent_fd)
+            if not collision_created:
+                descriptor = os.open(
+                    candidate,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+                    0o600,
+                    dir_fd=parent_fd,
+                )
+                try:
+                    os.write(descriptor, marker)
+                finally:
+                    os.close(descriptor)
+                collision_created = True
+            return candidate
+
+        with (
+            mock.patch.object(
+                profile_snapshot,
+                "_final_attest_prepared_snapshot",
+                side_effect=ValueError("force cleanup"),
+            ) as final_attest,
+            mock.patch.object(
+                profile_snapshot, "_unused_cleanup_name", side_effect=create_collision
+            ),
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        remaining = sorted(
+            path.read_bytes() for path in self.scratch.rglob("*") if path.is_file()
+        )
+        self.assertTrue(collision_created)
+        final_attest.assert_called_once()
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertEqual(remaining, [marker])
+
+    def test_cleanup_replacement_immediately_before_delete_survives(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        replacement = self.root / "pre-delete-replacement"
+        marker = b"pre-delete-replacement-survived\n"
+        replacement.write_bytes(marker)
+        replacement_status = replacement.stat()
+        escaped_expected = self.root / "escaped-pre-delete-expected"
+        original_delete = profile_snapshot._delete_after_atomic_transfer
+        delete_calls = 0
+        replaced = False
+        retained_name: str | None = None
+
+        def replace_before_delete(
+            parent_fd: int,
+            name: str,
+            descriptor: int,
+            expected_identity: tuple[int, int],
+            *,
+            directory: bool,
+            collided: bool,
+        ) -> None:
+            nonlocal delete_calls, replaced, retained_name
+            delete_calls += 1
+            if not directory and not replaced:
+                source = profile_snapshot._descriptor_projection(parent_fd) / name
+                source.rename(escaped_expected)
+                replacement.rename(source)
+                retained_name = name
+                replaced = True
+            original_delete(
+                parent_fd,
+                name,
+                descriptor,
+                expected_identity,
+                directory=directory,
+                collided=collided,
+            )
+
+        with (
+            mock.patch.object(
+                profile_snapshot,
+                "_final_attest_prepared_snapshot",
+                side_effect=ValueError("force cleanup"),
+            ) as final_attest,
+            mock.patch.object(
+                profile_snapshot,
+                "_delete_after_atomic_transfer",
+                side_effect=replace_before_delete,
+            ),
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        retained = [path for path in self.scratch.rglob("*") if path.is_file()]
+        self.assertTrue(replaced)
+        self.assertGreaterEqual(delete_calls, 1)
+        final_attest.assert_called_once()
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertIsNotNone(retained_name)
+        assert retained_name is not None
+        retained_replacement = self.scratch / "rick" / retained_name
+        self.assertTrue(retained_replacement.exists())
+        self.assertEqual(len(retained), 1)
+        self.assertEqual(retained[0], retained_replacement)
+        self.assertEqual(retained[0].stat().st_ino, replacement_status.st_ino)
+        self.assertEqual(retained[0].stat().st_mode, replacement_status.st_mode)
+        self.assertEqual(retained[0].read_bytes(), marker)
+        self.assertEqual(escaped_expected.read_bytes(), b"")
+
     def test_real_directory_ancestor_replacement_is_detected_before_a_snapshot_escapes(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -782,18 +1028,24 @@ class ProfileSnapshotTests(unittest.TestCase):
         (replacement / "replacement.png").write_bytes(b"replacement")
         original_write = profile_snapshot._write_descriptor
         replaced = False
+        replace_calls = 0
 
         def write_then_replace_nested(directory: int, content: bytes) -> None:
-            nonlocal replaced
+            nonlocal replace_calls, replaced
             original_write(directory, content)
             if content == b"nested-avatar" and not replaced:
-                replaced = True
                 os.replace(home / "assets", self.root / "stale-assets")
                 os.replace(replacement, home / "assets")
+                replace_calls += 1
+                replaced = True
 
         with mock.patch("hermes_bootstrap.profile_snapshot._write_descriptor", side_effect=write_then_replace_nested):
             with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(replaced)
+        self.assertEqual(replace_calls, 1)
+        self.assertTrue((self.root / "stale-assets" / "nested" / "avatar.png").is_file())
+        self.assertTrue((home / "assets" / "replacement.png").is_file())
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((self.scratch / "rick").exists())
 
@@ -831,13 +1083,12 @@ class ProfileSnapshotTests(unittest.TestCase):
         home = self.write_profile("rick", ["SOUL.md"], description="original")
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
         replacement = self.root / "private-replacement.yaml"
-        replacement.write_text(
-            yaml.safe_dump(
-                {"name": "rick", "version": "0.1.0", "description": "replaced", "hermes_requires": ">=0.18.2", "distribution_owned": ["SOUL.md"]},
-                sort_keys=False,
-            ),
-            encoding="utf-8",
-        )
+        replacement_bytes = yaml.safe_dump(
+            {"name": "rick", "version": "0.1.0", "description": "replaced", "hermes_requires": ">=0.18.2", "distribution_owned": ["SOUL.md"]},
+            sort_keys=False,
+        ).encode("utf-8")
+        replacement.write_bytes(replacement_bytes)
+        replacement_inode = replacement.stat().st_ino
         original_read = profile_snapshot.distributions._read_profile_manifest_at
         calls: list[bool] = []
         replaced = False
@@ -855,75 +1106,127 @@ class ProfileSnapshotTests(unittest.TestCase):
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertTrue(replaced)
         self.assertEqual(calls, [True])
-        self.assertEqual(caught.exception.category, "invalid_local_profile")
-        self.assertFalse((self.scratch / "rick").exists())
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        retained = self.scratch / "rick" / "distribution.yaml"
+        self.assertEqual(retained.stat().st_ino, replacement_inode)
+        self.assertEqual(retained.read_bytes(), replacement_bytes)
 
     def test_rejects_transient_hermes_manifest_semantic_mismatch(self) -> None:
-        home = self.write_profile(
-            "rick",
-            ["SOUL.md", "assets"],
-            description="original description",
-            author="Original Author",
-            license="MIT",
-            env_requires=[
-                {"name": "ORIGINAL_ENV", "description": "original", "required": False}
-            ],
-        )
-        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
-        (home / "assets").mkdir()
-        alternate = yaml.safe_dump(
-            {
-                "name": "rick",
-                "version": "0.1.0",
-                "description": "alternate description",
-                "hermes_requires": ">=0.18.2",
-                "author": "Alternate Author",
-                "license": "Apache-2.0",
-                "env_requires": [
-                    {"name": "ALTERNATE_ENV", "description": "alternate", "required": True}
+        alternate_values: tuple[tuple[str, object], ...] = (
+            ("name", "alternate"),
+            ("version", "0.2.0"),
+            ("description", "alternate description"),
+            ("hermes_requires", ">=0.18.1"),
+            ("author", "Alternate Author"),
+            ("license", "Apache-2.0"),
+            (
+                "env_requires",
+                [
+                    {
+                        "name": "ALTERNATE_ENV",
+                        "description": "alternate",
+                        "required": True,
+                    }
                 ],
-                "distribution_owned": ["assets", "SOUL.md"],
-            },
-            sort_keys=False,
-        ).encode("utf-8")
+            ),
+            ("distribution_owned", ["SOUL.md", "assets/avatar.png"]),
+        )
         original_read = profile_snapshot.distributions._read_profile_manifest_at
-        parser_saw_alternate = False
-        restored_before_return = False
 
-        def read_alternate_then_restore(
-            root: Path, expected_name: str, *, require_sources: bool
-        ):
-            nonlocal parser_saw_alternate, restored_before_return
-            manifest_path = root / "distribution.yaml"
-            canonical = manifest_path.read_bytes()
-            manifest_path.write_bytes(alternate)
-            try:
-                parsed = original_read(root, expected_name, require_sources=require_sources)
-                parser_saw_alternate = (
-                    parsed[0].description == "alternate description"
-                    and parsed[0].env_requires[0].name == "ALTERNATE_ENV"
-                    and [path.as_posix() for path in parsed[1]] == ["SOUL.md", "assets"]
+        for index, (field, alternate_value) in enumerate(alternate_values):
+            with self.subTest(field=field):
+                name = f"semantic{index}"
+                home = self.write_profile(
+                    name,
+                    ["SOUL.md", "assets"],
+                    description="original description",
+                    author="Original Author",
+                    license="MIT",
+                    env_requires=[
+                        {
+                            "name": "ORIGINAL_ENV",
+                            "description": "original",
+                            "required": False,
+                        }
+                    ],
                 )
-            finally:
-                manifest_path.write_bytes(canonical)
-                restored_before_return = manifest_path.read_bytes() == canonical
-            return parsed
+                (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+                (home / "assets").mkdir()
+                (home / "assets" / "avatar.png").write_bytes(b"avatar")
+                scratch = self.root / f"semantic-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+                alternate_payload: dict[str, object] = {
+                    "name": name,
+                    "version": "0.1.0",
+                    "description": "original description",
+                    "hermes_requires": ">=0.18.2",
+                    "author": "Original Author",
+                    "license": "MIT",
+                    "env_requires": [
+                        {
+                            "name": "ORIGINAL_ENV",
+                            "description": "original",
+                            "required": False,
+                        }
+                    ],
+                    "distribution_owned": ["SOUL.md", "assets"],
+                }
+                alternate_payload[field] = alternate_value
+                alternate = yaml.safe_dump(
+                    alternate_payload, sort_keys=False
+                ).encode("utf-8")
+                parser_returned = False
+                alternate_replaced = False
+                canonical_inode_restored = False
 
-        with mock.patch.object(
-            profile_snapshot.distributions,
-            "_read_profile_manifest_at",
-            side_effect=read_alternate_then_restore,
-        ):
-            with self.assertRaises(ProfileSnapshotError) as caught:
-                prepare_profile_snapshots(
-                    self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+                def read_alternate_then_restore(
+                    root: Path, expected_name: str, *, require_sources: bool
+                ):
+                    nonlocal alternate_replaced, canonical_inode_restored, parser_returned
+                    manifest_path = root / "distribution.yaml"
+                    canonical_inode = manifest_path.stat().st_ino
+                    backup_path = root / f".canonical-{index}.yaml"
+                    alternate_path = root / f".alternate-{index}.yaml"
+                    alternate_path.write_bytes(alternate)
+                    manifest_path.rename(backup_path)
+                    os.replace(alternate_path, manifest_path)
+                    alternate_replaced = manifest_path.read_bytes() == alternate
+                    try:
+                        parser_name = (
+                            str(alternate_value) if field == "name" else expected_name
+                        )
+                        parsed = original_read(
+                            root, parser_name, require_sources=require_sources
+                        )
+                        parser_returned = True
+                    finally:
+                        os.replace(backup_path, manifest_path)
+                        canonical_inode_restored = (
+                            manifest_path.stat().st_ino == canonical_inode
+                        )
+                    return parsed
+
+                with mock.patch.object(
+                    profile_snapshot.distributions,
+                    "_read_profile_manifest_at",
+                    side_effect=read_alternate_then_restore,
+                ):
+                    with self.assertRaises(ProfileSnapshotError) as caught:
+                        prepare_profile_snapshots(
+                            self.manifest(self.profile(name)),
+                            scratch,
+                            allow_missing=False,
+                        )
+
+                self.assertTrue(alternate_replaced)
+                self.assertTrue(parser_returned)
+                self.assertTrue(canonical_inode_restored)
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(
+                    str(caught.exception),
+                    "profile snapshot rejected (invalid_local_profile)",
                 )
-
-        self.assertTrue(parser_saw_alternate)
-        self.assertTrue(restored_before_return)
-        self.assertEqual(caught.exception.category, "invalid_local_profile")
-        self.assertEqual(str(caught.exception), "profile snapshot rejected (invalid_local_profile)")
-        self.assertFalse((self.scratch / "rick").exists())
+                self.assertEqual(list(scratch.iterdir()), [])
 
     def test_rejects_incompatible_hermes_requirement(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
