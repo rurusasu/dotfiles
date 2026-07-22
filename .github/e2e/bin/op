@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 9 ] || [ "$1" != item ] || [ "$2" != get ] || \
+	[ "$4" != --account ] || [ "$5" != my.1password.com ] || \
+	[ "$6" != --vault ] || [ "$7" != openclaw ] || \
+	[ "$8" != --format ] || [ "$9" != json ]; then
+	printf 'acceptance op fixture rejected unsupported arguments\n' >&2
+	exit 2
+fi
+
+case "$3" in
+"Hermes Agent Dashboard" | \
+	"GitHubUsedOpenClawPAT" | \
+	"SlackBot-OpenClaw" | \
+	"SlackBot-Rick" | \
+	"SlackBot-Hoffman" | \
+	"SlackBot-Risarisa") ;;
+*)
+	printf 'acceptance op fixture rejected item: %s\n' "$3" >&2
+	exit 2
+	;;
+esac
+
+printf '{"id":"acceptance-%s","fields":[]}\n' "$3"

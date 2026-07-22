@@ -1,7 +1,20 @@
 services:
+  hermes:
+    image: nginx:1.29-alpine
+
   acceptance:
     image: nginx:1.29-alpine
     ports:
       - "127.0.0.1:8642:80"
       - "127.0.0.1:9119:80"
       - "127.0.0.1:6080:80"
+
+  hermes-bootstrap:
+    image: nginx:1.29-alpine
+    profiles:
+      - bootstrap
+    entrypoint:
+      - /bin/sh
+      - /fixture/hermes-bootstrap.sh
+    volumes:
+      - ./hermes-bootstrap-fixture.sh:/fixture/hermes-bootstrap.sh:ro

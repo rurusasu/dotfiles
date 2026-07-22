@@ -40,10 +40,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DOTFILES_COMPOSE_FILE: ${{ github.workspace }}/.github/e2e/bootstrap-compose.yml
       DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
-      DOTFILES_HERMES_DASHBOARD_AUTH_ENABLED: "0"
-      DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED: "0"
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -57,7 +54,7 @@ jobs:
 
       - name: First one-command convergence
         run: |
-          ./install.sh
+          ./.github/e2e/run-bootstrap-acceptance.sh
           export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
           . ./scripts/sh/install-common.sh
           export DOTFILES_USER="$USER"
@@ -65,7 +62,7 @@ jobs:
 
       - name: Second idempotent convergence
         run: |
-          ./install.sh
+          ./.github/e2e/run-bootstrap-acceptance.sh
           export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
           . ./scripts/sh/install-common.sh
           export DOTFILES_USER="$USER"
@@ -165,9 +162,9 @@ jobs:
 
           # The variables below must expand inside the Debian machine.
           # shellcheck disable=SC2016
-          bootstrap='export DOTFILES_COMPOSE_FILE=/workspace/.github/e2e/bootstrap-compose.yml DOTFILES_HERMES_DASHBOARD_AUTH_ENABLED=0 DOTFILES_HERMES_AGENT_SLACK_1PASSWORD_ENABLED=0; cd /workspace; ./install.sh'
+          bootstrap='cd /workspace; ./.github/e2e/run-bootstrap-acceptance.sh'
           # shellcheck disable=SC2016
-          verify='export DOTFILES_COMPOSE_FILE=/workspace/.github/e2e/bootstrap-compose.yml; export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
+          verify='export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
           run_inside "$bootstrap"
           run_inside "$verify"
           run_inside "$bootstrap"
