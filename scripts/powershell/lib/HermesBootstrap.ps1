@@ -71,6 +71,14 @@ public static class HermesBootstrapErrorHistory
 $script:HermesBootstrapProcessTimeoutMilliseconds = 30 * 60 * 1000
 $script:HermesBootstrapTerminationTimeoutMilliseconds = 5000
 $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
+$script:HermesBootstrapAllowedOnePasswordItems = @(
+    [PSCustomObject]@{ key = "dashboard"; account = "my.1password.com"; vault = "openclaw"; item = "Hermes Agent Dashboard" },
+    [PSCustomObject]@{ key = "github"; account = "my.1password.com"; vault = "openclaw"; item = "GitHubUsedOpenClawPAT" },
+    [PSCustomObject]@{ key = "slack_default"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-OpenClaw" },
+    [PSCustomObject]@{ key = "slack_rick"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Rick" },
+    [PSCustomObject]@{ key = "slack_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Hoffman" },
+    [PSCustomObject]@{ key = "slack_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Risarisa" }
+)
 
 function Get-HermesBootstrapSecretPlan {
     [CmdletBinding()]
@@ -115,7 +123,8 @@ function Test-HermesBootstrapSecretPlan {
     if ($items.Count -ne 6) { return $false }
 
     $keys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($item in $items) {
+    for ($itemIndex = 0; $itemIndex -lt $items.Count; $itemIndex++) {
+        $item = $items[$itemIndex]
         if (-not (Test-HermesBootstrapPropertySet -Value $item -Names @("key", "account", "vault", "item", "fields"))) {
             return $false
         }
@@ -123,6 +132,10 @@ function Test-HermesBootstrapSecretPlan {
             if ($item.$name -isnot [string] -or
                 [string]::IsNullOrWhiteSpace($item.$name) -or
                 $item.$name.Trim() -cne $item.$name) { return $false }
+        }
+        $allowedItem = $script:HermesBootstrapAllowedOnePasswordItems[$itemIndex]
+        foreach ($name in @("key", "account", "vault", "item")) {
+            if ($item.$name -cne $allowedItem.$name) { return $false }
         }
         if (-not $keys.Add($item.key)) { return $false }
 

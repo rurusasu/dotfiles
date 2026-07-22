@@ -65,6 +65,35 @@ Describe "Get-HermesBootstrapSecretPlan" {
         @($plan.items).Count | Should -Be 6
     }
 
+    It "rejects plans that replace an allowlisted 1Password reference" {
+        $validJson = $script:dockerOutput[0]
+        $mutations = @(
+            @{ Index = 0; Property = "account"; Value = "attacker.1password.com" },
+            @{ Index = 1; Property = "vault"; Value = "private" },
+            @{ Index = 2; Property = "item"; Value = "Arbitrary Secret" },
+            @{ Index = 3; Property = "key"; Value = "arbitrary" }
+        )
+
+        foreach ($mutation in $mutations) {
+            $invalidPlan = $validJson | ConvertFrom-Json -Depth 32
+            $invalidPlan.items[$mutation.Index].($mutation.Property) = $mutation.Value
+            $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
+
+            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+                Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
+        }
+    }
+
+    It "rejects a reordered allowlisted 1Password plan" {
+        $invalidPlan = $script:dockerOutput[0] | ConvertFrom-Json -Depth 32
+        $items = @($invalidPlan.items)
+        $invalidPlan.items = @($items[1], $items[0]) + $items[2..5]
+        $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
+
+        { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+            Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
+    }
+
     It "rejects plans that do not satisfy the exact six-item metadata schema" {
         $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
         $invalidPlans = @()
