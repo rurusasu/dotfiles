@@ -28,6 +28,7 @@ _DECLARATIVE_KEYS = (
 _RUNTIME_KEYS = frozenset({"source", "installed_at"})
 _READ_CHUNK_BYTES = 64 * 1024
 _SECRET_OVERLAP_BYTES = 256
+_PROFILE_NAME = re.compile(r"[a-z][a-z0-9-]*\Z")
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
 _GITHUB_TOKEN = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
 _SLACK_TOKEN = re.compile(rb"\bxox(?:b|p|a|r|s)-[A-Za-z0-9-]{8,}\b")
@@ -83,11 +84,16 @@ def prepare_profile_snapshots(
     """Copy every valid installed profile to caller-owned private scratch space."""
 
     _require_private_scratch(scratch_root)
+    scratch_fd = open_absolute_directory(scratch_root)
     snapshots: list[ProfileSnapshot] = []
     missing: list[DistributionSource] = []
-    created: list[Path] = []
+    created: list[str] = []
     try:
         for declaration in manifest.profiles:
+            try:
+                _validate_profile_name(declaration.name)
+            except Exception:
+                raise ProfileSnapshotError(declaration.name, "invalid_profile_name") from None
             if declaration.target != manifest.data_root / "profiles" / declaration.name:
                 raise ProfileSnapshotError(declaration.name, "invalid_profile_target")
             if not _path_exists(declaration.target):
@@ -95,34 +101,43 @@ def prepare_profile_snapshots(
                     missing.append(declaration)
                     continue
                 raise ProfileSnapshotError(declaration.name, "missing_profile")
-            root = scratch_root / declaration.name
             try:
-                snapshot = _prepare_one(declaration, root)
+                snapshot = _prepare_one(declaration, scratch_root, scratch_fd)
             except ProfileSnapshotError:
                 raise
             except Exception as error:
                 raise ProfileSnapshotError(declaration.name, _category(error)) from None
             snapshots.append(snapshot)
-            created.append(root)
+            created.append(declaration.name)
     except ProfileSnapshotError:
-        for root in reversed(created):
-            _remove_snapshot(root)
+        for name in reversed(created):
+            _remove_snapshot(scratch_fd, name)
         raise
+    finally:
+        os.close(scratch_fd)
     return PreparedProfiles(tuple(snapshots), tuple(missing))
 
 
-def _prepare_one(declaration: DistributionSource, output: Path) -> ProfileSnapshot:
-    if output.exists() or os.path.lexists(output):
+def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd: int) -> ProfileSnapshot:
+    output = scratch_root / declaration.name
+    try:
+        os.stat(declaration.name, dir_fd=scratch_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    else:
         raise ValueError("snapshot output already exists")
     source_fd = open_absolute_directory(declaration.target)
+    output_fd: int | None = None
     output_created = False
     try:
-        raw = _read_manifest_compatibly(declaration, source_fd)
+        raw, manifest_stat = _read_manifest_compatibly(declaration, source_fd)
         owned = _normalize_owned(raw["distribution_owned"])
         manifest_bytes = _canonical_manifest(raw, owned)
         _reject_sensitive_bytes(manifest_bytes)
-        output.mkdir(mode=0o700)
+        os.mkdir(declaration.name, mode=0o700, dir_fd=scratch_fd)
         output_created = True
+        output_fd = _open_directory(scratch_fd, declaration.name)
+        _write_private_file(output / "distribution.yaml", manifest_bytes, 0o644)
         entries: list[SnapshotEntry] = []
         casefolded: set[str] = set()
         directory_paths: set[PurePosixPath] = set()
@@ -130,25 +145,30 @@ def _prepare_one(declaration: DistributionSource, output: Path) -> ProfileSnapsh
             is_directory = _copy_declared_path(source_fd, owned_path, output, entries, casefolded)
             if is_directory:
                 directory_paths.add(owned_path)
+        _validate_canonical_manifest(output, output_fd, declaration, owned, manifest_bytes)
+        _verify_manifest_current(source_fd, manifest_stat)
         verify_absolute_directory(declaration.target, source_fd)
         entries.sort(key=lambda entry: entry.path.as_posix())
         gitignore_bytes = _render_gitignore(owned, frozenset(directory_paths))
-        _write_private_file(output / "distribution.yaml", manifest_bytes, 0o644)
         _write_private_file(output / ".gitignore", gitignore_bytes, 0o644)
+        verify_absolute_directory(output, output_fd)
+        verify_absolute_directory(scratch_root, scratch_fd)
         digest = _snapshot_digest(manifest_bytes, gitignore_bytes, entries)
         return ProfileSnapshot(declaration, output, manifest_bytes, gitignore_bytes, tuple(entries), digest)
     except Exception:
         if output_created:
-            _remove_snapshot(output)
+            _remove_snapshot(scratch_fd, declaration.name)
         raise
     finally:
         os.close(source_fd)
+        if output_fd is not None:
+            os.close(output_fd)
 
 
-def _read_manifest_compatibly(declaration: DistributionSource, source_fd: int) -> dict[str, object]:
-    # Hermes remains the authority for the distribution format; this raw parse adds strict keys.
-    parsed, _ = distributions._read_profile_manifest_at(declaration.target, declaration.name, require_sources=True)
-    content, _ = _read_regular(source_fd, "distribution.yaml")
+def _read_manifest_compatibly(declaration: DistributionSource, source_fd: int) -> tuple[dict[str, object], os.stat_result]:
+    """Read exact manifest bytes before validating them in private scratch."""
+
+    content, manifest_stat = _read_regular(source_fd, "distribution.yaml")
     raw = yaml.load(content.decode("utf-8"), Loader=distributions._UniqueKeyLoader)
     if not isinstance(raw, dict) or any(not isinstance(key, str) for key in raw):
         raise ValueError("manifest shape")
@@ -157,14 +177,28 @@ def _read_manifest_compatibly(declaration: DistributionSource, source_fd: int) -
         raise ValueError("manifest keys")
     if raw["name"] != declaration.name or not isinstance(raw["distribution_owned"], list):
         raise ValueError("manifest identity")
-    if any(getattr(parsed, key, None) != raw[key] for key in ("name", "version", "hermes_requires")):
-        raise ValueError("manifest changed")
     if any(not isinstance(value, str) for value in raw["distribution_owned"]):
         raise ValueError("manifest ownership")
     for key in ("description", "author", "license"):
         if key in raw and not isinstance(raw[key], str):
             raise ValueError("manifest value")
-    return raw
+    return raw, manifest_stat
+
+
+def _validate_canonical_manifest(
+    root: Path,
+    root_fd: int,
+    declaration: DistributionSource,
+    owned: tuple[PurePosixPath, ...],
+    expected_bytes: bytes,
+) -> None:
+    """Use Hermes on the exact bytes and copied sources that will be published."""
+
+    if _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
+        raise ValueError("manifest changed")
+    _, parsed_owned = distributions._read_profile_manifest_at(root, declaration.name, require_sources=True)
+    if parsed_owned != owned or _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
+        raise ValueError("manifest ownership")
 
 
 def _normalize_owned(values: object) -> tuple[PurePosixPath, ...]:
@@ -176,6 +210,11 @@ def _normalize_owned(values: object) -> tuple[PurePosixPath, ...]:
             raise ValueError("control ownership")
         _validate_path(path)
     return normalized
+
+
+def _validate_profile_name(name: str) -> None:
+    if not isinstance(name, str) or _PROFILE_NAME.fullmatch(name) is None:
+        raise ValueError("invalid profile name")
 
 
 def _validate_path(path: PurePosixPath) -> None:
@@ -328,6 +367,18 @@ def _verify_regular(parent_fd: int, name: str, descriptor: int, before: os.stat_
         raise ValueError("source replaced")
 
 
+def _verify_manifest_current(source_fd: int, before: os.stat_result) -> None:
+    current = os.stat("distribution.yaml", dir_fd=source_fd, follow_symlinks=False)
+    _require_safe_source(current)
+    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+        current.st_dev,
+        current.st_ino,
+        current.st_size,
+        current.st_mtime_ns,
+    ):
+        raise ValueError("manifest changed")
+
+
 def _open_directory(parent_fd: int, name: str) -> int:
     flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(name, flags, dir_fd=parent_fd)
@@ -436,10 +487,9 @@ def _path_exists(path: Path) -> bool:
     return True
 
 
-def _remove_snapshot(path: Path) -> None:
+def _remove_snapshot(scratch_fd: int, name: str) -> None:
     try:
-        if os.path.lexists(path):
-            shutil.rmtree(path)
+        shutil.rmtree(name, dir_fd=scratch_fd)
     except OSError:
         pass
 
