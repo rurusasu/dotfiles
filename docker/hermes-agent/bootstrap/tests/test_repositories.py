@@ -218,6 +218,24 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=repo.target), commit_count)
         self.assertEqual(self.remote_head(), expected)
 
+    def test_declared_remote_credential_named_knowledge_remains_writable(self) -> None:
+        repo = self.repository()
+        knowledge = self.seed / "authentication-guide.md"
+        knowledge.write_text("declared remote knowledge\n", encoding="utf-8")
+        run_git("add", knowledge.name, cwd=self.seed)
+        run_git("commit", "-m", "add declared knowledge", cwd=self.seed)
+        run_git("push", "origin", "main", cwd=self.seed)
+        self.clone(repo.target)
+        expected = run_git("rev-parse", "HEAD", cwd=repo.target)
+
+        result = synchronize_remote(repo, self.auth)
+
+        self.assertEqual(result, RemoteSyncResult("lifelog", expected, False, repo.target))
+        (repo.target / knowledge.name).write_text("local credential change\n", encoding="utf-8")
+        updated = synchronize_remote(repo, self.auth)
+        self.assertTrue(updated.pushed)
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), self.remote_head())
+
     def test_read_write_commits_allowed_changes_and_retries_a_prior_unpushed_commit(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
@@ -726,6 +744,24 @@ class RepositoryTests(unittest.TestCase):
         result = synchronize_remote(repo, self.auth)
 
         self.assertTrue(result.pushed)
+
+    def test_index_validation_accepts_a_bounded_tree_larger_than_512_kibibytes(self) -> None:
+        record = b"100644 " + (b"a" * 40) + b" 0\tknowledge/entry-with-a-bounded-name.md\0"
+        index = record * 7000
+        self.assertGreater(len(index), 512 * 1024)
+
+        def bounded_runner(
+            arguments: tuple[str, ...],
+            _cwd: Path,
+            _environment: dict[str, str],
+            *,
+            max_output_bytes: int,
+        ) -> bytes | None:
+            self.assertEqual(arguments, ("ls-files", "--stage", "-z"))
+            return index if len(index) <= max_output_bytes else None
+
+        with mock.patch.object(repositories_module, "_run_git_bytes", side_effect=bounded_runner):
+            repositories_module._validate_index(self.root, {})
 
 
 if __name__ == "__main__":

@@ -123,6 +123,13 @@ Repository synchronization uses
 instead of waiting indefinitely. After confirming that the other bootstrap or
 sync process has exited, rerun the same command.
 
+Git status, index, staged-path, and unpushed-history inspection is bounded to
+8 MiB per command and fails closed above that limit. The declared remote tree
+may contain ordinary knowledge filenames such as `authentication-guide.md`.
+Local synchronization still rejects credential artifacts such as `.env`,
+`auth.json`, and `token.txt`, runtime state directories, databases, and nested
+Git repositories before it can commit or push them.
+
 ## Migration And Conflicts
 
 - A legacy real checkout at `/opt/data/core/lifelog` is moved atomically to

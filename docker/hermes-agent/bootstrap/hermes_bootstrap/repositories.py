@@ -32,8 +32,10 @@ from .payload import SecretRedactor
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 _COMMAND_OUTPUT_MAX_BYTES = 64 * 1024
-_STATUS_OUTPUT_MAX_BYTES = 512 * 1024
-_FORBIDDEN_COMPONENT_MARKERS = ("auth", "token", "secret", "credential")
+_STATUS_OUTPUT_MAX_BYTES = 8 * 1024 * 1024
+_FORBIDDEN_CREDENTIAL_STEMS = frozenset(
+    {"auth", "token", "tokens", "secret", "secrets", "credential", "credentials"}
+)
 _FORBIDDEN_DIRECTORIES = frozenset({"memories", "sessions", "logs", "cache", "caches", "generated", "runtime"})
 _RUNTIME_DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal")
 _LOCAL_VALIDATION_AUTH = GitAuth("local-validation", SecretRedactor(("local-validation",)))
@@ -468,11 +470,10 @@ def _validate_index(checkout: Path, environment: dict[str, str]) -> None:
         )
     )
     for record in records:
-        metadata, separator, path = record.partition(b"\t")
+        metadata, separator, _path = record.partition(b"\t")
         fields = metadata.split(b" ")
         if not separator or len(fields) != 3 or fields[0] == b"160000":
             raise ValueError("unsafe index entry")
-        _reject_forbidden_path(path)
 
 
 def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
@@ -581,10 +582,13 @@ def _reject_forbidden_path(raw: bytes) -> None:
         raise ValueError("unsafe path")
     for component in components:
         folded = component.casefold()
+        stem = folded.split(".", 1)[0]
         if (
-            folded in {".git", ".env"}
+            folded == ".git"
+            or folded == ".env"
+            or folded.startswith(".env.")
             or folded in _FORBIDDEN_DIRECTORIES
-            or any(marker in folded for marker in _FORBIDDEN_COMPONENT_MARKERS)
+            or stem in _FORBIDDEN_CREDENTIAL_STEMS
             or folded.endswith(_RUNTIME_DATABASE_SUFFIXES)
         ):
             raise ValueError("forbidden repository path")
