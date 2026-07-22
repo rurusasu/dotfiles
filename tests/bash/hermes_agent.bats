@@ -6,20 +6,26 @@ setup() {
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
+	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
+	printf '0\n' >"$READY_ATTEMPT_FILE"
 	: >"$COMPOSE_FILE"
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG PAYLOAD_CAPTURE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
+	export API_READY_AFTER=1
+	export HERMES_API_READY_ATTEMPTS=3
+	export HERMES_API_READY_DELAY_SECONDS=0
+	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 
 	write_stub jq '
 exec "$REAL_JQ" "$@"
@@ -44,6 +50,20 @@ case " $* " in
   *" secret-plan "*) printf "%s\n" "$PLAN_JSON" ;;
   *" apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$BOOTSTRAP_STATUS" ;;
 esac
+'
+	write_stub curl '
+attempt="$(cat "$READY_ATTEMPT_FILE")"
+attempt=$((attempt + 1))
+printf "%s\n" "$attempt" >"$READY_ATTEMPT_FILE"
+printf "curl" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if ((attempt < API_READY_AFTER)); then
+	exit 22
+fi
+'
+	write_stub sleep '
+printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 '
 }
 
@@ -402,10 +422,11 @@ trailing-garbage"
 
 @test "propagates an op failure, closes the apply stream, and does not recreate services" {
 	export OP_FAIL_ITEM='SlackBot-Rick'
+	export BOOTSTRAP_STATUS=2
 
 	run_start_stack
 
-	[ "$status" -ne 0 ]
+	[ "$status" -eq 1 ]
 	grep -q '<SlackBot-Rick>' "$COMMAND_LOG"
 	grep -q '<apply>' "$COMMAND_LOG"
 	! grep -q '<up>' "$COMMAND_LOG"
@@ -436,6 +457,36 @@ trailing-garbage"
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:slack_default item:slack_rick item:slack_hoffman item:slack_risarisa end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
+	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "waits for the Hermes API to become ready before reporting success" {
+	export API_READY_AFTER=3
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
+	[ "$(grep -c '^curl ' "$COMMAND_LOG")" -eq 3 ]
+	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
+	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	assert_log_order '<up> <-d> <--force-recreate>' '^curl '
+	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
+	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "fails after bounded Hermes API readiness attempts with redacted diagnostics" {
+	export API_READY_AFTER=99
+	export HERMES_API_READY_ATTEMPTS=3
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
+	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }

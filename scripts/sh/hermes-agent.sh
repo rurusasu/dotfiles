@@ -29,6 +29,7 @@ dotfiles_hermes_prepare_runtime_home() {
 dotfiles_hermes_require_secret_tools() {
   dotfiles_have op || dotfiles_die "1Password CLI (op) is required for Hermes bootstrap."
   dotfiles_have jq || dotfiles_die "jq is required for Hermes bootstrap."
+  dotfiles_have curl || dotfiles_die "curl is required for Hermes readiness checks."
 }
 
 dotfiles_hermes_validate_secret_plan() {
@@ -117,11 +118,36 @@ dotfiles_hermes_run_bootstrap() {
     statuses=("${PIPESTATUS[@]}")
     producer_status="${statuses[0]:-1}"
     docker_status="${statuses[1]:-1}"
-    if ((docker_status != 0)); then
-      return "$docker_status"
+    if ((producer_status != 0)); then
+      return 1
     fi
-    return "$producer_status"
+    return "$docker_status"
   fi
+}
+
+dotfiles_hermes_wait_for_api() {
+  local attempts delay_seconds timeout_seconds port url attempt
+  attempts="${HERMES_API_READY_ATTEMPTS:-30}"
+  delay_seconds="${HERMES_API_READY_DELAY_SECONDS:-2}"
+  timeout_seconds="${HERMES_API_PROBE_TIMEOUT_SECONDS:-2}"
+  port="${HERMES_API_PORT:-8642}"
+
+  [[ $attempts =~ ^[1-9][0-9]*$ ]] || attempts=30
+  [[ $delay_seconds =~ ^[0-9]+$ ]] || delay_seconds=2
+  [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=2
+  url="http://127.0.0.1:${port}/health"
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if curl --fail --silent --show-error --max-time "$timeout_seconds" "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ((attempt < attempts)); then
+      sleep "$delay_seconds"
+    fi
+  done
+
+  printf 'Hermes API did not become ready after %s attempts.\n' "$attempts" >&2
+  return 1
 }
 
 dotfiles_hermes_show_compose_diagnostics() {
@@ -161,6 +187,13 @@ dotfiles_hermes_start_stack() {
     return "$status"
   fi
   if "$docker_runner" compose -f "$compose_file" up -d --force-recreate; then
+    :
+  else
+    status=$?
+    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    return "$status"
+  fi
+  if dotfiles_hermes_wait_for_api; then
     return 0
   else
     status=$?

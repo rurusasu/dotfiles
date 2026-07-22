@@ -21,8 +21,13 @@ Describe 'HermesAgentHandler' {
         $script:oldHermesDataDir = $env:HERMES_DATA_DIR
         $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
         $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
+        $script:oldHermesApiPort = $env:HERMES_API_PORT
+        $script:oldHermesApiReadyAttempts = $env:HERMES_API_READY_ATTEMPTS
+        $script:oldHermesApiReadyDelaySeconds = $env:HERMES_API_READY_DELAY_SECONDS
+        $script:oldHermesApiProbeTimeoutSeconds = $env:HERMES_API_PROBE_TIMEOUT_SECONDS
         $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
         $script:eventLog = [System.Collections.Generic.List[string]]::new()
+        $script:readinessAttempts = 0
 
         $script:ctx.Options['NixRebuildApplied'] = $true
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
@@ -33,6 +38,10 @@ Describe 'HermesAgentHandler' {
         Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_API_PORT -ErrorAction SilentlyContinue
+        $env:HERMES_API_READY_ATTEMPTS = '3'
+        $env:HERMES_API_READY_DELAY_SECONDS = '0'
+        $env:HERMES_API_PROBE_TIMEOUT_SECONDS = '1'
 
         Mock Write-Host { }
         Mock Get-Command {
@@ -51,6 +60,12 @@ Describe 'HermesAgentHandler' {
             $script:eventLog.Add('bootstrap')
             [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
         }
+        Mock Invoke-WebRequest {
+            $script:readinessAttempts++
+            $script:eventLog.Add('health')
+            [PSCustomObject]@{ StatusCode = 200 }
+        }
+        Mock Start-Sleep { }
     }
 
     AfterEach {
@@ -59,7 +74,11 @@ Describe 'HermesAgentHandler' {
                 @{ Name = 'HOME'; Value = $script:oldHome },
                 @{ Name = 'HERMES_DATA_DIR'; Value = $script:oldHermesDataDir },
                 @{ Name = 'HERMES_BROWSER_DATA_DIR'; Value = $script:oldHermesBrowserDataDir },
-                @{ Name = 'HERMES_BROWSER_VIEW_PORT'; Value = $script:oldHermesBrowserViewPort }
+                @{ Name = 'HERMES_BROWSER_VIEW_PORT'; Value = $script:oldHermesBrowserViewPort },
+                @{ Name = 'HERMES_API_PORT'; Value = $script:oldHermesApiPort },
+                @{ Name = 'HERMES_API_READY_ATTEMPTS'; Value = $script:oldHermesApiReadyAttempts },
+                @{ Name = 'HERMES_API_READY_DELAY_SECONDS'; Value = $script:oldHermesApiReadyDelaySeconds },
+                @{ Name = 'HERMES_API_PROBE_TIMEOUT_SECONDS'; Value = $script:oldHermesApiProbeTimeoutSeconds }
             )) {
             if ($null -eq $entry.Value) {
                 Remove-Item "Env:\\$($entry.Name)" -ErrorAction SilentlyContinue
@@ -136,7 +155,12 @@ Describe 'HermesAgentHandler' {
                 "compose -f $script:composeFile build hermes hermes-bootstrap",
                 "compose -f $script:composeFile up -d --force-recreate"
             )
-            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up')
+            $script:eventLog | Should -Be @('config', 'build', 'bootstrap', 'up', 'health')
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                $Uri -eq 'http://127.0.0.1:8642/health' -and
+                $Method -eq 'Get' -and
+                $TimeoutSec -eq 1
+            }
             Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
                 $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
             }
@@ -211,6 +235,41 @@ Describe 'HermesAgentHandler' {
             $result.Message | Should -Match 'startup failure'
             $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
             ($script:dockerCalls -join "`n") | Should -Not -Match '\b(down|stop)\b'
+        }
+
+        It 'waits through transient API failures before reporting startup success' {
+            Mock Invoke-WebRequest {
+                $script:readinessAttempts++
+                $script:eventLog.Add('health')
+                if ($script:readinessAttempts -lt 3) { throw 'not ready' }
+                [PSCustomObject]@{ StatusCode = 200 }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:readinessAttempts | Should -Be 3
+            Should -Invoke Invoke-WebRequest -Times 3 -Exactly
+            Should -Invoke Start-Sleep -Times 2 -Exactly
+            $script:eventLog[-1] | Should -Be 'health'
+        }
+
+        It 'fails after bounded API readiness attempts without exposing probe errors' {
+            $secret = 'api-secret-value'
+            Mock Invoke-WebRequest {
+                $script:readinessAttempts++
+                throw "not ready: $secret"
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes API did not become ready after 3 attempts.'
+            $result.Message | Should -Not -Match ([regex]::Escape($secret))
+            $script:readinessAttempts | Should -Be 3
+            Should -Invoke Invoke-WebRequest -Times 3 -Exactly
+            Should -Invoke Start-Sleep -Times 2 -Exactly
+            $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile ps --all"
         }
 
         It 'returns failure and stops after a compose validation exception' {

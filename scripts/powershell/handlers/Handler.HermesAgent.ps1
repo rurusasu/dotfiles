@@ -91,6 +91,17 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Agent startup failed: $($start.Message)")
             }
 
+            if (-not $this.WaitForApi()) {
+                try {
+                    $this.InvokeCompose($composeFile, @('ps', '--all')) | Out-Null
+                }
+                catch {
+                    $null = $_
+                }
+                $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
+                return $this.CreateFailureResult("Hermes API did not become ready after $attempts attempts.")
+            }
+
             return $this.CreateSuccessResult("Hermes Agent started: http://127.0.0.1:9119 / browser: $($this.GetBrowserViewUrl())")
         }
         catch {
@@ -155,6 +166,60 @@ class HermesAgentHandler : SetupHandlerBase {
             $env:HERMES_BROWSER_VIEW_PORT
         }
         return "http://127.0.0.1:$port"
+    }
+
+    hidden [string] GetApiHealthUrl() {
+        $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_API_PORT)) {
+            '8642'
+        }
+        else {
+            $env:HERMES_API_PORT
+        }
+        return "http://127.0.0.1:$port/health"
+    }
+
+    hidden [int] GetPositiveEnvironmentInteger([string]$name, [int]$defaultValue) {
+        $rawValue = [Environment]::GetEnvironmentVariable($name)
+        $parsedValue = 0
+        if ([int]::TryParse($rawValue, [ref]$parsedValue) -and $parsedValue -gt 0) {
+            return $parsedValue
+        }
+        return $defaultValue
+    }
+
+    hidden [int] GetNonNegativeEnvironmentInteger([string]$name, [int]$defaultValue) {
+        $rawValue = [Environment]::GetEnvironmentVariable($name)
+        $parsedValue = 0
+        if ([int]::TryParse($rawValue, [ref]$parsedValue) -and $parsedValue -ge 0) {
+            return $parsedValue
+        }
+        return $defaultValue
+    }
+
+    hidden [bool] WaitForApi() {
+        $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
+        $delaySeconds = $this.GetNonNegativeEnvironmentInteger('HERMES_API_READY_DELAY_SECONDS', 2)
+        $timeoutSeconds = $this.GetPositiveEnvironmentInteger('HERMES_API_PROBE_TIMEOUT_SECONDS', 2)
+        $healthUrl = $this.GetApiHealthUrl()
+
+        for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+            try {
+                $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing `
+                    -TimeoutSec $timeoutSeconds -ErrorAction Stop
+                if ($null -ne $response -and [int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 300) {
+                    return $true
+                }
+            }
+            catch {
+                $null = $_
+            }
+
+            if ($attempt -lt $attempts) {
+                Start-Sleep -Seconds $delaySeconds
+            }
+        }
+
+        return $false
     }
 
     hidden [string] GetHomeDir() {
