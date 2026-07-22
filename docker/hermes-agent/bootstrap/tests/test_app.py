@@ -395,10 +395,13 @@ class AppTests(unittest.TestCase):
         from hermes_bootstrap import app
 
         root_env = self.root / ".env"
-        root_env.write_text("GH_TOKEN=root-token\n", encoding="utf-8")
+        root_env.write_text("GH_TOKEN='root-token'\n", encoding="utf-8")
         active = self.root / "profiles" / "rick"
         active.mkdir(parents=True)
-        (active / ".env").write_text("$(touch should-not-exist)\nGH_TOKEN=active-token\n", encoding="utf-8")
+        (active / ".env").write_text(
+            "$(touch should-not-exist)\nGH_TOKEN='active-token'\n",
+            encoding="utf-8",
+        )
         environ = {"HERMES_HOME": str(active)}
         with (
             mock.patch.object(app, "load_manifest", return_value=self.manifest),

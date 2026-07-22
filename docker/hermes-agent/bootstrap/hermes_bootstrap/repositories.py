@@ -48,11 +48,13 @@ _EXECUTABLE_LOCAL_CONFIG = frozenset(
         "core.gitproxy",
         "core.hookspath",
         "core.sshcommand",
+        "core.worktree",
         "credential.helper",
         "diff.external",
         "gpg.program",
         "gpg.ssh.defaultkeycommand",
         "interactive.difffilter",
+        "extensions.worktreeconfig",
         "sequence.editor",
     }
 )
@@ -328,6 +330,7 @@ def _verify_checkout_identity(repo: SharedRepository, checkout: Path, environmen
     if not _looks_like_checkout(checkout):
         raise ValueError("not a checkout")
     _reject_redirecting_local_config(checkout, environment)
+    _verify_effective_worktree(checkout, environment)
     remotes = _nul_records(
         _git_bytes(
             ("config", "--local", "--no-includes", "--null", "--get-all", "remote.origin.url"),
@@ -368,8 +371,8 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
     _reject_forbidden_status_paths(status_output)
     _validate_index(checkout, local_environment)
     _reject_external_hardlinks(checkout)
-    _fetch_declared_commit(repo, checkout, environment)
-    _validate_unpushed_commits(checkout, local_environment)
+    remote_commit = _fetch_declared_commit(repo, checkout, environment)
+    _reject_preexisting_unpushed_commits(checkout, local_environment)
     staged = b""
     if status_output:
         backup = _backup_index(checkout)
@@ -388,6 +391,7 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
             _restore_index(backup)
             raise
         _discard_index_backup(backup)
+    created_commit = False
     if staged:
         _require_git_success(
             (
@@ -403,21 +407,36 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
             checkout,
             local_environment,
         )
-    remote_commit = _fetch_head_commit(checkout, local_environment)
-    _validate_index(checkout, local_environment)
-    _validate_unpushed_commits(checkout, local_environment)
-    if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, local_environment) is None:
-        if _try_git_bytes(("rebase", "--abort"), checkout, local_environment) is None:
-            raise ValueError("could not abort rebase")
-        raise ValueError("rebase failed")
-    head = _head_commit(checkout, local_environment)
-    ahead = _git_ascii(("rev-list", "--count", "FETCH_HEAD..HEAD"), checkout, local_environment)
-    if ahead is None or not ahead.isdecimal():
-        raise ValueError("could not count local commits")
-    pushed = int(ahead) > 0
-    if pushed:
-        _require_git_success(("push", "--", repo.source, f"HEAD:{repo.ref}"), checkout, environment)
-    return head, pushed
+        created_commit = True
+    try:
+        if _fetch_head_commit(checkout, local_environment) != remote_commit:
+            raise ValueError("fetched commit changed unexpectedly")
+        _validate_index(checkout, local_environment)
+        _validate_unpushed_commits(checkout, local_environment)
+        if _try_git_bytes(("rebase", "FETCH_HEAD"), checkout, local_environment) is None:
+            if _try_git_bytes(("rebase", "--abort"), checkout, local_environment) is None:
+                raise ValueError("could not abort rebase")
+            raise ValueError("rebase failed")
+        head = _head_commit(checkout, local_environment)
+        ahead = _git_ascii(("rev-list", "--count", "FETCH_HEAD..HEAD"), checkout, local_environment)
+        if ahead is None or not ahead.isdecimal():
+            raise ValueError("could not count local commits")
+        pushed = int(ahead) > 0
+        if pushed and _try_git_bytes(
+            ("push", "--", repo.source, f"HEAD:{repo.ref}"), checkout, environment
+        ) is None:
+            confirmed = None
+            try:
+                confirmed = _fetch_declared_commit(repo, checkout, environment)
+            except ValueError:
+                pass
+            if confirmed != head:
+                raise ValueError("push failed")
+        return head, pushed
+    except Exception:
+        if created_commit:
+            _try_git_bytes(("reset", "--mixed", remote_commit), checkout, local_environment)
+        raise
 
 
 def _fetch_declared_commit(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> str:
@@ -481,6 +500,20 @@ def _local_git_environment(environment: dict[str, str]) -> dict[str, str]:
     local_environment = environment.copy()
     local_environment.pop("HERMES_BOOTSTRAP_GITHUB_TOKEN", None)
     return local_environment
+
+
+def _verify_effective_worktree(checkout: Path, environment: dict[str, str]) -> None:
+    raw_worktree = _git_bytes(
+        ("rev-parse", "--path-format=absolute", "--show-toplevel"),
+        checkout,
+        environment,
+    )
+    try:
+        effective = Path(os.fsdecode(raw_worktree.rstrip(b"\n")))
+        if not effective.samefile(checkout):
+            raise ValueError("Git worktree does not match checkout")
+    except OSError:
+        raise ValueError("could not verify Git worktree") from None
 
 
 def _reject_redirecting_local_config(checkout: Path, environment: dict[str, str]) -> None:
@@ -564,13 +597,14 @@ def _validate_index(checkout: Path, environment: dict[str, str]) -> None:
             raise ValueError("unsafe index entry")
 
 
-def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
+def _unpushed_commit_ids(checkout: Path, environment: dict[str, str]) -> tuple[str, ...]:
     raw_commits = _git_bytes(
         ("rev-list", "--reverse", "FETCH_HEAD..HEAD"),
         checkout,
         environment,
         max_output_bytes=_STATUS_OUTPUT_MAX_BYTES,
     )
+    commits: list[str] = []
     for raw_commit in raw_commits.splitlines():
         try:
             commit = raw_commit.decode("ascii", "strict")
@@ -578,6 +612,17 @@ def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> N
             raise ValueError("invalid commit list") from None
         if _OBJECT_ID.fullmatch(commit.lower()) is None:
             raise ValueError("invalid commit list")
+        commits.append(commit.lower())
+    return tuple(commits)
+
+
+def _reject_preexisting_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
+    if _unpushed_commit_ids(checkout, environment):
+        raise ValueError("pre-existing unpushed commits are forbidden")
+
+
+def _validate_unpushed_commits(checkout: Path, environment: dict[str, str]) -> None:
+    for commit in _unpushed_commit_ids(checkout, environment):
         entries = _nul_records(
             _git_bytes(
                 ("ls-tree", "-r", "-z", commit),

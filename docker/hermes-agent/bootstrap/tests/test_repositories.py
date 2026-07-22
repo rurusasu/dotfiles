@@ -237,7 +237,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(updated.pushed)
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), self.remote_head())
 
-    def test_read_write_commits_allowed_changes_and_retries_a_prior_unpushed_commit(self) -> None:
+    def test_read_write_rolls_back_failed_publication_and_retries_dirty_changes(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
         (repo.target / "entry.md").write_text("entry\n", encoding="utf-8")
@@ -253,6 +253,11 @@ class RepositoryTests(unittest.TestCase):
         reject.chmod(0o700)
         with self.assertRaises(RepositoryError):
             synchronize_remote(repo, self.auth)
+        self.assertEqual(
+            run_git("rev-list", "--count", "FETCH_HEAD..HEAD", cwd=repo.target),
+            "0",
+        )
+        self.assertTrue((repo.target / "retry.md").is_file())
         reject.unlink()
         retried = synchronize_remote(repo, self.auth)
         self.assertTrue(retried.pushed)
@@ -316,6 +321,31 @@ class RepositoryTests(unittest.TestCase):
             "fixture-token",
         )
 
+    def test_read_write_rejects_deleted_external_hardlinks_in_unpushed_history(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        outside_secret = self.data_root / ".env"
+        outside_secret.parent.mkdir(parents=True, exist_ok=True)
+        outside_secret.write_text("deleted-hardlink-secret-marker\n", encoding="utf-8")
+        linked = repo.target / "notes.md"
+        os.link(outside_secret, linked)
+        run_git("add", "notes.md", cwd=repo.target)
+        run_git("commit", "-m", "add prior hardlink", cwd=repo.target)
+        linked.unlink()
+        run_git("add", "-A", cwd=repo.target)
+        run_git("commit", "-m", "delete prior hardlink", cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "deleted-hardlink-secret-marker",
+            "fixture-token",
+        )
+
     def test_read_write_allows_hardlinks_fully_contained_in_the_checkout(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
@@ -341,7 +371,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual((repo.target / "README.md").read_text(encoding="utf-8"), "remote\n")
         self.assertEqual((repo.target / "local.md").read_text(encoding="utf-8"), "local\n")
 
-    def test_rebase_conflict_is_aborted_and_preserves_the_prior_local_commit(self) -> None:
+    def test_preexisting_unpushed_commit_is_rejected_and_preserved(self) -> None:
         repo = self.repository()
         self.clone(repo.target)
         (repo.target / "README.md").write_text("local conflict\n", encoding="utf-8")
@@ -362,8 +392,6 @@ class RepositoryTests(unittest.TestCase):
         repo = self.repository()
         self.clone(repo.target)
         (repo.target / "README.md").write_text("local abort marker\n", encoding="utf-8")
-        run_git("add", "README.md", cwd=repo.target)
-        run_git("commit", "-m", "local abort", cwd=repo.target)
         self.advance_remote("remote abort marker\n")
         real_runner = repositories_module._run_git_bytes
         abort_attempts: list[int] = []
@@ -472,6 +500,36 @@ class RepositoryTests(unittest.TestCase):
             synchronize_remote(repo, self.auth)
 
         self.assertFalse(marker.exists())
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
+
+    def test_rejects_an_external_core_worktree_before_staging_or_pushing(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        source_head = self.remote_head()
+        outside = self.root / "external-worktree"
+        outside.mkdir()
+        (outside / "notes.md").write_text("external-worktree-secret-marker\n", encoding="utf-8")
+        run_git("config", "--local", "core.worktree", str(outside), cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
+        self.assertEqual(self.remote_head(), source_head)
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            "external-worktree-secret-marker",
+            "fixture-token",
+        )
+
+    def test_rejects_worktree_scoped_config_before_authenticated_git(self) -> None:
+        repo = self.repository()
+        self.clone(repo.target)
+        run_git("config", "--local", "extensions.worktreeConfig", "true", cwd=repo.target)
+        run_git("config", "--worktree", "http.proxy", "http://127.0.0.1:9", cwd=repo.target)
+
+        with self.assertRaises(RepositoryError) as caught:
+            synchronize_remote(repo, self.auth)
+
         self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
 
     def test_rejects_local_http_transport_overrides_before_fetching(self) -> None:

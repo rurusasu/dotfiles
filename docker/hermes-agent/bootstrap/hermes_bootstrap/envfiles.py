@@ -290,6 +290,7 @@ def _validate_environment_mapping(managed: Mapping[str, str], remove: AbstractSe
         raise InputError("environment mapping is invalid") from None
     for key, value in items:
         _validate_environment_key(key)
+        # python-dotenv expands ${NAME} even in single-quoted values.
         if (
             not isinstance(value, str)
             or any(character in value for character in "\x00\r\n")

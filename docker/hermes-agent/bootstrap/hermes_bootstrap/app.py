@@ -10,8 +10,11 @@ import stat
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path, PurePosixPath
 from typing import Callable, TextIO
+
+from dotenv.parser import parse_stream
 
 from .distributions import (
     _normalize_owned_paths,
@@ -323,11 +326,27 @@ def _read_env_token(path: Path) -> str | None:
     if len(data) > _ENV_LIMIT or "\x00" in text:
         raise CredentialError("GitHub credentials are unavailable")
     token: str | None = None
-    for line in text.splitlines():
-        if not line.startswith("GH_TOKEN="):
+    for binding in parse_stream(StringIO(text)):
+        original = binding.original.string
+        first_line = original.split("\n", 1)[0]
+        declared = first_line.startswith("GH_TOKEN=")
+        if binding.error:
+            if declared:
+                raise CredentialError("GitHub credentials are unavailable")
             continue
-        value = line[len("GH_TOKEN=") :]
-        if token is not None or not value or "\r" in value or "\n" in value:
+        if binding.key != "GH_TOKEN" or not declared:
+            continue
+        value = binding.value
+        normalized_original = original[:-1] if original.endswith("\n") else original
+        if (
+            token is not None
+            or not isinstance(value, str)
+            or not value
+            or "\r" in value
+            or "\n" in value
+            or "\r" in normalized_original
+            or "\n" in normalized_original
+        ):
             raise CredentialError("GitHub credentials are unavailable")
         token = value
     return token
