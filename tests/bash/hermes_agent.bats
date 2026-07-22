@@ -85,10 +85,16 @@ JSON
 }
 
 run_start_stack() {
-	run bash -c '
+	local missing_command="${1:-}"
+	run env DOTFILES_TEST_MISSING_COMMAND="$missing_command" bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
 . "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+if [[ -n ${DOTFILES_TEST_MISSING_COMMAND:-} ]]; then
+  dotfiles_have() {
+    [[ $1 != "$DOTFILES_TEST_MISSING_COMMAND" ]] && command -v "$1" >/dev/null 2>&1
+  }
+fi
 dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 '
 }
@@ -140,9 +146,10 @@ EOF
 }
 
 create_mocked_installer_fixture() {
-	MOCK_REPO="$BATS_TEST_TMPDIR/installer-repo"
-	MOCK_BIN="$BATS_TEST_TMPDIR/installer-bin"
-	MOCK_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
+	local fixture_root="$1"
+	MOCK_REPO="$fixture_root/installer-repo"
+	MOCK_BIN="$fixture_root/installer-bin"
+	MOCK_DOCKER_APP="$fixture_root/Docker.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
 		"$MOCK_REPO/docker/hermes-agent" "$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
@@ -216,15 +223,20 @@ EOF
 
 run_mocked_installer() {
 	local platform="$1"
-	local marker="$BATS_TEST_TMPDIR/NIXOS"
-	local hardware="$BATS_TEST_TMPDIR/hardware-configuration.nix"
-	local prebuilt="$BATS_TEST_TMPDIR/prebuilt-system"
-	local systemd_dir="$BATS_TEST_TMPDIR/systemd"
-	local os_release="$BATS_TEST_TMPDIR/os-release"
+	local test_root fixture_root marker hardware prebuilt systemd_dir os_release user_profile_root
+	test_root="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
+	fixture_root="$test_root/installer-$platform"
+	marker="$fixture_root/NIXOS"
+	hardware="$fixture_root/hardware-configuration.nix"
+	prebuilt="$fixture_root/prebuilt-system"
+	systemd_dir="$fixture_root/systemd"
+	os_release="$fixture_root/os-release"
+	user_profile_root="$fixture_root/profiles"
 
-	create_mocked_installer_fixture
+	create_mocked_installer_fixture "$fixture_root"
 	printf '{ ... }: { }\n' >"$hardware"
-	mkdir -p "$prebuilt/bin" "$systemd_dir"
+	mkdir -p "$prebuilt/bin" "$systemd_dir" "$user_profile_root/test-user"
+	ln -s "$MOCK_BIN" "$user_profile_root/test-user/bin"
 	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
 #!/usr/bin/env bash
 printf 'switch-to-configuration %s\n' "$*" >>"$COMMAND_LOG"
@@ -259,10 +271,11 @@ EOF
 		COMMAND_LOG="$COMMAND_LOG" \
 		MOCK_UNAME_S="$MOCK_UNAME_S" \
 		MOCK_UNAME_M="$MOCK_UNAME_M" \
-		DOTFILES_CHECKOUT_TARGET="$BATS_TEST_TMPDIR/checkout-$platform" \
-		DOTFILES_NIX_PROFILE_SCRIPT="$BATS_TEST_TMPDIR/nix-daemon.sh" \
+		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
+		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
-		DOTFILES_DOCKER_SETUP_MARKER="$BATS_TEST_TMPDIR/docker-setup" \
+		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
+		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
 		DOTFILES_SYSTEMD_DIR="$systemd_dir" \
 		DOTFILES_OS_RELEASE_FILE="$os_release" \
 		DOTFILES_NIXOS_MARKER="$marker" \
@@ -302,7 +315,10 @@ EOF
 		: >"$COMMAND_LOG"
 		run_mocked_installer "$platform"
 
-		[ "$status" -eq 0 ]
+		if [[ $status -ne 0 ]]; then
+			printf '%s installer failed:\n%s\n' "$platform" "$output" >&3
+			false
+		fi
 		case "$platform" in
 		macos) expected_runner=docker ;;
 		*) expected_runner=docker_command ;;
@@ -361,9 +377,7 @@ dotfiles_hermes_browser_data_dir
 }
 
 @test "fails preflight before Compose when op is unavailable" {
-	rm "$STUB_BIN/op"
-
-	run_start_stack
+	run_start_stack op
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"1Password CLI (op) is required"* ]]
@@ -371,10 +385,7 @@ dotfiles_hermes_browser_data_dir
 }
 
 @test "fails preflight before Compose when jq is unavailable" {
-	rm "$STUB_BIN/jq"
-	export PATH="$STUB_BIN:/bin"
-
-	run_start_stack
+	run_start_stack jq
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"jq is required"* ]]

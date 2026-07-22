@@ -310,13 +310,13 @@ Describe "Invoke-HermesBootstrap" {
         $fakeDockerPath = New-HermesBootstrapFakeDocker -Directory $script:fakeDockerDirectory
         $script:dockerProcessParameters = if ($IsWindows) {
             @{
-                DockerExecutable = $env:ComSpec
+                DockerExecutable      = $env:ComSpec
                 DockerPrefixArguments = @("/d", "/c", $fakeDockerPath)
             }
         }
         else {
             @{
-                DockerExecutable = $fakeDockerPath
+                DockerExecutable      = $fakeDockerPath
                 DockerPrefixArguments = @()
             }
         }
@@ -369,7 +369,7 @@ Describe "Invoke-HermesBootstrap" {
         )
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
-            Where-Object { $_.Length -gt 0 } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
         @($records).Count | Should -Be 8
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
@@ -400,7 +400,7 @@ Describe "Invoke-HermesBootstrap" {
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
         )
         $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "`n" |
-                Where-Object { $_.Length -gt 0 })
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
         $rawLines[7] | Should -Be '{"type":"end"}'
         foreach ($index in 1..6) {
@@ -411,7 +411,7 @@ Describe "Invoke-HermesBootstrap" {
 
     It "returns a fixed producer failure when Docker cannot be started" {
         $missingDockerProcessParameters = @{
-            DockerExecutable = Join-Path $TestDrive "missing-docker"
+            DockerExecutable      = Join-Path $TestDrive "missing-docker"
             DockerPrefixArguments = @()
         }
         $invoker = {
