@@ -177,11 +177,13 @@ restart Hermes. There are two public diagnostics:
   profile and category in its JSON.
 - A nonzero post-preflight publication report writes
   `named profile repository sync failed: <failed names>` to stderr. The Python
-  exception retains the report internally, but the CLI does not serialize its
-  categories.
+  exception can retain the report internally.
 
-In both cases `apply` stdout is empty; unlike standalone `sync-profiles`, it
-does not emit a failed JSON report.
+Once synchronization has created `profile_report`, later staging, transaction,
+installed-layout validation, cleanup, or rollback failures can also retain that
+report on the internal Python exception. The CLI never serializes this
+attribute: every failed `apply` has empty stdout and only its safe error message
+on stderr, unlike standalone `sync-profiles`.
 
 Use dry-run only for aggregate preflight and diff inspection. It never pushes,
 so a changed entry reports category `dry_run`; it cannot reproduce
@@ -340,8 +342,10 @@ remote URLs.
 `sync-profiles` uses its JSON route only for handled exits `0`, `3`, and `4`.
 Its argument error `2`, manifest validation error `8`, and unexpected error `6`
 use stderr without a result document. Failed `apply` likewise uses stderr.
-Only a post-preflight publication failure has an internal profile-sync report,
-and that report is not part of the public CLI result.
+Snapshot-preflight rejection occurs before a profile report exists. After
+synchronization creates one, publication, staging, transaction, validation,
+cleanup, and rollback failures may retain it on the internal Python exception.
+The CLI does not serialize that report and emits only the safe error.
 
 ## Future Handoff
 
