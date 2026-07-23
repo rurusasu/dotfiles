@@ -11,6 +11,7 @@ import resource
 import secrets
 import stat
 from collections.abc import Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -31,13 +32,20 @@ _DECLARATIVE_KEYS = (
 )
 _RUNTIME_KEYS = frozenset({"source", "installed_at"})
 _READ_CHUNK_BYTES = 64 * 1024
-_PRIVATE_KEY_OVERLAP_BYTES = 256
 _FD_OPERATION_HEADROOM = 32
 _FD_CONSERVATIVE_MARGIN = 32
 _RENAME_NOREPLACE = 1
 _PROFILE_NAME = re.compile(r"[a-z][a-z0-9-]*\Z")
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
-_PRIVATE_KEY = re.compile(rb"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")
+_PRIVATE_KEY_HEADERS = (
+    b"-----BEGIN PRIVATE KEY-----",
+    b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+    b"-----BEGIN RSA PRIVATE KEY-----",
+    b"-----BEGIN EC PRIVATE KEY-----",
+    b"-----BEGIN DSA PRIVATE KEY-----",
+    b"-----BEGIN OPENSSH PRIVATE KEY-----",
+)
+_PRIVATE_KEY_CARRY_BYTES = max(len(header) for header in _PRIVATE_KEY_HEADERS) - 1
 _ASCII_ALNUM = frozenset(
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 )
@@ -279,9 +287,9 @@ class _SensitiveStreamScanner:
         self._github.feed(content)
         self._slack.feed(content)
         private_window = self._private_tail + content
-        if _PRIVATE_KEY.search(private_window):
+        if any(header in private_window for header in _PRIVATE_KEY_HEADERS):
             raise ValueError("secret candidate")
-        self._private_tail = private_window[-_PRIVATE_KEY_OVERLAP_BYTES:]
+        self._private_tail = private_window[-_PRIVATE_KEY_CARRY_BYTES:]
 
     def finish(self) -> None:
         self._github.finish()
@@ -403,7 +411,6 @@ def _prepare_one(
         pass
     else:
         raise ValueError("snapshot output already exists")
-    source_fd = open_absolute_directory(declaration.target)
     output_fd: int | None = None
     output_identity: tuple[int, int] | None = None
     output_created = False
@@ -411,6 +418,7 @@ def _prepare_one(
     keep_expected_files_open = False
     expected_files: list[_ExpectedFile] = []
     expected_directories: dict[PurePosixPath, _ExpectedDirectory] = {}
+    source_fd = open_absolute_directory(declaration.target)
     try:
         raw, manifest_stat = _read_manifest_compatibly(declaration, source_fd)
         owned = _normalize_owned(raw["distribution_owned"])
@@ -632,21 +640,29 @@ def _copy_declared_path(
     casefolded: dict[str, str],
     fd_budget: _RetainedFdBudget,
 ) -> bool:
-    source_fds = [os.dup(source_fd)]
-    output_fds = [os.dup(output_fd)]
-    ancestors: list[tuple[int, str, int, tuple[os.stat_result, os.stat_result]]] = []
-    try:
+    with ExitStack() as descriptors:
+        source_root_fd = os.dup(source_fd)
+        descriptors.callback(os.close, source_root_fd)
+        source_fds = [source_root_fd]
+        output_root_fd = os.dup(output_fd)
+        descriptors.callback(os.close, output_root_fd)
+        output_fds = [output_root_fd]
+        ancestors: list[
+            tuple[int, str, int, tuple[os.stat_result, os.stat_result]]
+        ] = []
         prefix = PurePosixPath()
         for component in path.parts[:-1]:
             prefix /= component
             fd_budget.require_tree_depth(len(prefix.parts))
             source_child_fd, source_identity = _open_source_directory(source_fds[-1], component)
+            descriptors.callback(os.close, source_child_fd)
             output_child_fd = _create_output_directory(
                 output_fds[-1],
                 component,
                 prefix,
                 expected_directories,
             )
+            descriptors.callback(os.close, output_child_fd)
             ancestors.append((source_fds[-1], component, source_child_fd, source_identity))
             source_fds.append(source_child_fd)
             output_fds.append(output_child_fd)
@@ -657,14 +673,18 @@ def _copy_declared_path(
         _check_casefold(path, casefolded)
         if stat.S_ISDIR(source.st_mode):
             fd_budget.require_tree_depth(len(path.parts))
-            source_child_fd, source_identity = _open_source_directory(source_parent_fd, path.name)
-            output_child_fd = _create_output_directory(
-                output_parent_fd,
-                path.name,
-                path,
-                expected_directories,
-            )
-            try:
+            with ExitStack() as child_descriptors:
+                source_child_fd, source_identity = _open_source_directory(
+                    source_parent_fd, path.name
+                )
+                child_descriptors.callback(os.close, source_child_fd)
+                output_child_fd = _create_output_directory(
+                    output_parent_fd,
+                    path.name,
+                    path,
+                    expected_directories,
+                )
+                child_descriptors.callback(os.close, output_child_fd)
                 _copy_directory(
                     source_child_fd,
                     source_parent_fd,
@@ -678,9 +698,6 @@ def _copy_declared_path(
                     casefolded,
                     fd_budget,
                 )
-            finally:
-                os.close(source_child_fd)
-                os.close(output_child_fd)
             result = True
         else:
             _copy_regular(
@@ -696,11 +713,6 @@ def _copy_declared_path(
         for parent_fd, name, descriptor, identity in reversed(ancestors):
             _verify_source_directory(parent_fd, name, descriptor, identity)
         return result
-    finally:
-        for descriptor in reversed(source_fds):
-            os.close(descriptor)
-        for descriptor in reversed(output_fds):
-            os.close(descriptor)
 
 
 def _copy_directory(
@@ -726,14 +738,18 @@ def _copy_directory(
         _require_safe_source(source)
         if stat.S_ISDIR(source.st_mode):
             fd_budget.require_tree_depth(len(relative.parts))
-            source_child_fd, child_identity = _open_source_directory(source_fd, name)
-            output_child_fd = _create_output_directory(
-                output_fd,
-                name,
-                relative,
-                expected_directories,
-            )
-            try:
+            with ExitStack() as child_descriptors:
+                source_child_fd, child_identity = _open_source_directory(
+                    source_fd, name
+                )
+                child_descriptors.callback(os.close, source_child_fd)
+                output_child_fd = _create_output_directory(
+                    output_fd,
+                    name,
+                    relative,
+                    expected_directories,
+                )
+                child_descriptors.callback(os.close, output_child_fd)
                 _copy_directory(
                     source_child_fd,
                     source_fd,
@@ -747,9 +763,6 @@ def _copy_directory(
                     casefolded,
                     fd_budget,
                 )
-            finally:
-                os.close(source_child_fd)
-                os.close(output_child_fd)
         else:
             _copy_regular(
                 source_fd,
@@ -772,9 +785,9 @@ def _copy_regular(
     expected_files: list[_ExpectedFile],
     fd_budget: _RetainedFdBudget,
 ) -> None:
-    source_fd = _open_regular(parent_fd, name)
     destination_fd: int | None = None
     destination_registered = False
+    source_fd = _open_regular(parent_fd, name)
     try:
         before = os.fstat(source_fd)
         fd_budget.require_headroom(additional=1)
@@ -1035,8 +1048,8 @@ def _write_private_file_at(
     fd_budget: _RetainedFdBudget,
 ) -> _ExpectedFile:
     fd_budget.require_headroom(additional=1)
-    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
     registered = False
+    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
     try:
         created = os.fstat(descriptor)
         expected_index = len(expected_files)
@@ -1415,8 +1428,9 @@ def _verify_absolute_directory_nonblocking(path: Path, descriptor: int) -> None:
         | getattr(os, "O_NOFOLLOW", 0)
         | getattr(os, "O_NONBLOCK", 0)
     )
-    current_fd: int | None = os.open("/", flags)
+    current_fd: int | None = None
     try:
+        current_fd = os.open("/", flags)
         for component in path.parts[1:]:
             child_fd = os.open(component, flags, dir_fd=current_fd)
             try:
@@ -1472,8 +1486,10 @@ def _remove_snapshot(
     directory_paths = {item.path for item in directories}
     removed_files: set[tuple[int, int]] = set()
     removed_directories: set[tuple[int, int]] = set()
-    cleanup_fd: int | None = os.dup(output_fd) if output_fd is not None else None
+    cleanup_fd: int | None = None
     try:
+        if output_fd is not None:
+            cleanup_fd = os.dup(output_fd)
         if cleanup_fd is None:
             name = _find_snapshot_name(scratch_fd, expected_identity)
             if name is None:

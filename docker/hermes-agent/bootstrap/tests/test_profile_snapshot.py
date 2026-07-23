@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import errno
 import os
+import random
+import re
 import resource
 import signal
 import socket
@@ -362,6 +364,162 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
 
+    def test_rejects_every_supported_private_key_header_at_every_split(self) -> None:
+        headers = (
+            b"-----BEGIN PRIVATE KEY-----",
+            b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+            b"-----BEGIN RSA PRIVATE KEY-----",
+            b"-----BEGIN EC PRIVATE KEY-----",
+            b"-----BEGIN DSA PRIVATE KEY-----",
+            b"-----BEGIN OPENSSH PRIVATE KEY-----",
+        )
+        split_cases = 0
+
+        for header in headers:
+            for split in range(len(header) + 1):
+                scanner = profile_snapshot._SensitiveStreamScanner()
+                rejected = False
+                try:
+                    scanner.feed(b"safe!" + header[:split])
+                    scanner.feed(header[split:] + b"!tail")
+                    scanner.finish()
+                except ValueError:
+                    rejected = True
+                if not rejected:
+                    self.fail(f"private header escaped at split {split}: {header!r}")
+                split_cases += 1
+
+        self.assertEqual(split_cases, 197)
+
+    def test_accepts_a_long_bogus_uppercase_private_key_label(self) -> None:
+        content = b"-----BEGIN " + b"A" * 4096 + b" PRIVATE KEY-----"
+
+        for width in (len(content), 17):
+            scanner = profile_snapshot._SensitiveStreamScanner()
+            for start in range(0, len(content), width):
+                scanner.feed(content[start : start + width])
+            scanner.finish()
+
+    def test_streaming_detector_matches_deterministic_whole_buffer_oracle(self) -> None:
+        github_prefixes = (
+            b"ghp_",
+            b"gho_",
+            b"ghu_",
+            b"ghs_",
+            b"ghr_",
+            b"github_pat_",
+        )
+        slack_prefixes = (
+            b"xoxb-",
+            b"xoxp-",
+            b"xoxa-",
+            b"xoxr-",
+            b"xoxs-",
+            b"xapp-",
+        )
+        private_headers = (
+            b"-----BEGIN PRIVATE KEY-----",
+            b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+            b"-----BEGIN RSA PRIVATE KEY-----",
+            b"-----BEGIN EC PRIVATE KEY-----",
+            b"-----BEGIN DSA PRIVATE KEY-----",
+            b"-----BEGIN OPENSSH PRIVATE KEY-----",
+        )
+        github_oracle = re.compile(
+            rb"(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{20,}"
+            rb"|github_pat_[A-Za-z0-9_]{20,})(?![A-Za-z0-9_])"
+        )
+        slack_oracle = re.compile(
+            rb"(?<![A-Za-z0-9_])(?:xoxb|xoxp|xoxa|xoxr|xoxs|xapp)-"
+            rb"[A-Za-z0-9-]+(?![A-Za-z0-9_-])"
+        )
+        private_oracle = re.compile(
+            b"(?:" + b"|".join(re.escape(header) for header in private_headers) + b")"
+        )
+        corpus: list[bytes] = []
+
+        for prefix in github_prefixes:
+            token = prefix + b"A" * 20
+            long_token = prefix + b"A" * 600
+            corpus.extend(
+                (
+                    token,
+                    b"!" + token + b"!",
+                    b"A" + token + b"!",
+                    b"!" + prefix + b"A" * 19 + b"!",
+                    b"!" + token + b"_!",
+                    b"!" + long_token + b"!",
+                    b"!" + long_token,
+                    b"!" + long_token + b"_!",
+                )
+            )
+        for prefix in slack_prefixes:
+            token = prefix + b"valid"
+            long_token = prefix + b"a" * 600
+            corpus.extend(
+                (
+                    token,
+                    b"!" + token + b"!",
+                    b"A" + token + b"!",
+                    b"!" + token + b"_!",
+                    b"!" + long_token + b"!",
+                    b"!" + long_token,
+                    b"!" + long_token + b"_!",
+                )
+            )
+        for header in private_headers:
+            corpus.extend(
+                (
+                    header,
+                    b"safe!" + header + b"!tail",
+                    header.replace(b"PRIVATE", b"PUBLIC"),
+                )
+            )
+        corpus.extend(
+            (
+                b"",
+                b"ordinary profile content",
+                b"!ghp_short!",
+                b"!xapp-!",
+                b"-----BEGIN " + b"A" * 4096 + b" PRIVATE KEY-----",
+            )
+        )
+        random_source = random.Random(20260723)
+        alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_!- "
+        for _ in range(512):
+            corpus.append(
+                bytes(
+                    random_source.choice(alphabet)
+                    for _ in range(random_source.randrange(0, 321))
+                )
+            )
+
+        evaluations = 0
+        for content in corpus:
+            expected = bool(
+                github_oracle.search(content)
+                or slack_oracle.search(content)
+                or private_oracle.search(content)
+            )
+            widths = (1, 2, 3, 7, 31, 64, 257, max(1, len(content)))
+            for width in widths:
+                scanner = profile_snapshot._SensitiveStreamScanner()
+                actual = False
+                try:
+                    for start in range(0, len(content), width):
+                        scanner.feed(content[start : start + width])
+                    scanner.finish()
+                except ValueError:
+                    actual = True
+                if actual != expected:
+                    self.fail(
+                        "streaming detector disagreed with oracle "
+                        f"at width {width}: {content[:120]!r}"
+                    )
+                evaluations += 1
+
+        self.assertEqual(evaluations, 5000)
+
     def test_manifest_growth_is_rejected_after_one_bounded_probe(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -474,6 +632,154 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(delivered, len(content) // 2)
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_second_directory_dup_failure_closes_first_dup_and_cleans_snapshot(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        original_dup = os.dup
+        baseline_fds = len(os.listdir("/proc/self/fd"))
+        dup_calls = 0
+        first_duplicate: int | None = None
+        observed_fds = baseline_fds
+        first_duplicate_open = False
+
+        def fail_second_dup(descriptor: int) -> int:
+            nonlocal dup_calls, first_duplicate
+            dup_calls += 1
+            if dup_calls == 1:
+                first_duplicate = original_dup(descriptor)
+                return first_duplicate
+            if dup_calls == 2:
+                raise OSError(errno.EIO, "injected second dup failure")
+            return original_dup(descriptor)
+
+        try:
+            with mock.patch.object(
+                profile_snapshot.os, "dup", side_effect=fail_second_dup
+            ):
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile("rick")),
+                        self.scratch,
+                        allow_missing=False,
+                    )
+            observed_fds = len(os.listdir("/proc/self/fd"))
+            assert first_duplicate is not None
+            try:
+                os.fstat(first_duplicate)
+                first_duplicate_open = True
+            except OSError as error:
+                self.assertEqual(error.errno, errno.EBADF)
+        finally:
+            if first_duplicate_open and first_duplicate is not None:
+                os.close(first_duplicate)
+
+        self.assertEqual(dup_calls, 3)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+        self.assertFalse(first_duplicate_open)
+        self.assertEqual(observed_fds, baseline_fds)
+
+    def test_output_directory_creation_failure_closes_open_source_child(self) -> None:
+        cases = (
+            ("declared", ["assets"], "assets", "assets"),
+            ("recursive", ["assets"], "assets/nested", "assets/nested"),
+            (
+                "ancestor",
+                ["assets/nested/SOUL.md"],
+                "assets/nested/SOUL.md",
+                "assets",
+            ),
+        )
+
+        for index, (case, owned, source_item, failure_path) in enumerate(cases):
+            with self.subTest(case=case):
+                name = f"fdcreate{index}"
+                home = self.write_profile(name, owned)
+                source_path = home / source_item
+                if source_path.suffix:
+                    source_path.parent.mkdir(parents=True)
+                    source_path.write_text("safe\n", encoding="utf-8")
+                else:
+                    source_path.mkdir(parents=True)
+                    (source_path / "safe.txt").write_text(
+                        "safe\n", encoding="utf-8"
+                    )
+                scratch = self.root / f"fd-create-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+                original_open_source = profile_snapshot._open_source_directory
+                original_create = profile_snapshot._create_output_directory
+                baseline_fds = len(os.listdir("/proc/self/fd"))
+                opened_child: int | None = None
+                create_failures = 0
+                source_was_open = False
+
+                def track_source_child(parent_fd: int, child_name: str):
+                    nonlocal opened_child
+                    result = original_open_source(parent_fd, child_name)
+                    relative_name = failure_path.rsplit("/", 1)[-1]
+                    if child_name == relative_name:
+                        opened_child = result[0]
+                    return result
+
+                def fail_output_create(
+                    parent_fd: int,
+                    child_name: str,
+                    relative: object,
+                    expected_directories: object,
+                ) -> int:
+                    nonlocal create_failures, source_was_open
+                    if relative.as_posix() == failure_path:
+                        create_failures += 1
+                        if opened_child is not None:
+                            os.fstat(opened_child)
+                            source_was_open = True
+                        raise OSError(
+                            errno.EIO, "injected output directory failure"
+                        )
+                    return original_create(
+                        parent_fd,
+                        child_name,
+                        relative,
+                        expected_directories,
+                    )
+
+                with mock.patch.object(
+                    profile_snapshot,
+                    "_open_source_directory",
+                    side_effect=track_source_child,
+                ), mock.patch.object(
+                    profile_snapshot,
+                    "_create_output_directory",
+                    side_effect=fail_output_create,
+                ):
+                    with self.assertRaises(ProfileSnapshotError) as caught:
+                        prepare_profile_snapshots(
+                            self.manifest(self.profile(name)),
+                            scratch,
+                            allow_missing=False,
+                        )
+
+                observed_fds = len(os.listdir("/proc/self/fd"))
+                child_still_open = False
+                assert opened_child is not None
+                try:
+                    os.fstat(opened_child)
+                    child_still_open = True
+                except OSError as error:
+                    self.assertEqual(error.errno, errno.EBADF)
+                finally:
+                    if child_still_open:
+                        os.close(opened_child)
+
+                self.assertEqual(create_failures, 1)
+                self.assertTrue(source_was_open)
+                self.assertEqual(
+                    caught.exception.category, "invalid_local_profile"
+                )
+                self.assertEqual(list(scratch.iterdir()), [])
+                self.assertFalse(child_still_open)
+                self.assertEqual(observed_fds, baseline_fds)
 
     def test_retained_fd_budget_rejects_before_emfile_and_cleans_all_profiles(self) -> None:
         first = self.write_profile("alpha", ["SOUL.md"])
