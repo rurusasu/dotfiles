@@ -63,7 +63,11 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
         if not isinstance(mcp_servers, Mapping):
             _invalid(source)
         chrome = mcp_servers.get("chrome")
-        if not isinstance(chrome, Mapping) or dict(chrome) != _CHROME_MCP:
+        if (
+            not isinstance(chrome, Mapping)
+            or type(chrome.get("connect_timeout")) is not int
+            or dict(chrome) != _CHROME_MCP
+        ):
             _invalid(source)
 
 

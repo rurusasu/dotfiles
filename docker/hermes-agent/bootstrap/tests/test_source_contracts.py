@@ -101,6 +101,12 @@ mcp_servers:
     url: http://browser-mcp:8080/mcp
     connect_timeout: true
 """,
+            "float-timeout": """\
+mcp_servers:
+  chrome:
+    url: http://browser-mcp:8080/mcp
+    connect_timeout: 120.0
+""",
             "wrong-timeout": """\
 mcp_servers:
   chrome:
