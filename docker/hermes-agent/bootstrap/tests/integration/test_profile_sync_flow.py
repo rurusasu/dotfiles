@@ -8,10 +8,12 @@ import io
 import json
 import shutil
 import stat
+import subprocess
 import unittest
-from builtins import ExceptionGroup
+from builtins import BaseExceptionGroup, ExceptionGroup
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path, PurePosixPath
+from types import FrameType, TracebackType
 from unittest import mock
 
 from hermes_cli import profile_distribution
@@ -26,38 +28,6 @@ from hermes_bootstrap.errors import RepositoryError
 from hermes_bootstrap.models import DistributionSource
 
 
-PROFILE_OWNED_PATHS = {
-    "rick": (
-        ".no-bundled-skills",
-        "SOUL.md",
-        "assets",
-        "config.yaml",
-        "profile.yaml",
-        "slack-manifest.json",
-    ),
-    "hoffman": (
-        ".no-bundled-skills",
-        "SOUL.md",
-        "assets",
-        "config.yaml",
-        "profile.yaml",
-        "slack-manifest.json",
-    ),
-    "risarisa": (
-        ".no-bundled-skills",
-        "SOUL.md",
-        "config.yaml",
-        "slack-manifest.json",
-    ),
-    "nancy": (
-        ".no-bundled-skills",
-        "SOUL.md",
-        "assets",
-        "config.yaml",
-        "profile.yaml",
-        "slack-manifest.json",
-    ),
-}
 PNG_FIXTURE = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
     "+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -72,9 +42,26 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.profile_names = tuple(
             source.name for source in self.flow.manifest.profiles
         )
+        self.profile_declarations = tuple(
+            (source.name, source.source, source.ref)
+            for source in self.flow.manifest.profiles
+        )
+        production = bootstrap_flow.load_manifest(bootstrap_flow.PRODUCTION_MANIFEST)
+        self.assertEqual(len(production.profiles), 4)
+        self.assertEqual(
+            self.profile_declarations,
+            tuple(
+                (source.name, source.source, source.ref)
+                for source in production.profiles
+            ),
+        )
         self.assertEqual(self.profile_names, bootstrap_flow.PROFILE_NAMES)
-        self.assertEqual(set(self.profile_names), set(PROFILE_OWNED_PATHS))
         self._install_profile_fixtures()
+        nancy = next(source for source in self.flow.manifest.profiles if source.name == "nancy")
+        nancy_manifest = profile_distribution.read_manifest(nancy.target)
+        self.assertIsNotNone(nancy_manifest)
+        assert nancy_manifest is not None
+        self.assertIn("assets", nancy_manifest.distribution_owned)
 
     def _cleanup_flow(self) -> None:
         try:
@@ -94,9 +81,8 @@ class ProfileSyncFlowTests(unittest.TestCase):
 
     def _install_profile_fixtures(self) -> None:
         for source in self.flow.manifest.profiles:
-            owned = PROFILE_OWNED_PATHS[source.name]
             remote_files = self._profile_files(
-                source.name, owned, version="0.1.0", marker="remote"
+                source, version="0.1.0", marker="remote"
             )
             remote_files.update(
                 {
@@ -110,26 +96,22 @@ class ProfileSyncFlowTests(unittest.TestCase):
             )
             self._commit_seed(source.name, remote_files, "seed stale profile remote")
             local_files = self._profile_files(
-                source.name, owned, version="0.2.0", marker="local"
+                source, version="0.2.0", marker="local"
             )
             self._write_bytes(source.target, local_files)
 
     def _profile_files(
         self,
-        name: str,
-        owned: tuple[str, ...],
+        source: DistributionSource,
         *,
         version: str,
         marker: str,
     ) -> dict[str, bytes]:
+        name = source.name
         files = {
-            "distribution.yaml": self._profile_manifest(
-                name, owned, version
-            ).encode("ascii"),
             ".no-bundled-skills": b"",
             "SOUL.md": f"{marker} soul for {name}\n".encode("ascii"),
             "config.yaml": f"profile: {name}-{marker}\n".encode("ascii"),
-            "profile.yaml": f"name: {name}-{marker}\n".encode("ascii"),
             "slack-manifest.json": json.dumps(
                 {"display_name": f"{name}-{marker}"},
                 sort_keys=True,
@@ -137,19 +119,27 @@ class ProfileSyncFlowTests(unittest.TestCase):
             ).encode("ascii")
             + b"\n",
         }
-        if "assets" in owned:
+        rich_fixture_names = {
+            self.profile_names[0],
+            self.profile_names[1],
+            self.profile_names[-1],
+        }
+        if name in rich_fixture_names:
+            files["profile.yaml"] = f"name: {name}-{marker}\n".encode("ascii")
             files[f"assets/{name}-portfolio.png"] = (
                 PNG_FIXTURE + f"{name}-{marker}-portfolio".encode("ascii")
             )
             files[f"assets/{name}-slack-avatar.png"] = (
                 PNG_FIXTURE + f"{name}-{marker}-avatar".encode("ascii")
             )
+        owned = tuple(
+            sorted({PurePosixPath(path).parts[0] for path in files})
+        )
         return {
-            path: content
-            for path, content in files.items()
-            if path == "distribution.yaml"
-            or path in owned
-            or any(path.startswith(f"{item}/") for item in owned)
+            "distribution.yaml": self._profile_manifest(
+                name, owned, version
+            ).encode("ascii"),
+            **files,
         }
 
     @staticmethod
@@ -196,6 +186,14 @@ class ProfileSyncFlowTests(unittest.TestCase):
     def _remote_heads(self) -> dict[str, str]:
         return {name: self._remote_head(name) for name in self.profile_names}
 
+    def _snapshot_bytes_modes(
+        self, root: Path
+    ) -> dict[str, tuple[str, int, bytes | str | None]]:
+        return {
+            relative: (entry.kind, entry.mode, entry.payload)
+            for relative, entry in self.flow._snapshot_tree(root).items()
+        }
+
     def _source(self, name: str) -> DistributionSource:
         return next(
             source
@@ -205,12 +203,10 @@ class ProfileSyncFlowTests(unittest.TestCase):
 
     def _write_local_revision(self, name: str, revision: int) -> None:
         source = self._source(name)
-        owned = PROFILE_OWNED_PATHS[name]
         self._write_bytes(
             source.target,
             self._profile_files(
-                name,
-                owned,
+                source,
                 version=f"0.{revision}.0",
                 marker=f"local-{revision}",
             ),
@@ -271,28 +267,180 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 )
         return tuple(sorted(files))
 
+    @staticmethod
+    def _git_object_id(kind: str, content: bytes) -> str:
+        return hashlib.sha1(
+            f"{kind} {len(content)}\0".encode("ascii") + content
+        ).hexdigest()
+
+    def _expected_gitignore(self, target: Path) -> bytes:
+        installed = profile_distribution.read_manifest(target)
+        self.assertIsNotNone(installed)
+        assert installed is not None
+        rules = ["/*", "!/.gitignore", "!/distribution.yaml"]
+        seen = set(rules)
+
+        def add(rule: str) -> None:
+            if rule not in seen:
+                seen.add(rule)
+                rules.append(rule)
+
+        for raw in installed.distribution_owned:
+            owned = PurePosixPath(raw)
+            for depth in range(1, len(owned.parts)):
+                add(f"!/{'/'.join(owned.parts[:depth])}/")
+            logical = owned.as_posix()
+            if target.joinpath(*owned.parts).is_dir():
+                add(f"!/{logical}/")
+                add(f"!/{logical}/**")
+            else:
+                add(f"!/{logical}")
+        return ("\n".join(rules) + "\n").encode("ascii")
+
+    def _expected_remote_blobs(
+        self, target: Path
+    ) -> dict[str, tuple[int, bytes]]:
+        expected = {
+            ".gitignore": (0o100644, self._expected_gitignore(target)),
+            "distribution.yaml": (
+                0o100644,
+                (target / "distribution.yaml").read_bytes(),
+            ),
+        }
+        for relative in self._expected_owned_files(target):
+            local = target / relative
+            expected[relative] = (
+                stat.S_IFREG | stat.S_IMODE(local.stat().st_mode),
+                local.read_bytes(),
+            )
+        return expected
+
+    def _expected_tree_id(
+        self, expected: dict[str, tuple[int, bytes]]
+    ) -> str:
+        root: dict[str, object] = {}
+        for relative, value in expected.items():
+            node = root
+            parts = PurePosixPath(relative).parts
+            for component in parts[:-1]:
+                child = node.setdefault(component, {})
+                self.assertIsInstance(child, dict)
+                assert isinstance(child, dict)
+                node = child
+            self.assertNotIn(parts[-1], node)
+            node[parts[-1]] = value
+
+        def build(node: dict[str, object]) -> str:
+            entries: list[tuple[bytes, bytes, str]] = []
+            for name, value in node.items():
+                encoded_name = name.encode("utf-8")
+                if isinstance(value, dict):
+                    mode = b"40000"
+                    object_id = build(value)
+                    sort_key = encoded_name + b"/"
+                else:
+                    self.assertIsInstance(value, tuple)
+                    assert isinstance(value, tuple)
+                    file_mode, content = value
+                    self.assertIsInstance(file_mode, int)
+                    self.assertIsInstance(content, bytes)
+                    assert isinstance(file_mode, int)
+                    assert isinstance(content, bytes)
+                    mode = f"{file_mode:o}".encode("ascii")
+                    object_id = self._git_object_id("blob", content)
+                    sort_key = encoded_name
+                record = (
+                    mode
+                    + b" "
+                    + encoded_name
+                    + b"\0"
+                    + bytes.fromhex(object_id)
+                )
+                entries.append((sort_key, record, object_id))
+            payload = b"".join(
+                record for _key, record, _oid in sorted(entries)
+            )
+            return self._git_object_id("tree", payload)
+
+        return build(root)
+
+    def _remote_blob_bytes(self, remote: Path, object_id: str) -> bytes:
+        environment = bootstrap_flow._minimal_environment(
+            Path("/nonexistent"),
+            GIT_CONFIG_GLOBAL="/dev/null",
+            GIT_CONFIG_NOSYSTEM="1",
+            GIT_TERMINAL_PROMPT="0",
+        )
+        process = bootstrap_flow._REAL_POPEN(
+            ("git", "--git-dir", str(remote), "cat-file", "blob", object_id),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            close_fds=True,
+            start_new_session=True,
+        )
+        bootstrap_flow._CHILD_PROCESSES.append(process)
+        try:
+            stdout, stderr = process.communicate(
+                timeout=bootstrap_flow.PROCESS_TIMEOUT_SECONDS
+            )
+        except subprocess.TimeoutExpired:
+            bootstrap_flow._stop_process(process)
+            self.fail("git cat-file exceeded its timeout")
+        finally:
+            bootstrap_flow._stop_process(process)
+        self.assertEqual(process.returncode, 0, stderr.decode("utf-8", "replace"))
+        return stdout
+
+    def _assert_exception_graph_hides(
+        self, error: BaseException, *markers: str
+    ) -> None:
+        pending: list[object] = [error]
+        visited: set[int] = set()
+        while pending:
+            value = pending.pop()
+            if value is None or id(value) in visited:
+                continue
+            visited.add(id(value))
+            if isinstance(value, str):
+                for marker in markers:
+                    self.assertNotIn(marker, value)
+            elif isinstance(value, bytes):
+                for marker in markers:
+                    self.assertNotIn(marker.encode("utf-8"), value)
+            elif isinstance(value, BaseException):
+                pending.extend(
+                    (
+                        value.args,
+                        value.__notes__ if hasattr(value, "__notes__") else (),
+                        value.__cause__,
+                        value.__context__,
+                        value.__traceback__,
+                    )
+                )
+                if isinstance(value, BaseExceptionGroup):
+                    pending.append(value.message)
+                    pending.extend(value.exceptions)
+            elif isinstance(value, TracebackType):
+                pending.extend((value.tb_frame, value.tb_next))
+            elif isinstance(value, FrameType):
+                if "hermes_bootstrap" in value.f_code.co_filename:
+                    pending.extend(value.f_locals.values())
+            elif isinstance(value, dict):
+                pending.extend((*value.keys(), *value.values()))
+            elif isinstance(value, (list, tuple, set, frozenset)):
+                pending.extend(value)
+
     def _assert_exact_remote(self, name: str) -> None:
         target = next(
             source.target
             for source in self.flow.manifest.profiles
             if source.name == name
         )
-        owned_files = self._expected_owned_files(target)
-        expected = tuple(sorted((".gitignore", "distribution.yaml", *owned_files)))
+        expected = self._expected_remote_blobs(target)
         remote = self.flow.source_remotes[name]
-        observed = tuple(
-            bootstrap_flow.run_git(
-                "--git-dir",
-                str(remote),
-                "ls-tree",
-                "-r",
-                "--name-only",
-                "refs/heads/main",
-            ).splitlines()
-        )
-        self.assertEqual(observed, expected)
-
-        mode_by_path: dict[str, int] = {}
+        observed: dict[str, tuple[int, str]] = {}
         for line in bootstrap_flow.run_git(
             "--git-dir",
             str(remote),
@@ -301,34 +449,37 @@ class ProfileSyncFlowTests(unittest.TestCase):
             "refs/heads/main",
         ).splitlines():
             metadata, path = line.split("\t", 1)
-            mode_by_path[path] = int(metadata.split()[0], 8)
-        self.assertEqual(mode_by_path[".gitignore"], 0o100644)
-        self.assertEqual(mode_by_path["distribution.yaml"], 0o100644)
-        for relative in owned_files:
-            local = target / relative
-            self.assertEqual(
-                mode_by_path[relative],
-                stat.S_IFREG | stat.S_IMODE(local.stat().st_mode),
-            )
-            expected_blob = hashlib.sha1(
-                f"blob {local.stat().st_size}\0".encode("ascii")
-                + local.read_bytes()
-            ).hexdigest()
-            self.assertEqual(
-                bootstrap_flow.run_git(
-                    "--git-dir",
-                    str(remote),
-                    "rev-parse",
-                    f"refs/heads/main:{relative}",
-                ),
-                expected_blob,
-            )
+            mode, kind, object_id = metadata.split()
+            self.assertEqual(kind, "blob")
+            observed[path] = (int(mode, 8), object_id)
+        self.assertEqual(tuple(sorted(observed)), tuple(sorted(expected)))
 
-        manifest = profile_distribution.read_manifest(target)
-        assert manifest is not None
+        for relative, (expected_mode, expected_bytes) in expected.items():
+            with self.subTest(profile=name, path=relative):
+                observed_mode, observed_blob = observed[relative]
+                self.assertEqual(observed_mode, expected_mode)
+                expected_blob = self._git_object_id("blob", expected_bytes)
+                self.assertEqual(observed_blob, expected_blob)
+                self.assertEqual(
+                    self._remote_blob_bytes(remote, observed_blob),
+                    expected_bytes,
+                )
+
+        self.assertEqual(
+            bootstrap_flow.run_git(
+                "--git-dir",
+                str(remote),
+                "rev-parse",
+                "refs/heads/main^{tree}",
+            ),
+            self._expected_tree_id(expected),
+        )
+
+        installed = profile_distribution.read_manifest(target)
+        assert installed is not None
         declared_assets = tuple(
             PurePosixPath(path)
-            for path in manifest.distribution_owned
+            for path in installed.distribution_owned
             if PurePosixPath(path).parts[0] == "assets"
         )
         if declared_assets:
@@ -531,7 +682,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
         initial_code, _payload, _stdout, _stderr = self._run_sync()
         self.assertEqual(initial_code, 0)
         race_name = self.profile_names[0]
-        race_remote = str(self.flow.source_remotes[race_name])
+        race_remote = self._source(race_name).source
         self._write_local_revision(race_name, 3)
         real_run = profile_sync._run_git_bytes
         push_calls = 0
@@ -634,9 +785,20 @@ class ProfileSyncFlowTests(unittest.TestCase):
     def test_missing_profile_bootstrap_uses_remote_distribution_path(
         self,
     ) -> None:
+        initial = self.flow._apply()
+        self.assertEqual(initial["status"], "applied")
         missing = self.flow.manifest.profiles[-1]
+        missing_before = profile_distribution.read_manifest(missing.target)
+        self.assertIsNotNone(missing_before)
+        assert missing_before is not None
+        existing = self.flow.manifest.profiles[:-1]
+        remote_before = self._remote_heads()
+        existing_before = {
+            source.name: self._snapshot_bytes_modes(source.target)
+            for source in existing
+        }
         shutil.rmtree(missing.target)
-        for source in self.flow.manifest.profiles[:-1]:
+        for source in existing:
             self.assertTrue((source.target / "distribution.yaml").is_file())
 
         result = self.flow._apply()
@@ -648,16 +810,27 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.assertEqual(profile_summary[missing.name], "installed")
         self.assertTrue(
             all(
-                profile_summary[source.name] == "changed"
-                for source in self.flow.manifest.profiles[:-1]
+                profile_summary[source.name] == "unchanged"
+                for source in existing
             )
         )
+        self.assertEqual(
+            self._remote_head(missing.name),
+            remote_before[missing.name],
+            "missing profile install must seed from remote without publishing",
+        )
+        for source in existing:
+            with self.subTest(existing_profile=source.name):
+                self.assertEqual(
+                    self._snapshot_bytes_modes(source.target),
+                    existing_before[source.name],
+                )
         installed = profile_distribution.read_manifest(missing.target)
         self.assertIsNotNone(installed)
         assert installed is not None
         self.assertEqual(installed.name, missing.name)
         self.assertEqual(installed.source, missing.source)
-        self.assertEqual(installed.version, "0.1.0")
+        self.assertEqual(installed.version, missing_before.version)
         self.assertFalse((missing.target / ".git").exists())
         owned_files = self._expected_owned_files(missing.target)
         self.assertTrue(owned_files)
@@ -709,11 +882,11 @@ class ProfileSyncFlowTests(unittest.TestCase):
         with self.assertRaises(RepositoryError) as raised:
             self.flow._apply()
 
-        visible_exception = repr(
-            (raised.exception, raised.exception.__dict__)
+        self._assert_exception_graph_hides(
+            raised.exception,
+            bootstrap_flow.FIXTURE_TOKEN,
+            bootstrap_flow.HOST_SECRET_VALUE,
         )
-        self.assertNotIn(bootstrap_flow.FIXTURE_TOKEN, visible_exception)
-        self.assertNotIn(bootstrap_flow.HOST_SECRET_VALUE, visible_exception)
         self.assertEqual(self._remote_heads(), remote_before)
         self.assertEqual(
             self.flow._snapshot_tree(self.flow.data_root), runtime_before
@@ -766,11 +939,11 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 if name != failed_name
             )
         )
-        visible_exception = repr(
-            (raised.exception, raised.exception.__dict__)
+        self._assert_exception_graph_hides(
+            raised.exception,
+            bootstrap_flow.FIXTURE_TOKEN,
+            bootstrap_flow.HOST_SECRET_VALUE,
         )
-        self.assertNotIn(bootstrap_flow.FIXTURE_TOKEN, visible_exception)
-        self.assertNotIn(bootstrap_flow.HOST_SECRET_VALUE, visible_exception)
 
     def test_secret_markers_are_absent_from_outputs_argv_and_retained_graphs(
         self,
@@ -779,7 +952,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
         failed_name = self.profile_names[1]
         real_attempt = profile_sync._exact_tree_attempt
         real_scrub = profile_sync._scrub_exception_graph
-        retained: list[BaseException] = []
+        retained_sanitized: list[BaseException] = []
         injected = False
 
         def fail_with_group(snapshot, repository, environment):
@@ -793,15 +966,25 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 child.add_note(
                     f"{bootstrap_flow.HOST_SECRET_VALUE} {owned_marker}"
                 )
-                raise ExceptionGroup(
+                child.__cause__ = ValueError(
+                    f"cause {bootstrap_flow.FIXTURE_TOKEN}"
+                )
+                child.__context__ = LookupError(
+                    f"context {owned_marker}"
+                )
+                group = ExceptionGroup(
                     f"{bootstrap_flow.FIXTURE_TOKEN} {owned_marker}",
                     [child],
                 )
+                group.add_note(
+                    f"group note {bootstrap_flow.HOST_SECRET_VALUE}"
+                )
+                raise group
             return real_attempt(snapshot, repository, environment)
 
         def retain_scrubbed(error: BaseException) -> BaseException:
             scrubbed = real_scrub(error)
-            retained.append(scrubbed)
+            retained_sanitized.append(scrubbed)
             return scrubbed
 
         ambient_stdout = io.StringIO()
@@ -842,7 +1025,6 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 stderr,
                 ambient_stdout.getvalue(),
                 ambient_stderr.getvalue(),
-                retained,
                 self.flow.child_arguments,
             )
         )
@@ -852,7 +1034,14 @@ class ProfileSyncFlowTests(unittest.TestCase):
             owned_marker,
         ):
             self.assertNotIn(protected, visible)
-        self.assertTrue(retained)
+        self.assertTrue(retained_sanitized)
+        for sanitized in retained_sanitized:
+            self._assert_exception_graph_hides(
+                sanitized,
+                bootstrap_flow.FIXTURE_TOKEN,
+                bootstrap_flow.HOST_SECRET_VALUE,
+                owned_marker,
+            )
         attempted_names = {
             item["name"]
             for item in profiles
