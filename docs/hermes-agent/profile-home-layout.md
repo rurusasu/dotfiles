@@ -38,7 +38,8 @@ host ~/.hermes/                    container /opt/data/
   bytes and modes unchanged. Empty directories have no Git representation.
 - Only a truly absent named target is seeded from its configured remote for
   first install. An existing malformed target fails rather than falling back to
-  remote content.
+  remote content. This rule is based on target existence and manifest validity,
+  not on a hard-coded profile name.
 - `shared/lifelog` remains the canonical shared repository. The default profile
   owns its locked read-write Git synchronization and every profile uses that
   same path.

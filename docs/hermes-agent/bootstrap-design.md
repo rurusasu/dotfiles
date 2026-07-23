@@ -7,17 +7,39 @@ The implementation is split between this dotfiles repository, the
 remote-authoritative root distribution, and the configured named-profile
 remotes.
 
+## Problem
+
+Hermes setup historically had independent shell and PowerShell implementations:
+
+- macOS, Linux, and NixOS source `scripts/sh/hermes-agent.sh`.
+- Windows runs `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
+
+The PowerShell handler provisions a GitHub token, while the shell implementation
+did not. The container `gh` wrapper originally only mapped an existing process
+environment variable rather than the active Hermes profile `.env`. Slack could
+therefore start while `gh auth status` had no authenticated GitHub host. The
+duplicated setup logic also lets dashboard, Slack, profile, repository, and
+runtime configuration drift between operating systems.
+
 ## Goals
 
 - Use one bootstrap implementation inside the Hermes image on every host OS.
 - Keep root/default declarative content remote-authoritative.
 - Treat existing named-profile declarative allowlists as local-authoritative.
-- Publish named profiles through the official Hermes distribution API without
+- Publish exact named-profile snapshots to their configured remotes, then apply
+  the reported commits through the official Hermes distribution API without
   making a runtime profile home a Git worktree.
 - Keep runtime state and secrets outside distribution repositories.
 - Keep shared repositories, including lifelog, available to every profile.
 - Fail before local transaction and gateway restart when credentials, preflight,
   or profile publication fail.
+
+## Non-Goals
+
+- Replacing Hermes' one-container/many-profiles model.
+- Storing secrets in Git, Compose files, command arguments, or image layers.
+- Making profile memories or sessions shared through Git.
+- Running one gateway container per profile.
 
 ## Runtime Layout
 
@@ -71,9 +93,11 @@ are not represented by Git.
 
 Only a target directory that is truly absent uses its configured remote as a
 first-install seed. Existing malformed profiles are failed, never overwritten
-from remote content. The current local layout declares Rick and Hoffman assets,
-does not declare RisaRisa assets, and has no Nancy home yet; a future installed
-Nancy home controls its own assets through its local allowlist.
+from remote content. Assets are manifest-generic: any profile, including Nancy,
+publishes avatar or portfolio files only when its valid local
+`distribution.yaml` declares the corresponding `assets` path. Task 5 fixtures
+cover declared assets for Rick, Hoffman, and Nancy and no `assets` declaration
+for RisaRisa.
 
 ## Bootstrap Components
 
@@ -103,19 +127,23 @@ data.
 3. Snapshot every existing named profile, complete aggregate preflight, and
    synchronize each exact local snapshot to its configured remote before any
    staging or local transaction.
-4. For existing profiles, stage the exact commit reported by publication. For a
-   truly missing target only, stage its configured remote first-install ref.
-5. Stage the remote-authoritative root distribution and synchronize the shared
-   lifelog remote according to its locked read-write policy.
-6. Start the local transaction; apply root and named distributions through the
-   official Hermes APIs, apply shared working trees, and merge private `.env`
-   files with mode `0600`.
-7. Validate the installed layout, commit the transaction, report the
+4. Stage the remote-authoritative root distribution.
+5. In manifest order, stage each named profile: use the exact commit reported by
+   publication for an existing profile, or the configured branch only for a
+   truly missing first install.
+6. Synchronize each shared repository remote, including lifelog under its
+   locked read-write policy.
+7. Call `Transaction.begin`, apply the root distribution, apply the staged
+   profiles in manifest order through the official Hermes API, publish shared
+   working trees, and merge private `.env` files with mode `0600`.
+8. Validate the installed layout, commit the transaction, report the
    `profile_sync` summary, then recreate and health-check the gateway.
 
 If aggregate profile preflight or publication fails, bootstrap stops before
-starting the local transaction. It preserves the profile-sync report. Earlier
-remote pushes remain valid because remote commits are outside the local
+root/profile staging, shared synchronization, or the local transaction. The
+public `apply` CLI reports only the safe failed profile names and message on
+stderr; operators use standalone `sync-profiles` for the category-bearing JSON.
+Earlier remote pushes remain valid because remote commits are outside the local
 transaction boundary; they are not rolled back.
 
 ## Profile Sync Result Contract
