@@ -31,6 +31,10 @@ install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> herm
 install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter (HermesBootstrap.ps1) -> hermes-bootstrap container -> compose up
 ```
 
+`HermesAgentHandler` is Phase `2`, order `56`, and
+`RequiresAdmin = false`. It must stay in the user context so native `op.exe`
+can use 1Password desktop integration.
+
 `task hermes:bootstrap` returns the selected focused adapter status; it neither
 runs the full-machine installer nor hides a nonzero result.
 
@@ -42,7 +46,9 @@ host adapter
   -> fetch seven full 1Password item JSON objects
   -> stream header + seven item records + end as NDJSON
   -> docker compose run --rm --no-deps -T hermes-bootstrap apply
-  -> validate and stage every source
+  -> load manifest and recover any crash journal
+  -> validate payload, credentials, and source access
+  -> publish existing profiles, stage sources, and sync shared remotes
   -> transactional install under /opt/data
   -> docker compose up -d --force-recreate only after success
 ```
@@ -61,9 +67,12 @@ Required labels are `username` or `user name` and `password` for the dashboard;
 `SLACK_APP_TOKEN`/`app_level_token`/`app token`/`app-level token`, and
 `SLACK_ALLOWED_USERS`/`allowed_users`/`allowed users`/`allowFrom`/`allow_from`
 for each Slack item. Bootstrap validates GitHub authentication and all remote
-access before writing. Managed `.env` keys include the three GitHub aliases,
-dashboard username/hash/signing secret, and profile Slack credentials; root
-also owns `API_SERVER_KEY`, which is removed from named profile `.env` files.
+access after crash-journal recovery and before it begins new staging or
+transaction writes. Recovery may restore or delete previously journaled managed
+paths before secrets and credentials are validated. Managed `.env` keys include
+the three GitHub aliases, dashboard username/hash/signing secret, and profile
+Slack credentials; root also owns `API_SERVER_KEY`, which is removed from named
+profile `.env` files.
 
 ## Runtime `gh` Authentication
 
@@ -78,6 +87,33 @@ executes `/usr/bin/gh`. It does not run `gh auth login` or create a separate
 `hosts.yml`. If no token is available, rerun bootstrap after repairing the
 configured GitHub item. Hermes propagates the active profile's `HERMES_HOME`,
 so the same wrapper works for root and named profiles.
+
+## Sync Shared Lifelog
+
+Lifelog remains a normal read-write shared Git repository, not a named-profile
+exact mirror. The manifest assigns `sync_owner: default`; all profiles use the
+same canonical checkout at `/opt/data/shared/lifelog`.
+
+The current owner operation is:
+
+```text
+hermes-bootstrap sync-repository lifelog
+```
+
+From the dotfiles repository, an operator may invoke the same command through
+Compose:
+
+```text
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-repository lifelog
+```
+
+It resolves the token as process `GH_TOKEN`, then the safe active
+`${HERMES_HOME}/.env`, then `/opt/data/.env`. Env files are parsed as data and
+never executed; unsafe, duplicate, symlinked, hard-linked, or special-file
+sources fail closed. The command validates the canonical repository, acquires
+`/opt/data/locks/repositories/lifelog.lock`, and runs the ordinary read-write
+commit/rebase/push workflow. Its success JSON reports `status`, `name`,
+`commit`, and `pushed`.
 
 The successful bootstrap JSON contains `status: "applied"`, the four profile
 names, `repositories: ["lifelog"]`, and `profile_sync`. `profile_sync` maps
@@ -133,13 +169,22 @@ profile is not absent: bootstrap fails before its transaction and never falls
 back to a remote overwrite.
 
 If synchronization fails, bootstrap does not begin its local transaction or
-restart Hermes. The Python exception carries an internal profile-sync report,
-but the public `apply` CLI does not serialize that attribute: it writes only a
-safe message such as `named profile repository sync failed: <names>` to
-stderr. Run standalone `sync-profiles --dry-run` to obtain the category-bearing
-JSON before assigning a repair. Earlier remote pushes remain valid because
-remote commits cannot be rolled back; a subsequent run reports them as
-`unchanged` when the remote tree matches the same local snapshot.
+restart Hermes. There are two public diagnostics:
+
+- Snapshot preflight can fail before a `profile_report` is created. `apply`
+  writes `profile snapshot rejected (<category>)` to stderr, without a profile
+  name or report.
+- A nonzero post-preflight publication report writes
+  `named profile repository sync failed: <failed names>` to stderr. The Python
+  exception retains the report internally, but the CLI does not serialize it.
+
+In both cases `apply` stdout is empty; unlike standalone `sync-profiles`, it
+does not emit a failed JSON report.
+
+Run standalone `sync-profiles --dry-run` to obtain category-bearing JSON before
+assigning a repair. Earlier remote pushes remain valid because remote commits
+cannot be rolled back; a subsequent run reports them as `unchanged` when the
+remote tree matches the same local snapshot.
 
 Root `hermes-home` remains remote-authoritative. `shared/lifelog` remains the
 normal locked read-write Git repository owned for synchronization by the default
@@ -205,17 +250,20 @@ profile.
 
 ## Transaction And Rollback
 
-After manifest loading and before reading a new secret payload, `apply` calls
-`Transaction.recover_if_needed` for journals under
+After manifest loading and before reading or validating a new secret payload,
+`apply` calls `Transaction.recover_if_needed` for journals under
 `/opt/data/.bootstrap/transactions/`. A single-writer transaction lock prevents
-two local applies from mutating managed paths concurrently.
+two local applies from mutating managed paths concurrently. Recovery may restore
+or remove previously journaled managed paths; it is intentionally not covered
+by validation-before-new-write claims.
 
-Profile publication, root/profile staging, and shared remote synchronization
-finish before `Transaction.begin` because remote pushes cannot be rolled back.
-Inside the transaction, bootstrap snapshots root-owned paths, named profile
-targets, shared working-tree publication, deprecated-path cleanup, and managed
-`.env` files before replacement. Environment files use atomic rename and mode
-`0600`, preserve unmanaged keys, and replace only managed keys.
+After recovery completes, credential validation, profile publication,
+root/profile staging, and shared remote synchronization finish before
+`Transaction.begin` because remote pushes cannot be rolled back. Inside the
+new transaction, bootstrap snapshots root-owned paths, named profile targets,
+shared working-tree publication, deprecated-path cleanup, and managed `.env`
+files before replacement. Environment files use atomic rename and mode `0600`,
+preserve unmanaged keys, and replace only managed keys.
 
 If apply or final validation fails, bootstrap restores ready journal entries in
 reverse order and leaves the gateway stopped. A rollback failure exits `7`; do
@@ -282,8 +330,9 @@ remote URLs.
 
 `sync-profiles` uses its JSON route only for handled exits `0`, `3`, and `4`.
 Its argument error `2`, manifest validation error `8`, and unexpected error `6`
-use stderr without a result document. Failed `apply` likewise uses stderr; its
-internal profile-sync report is not part of the public CLI result.
+use stderr without a result document. Failed `apply` likewise uses stderr.
+Only a post-preflight publication failure has an internal profile-sync report,
+and that report is not part of the public CLI result.
 
 ## Future Handoff
 
@@ -298,29 +347,32 @@ profiles.
 Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
 the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
 pinned Docker stage and the `gh` wrapper security suite in the
-`Hermes Bootstrap Tests` workflow.
+`Hermes Bootstrap Tests` workflow. Task 5 integration coverage is the
+publication gate for aggregate preflight, exact-tree deletion, local
+immutability, missing-only bootstrap install, continuation, retry, and result
+serialization.
 
-The root distribution and four named-profile repositories use the shared
-`fast` and `full` validator contract. Evidence is current only when its
-`head_sha` matches the local or pull-request head. The controller states are:
+Named-profile default branches are exact mirrors. A real sync deletes
+repository-local `.github` workflows, pre-commit configuration, validators,
+tests, and README files because they are outside the local declarative
+allowlist. Therefore named-profile mirrors, including Nancy, are not governed
+by the old repository-local `fast`/`full` or GitHub Actions validator contract.
+Their replacement is:
 
-| State                 | Meaning                                                                                       |
-| --------------------- | --------------------------------------------------------------------------------------------- |
-| `PASS_REMOTE`         | Exact-head local full validation and current-head workflow both pass                          |
-| `PASS_LOCAL_FALLBACK` | Exact-head local full validation passes and GitHub explicitly reports a billing startup block |
-| `FAIL_VALIDATION`     | Local or hosted validation reports failed checks                                              |
-| `FIX_FAILED`          | The two-round automated repair limit was reached                                              |
-| `ENV_BLOCKED`         | Docker, image, pre-commit, or authentication prerequisite is absent                           |
-| `REMOTE_PENDING`      | Current-head workflow is queued or running                                                    |
-| `REMOTE_UNKNOWN`      | No usable run and no explicit billing evidence exists                                         |
-| `STALE_EVIDENCE`      | Local or remote evidence is for another commit                                                |
-| `INTERNAL_ERROR`      | Validator or classifier violated its contract                                                 |
+- runtime aggregate snapshot preflight and `sync-profiles` result handling;
+- dotfiles engine pre-commit and `Hermes Bootstrap Tests` GitHub Actions; and
+- the pinned unit/integration gate `task hermes:bootstrap:test`.
 
-Only `PASS_REMOTE` and `PASS_LOCAL_FALLBACK` authorize merge.
-`PASS_LOCAL_FALLBACK` requires GitHub-owned current-head evidence that billing,
-spending, included usage, storage billing, or an exhausted budget prevented
-workflow startup. Missing permission, a missing run, or an unknown failure
-remains `REMOTE_UNKNOWN`.
+The separate [Distribution Validation](distribution-validation-design.md)
+contract remains applicable only to remote-authoritative root or other source
+repositories that actually retain its workflow, pre-commit, and validator
+files. Do not extend its historical three-profile repository list to Nancy.
+For a repository that retains that contract, validator exits remain `0` pass,
+`1` validation failure, `2` prerequisite blocked as `ENV_BLOCKED`, and `3`
+validator internal failure as `INTERNAL_ERROR`. Exact-head evidence is
+required, and automated repair remains limited to two rounds for the same
+failed check set; failure after two rounds is `FIX_FAILED`, while an
+`ENV_BLOCKED` result does not consume a repair round.
 
 ## Verification Gate
 

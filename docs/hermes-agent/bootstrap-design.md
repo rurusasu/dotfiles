@@ -114,37 +114,61 @@ gateway after successful bootstrap. They do not implement profile Git or merge
 behavior. Secret values are never command arguments or persistent payload
 files.
 
+On Windows, `HermesAgentHandler` remains Phase `2`, order `56`, with
+`RequiresAdmin = false`. Running in the user context is required so native
+`op.exe` can use 1Password desktop integration; elevating this handler would
+break that credential path.
+
 The required Slack items include `SlackBot-OpenClaw`, `SlackBot-Rick`,
 `SlackBot-Hoffman`, `SlackBot-Risarisa`, and `SlackBot-Nancy`; GitHub access is
-validated for every configured remote before bootstrap modifies local runtime
-data.
+validated for every configured remote before bootstrap begins new staging or
+transaction writes. Crash-journal recovery is the exception: it runs first and
+may restore or remove previously journaled managed paths before secret or
+credential validation.
+
+## Shared Lifelog Operation
+
+Lifelog is not an exact named-profile mirror. The manifest declares it as a
+normal read-write shared repository with `sync_owner: default`. Its owner runs
+`hermes-bootstrap sync-repository lifelog`, which uses the runtime token
+precedence, validates the canonical checkout, acquires
+`/opt/data/locks/repositories/lifelog.lock`, and performs the ordinary
+commit/rebase/push workflow. All profiles continue to use
+`/opt/data/shared/lifelog`.
 
 ## Apply Sequence
 
-1. Build and validate the Compose model, stop the gateway, and read the secret
-   payload without logging it.
-2. Validate required fields, GitHub credentials, remote identities, and access.
-3. Snapshot every existing named profile, complete aggregate preflight, and
+1. Build and validate the Compose model and stop the gateway.
+2. Load the manifest and recover or clean any crash journal. This recovery may
+   restore or remove previously journaled managed paths before credentials are
+   validated.
+3. Read the secret payload without logging it, then validate required fields,
+   GitHub credentials, remote identities, and access.
+4. Snapshot every existing named profile, complete aggregate preflight, and
    synchronize each exact local snapshot to its configured remote before any
    staging or local transaction.
-4. Stage the remote-authoritative root distribution.
-5. In manifest order, stage each named profile: use the exact commit reported by
+5. Stage the remote-authoritative root distribution.
+6. In manifest order, stage each named profile: use the exact commit reported by
    publication for an existing profile, or the configured branch only for a
    truly missing first install.
-6. Synchronize each shared repository remote, including lifelog under its
+7. Synchronize each shared repository remote, including lifelog under its
    locked read-write policy.
-7. Call `Transaction.begin`, apply the root distribution, apply the staged
+8. Call `Transaction.begin`, apply the root distribution, apply the staged
    profiles in manifest order through the official Hermes API, publish shared
    working trees, and merge private `.env` files with mode `0600`.
-8. Validate the installed layout, commit the transaction, report the
+9. Validate the installed layout, commit the transaction, report the
    `profile_sync` summary, then recreate and health-check the gateway.
 
 If aggregate profile preflight or publication fails, bootstrap stops before
-root/profile staging, shared synchronization, or the local transaction. The
-public `apply` CLI reports only the safe failed profile names and message on
-stderr; operators use standalone `sync-profiles` for the category-bearing JSON.
-Earlier remote pushes remain valid because remote commits are outside the local
-transaction boundary; they are not rolled back.
+root/profile staging, shared synchronization, or the local transaction.
+Snapshot-preflight rejection happens before `profile_report` exists; public
+`apply` stderr is `profile snapshot rejected (<category>)`, with no profile
+name or report. A nonzero post-preflight publication report instead produces
+`named profile repository sync failed: <failed names>`; the Python exception
+retains that report internally, but the CLI does not serialize it. In both
+cases `apply` stdout is empty. Operators use standalone `sync-profiles` for
+category-bearing JSON. Earlier remote pushes remain valid because remote
+commits are outside the local transaction boundary; they are not rolled back.
 
 ## Profile Sync Result Contract
 
@@ -172,11 +196,12 @@ second race is `push_race_exhausted`.
 
 ## Failure And Recovery
 
-An operator repairs only the failed profile and redacted category. Fix the
-local authoritative profile content, or the owning engine/environment for a
-non-content failure, then run the dry-run command and the real command. A
-repair is accepted only when the aggregate exits `0` and that profile is
-`changed` or `unchanged`.
+After an `apply` failure, an operator first runs standalone
+`sync-profiles --dry-run` to identify the failed profile and redacted category.
+Fix only that local authoritative profile content, or the owning
+engine/environment for a non-content failure, then run the dry-run command and
+the real command. A repair is accepted only when the aggregate exits `0` and
+that profile is `changed` or `unchanged`.
 
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact
@@ -197,3 +222,10 @@ including Nancy; existing-local snapshots; missing-only first install; invalid
 existing profiles; exact remote deletion; local immutability; aggregate
 preflight; sequential continuation; retry and same-tree descendant acceptance;
 compact JSON; exit codes; and redaction.
+
+Exact named-profile mirrors intentionally delete repository-local workflows,
+pre-commit configuration, validators, and tests. Their replacement gate is the
+runtime aggregate snapshot preflight plus the dotfiles engine's pre-commit,
+GitHub Actions, and container integration suite. Repository-local `fast`/`full`
+validation remains scoped only to remote-authoritative or other source
+repositories that actually retain that tooling.

@@ -212,21 +212,27 @@ fetches the new remote head, rebuilds the same expected tree, and retries. It
 accepts a remote descendant when that descendant has the same expected tree;
 a second race failure is reported as `push_race_exhausted`.
 
-Bootstrap runs the same snapshot-and-publication phase after credential and
-repository validation but before staging or starting the local transaction. It
-then stages root, stages profiles in manifest order using either the reported
-exact commit or the configured branch for a truly missing target, synchronizes
-shared repositories, and only then begins the transaction. The successful
-`apply` result includes a `profile_sync` summary whose entries are `changed`,
-`unchanged`, or `installed`.
+After any crash-journal recovery, bootstrap validates credentials and
+repositories, then runs the same snapshot-and-publication phase before staging
+or starting a new local transaction. It then stages root, stages profiles in
+manifest order using either the reported exact commit or the configured branch
+for a truly missing target, synchronizes shared repositories, and only then
+begins the transaction. The successful `apply` result includes a
+`profile_sync` summary whose entries are `changed`, `unchanged`, or
+`installed`.
 
 If profile synchronization fails, bootstrap fails before starting the local
 transaction; it neither applies runtime distributions nor restarts Hermes.
-Pushes completed for earlier profiles remain valid. The Python exception keeps
-an internal report, but the public `apply` CLI reduces it to a safe failed-name
-message on stderr. Operators obtain per-profile categories from the standalone
-`sync-profiles` JSON. Root staging stays remote-authoritative and shared
-lifelog continues its ordinary locked read-write Git synchronization.
+Pushes completed for earlier profiles remain valid. Snapshot preflight throws
+before `profile_report` is assigned, so public `apply` stderr is only
+`profile snapshot rejected (<category>)`; it has no profile name or report.
+Only a nonzero post-preflight publication report produces
+`named profile repository sync failed: <failed names>` and attaches the report
+to the Python exception. The CLI still emits only that safe stderr message;
+`apply` stdout is empty in both cases and has no failed JSON result.
+Operators obtain per-profile categories from standalone `sync-profiles` JSON.
+Root staging stays remote-authoritative and shared lifelog continues its
+ordinary locked read-write Git synchronization.
 
 ## Repair Handoff
 
@@ -263,6 +269,12 @@ snapshots, dry-run behavior, aggregate preflight, sequential continuation,
 one retry and race exhaustion, same-tree descendant acceptance, credential
 exit `3`, repository/preflight exit `4`, compact JSON stdout, and redacted
 stderr behavior.
+
+Because a real exact sync deletes allowlist-external workflows, pre-commit
+configuration, validators, and tests, named-profile mirror repositories do not
+retain a repository-local validation contract. Runtime aggregate preflight and
+the dotfiles engine's pre-commit, GitHub Actions, and pinned integration gate
+replace it.
 
 Production acceptance is a dry run followed by a real aggregate run, with
 inspection that each remote tree contains only the two canonical control files

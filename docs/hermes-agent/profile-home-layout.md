@@ -41,8 +41,10 @@ host ~/.hermes/                    container /opt/data/
   remote content. This rule is based on target existence and manifest validity,
   not on a hard-coded profile name.
 - `shared/lifelog` remains the canonical shared repository. The default profile
-  owns its locked read-write Git synchronization and every profile uses that
-  same path.
+  is its `sync_owner` and runs
+  `hermes-bootstrap sync-repository lifelog` under the repository lock. This is
+  a normal read-write Git workflow, not named-profile exact mirroring, and every
+  profile uses the same path.
 - `core/lifelog` is accepted only as a migration source and is absent after
   bootstrap. Runtime configuration uses `/opt/data/shared/lifelog`.
 
