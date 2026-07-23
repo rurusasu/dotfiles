@@ -84,13 +84,18 @@ credentials, authenticated URLs, environment values, or token-bearing command
 arguments.
 
 On a handled sync result, stdout is exactly one compact, sorted JSON line and
-stderr is empty, even for an aggregate failure. The process status is still
-authoritative: credential unavailability exits `3`; repository, lock, remote,
-missing-target, or aggregate-preflight failures exit `4`. A standalone
-`sync-profiles` command never installs a missing profile. Invalid arguments
-exit `2`, manifest validation exits `8`, and unexpected command failures exit
-`6`; those failures write a safe message to stderr and do not emit the JSON
-report.
+stderr is empty, even for an aggregate failure. After that line is written and
+flushed normally, the process status is authoritative: credential
+unavailability exits `3`; repository, lock, remote, missing-target, or
+aggregate-preflight failures exit `4`. A standalone `sync-profiles` command
+never installs a missing profile. Invalid arguments exit `2`, manifest
+validation exits `8`, and unexpected command failures exit `6`; those failures
+write a safe message to stderr and do not emit the JSON report.
+
+The existing CLI BrokenPipe behavior is the exception to exit-status authority.
+If stdout closes while the result is written, the command returns `0`, even
+when the report would have exited nonzero. Automation must consume stdout to
+completion and must not accept an early-closing pipe's `0` as sync success.
 
 The JSON schema is `schema_version: 1`. Its top-level `command` is exactly
 `"sync-profiles"`; `dry_run` is a boolean; `status` is exactly `"changed"`,
@@ -111,10 +116,16 @@ The per-profile values have these exact meanings:
 - A real publication is `changed`, reports the resulting remote commit and
   tree diff, and uses category `published` with message
   `profile snapshot published`.
-- A failure after snapshot preparation has `status: "failed"`, `commit: null`,
-  the prepared snapshot digest, and empty diff arrays. Credential, missing
-  target, malformed-profile, and other pre-snapshot aggregate failures use an
-  empty `snapshot` for every profile.
+- An ordinary per-profile Git or publication failure after snapshot preparation
+  does not replace other completed profile results; their available snapshots,
+  commits, and diffs remain in the aggregate. The failed entry has status
+  `failed` and retains its prepared snapshot digest; an unavailable commit is
+  `null` and unavailable diff arrays are empty.
+- Credential, missing-target, malformed-profile, and other pre-snapshot
+  aggregate failures use an empty `snapshot` for every profile.
+- A final top-level snapshot scratch cleanup failure replaces all completed
+  results with aggregate `cleanup_failed` entries. Every replacement has an
+  empty snapshot, `commit: null`, and empty diff arrays.
 
 Credential failure marks every profile `failed` with
 `credentials_unavailable` / `GitHub credentials are unavailable`. For a
@@ -230,11 +241,14 @@ Standalone dry-run repeats aggregate preflight and identifies that profile and
 category in its JSON.
 Only a nonzero post-preflight publication report produces
 `named profile repository sync failed: <failed names>` and attaches the report
-to the Python exception. The CLI still emits only that safe stderr message;
-`apply` stdout is empty in both cases and has no failed JSON result.
-The public message has failed names but no publication categories. Root staging
-stays remote-authoritative and shared lifelog continues its ordinary locked
-read-write Git synchronization.
+to the Python exception. Later staging, transaction, validation, cleanup, or
+rollback failures can retain the already-created report as well. The CLI never
+serializes it. By default `apply` emits one safe stderr message and no failed
+JSON result; with `HERMES_BOOTSTRAP_DEBUG=1`, it may append a sanitized
+public-boundary traceback that retains neither tokens nor the raw internal
+exception graph. The publication message has failed names but no categories.
+Root staging stays remote-authoritative and shared lifelog continues its
+ordinary locked read-write Git synchronization.
 
 ## Repair Handoff
 

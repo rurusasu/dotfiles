@@ -168,7 +168,10 @@ preflight and identifies the invalid profile and category in its JSON. A
 nonzero post-preflight publication report instead produces
 `named profile repository sync failed: <failed names>`; the Python exception
 retains that report internally, but the CLI does not serialize its categories.
-In both cases `apply` stdout is empty.
+In both cases `apply` stdout is empty. By default stderr is one safe message.
+With `HERMES_BOOTSTRAP_DEBUG=1`, the CLI may append a sanitized traceback from
+its public boundary; it does not retain tokens or the raw internal exception
+graph.
 
 Dry-run is limited to preflight and diff inspection. It never pushes, so a
 changed entry has category `dry_run` and cannot reproduce push-only categories
@@ -193,9 +196,22 @@ Its `command` is `sync-profiles`; aggregate `status` is `changed`, `unchanged`,
 or `failed`; profile entries contain `name`, `status`, `commit`, `snapshot`,
 `added`, `modified`, `deleted`, `paths`, `category`, and `message`.
 
+An ordinary per-profile Git or publication failure after snapshot preparation
+does not replace other completed profile results; their available snapshots,
+commits, and diffs remain in the aggregate. The failed entry retains its
+snapshot digest, while an unavailable commit is `null` and unavailable diff
+arrays are empty. If final top-level snapshot scratch cleanup fails, however,
+it replaces all completed results with aggregate `cleanup_failed` entries.
+Those replacement entries have an empty snapshot, `commit: null`, and empty
+diffs.
+
 Credential failure exits `3`. Repository, lock, remote, or aggregate-preflight
 failure exits `4`. Unexpected CLI failures use the standard redacted stderr
 boundary. A JSON result paired with nonzero exit remains a failed aggregate.
+After a normal complete stdout write, the report exit code is authoritative.
+The existing CLI BrokenPipe contract instead returns `0` if stdout closes while
+the JSON is written, even for a failure report. Automation must consume stdout
+to completion and must not treat an early-closing pipe's `0` as sync success.
 
 Aggregate preflight completes before any push. Subsequent profile Git work runs
 sequentially; a failure does not prevent later attempts. One race retry fetches

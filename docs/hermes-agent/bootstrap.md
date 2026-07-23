@@ -182,8 +182,10 @@ restart Hermes. There are two public diagnostics:
 Once synchronization has created `profile_report`, later staging, transaction,
 installed-layout validation, cleanup, or rollback failures can also retain that
 report on the internal Python exception. The CLI never serializes this
-attribute: every failed `apply` has empty stdout and only its safe error message
-on stderr, unlike standalone `sync-profiles`.
+attribute. By default every failed `apply` has empty stdout and exactly one safe
+error message on stderr. With `HERMES_BOOTSTRAP_DEBUG=1`, a sanitized traceback
+from the public CLI boundary may follow that message; it contains neither
+tokens nor the raw internal exception graph.
 
 Use dry-run only for aggregate preflight and diff inspection. It never pushes,
 so a changed entry reports category `dry_run`; it cannot reproduce
@@ -219,12 +221,20 @@ actual diff with `dry_run` / `profile snapshot changes detected`. A changed
 real run reports the resulting remote commit and uses
 `published` / `profile snapshot published`.
 
-A failure after snapshot preparation has `commit: null`, retains that profile's
-snapshot digest, and has empty diff arrays. Credential failures and aggregate
-pre-snapshot failures, including a missing or malformed profile, report an
-empty snapshot for every profile. Standalone `sync-profiles` never installs a
-missing target: it exits `4` with a failed aggregate. Only bootstrap `apply`
-uses the missing-target first-install exception.
+An ordinary per-profile Git or publication failure after snapshot preparation
+does not replace other completed profile results; their available snapshots,
+commits, and diffs remain in the aggregate. The failed entry retains its
+profile snapshot digest, while an unavailable commit is `null` and unavailable
+diff arrays are empty. Credential failures and aggregate pre-snapshot failures,
+including a missing or malformed profile, report an empty snapshot for every
+profile.
+
+Final top-level snapshot scratch cleanup is a separate aggregate failure. If it
+fails after profile processing, the command replaces all completed results
+with `cleanup_failed` entries whose snapshots are empty, commits are `null`,
+and diff arrays are empty. Standalone `sync-profiles` never installs a missing
+target: it exits `4` with a failed aggregate. Only bootstrap `apply` uses the
+missing-target first-install exception.
 
 | Exit | Meaning                                          | Operator action                                                      |
 | ---- | ------------------------------------------------ | -------------------------------------------------------------------- |
@@ -235,7 +245,11 @@ uses the missing-target first-install exception.
 Invalid arguments exit `2`, manifest validation exits `8`, and unexpected
 command failures exit `6`. Those errors use the safe stderr path and do not
 emit a `sync-profiles` JSON document. A successful JSON parse is not enough:
-use the process exit status as the aggregate success signal.
+after a normal complete stdout write, use the report's process exit status as
+the aggregate success signal. The existing BrokenPipe contract is an exception:
+if stdout closes while the JSON is written, the CLI returns `0` even for a
+failure report. Automation must consume stdout through EOF and must not
+interpret an early-closing pipe's `0` as successful synchronization.
 
 ## Failure And Recovery
 
@@ -345,7 +359,9 @@ use stderr without a result document. Failed `apply` likewise uses stderr.
 Snapshot-preflight rejection occurs before a profile report exists. After
 synchronization creates one, publication, staging, transaction, validation,
 cleanup, and rollback failures may retain it on the internal Python exception.
-The CLI does not serialize that report and emits only the safe error.
+The CLI does not serialize that report. Its default output is the single safe
+error described above; debug mode may append only the sanitized public-boundary
+traceback.
 
 ## Future Handoff
 
