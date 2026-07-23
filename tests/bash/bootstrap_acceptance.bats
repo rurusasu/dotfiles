@@ -71,6 +71,11 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'"id":"acceptance-GitHubUsedOpenClawPAT"'* ]]
 
+	run "$op" item get "SlackBot-Nancy" \
+		--account my.1password.com --vault openclaw --format json
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'"id":"acceptance-SlackBot-Nancy"'* ]]
+
 	run "$op" item get "Unapproved Item" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -ne 0 ]

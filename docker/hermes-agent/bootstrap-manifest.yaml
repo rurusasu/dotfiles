@@ -43,6 +43,11 @@ onepassword_items:
     vault: openclaw
     item: SlackBot-Risarisa
     fields: *slack_fields
+  - key: slack_nancy
+    account: my.1password.com
+    vault: openclaw
+    item: SlackBot-Nancy
+    fields: *slack_fields
 root_distribution:
   name: default
   source: https://github.com/rurusasu/hermes-home.git
@@ -64,6 +69,11 @@ profiles:
     source: https://github.com/rurusasu/hermes-profile-risarisa.git
     ref: main
     target: /opt/data/profiles/risarisa
+    manifest: distribution.yaml
+  - name: nancy
+    source: https://github.com/rurusasu/hermes-profile-nancy.git
+    ref: main
+    target: /opt/data/profiles/nancy
     manifest: distribution.yaml
 shared_repositories:
   - name: lifelog

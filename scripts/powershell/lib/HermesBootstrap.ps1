@@ -130,7 +130,8 @@ $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "slack_default"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-OpenClaw" },
     [PSCustomObject]@{ key = "slack_rick"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Rick" },
     [PSCustomObject]@{ key = "slack_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Hoffman" },
-    [PSCustomObject]@{ key = "slack_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Risarisa" }
+    [PSCustomObject]@{ key = "slack_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Risarisa" },
+    [PSCustomObject]@{ key = "slack_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Nancy" }
 )
 
 function ConvertFrom-HermesBootstrapJson {
@@ -228,7 +229,7 @@ function Test-HermesBootstrapSecretPlan {
     if ($Plan.schema_version -ne 1) { return $false }
 
     $items = @($Plan.items)
-    if ($items.Count -ne 6) { return $false }
+    if ($items.Count -ne 7) { return $false }
 
     $keys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     for ($itemIndex = 0; $itemIndex -lt $items.Count; $itemIndex++) {
