@@ -276,3 +276,164 @@ Result: both commands exited 0 with no output.
   fail closed before Hermes install.
 - Hermes still emits the pre-existing `profile_distribution.py`
   `DeprecationWarning`; it is outside this fix.
+
+## Post-Publish Critical Fix
+
+### Result
+
+Moved the complete no-replace profile installation into a private
+same-filesystem Hermes home. Hermes installation, canonical source stamping,
+managed profile environment preparation, and tree synchronization now finish
+before the completed directory is adopted by the transaction journal and
+published with `RENAME_NOREPLACE`.
+
+Implementation commit: `f786ace`
+
+### RED Evidence
+
+Post-publication replacement and direct v2 recovery command in a fresh Hermes
+container copy:
+
+```bash
+docker exec hermes rm -rf /tmp/task-2-post-publish-red
+docker cp docker/hermes-agent hermes:/tmp/task-2-post-publish-red
+docker exec -w /tmp/task-2-post-publish-red/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_never_writes_after_published_target_is_replaced \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_post_publish_replacement_survives_env_merge_and_validation \
+    tests.test_transaction.TransactionTests.test_version_two_active_journal_recovery_restores_snapshot \
+    tests.test_transaction.TransactionTests.test_version_two_committed_journal_recovery_retains_snapshot \
+    -v
+```
+
+Result: 4 tests ran; 2 passed and 2 failed. The distribution failure showed the
+external mode-0600 `config.yaml` replaced by staged content plus Hermes-created
+directories after `reserve_directory` returned. The app failure showed that
+the external `.env` was merged into a valid managed file, so the expected
+validation error was not raised. Both direct v2 recovery tests passed.
+
+Completed-directory publication API RED:
+
+```bash
+docker exec hermes rm -rf /tmp/task-2-publish-api-red
+docker cp docker/hermes-agent hermes:/tmp/task-2-publish-api-red
+docker exec -w /tmp/task-2-publish-api-red/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_transaction.TransactionTests.test_completed_directory_is_journaled_before_atomic_publication \
+    -v
+```
+
+Result: 1 test ran; 1 error because `Transaction.publish_directory` did not
+exist.
+
+### GREEN Evidence
+
+Focused race, publication, and compatibility command in the final fresh Hermes
+container copy:
+
+```bash
+docker exec hermes rm -rf /tmp/task-2-post-publish-final
+docker cp docker/hermes-agent hermes:/tmp/task-2-post-publish-final
+docker exec -w /tmp/task-2-post-publish-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_never_writes_after_published_target_is_replaced \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_post_publish_replacement_survives_env_merge_and_validation \
+    tests.test_transaction.TransactionTests.test_completed_directory_is_journaled_before_atomic_publication \
+    tests.test_transaction.TransactionTests.test_version_two_active_journal_recovery_restores_snapshot \
+    tests.test_transaction.TransactionTests.test_version_two_committed_journal_recovery_retains_snapshot \
+    -v
+```
+
+Result: 5 tests ran; 5 passed; 0 failures; 0 errors.
+
+Complete Task 2 command in the same fresh copy:
+
+```bash
+docker exec -w /tmp/task-2-post-publish-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_profile_snapshot \
+    tests.test_distributions \
+    tests.test_app \
+    tests.integration.test_profile_sync_flow \
+    -v
+```
+
+Result: 186 tests ran; 186 passed; 0 failures; 0 errors.
+
+Complete transaction command:
+
+```bash
+docker exec -w /tmp/task-2-post-publish-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest tests.test_transaction -v
+```
+
+Result: 51 tests ran; 51 passed; 0 failures; 0 errors.
+
+Additional checks:
+
+```bash
+docker exec -w /tmp/task-2-post-publish-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m compileall -q \
+    hermes_bootstrap \
+    tests/test_profile_snapshot.py \
+    tests/test_distributions.py \
+    tests/test_app.py \
+    tests/test_transaction.py \
+    tests/integration/test_profile_sync_flow.py
+git diff --check
+```
+
+Result: both commands exited 0 with no output.
+
+### Changed Files
+
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/app.py`
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/distributions.py`
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/transaction.py`
+- `docker/hermes-agent/bootstrap/tests/test_app.py`
+- `docker/hermes-agent/bootstrap/tests/test_distributions.py`
+- `docker/hermes-agent/bootstrap/tests/test_transaction.py`
+- `docker/hermes-agent/bootstrap/tests/integration/test_profile_sync_flow.py`
+- `.superpowers/sdd/task-2-report.md` in the separate report commit
+
+### Self-Review
+
+- The Task 2 no-replace path points the official Hermes
+  `install_distribution(..., force=True)` API at a descriptor-owned private
+  home created directly beneath the data root. The focused test confirms the
+  staging home and data root use the same filesystem.
+- Hermes installation, installed-manifest source stamping, managed `.env`
+  preparation, and staged-tree fsync all complete before transaction
+  publication. The focused test confirms every manifest write targets private
+  staging rather than the canonical profile.
+- `Transaction.publish_directory` first adopts the completed directory as the
+  existing v3 `reservation-NNNNNN` journal object, writes its private nonce,
+  makes the ready record durable, and only then publishes with
+  `RENAME_NOREPLACE`.
+- A missing `profiles` parent is reserved nonrecursively only after private
+  preparation finishes. The completed target is then the sole publication
+  beneath it. A race winner prevents target publication, and parent rollback
+  removes only the marker/empty directory while preserving any external child.
+- After successful target publication, distributions performs only private
+  staging cleanup and result construction. App skips the later canonical
+  `.env` merge for every profile that was missing at revalidation, and
+  installed-layout validation remains read-only.
+- The focused post-publish replacement test copies out the published profile,
+  replaces canonical `config.yaml` and `.env`, then exercises app validation
+  and rollback. Exact external bytes and modes survive.
+- Rollback, active recovery, commit, and committed recovery continue to remove
+  or unmark only a canonical directory whose identity and nonce both match the
+  ready journal entry. Replacement identities are retained.
+- Journal schema version remains 3 with the existing directory-reservation
+  record shape. Direct representative version-2 active and committed
+  snapshot-journal recovery tests both pass.
+- Legacy `replace_existing=True` behavior remains on the prior snapshot-backed
+  path. No Task 3 cleanup changes were added.
+
+### Concerns
+
+- Atomic publication still requires Linux `renameat2` with
+  `RENAME_NOREPLACE`; unsupported runtimes fail closed before canonical
+  publication.
+- Hermes still emits the pre-existing `profile_distribution.py`
+  `DeprecationWarning`; it did not affect any result and remains outside Task 2.
