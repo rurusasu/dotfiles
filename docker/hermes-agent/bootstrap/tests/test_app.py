@@ -15,6 +15,7 @@ from unittest import mock
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
+import hermes_bootstrap.repositories as repositories_module
 from hermes_bootstrap.errors import (
     ApplyError,
     CredentialError,
@@ -328,30 +329,45 @@ class AppTests(unittest.TestCase):
         self.assertLess(events.index("publication"), events.index("cleanup"))
         self.assertLess(events.index("cleanup"), events.index("lock-close"))
 
-    def test_sync_repository_holds_the_engine_lock_through_repository_cleanup(
+    def test_sync_repository_holds_the_engine_lock_through_real_askpass_cleanup(
         self,
     ) -> None:
         from hermes_bootstrap import app
 
         events: list[str] = []
         lock = RecordingEngineLock(events)
+        repository = self.manifest.shared_repositories[0]
+        (repository.target / ".git").mkdir(parents=True)
 
         def acquire(root: Path) -> RecordingEngineLock:
             self.assertIs(root, self.root)
             events.append("lock-acquire")
             return lock
 
-        def synchronize(*_args: object, **_kwargs: object) -> RemoteSyncResult:
+        def synchronize(*_args: object, **_kwargs: object) -> tuple[str, bool]:
             events.append("repository-sync")
+            return "a" * 40, False
+
+        real_unlink = repositories_module._unlink_path
+
+        def cleanup(path: Path) -> bool:
+            self.assertTrue(path.name.startswith("askpass-"))
+            self.assertTrue(path.exists())
             events.append("repository-cleanup")
-            return RemoteSyncResult("lifelog", "a" * 40, False, self.root / "shared")
+            return real_unlink(path)
 
         with (
             mock.patch.object(app, "load_manifest", return_value=self.manifest),
             mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
             mock.patch.object(app, "_runtime_token", return_value="token"),
             mock.patch.object(
-                app, "synchronize_named_repository", side_effect=synchronize
+                repositories_module, "_verify_checkout_identity"
+            ),
+            mock.patch.object(
+                repositories_module, "_synchronize_checkout", side_effect=synchronize
+            ),
+            mock.patch.object(
+                repositories_module, "_unlink_path", side_effect=cleanup
             ),
         ):
             result = app.sync_repository(Path("manifest.yaml"), "lifelog", {})
