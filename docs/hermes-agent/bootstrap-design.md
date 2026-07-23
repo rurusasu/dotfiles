@@ -159,7 +159,7 @@ commit/rebase/push workflow. All profiles continue to use
    profiles in manifest order through the official Hermes API, publish shared
    working trees, and merge private `.env` files with mode `0600`.
 10. Validate the installed layout, commit the transaction, report the
-   `profile_sync` summary, then recreate and health-check the gateway.
+    `profile_sync` summary, then recreate and health-check the gateway.
 
 For a truly missing profile, `hermes profile install --force` preserves
 user-owned paths. The pinned runtime restricts direct profile installation to
