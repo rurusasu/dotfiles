@@ -152,7 +152,13 @@ projection because Git cannot represent it.
 Hermes installs an exactly top-level declared `.env.template` as
 `.env.EXAMPLE`. Snapshotting reverses only that mapping: it reads the safe
 installed `.env.EXAMPLE` bytes and publishes them as `.env.template`, while the
-canonical manifest and `.gitignore` retain the declared source name. Missing,
+canonical manifest and `.gitignore` retain the declared source name. The raw
+manifest value must be spelled exactly `.env.template`; normalized aliases such
+as `./.env.template` or a trailing slash are invalid. The installed directory
+entry must likewise be spelled exactly `.env.EXAMPLE`; lowercase or mixed-case
+aliases and casefold collisions are invalid even on a case-insensitive host.
+Snapshotting binds the enumerated entry identity to the descriptor opened for
+copying and rechecks both spelling and identity afterward. Missing,
 symbolic-link, non-regular, concurrently replaced, or secret-like installed
 content fails preflight. `.env`, nested `.env.template`, explicitly owned
 `.env.EXAMPLE`, and every other `.env*` path remain invalid. The pre-transaction

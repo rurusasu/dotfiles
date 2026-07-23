@@ -57,8 +57,13 @@ Hermes installs that source file as `.env.EXAMPLE`; the synchronizer safely
 reads the installed regular file and restores its bytes to `.env.template` in
 the publishable snapshot. The canonical manifest and `.gitignore` continue to
 name `.env.template`, preserving a valid source repository for a later install.
-The same source/destination mapping participates in immutable-copy identity
-checks and pre-transaction snapshot revalidation.
+The raw declaration must use that exact spelling without a leading `./`,
+trailing slash, or doubled slash. The installed directory entry must be spelled
+exactly `.env.EXAMPLE`; any casefold alias or collision is rejected regardless
+of host filesystem case sensitivity. Its enumerated identity is bound to the
+opened copy descriptor and the exact spelling and identity are rechecked after
+copying. The same source/destination mapping participates in pre-transaction
+snapshot revalidation.
 
 It rejects `.env`, nested `.env.template`, explicitly owned `.env.EXAMPLE`,
 every other `.env*`, credential filenames such as `auth.json`, Git control

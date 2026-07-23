@@ -491,6 +491,18 @@ secret-like, concurrently replaced, nested, explicit `.env.EXAMPLE`, and other
 `.env*` inputs. Integration coverage proves local bytes remain installed as
 `.env.EXAMPLE` while the exact remote tree contains `.env.template`.
 
+Focused re-review then found that the initial installed-entry `stat` was not
+bound to the descriptor opened for copying, case-insensitive lookup could
+accept a noncanonical installed spelling, and raw manifest aliases normalized
+to `.env.template`. Snapshotting now enumerates the actual directory entries,
+requires one exact `.env.EXAMPLE` with no casefold collision, binds its complete
+regular-file identity to `_open_regular`, and repeats the spelling and identity
+check after copying. Manifest validation rejects every raw value that normalizes
+to `.env.template` unless it is exactly `.env.template`. Deterministic RED
+coverage replaced the source immediately before open, created lowercase and
+mixed-case aliases and collisions, and exercised leading-dot and trailing-slash
+manifest aliases.
+
 ### Addendum Verification
 
 The focused filesystem and four existing replacement tests passed:
@@ -513,7 +525,7 @@ Fresh full verification:
 
 ```text
 task hermes:bootstrap:test
-Ran 532 tests
+Ran 535 tests
 OK (skipped=3)
 test_gh_wrapper: PASS
 profile sync provenance verified

@@ -225,6 +225,93 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
 
+    def test_mapped_env_template_rejects_replacement_before_source_open(
+        self,
+    ) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        source = home / ".env.EXAMPLE"
+        source.write_bytes(b"SAFE=original\n")
+        replacement = home / ".env.EXAMPLE.replacement"
+        replacement.write_bytes(b"SAFE=replacement\n")
+        original_open = profile_snapshot._open_regular
+        replaced = False
+
+        def replace_before_open(
+            parent_fd: int,
+            name: str,
+            *args: object,
+            **kwargs: object,
+        ) -> int:
+            nonlocal replaced
+            if name == ".env.EXAMPLE" and not replaced:
+                replacement.replace(source)
+                replaced = True
+            return original_open(parent_fd, name, *args, **kwargs)
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_open_regular",
+            side_effect=replace_before_open,
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_mapped_env_template_requires_exact_installed_case(self) -> None:
+        cases = (
+            ("lowercase-only", (".env.example",)),
+            ("mixed-only", (".Env.Example",)),
+            ("lowercase-collision", (".env.EXAMPLE", ".env.example")),
+            ("mixed-collision", (".env.EXAMPLE", ".Env.Example")),
+        )
+
+        for index, (case, installed_names) in enumerate(cases):
+            with self.subTest(case=case):
+                name = f"envcase{index}"
+                home = self.write_profile(name, [".env.template"])
+                for installed_name in installed_names:
+                    (home / installed_name).write_bytes(b"SAFE=value\n")
+                scratch = self.root / f"envcase-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)),
+                        scratch,
+                        allow_missing=False,
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_env_template_requires_exact_raw_manifest_spelling(self) -> None:
+        for index, raw in enumerate(
+            ("./.env.template", ".env.template/", ".env.template//")
+        ):
+            with self.subTest(raw=raw):
+                name = f"envraw{index}"
+                home = self.write_profile(name, [raw])
+                (home / ".env.EXAMPLE").write_bytes(b"SAFE=value\n")
+                scratch = self.root / f"envraw-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)),
+                        scratch,
+                        allow_missing=False,
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
     def test_manifest_rejects_duplicate_identity_empty_overlap_and_nonportable_ownership(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")

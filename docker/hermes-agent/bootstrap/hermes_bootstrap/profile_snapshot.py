@@ -705,6 +705,13 @@ def _manifest_semantics(
 def _normalize_owned(values: object) -> tuple[PurePosixPath, ...]:
     if not isinstance(values, list) or not values:
         raise ValueError("empty ownership")
+    for value in values:
+        if (
+            isinstance(value, str)
+            and PurePosixPath(value) == _ENV_TEMPLATE
+            and value != _ENV_TEMPLATE.as_posix()
+        ):
+            raise ValueError("noncanonical env template ownership")
     normalized = distributions._normalize_owned_paths(values, None, require_sources=False, profile=True)
     for path in normalized:
         if path in {PurePosixPath(".gitignore"), PurePosixPath("distribution.yaml")}:
@@ -758,14 +765,7 @@ def _copy_installed_env_template(
     casefolded: dict[str, str],
     fd_budget: _RetainedFdBudget,
 ) -> None:
-    source = os.stat(
-        _INSTALLED_ENV_EXAMPLE.name,
-        dir_fd=source_fd,
-        follow_symlinks=False,
-    )
-    _require_safe_source(source)
-    if not stat.S_ISREG(source.st_mode):
-        raise ValueError("unsafe env template source")
+    source = _stat_exact_installed_env_example(source_fd)
     _check_casefold(_ENV_TEMPLATE, casefolded)
     _copy_regular(
         source_fd,
@@ -776,7 +776,29 @@ def _copy_installed_env_template(
         expected_files,
         fd_budget,
         destination_name=_ENV_TEMPLATE.name,
+        expected_source=source,
     )
+    current = _stat_exact_installed_env_example(source_fd)
+    if _regular_identity(source) != _regular_identity(current):
+        raise ValueError("env template source changed")
+
+
+def _stat_exact_installed_env_example(source_fd: int) -> os.stat_result:
+    matches: list[tuple[str, os.stat_result]] = []
+    expected_name = _INSTALLED_ENV_EXAMPLE.name
+    with os.scandir(source_fd) as iterator:
+        for entry in iterator:
+            if entry.name.casefold() == expected_name.casefold():
+                matches.append(
+                    (entry.name, entry.stat(follow_symlinks=False))
+                )
+    if len(matches) != 1 or matches[0][0] != expected_name:
+        raise ValueError("invalid installed env example spelling")
+    source = matches[0][1]
+    _require_safe_source(source)
+    if not stat.S_ISREG(source.st_mode):
+        raise ValueError("unsafe env template source")
+    return source
 
 
 def _copy_declared_path(
@@ -935,11 +957,16 @@ def _copy_regular(
     fd_budget: _RetainedFdBudget,
     *,
     destination_name: str | None = None,
+    expected_source: os.stat_result | None = None,
 ) -> None:
     destination_fd: int | None = None
     destination_registered = False
     output_name = destination_name if destination_name is not None else name
-    source_fd = _open_regular(parent_fd, name)
+    source_fd = _open_regular(
+        parent_fd,
+        name,
+        expected_source=expected_source,
+    )
     try:
         before = os.fstat(source_fd)
         fd_budget.require_headroom(additional=1)
@@ -1019,7 +1046,12 @@ def _read_bounded_chunks(descriptor: int, expected_size: int) -> Iterator[bytes]
         raise ValueError("file changed while reading")
 
 
-def _open_regular(parent_fd: int, name: str) -> int:
+def _open_regular(
+    parent_fd: int,
+    name: str,
+    *,
+    expected_source: os.stat_result | None = None,
+) -> int:
     flags = (
         os.O_RDONLY
         | os.O_CLOEXEC
@@ -1030,6 +1062,11 @@ def _open_regular(parent_fd: int, name: str) -> int:
     try:
         source = os.fstat(descriptor)
         _require_safe_source(source)
+        if (
+            expected_source is not None
+            and _regular_identity(source) != _regular_identity(expected_source)
+        ):
+            raise ValueError("source replaced before open")
         if not source.st_mode & 0o444:
             raise ValueError("unreadable source")
         return descriptor
