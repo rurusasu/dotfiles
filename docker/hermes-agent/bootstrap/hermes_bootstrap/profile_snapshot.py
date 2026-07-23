@@ -20,7 +20,11 @@ import yaml
 
 from . import distributions
 from .errors import RepositoryError
-from .filesystem import open_absolute_directory, verify_absolute_directory
+from .filesystem import (
+    create_private_directory,
+    open_absolute_directory,
+    verify_absolute_directory,
+)
 from .models import BootstrapManifest, DistributionSource
 
 
@@ -396,6 +400,103 @@ def prepare_profile_snapshots(
             finally:
                 os.close(scratch_fd)
     return PreparedProfiles(tuple(item.snapshot for item in prepared), tuple(missing))
+
+
+def revalidate_profile_snapshots(
+    manifest: BootstrapManifest,
+    baseline: PreparedProfiles,
+    scratch_parent: Path,
+) -> None:
+    """Reject any local profile projection that changed after preflight."""
+
+    fallback = manifest.profiles[0].name if manifest.profiles else "local-profiles"
+    comparison = None
+    changed_profile: str | None = None
+    category: str | None = None
+    try:
+        comparison = create_private_directory(
+            scratch_parent,
+            prefix=".profile-revalidate-",
+        )
+        try:
+            current = prepare_profile_snapshots(
+                manifest,
+                comparison.path,
+                allow_missing=True,
+            )
+        except ProfileSnapshotError as error:
+            changed_profile = error.profile
+            category = (
+                "cleanup_failed"
+                if error.category == "cleanup_failed"
+                else "local_profile_changed"
+            )
+        else:
+            if _prepared_fingerprint(current) != _prepared_fingerprint(baseline):
+                changed_profile = _first_changed_profile(
+                    manifest,
+                    baseline,
+                    current,
+                )
+                category = "local_profile_changed"
+    except ProfileSnapshotError:
+        raise
+    except Exception:
+        changed_profile = fallback
+        category = "local_profile_changed"
+    finally:
+        if comparison is not None and not comparison.cleanup():
+            changed_profile = changed_profile or fallback
+            category = "cleanup_failed"
+    if category is not None:
+        raise ProfileSnapshotError(changed_profile or fallback, category) from None
+
+
+def _prepared_fingerprint(
+    prepared: PreparedProfiles,
+) -> object:
+    return (
+        tuple(
+            (
+                snapshot.declaration.name,
+                snapshot.manifest_bytes,
+                snapshot.gitignore_bytes,
+                snapshot.entries,
+                snapshot.digest,
+            )
+            for snapshot in prepared.snapshots
+        ),
+        tuple(source.name for source in prepared.missing),
+    )
+
+
+def _first_changed_profile(
+    manifest: BootstrapManifest,
+    baseline: PreparedProfiles,
+    current: PreparedProfiles,
+) -> str:
+    for declaration in manifest.profiles:
+        if _profile_fingerprint(baseline, declaration.name) != _profile_fingerprint(
+            current,
+            declaration.name,
+        ):
+            return declaration.name
+    return manifest.profiles[0].name if manifest.profiles else "local-profiles"
+
+
+def _profile_fingerprint(prepared: PreparedProfiles, name: str) -> object:
+    for snapshot in prepared.snapshots:
+        if snapshot.declaration.name == name:
+            return (
+                "snapshot",
+                snapshot.manifest_bytes,
+                snapshot.gitignore_bytes,
+                snapshot.entries,
+                snapshot.digest,
+            )
+    if any(source.name == name for source in prepared.missing):
+        return ("missing",)
+    return ("absent",)
 
 
 def _prepare_one(

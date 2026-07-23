@@ -5,6 +5,7 @@ import os
 import random
 import re
 import resource
+import shutil
 import signal
 import socket
 import stat
@@ -960,6 +961,222 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(prepare_profile_snapshots(self.manifest(profile), self.scratch, allow_missing=True).missing, (profile,))
         with self.assertRaises(ProfileSnapshotError):
             prepare_profile_snapshots(self.manifest(profile), self.scratch, allow_missing=False)
+
+    def test_revalidation_rejects_every_late_local_profile_drift(self) -> None:
+        def reset_profile() -> None:
+            shutil.rmtree(self.data_root / "profiles", ignore_errors=True)
+            for child in self.scratch.iterdir():
+                shutil.rmtree(child)
+
+        def prepare_existing(owned: list[str]) -> tuple[BootstrapManifest, object, Path]:
+            home = self.write_profile("rick", owned)
+            for item in owned:
+                path = home / item
+                if item == "assets":
+                    path.mkdir()
+                    (path / "fixture.txt").write_bytes(b"safe\n")
+                else:
+                    path.write_bytes(b"safe\n")
+            configured = self.manifest(self.profile("rick"))
+            baseline = prepare_profile_snapshots(
+                configured, self.scratch, allow_missing=True
+            )
+            return configured, baseline, home
+
+        cases = (
+            "canonical-manifest-edit",
+            "same-size-content-edit",
+            "owned-file-mode-change",
+            "owned-file-addition",
+            "owned-file-deletion",
+            "owned-file-rename",
+            "owned-directory-replacement",
+            "previously-missing-target-creation",
+            "previously-existing-target-deletion",
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                reset_profile()
+                owned = ["assets"] if case in {
+                    "owned-file-addition",
+                    "owned-directory-replacement",
+                } else ["SOUL.md"]
+                if case == "previously-missing-target-creation":
+                    configured = self.manifest(self.profile("rick"))
+                    baseline = prepare_profile_snapshots(
+                        configured, self.scratch, allow_missing=True
+                    )
+                    home = self.write_profile("rick", owned)
+                    (home / "SOUL.md").write_bytes(b"late\n")
+                else:
+                    configured, baseline, home = prepare_existing(owned)
+                    if case == "canonical-manifest-edit":
+                        manifest_path = home / "distribution.yaml"
+                        payload = yaml.safe_load(
+                            manifest_path.read_text(encoding="utf-8")
+                        )
+                        payload["version"] = "0.2.0"
+                        manifest_path.write_text(
+                            yaml.safe_dump(payload, sort_keys=False),
+                            encoding="utf-8",
+                        )
+                    elif case == "same-size-content-edit":
+                        path = home / "SOUL.md"
+                        before = path.stat()
+                        path.write_bytes(b"late\n")
+                        os.utime(
+                            path,
+                            ns=(before.st_atime_ns, before.st_mtime_ns),
+                        )
+                    elif case == "owned-file-mode-change":
+                        (home / "SOUL.md").chmod(0o755)
+                    elif case == "owned-file-addition":
+                        (home / "assets" / "late.txt").write_bytes(b"late\n")
+                    elif case == "owned-file-deletion":
+                        (home / "SOUL.md").unlink()
+                    elif case == "owned-file-rename":
+                        (home / "SOUL.md").rename(home / "MIND.md")
+                    elif case == "owned-directory-replacement":
+                        shutil.rmtree(home / "assets")
+                        (home / "assets").mkdir()
+                        (home / "assets" / "replacement.txt").write_bytes(
+                            b"late\n"
+                        )
+                    elif case == "previously-existing-target-deletion":
+                        shutil.rmtree(home)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    profile_snapshot.revalidate_profile_snapshots(
+                        configured,
+                        baseline,
+                        self.scratch,
+                    )
+
+                self.assertEqual(caught.exception.profile, "rick")
+                self.assertEqual(
+                    caught.exception.category,
+                    "local_profile_changed",
+                )
+
+    def test_unchanged_revalidation_passes_and_removes_comparison_scratch(
+        self,
+    ) -> None:
+        configured = self.manifest(self.profile("rick"))
+        self.write_profile("rick", ["SOUL.md"])
+        (self.profile("rick").target / "SOUL.md").write_bytes(b"safe\n")
+        baseline = prepare_profile_snapshots(
+            configured,
+            self.scratch,
+            allow_missing=True,
+        )
+        before = tuple(self.scratch.iterdir())
+
+        profile_snapshot.revalidate_profile_snapshots(
+            configured,
+            baseline,
+            self.scratch,
+        )
+
+        self.assertEqual(tuple(self.scratch.iterdir()), before)
+
+    def test_revalidation_cleanup_failure_overrides_an_unchanged_result(
+        self,
+    ) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_bytes(b"safe\n")
+        configured = self.manifest(self.profile("rick"))
+        baseline = prepare_profile_snapshots(
+            configured,
+            self.scratch,
+            allow_missing=True,
+        )
+        comparison = self.root / "comparison-cleanup-failure"
+        comparison.mkdir(mode=0o700)
+        resource = mock.Mock(path=comparison)
+        resource.cleanup.return_value = False
+
+        with (
+            mock.patch.object(
+                profile_snapshot,
+                "create_private_directory",
+                return_value=resource,
+            ),
+            self.assertRaises(ProfileSnapshotError) as caught,
+        ):
+            profile_snapshot.revalidate_profile_snapshots(
+                configured,
+                baseline,
+                self.scratch,
+            )
+
+        self.assertEqual(caught.exception.profile, "rick")
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+
+    def test_revalidation_cleanup_failure_overrides_detected_drift(
+        self,
+    ) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_bytes(b"safe\n")
+        configured = self.manifest(self.profile("rick"))
+        baseline = prepare_profile_snapshots(
+            configured,
+            self.scratch,
+            allow_missing=True,
+        )
+        (home / "SOUL.md").write_bytes(b"late\n")
+        comparison = self.root / "drift-cleanup-failure"
+        comparison.mkdir(mode=0o700)
+        resource = mock.Mock(path=comparison)
+        resource.cleanup.return_value = False
+
+        with (
+            mock.patch.object(
+                profile_snapshot,
+                "create_private_directory",
+                return_value=resource,
+            ),
+            self.assertRaises(ProfileSnapshotError) as caught,
+        ):
+            profile_snapshot.revalidate_profile_snapshots(
+                configured,
+                baseline,
+                self.scratch,
+            )
+
+        self.assertEqual(caught.exception.profile, "rick")
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+
+    def test_revalidation_reports_the_first_manifest_order_mismatch(
+        self,
+    ) -> None:
+        rick = self.write_profile("rick", ["SOUL.md"])
+        hoffman = self.write_profile("hoffman", ["SOUL.md"])
+        for home in (rick, hoffman):
+            (home / "SOUL.md").write_bytes(b"safe\n")
+        configured = self.manifest(
+            self.profile("rick"),
+            self.profile("hoffman"),
+        )
+        baseline = prepare_profile_snapshots(
+            configured,
+            self.scratch,
+            allow_missing=True,
+        )
+        (rick / "SOUL.md").write_bytes(b"rick\n")
+        (hoffman / "SOUL.md").write_bytes(b"hoff\n")
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            profile_snapshot.revalidate_profile_snapshots(
+                configured,
+                baseline,
+                self.scratch,
+            )
+
+        self.assertEqual(caught.exception.profile, "rick")
+        self.assertEqual(
+            caught.exception.category,
+            "local_profile_changed",
+        )
 
     def test_all_missing_profiles_still_recheck_scratch_at_the_end(self) -> None:
         profiles = (self.profile("rick"), self.profile("hoffman"))

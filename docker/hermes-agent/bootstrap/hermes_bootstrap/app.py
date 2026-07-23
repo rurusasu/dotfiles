@@ -55,6 +55,7 @@ from .payload import SecretRedactor, build_secret_plan, read_secret_payload
 from .profile_snapshot import (
     ProfileSnapshotError,
     prepare_profile_snapshots,
+    revalidate_profile_snapshots,
 )
 from .profile_sync import ProfileSyncReport
 from .repositories import (
@@ -222,11 +223,21 @@ def _apply_sensitive(
         for repo in manifest.shared_repositories:
             remote_results.append((repo, synchronize_remote(repo, auth)))
 
+        revalidate_profile_snapshots(
+            manifest,
+            prepared,
+            scratch.path,
+        )
         tx = Transaction.begin(manifest.data_root)
         apply_root_distribution(root_stage, manifest.data_root, tx)
         _failpoint("root-apply")
         for stage in profile_stages:
-            apply_profile_distribution(stage, manifest.data_root, tx)
+            apply_profile_distribution(
+                stage,
+                manifest.data_root,
+                tx,
+                replace_existing=False,
+            )
             _failpoint(f"profile-apply:{stage.declaration.name}")
         for repo, result in remote_results:
             apply_shared_working_tree(repo, result, tx)

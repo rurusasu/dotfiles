@@ -16,6 +16,7 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 import hermes_bootstrap.repositories as repositories_module
+from hermes_bootstrap import profile_snapshot
 from hermes_bootstrap.errors import (
     ApplyError,
     CredentialError,
@@ -119,6 +120,13 @@ class AppTests(unittest.TestCase):
         )
         self.validate_chrome_mcp_sources = source_contract_patcher.start()
         self.addCleanup(source_contract_patcher.stop)
+        revalidate_patcher = mock.patch.object(
+            app,
+            "revalidate_profile_snapshots",
+            create=True,
+        )
+        self.revalidate_profile_snapshots = revalidate_patcher.start()
+        self.addCleanup(revalidate_patcher.stop)
 
     def write_installed_profile(
         self,
@@ -562,6 +570,7 @@ class AppTests(unittest.TestCase):
                     f"stage:nancy:{commits['nancy']}",
                     "source-contract:default,rick,hoffman,risarisa,nancy",
                     "sync:lifelog",
+                    "revalidate",
                 ],
             )
             return tx
@@ -583,6 +592,9 @@ class AppTests(unittest.TestCase):
                 + ",".join(stage.declaration.name for stage in staged)
             )
         )
+        self.revalidate_profile_snapshots.side_effect = (
+            lambda _manifest, _baseline, _scratch: events.append("revalidate")
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -602,7 +614,7 @@ class AppTests(unittest.TestCase):
             mock.patch.object(
                 app,
                 "apply_profile_distribution",
-                side_effect=lambda stage, *_: events.append(
+                side_effect=lambda stage, *_args, **_kwargs: events.append(
                     f"profile:{stage.declaration.name}"
                 ),
             ),
@@ -633,6 +645,7 @@ class AppTests(unittest.TestCase):
                 f"stage:nancy:{commits['nancy']}",
                 "source-contract:default,rick,hoffman,risarisa,nancy",
                 "sync:lifelog",
+                "revalidate",
                 "root",
                 "profile:rick",
                 "profile:hoffman",
@@ -723,9 +736,10 @@ class AppTests(unittest.TestCase):
             mock.patch.object(
                 app,
                 "apply_profile_distribution",
-                side_effect=lambda staged, *_: applied_profiles.append(
-                    staged.declaration.name
-                ),
+                side_effect=lambda staged, *_args, **kwargs: (
+                    self.assertFalse(kwargs["replace_existing"]),
+                    applied_profiles.append(staged.declaration.name),
+                )[-1],
             ),
             mock.patch.object(app, "apply_shared_working_tree"),
             mock.patch.object(
@@ -757,6 +771,236 @@ class AppTests(unittest.TestCase):
             result["profile_sync"],
             {"rick": "unchanged", "nancy": "installed"},
         )
+
+    def test_apply_rejects_existing_and_new_profile_drift_at_every_late_checkpoint(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        checkpoints = (
+            "profile-publication",
+            "distribution-staging",
+            "chrome-validation",
+            "shared-remote-sync",
+        )
+        for checkpoint in checkpoints:
+            for mutation in ("existing-edit", "missing-target-creation"):
+                with self.subTest(checkpoint=checkpoint, mutation=mutation):
+                    case_root = self.root.parent / f"{checkpoint}-{mutation}"
+                    case_root.mkdir()
+                    configured = manifest(case_root)
+                    target = configured.profiles[0].target
+                    if mutation == "existing-edit":
+                        target.mkdir(parents=True)
+                        (target / "distribution.yaml").write_text(
+                            json.dumps(
+                                {
+                                    "name": "rick",
+                                    "version": "0.1.0",
+                                    "hermes_requires": ">=0.18.2",
+                                    "distribution_owned": ["config.yaml"],
+                                    "source": configured.profiles[0].source,
+                                }
+                            ),
+                            encoding="ascii",
+                        )
+                        (target / "config.yaml").write_bytes(b"original\n")
+                        (target / "config.yaml").chmod(0o644)
+
+                    report = ProfileSyncReport(
+                        dry_run=False,
+                        profiles=(
+                            (
+                                ProfileSyncResult(
+                                    "rick",
+                                    "changed",
+                                    "1" * 40,
+                                    "snapshot-rick",
+                                    ProfileDiff(),
+                                    "published",
+                                    "safe",
+                                ),
+                            )
+                            if mutation == "existing-edit"
+                            else ()
+                        ),
+                        exit_code=0,
+                    )
+                    expected_after: dict[
+                        str, tuple[str, int, bytes | None]
+                    ] | None = None
+                    mutated = False
+
+                    def snapshot_target() -> dict[
+                        str, tuple[str, int, bytes | None]
+                    ]:
+                        return {
+                            path.relative_to(target).as_posix(): (
+                                "directory" if path.is_dir() else "file",
+                                stat.S_IMODE(path.stat().st_mode),
+                                None if path.is_dir() else path.read_bytes(),
+                            )
+                            for path in (target, *sorted(target.rglob("*")))
+                        }
+
+                    def mutate() -> None:
+                        nonlocal expected_after, mutated
+                        if mutated:
+                            return
+                        mutated = True
+                        if mutation == "existing-edit":
+                            config = target / "config.yaml"
+                            config.write_bytes(b"late-edit\n")
+                            config.chmod(0o600)
+                        else:
+                            target.mkdir(parents=True)
+                            (target / "distribution.yaml").write_text(
+                                json.dumps(
+                                    {
+                                        "name": "rick",
+                                        "version": "9.9.9",
+                                        "hermes_requires": ">=0.18.2",
+                                        "distribution_owned": ["config.yaml"],
+                                    }
+                                ),
+                                encoding="ascii",
+                            )
+                            (target / "config.yaml").write_bytes(
+                                b"new-local-profile\n"
+                            )
+                            (target / "config.yaml").chmod(0o600)
+                        expected_after = snapshot_target()
+
+                    def synchronize_profiles(
+                        *_args: object,
+                        **_kwargs: object,
+                    ) -> ProfileSyncReport:
+                        if checkpoint == "profile-publication":
+                            mutate()
+                        return report
+
+                    def stage(
+                        source: DistributionSource,
+                        *_args: object,
+                    ) -> mock.Mock:
+                        if (
+                            checkpoint == "distribution-staging"
+                            and source.name == "rick"
+                        ):
+                            mutate()
+                        return mock.Mock(declaration=source)
+
+                    def validate_stages(_stages: object) -> None:
+                        if checkpoint == "chrome-validation":
+                            mutate()
+
+                    def synchronize_shared(
+                        *_args: object,
+                    ) -> RemoteSyncResult:
+                        if checkpoint == "shared-remote-sync":
+                            mutate()
+                        return RemoteSyncResult(
+                            "lifelog",
+                            "a" * 40,
+                            False,
+                            case_root / "shared" / "lifelog",
+                        )
+
+                    self.revalidate_profile_snapshots.side_effect = (
+                        profile_snapshot.revalidate_profile_snapshots
+                    )
+                    self.validate_chrome_mcp_sources.side_effect = validate_stages
+                    with (
+                        mock.patch.object(
+                            app,
+                            "load_manifest",
+                            return_value=configured,
+                        ),
+                        mock.patch.object(
+                            app.Transaction,
+                            "recover_if_needed",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "read_secret_payload",
+                            return_value=mock.Mock(
+                                github_token="token",
+                                redactor=SecretRedactor(("token",)),
+                            ),
+                        ),
+                        mock.patch.object(
+                            app,
+                            "_validate_remote_credentials",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "_validate_profile_credentials",
+                            return_value={},
+                        ),
+                        mock.patch.object(
+                            app.profile_sync,
+                            "synchronize_prepared_profiles",
+                            side_effect=synchronize_profiles,
+                        ),
+                        mock.patch.object(
+                            app,
+                            "stage_distribution",
+                            side_effect=stage,
+                        ),
+                        mock.patch.object(
+                            app,
+                            "synchronize_remote",
+                            side_effect=synchronize_shared,
+                        ),
+                        mock.patch.object(
+                            app.Transaction,
+                            "begin",
+                        ) as transaction_begin,
+                        mock.patch.object(
+                            app,
+                            "apply_root_distribution",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "apply_profile_distribution",
+                        ) as apply_profile,
+                        mock.patch.object(
+                            app,
+                            "apply_shared_working_tree",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "build_profile_environment",
+                            return_value={},
+                        ),
+                        mock.patch.object(app, "merge_env_file"),
+                        mock.patch.object(app, "_validate_installed_layout"),
+                        mock.patch.object(
+                            app,
+                            "_cleanup_apply_resources",
+                            return_value=True,
+                        ),
+                        self.assertRaises(RepositoryError) as raised,
+                    ):
+                        app.apply(
+                            Path("manifest.yaml"),
+                            io.StringIO("payload"),
+                        )
+
+                    self.assertTrue(mutated)
+                    transaction_begin.assert_not_called()
+                    apply_profile.assert_not_called()
+                    self.assertEqual(snapshot_target(), expected_after)
+                    self.assertEqual(
+                        str(raised.exception),
+                        "profile snapshot rejected (local_profile_changed)",
+                    )
+                    failure = raised.exception.profile_sync_report.profiles[0]
+                    self.assertEqual(failure.name, "rick")
+                    self.assertEqual(
+                        failure.category,
+                        "local_profile_changed",
+                    )
 
     def test_apply_rejects_an_invalid_existing_profile_without_remote_fallback(
         self,
@@ -1150,7 +1394,13 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "synchronize_remote", return_value=remote),
             mock.patch.object(app.Transaction, "begin", return_value=tx),
             mock.patch.object(app, "apply_root_distribution", side_effect=lambda *_: events.append("root")),
-            mock.patch.object(app, "apply_profile_distribution", side_effect=lambda *_: events.append("profile:rick")),
+            mock.patch.object(
+                app,
+                "apply_profile_distribution",
+                side_effect=lambda *_args, **_kwargs: events.append(
+                    "profile:rick"
+                ),
+            ),
             mock.patch.object(app, "apply_shared_working_tree", side_effect=lambda *_: events.append("shared:lifelog")),
             mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
             mock.patch.object(app, "build_profile_environment", return_value={"GH_TOKEN": "token"}),
@@ -1620,7 +1870,12 @@ class AppTests(unittest.TestCase):
                     root_file.write_bytes(b"root-after")
                     root_file.chmod(0o600)
 
-                def profile_apply(_stage: object, _root: Path, tx: object) -> None:
+                def profile_apply(
+                    _stage: object,
+                    _root: Path,
+                    tx: object,
+                    **_kwargs: object,
+                ) -> None:
                     tx.snapshot(profile_link)
                     profile_link.unlink()
                     profile_link.write_bytes(b"not-a-link")

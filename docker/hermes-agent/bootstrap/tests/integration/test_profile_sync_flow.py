@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 from types import FrameType, TracebackType
 from unittest import mock
 
+import yaml
 from hermes_cli import profile_distribution
 
 try:
@@ -23,8 +24,8 @@ try:
 except ImportError:
     import test_bootstrap_flow as bootstrap_flow
 
-from hermes_bootstrap import cli, profile_sync
-from hermes_bootstrap.errors import RepositoryError, ValidationError
+from hermes_bootstrap import cli, profile_snapshot, profile_sync
+from hermes_bootstrap.errors import ApplyError, RepositoryError, ValidationError
 from hermes_bootstrap.models import DistributionSource
 
 
@@ -57,6 +58,10 @@ class ProfileSyncFlowTests(unittest.TestCase):
         )
         self.assertEqual(self.profile_names, bootstrap_flow.PROFILE_NAMES)
         self._install_profile_fixtures()
+        with bootstrap_flow.app.EngineLock.acquire(
+            self.flow.data_root
+        ) as engine_lock:
+            engine_lock.require_held()
         nancy = next(source for source in self.flow.manifest.profiles if source.name == "nancy")
         nancy_manifest = profile_distribution.read_manifest(nancy.target)
         self.assertIsNotNone(nancy_manifest)
@@ -99,6 +104,23 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 source, version="0.2.0", marker="local"
             )
             self._write_bytes(source.target, local_files)
+            installed = profile_distribution.read_manifest(source.target)
+            self.assertIsNotNone(installed)
+            assert installed is not None
+            installed.source = source.source
+            profile_distribution.write_manifest(source.target, installed)
+            for directory in (
+                "memories",
+                "sessions",
+                "skills",
+                "skins",
+                "logs",
+                "plans",
+                "workspace",
+                "cron",
+                "home",
+            ):
+                (source.target / directory).mkdir(exist_ok=True)
 
     def _profile_files(
         self,
@@ -306,7 +328,20 @@ class ProfileSyncFlowTests(unittest.TestCase):
             ".gitignore": (0o100644, self._expected_gitignore(target)),
             "distribution.yaml": (
                 0o100644,
-                (target / "distribution.yaml").read_bytes(),
+                profile_snapshot._canonical_manifest(
+                    yaml.safe_load(
+                        (target / "distribution.yaml").read_text(
+                            encoding="ascii"
+                        )
+                    ),
+                    profile_snapshot._normalize_owned(
+                        list(
+                            profile_distribution.read_manifest(
+                                target
+                            ).distribution_owned
+                        )
+                    ),
+                ),
             ),
         }
         for relative in self._expected_owned_files(target):
@@ -626,9 +661,12 @@ class ProfileSyncFlowTests(unittest.TestCase):
         empty_owned = invalid_source.target / "empty-owned"
         empty_owned.mkdir()
         manifest_path = invalid_source.target / "distribution.yaml"
-        manifest_path.write_text(
+        manifest_payload = yaml.safe_load(
             manifest_path.read_text(encoding="ascii")
-            + "- empty-owned\n",
+        )
+        manifest_payload["distribution_owned"].append("empty-owned")
+        manifest_path.write_text(
+            yaml.safe_dump(manifest_payload, sort_keys=False),
             encoding="ascii",
         )
         remote_before = self._remote_heads()
@@ -1022,6 +1060,130 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.assertEqual(
             self._snapshot_bytes_modes(invalid_source.target),
             local_before,
+        )
+        self.flow._assert_no_temporary_resources()
+
+    def test_late_existing_profile_drift_after_publication_preserves_local_bytes_and_skips_transaction(
+        self,
+    ) -> None:
+        source = self._source(self.profile_names[0])
+        config = source.target / "config.yaml"
+        remote_before = self._remote_head(source.name)
+        real_synchronize = (
+            bootstrap_flow.app.profile_sync.synchronize_prepared_profiles
+        )
+        expected_after: dict[
+            str, tuple[str, int, bytes | str | None]
+        ] | None = None
+
+        def synchronize_then_mutate(prepared, auth, *, dry_run):
+            nonlocal expected_after
+            report = real_synchronize(prepared, auth, dry_run=dry_run)
+            config.write_bytes(b"late-local-authority\n")
+            config.chmod(0o600)
+            expected_after = self._snapshot_bytes_modes(source.target)
+            return report
+
+        with (
+            mock.patch.object(
+                bootstrap_flow.app.profile_sync,
+                "synchronize_prepared_profiles",
+                side_effect=synchronize_then_mutate,
+            ),
+            mock.patch.object(
+                bootstrap_flow.app.Transaction,
+                "begin",
+                wraps=bootstrap_flow.app.Transaction.begin,
+            ) as transaction_begin,
+            mock.patch.object(
+                bootstrap_flow.app,
+                "apply_profile_distribution",
+                wraps=bootstrap_flow.app.apply_profile_distribution,
+            ) as apply_profile,
+            self.assertRaises(RepositoryError) as raised,
+        ):
+            self.flow._apply()
+
+        self.assertIsNotNone(expected_after)
+        self.assertNotEqual(self._remote_head(source.name), remote_before)
+        transaction_begin.assert_not_called()
+        apply_profile.assert_not_called()
+        self.assertEqual(
+            self._snapshot_bytes_modes(source.target),
+            expected_after,
+        )
+        self.assertEqual(
+            str(raised.exception),
+            "profile snapshot rejected (local_profile_changed)",
+        )
+        failure = next(
+            item
+            for item in raised.exception.profile_sync_report.profiles
+            if item.name == source.name
+        )
+        self.assertEqual(failure.category, "local_profile_changed")
+        self.flow._assert_no_temporary_resources()
+
+    def test_profile_created_after_revalidation_survives_no_overwrite_failure(
+        self,
+    ) -> None:
+        self.assertEqual(self.flow._apply()["status"], "applied")
+        missing = self.flow.manifest.profiles[-1]
+        shutil.rmtree(missing.target)
+        created_after: dict[
+            str, tuple[str, int, bytes | str | None]
+        ] | None = None
+        real_apply_root = bootstrap_flow.app.apply_root_distribution
+
+        def apply_root_then_create(stage, data_root, tx):
+            nonlocal created_after
+            result = real_apply_root(stage, data_root, tx)
+            self._write_bytes(
+                missing.target,
+                self._profile_files(
+                    missing,
+                    version="9.9.9",
+                    marker="late-local",
+                ),
+            )
+            (missing.target / "config.yaml").chmod(0o600)
+            created_after = self._snapshot_bytes_modes(missing.target)
+            return result
+
+        with (
+            mock.patch.object(
+                bootstrap_flow.app,
+                "revalidate_profile_snapshots",
+                wraps=bootstrap_flow.app.revalidate_profile_snapshots,
+            ) as revalidate,
+            mock.patch.object(
+                bootstrap_flow.app,
+                "apply_root_distribution",
+                side_effect=apply_root_then_create,
+            ),
+            mock.patch.object(
+                bootstrap_flow.app.Transaction,
+                "begin",
+                wraps=bootstrap_flow.app.Transaction.begin,
+            ) as transaction_begin,
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError) as raised,
+        ):
+            self.flow._apply()
+
+        self.assertEqual(revalidate.call_count, 1)
+        self.assertEqual(transaction_begin.call_count, 1)
+        install.assert_not_called()
+        self.assertIsNotNone(created_after)
+        self.assertEqual(
+            self._snapshot_bytes_modes(missing.target),
+            created_after,
+        )
+        self.assertEqual(
+            str(raised.exception),
+            "could not apply the named profile distribution",
         )
         self.flow._assert_no_temporary_resources()
 

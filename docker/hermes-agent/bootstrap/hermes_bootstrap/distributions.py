@@ -183,10 +183,21 @@ def build_sanitized_profile_source(stage: StagedSource, scratch_root: Path) -> P
     return result
 
 
-def apply_profile_distribution(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet:
+def apply_profile_distribution(
+    stage: StagedSource,
+    data_root: Path,
+    tx: Transaction,
+    *,
+    replace_existing: bool = True,
+) -> ChangeSet:
     """Install one staged profile through Hermes' supported distribution API."""
 
-    result = _apply_profile_boundary(stage, data_root, tx)
+    result = _apply_profile_boundary(
+        stage,
+        data_root,
+        tx,
+        replace_existing=replace_existing,
+    )
     if isinstance(result, _Failure):
         message = result.message
         del result
@@ -385,7 +396,13 @@ def _read_prior_profile_manifest(target: Path, name: str) -> tuple[Any, tuple[Pu
         return None
 
 
-def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet | _Failure:
+def _apply_profile_boundary(
+    stage: StagedSource,
+    data_root: Path,
+    tx: Transaction,
+    *,
+    replace_existing: bool = True,
+) -> ChangeSet | _Failure:
     sanitized: Path | None = None
     scratch_root: Path | None = None
     prior_home = os.environ.get("HERMES_HOME")
@@ -407,9 +424,12 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
             raise ValueError("could not build sanitized profile")
         sanitized = build_result
         target = expected_target
+        target_exists = _lexists(target)
         prior = _read_prior_profile_manifest(target, stage.declaration.name)
         if _profile_is_current(target, sanitized, manifest, stage, owned, prior):
             result = ChangeSet(())
+        elif target_exists and not replace_existing:
+            raise ValueError("existing profile differs from staged distribution")
         else:
             snapshots = _SnapshotTracker(tx)
             _profile_snapshots(target, owned, manifest, snapshots)

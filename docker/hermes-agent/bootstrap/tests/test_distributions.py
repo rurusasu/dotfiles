@@ -626,6 +626,102 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual((target / "distribution.yaml").read_text(encoding="utf-8"), manifest_before)
         self.assertEqual({path: path.stat().st_ino for path in inodes}, inodes)
 
+    def test_profile_no_overwrite_installs_a_still_missing_target(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+
+        changed = apply_profile_distribution(
+            self.source("rick"),
+            self.data_root,
+            RecordingTransaction(),
+            replace_existing=False,
+        )
+
+        target = self.data_root / "profiles" / "rick"
+        self.assertNotEqual(changed, ChangeSet(()))
+        self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "config\n")
+
+    def test_profile_no_overwrite_allows_a_byte_identical_existing_target(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        apply_profile_distribution(
+            self.source("rick"),
+            self.data_root,
+            RecordingTransaction(),
+        )
+        tx = RecordingTransaction()
+
+        with mock.patch(
+            "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+        ) as install:
+            changed = apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+            )
+
+        self.assertEqual(changed, ChangeSet(()))
+        self.assertEqual(tx.snapshots, [])
+        install.assert_not_called()
+
+    def test_profile_no_overwrite_rejects_differing_and_malformed_existing_targets_without_mutation(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+
+        def snapshot_tree(root: Path) -> dict[
+            str, tuple[str, int, bytes | None]
+        ]:
+            return {
+                path.relative_to(root).as_posix(): (
+                    "directory" if path.is_dir() else "file",
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (root, *sorted(root.rglob("*")))
+            }
+
+        for condition in ("differing", "malformed"):
+            with self.subTest(condition=condition):
+                shutil.rmtree(self.data_root / "profiles", ignore_errors=True)
+                apply_profile_distribution(
+                    self.source("rick"),
+                    self.data_root,
+                    RecordingTransaction(),
+                )
+                target = self.data_root / "profiles" / "rick"
+                if condition == "differing":
+                    (target / "config.yaml").write_bytes(b"local-authoritative\n")
+                    (target / "config.yaml").chmod(0o600)
+                else:
+                    (target / "distribution.yaml").write_bytes(
+                        b"name: rick\nversion: [\n"
+                    )
+                    (target / "distribution.yaml").chmod(0o600)
+                before = snapshot_tree(target)
+                tx = RecordingTransaction()
+
+                with (
+                    mock.patch(
+                        "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+                    ) as install,
+                    self.assertRaises(ApplyError),
+                ):
+                    apply_profile_distribution(
+                        self.source("rick"),
+                        self.data_root,
+                        tx,
+                        replace_existing=False,
+                    )
+
+                self.assertEqual(tx.snapshots, [])
+                install.assert_not_called()
+                self.assertEqual(snapshot_tree(target), before)
+
     def test_profile_rejects_hardlinked_direct_managed_files_before_official_install(self) -> None:
         cases = (
             ("config.yaml", ["config.yaml"], "config.yaml"),
