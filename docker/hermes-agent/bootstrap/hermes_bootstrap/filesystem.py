@@ -104,6 +104,16 @@ class PrivateDirectory:
                 self._directory_fd,
                 self._identity,
             )
+            try:
+                os.stat(
+                    self.path.name,
+                    dir_fd=self._parent_fd,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass
+            else:
+                path_changed = True
             if _find_directory_name(self._parent_fd, self._identity) is not None:
                 raise OSError("private cleanup target remains")
             success = not path_changed
