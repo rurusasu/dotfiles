@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import tempfile
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -190,12 +191,12 @@ def synchronize_profiles(
     except ProfileSnapshotError as error:
         invalid_profile = error.profile
         invalid_category = error.category
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         report = _profile_preflight_failure(
             profiles, invalid_profile, invalid_category, dry_run=dry_run
         )
     except Exception as error:
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         report = failed_profile_report(
             profiles,
             dry_run=dry_run,
@@ -322,20 +323,20 @@ def _synchronize_one_boundary(
                     message=message,
                 )
     except _LockBusy as error:
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         outcome = _failed(snapshot, "lock_busy", "profile publication lock is busy")
     except _PushRejected as error:
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         outcome = _failed(snapshot, "push_rejected", "profile publication was rejected")
     except _PushRaceExhausted as error:
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         outcome = _failed(
             snapshot,
             "push_race_exhausted",
             "profile publication changed repeatedly",
         )
     except Exception as error:
-        _scrub_exception_graph(error)
+        error = _scrub_exception_graph(error)
         outcome = _failed(snapshot, "repository", "profile snapshot synchronization failed")
 
     resources: list[tuple[Callable[[Path], bool], Path]] = []
@@ -439,11 +440,22 @@ def _reported_path(raw: bytes, auth: GitAuth) -> PurePosixPath:
         or path.is_absolute()
         or path.as_posix() != text
         or any(part in {"", ".", ".."} for part in path.parts)
-        or any(ord(character) < 32 or ord(character) == 127 for character in text)
+        or not _visible_path_text(text)
         or auth.redactor.redact(text) != text
     ):
         return _escaped_reported_path(raw)
     return path
+
+
+def _visible_path_text(text: str) -> bool:
+    return all(
+        character == " "
+        or (
+            character.isprintable()
+            and unicodedata.category(character)[0] not in {"C", "M", "Z"}
+        )
+        for character in text
+    )
 
 
 def _escaped_reported_path(raw: bytes) -> PurePosixPath:
@@ -779,12 +791,37 @@ def _cleanup_resources(
             if not cleanup(path):
                 failed = True
         except Exception as error:
-            _scrub_exception_graph(error)
+            error = _scrub_exception_graph(error)
             failed = True
     return failed
 
 
-def _scrub_exception_graph(error: BaseException) -> None:
+def _scrub_exception_graph(error: BaseException) -> BaseException:
+    sanitized: BaseException = RuntimeError("sanitized exception")
+    try:
+        sanitized = _sanitized_exception_clone(error)
+    except BaseException:
+        pass
+    _best_effort_scrub_exception_graph(error)
+    return sanitized
+
+
+def _sanitized_exception_clone(error: BaseException) -> BaseException:
+    if isinstance(error, BaseExceptionGroup):
+        children = BaseException.__getattribute__(error, "exceptions")
+        sanitized_children = [
+            _sanitized_exception_clone(child)
+            for child in children
+            if isinstance(child, BaseException)
+        ]
+        if sanitized_children:
+            return BaseExceptionGroup(
+                "sanitized exception group", sanitized_children
+            )
+    return RuntimeError("sanitized exception")
+
+
+def _best_effort_scrub_exception_graph(error: BaseException) -> None:
     try:
         pending = [error]
         visited: set[int] = set()

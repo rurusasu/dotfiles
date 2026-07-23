@@ -72,6 +72,7 @@ class ProfileSyncTests(unittest.TestCase):
                 )
                 pending.extend(getattr(value, "__notes__", ()))
                 if isinstance(value, BaseExceptionGroup):
+                    pending.append(value.message)
                     pending.extend(value.exceptions)
             elif isinstance(value, TracebackType):
                 pending.extend((value.tb_frame, value.tb_next))
@@ -747,6 +748,60 @@ class ProfileSyncTests(unittest.TestCase):
             b".gitignore\0SOUL.md\0distribution.yaml\0",
         )
 
+    def test_unicode_control_and_format_paths_use_digest_identifiers(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        unsafe_texts = (
+            "next-line-\u0085.md",
+            "bidi-override-\u202eREADME.md",
+            "zero-width-\u200bspace.md",
+        )
+        unsafe_paths = tuple(text.encode("utf-8") for text in unsafe_texts)
+        self.seed_remote_raw_files(
+            remote,
+            {
+                b"README.md": b"safe path\n",
+                unsafe_paths[0]: b"unicode control\n",
+                unsafe_paths[1]: b"bidi override\n",
+                unsafe_paths[2]: b"zero width\n",
+            },
+        )
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+
+        expected_identifiers = tuple(
+            f".git-path-bytes/sha256-{hashlib.sha256(raw).hexdigest()}"
+            for raw in unsafe_paths
+        )
+        displayed = tuple(
+            path.as_posix() for path in report.profiles[0].diff.deleted
+        )
+        self.assertEqual(report.profiles[0].status, "changed")
+        self.assertEqual(
+            displayed, tuple(sorted(("README.md", *expected_identifiers)))
+        )
+        serialized = repr(report.as_dict())
+        displayed_bytes = "\0".join(displayed).encode("utf-8")
+        for text, raw in zip(unsafe_texts, unsafe_paths, strict=True):
+            self.assertNotIn(text, displayed)
+            self.assertNotIn(raw, displayed_bytes)
+            self.assertNotIn(raw.hex(), serialized)
+        self.assertEqual(report.as_dict(), report.as_dict())
+        self.assertEqual(
+            self.git_bytes(
+                remote,
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                "refs/heads/main",
+            ),
+            b".gitignore\0SOUL.md\0distribution.yaml\0",
+        )
+
     def test_first_non_fast_forward_rebuilds_once_on_the_new_remote_head(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)
@@ -1224,7 +1279,9 @@ class ProfileSyncTests(unittest.TestCase):
         self.seed_remote(second_remote, second)
         original_unlink = profile_sync._unlink
         original_remove = profile_sync._remove_tree
+        original_scrub = profile_sync._scrub_exception_graph
         captured: list[BaseException] = []
+        sanitized: list[BaseException] = []
         removed: list[Path] = []
         calls = 0
 
@@ -1235,7 +1292,7 @@ class ProfileSyncTests(unittest.TestCase):
                 child = RuntimeError(owned_marker.encode("ascii"))
                 child.add_note(f"child note {self.auth.token}")
                 error = ExceptionGroup(
-                    "cleanup group",
+                    f"cleanup group {self.auth.token} {owned_marker}",
                     [child, ValueError(owned_marker)],
                 )
                 error.add_note(f"group note {owned_marker}")
@@ -1247,9 +1304,17 @@ class ProfileSyncTests(unittest.TestCase):
             removed.append(path)
             return original_remove(path)
 
+        def scrub(error: BaseException) -> BaseException:
+            cleaned = original_scrub(error)
+            sanitized.append(cleaned)
+            return cleaned
+
         with (
             mock.patch.object(profile_sync, "_unlink", side_effect=unlink),
             mock.patch.object(profile_sync, "_remove_tree", side_effect=remove),
+            mock.patch.object(
+                profile_sync, "_scrub_exception_graph", side_effect=scrub
+            ),
         ):
             report = synchronize_prepared_profiles(
                 PreparedProfiles((first, second), ()), self.auth, dry_run=False
@@ -1264,7 +1329,15 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotIn(self.auth.token, serialized)
         self.assertNotIn(owned_marker, serialized)
         self.assertEqual(len(captured), 1)
-        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+        self.assertIn(self.auth.token, captured[0].message)
+        for child in captured[0].exceptions:
+            self.assert_exception_hides(child, self.auth.token, owned_marker)
+        self.assertEqual(len(sanitized), 1)
+        self.assertIsInstance(sanitized[0], BaseExceptionGroup)
+        self.assertEqual(sanitized[0].message, "sanitized exception group")
+        self.assert_exception_hides(
+            sanitized[0], self.auth.token, owned_marker
+        )
 
     def test_cleanup_scrubber_is_non_throwing_for_frozen_group_children(self) -> None:
         first_remote = self.root / "first.git"
@@ -1444,7 +1517,9 @@ class ProfileSyncTests(unittest.TestCase):
         self.seed_remote(first_remote, first)
         self.seed_remote(second_remote, second)
         original_attempt = profile_sync._exact_tree_attempt
+        original_scrub = profile_sync._scrub_exception_graph
         captured: list[BaseException] = []
+        sanitized: list[BaseException] = []
         calls = 0
 
         def attempt(snapshot, repository, environment):
@@ -1455,13 +1530,25 @@ class ProfileSyncTests(unittest.TestCase):
                     self.auth.token, owned_marker.encode("ascii")
                 )
                 child.add_note(f"repository note {owned_marker}")
-                error = ExceptionGroup("repository operation", [child])
+                error = ExceptionGroup(
+                    f"repository {self.auth.token} {owned_marker}", [child]
+                )
                 captured.append(error)
                 raise error
             return original_attempt(snapshot, repository, environment)
 
-        with mock.patch.object(
-            profile_sync, "_exact_tree_attempt", side_effect=attempt
+        def scrub(error: BaseException) -> BaseException:
+            cleaned = original_scrub(error)
+            sanitized.append(cleaned)
+            return cleaned
+
+        with (
+            mock.patch.object(
+                profile_sync, "_exact_tree_attempt", side_effect=attempt
+            ),
+            mock.patch.object(
+                profile_sync, "_scrub_exception_graph", side_effect=scrub
+            ),
         ):
             report = synchronize_prepared_profiles(
                 PreparedProfiles((first, second), ()), self.auth, dry_run=False
@@ -1473,7 +1560,16 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertEqual(report.profiles[0].category, "repository")
         self.assertNotIn(self.auth.token, repr(report.as_dict()))
         self.assertNotIn(owned_marker, repr(report.as_dict()))
-        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+        self.assertIn(self.auth.token, captured[0].message)
+        self.assert_exception_hides(
+            captured[0].exceptions[0], self.auth.token, owned_marker
+        )
+        self.assertEqual(len(sanitized), 1)
+        self.assertIsInstance(sanitized[0], BaseExceptionGroup)
+        self.assertEqual(sanitized[0].message, "sanitized exception group")
+        self.assert_exception_hides(
+            sanitized[0], self.auth.token, owned_marker
+        )
 
     def test_snapshot_preflight_exception_group_is_scrubbed(self) -> None:
         first = self.profile("first-profile", self.root / "first.git")
