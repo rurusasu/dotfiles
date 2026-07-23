@@ -437,3 +437,145 @@ Result: both commands exited 0 with no output.
   publication.
 - Hermes still emits the pre-existing `profile_distribution.py`
   `DeprecationWarning`; it did not affect any result and remains outside Task 2.
+
+## State Propagation Critical Fix
+
+### Result
+
+Propagated each profile's expected missing/existing state from the app's
+revalidated baseline into the no-replace distribution boundary. No-replace
+callers must now provide that state, and the distribution boundary enforces
+the expected/current matrix before Hermes install, transaction publication,
+or any managed-environment write.
+
+Implementation commit:
+`69d08ec73234c80d1b92e2f378d6b1ee5c56ec56`
+
+### RED Evidence
+
+Focused state-propagation command in a fresh Hermes container copy:
+
+```bash
+docker exec hermes rm -rf /tmp/task-2-state-red
+docker cp docker/hermes-agent hermes:/tmp/task-2-state-red
+docker exec -w /tmp/task-2-state-red/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_requires_revalidated_expected_state \
+    tests.test_distributions.DistributionTests.test_profile_expected_existing_rejects_current_absence_before_install \
+    tests.test_app.AppTests.test_apply_installs_only_missing_profiles_from_their_configured_remote_branch \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_existing_profile_deleted_after_revalidation_rejects_install_and_preserves_replacement \
+    -v
+```
+
+Result: 4 tests ran; 2 failed and 2 errored. Omitting the expected state still
+called Hermes install; passing `expected_missing=False` raised an unexpected
+keyword `TypeError`; the app call lacked `expected_missing`; and deleting an
+existing profile after revalidation silently reinstalled it instead of raising
+`ApplyError`.
+
+### GREEN Evidence
+
+The named `hermes` container was running, so the final verification used a
+fresh copy there:
+
+```bash
+docker exec hermes rm -rf /tmp/task-2-state-final
+docker cp docker/hermes-agent hermes:/tmp/task-2-state-final
+```
+
+Focused expected-state and race command:
+
+```bash
+docker exec -w /tmp/task-2-state-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_requires_revalidated_expected_state \
+    tests.test_distributions.DistributionTests.test_profile_expected_existing_rejects_current_absence_before_install \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_installs_a_still_missing_target \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_allows_a_byte_identical_existing_target \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_rejects_differing_and_malformed_existing_targets_without_mutation \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe \
+    tests.test_app.AppTests.test_apply_installs_only_missing_profiles_from_their_configured_remote_branch \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_existing_profile_deleted_after_revalidation_rejects_install_and_preserves_replacement
+```
+
+Result: 8 tests ran; 8 passed; 0 failures; 0 errors.
+
+Complete Task 2 command in the same fresh copy:
+
+```bash
+docker exec -w /tmp/task-2-state-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_profile_snapshot \
+    tests.test_distributions \
+    tests.test_app \
+    tests.integration.test_profile_sync_flow
+```
+
+Result: 189 tests ran; 189 passed; 0 failures; 0 errors.
+
+Complete transaction command:
+
+```bash
+docker exec -w /tmp/task-2-state-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest tests.test_transaction
+```
+
+Result: 51 tests ran; 51 passed; 0 failures; 0 errors.
+
+Additional checks:
+
+```bash
+docker exec -w /tmp/task-2-state-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m compileall -q \
+    hermes_bootstrap \
+    tests/test_profile_snapshot.py \
+    tests/test_distributions.py \
+    tests/test_app.py \
+    tests/test_transaction.py \
+    tests/integration/test_profile_sync_flow.py
+git diff --check
+```
+
+Result: both commands exited 0 with no output.
+
+### Changed Files
+
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/app.py`
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/distributions.py`
+- `docker/hermes-agent/bootstrap/tests/test_app.py`
+- `docker/hermes-agent/bootstrap/tests/test_distributions.py`
+- `docker/hermes-agent/bootstrap/tests/integration/test_profile_sync_flow.py`
+- `.superpowers/sdd/task-2-report.md` in the separate report commit
+
+### Self-Review
+
+- App now passes `expected_missing=True` only for profiles classified missing
+  by the revalidated baseline and `expected_missing=False` for profiles
+  classified existing.
+- A no-replace call without an actual boolean expected state fails before data
+  root validation, sanitized source construction, private Hermes home
+  creation, install, publication, or canonical environment work.
+- Expected existing plus current absence fails; expected existing plus an exact
+  installed profile is a no-op; expected existing plus differing or malformed
+  content fails.
+- Expected missing plus a present target fails before private install. Expected
+  missing plus an absent target retains the completed-private-install and
+  atomic `RENAME_NOREPLACE` publication path.
+- The deleted-after-revalidation integration regression confirms that Hermes
+  install, directory publication, and app environment merge are never called.
+  It then creates an external replacement while the apply failure unwinds and
+  verifies that rollback preserves its exact bytes and modes.
+- Existing no-replace race checks still reject targets that appear after the
+  first absence probe, before private install when possible and at atomic
+  publication otherwise.
+- `replace_existing=True`, current v3 journaling, direct v2 recovery behavior,
+  and the prior no-post-publish-write architecture are unchanged. No Task 3
+  cleanup changes were added.
+
+### Concerns
+
+- Atomic publication still requires Linux `renameat2` with
+  `RENAME_NOREPLACE`; unsupported runtimes fail closed before canonical
+  publication.
+- Hermes still emits the pre-existing `profile_distribution.py`
+  `DeprecationWarning`; it did not affect any result and remains outside Task 2.
