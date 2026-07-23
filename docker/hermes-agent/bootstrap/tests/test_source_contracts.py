@@ -25,6 +25,9 @@ mcp_servers:
   chrome:
     url: http://browser-mcp:8080/mcp
     connect_timeout: 120
+  xapi:
+    url: http://xapi-mcp:8080/mcp
+    connect_timeout: 300
   retained:
     url: https://example.invalid/mcp
 """
@@ -100,6 +103,32 @@ mcp_servers:
             "mcp-sequence": "mcp_servers: []\n",
             "missing-chrome": "mcp_servers: {}\n",
             "chrome-sequence": "mcp_servers:\n  chrome: []\n",
+            "missing-xapi": VALID_CONFIG.replace(
+                "  xapi:\n    url: http://xapi-mcp:8080/mcp\n    connect_timeout: 300\n", ""
+            ),
+            "wrong-xapi-url": VALID_CONFIG.replace(
+                "http://xapi-mcp:8080/mcp", "https://secret.invalid/mcp"
+            ),
+            "missing-xapi-timeout": VALID_CONFIG.replace(
+                "    connect_timeout: 300\n", "", 1
+            ),
+            "string-xapi-timeout": VALID_CONFIG.replace(
+                "    connect_timeout: 300", '    connect_timeout: "300"', 1
+            ),
+            "boolean-xapi-timeout": VALID_CONFIG.replace(
+                "    connect_timeout: 300", "    connect_timeout: true", 1
+            ),
+            "float-xapi-timeout": VALID_CONFIG.replace(
+                "    connect_timeout: 300", "    connect_timeout: 300.0", 1
+            ),
+            "wrong-xapi-timeout": VALID_CONFIG.replace(
+                "    connect_timeout: 300", "    connect_timeout: 60", 1
+            ),
+            "extra-xapi-key": VALID_CONFIG.replace(
+                "    connect_timeout: 300",
+                "    connect_timeout: 300\n    token: secret-marker",
+                1,
+            ),
             "wrong-url": """\
 mcp_servers:
   chrome:
@@ -148,6 +177,8 @@ mcp_servers:
         }
         for case, config in invalid.items():
             with self.subTest(case=case):
+                if case not in {"missing-xapi"}:
+                    config = _with_valid_xapi(config)
                 staged = self.staged(case, config)
                 with self.assertRaises(ValidationError) as caught:
                     validate_chrome_mcp_sources((staged,))
@@ -185,6 +216,16 @@ distribution_owned:
             ValidationError, "future-profile.*distribution_owned.*config.yaml"
         ):
             validate_chrome_mcp_sources((staged,))
+
+
+def _with_valid_xapi(config: str | None) -> str | None:
+    if config is None or "xapi:" in config or "mcp_servers:\n" not in config:
+        return config
+    return config.replace(
+        "mcp_servers:\n",
+        "mcp_servers:\n  xapi:\n    url: http://xapi-mcp:8080/mcp\n    connect_timeout: 300\n",
+        1,
+    )
 
 
 if __name__ == "__main__":

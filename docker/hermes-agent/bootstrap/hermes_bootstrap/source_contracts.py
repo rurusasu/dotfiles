@@ -15,6 +15,10 @@ _CHROME_MCP = {
     "url": "http://browser-mcp:8080/mcp",
     "connect_timeout": 120,
 }
+_XAPI_MCP = {
+    "url": "http://xapi-mcp:8080/mcp",
+    "connect_timeout": 300,
+}
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
@@ -91,12 +95,26 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
             or dict(chrome) != _CHROME_MCP
         ):
             _invalid(source)
+        xapi = mcp_servers.get("xapi")
+        if (
+            not isinstance(xapi, Mapping)
+            or type(xapi.get("connect_timeout")) is not int
+            or dict(xapi) != _XAPI_MCP
+        ):
+            _invalid_xapi(source)
 
 
 def _invalid(source: StagedSource) -> NoReturn:
     name = source.declaration.name
     raise ValidationError(
         f"distribution {name!r} config.yaml has invalid Chrome MCP configuration"
+    ) from None
+
+
+def _invalid_xapi(source: StagedSource) -> NoReturn:
+    name = source.declaration.name
+    raise ValidationError(
+        f"distribution {name!r} config.yaml has invalid X API MCP configuration"
     ) from None
 
 
