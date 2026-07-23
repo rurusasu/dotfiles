@@ -7,6 +7,7 @@ import errno
 import hashlib
 import os
 import re
+import resource
 import secrets
 import stat
 from collections.abc import Iterator
@@ -30,15 +31,19 @@ _DECLARATIVE_KEYS = (
 )
 _RUNTIME_KEYS = frozenset({"source", "installed_at"})
 _READ_CHUNK_BYTES = 64 * 1024
-_SECRET_OVERLAP_BYTES = 256
+_PRIVATE_KEY_OVERLAP_BYTES = 256
+_FD_OPERATION_HEADROOM = 32
+_FD_CONSERVATIVE_MARGIN = 32
 _RENAME_NOREPLACE = 1
 _PROFILE_NAME = re.compile(r"[a-z][a-z0-9-]*\Z")
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
-_GITHUB_TOKEN = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
-_SLACK_TOKEN = re.compile(
-    rb"(?<![A-Za-z0-9_])(?:xox(?:b|p|a|r|s)|xapp)-[A-Za-z0-9-]+(?![A-Za-z0-9_-])"
-)
 _PRIVATE_KEY = re.compile(rb"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")
+_ASCII_ALNUM = frozenset(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+)
+_ASCII_WORD = _ASCII_ALNUM | frozenset(b"_")
+_SLACK_BODY = _ASCII_ALNUM | frozenset(b"-")
+_SLACK_CONTINUATION = _SLACK_BODY | frozenset(b"_")
 _GIT_CONTROL_COMPONENTS = frozenset({".git", ".gitignore", ".gitattributes", ".gitmodules"})
 _RESERVED_COMPONENTS = frozenset(
     {
@@ -88,6 +93,18 @@ class ProfileSnapshotError(RepositoryError):
         RepositoryError.__init__(self, f"profile snapshot rejected ({self.category})")
 
 
+class _FdBudgetError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class _TokenRule:
+    prefix: bytes
+    body: frozenset[int]
+    minimum: int
+    trailing_forbidden: frozenset[int]
+
+
 @dataclass(frozen=True)
 class _ExpectedFile:
     path: PurePosixPath
@@ -116,13 +133,186 @@ class _PreparedSnapshot:
     directories: tuple[_ExpectedDirectory, ...]
 
 
+_GITHUB_TOKEN_RULES = tuple(
+    _TokenRule(prefix, _ASCII_ALNUM, 20, _ASCII_WORD)
+    for prefix in (b"ghp_", b"gho_", b"ghu_", b"ghs_", b"ghr_")
+) + (_TokenRule(b"github_pat_", _ASCII_WORD, 20, _ASCII_WORD),)
+_SLACK_TOKEN_RULES = tuple(
+    _TokenRule(prefix, _SLACK_BODY, 1, _SLACK_CONTINUATION)
+    for prefix in (b"xoxb-", b"xoxp-", b"xoxa-", b"xoxr-", b"xoxs-", b"xapp-")
+)
+
+
+@dataclass
+class _RetainedFdBudget:
+    soft_limit: int
+    initial_open: int
+    tree_depth: int = 0
+
+    @classmethod
+    def from_process(cls) -> _RetainedFdBudget:
+        try:
+            soft_limit, _hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+            if soft_limit == resource.RLIM_INFINITY:
+                soft_limit = os.sysconf("SC_OPEN_MAX")
+        except (OSError, ValueError):
+            raise _FdBudgetError from None
+        if not isinstance(soft_limit, int) or soft_limit <= 0:
+            raise _FdBudgetError
+        return cls(soft_limit, _open_descriptor_count())
+
+    def require_headroom(self, *, additional: int = 0) -> None:
+        current = max(self.initial_open, _open_descriptor_count())
+        reserved = (
+            _FD_OPERATION_HEADROOM
+            + _FD_CONSERVATIVE_MARGIN
+            + self.tree_depth
+        )
+        if current + additional + reserved > self.soft_limit:
+            raise _FdBudgetError
+
+    def require_tree_depth(self, depth: int) -> None:
+        self.tree_depth = max(self.tree_depth, depth)
+        self.require_headroom()
+
+
+class _IncrementalTokenDetector:
+    def __init__(self, rules: tuple[_TokenRule, ...]) -> None:
+        self._rules = rules
+        self._start = bytes((rules[0].prefix[0],))
+        self._candidates: tuple[_TokenRule, ...] = ()
+        self._prefix_index = 0
+        self._active: _TokenRule | None = None
+        self._body_length = 0
+        self._previous: int | None = None
+
+    def feed(self, content: bytes) -> None:
+        index = 0
+        while index < len(content):
+            if self._active is not None:
+                index = self._consume_body(content, index)
+                continue
+            if self._candidates:
+                index = self._consume_prefix(content, index)
+                continue
+            candidate = content.find(self._start, index)
+            if candidate < 0:
+                self._previous = content[-1]
+                return
+            previous = content[candidate - 1] if candidate else self._previous
+            byte = content[candidate]
+            self._previous = byte
+            index = candidate + 1
+            if previous is None or previous not in _ASCII_WORD:
+                self._candidates = self._rules
+                self._prefix_index = 1
+
+    def finish(self) -> None:
+        if (
+            self._active is not None
+            and self._body_length >= self._active.minimum
+        ):
+            raise ValueError("secret candidate")
+
+    def _consume_prefix(self, content: bytes, index: int) -> int:
+        previous = self._previous
+        byte = content[index]
+        next_index = self._prefix_index + 1
+        candidates = tuple(
+            rule
+            for rule in self._candidates
+            if len(rule.prefix) >= next_index
+            and rule.prefix[self._prefix_index] == byte
+        )
+        self._previous = byte
+        if not candidates:
+            self._candidates = ()
+            self._prefix_index = 0
+            if (
+                byte == self._start[0]
+                and (previous is None or previous not in _ASCII_WORD)
+            ):
+                self._candidates = self._rules
+                self._prefix_index = 1
+            return index + 1
+        complete = tuple(rule for rule in candidates if len(rule.prefix) == next_index)
+        if complete:
+            self._active = complete[0]
+            self._body_length = 0
+            self._candidates = ()
+            self._prefix_index = 0
+        else:
+            self._candidates = candidates
+            self._prefix_index = next_index
+        return index + 1
+
+    def _consume_body(self, content: bytes, index: int) -> int:
+        assert self._active is not None
+        end = index
+        while end < len(content) and content[end] in self._active.body:
+            end += 1
+        if end > index:
+            self._body_length = min(
+                self._active.minimum, self._body_length + end - index
+            )
+            self._previous = content[end - 1]
+            if end == len(content):
+                return end
+        next_byte = content[end]
+        if (
+            self._body_length >= self._active.minimum
+            and next_byte not in self._active.trailing_forbidden
+        ):
+            raise ValueError("secret candidate")
+        self._active = None
+        self._body_length = 0
+        return end
+
+
+class _SensitiveStreamScanner:
+    def __init__(self) -> None:
+        self._github = _IncrementalTokenDetector(_GITHUB_TOKEN_RULES)
+        self._slack = _IncrementalTokenDetector(_SLACK_TOKEN_RULES)
+        self._private_tail = b""
+
+    def feed(self, content: bytes) -> None:
+        self._github.feed(content)
+        self._slack.feed(content)
+        private_window = self._private_tail + content
+        if _PRIVATE_KEY.search(private_window):
+            raise ValueError("secret candidate")
+        self._private_tail = private_window[-_PRIVATE_KEY_OVERLAP_BYTES:]
+
+    def finish(self) -> None:
+        self._github.finish()
+        self._slack.finish()
+
+
+def _open_descriptor_count() -> int:
+    try:
+        return len(os.listdir("/proc/self/fd"))
+    except OSError:
+        raise _FdBudgetError from None
+
+
 def prepare_profile_snapshots(
     manifest: BootstrapManifest, scratch_root: Path, *, allow_missing: bool
 ) -> PreparedProfiles:
     """Copy every valid installed profile to caller-owned private scratch space."""
 
     _require_private_scratch(scratch_root)
-    scratch_fd = open_absolute_directory(scratch_root)
+    profile = manifest.profiles[0].name if manifest.profiles else "local-profiles"
+    try:
+        fd_budget = _RetainedFdBudget.from_process()
+        fd_budget.require_headroom(additional=1)
+    except _FdBudgetError:
+        raise ProfileSnapshotError(profile, "resource_limit") from None
+    try:
+        scratch_fd = open_absolute_directory(scratch_root)
+    except OSError as error:
+        if error.errno in {errno.EMFILE, errno.ENFILE}:
+            raise ProfileSnapshotError(profile, "resource_limit") from None
+        raise ValueError("scratch unavailable") from None
     try:
         _require_private_scratch_status(os.fstat(scratch_fd))
     except Exception:
@@ -146,7 +336,10 @@ def prepare_profile_snapshots(
                         missing.append(declaration)
                         continue
                     raise ProfileSnapshotError(declaration.name, "missing_profile")
-                item = _prepare_one(declaration, scratch_root, scratch_fd)
+                fd_budget.require_headroom()
+                item = _prepare_one(
+                    declaration, scratch_root, scratch_fd, fd_budget
+                )
             except ProfileSnapshotError:
                 raise
             except Exception as error:
@@ -197,7 +390,12 @@ def prepare_profile_snapshots(
     return PreparedProfiles(tuple(item.snapshot for item in prepared), tuple(missing))
 
 
-def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd: int) -> _PreparedSnapshot:
+def _prepare_one(
+    declaration: DistributionSource,
+    scratch_root: Path,
+    scratch_fd: int,
+    fd_budget: _RetainedFdBudget,
+) -> _PreparedSnapshot:
     output = scratch_root / declaration.name
     try:
         os.stat(declaration.name, dir_fd=scratch_fd, follow_symlinks=False)
@@ -236,6 +434,7 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
             manifest_bytes,
             0o644,
             expected_files,
+            fd_budget,
         )
         entries: list[SnapshotEntry] = []
         casefolded = {
@@ -252,6 +451,7 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
                 expected_files,
                 expected_directories,
                 casefolded,
+                fd_budget,
             )
             if is_directory:
                 directory_paths.add(owned_path)
@@ -266,6 +466,7 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
             gitignore_bytes,
             0o644,
             expected_files,
+            fd_budget,
         )
         digest = _snapshot_digest(manifest_bytes, gitignore_bytes, entries)
         snapshot = ProfileSnapshot(declaration, output, manifest_bytes, gitignore_bytes, tuple(entries), digest)
@@ -429,6 +630,7 @@ def _copy_declared_path(
     expected_files: list[_ExpectedFile],
     expected_directories: dict[PurePosixPath, _ExpectedDirectory],
     casefolded: dict[str, str],
+    fd_budget: _RetainedFdBudget,
 ) -> bool:
     source_fds = [os.dup(source_fd)]
     output_fds = [os.dup(output_fd)]
@@ -437,6 +639,7 @@ def _copy_declared_path(
         prefix = PurePosixPath()
         for component in path.parts[:-1]:
             prefix /= component
+            fd_budget.require_tree_depth(len(prefix.parts))
             source_child_fd, source_identity = _open_source_directory(source_fds[-1], component)
             output_child_fd = _create_output_directory(
                 output_fds[-1],
@@ -453,6 +656,7 @@ def _copy_declared_path(
         _require_safe_source(source)
         _check_casefold(path, casefolded)
         if stat.S_ISDIR(source.st_mode):
+            fd_budget.require_tree_depth(len(path.parts))
             source_child_fd, source_identity = _open_source_directory(source_parent_fd, path.name)
             output_child_fd = _create_output_directory(
                 output_parent_fd,
@@ -472,6 +676,7 @@ def _copy_declared_path(
                     expected_files,
                     expected_directories,
                     casefolded,
+                    fd_budget,
                 )
             finally:
                 os.close(source_child_fd)
@@ -485,6 +690,7 @@ def _copy_declared_path(
                 output_parent_fd,
                 entries,
                 expected_files,
+                fd_budget,
             )
             result = False
         for parent_fd, name, descriptor, identity in reversed(ancestors):
@@ -508,6 +714,7 @@ def _copy_directory(
     expected_files: list[_ExpectedFile],
     expected_directories: dict[PurePosixPath, _ExpectedDirectory],
     casefolded: dict[str, str],
+    fd_budget: _RetainedFdBudget,
 ) -> None:
     with os.scandir(source_fd) as iterator:
         names = sorted(entry.name for entry in iterator)
@@ -518,6 +725,7 @@ def _copy_directory(
         source = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
         _require_safe_source(source)
         if stat.S_ISDIR(source.st_mode):
+            fd_budget.require_tree_depth(len(relative.parts))
             source_child_fd, child_identity = _open_source_directory(source_fd, name)
             output_child_fd = _create_output_directory(
                 output_fd,
@@ -537,12 +745,21 @@ def _copy_directory(
                     expected_files,
                     expected_directories,
                     casefolded,
+                    fd_budget,
                 )
             finally:
                 os.close(source_child_fd)
                 os.close(output_child_fd)
         else:
-            _copy_regular(source_fd, name, relative, output_fd, entries, expected_files)
+            _copy_regular(
+                source_fd,
+                name,
+                relative,
+                output_fd,
+                entries,
+                expected_files,
+                fd_budget,
+            )
     _verify_source_directory(source_parent_fd, source_name, source_fd, source_identity)
 
 
@@ -553,12 +770,14 @@ def _copy_regular(
     output_fd: int,
     entries: list[SnapshotEntry],
     expected_files: list[_ExpectedFile],
+    fd_budget: _RetainedFdBudget,
 ) -> None:
     source_fd = _open_regular(parent_fd, name)
     destination_fd: int | None = None
     destination_registered = False
     try:
         before = os.fstat(source_fd)
+        fd_budget.require_headroom(additional=1)
         destination_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=output_fd)
         created = os.fstat(destination_fd)
         expected_index = len(expected_files)
@@ -576,14 +795,13 @@ def _copy_regular(
         destination_registered = True
         digest = hashlib.sha256()
         size = 0
-        overlap = b""
+        scanner = _SensitiveStreamScanner()
         for chunk in _read_bounded_chunks(source_fd, before.st_size):
-            _reject_sensitive_bytes(overlap + chunk, final=False)
+            _reject_sensitive_bytes(chunk, final=False, scanner=scanner)
             _write_descriptor(destination_fd, chunk)
             digest.update(chunk)
             size += len(chunk)
-            overlap = (overlap + chunk)[-_SECRET_OVERLAP_BYTES:]
-        _reject_sensitive_bytes(overlap)
+        _reject_sensitive_bytes(b"", scanner=scanner)
         _verify_regular(parent_fd, name, source_fd, before, size)
         mode = _git_mode(before.st_mode)
         os.fchmod(destination_fd, mode)
@@ -814,7 +1032,9 @@ def _write_private_file_at(
     content: bytes,
     mode: ProfileMode,
     expected_files: list[_ExpectedFile],
+    fd_budget: _RetainedFdBudget,
 ) -> _ExpectedFile:
+    fd_budget.require_headroom(additional=1)
     descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
     registered = False
     try:
@@ -1149,11 +1369,16 @@ def _snapshot_digest(manifest_bytes: bytes, gitignore_bytes: bytes, entries: lis
     return hashlib.sha256(payload).hexdigest()
 
 
-def _reject_sensitive_bytes(content: bytes, *, final: bool = True) -> None:
-    for pattern in (_GITHUB_TOKEN, _SLACK_TOKEN, _PRIVATE_KEY):
-        match = pattern.search(content)
-        if match is not None and (final or match.end() < len(content)):
-            raise ValueError("secret candidate")
+def _reject_sensitive_bytes(
+    content: bytes,
+    *,
+    final: bool = True,
+    scanner: _SensitiveStreamScanner | None = None,
+) -> None:
+    active_scanner = scanner if scanner is not None else _SensitiveStreamScanner()
+    active_scanner.feed(content)
+    if final:
+        active_scanner.finish()
 
 
 def _require_private_scratch(path: Path) -> None:
@@ -1645,6 +1870,8 @@ def _unused_cleanup_name(parent_fd: int) -> str:
 
 
 def _category(error: Exception) -> str:
+    if isinstance(error, _FdBudgetError):
+        return "resource_limit"
     if isinstance(error, UnicodeError):
         return "invalid_manifest"
     return "invalid_local_profile"

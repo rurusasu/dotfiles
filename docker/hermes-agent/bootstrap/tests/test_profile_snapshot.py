@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import errno
 import os
+import resource
 import signal
 import socket
 import stat
@@ -273,6 +275,93 @@ class ProfileSnapshotTests(unittest.TestCase):
                     ).snapshots[0]
                     self.assertEqual((snapshot.root / "SOUL.md").read_bytes(), content)
 
+    def test_rejects_arbitrarily_long_streaming_tokens_at_delimiter_or_eof(self) -> None:
+        body = b"a" * (profile_snapshot._READ_CHUNK_BYTES + 300)
+        cases = (
+            (b"xoxb-", b"!"),
+            (b"xoxb-", b""),
+            (b"ghp_", b"!"),
+            (b"ghp_", b""),
+        )
+
+        for index, (prefix, suffix) in enumerate(cases):
+            with self.subTest(prefix=prefix, suffix=suffix):
+                name = f"longtoken{index}"
+                home = self.write_profile(name, ["SOUL.md"])
+                (home / "SOUL.md").write_bytes(b"!" + prefix + body + suffix)
+                scratch = self.root / f"long-token-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)),
+                        scratch,
+                        allow_missing=False,
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_accepts_long_token_shapes_with_continuation_or_no_leading_boundary(self) -> None:
+        body = b"a" * (profile_snapshot._READ_CHUNK_BYTES + 300)
+        forgotten_leading_slack = (
+            b"z" * (profile_snapshot._READ_CHUNK_BYTES - 257)
+            + b"A"
+            + b"xoxb-"
+            + body
+            + b"!"
+        )
+        forgotten_leading_github = (
+            b"z" * (profile_snapshot._READ_CHUNK_BYTES - 257)
+            + b"A"
+            + b"ghp_"
+            + body
+            + b"!"
+        )
+        cases = (
+            b"!xoxb-" + body + b"_!",
+            b"!ghp_" + body + b"_!",
+            b"Axoxb-" + body + b"!",
+            b"Aghp_" + body + b"!",
+            forgotten_leading_slack,
+            forgotten_leading_github,
+        )
+
+        for index, content in enumerate(cases):
+            with self.subTest(index=index):
+                name = f"longsafe{index}"
+                home = self.write_profile(name, ["SOUL.md"])
+                (home / "SOUL.md").write_bytes(content)
+                scratch = self.root / f"long-safe-{index}"
+                scratch.mkdir(mode=0o700)
+
+                snapshot = prepare_profile_snapshots(
+                    self.manifest(self.profile(name)),
+                    scratch,
+                    allow_missing=False,
+                ).snapshots[0]
+
+                self.assertEqual((snapshot.root / "SOUL.md").read_bytes(), content)
+
+    def test_rejects_a_private_key_header_crossing_a_chunk_boundary(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        header = b"-----BEGIN OPENSSH PRIVATE KEY-----"
+        content = (
+            b"x" * (profile_snapshot._READ_CHUNK_BYTES - len(header) // 2)
+            + header
+        )
+        (home / "SOUL.md").write_bytes(content)
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(
+                self.manifest(self.profile("rick")),
+                self.scratch,
+                allow_missing=False,
+            )
+
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_manifest_growth_is_rejected_after_one_bounded_probe(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -345,6 +434,103 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 1.0)
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_owned_file_premature_eof_is_rejected_directly(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        source = home / "SOUL.md"
+        content = b"bounded-source" * 128
+        source.write_bytes(content)
+        source_status = source.stat()
+        original_read = os.read
+        source_reads = 0
+        delivered = 0
+
+        def read_then_end_early(descriptor: int, count: int) -> bytes:
+            nonlocal delivered, source_reads
+            status = os.fstat(descriptor)
+            if (status.st_dev, status.st_ino) != (
+                source_status.st_dev,
+                source_status.st_ino,
+            ):
+                return original_read(descriptor, count)
+            source_reads += 1
+            if source_reads == 1:
+                chunk = original_read(descriptor, min(count, len(content) // 2))
+                delivered += len(chunk)
+                return chunk
+            return b""
+
+        with mock.patch.object(
+            profile_snapshot.os, "read", side_effect=read_then_end_early
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertEqual(source_reads, 2)
+        self.assertEqual(delivered, len(content) // 2)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_retained_fd_budget_rejects_before_emfile_and_cleans_all_profiles(self) -> None:
+        first = self.write_profile("alpha", ["SOUL.md"])
+        (first / "SOUL.md").write_text("first\n", encoding="utf-8")
+        second = self.write_profile("beta", ["assets"])
+        assets = second / "assets"
+        assets.mkdir()
+        for index in range(128):
+            (assets / f"item-{index:03}.txt").write_text(
+                f"item {index}\n", encoding="utf-8"
+            )
+
+        original_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+        original_open = os.open
+        baseline_open = len(os.listdir("/proc/self/fd"))
+        effective_limit = baseline_open + 80
+        emfile_attempted = False
+
+        def guarded_open(
+            path: str | bytes | os.PathLike[str],
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            nonlocal emfile_attempted
+            if len(os.listdir("/proc/self/fd")) >= effective_limit:
+                emfile_attempted = True
+                raise OSError(errno.EMFILE, "mock descriptor limit")
+            return original_open(path, flags, mode, dir_fd=dir_fd)
+
+        hard_limit = max(effective_limit, original_limits[1])
+        with mock.patch.object(
+            resource,
+            "getrlimit",
+            return_value=(effective_limit, hard_limit),
+        ) as getrlimit, mock.patch.object(
+            profile_snapshot.os, "open", side_effect=guarded_open
+        ), mock.patch.object(
+            profile_snapshot, "_prepare_one", wraps=profile_snapshot._prepare_one
+        ) as prepare_one:
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("alpha"), self.profile("beta")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        getrlimit.assert_called_once_with(resource.RLIMIT_NOFILE)
+        self.assertEqual(prepare_one.call_count, 2)
+        self.assertFalse(emfile_attempted)
+        self.assertEqual(caught.exception.category, "resource_limit")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+        self.assertEqual(len(os.listdir("/proc/self/fd")), baseline_open)
+        self.assertEqual(
+            resource.getrlimit(resource.RLIMIT_NOFILE), original_limits
+        )
 
     def test_accepts_an_owned_file_larger_than_sixteen_mebibytes(self) -> None:
         home = self.write_profile("rick", ["archive.bin"])
@@ -866,6 +1052,41 @@ class ProfileSnapshotTests(unittest.TestCase):
         with self.assertRaises(OSError):
             os.fstat(retained_descriptor)
 
+    def test_success_closes_all_retained_file_descriptors_after_attestation(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        original_attest = profile_snapshot._final_attest_prepared_snapshot
+        retained_descriptors: set[int] = set()
+
+        def inspect_then_attest(
+            scratch_root: Path,
+            scratch_fd: int,
+            prepared: object,
+        ) -> None:
+            for expected in prepared.files:
+                os.fstat(expected.descriptor)
+                retained_descriptors.add(expected.descriptor)
+            original_attest(scratch_root, scratch_fd, prepared)
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_final_attest_prepared_snapshot",
+            side_effect=inspect_then_attest,
+        ) as attest:
+            snapshot = prepare_profile_snapshots(
+                self.manifest(self.profile("rick")),
+                self.scratch,
+                allow_missing=False,
+            ).snapshots[0]
+
+        attest.assert_called_once()
+        self.assertEqual(len(retained_descriptors), 3)
+        self.assertEqual((snapshot.root / "SOUL.md").read_text(), "safe\n")
+        for descriptor in retained_descriptors:
+            with self.assertRaises(OSError) as caught:
+                os.fstat(descriptor)
+            self.assertEqual(caught.exception.errno, errno.EBADF)
+
     def test_final_recursive_attestation_rejects_late_inventory_mutations(self) -> None:
         for index, mutation in enumerate(("insert", "delete", "replace")):
             with self.subTest(mutation=mutation):
@@ -1046,9 +1267,17 @@ class ProfileSnapshotTests(unittest.TestCase):
             content: bytes,
             mode: int,
             expected_files: list[object],
+            fd_budget: object,
         ):
             nonlocal replaced
-            result = original_write(parent_fd, name, content, mode, expected_files)
+            result = original_write(
+                parent_fd,
+                name,
+                content,
+                mode,
+                expected_files,
+                fd_budget,
+            )
             if name == ".gitignore" and not replaced:
                 os.replace(replacement, self.scratch / "rick" / name)
                 replaced = True
