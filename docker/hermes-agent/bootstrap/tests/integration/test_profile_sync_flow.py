@@ -111,7 +111,9 @@ class ProfileSyncFlowTests(unittest.TestCase):
         files = {
             ".no-bundled-skills": b"",
             "SOUL.md": f"{marker} soul for {name}\n".encode("ascii"),
-            "config.yaml": f"profile: {name}-{marker}\n".encode("ascii"),
+            "config.yaml": bootstrap_flow.source_config(
+                "profile", f"{name}-{marker}"
+            ).encode("ascii"),
             "slack-manifest.json": json.dumps(
                 {"display_name": f"{name}-{marker}"},
                 sort_keys=True,
