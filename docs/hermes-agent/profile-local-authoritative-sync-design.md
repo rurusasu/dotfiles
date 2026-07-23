@@ -250,6 +250,22 @@ exception graph. The publication message has failed names but no categories.
 Root staging stays remote-authoritative and shared lifelog continues its
 ordinary locked read-write Git synchronization.
 
+Every post-preflight apply publication message is therefore a cleanup inventory
+trigger before retry or closure: its hidden category could be
+`cleanup_failed`. If the guarded inventory is reliably empty, continue ordinary
+push-failure recovery. A candidate or indeterminate check activates the full
+quiescent quarantine procedure. Later successful dry-run/real results do not
+waive the earlier inventory.
+
+Snapshot-preflight rejection remains separate because its category is public
+and publication has not started. If final outer apply scratch cleanup fails,
+`could not clean bootstrap staging resources` replaces the snapshot rejection;
+that apply-staging error is preserved and escalated outside the exact
+publication-artifact quarantine procedure. An exact
+`profile snapshot rejected (cleanup_failed)` message means the final outer
+scratch cleanup did not replace it and does not alone trigger the direct-child
+publication inventory.
+
 ## Repair Handoff
 
 After a snapshot-preflight `apply` failure, run standalone
@@ -286,6 +302,12 @@ maintenance owner; reject candidate subtrees containing mounts; atomically
 isolate verified artifacts in the same-filesystem private quarantine; and
 require final candidate, quarantine, and mount inventories to be clean before
 re-enabling launch paths.
+
+The same pre-retry inventory is mandatory when failed `apply` exposes only
+`named profile repository sync failed: <failed names>`. Do not infer an
+ordinary push category from those names. A reliably empty inventory returns to
+the normal push repair above; a candidate or indeterminate result activates the
+full cleanup procedure.
 
 ## Future Cron Handoff (Task 7, `hermes-home`)
 

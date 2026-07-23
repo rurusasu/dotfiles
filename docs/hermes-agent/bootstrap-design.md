@@ -173,6 +173,22 @@ With `HERMES_BOOTSTRAP_DEBUG=1`, the CLI may append a sanitized traceback from
 its public boundary; it does not retain tokens or the raw internal exception
 graph.
 
+Because a post-preflight `named profile repository sync failed: <failed names>`
+message hides its category, every such apply failure triggers the guarded stale
+artifact inventory before retry or closure. A reliably empty inventory follows
+ordinary push recovery; any candidate or indeterminate check activates the full
+quiescent quarantine path. Later successful dry-run/real commands do not replace
+the required inventory because they do not revisit old artifacts.
+
+Snapshot-preflight rejection is not this hidden-category trigger. Its category
+is public and publication has not started. If final outer apply scratch cleanup
+also fails, the CLI reports `could not clean bootstrap staging resources`
+instead of the snapshot rejection; that apply-staging failure is preserved and
+escalated outside the exact publication-artifact quarantine procedure. An exact
+`profile snapshot rejected (cleanup_failed)` message means the final outer
+scratch cleanup did not replace it and does not by itself trigger the
+direct-child publication inventory.
+
 Dry-run is limited to preflight and diff inspection. It never pushes, so a
 changed entry has category `dry_run` and cannot reproduce push-only categories
 such as `push_rejected` or `push_race_exhausted`. To obtain a push-only category,
@@ -237,6 +253,11 @@ Compose, and manual sync launch paths remain disabled under one maintenance
 owner until controlled dry-run/real verification and final candidate,
 quarantine, and mount inventories are clean. Repository locks alone are
 insufficient because no global lock covers aggregate scratch creation.
+
+The same guarded inventory is mandatory after every post-preflight apply
+publication failure, even when cleanup is not named publicly. A zero,
+fully-determined inventory returns to ordinary push-failure recovery; a
+candidate or indeterminate result enters the full procedure.
 
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact

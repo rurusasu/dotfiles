@@ -180,6 +180,23 @@ restart Hermes. There are two public diagnostics:
   `named profile repository sync failed: <failed names>` to stderr. The Python
   exception can retain the report internally.
 
+Every `named profile repository sync failed: <failed names>` message requires
+the guarded direct-child artifact inventory in the cleanup runbook before any
+retry or closure. The CLI-hidden category could be `cleanup_failed`; neither an
+expected push diagnosis nor a later successful sync excludes that possibility.
+
+Snapshot-preflight rejection is a different trigger. Publication has not begun,
+and `profile snapshot rejected (<category>)` exposes its category. If the inner
+category is `cleanup_failed` but that exact message reaches the CLI, the final
+outer apply scratch cleanup did not fail; otherwise the outer cleanup error
+would replace it with `could not clean bootstrap staging resources`. That
+exact snapshot message alone does not trigger the direct-child publication
+inventory because publication resources were not created. The replacement
+error concerns apply staging, is outside the exact profile publication
+candidate prefixes below, and must be preserved and escalated rather than sent
+through this quarantine procedure. A non-cleanup snapshot category likewise
+does not activate the post-publication inventory trigger.
+
 Once synchronization has created `profile_report`, later staging, transaction,
 installed-layout validation, cleanup, or rollback failures can also retain that
 report on the internal Python exception. The CLI never serializes this
@@ -282,6 +299,11 @@ for private artifacts left by an earlier invocation. There is no global lock
 covering aggregate scratch creation before per-profile repository locks are
 acquired, so a one-time process or lock check cannot make deletion safe.
 
+The full procedure is mandatory for an explicit standalone `cleanup_failed`
+report. A post-preflight apply publication message has a hidden category, so it
+must complete the quiescent inventory and decision steps below even when the
+suspected cause is an ordinary push failure.
+
 1. Establish one named maintenance owner. Stop and disable every launch path
    for the entire recovery window: the Hermes gateway and scheduler, any
    deployed profile-sync cron or scheduled task, bootstrap Compose runs, host
@@ -310,27 +332,38 @@ acquired, so a one-time process or lock check cannot make deletion safe.
    `find -xdev` is not a mountpoint detector. If canonicalization, mount
    inventory, or subtree comparison is unavailable or ambiguous, do not remove
    anything; preserve evidence and escalate.
-5. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
+5. Record the decision before any retry. For a hidden-category apply
+   publication failure, a reliably empty candidate inventory and complete mount
+   determination return to ordinary push-failure recovery in step 8 without
+   creating quarantine. An explicit standalone `cleanup_failed` with no
+   candidates keeps its cleanup diagnosis and proceeds to controlled
+   verification only after its owning cleanup fault is repaired. If any
+   candidate exists, activate the quarantine path in steps 6 and 7. If any
+   determination is unavailable, the full recovery path is active but cannot
+   safely proceed; preserve evidence and escalate. A later dry-run or real
+   aggregate exit `0` never substitutes for this pre-retry inventory because
+   old artifacts are not revisited.
+6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
    directly under `/opt/data`. Verify that it is owner-created, non-symlink,
    mode `0700`, contains no mountpoint, and has the same filesystem device as
    every candidate. Revalidate each candidate immediately before moving it,
    then atomically rename each exact candidate into quarantine without using
    globs. Any rename failure, including `EXDEV` or `EBUSY`, aborts the operation;
    leave the quarantine untouched and escalate.
-6. After every candidate is isolated, refresh the mount inventory and recheck
+7. After every candidate is isolated, refresh the mount inventory and recheck
    the quarantine and every descendant. Confirm the quarantined entries match
    the reviewed candidate set and remain mount-free. Only then remove the
    quarantine with a no-follow, type-aware procedure that refuses mount
    crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
    pattern, or `find -delete`.
-7. While all ordinary launch paths remain disabled, require zero direct
+8. While all ordinary launch paths remain disabled, require zero direct
    candidate and quarantine names and no related mount issue. The maintenance
    owner then runs standalone dry-run and real `sync-profiles`, consumes both
    JSON reports completely, and requires both aggregates to exit `0` with the
    repaired profile `changed` or `unchanged`. Refresh the candidate,
    quarantine, and mount inventories once more and require them to remain
    clean.
-8. Record the evidence and only then re-enable the gateway, scheduler, future
+9. Record the evidence and only then re-enable the gateway, scheduler, future
    profile-sync cron if deployed, installers, and other launch paths.
 
 Cleanup recovery is accepted only when the entire quiescent procedure,
