@@ -213,7 +213,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm --no-deps --entrypoint /bin/sh xapi-mcp -lc 'node_modules/.bin/xurl auth oauth2 --headless'
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm --no-deps --entrypoint /bin/sh xapi-mcp -lc 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl auth oauth2 --headless'
 
   hermes:xapi:restart:
     desc: Recreate the Hermes X MCP container

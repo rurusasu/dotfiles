@@ -23,6 +23,10 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:xapi:auth"),
         )
         self.assertIn(
+            'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET"',
+            self._command_text("hermes:xapi:auth"),
+        )
+        self.assertIn(
             "up -d --force-recreate xapi-mcp",
             self._command_text("hermes:xapi:restart"),
         )
