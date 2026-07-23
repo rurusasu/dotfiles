@@ -181,9 +181,10 @@ restart Hermes. There are two public diagnostics:
   exception can retain the report internally.
 
 Every `named profile repository sync failed: <failed names>` message requires
-the guarded direct-child artifact inventory in the cleanup runbook before any
-retry or closure. The CLI-hidden category could be `cleanup_failed`; neither an
-expected push diagnosis nor a later successful sync excludes that possibility.
+the guarded direct-child profile and outer-bootstrap artifact inventories in
+the cleanup runbook before any retry or closure. The CLI-hidden category could
+be `cleanup_failed`; neither an expected push diagnosis nor a later successful
+sync excludes that possibility.
 
 Snapshot-preflight rejection is a different trigger. Publication has not begun,
 and `profile snapshot rejected (<category>)` exposes its category. If the inner
@@ -191,11 +192,19 @@ category is `cleanup_failed` but that exact message reaches the CLI, the final
 outer apply scratch cleanup did not fail; otherwise the outer cleanup error
 would replace it with `could not clean bootstrap staging resources`. That
 exact snapshot message alone does not trigger the direct-child publication
-inventory because publication resources were not created. The replacement
-error concerns apply staging, is outside the exact profile publication
-candidate prefixes below, and must be preserved and escalated rather than sent
-through this quarantine procedure. A non-cleanup snapshot category likewise
-does not activate the post-publication inventory trigger.
+inventory because publication resources were not created. A non-cleanup
+snapshot category likewise does not activate the post-publication inventory
+trigger.
+
+`could not clean bootstrap staging resources` is itself an indeterminate
+cleanup trigger. Final outer cleanup can replace a snapshot-preflight,
+publication, staging, transaction, validation, or other primary failure. If a
+profile report had already been created, it can remain attached internally, but
+the CLI exposes neither that report nor the replaced primary failure. Before
+retry or closure, inventory both the profile scratch prefixes and the outer
+`.hermes-bootstrap-*` prefix below. A candidate or indeterminate determination
+activates the same full-window quiescent quarantine procedure; a later
+successful command does not waive either inventory.
 
 Once synchronization has created `profile_report`, later staging, transaction,
 installed-layout validation, cleanup, or rollback failures can also retain that
@@ -291,7 +300,7 @@ are not rolled back. Accept the repair only when the real aggregate exits `0`
 and the repaired profile is `changed` or `unchanged`. Do not use remote content
 to repair an existing local profile.
 
-### Profile Sync Cleanup Recovery
+### Bootstrap Scratch Cleanup Recovery
 
 A `cleanup_failed` result is not closed by a later successful run alone. Each
 invocation cleans only artifacts it created and still tracks; it does not scan
@@ -300,9 +309,11 @@ covering aggregate scratch creation before per-profile repository locks are
 acquired, so a one-time process or lock check cannot make deletion safe.
 
 The full procedure is mandatory for an explicit standalone `cleanup_failed`
-report. A post-preflight apply publication message has a hidden category, so it
-must complete the quiescent inventory and decision steps below even when the
-suspected cause is an ordinary push failure.
+report. A post-preflight apply publication message has a hidden category, and
+`could not clean bootstrap staging resources` can replace an earlier hidden
+profile report or another primary failure. Both messages must complete the
+unified quiescent inventory and decision steps below even when the suspected
+cause is an ordinary push failure.
 
 1. Establish one named maintenance owner. Stop and disable every launch path
    for the entire recovery window: the Hermes gateway and scheduler, any
@@ -314,17 +325,20 @@ suspected cause is an ordinary push failure.
    maintenance owner may run the controlled verification commands below.
 2. From a maintenance environment that sees the same `/opt/data` mount
    namespace, inventory only direct children whose complete names match
-   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, or `askpass-*`.
+   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, `askpass-*`, or
+   `.hermes-bootstrap-*`. Always inventory both the profile-scratch and outer
+   bootstrap groups, even when the public error names only one phase.
    Separately inventory any prior
    `.hermes-profile-cleanup-quarantine-*` directory. An existing quarantine is
    unresolved recovery evidence: do not reuse or remove it; stop and escalate.
 3. Inspect every candidate individually with no symlink following. Both
-   `.hermes-profile-*` forms must be real directories directly under canonical
-   `/opt/data`, owned by the maintenance service UID/GID, with mode `0700` and
-   the exact expected prefix. An `askpass-*` candidate must be a real regular
-   file in that same location, with the same owner, mode `0700`, link count `1`,
-   and exact prefix. Any unexpected path, descendant mount, type, owner, mode,
-   link count, prefix, or location is an escalation, not a deletion candidate.
+   `.hermes-profile-*` forms and `.hermes-bootstrap-*` must be real directories
+   directly under canonical `/opt/data`, owned by the maintenance service
+   UID/GID, with mode `0700` and the exact expected prefix. An `askpass-*`
+   candidate must be a real regular file in that same location, with the same
+   owner, mode `0700`, link count `1`, and exact prefix. Any unexpected path,
+   descendant mount, type, owner, mode, link count, prefix, or location is an
+   escalation, not a deletion candidate.
 4. Capture an authoritative mount inventory for that maintenance namespace,
    such as Linux `/proc/self/mountinfo` or reliable mountpoint tooling. Compare
    its canonical mount targets against each canonical candidate subtree.
@@ -332,17 +346,19 @@ suspected cause is an ordinary push failure.
    `find -xdev` is not a mountpoint detector. If canonicalization, mount
    inventory, or subtree comparison is unavailable or ambiguous, do not remove
    anything; preserve evidence and escalate.
-5. Record the decision before any retry. For a hidden-category apply
-   publication failure, a reliably empty candidate inventory and complete mount
-   determination return to ordinary push-failure recovery in step 8 without
-   creating quarantine. An explicit standalone `cleanup_failed` with no
-   candidates keeps its cleanup diagnosis and proceeds to controlled
-   verification only after its owning cleanup fault is repaired. If any
-   candidate exists, activate the quarantine path in steps 6 and 7. If any
-   determination is unavailable, the full recovery path is active but cannot
-   safely proceed; preserve evidence and escalate. A later dry-run or real
-   aggregate exit `0` never substitutes for this pre-retry inventory because
-   old artifacts are not revisited.
+5. Record the decision for both candidate groups before any retry. For a
+   hidden-category apply publication failure, reliably empty profile and outer
+   inventories plus complete mount determination return to ordinary
+   push-failure recovery in step 8 without creating quarantine. An explicit
+   standalone `cleanup_failed`, or an outer
+   `could not clean bootstrap staging resources`, keeps its cleanup diagnosis
+   even when both inventories are empty and proceeds to controlled verification
+   only after its owning cleanup fault is repaired. If any candidate exists,
+   activate the quarantine path in steps 6 and 7. If any determination is
+   unavailable, the full recovery path is active but cannot safely proceed;
+   preserve evidence and escalate. A later dry-run or real aggregate exit `0`
+   never substitutes for this pre-retry inventory because old artifacts are not
+   revisited.
 6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
    directly under `/opt/data`. Verify that it is owner-created, non-symlink,
    mode `0700`, contains no mountpoint, and has the same filesystem device as
@@ -357,19 +373,19 @@ suspected cause is an ordinary push failure.
    crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
    pattern, or `find -delete`.
 8. While all ordinary launch paths remain disabled, require zero direct
-   candidate and quarantine names and no related mount issue. The maintenance
-   owner then runs standalone dry-run and real `sync-profiles`, consumes both
-   JSON reports completely, and requires both aggregates to exit `0` with the
-   repaired profile `changed` or `unchanged`. Refresh the candidate,
-   quarantine, and mount inventories once more and require them to remain
-   clean.
+   profile-scratch, outer-bootstrap, and quarantine names and no related mount
+   issue. The maintenance owner then runs standalone dry-run and real
+   `sync-profiles`, consumes both JSON reports completely, and requires both
+   aggregates to exit `0` with the repaired profile `changed` or `unchanged`.
+   Refresh both candidate groups plus the quarantine and mount inventories once
+   more and require them to remain clean.
 9. Record the evidence and only then re-enable the gateway, scheduler, future
    profile-sync cron if deployed, installers, and other launch paths.
 
 Cleanup recovery is accepted only when the entire quiescent procedure,
-quarantine removal, dry-run/real verification, and final zero inventories
-succeed. A later aggregate `0` without this evidence does not close the
-incident.
+quarantine removal, dry-run/real verification, and final zero profile-scratch,
+outer-bootstrap, quarantine, and mount inventories succeed. A later aggregate
+`0` without this evidence does not close the incident.
 
 ## Transaction And Rollback
 
@@ -483,20 +499,20 @@ Named-profile default branches are exact mirrors. A real sync deletes
 repository-local `.github` workflows, pre-commit configuration, validators,
 tests, and README files because they are outside the local declarative
 allowlist. Therefore named-profile mirrors, including Nancy, are not governed
-by the old repository-local `fast`/`full` or GitHub Actions validator contract.
+by a repository-local `fast`/`full` or GitHub Actions validator contract.
 Their replacement is:
 
 - runtime aggregate snapshot preflight and `sync-profiles` result handling;
 - dotfiles engine pre-commit and `Hermes Bootstrap Tests` GitHub Actions; and
 - the pinned unit/integration gate `task hermes:bootstrap:test`.
 
-The separate [Distribution Validation](distribution-validation-design.md)
-contract remains applicable only to remote-authoritative root or other source
-repositories that actually retain its workflow, pre-commit, and validator
-files. Do not extend its historical three-profile repository list to Nancy.
-For a repository that retains that contract, validator exits remain `0` pass,
-`1` validation failure, `2` prerequisite blocked as `ENV_BLOCKED`, and `3`
-validator internal failure as `INTERNAL_ERROR`. Exact-head evidence is
+The scoped [Distribution Validation](distribution-validation-design.md)
+contract remains normative for the remote-authoritative `hermes-home` root and
+only those source repositories explicitly declared to retain its workflow,
+pre-commit, and validator files. A profile manifest entry does not opt a mirror
+into that contract. For an in-scope source repository, validator exits remain
+`0` pass, `1` validation failure, `2` prerequisite blocked as `ENV_BLOCKED`,
+and `3` validator internal failure as `INTERNAL_ERROR`. Exact-head evidence is
 required, and automated repair remains limited to two rounds for the same
 failed check set; failure after two rounds is `FIX_FAILED`, while an
 `ENV_BLOCKED` result does not consume a repair round.

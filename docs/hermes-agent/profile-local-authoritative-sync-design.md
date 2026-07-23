@@ -252,19 +252,24 @@ ordinary locked read-write Git synchronization.
 
 Every post-preflight apply publication message is therefore a cleanup inventory
 trigger before retry or closure: its hidden category could be
-`cleanup_failed`. If the guarded inventory is reliably empty, continue ordinary
-push-failure recovery. A candidate or indeterminate check activates the full
-quiescent quarantine procedure. Later successful dry-run/real results do not
-waive the earlier inventory.
+`cleanup_failed`. Inventory both profile scratch and outer apply scratch. If
+both guarded inventories are reliably empty, continue ordinary push-failure
+recovery. A candidate or indeterminate check activates the full quiescent,
+mount-aware, atomic-quarantine procedure. Later successful dry-run/real results
+do not waive the earlier inventories.
 
 Snapshot-preflight rejection remains separate because its category is public
 and publication has not started. If final outer apply scratch cleanup fails,
 `could not clean bootstrap staging resources` replaces the snapshot rejection;
-that apply-staging error is preserved and escalated outside the exact
-publication-artifact quarantine procedure. An exact
-`profile snapshot rejected (cleanup_failed)` message means the final outer
-scratch cleanup did not replace it and does not alone trigger the direct-child
-publication inventory.
+that outer error can also replace a post-preflight publication or later primary
+failure and can retain an internal profile report that the CLI does not expose.
+It is therefore an indeterminate trigger requiring both the direct-child
+profile inventory for `.hermes-profile-snapshots-*`,
+`.hermes-profile-sync-*`, and `askpass-*` and the outer inventory for
+`.hermes-bootstrap-*`. A candidate or indeterminate determination activates the
+same full recovery procedure. An exact
+`profile snapshot rejected (cleanup_failed)` message means final outer scratch
+cleanup did not replace it and does not alone trigger these inventories.
 
 ## Repair Handoff
 
@@ -300,14 +305,16 @@ Operations](bootstrap.md). Keep every automated, installer, Compose, and manual
 sync launch path, including the gateway and scheduler, disabled under one
 maintenance owner; reject candidate subtrees containing mounts; atomically
 isolate verified artifacts in the same-filesystem private quarantine; and
-require final candidate, quarantine, and mount inventories to be clean before
-re-enabling launch paths.
+require final profile-scratch, outer-bootstrap, quarantine, and mount
+inventories to be clean before re-enabling launch paths.
 
-The same pre-retry inventory is mandatory when failed `apply` exposes only
-`named profile repository sync failed: <failed names>`. Do not infer an
-ordinary push category from those names. A reliably empty inventory returns to
-the normal push repair above; a candidate or indeterminate result activates the
-full cleanup procedure.
+The same unified pre-retry inventories are mandatory when failed `apply`
+exposes only `named profile repository sync failed: <failed names>` or
+`could not clean bootstrap staging resources`. Do not infer an ordinary push
+category from either message. Reliably empty inventories return the named
+publication error to normal push repair; the outer cleanup error retains its
+cleanup diagnosis until its cleanup fault is repaired. A candidate or
+indeterminate result activates the full cleanup procedure.
 
 ## Future Cron Handoff (Task 7, `hermes-home`)
 
@@ -330,16 +337,18 @@ stderr behavior.
 
 Because a real exact sync deletes allowlist-external workflows, pre-commit
 configuration, validators, and tests, named-profile mirror repositories do not
-retain a repository-local validation contract. Runtime aggregate preflight and
-the dotfiles engine's pre-commit, GitHub Actions, and pinned integration gate
-replace it.
+retain a repository-local validation contract. This named-mirror contract
+supersedes that scope of the older validation design. Runtime aggregate
+preflight and the dotfiles engine's pre-commit, GitHub Actions, and pinned
+integration gate replace it; see the current scoped
+[Distribution Validation Design](distribution-validation-design.md).
 
 Production acceptance is a dry run followed by a real aggregate run, with
 inspection that each remote tree contains only the two canonical control files
 and its local owned paths. Verify the profile homes are unchanged, then confirm
 a repeat real run is `unchanged` without creating commits. The direct
 `/opt/data` inventory for `.hermes-profile-snapshots-*`,
-`.hermes-profile-sync-*`, `askpass-*`, and
+`.hermes-profile-sync-*`, `askpass-*`, `.hermes-bootstrap-*`, and
 `.hermes-profile-cleanup-quarantine-*` must also be empty, with no candidate or
 descendant mount issue. Aggregate success does not waive the quiescent cleanup
 and quarantine evidence.

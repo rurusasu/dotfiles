@@ -174,20 +174,25 @@ its public boundary; it does not retain tokens or the raw internal exception
 graph.
 
 Because a post-preflight `named profile repository sync failed: <failed names>`
-message hides its category, every such apply failure triggers the guarded stale
-artifact inventory before retry or closure. A reliably empty inventory follows
-ordinary push recovery; any candidate or indeterminate check activates the full
-quiescent quarantine path. Later successful dry-run/real commands do not replace
-the required inventory because they do not revisit old artifacts.
+message hides its category, every such apply failure triggers guarded
+inventories of both profile scratch and outer apply scratch before retry or
+closure. Reliably empty inventories follow ordinary push recovery; any
+candidate or indeterminate check activates the full quiescent quarantine path.
+Later successful dry-run/real commands do not replace the required inventories
+because they do not revisit old artifacts.
 
 Snapshot-preflight rejection is not this hidden-category trigger. Its category
 is public and publication has not started. If final outer apply scratch cleanup
 also fails, the CLI reports `could not clean bootstrap staging resources`
-instead of the snapshot rejection; that apply-staging failure is preserved and
-escalated outside the exact publication-artifact quarantine procedure. An exact
-`profile snapshot rejected (cleanup_failed)` message means the final outer
-scratch cleanup did not replace it and does not by itself trigger the
-direct-child publication inventory.
+instead of the snapshot rejection. That outer message can also replace a
+post-preflight publication or later primary failure and can retain a hidden
+profile report internally, so it is an indeterminate trigger. Inventory both
+`.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, and `askpass-*` profile
+artifacts and `.hermes-bootstrap-*` outer artifacts. A candidate or
+indeterminate determination uses the same full-window, mount-aware, atomic
+quarantine procedure. An exact `profile snapshot rejected (cleanup_failed)`
+message means the final outer scratch cleanup did not replace it and does not
+by itself trigger the direct-child publication inventory.
 
 Dry-run is limited to preflight and diff inspection. It never pushes, so a
 changed entry has category `dry_run` and cannot reproduce push-only categories
@@ -250,14 +255,18 @@ do not revisit artifacts left by older invocations. Follow the guarded artifact
 inspection, mount rejection, atomic quarantine, and removal procedure in
 [Hermes Bootstrap Operations](bootstrap.md). All scheduler, gateway, installer,
 Compose, and manual sync launch paths remain disabled under one maintenance
-owner until controlled dry-run/real verification and final candidate,
-quarantine, and mount inventories are clean. Repository locks alone are
-insufficient because no global lock covers aggregate scratch creation.
+owner until controlled dry-run/real verification and final profile-scratch,
+outer-bootstrap, quarantine, and mount inventories are clean. Repository locks
+alone are insufficient because no global lock covers aggregate scratch
+creation.
 
-The same guarded inventory is mandatory after every post-preflight apply
-publication failure, even when cleanup is not named publicly. A zero,
-fully-determined inventory returns to ordinary push-failure recovery; a
-candidate or indeterminate result enters the full procedure.
+The same unified inventories are mandatory after every post-preflight apply
+publication failure, even when cleanup is not named publicly, and after every
+`could not clean bootstrap staging resources` failure. Reliably empty,
+fully-determined inventories return a named publication failure to ordinary
+push recovery; the outer cleanup error keeps its cleanup diagnosis until the
+owning cleanup fault is repaired. Any candidate or indeterminate result enters
+the full procedure. Later success does not waive either inventory.
 
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact
@@ -283,5 +292,7 @@ Exact named-profile mirrors intentionally delete repository-local workflows,
 pre-commit configuration, validators, and tests. Their replacement gate is the
 runtime aggregate snapshot preflight plus the dotfiles engine's pre-commit,
 GitHub Actions, and container integration suite. Repository-local `fast`/`full`
-validation remains scoped only to remote-authoritative or other source
-repositories that actually retain that tooling.
+validation remains scoped by the
+[Distribution Validation Design](distribution-validation-design.md) to the
+remote-authoritative `hermes-home` root and source repositories explicitly
+declared to retain that tooling.
