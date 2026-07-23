@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -35,7 +36,6 @@ from .repositories import _LockBusy, _RepositoryLock
 SyncStatus = Literal["changed", "unchanged", "failed"]
 
 _OBJECT_ID = re.compile(rb"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\Z")
-_ALLOWED_BLOB_MODES = frozenset({b"100644", b"100755"})
 _COMMAND_OUTPUT_MAX_BYTES = 64 * 1024
 _INDEX_OUTPUT_MAX_BYTES = 8 * 1024 * 1024
 _REPOSITORY_EXIT_CODE = 4
@@ -91,7 +91,7 @@ class ProfileSyncReport:
             status = "unchanged"
         return {
             "schema_version": 1,
-            "command": "profile-sync",
+            "command": "sync-profiles",
             "dry_run": self.dry_run,
             "status": status,
             "profiles": [profile.as_dict() for profile in self.profiles],
@@ -197,7 +197,9 @@ def synchronize_profiles(
             message="profile snapshot preflight failed",
             exit_code=_REPOSITORY_EXIT_CODE,
         )
-    cleanup_failed = scratch is not None and not _remove_tree(scratch)
+    cleanup_failed = _cleanup_resources(
+        ((_remove_tree, scratch),) if scratch is not None else ()
+    )
     if cleanup_failed:
         return failed_profile_report(
             profiles,
@@ -320,11 +322,12 @@ def _synchronize_one_boundary(
     except Exception:
         outcome = _failed(snapshot, "repository", "profile snapshot synchronization failed")
 
-    cleanup_failed = False
+    resources: list[tuple[Callable[[Path], bool], Path]] = []
     if askpass is not None:
-        cleanup_failed = not _unlink(askpass)
+        resources.append((_unlink, askpass))
     if repository is not None:
-        cleanup_failed = not _remove_tree(repository) or cleanup_failed
+        resources.append((_remove_tree, repository))
+    cleanup_failed = _cleanup_resources(tuple(resources))
     if cleanup_failed:
         return _failed(
             snapshot,
@@ -349,6 +352,7 @@ def _exact_tree_attempt(
     )
     if observed is None or not _same_remote_identity(declaration.source, observed):
         raise ValueError("remote identity mismatch")
+    _validate_destination_branch(declaration.ref, repository, environment)
     _require_git(
         ("fetch", "--no-tags", "origin", "--", declaration.ref), repository, environment
     )
@@ -420,40 +424,48 @@ def _commit_and_push(
 ) -> str:
     declaration = snapshot.declaration
     _validate_destination_branch(declaration.ref, repository, environment)
-    commit = _create_commit(
-        snapshot, attempt.tree, attempt.remote_commit, repository, environment
-    )
-    if _push_commit(snapshot, commit, repository, environment):
-        return _confirm_publication(
-            snapshot, commit, attempt.tree, repository, environment
+    parent = attempt.remote_commit
+    for publication_attempt in range(2):
+        if publication_attempt:
+            rebuilt_tree = _rebuild_snapshot_tree(
+                snapshot, repository, environment
+            )
+            if rebuilt_tree != attempt.tree:
+                raise ValueError("profile snapshot tree changed during retry")
+        commit = _create_commit(
+            snapshot, attempt.tree, parent, repository, environment
         )
+        pushed = _push_commit(snapshot, commit, repository, environment)
+        remote_commit, remote_tree = _fetch_remote(
+            snapshot, repository, environment
+        )
+        if _publication_matches(
+            commit,
+            attempt.tree,
+            remote_commit,
+            remote_tree,
+            pushed=pushed,
+            repository=repository,
+            environment=environment,
+        ):
+            return remote_commit
+        if not pushed and remote_commit == parent:
+            raise _PushRejected
+        if publication_attempt:
+            raise _PushRaceExhausted
+        parent = remote_commit
+    raise _PushRaceExhausted
 
-    remote_commit, remote_tree = _fetch_remote(snapshot, repository, environment)
-    if remote_tree == attempt.tree:
-        return remote_commit
-    if remote_commit == attempt.remote_commit:
-        raise _PushRejected
 
+def _rebuild_snapshot_tree(
+    snapshot: ProfileSnapshot,
+    repository: Path,
+    environment: dict[str, str],
+) -> str:
     _require_git(("read-tree", "--empty"), repository, environment)
     _require_git(("add", "-A", "--", "."), repository, environment)
     _validate_staged_paths(snapshot, repository, environment)
-    rebuilt_tree = _git_object_id(("write-tree",), repository, environment)
-    if rebuilt_tree != attempt.tree:
-        raise ValueError("profile snapshot tree changed during retry")
-    retry_commit = _create_commit(
-        snapshot, rebuilt_tree, remote_commit, repository, environment
-    )
-    if _push_commit(snapshot, retry_commit, repository, environment):
-        return _confirm_publication(
-            snapshot, retry_commit, rebuilt_tree, repository, environment
-        )
-
-    second_commit, second_tree = _fetch_remote(snapshot, repository, environment)
-    if second_tree == rebuilt_tree:
-        return second_commit
-    if second_commit == remote_commit:
-        raise _PushRejected
-    raise _PushRaceExhausted
+    return _git_object_id(("write-tree",), repository, environment)
 
 
 def _create_commit(
@@ -520,24 +532,26 @@ def _validate_destination_branch(
         raise ValueError("invalid profile destination branch")
 
 
-def _confirm_publication(
-    snapshot: ProfileSnapshot,
+def _publication_matches(
     commit: str,
     expected_tree: str,
+    remote_commit: str,
+    remote_tree: str,
+    *,
+    pushed: bool,
     repository: Path,
     environment: dict[str, str],
-) -> str:
-    remote_commit, remote_tree = _fetch_remote(snapshot, repository, environment)
+) -> bool:
     if remote_tree != expected_tree:
-        raise ValueError("published profile tree mismatch")
-    if remote_commit != commit and _run_git_bytes(
+        return False
+    if remote_commit == commit or not pushed:
+        return True
+    return _run_git_bytes(
         ("merge-base", "--is-ancestor", commit, remote_commit),
         repository,
         environment,
         max_output_bytes=_COMMAND_OUTPUT_MAX_BYTES,
-    ) is None:
-        raise ValueError("published profile commit mismatch")
-    return remote_commit
+    ) is not None
 
 
 def _fetch_remote(
@@ -561,7 +575,7 @@ def _fetch_remote(
 
 
 def _copy_snapshot(snapshot: ProfileSnapshot, repository: Path) -> None:
-    _write_file(repository / ".gitignore", _publication_gitignore(snapshot), 0o644)
+    _write_file(repository / ".gitignore", snapshot.gitignore_bytes, 0o644)
     _write_file(repository / "distribution.yaml", snapshot.manifest_bytes, 0o644)
     for entry in snapshot.entries:
         source = snapshot.root.joinpath(*entry.path.parts)
@@ -584,25 +598,6 @@ def _copy_snapshot(snapshot: ProfileSnapshot, repository: Path) -> None:
         ):
             raise ValueError("snapshot entry changed")
         _write_file(destination, content, entry.mode)
-    _write_file(repository / "snapshot.entries", _snapshot_entries(snapshot), 0o644)
-
-
-def _snapshot_entries(snapshot: ProfileSnapshot) -> bytes:
-    return b"".join(
-        (
-            f"{entry.mode:o}\t{entry.size}\t{entry.sha256}\t"
-            f"{entry.path.as_posix()}\n"
-        ).encode("ascii")
-        for entry in snapshot.entries
-    )
-
-
-def _publication_gitignore(snapshot: ProfileSnapshot) -> bytes:
-    lines = snapshot.gitignore_bytes.decode("ascii", "strict").splitlines()
-    if not lines or lines[0] != "/*" or "!/snapshot.entries" in lines:
-        raise ValueError("invalid snapshot allowlist")
-    lines.insert(2, "!/snapshot.entries")
-    return ("\n".join(lines) + "\n").encode("ascii")
 
 
 def _write_file(path: Path, content: bytes, mode: int) -> None:
@@ -631,27 +626,32 @@ def _validate_staged_paths(
         environment,
         max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
     )
-    observed: set[bytes] = set()
+    expected = {
+        b".gitignore": b"100644",
+        b"distribution.yaml": b"100644",
+        **{
+            entry.path.as_posix().encode("ascii"): f"100{entry.mode:o}".encode(
+                "ascii"
+            )
+            for entry in snapshot.entries
+        },
+    }
+    observed: dict[bytes, bytes] = {}
     for record in _nul_records(raw):
         metadata, separator, path = record.partition(b"\t")
         fields = metadata.split(b" ")
         if (
             not separator
             or len(fields) != 3
-            or fields[0] not in _ALLOWED_BLOB_MODES
+            or fields[0] != expected.get(path)
             or _OBJECT_ID.fullmatch(fields[1]) is None
             or fields[2] != b"0"
             or not path
+            or path in observed
         ):
             raise ValueError("unsafe staged profile entry")
-        observed.add(path)
-    expected = {
-        b".gitignore",
-        b"distribution.yaml",
-        b"snapshot.entries",
-        *(entry.path.as_posix().encode("ascii") for entry in snapshot.entries),
-    }
-    if observed != expected or len(observed) != len(_nul_records(raw)):
+        observed[path] = fields[0]
+    if observed != expected:
         raise ValueError("staged profile paths do not match snapshot")
 
 
@@ -729,6 +729,43 @@ def _failed(snapshot: ProfileSnapshot, category: str, message: str) -> ProfileSy
         category=category,
         message=message,
     )
+
+
+def _cleanup_resources(
+    resources: tuple[tuple[Callable[[Path], bool], Path], ...]
+) -> bool:
+    failed = False
+    for cleanup, path in resources:
+        try:
+            if not cleanup(path):
+                failed = True
+        except Exception as error:
+            _scrub_exception_graph(error)
+            failed = True
+    return failed
+
+
+def _scrub_exception_graph(error: BaseException) -> None:
+    pending = [error]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        cause = current.__cause__
+        context = current.__context__
+        if cause is not None:
+            pending.append(cause)
+        if context is not None:
+            pending.append(context)
+        try:
+            current.args = ()
+        except Exception:
+            pass
+        current.__traceback__ = None
+        current.__cause__ = None
+        current.__context__ = None
 
 
 def _safe_directory(path: Path) -> bool:

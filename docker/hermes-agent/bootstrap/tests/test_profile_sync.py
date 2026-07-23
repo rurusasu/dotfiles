@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path, PurePosixPath
+from types import FrameType, TracebackType
 from unittest import mock
 
 
@@ -45,6 +46,34 @@ class ProfileSyncTests(unittest.TestCase):
         (self.data_root / "locks" / "repositories").mkdir(parents=True, mode=0o700)
         self.auth = GitAuth("fixture-token", SecretRedactor(("fixture-token",)))
         self.advance_count = 0
+
+    def assert_exception_hides(self, error: BaseException, *markers: str) -> None:
+        pending: list[object] = [error]
+        visited: set[int] = set()
+        while pending:
+            value = pending.pop()
+            if value is None or id(value) in visited:
+                continue
+            visited.add(id(value))
+            if isinstance(value, str):
+                for marker in markers:
+                    self.assertNotIn(marker, value)
+            elif isinstance(value, bytes):
+                for marker in markers:
+                    self.assertNotIn(marker.encode("utf-8"), value)
+            elif isinstance(value, BaseException):
+                pending.extend(
+                    (value.__cause__, value.__context__, value.__traceback__, value.args)
+                )
+            elif isinstance(value, TracebackType):
+                pending.extend((value.tb_frame, value.tb_next))
+            elif isinstance(value, FrameType):
+                if "hermes_bootstrap" in value.f_code.co_filename:
+                    pending.extend(value.f_locals.values())
+            elif isinstance(value, dict):
+                pending.extend((*value.keys(), *value.values()))
+            elif isinstance(value, (list, tuple, set, frozenset)):
+                pending.extend(value)
 
     def git(self, cwd: Path, *arguments: str) -> str:
         environment = os.environ.copy()
@@ -85,11 +114,13 @@ class ProfileSyncTests(unittest.TestCase):
         )
         return result.stdout
 
-    def profile(self, name: str, remote: Path) -> DistributionSource:
+    def profile(
+        self, name: str, remote: Path, *, ref: str = "main"
+    ) -> DistributionSource:
         return DistributionSource(
             name=name,
             source=str(remote),
-            ref="main",
+            ref=ref,
             target=self.data_root / "profiles" / name,
             manifest_name="distribution.yaml",
         )
@@ -104,7 +135,13 @@ class ProfileSyncTests(unittest.TestCase):
         )
         return BootstrapManifest(1, self.data_root, (), root, profiles, ())
 
-    def snapshot(self, declaration: DistributionSource, files: dict[str, bytes]) -> ProfileSnapshot:
+    def snapshot(
+        self,
+        declaration: DistributionSource,
+        files: dict[str, bytes],
+        *,
+        modes: dict[str, int] | None = None,
+    ) -> ProfileSnapshot:
         root = self.root / f"snapshot-{declaration.name}"
         root.mkdir(mode=0o700)
         manifest = (
@@ -130,17 +167,33 @@ class ProfileSyncTests(unittest.TestCase):
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
+            mode = (modes or {}).get(name, 0o644)
+            path.chmod(mode)
             entries.append(
                 SnapshotEntry(
                     PurePosixPath(name),
-                    0o644,
+                    mode,
                     len(content),
                     hashlib.sha256(content).hexdigest(),
                 )
             )
+        controls = (
+            SnapshotEntry(
+                PurePosixPath(".gitignore"),
+                0o644,
+                len(gitignore),
+                hashlib.sha256(gitignore).hexdigest(),
+            ),
+            SnapshotEntry(
+                PurePosixPath("distribution.yaml"),
+                0o644,
+                len(manifest),
+                hashlib.sha256(manifest).hexdigest(),
+            ),
+        )
         digest_payload = b"".join(
             f"{entry.path.as_posix()}\0{entry.mode:o}\0{entry.sha256}\n".encode("ascii")
-            for entry in entries
+            for entry in sorted((*controls, *entries), key=lambda item: item.path.as_posix())
         )
         return ProfileSnapshot(
             declaration=declaration,
@@ -151,29 +204,26 @@ class ProfileSyncTests(unittest.TestCase):
             digest=hashlib.sha256(digest_payload).hexdigest(),
         )
 
-    def snapshot_entries(self, snapshot: ProfileSnapshot) -> bytes:
-        return b"".join(
-            f"{entry.mode:o}\t{entry.size}\t{entry.sha256}\t{entry.path.as_posix()}\n".encode("ascii")
-            for entry in snapshot.entries
-        )
-
-    def publication_gitignore(self, snapshot: ProfileSnapshot) -> bytes:
-        lines = snapshot.gitignore_bytes.decode("ascii").splitlines()
-        lines.insert(2, "!/snapshot.entries")
-        return ("\n".join(lines) + "\n").encode("ascii")
-
     def seed_remote(self, remote: Path, snapshot: ProfileSnapshot) -> str:
         files = {
             source.relative_to(snapshot.root).as_posix(): source.read_bytes()
             for source in snapshot.root.rglob("*")
             if source.is_file()
         }
-        files[".gitignore"] = self.publication_gitignore(snapshot)
-        files["snapshot.entries"] = self.snapshot_entries(snapshot)
-        return self.seed_remote_files(remote, snapshot.declaration.name, files)
+        modes = {
+            entry.path.as_posix(): entry.mode for entry in snapshot.entries
+        }
+        return self.seed_remote_files(
+            remote, snapshot.declaration.name, files, modes=modes
+        )
 
     def seed_remote_files(
-        self, remote: Path, name: str, files: dict[str, bytes]
+        self,
+        remote: Path,
+        name: str,
+        files: dict[str, bytes],
+        *,
+        modes: dict[str, int] | None = None,
     ) -> str:
         self.git(self.root, "init", "--bare", "--initial-branch=main", str(remote))
         self.addCleanup(self.git, remote, "fsck", "--strict")
@@ -183,6 +233,7 @@ class ProfileSyncTests(unittest.TestCase):
             target = seed / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+            target.chmod((modes or {}).get(relative, 0o644))
         self.git(seed, "add", "-f", "-A", "--", ".")
         self.git(
             seed,
@@ -217,8 +268,7 @@ class ProfileSyncTests(unittest.TestCase):
                     destination = checkout / source.relative_to(snapshot.root)
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     destination.write_bytes(source.read_bytes())
-            (checkout / ".gitignore").write_bytes(self.publication_gitignore(snapshot))
-            (checkout / "snapshot.entries").write_bytes(self.snapshot_entries(snapshot))
+            (checkout / ".gitignore").write_bytes(snapshot.gitignore_bytes)
         self.git(checkout, "add", "-f", "-A", "--", ".")
         self.git(
             checkout,
@@ -227,11 +277,34 @@ class ProfileSyncTests(unittest.TestCase):
             "-c",
             "user.email=racer@localhost",
             "commit",
+            "--allow-empty",
             "-m",
             f"race {self.advance_count}",
         )
         self.git(checkout, "push", "origin", "main")
         return self.git(remote, "rev-parse", "refs/heads/main")
+
+    def published_snapshot_digest(self, remote: Path, commit: str) -> str:
+        records = self.git_bytes(remote, "ls-tree", "-r", "-z", commit)
+        entries: list[tuple[str, int, str]] = []
+        for record in records.rstrip(b"\0").split(b"\0"):
+            metadata, raw_path = record.split(b"\t", 1)
+            raw_mode, kind, _object_id = metadata.split(b" ")
+            self.assertEqual(kind, b"blob")
+            path = raw_path.decode("ascii")
+            content = self.git_bytes(remote, "show", f"{commit}:{path}")
+            entries.append(
+                (
+                    path,
+                    int(raw_mode, 8) & 0o777,
+                    hashlib.sha256(content).hexdigest(),
+                )
+            )
+        payload = b"".join(
+            f"{path}\0{mode:o}\0{sha256}\n".encode("ascii")
+            for path, mode, sha256 in sorted(entries)
+        )
+        return hashlib.sha256(payload).hexdigest()
 
     def test_result_and_report_mappings_have_the_exact_public_shape(self) -> None:
         result = ProfileSyncResult(
@@ -269,6 +342,7 @@ class ProfileSyncTests(unittest.TestCase):
             tuple(report.as_dict()),
             ("schema_version", "command", "dry_run", "status", "profiles"),
         )
+        self.assertEqual(report.as_dict()["command"], "sync-profiles")
         self.assertEqual(report.as_dict()["status"], "changed")
 
     def test_failed_profile_report_preserves_all_configured_profiles_in_order(self) -> None:
@@ -313,6 +387,84 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotIn("safe local profile", serialized)
         self.assertEqual(result.as_dict()["paths"], [])
 
+    def test_published_tree_is_exact_and_matches_the_task1_snapshot_digest(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(
+            declaration,
+            {"SOUL.md": b"profile\n", "bin/tool": b"#!/bin/sh\nexit 0\n"},
+            modes={"bin/tool": 0o755},
+        )
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+
+        result = report.profiles[0]
+        self.assertEqual(result.status, "changed")
+        self.assertIsNotNone(result.commit)
+        assert result.commit is not None
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", result.commit).splitlines(),
+            [".gitignore", "SOUL.md", "bin/tool", "distribution.yaml"],
+        )
+        self.assertEqual(
+            self.git_bytes(remote, "show", f"{result.commit}:.gitignore"),
+            snapshot.gitignore_bytes,
+        )
+        self.assertEqual(result.snapshot, snapshot.digest)
+        self.assertEqual(
+            self.published_snapshot_digest(remote, result.commit), snapshot.digest
+        )
+        self.assertTrue((snapshot.root / "bin/tool").stat().st_mode & stat.S_IXUSR)
+        self.assertTrue(
+            self.git(remote, "ls-tree", result.commit, "bin/tool").startswith("100755 blob ")
+        )
+
+    def test_staged_modes_must_match_controls_and_each_snapshot_entry(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(
+            declaration,
+            {"bin/tool": b"#!/bin/sh\nexit 0\n"},
+            modes={"bin/tool": 0o755},
+        )
+        self.seed_remote(remote, snapshot)
+        original_run = profile_sync._run_git_bytes
+
+        def mismatched_owned(arguments, cwd, environment, *, max_output_bytes):
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments[:2] == ("ls-files", "--stage") and output is not None:
+                output = output.replace(b"100755 ", b"100644 ", 1)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=mismatched_owned
+        ):
+            owned = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+        self.assertEqual(owned.profiles[0].status, "failed")
+
+        def executable_control(arguments, cwd, environment, *, max_output_bytes):
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments[:2] == ("ls-files", "--stage") and output is not None:
+                output = output.replace(b"100644 ", b"100755 ", 1)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=executable_control
+        ):
+            control = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+        self.assertEqual(control.profiles[0].status, "failed")
+
     def test_changed_tree_replaces_the_remote_with_the_exact_local_projection(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)
@@ -349,7 +501,7 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotEqual(result.commit, original)
         self.assertEqual(
             result.diff.added,
-            (PurePosixPath("assets/avatar.bin"), PurePosixPath("snapshot.entries")),
+            (PurePosixPath("assets/avatar.bin"),),
         )
         self.assertEqual(
             result.diff.modified,
@@ -382,7 +534,6 @@ class ProfileSyncTests(unittest.TestCase):
                 "SOUL.md",
                 "assets/avatar.bin",
                 "distribution.yaml",
-                "snapshot.entries",
             ],
         )
         self.assertEqual(
@@ -425,7 +576,7 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertEqual(result.commit, original)
         self.assertEqual(
             [path.as_posix() for path in result.diff.added],
-            ["assets/avatar.bin", "snapshot.entries"],
+            ["assets/avatar.bin"],
         )
         self.assertEqual(
             [path.as_posix() for path in result.diff.modified],
@@ -469,8 +620,45 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertEqual(result.commit, self.git(remote, "rev-parse", "refs/heads/main"))
         self.assertEqual(
             self.git(remote, "ls-tree", "-r", "--name-only", result.commit).splitlines(),
-            [".gitignore", "SOUL.md", "distribution.yaml", "snapshot.entries"],
+            [".gitignore", "SOUL.md", "distribution.yaml"],
         )
+
+    def test_invalid_destination_branch_fails_unchanged_and_dry_run_paths(self) -> None:
+        unchanged_remote = self.root / "unchanged.git"
+        unchanged_declaration = self.profile(
+            "unchanged-profile", unchanged_remote, ref="HEAD"
+        )
+        unchanged_snapshot = self.snapshot(
+            unchanged_declaration, {"SOUL.md": b"same\n"}
+        )
+        self.seed_remote(unchanged_remote, unchanged_snapshot)
+
+        unchanged = synchronize_prepared_profiles(
+            PreparedProfiles((unchanged_snapshot,), ()), self.auth, dry_run=False
+        )
+
+        dry_remote = self.root / "dry.git"
+        dry_declaration = self.profile(
+            "dry-profile", dry_remote, ref="refs/heads/main"
+        )
+        dry_snapshot = self.snapshot(dry_declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(dry_remote, dry_declaration.name, {"README.md": b"old\n"})
+
+        dry = synchronize_prepared_profiles(
+            PreparedProfiles((dry_snapshot,), ()), self.auth, dry_run=True
+        )
+
+        invalid = self.snapshot(
+            self.profile("invalid-profile", dry_remote, ref="main..bad"),
+            {"SOUL.md": b"local\n"},
+        )
+        invalid_result = synchronize_prepared_profiles(
+            PreparedProfiles((invalid,), ()), self.auth, dry_run=True
+        )
+
+        self.assertEqual(unchanged.profiles[0].status, "failed")
+        self.assertEqual(dry.profiles[0].status, "failed")
+        self.assertEqual(invalid_result.profiles[0].status, "failed")
 
     def test_second_non_fast_forward_exhausts_the_single_retry(self) -> None:
         remote = self.root / "profile-a.git"
@@ -518,6 +706,103 @@ class ProfileSyncTests(unittest.TestCase):
             )
 
         with mock.patch.object(profile_sync, "_run_git_bytes", side_effect=race):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(push_calls, 1)
+        self.assertEqual(report.profiles[0].status, "changed")
+        self.assertEqual(report.profiles[0].commit, winning_commit)
+
+    def test_different_tree_after_successful_push_retries_on_the_new_head(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+        original_run = profile_sync._run_git_bytes
+        push_calls = 0
+        raced_commit = ""
+
+        def race_after_push(arguments, cwd, environment, *, max_output_bytes):
+            nonlocal push_calls, raced_commit
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments and arguments[0] == "push" and output is not None:
+                push_calls += 1
+                if push_calls == 1:
+                    raced_commit = self.advance_remote(remote)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=race_after_push
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+
+        result = report.profiles[0]
+        self.assertEqual(result.status, "changed")
+        self.assertEqual(push_calls, 2)
+        self.assertEqual(result.commit, self.git(remote, "rev-parse", "refs/heads/main"))
+        self.assertEqual(self.git(remote, "rev-parse", f"{result.commit}^"), raced_commit)
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", result.commit).splitlines(),
+            [".gitignore", "SOUL.md", "distribution.yaml"],
+        )
+
+    def test_different_tree_after_successful_retry_exhausts_the_race(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+        original_run = profile_sync._run_git_bytes
+        push_calls = 0
+
+        def race_after_each_push(arguments, cwd, environment, *, max_output_bytes):
+            nonlocal push_calls
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments and arguments[0] == "push" and output is not None:
+                push_calls += 1
+                self.advance_remote(remote)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=race_after_each_push
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(push_calls, 2)
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "push_race_exhausted")
+
+    def test_same_tree_descendant_after_successful_push_is_accepted(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+        original_run = profile_sync._run_git_bytes
+        winning_commit = ""
+        push_calls = 0
+
+        def same_tree_after_push(arguments, cwd, environment, *, max_output_bytes):
+            nonlocal winning_commit, push_calls
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments and arguments[0] == "push" and output is not None:
+                push_calls += 1
+                if push_calls == 1:
+                    winning_commit = self.advance_remote(remote, snapshot=snapshot)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=same_tree_after_push
+        ):
             report = synchronize_prepared_profiles(
                 PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
             )
@@ -632,6 +917,154 @@ class ProfileSyncTests(unittest.TestCase):
         with mock.patch.object(profile_sync, "_unlink", return_value=False):
             cleanup = synchronize_prepared_profiles(prepared, self.auth, dry_run=False)
         self.assertEqual(cleanup.profiles[0].category, "cleanup_failed")
+
+    def test_unexpected_askpass_cleanup_exception_is_scrubbed_and_continues(self) -> None:
+        first_remote = self.root / "first.git"
+        second_remote = self.root / "second.git"
+        owned_marker = "askpass-owned-marker"
+        first = self.snapshot(
+            self.profile("first-profile", first_remote),
+            {"SOUL.md": owned_marker.encode("ascii")},
+        )
+        second = self.snapshot(
+            self.profile("second-profile", second_remote), {"SOUL.md": b"second\n"}
+        )
+        self.seed_remote(first_remote, first)
+        self.seed_remote(second_remote, second)
+        original_unlink = profile_sync._unlink
+        original_remove = profile_sync._remove_tree
+        captured: list[BaseException] = []
+        removed: list[Path] = []
+        calls = 0
+
+        def unlink(path: Path) -> bool:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                try:
+                    raise ValueError(owned_marker)
+                except ValueError as cause:
+                    error = RuntimeError(self.auth.token)
+                    error.__cause__ = cause
+                    captured.append(error)
+                    raise error
+            return original_unlink(path)
+
+        def remove(path: Path) -> bool:
+            removed.append(path)
+            return original_remove(path)
+
+        with (
+            mock.patch.object(profile_sync, "_unlink", side_effect=unlink),
+            mock.patch.object(profile_sync, "_remove_tree", side_effect=remove),
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((first, second), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(
+            [item.status for item in report.profiles], ["failed", "unchanged"]
+        )
+        self.assertEqual(report.profiles[0].category, "cleanup_failed")
+        self.assertEqual(len(removed), 2)
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(owned_marker, repr(report.as_dict()))
+        self.assertEqual(len(captured), 1)
+        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+
+    def test_unexpected_repository_cleanup_exception_is_scrubbed_and_continues(self) -> None:
+        first_remote = self.root / "first.git"
+        second_remote = self.root / "second.git"
+        owned_marker = "repository-owned-marker"
+        first = self.snapshot(
+            self.profile("first-profile", first_remote),
+            {"SOUL.md": owned_marker.encode("ascii")},
+        )
+        second = self.snapshot(
+            self.profile("second-profile", second_remote), {"SOUL.md": b"second\n"}
+        )
+        self.seed_remote(first_remote, first)
+        self.seed_remote(second_remote, second)
+        original_remove = profile_sync._remove_tree
+        captured: list[BaseException] = []
+        calls = 0
+
+        def remove(path: Path) -> bool:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                error = RuntimeError(self.auth.token, owned_marker)
+                captured.append(error)
+                raise error
+            return original_remove(path)
+
+        with mock.patch.object(profile_sync, "_remove_tree", side_effect=remove):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((first, second), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(
+            [item.status for item in report.profiles], ["failed", "unchanged"]
+        )
+        self.assertEqual(report.profiles[0].category, "cleanup_failed")
+        self.assertEqual(calls, 2)
+        serialized = repr(report.as_dict())
+        self.assertNotIn(self.auth.token, serialized)
+        self.assertNotIn(owned_marker, serialized)
+        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+
+    def test_unexpected_snapshot_cleanup_exception_is_scrubbed_after_all_profiles(self) -> None:
+        first_remote = self.root / "first.git"
+        second_remote = self.root / "second.git"
+        owned_marker = "snapshot-owned-marker"
+        first_declaration = self.profile("first-profile", first_remote)
+        second_declaration = self.profile("second-profile", second_remote)
+        first = self.snapshot(
+            first_declaration, {"SOUL.md": owned_marker.encode("ascii")}
+        )
+        second = self.snapshot(
+            second_declaration, {"SOUL.md": b"second\n"}
+        )
+        self.seed_remote(first_remote, first)
+        self.seed_remote(second_remote, second)
+        manifest = self.manifest(first_declaration, second_declaration)
+        original_remove = profile_sync._remove_tree
+        original_sync_one = profile_sync._synchronize_one_boundary
+        captured: list[BaseException] = []
+        attempted: list[str] = []
+
+        def remove(path: Path) -> bool:
+            if path.name.startswith(".hermes-profile-snapshots-"):
+                error = RuntimeError(self.auth.token, owned_marker)
+                captured.append(error)
+                raise error
+            return original_remove(path)
+
+        def sync_one(snapshot, auth, dry_run):
+            attempted.append(snapshot.declaration.name)
+            return original_sync_one(snapshot, auth, dry_run)
+
+        with (
+            mock.patch.object(
+                profile_sync,
+                "prepare_profile_snapshots",
+                return_value=PreparedProfiles((first, second), ()),
+            ),
+            mock.patch.object(profile_sync, "_remove_tree", side_effect=remove),
+            mock.patch.object(
+                profile_sync, "_synchronize_one_boundary", side_effect=sync_one
+            ),
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertEqual(attempted, ["first-profile", "second-profile"])
+        self.assertTrue(
+            all(item.category == "cleanup_failed" for item in report.profiles)
+        )
+        serialized = repr(report.as_dict())
+        self.assertNotIn(self.auth.token, serialized)
+        self.assertNotIn(owned_marker, serialized)
+        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
 
     def test_profile_failures_continue_in_prepared_order(self) -> None:
         good_remote = self.root / "good.git"
