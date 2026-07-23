@@ -163,12 +163,20 @@ If aggregate profile preflight or publication fails, bootstrap stops before
 root/profile staging, shared synchronization, or the local transaction.
 Snapshot-preflight rejection happens before `profile_report` exists; public
 `apply` stderr is `profile snapshot rejected (<category>)`, with no profile
-name or report. A nonzero post-preflight publication report instead produces
+name or report. Standalone `sync-profiles --dry-run` repeats aggregate
+preflight and identifies the invalid profile and category in its JSON. A
+nonzero post-preflight publication report instead produces
 `named profile repository sync failed: <failed names>`; the Python exception
-retains that report internally, but the CLI does not serialize it. In both
-cases `apply` stdout is empty. Operators use standalone `sync-profiles` for
-category-bearing JSON. Earlier remote pushes remain valid because remote
-commits are outside the local transaction boundary; they are not rolled back.
+retains that report internally, but the CLI does not serialize its categories.
+In both cases `apply` stdout is empty.
+
+Dry-run is limited to preflight and diff inspection. It never pushes, so a
+changed entry has category `dry_run` and cannot reproduce push-only categories
+such as `push_rejected` or `push_race_exhausted`. To obtain a push-only category,
+run standalone real `sync-profiles` and inspect its JSON. That aggregate command
+also processes every other manifest profile and may publish their changes;
+successful pushes, including those completed before another profile fails,
+remain valid and are not rolled back.
 
 ## Profile Sync Result Contract
 
@@ -196,12 +204,14 @@ second race is `push_race_exhausted`.
 
 ## Failure And Recovery
 
-After an `apply` failure, an operator first runs standalone
-`sync-profiles --dry-run` to identify the failed profile and redacted category.
-Fix only that local authoritative profile content, or the owning
-engine/environment for a non-content failure, then run the dry-run command and
-the real command. A repair is accepted only when the aggregate exits `0` and
-that profile is `changed` or `unchanged`.
+After a snapshot-preflight `apply` failure, use standalone dry-run JSON to
+identify the failed profile and category. Fix that local authoritative profile
+or its owning engine/environment, and rerun dry-run until aggregate preflight is
+green. Then run real `sync-profiles`. If real publication fails, assign its
+failed profile and push-only category from that real JSON report, repair the
+owning engine/environment, and repeat dry-run before another real attempt. A
+repair is accepted only when the real aggregate exits `0` and the repaired
+profile is `changed` or `unchanged`.
 
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact

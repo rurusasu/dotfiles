@@ -173,16 +173,22 @@ restart Hermes. There are two public diagnostics:
 
 - Snapshot preflight can fail before a `profile_report` is created. `apply`
   writes `profile snapshot rejected (<category>)` to stderr, without a profile
-  name or report.
+  name or report. Standalone `sync-profiles --dry-run` identifies the invalid
+  profile and category in its JSON.
 - A nonzero post-preflight publication report writes
   `named profile repository sync failed: <failed names>` to stderr. The Python
-  exception retains the report internally, but the CLI does not serialize it.
+  exception retains the report internally, but the CLI does not serialize its
+  categories.
 
 In both cases `apply` stdout is empty; unlike standalone `sync-profiles`, it
 does not emit a failed JSON report.
 
-Run standalone `sync-profiles --dry-run` to obtain category-bearing JSON before
-assigning a repair. Earlier remote pushes remain valid because remote commits
+Use dry-run only for aggregate preflight and diff inspection. It never pushes,
+so a changed entry reports category `dry_run`; it cannot reproduce
+`push_rejected`, `push_race_exhausted`, or another push-only failure. To obtain
+a push-only category, run standalone real `sync-profiles` and inspect its JSON.
+The real aggregate processes every manifest profile and may push changes for
+profiles other than the original failure. Successful pushes remain valid and
 cannot be rolled back; a subsequent run reports them as `unchanged` when the
 remote tree matches the same local snapshot.
 
@@ -241,12 +247,15 @@ One Git failure does not stop later profiles from being attempted. A push race
 gets one fetch-and-rebuild retry. A matching-tree remote descendant is accepted;
 a second race failure is reported as `push_race_exhausted`.
 
-For a repair handoff, give the repair task only the failed profile and its
-redacted category. Correct the local authoritative profile or the owning
-engine/environment, then run the dry-run command followed by the real command.
-Accept the repair only when the aggregate exits `0` and the repaired profile is
-`changed` or `unchanged`. Do not use remote content to repair an existing local
-profile.
+For a snapshot-preflight repair handoff, take the failed profile and redacted
+category from standalone dry-run JSON. Correct the local authoritative profile
+or its owning engine/environment, then rerun dry-run until aggregate preflight
+is green. Run real `sync-profiles` next. If publication fails, take the failed
+profile and push-only category from that real JSON report; do not infer it from
+dry-run. The real aggregate can publish other profiles, and successful pushes
+are not rolled back. Accept the repair only when the real aggregate exits `0`
+and the repaired profile is `changed` or `unchanged`. Do not use remote content
+to repair an existing local profile.
 
 ## Transaction And Rollback
 
