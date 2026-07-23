@@ -55,6 +55,7 @@ filesystem APIs, `unittest`, Docker Compose, Git, pre-commit.
 ### Task 1: Serialize Mutating Bootstrap Commands
 
 **Files:**
+
 - Create:
   `docker/hermes-agent/bootstrap/hermes_bootstrap/engine_lock.py`
 - Create:
@@ -65,6 +66,7 @@ filesystem APIs, `unittest`, Docker Compose, Git, pre-commit.
   `docker/hermes-agent/bootstrap/tests/test_app.py`
 
 **Interfaces:**
+
 - Produces:
   `EngineLock.acquire(data_root: Path) -> EngineLock`
 - Produces:
@@ -189,6 +191,7 @@ git commit -m "feat: serialize Hermes bootstrap mutations"
 ### Task 2: Reject Local Drift Without Overwriting Existing Profiles
 
 **Files:**
+
 - Modify:
   `docker/hermes-agent/bootstrap/hermes_bootstrap/profile_snapshot.py`
 - Modify:
@@ -205,12 +208,13 @@ git commit -m "feat: serialize Hermes bootstrap mutations"
   `docker/hermes-agent/bootstrap/tests/integration/test_profile_sync_flow.py`
 
 **Interfaces:**
+
 - Produces:
   `revalidate_profile_snapshots(manifest: BootstrapManifest, baseline:
-  PreparedProfiles, scratch_parent: Path) -> None`
+PreparedProfiles, scratch_parent: Path) -> None`
 - Extends:
   `apply_profile_distribution(stage, data_root, tx, *,
-  replace_existing: bool = True) -> ChangeSet`
+replace_existing: bool = True) -> ChangeSet`
 - Consumes Task 1's held operation window.
 
 - [ ] **Step 1: Add failing snapshot-comparison tests**
@@ -415,6 +419,7 @@ git commit -m "fix: preserve local profile authority during apply"
 ### Task 3: Simplify Private Scratch Cleanup
 
 **Files:**
+
 - Modify:
   `docker/hermes-agent/bootstrap/hermes_bootstrap/filesystem.py`
 - Modify:
@@ -427,6 +432,7 @@ git commit -m "fix: preserve local profile authority during apply"
   `docker/hermes-agent/bootstrap/tests/test_repositories.py`
 
 **Interfaces:**
+
 - Preserves:
   `create_private_directory(parent: Path, *, prefix: str) -> PrivateDirectory`
 - Preserves:
@@ -547,6 +553,7 @@ git commit -m "refactor: bound Hermes private cleanup guarantees"
 ### Task 4: Align Documentation And Provenance Gates
 
 **Files:**
+
 - Modify:
   `docs/hermes-agent/bootstrap.md`
 - Modify:
@@ -561,6 +568,7 @@ git commit -m "refactor: bound Hermes private cleanup guarantees"
   `docker/hermes-agent/bootstrap/tests/test_hermes_home_wrapper_contract.py`
 
 **Interfaces:**
+
 - Consumes Task 1's canonical lock path and Task 2's
   `local_profile_changed` semantics.
 - Extends the existing hermes-home wrapper provenance gate with exact tree-mode

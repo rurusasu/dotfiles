@@ -34,10 +34,7 @@ expected device and inode. Cleanup:
 - recursively removes entries through directory descriptors;
 - never follows symlinks;
 - rejects cross-device descendants;
-- uses no-replace quarantine renames and inode revalidation;
 - fails closed when a mutable pathname is replaced;
-- never deletes the replacement tree;
-- removes the originally captured private tree through its retained identity;
 - returns failure so the existing redacted `cleanup_failed` or apply cleanup
   boundary wins.
 
@@ -46,9 +43,10 @@ scratch, per-profile Git scratch, and private shared-repository staging or
 publication copies. No private-stage pathname-only `shutil.rmtree` fallback was
 added.
 
-Deterministic replacement checkpoints cover all four required stages. Each test
-asserts that the replacement survives, the retired original tree is removed,
-and cleanup failure is surfaced through the redacted boundary.
+Deterministic replacement checkpoints cover supported cleanup anomalies and
+assert redacted cleanup failure with retained uncertain artifacts. They do not
+claim protection against a malicious same-UID process that bypasses the
+cooperative engine lock.
 
 ### Important 2: Empty owned directories
 
@@ -58,8 +56,9 @@ Aggregate snapshot preflight now raises:
 ProfileSnapshotError(<profile>, "empty_owned_directory")
 ```
 
-for every declared owned directory that has no publishable regular-file
-descendant. It does not synthesize a placeholder.
+for a declared owned root that has no publishable regular-file descendant. It
+does not synthesize a placeholder. A nested empty directory under a nonempty
+owned root is omitted from the Git projection because Git cannot represent it.
 
 The unit test proves the precise category and clean scratch removal. The
 integration ordering test proves the failure happens before:
@@ -107,6 +106,35 @@ command=sync-profiles
 profiles=rick,hoffman,risarisa,nancy
 categories=credentials_unavailable,credentials_unavailable,credentials_unavailable,credentials_unavailable
 ```
+
+The contract now reads committed tree entries, not worktree mode bits. It
+requires `100755` for both the provenance-pinned `hermes-home` source and the
+dotfiles fixture. Its negative case commits a `100644` fixture into a temporary
+Git repository and proves that the contract rejects it independently of the
+worktree executable bit. The full provenance gate runs before dotfiles
+publication and again immediately before hermes-home publication after the
+dotfiles merge.
+
+### Amendment 4: Engine lock and accepted threat model
+
+`EngineLock` is the canonical nonblocking cooperative lock at
+`/opt/data/locks/bootstrap-engine.lock`. It covers `apply`, `sync-profiles`,
+and `sync-repository` from before recovery or scratch creation through
+transaction and cleanup; repository locks are subordinate. The accepted model
+covers malformed remotes and local content, crashes, cooperating concurrency,
+and filesystem anomalies while trusting the kernel, filesystem, container
+runtime, and bootstrap context. A malicious same-UID process deliberately
+bypassing the lock is outside the model.
+
+Before `Transaction.begin`, apply repeats the profile snapshot and compares the
+full target set, canonical bytes, path inventory, modes, sizes, hashes, and
+aggregate digest. Drift is reported as `local_profile_changed` before local
+mutation. The final profile apply installs from remote only for a still-missing
+target; existing targets are never force-overwritten. Root remains
+remote-authoritative and lifelog remains its normal locked read-write
+repository. The `profile-local-sync` cron exists on the ordered hermes-home
+dependency branch and becomes active only after its merge and root-distribution
+apply.
 
 ## TDD Evidence
 
@@ -346,9 +374,9 @@ so a replacement could be created there after the last identity check. Cleanup
 removed the captured inode and returned `True` because its final scan searched
 only for that captured inode.
 
-The deterministic regression uses an empty private directory. At the existing
-final checkpoint it creates a replacement directory and marker through the
-retained parent descriptor. The replacement survives in both RED and GREEN.
+The deterministic regression uses an empty private directory. It records the
+supported fail-closed cleanup boundary, not safety against an uncooperative
+same-UID attacker.
 
 ### RED
 
@@ -385,11 +413,10 @@ FAILED (failures=1)
 
 ### GREEN
 
-The smallest fix performs a final no-follow `stat` of the original name through
-the retained parent descriptor after `_remove_directory_entry()` completes.
-Any extant entry, regardless of inode or type, sets `path_changed`; unexpected
-`OSError` continues through the existing fail-closed exception handling. The
-replacement is never deleted.
+The cleanup contract retains descriptor-anchored, no-follow, mount-aware
+validation and returns a redacted failure when it cannot establish its
+supported invariants. It makes no unsupported claim about cleanup of a
+replacement made by an uncooperative same-UID attacker.
 
 Command:
 
@@ -419,11 +446,14 @@ Task 8 now blocks PR publication unless a mechanical gate proves that:
 
 - the current hermes-home wrapper is unchanged at the recorded source commit;
 - the committed hermes-home blob matches the provenance Git blob SHA-1;
+- both committed Git tree modes are `100755`;
 - the current wrapper and committed dotfiles fixture compare byte-for-byte;
 - both files match the recorded Git blob SHA-1 and SHA-256;
 - the fixture and provenance record are committed at the dotfiles HEAD.
 
-The executable, mode-preserving CI fixture test remains unchanged.
+The executable fixture test verifies the committed fixture tree mode, and a
+temporary non-executable committed fixture is rejected without relying on its
+worktree mode.
 
 ### Addendum Verification
 
