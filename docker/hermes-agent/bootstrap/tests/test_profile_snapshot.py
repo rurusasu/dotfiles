@@ -225,6 +225,42 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
 
+    def test_mapped_env_template_rejects_replacement_after_copy_before_final_recheck(
+        self,
+    ) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        source = home / ".env.EXAMPLE"
+        source.write_bytes(b"SAFE=original\n")
+        replacement = home / ".env.EXAMPLE.replacement"
+        replacement.write_bytes(b"SAFE=replacement\n")
+        original_copy = profile_snapshot._copy_regular
+        baseline_fds = len(os.listdir("/proc/self/fd"))
+        replaced = False
+
+        def replace_after_copy(*args: object, **kwargs: object) -> None:
+            nonlocal replaced
+            original_copy(*args, **kwargs)
+            if len(args) > 1 and args[1] == ".env.EXAMPLE" and not replaced:
+                replacement.replace(source)
+                replaced = True
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_copy_regular",
+            side_effect=replace_after_copy,
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+        self.assertEqual(len(os.listdir("/proc/self/fd")), baseline_fds)
+
     def test_mapped_env_template_rejects_replacement_before_source_open(
         self,
     ) -> None:

@@ -503,6 +503,12 @@ coverage replaced the source immediately before open, created lowercase and
 mixed-case aliases and collisions, and exercised leading-dot and trailing-slash
 manifest aliases.
 
+The remaining Minor coverage gap now has a deterministic test that replaces
+`.env.EXAMPLE` with a different inode after `_copy_regular` returns and before
+the final exact-entry recheck. It proves `invalid_local_profile`, empty snapshot
+scratch cleanup, and unchanged open-descriptor count without an implementation
+change.
+
 ### Addendum Verification
 
 The focused filesystem and four existing replacement tests passed:
@@ -525,7 +531,7 @@ Fresh full verification:
 
 ```text
 task hermes:bootstrap:test
-Ran 535 tests
+Ran 536 tests
 OK (skipped=3)
 test_gh_wrapper: PASS
 profile sync provenance verified
