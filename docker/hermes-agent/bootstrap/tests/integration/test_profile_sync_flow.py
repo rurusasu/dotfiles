@@ -845,7 +845,27 @@ class ProfileSyncFlowTests(unittest.TestCase):
     def test_apply_stages_each_existing_profile_at_its_reported_commit(
         self,
     ) -> None:
-        result = self.flow._apply()
+        real_synchronize = (
+            bootstrap_flow.app.profile_sync.synchronize_prepared_profiles
+        )
+        advance_name = self.profile_names[0]
+        captured_reports: list[profile_sync.ProfileSyncReport] = []
+        advanced_heads: list[str] = []
+
+        def synchronize_then_advance(prepared, auth, *, dry_run):
+            report = real_synchronize(prepared, auth, dry_run=dry_run)
+            captured_reports.append(report)
+            advanced_heads.append(
+                self._advance_remote(advance_name, "after-real-sync-report")
+            )
+            return report
+
+        with mock.patch.object(
+            bootstrap_flow.app.profile_sync,
+            "synchronize_prepared_profiles",
+            side_effect=synchronize_then_advance,
+        ):
+            result = self.flow._apply()
 
         profile_summary = result["profile_sync"]
         self.assertIsInstance(profile_summary, dict)
@@ -854,15 +874,51 @@ class ProfileSyncFlowTests(unittest.TestCase):
             profile_summary,
             {name: "changed" for name in self.profile_names},
         )
+        self.assertEqual(len(captured_reports), 1)
+        self.assertEqual(len(advanced_heads), 1)
+        report = captured_reports[0]
+        self.assertIsInstance(report, profile_sync.ProfileSyncReport)
+        reported_commits = {
+            item.name: item.commit
+            for item in report.profiles
+        }
+        self.assertTrue(all(reported_commits.values()))
         self.assertEqual(
-            [name for name, _ref, _head in self.flow.profile_stage_refs],
+            [
+                name
+                for name, _source, _ref, _staged_commit, _head
+                in self.flow.profile_stage_refs
+            ],
             list(self.profile_names),
         )
-        for name, ref, remote_head in self.flow.profile_stage_refs:
+        for (
+            name,
+            source,
+            ref,
+            staged_commit,
+            remote_head,
+        ) in self.flow.profile_stage_refs:
             with self.subTest(profile=name):
-                self.assertEqual(ref, remote_head)
-                self.assertEqual(ref, self._remote_head(name))
+                self.assertEqual(source, self._source(name).source)
+                self.assertEqual(ref, reported_commits[name])
+                self.assertEqual(staged_commit, reported_commits[name])
+                if name == advance_name:
+                    self.assertEqual(remote_head, advanced_heads[0])
+                    self.assertEqual(self._remote_head(name), advanced_heads[0])
+                    self.assertNotEqual(remote_head, reported_commits[name])
+                else:
+                    self.assertEqual(remote_head, reported_commits[name])
+                    self.assertEqual(self._remote_head(name), reported_commits[name])
                 self.assertRegex(ref, r"\A[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
+        visible_arguments = {
+            argument
+            for command in self.flow.child_arguments
+            for argument in command
+        }
+        for source in self.flow.manifest.profiles:
+            self.assertIn(source.source, visible_arguments)
+        for remote in self.flow.source_remotes.values():
+            self.assertNotIn(str(remote), visible_arguments)
 
     def test_existing_invalid_profile_blocks_apply_and_preserves_runtime(
         self,

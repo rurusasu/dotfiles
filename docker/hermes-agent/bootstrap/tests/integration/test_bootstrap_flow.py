@@ -248,7 +248,7 @@ class BootstrapFlowTests(unittest.TestCase):
         self.fixture_root = Path(self.temporary.name)
         self.child_process_offset = len(_CHILD_PROCESSES)
         self.child_arguments: list[tuple[str, ...]] = []
-        self.profile_stage_refs: list[tuple[str, str, str]] = []
+        self.profile_stage_refs: list[tuple[str, str, str, str, str]] = []
         self.child_home = self.fixture_root / "child-home"
         self.profile_tmpdir = self.fixture_root / "tmp"
         self.child_home.mkdir()
@@ -552,7 +552,9 @@ class BootstrapFlowTests(unittest.TestCase):
                         self.profile_stage_refs.append(
                             (
                                 fixture_name,
+                                source.source,
                                 source.ref,
+                                staged.commit,
                                 run_git(
                                     "--git-dir",
                                     str(self.source_remotes[fixture_name]),
@@ -621,6 +623,8 @@ class BootstrapFlowTests(unittest.TestCase):
                 if path.name.startswith(
                     (
                         ".hermes-bootstrap-",
+                        ".hermes-profile-snapshots-",
+                        ".hermes-profile-sync-",
                         ".hermes-repository-",
                         "askpass-",
                         "stage-",
@@ -701,6 +705,18 @@ class BootstrapFlowTests(unittest.TestCase):
                 self._assert_no_temporary_resources()
         finally:
             profile_leak.rmdir()
+        for prefix in (
+            ".hermes-profile-snapshots-",
+            ".hermes-profile-sync-",
+        ):
+            production_leak = self.data_root / f"{prefix}review-probe"
+            production_leak.mkdir()
+            try:
+                with self.subTest(prefix=prefix):
+                    with self.assertRaises(AssertionError):
+                        self._assert_no_temporary_resources()
+            finally:
+                production_leak.rmdir()
 
     def test_profile_targets_keep_canonical_source_token_and_manifest_identity(self) -> None:
         production_profiles = {
@@ -771,12 +787,24 @@ class BootstrapFlowTests(unittest.TestCase):
             self.assertNotIn(str(remote), visible_arguments)
 
         self.assertEqual(
-            [name for name, _ref, _head in self.profile_stage_refs],
+            [
+                name
+                for name, _source, _ref, _staged_commit, _head
+                in self.profile_stage_refs
+            ],
             list(PROFILE_NAMES),
         )
-        for name, ref, remote_head in self.profile_stage_refs:
+        for (
+            name,
+            source,
+            ref,
+            staged_commit,
+            remote_head,
+        ) in self.profile_stage_refs:
             with self.subTest(staged_profile=name):
+                self.assertEqual(source, production_profiles[name].source)
                 self.assertEqual(ref, remote_head)
+                self.assertEqual(staged_commit, ref)
                 self.assertRegex(ref, r"\A[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 
         for name, expected in PROFILE_IDENTITIES.items():
