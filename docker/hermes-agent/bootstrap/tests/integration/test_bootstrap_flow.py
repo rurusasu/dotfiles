@@ -28,7 +28,12 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap import app, cli
-from hermes_bootstrap.errors import ApplyError, CredentialError, RepositoryError
+from hermes_bootstrap.errors import (
+    ApplyError,
+    CredentialError,
+    RepositoryError,
+    ValidationError,
+)
 from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
@@ -458,6 +463,11 @@ class BootstrapFlowTests(unittest.TestCase):
                 "bot_token": "xoxb-nancy-bot",
                 "app_token": "xapp-nancy-app",
                 "allowed_users": "UNANCY",
+            },
+            "slack_future": {
+                "bot_token": "xoxb-future-bot",
+                "app_token": "xapp-future-app",
+                "allowed_users": "UFUTURE",
             },
         }
         for item in self.manifest.onepassword_items:
@@ -956,6 +966,68 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(after, before)
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
+
+    def test_future_profile_chrome_validation_precedes_remote_and_transaction_mutation(
+        self,
+    ) -> None:
+        future = "future"
+        self._create_distribution(
+            future,
+            {
+                "distribution.yaml": self._profile_manifest(future),
+                "config.yaml": source_config("profile", "future-invalid").replace(
+                    "    connect_timeout: 120\n",
+                    "    connect_timeout: 120.0\n",
+                ),
+                "SOUL.md": "future initial\n",
+            },
+        )
+        future_source = DistributionSource(
+            name=future,
+            source="https://github.com/rurusasu/hermes-profile-future.git",
+            ref="main",
+            target=self.data_root / "profiles" / future,
+            manifest_name="distribution.yaml",
+        )
+        future_slack_item = replace(
+            next(
+                item
+                for item in self.manifest.onepassword_items
+                if item.key == "slack_rick"
+            ),
+            key="slack_future",
+            item="Hermes Slack future",
+        )
+        self.manifest = replace(
+            self.manifest,
+            profiles=(*self.manifest.profiles, future_source),
+            onepassword_items=(
+                *self.manifest.onepassword_items,
+                future_slack_item,
+            ),
+        )
+        before = self._snapshot_managed_tree()
+
+        with (
+            self._patched_runtime(),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                wraps=app.synchronize_remote,
+            ) as synchronize_remote,
+            mock.patch.object(
+                app.Transaction,
+                "begin",
+                wraps=app.Transaction.begin,
+            ) as transaction_begin,
+        ):
+            with self.assertRaises(ValidationError):
+                app.apply(PRODUCTION_MANIFEST, self._payload())
+
+        synchronize_remote.assert_not_called()
+        transaction_begin.assert_not_called()
+        self.assertEqual(self._snapshot_managed_tree(), before)
+        self.assertFalse(future_source.target.exists())
 
     def test_runtime_failpoints_rollback_each_mutation_phase_without_reversing_remote_pushes(self) -> None:
         self._initial_apply()
