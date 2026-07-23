@@ -88,11 +88,18 @@ class FakeTransaction:
 
 class AppTests(unittest.TestCase):
     def setUp(self) -> None:
+        from hermes_bootstrap import app
+
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "data"
         self.root.mkdir()
         self.manifest = manifest(self.root)
+        source_contract_patcher = mock.patch.object(
+            app, "validate_chrome_mcp_sources"
+        )
+        self.validate_chrome_mcp_sources = source_contract_patcher.start()
+        self.addCleanup(source_contract_patcher.stop)
 
     def write_installed_profile(
         self,
@@ -281,6 +288,7 @@ class AppTests(unittest.TestCase):
                     f"stage:hoffman:{commits['hoffman']}",
                     f"stage:risarisa:{commits['risarisa']}",
                     f"stage:nancy:{commits['nancy']}",
+                    "source-contract:default,rick,hoffman,risarisa,nancy",
                     "sync:lifelog",
                 ],
             )
@@ -296,6 +304,13 @@ class AppTests(unittest.TestCase):
                 "profiles": [profile.name for profile in configured.profiles],
                 "repositories": ["lifelog"],
             }
+
+        self.validate_chrome_mcp_sources.side_effect = (
+            lambda staged: events.append(
+                "source-contract:"
+                + ",".join(stage.declaration.name for stage in staged)
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -344,6 +359,7 @@ class AppTests(unittest.TestCase):
                 f"stage:hoffman:{commits['hoffman']}",
                 f"stage:risarisa:{commits['risarisa']}",
                 f"stage:nancy:{commits['nancy']}",
+                "source-contract:default,rick,hoffman,risarisa,nancy",
                 "sync:lifelog",
                 "root",
                 "profile:rick",
@@ -718,6 +734,40 @@ class AppTests(unittest.TestCase):
             before,
         )
         self.assertFalse(any(self.root.glob(".hermes-bootstrap-*")))
+
+    def test_source_contract_failure_precedes_remote_sync_and_transaction(self) -> None:
+        from hermes_bootstrap import app
+
+        secrets = mock.Mock(
+            github_token="token",
+            redactor=SecretRedactor(("token",)),
+        )
+        staged = mock.Mock()
+        self.validate_chrome_mcp_sources.side_effect = ValidationError(
+            "distribution 'future-profile' config.yaml has invalid Chrome MCP configuration"
+        )
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(app, "read_secret_payload", return_value=secrets),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(app, "stage_distribution", return_value=staged),
+            mock.patch.object(app, "synchronize_remote") as synchronize,
+            mock.patch.object(app.Transaction, "begin") as begin,
+        ):
+            with self.assertRaisesRegex(
+                ValidationError, "future-profile.*config.yaml"
+            ):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(
+            self.validate_chrome_mcp_sources.call_args.args[0],
+            [staged, staged],
+        )
+        synchronize.assert_not_called()
+        begin.assert_not_called()
 
     def test_apply_rolls_back_after_transaction_and_rollback_error_wins(self) -> None:
         from hermes_bootstrap import app

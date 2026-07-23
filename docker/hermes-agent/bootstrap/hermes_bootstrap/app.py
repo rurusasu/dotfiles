@@ -57,6 +57,7 @@ from .repositories import (
     synchronize_named_repository,
     synchronize_remote,
 )
+from .source_contracts import validate_chrome_mcp_sources
 from .transaction import Transaction
 
 
@@ -201,6 +202,7 @@ def _apply_sensitive(
             stage_distribution(source, scratch, auth)
             for source in profile_sources
         ]
+        validate_chrome_mcp_sources([root_stage, *profile_stages])
         for repo in manifest.shared_repositories:
             remote_results.append((repo, synchronize_remote(repo, auth)))
 

@@ -151,13 +151,20 @@ commit/rebase/push workflow. All profiles continue to use
 6. In manifest order, stage each named profile: use the exact commit reported by
    publication for an existing profile, or the configured branch only for a
    truly missing first install.
-7. Synchronize each shared repository remote, including lifelog under its
+7. Validate the staged root and every named profile against the required Chrome
+   MCP source contract.
+8. Synchronize each shared repository remote, including lifelog under its
    locked read-write policy.
-8. Call `Transaction.begin`, apply the root distribution, apply the staged
+9. Call `Transaction.begin`, apply the root distribution, apply the staged
    profiles in manifest order through the official Hermes API, publish shared
    working trees, and merge private `.env` files with mode `0600`.
-9. Validate the installed layout, commit the transaction, report the
+10. Validate the installed layout, commit the transaction, report the
    `profile_sync` summary, then recreate and health-check the gateway.
+
+For a truly missing profile, `hermes profile install --force` preserves
+user-owned paths. The pinned runtime restricts direct profile installation to
+the manifest's top-level `distribution_owned` roots, so repository workflows,
+tests, and validator tooling are not copied into the profile.
 
 If aggregate profile preflight or publication fails, bootstrap stops before
 root/profile staging, shared synchronization, or the local transaction.
