@@ -92,6 +92,9 @@ def source_config(key: str, value: str) -> str:
         "  chrome:\n"
         "    url: http://browser-mcp:8080/mcp\n"
         "    connect_timeout: 120\n"
+        "  xapi:\n"
+        "    url: http://xapi-mcp:8080/mcp\n"
+        "    connect_timeout: 300\n"
     )
 
 

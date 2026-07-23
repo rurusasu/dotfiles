@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
 
 

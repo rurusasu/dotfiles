@@ -23,7 +23,7 @@
 
 **Files:**
 - Modify: `docker/hermes-agent/bootstrap/tests/test_compose_contract.py`
-- Create: `docker/hermes-agent/bootstrap/tests/test_taskfile_contract.py`
+- Create: `tests/python/test_taskfile_contract.py`
 
 **Interfaces:**
 - Consumes: current `docker/hermes-agent/compose.yml` and `Taskfile.yml`.
@@ -67,7 +67,7 @@ Run:
 
 ```bash
 python -m unittest docker/hermes-agent/bootstrap/tests/test_compose_contract.py
-python -m unittest docker/hermes-agent/bootstrap/tests/test_taskfile_contract.py
+python -m unittest tests/python/test_taskfile_contract.py
 ```
 
 Expected: failures identify the missing `xapi-mcp` service and task entries;
@@ -76,7 +76,7 @@ there must be no YAML import or test syntax error.
 - [ ] **Step 4: Commit the red tests**
 
 ```bash
-git add docker/hermes-agent/bootstrap/tests/test_compose_contract.py docker/hermes-agent/bootstrap/tests/test_taskfile_contract.py
+git add docker/hermes-agent/bootstrap/tests/test_compose_contract.py tests/python/test_taskfile_contract.py
 git commit -m "test: define Hermes X MCP compose contracts"
 ```
 
@@ -250,7 +250,7 @@ Run:
 
 ```bash
 python -m unittest docker/hermes-agent/bootstrap/tests/test_compose_contract.py
-python -m unittest docker/hermes-agent/bootstrap/tests/test_taskfile_contract.py
+python -m unittest tests/python/test_taskfile_contract.py
 docker compose -f docker/hermes-agent/compose.yml config --quiet
 ```
 
