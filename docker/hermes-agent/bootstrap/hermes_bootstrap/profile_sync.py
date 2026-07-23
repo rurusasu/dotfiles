@@ -447,7 +447,8 @@ def _reported_path(raw: bytes, auth: GitAuth) -> PurePosixPath:
 
 
 def _escaped_reported_path(raw: bytes) -> PurePosixPath:
-    return PurePosixPath(".git-path-bytes", raw.hex() or "empty")
+    digest = hashlib.sha256(raw).hexdigest()
+    return PurePosixPath(".git-path-bytes", f"sha256-{digest}")
 
 
 def _commit_and_push(

@@ -122,6 +122,28 @@ class ProfileSyncTests(unittest.TestCase):
         )
         return result.stdout
 
+    def git_input_bytes(
+        self, cwd: Path, input_bytes: bytes, *arguments: str
+    ) -> bytes:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+        )
+        result = subprocess.run(
+            ("/usr/bin/git", *arguments),
+            cwd=cwd,
+            env=environment,
+            input=input_bytes,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return result.stdout
+
     def profile(
         self, name: str, remote: Path, *, ref: str = "main"
     ) -> DistributionSource:
@@ -256,6 +278,36 @@ class ProfileSyncTests(unittest.TestCase):
         self.git(seed, "remote", "add", "origin", str(remote))
         self.git(seed, "push", "origin", "main")
         return self.git(remote, "rev-parse", "refs/heads/main")
+
+    def seed_remote_raw_files(
+        self, remote: Path, files: dict[bytes, bytes]
+    ) -> str:
+        self.git(self.root, "init", "--bare", "--initial-branch=main", str(remote))
+        self.addCleanup(self.git, remote, "fsck", "--strict")
+        records = []
+        for raw_path, content in sorted(files.items()):
+            object_id = self.git_input_bytes(
+                remote, content, "hash-object", "-w", "--stdin"
+            ).strip()
+            records.append(b"100644 blob " + object_id + b"\t" + raw_path + b"\0")
+        tree = self.git_input_bytes(
+            remote, b"".join(records), "mktree", "-z"
+        ).strip()
+        commit = self.git_input_bytes(
+            remote,
+            b"",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@localhost",
+            "commit-tree",
+            tree.decode("ascii"),
+            "-m",
+            "seed raw paths",
+        ).strip()
+        commit_text = commit.decode("ascii")
+        self.git(remote, "update-ref", "refs/heads/main", commit_text)
+        return commit_text
 
     def advance_remote(
         self,
@@ -634,6 +686,65 @@ class ProfileSyncTests(unittest.TestCase):
                 remote, "ls-tree", "-r", "--name-only", "refs/heads/main"
             ).splitlines(),
             [".gitignore", "SOUL.md", "distribution.yaml"],
+        )
+
+    def test_unsafe_raw_paths_use_non_reversible_digest_identifiers(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        unsafe_paths = (
+            b"README-\xff.md",
+            b"control-\x01.md",
+            f"secret-{self.auth.token}.md".encode("ascii"),
+        )
+        self.seed_remote_raw_files(
+            remote,
+            {
+                b"README.md": b"safe path\n",
+                unsafe_paths[0]: b"invalid utf8\n",
+                unsafe_paths[1]: b"control byte\n",
+                unsafe_paths[2]: b"credential marker\n",
+            },
+        )
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+
+        expected_identifiers = tuple(
+            f".git-path-bytes/sha256-{hashlib.sha256(raw).hexdigest()}"
+            for raw in unsafe_paths
+        )
+        result = report.profiles[0]
+        self.assertEqual(result.status, "changed")
+        self.assertEqual(
+            [path.as_posix() for path in result.diff.deleted],
+            sorted(("README.md", *expected_identifiers)),
+        )
+        mapping = report.as_dict()
+        self.assertEqual(mapping, report.as_dict())
+        self.assertEqual(
+            tuple(mapping),
+            ("schema_version", "command", "dry_run", "status", "profiles"),
+        )
+        serialized = repr(mapping)
+        serialized_bytes = serialized.encode("utf-8")
+        self.assertNotIn(self.auth.token, serialized)
+        for raw in unsafe_paths:
+            self.assertNotIn(raw, serialized_bytes)
+            self.assertNotIn(raw.hex(), serialized)
+        for identifier in expected_identifiers:
+            self.assertIn(identifier, serialized)
+        self.assertEqual(
+            self.git_bytes(
+                remote,
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                "refs/heads/main",
+            ),
+            b".gitignore\0SOUL.md\0distribution.yaml\0",
         )
 
     def test_first_non_fast_forward_rebuilds_once_on_the_new_remote_head(self) -> None:
