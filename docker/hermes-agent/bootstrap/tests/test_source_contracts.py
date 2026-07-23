@@ -18,6 +18,9 @@ from hermes_bootstrap.source_contracts import validate_chrome_mcp_sources
 VALID_CONFIG = """\
 model:
   provider: openai-codex
+agent:
+  disabled_toolsets:
+    - browser
 mcp_servers:
   chrome:
     url: http://browser-mcp:8080/mcp
@@ -53,6 +56,25 @@ class SourceContractTests(unittest.TestCase):
                 else "distribution.yaml"
             ),
         )
+        manifest = (
+            """\
+schema_version: 1
+name: default
+version: 0.1.0
+hermes_requires: ">=0.18.2"
+distribution_owned:
+  - config.yaml
+"""
+            if name == "default"
+            else f"""\
+name: {name}
+version: 0.1.0
+hermes_requires: ">=0.18.2"
+distribution_owned:
+  - config.yaml
+"""
+        )
+        (path / declaration.manifest_name).write_text(manifest, encoding="utf-8")
         return StagedSource(declaration=declaration, path=path, commit="a" * 40)
 
     def test_accepts_root_and_profiles_while_preserving_other_servers(self) -> None:
@@ -120,6 +142,9 @@ mcp_servers:
     connect_timeout: 120
     token: secret-marker
 """,
+            "enabled-built-in-browser": VALID_CONFIG.replace(
+                "agent:\n  disabled_toolsets:\n    - browser\n", ""
+            ),
         }
         for case, config in invalid.items():
             with self.subTest(case=case):
@@ -142,6 +167,24 @@ mcp_servers:
 
         with self.assertRaisesRegex(ValidationError, "future-profile.*config.yaml"):
             validate_chrome_mcp_sources(stages)
+
+    def test_rejects_config_that_is_not_owned_by_its_distribution(self) -> None:
+        staged = self.staged("future-profile", VALID_CONFIG)
+        (staged.path / staged.declaration.manifest_name).write_text(
+            """\
+name: future-profile
+version: 0.1.0
+hermes_requires: ">=0.18.2"
+distribution_owned:
+  - SOUL.md
+""",
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            ValidationError, "future-profile.*distribution_owned.*config.yaml"
+        ):
+            validate_chrome_mcp_sources((staged,))
 
 
 if __name__ == "__main__":

@@ -51,6 +51,35 @@ class ComposeContractTests(unittest.TestCase):
         self.assertIn("127.0.0.1:${HERMES_API_PORT:-8642}:8642", self.hermes["ports"])
         self.assertNotIn("API_SERVER_KEY", self.hermes["environment"])
 
+    def test_browser_mcp_and_novnc_share_the_compose_chromium_process(self) -> None:
+        chromium = self.services["chromium"]
+        browser_mcp = self.services["browser-mcp"]
+        self.assertEqual(
+            browser_mcp["depends_on"],
+            {"chromium": {"condition": "service_healthy"}},
+        )
+        self.assertEqual(browser_mcp["networks"], chromium["networks"])
+        self.assertIn(
+            "127.0.0.1:${HERMES_BROWSER_VIEW_PORT:-6080}:6080",
+            chromium["ports"],
+        )
+        self.assertEqual(
+            browser_mcp["command"],
+            [
+                "node_modules/.bin/mcp-proxy",
+                "--server",
+                "stream",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--",
+                "node_modules/.bin/chrome-devtools-mcp",
+                "--browser-url=http://chromium:9222",
+                "--no-usage-statistics",
+            ],
+        )
+
     def test_dockerfile_builds_runtime_test_and_final_stages(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
         pinned_base = (

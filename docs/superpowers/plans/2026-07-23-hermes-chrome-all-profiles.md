@@ -20,10 +20,12 @@
   ```
 
 - Preserve additional profile MCP servers such as `xapi` and `x-docs`.
+- Require `agent.disabled_toolsets` to contain `browser` so the separate built-in browser session cannot be selected.
+- Require every distribution manifest to include `config.yaml` in `distribution_owned`.
 - Cover the root distribution, every profile in `bootstrap-manifest.yaml`, and profiles added to that manifest later.
 - Do not scan or mutate manually created profiles that are absent from the bootstrap manifest.
 - Validate all staged `config.yaml` files before `synchronize_remote(...)` and before `Transaction.begin(...)`.
-- Reject missing files, malformed or duplicate-key YAML, non-mapping nodes, the wrong URL, a missing/wrong/non-integer timeout, and extra keys under `mcp_servers.chrome`.
+- Reject missing or unowned files, malformed or duplicate-key YAML, non-mapping nodes, an enabled built-in browser, the wrong URL, a missing/wrong/non-integer timeout, and extra keys under `mcp_servers.chrome`.
 - Validation errors may identify the distribution name and `config.yaml`, but must not include file contents, staging paths, source URLs, credentials, or parser details.
 - Source distributions own complete configuration files; bootstrap must not inject, merge, or repair MCP settings.
 - Use branch `codex/chrome-mcp-all-profiles` in every repository with edits and isolate all edits in Git worktrees.

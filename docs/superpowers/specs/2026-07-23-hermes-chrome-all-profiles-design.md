@@ -7,6 +7,9 @@ must configure the visible container browser through the canonical Chrome MCP
 endpoint:
 
 ```yaml
+agent:
+  disabled_toolsets:
+    - browser
 mcp_servers:
   chrome:
     url: http://browser-mcp:8080/mcp
@@ -26,14 +29,17 @@ Each named profile's `config.yaml` remains owned by its corresponding
 The dotfiles bootstrap validates this contract but does not inject, merge, or
 rewrite MCP settings after applying a distribution. This preserves the existing
 distribution ownership boundary and makes the responsible source repository
-clear when validation fails.
+clear when validation fails. Every distribution manifest must list
+`config.yaml` in `distribution_owned`, so the validated file is also the file
+that bootstrap installs.
 
 ## Data Flow
 
 1. Bootstrap reads the root and profile declarations from the manifest.
 2. It fetches, verifies, and stages each declared source distribution.
 3. Before starting the local transaction, it parses each staged `config.yaml`.
-4. It verifies the canonical `mcp_servers.chrome` URL and timeout.
+4. It verifies `config.yaml` ownership, the global built-in `browser`
+   suppression, and the canonical `mcp_servers.chrome` URL and timeout.
 5. Only after every declared source passes does bootstrap begin local writes.
 6. The existing stack recreation flow restarts each gateway with the installed
    source-owned configuration.
@@ -46,7 +52,9 @@ the same validation path.
 Bootstrap rejects a declared source before local writes when:
 
 - `config.yaml` is missing;
+- `config.yaml` is absent from `distribution_owned`;
 - the file is not valid YAML;
+- `agent.disabled_toolsets` does not include `browser`;
 - `mcp_servers` or `mcp_servers.chrome` is not a mapping;
 - `mcp_servers.chrome.url` is not
   `http://browser-mcp:8080/mcp`; or
@@ -81,7 +89,11 @@ Focused bootstrap tests cover:
 - an incorrect Chrome MCP URL;
 - an incorrect or non-integer timeout;
 - validation before any local write; and
-- automatic coverage of an additional manifest-declared profile.
+- automatic coverage of an additional manifest-declared profile;
+- rejection when that future profile validates a file it does not distribute;
+  and
+- the static Compose contract connecting Browser MCP and noVNC to the same
+  Chromium service and CDP process.
 
 The full Hermes bootstrap and GitHub wrapper suites must remain green. Each
 source repository must pass its own validator.
@@ -92,9 +104,11 @@ After the source changes are available and bootstrap is applied locally:
 
 1. The root profile and every manifest-declared named profile list `chrome` as
    an enabled MCP server.
-2. The Chrome MCP connection discovers the expected tools, including
+2. Hermes reports the built-in `browser` toolset as disabled for every managed
+   profile.
+3. The Chrome MCP connection discovers the expected tools, including
    `navigate_page` and `take_snapshot`.
-3. Nancy uses the Chrome MCP toolset rather than Hermes' built-in
+4. Nancy uses the Chrome MCP toolset rather than Hermes' built-in
    `browser_navigate` toolset.
-4. A page opened by Nancy appears in the same Google Chrome session shown at
+5. A page opened by Nancy appears in the same Google Chrome session shown at
    `http://127.0.0.1:6080/`.

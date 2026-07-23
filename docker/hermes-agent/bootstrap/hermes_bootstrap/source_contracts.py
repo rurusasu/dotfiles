@@ -52,12 +52,34 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
 
     for source in staged:
         try:
+            with (
+                source.path / source.declaration.manifest_name
+            ).open(encoding="utf-8") as handle:
+                manifest = yaml.load(handle, Loader=_UniqueKeySafeLoader)
             with (source.path / "config.yaml").open(encoding="utf-8") as handle:
                 config = yaml.load(handle, Loader=_UniqueKeySafeLoader)
         except (OSError, UnicodeError, yaml.YAMLError):
             _invalid(source)
 
+        if not isinstance(manifest, Mapping):
+            _invalid_ownership(source)
+        distribution_owned = manifest.get("distribution_owned")
+        if (
+            not isinstance(distribution_owned, list)
+            or "config.yaml" not in distribution_owned
+        ):
+            _invalid_ownership(source)
         if not isinstance(config, Mapping):
+            _invalid(source)
+        agent = config.get("agent")
+        if not isinstance(agent, Mapping):
+            _invalid(source)
+        disabled_toolsets = agent.get("disabled_toolsets")
+        if (
+            not isinstance(disabled_toolsets, list)
+            or any(not isinstance(toolset, str) for toolset in disabled_toolsets)
+            or "browser" not in disabled_toolsets
+        ):
             _invalid(source)
         mcp_servers = config.get("mcp_servers")
         if not isinstance(mcp_servers, Mapping):
@@ -75,4 +97,11 @@ def _invalid(source: StagedSource) -> NoReturn:
     name = source.declaration.name
     raise ValidationError(
         f"distribution {name!r} config.yaml has invalid Chrome MCP configuration"
+    ) from None
+
+
+def _invalid_ownership(source: StagedSource) -> NoReturn:
+    name = source.declaration.name
+    raise ValidationError(
+        f"distribution {name!r} distribution_owned must include config.yaml"
     ) from None

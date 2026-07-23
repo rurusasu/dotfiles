@@ -16,6 +16,9 @@ noVNC viewer は通常の `Cmd/Ctrl+C`、`Cmd/Ctrl+X`、`Cmd/Ctrl+V` を Google 
 Hermes から接続する内部 URL は次の固定値にする。
 
 ```yaml
+agent:
+  disabled_toolsets:
+    - browser
 mcp_servers:
   chrome:
     url: http://browser-mcp:8080/mcp
@@ -24,20 +27,25 @@ mcp_servers:
 
 この URL は Compose network 内専用で、host に `8080` や `9222` を publish しない。
 サーバー名は Hermes 組み込みの `browser` toolset と衝突しないよう `chrome` にする。
+全 managed profile は `agent.disabled_toolsets` で組み込みの `browser` toolset を
+無効化し、別の local browser session を選択できないようにする。
 
 ## Distribution source contract
 
 root distribution と `docker/hermes-agent/bootstrap-manifest.yaml` に宣言された
 全 profile は、source repository の `config.yaml` で上記の
-`mcp_servers.chrome` を所有する。他の MCP server は `chrome` と共存できる。
+`mcp_servers.chrome` と built-in `browser` の無効化を所有する。各 distribution
+manifest の `distribution_owned` は `config.yaml` を明示的に含める。他の MCP
+server は `chrome` と共存できる。
 
 Bootstrap は全 distribution を stage した後、shared repository の同期や local
-transaction の開始前に、この URL と timeout を検証する。設定の注入、merge、
-修復は行わない。新しい profile を manifest に追加すると、同じ検証へ自動的に
-含まれる。manifest 外で手動作成した profile は管理対象外のままにする。
+transaction の開始前に、配布所有権、built-in `browser` の無効化、URL、timeout
+を検証する。設定の注入、merge、修復は行わない。新しい profile を manifest に
+追加すると、同じ検証へ自動的に含まれる。manifest 外で手動作成した profile は
+管理対象外のままにする。
 
 Hermes 組み込みの `browser_*` tool は、noVNC が表示する Chrome とは別の local
-browser session を起動する。host から操作を確認する必要がある場合、agent は
+browser session を起動するため、managed profile では無効である。agent は
 `mcp_servers.chrome` から discover された tool を使う。
 
 ## Browser profile
@@ -82,4 +90,6 @@ docker exec -e HERMES_HOME=/opt/data/profiles/nancy hermes hermes mcp test chrom
 ```
 
 全コマンドで接続が成功し、`navigate_page` と `take_snapshot` を含む同じ tool set
-が表示されることを確認する。host noVNC は `http://127.0.0.1:6080/` で開く。
+が表示されることを確認する。`hermes tools list --platform slack` では built-in
+`browser` が disabled と表示されることも確認する。host noVNC は
+`http://127.0.0.1:6080/` で開く。
