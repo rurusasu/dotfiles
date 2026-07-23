@@ -697,7 +697,7 @@ class AppTests(unittest.TestCase):
         )
         tx = FakeTransaction([])
         staged_sources: list[DistributionSource] = []
-        applied_profiles: list[str] = []
+        applied_profiles: list[tuple[str, dict[str, object]]] = []
 
         def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
             staged_sources.append(source)
@@ -738,7 +738,9 @@ class AppTests(unittest.TestCase):
                 "apply_profile_distribution",
                 side_effect=lambda staged, *_args, **kwargs: (
                     self.assertFalse(kwargs["replace_existing"]),
-                    applied_profiles.append(staged.declaration.name),
+                    applied_profiles.append(
+                        (staged.declaration.name, kwargs)
+                    ),
                 )[-1],
             ),
             mock.patch.object(app, "apply_shared_working_tree"),
@@ -750,7 +752,7 @@ class AppTests(unittest.TestCase):
                 "build_profile_environment",
                 return_value={"GH_TOKEN": "token"},
             ),
-            mock.patch.object(app, "merge_env_file"),
+            mock.patch.object(app, "merge_env_file") as merge_env,
             mock.patch.object(app, "_validate_installed_layout"),
         ):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
@@ -766,7 +768,22 @@ class AppTests(unittest.TestCase):
                 ("nancy", "main"),
             ],
         )
-        self.assertEqual(applied_profiles, ["rick", "nancy"])
+        self.assertEqual(
+            [name for name, _kwargs in applied_profiles],
+            ["rick", "nancy"],
+        )
+        self.assertNotIn("managed_environment", applied_profiles[0][1])
+        self.assertEqual(
+            applied_profiles[1][1]["managed_environment"],
+            {"GH_TOKEN": "token"},
+        )
+        self.assertEqual(
+            [call.args[0] for call in merge_env.call_args_list],
+            [
+                configured.data_root / ".env",
+                configured.profiles[0].target / ".env",
+            ],
+        )
         self.assertEqual(
             result["profile_sync"],
             {"rick": "unchanged", "nancy": "installed"},
@@ -1344,7 +1361,7 @@ class AppTests(unittest.TestCase):
         remote = RemoteSyncResult("lifelog", "a" * 40, False, self.root / ".remote")
 
         def failpoint(name: str) -> None:
-            if name == "env-merge:rick":
+            if name == "env-merge:default":
                 raise ApplyError("injected failure")
 
         with (
@@ -1412,7 +1429,7 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(
             events,
-            ["root", "profile:rick", "shared:lifelog", "env:data", "env:rick", "validate", "rollback"],
+            ["root", "profile:rick", "shared:lifelog", "env:data", "validate", "rollback"],
         )
         self.assertNotIn("commit", events)
 

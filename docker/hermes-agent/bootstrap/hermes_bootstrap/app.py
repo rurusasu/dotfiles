@@ -232,18 +232,37 @@ def _apply_sensitive(
         apply_root_distribution(root_stage, manifest.data_root, tx)
         _failpoint("root-apply")
         for stage in profile_stages:
-            apply_profile_distribution(
-                stage,
-                manifest.data_root,
-                tx,
-                replace_existing=False,
-            )
+            if stage.declaration.name in missing_names:
+                environment = build_profile_environment(
+                    stage.declaration.name,
+                    secrets,
+                    dashboard,
+                )
+                apply_profile_distribution(
+                    stage,
+                    manifest.data_root,
+                    tx,
+                    replace_existing=False,
+                    managed_environment=environment,
+                    environment_remove=(
+                        _MANAGED_ENV_KEYS - set(environment)
+                    ),
+                )
+            else:
+                apply_profile_distribution(
+                    stage,
+                    manifest.data_root,
+                    tx,
+                    replace_existing=False,
+                )
             _failpoint(f"profile-apply:{stage.declaration.name}")
         for repo, result in remote_results:
             apply_shared_working_tree(repo, result, tx)
             _failpoint(f"shared-apply:{repo.name}")
 
         for profile, target in _environment_targets(manifest):
+            if profile in missing_names:
+                continue
             environment = build_profile_environment(profile, secrets, dashboard)
             env_path = target / ".env"
             tx.snapshot(env_path)

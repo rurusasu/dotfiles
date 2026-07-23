@@ -1233,13 +1233,14 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 side_effect=create_then_reserve,
             ),
             mock.patch(
-                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution",
+                wraps=profile_distribution.install_distribution,
             ) as install,
             self.assertRaises(ApplyError) as raised,
         ):
             self.flow._apply()
 
-        install.assert_not_called()
+        install.assert_called_once()
         self.assertIsNotNone(created_after)
         self.assertEqual(
             self._snapshot_bytes_modes(missing.target),
@@ -1248,6 +1249,58 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.assertEqual(
             str(raised.exception),
             "could not apply the named profile distribution",
+        )
+        self.flow._assert_no_temporary_resources()
+
+    def test_post_publish_replacement_survives_env_merge_and_validation(
+        self,
+    ) -> None:
+        self.assertEqual(self.flow._apply()["status"], "applied")
+        missing = self.flow.manifest.profiles[-1]
+        shutil.rmtree(missing.target)
+        external_before: dict[
+            str, tuple[str, int, bytes | str | None]
+        ] | None = None
+        real_apply_profile = bootstrap_flow.app.apply_profile_distribution
+
+        def apply_then_replace(*args: object, **kwargs: object) -> object:
+            nonlocal external_before
+            result = real_apply_profile(*args, **kwargs)
+            stage = args[0]
+            if stage.declaration.name != missing.name:
+                return result
+            replacement = missing.target.parent / ".external-replacement"
+            shutil.copytree(missing.target, replacement)
+            (replacement / ".bootstrap-reservation").unlink(
+                missing_ok=True
+            )
+            (replacement / "config.yaml").write_bytes(
+                b"external config after publication\n"
+            )
+            (replacement / "config.yaml").chmod(0o600)
+            (replacement / ".env").write_bytes(
+                b"EXTERNAL_PROFILE_VALUE=preserve\n"
+            )
+            (replacement / ".env").chmod(0o640)
+            shutil.rmtree(missing.target)
+            replacement.rename(missing.target)
+            external_before = self._snapshot_bytes_modes(missing.target)
+            return result
+
+        with (
+            mock.patch.object(
+                bootstrap_flow.app,
+                "apply_profile_distribution",
+                side_effect=apply_then_replace,
+            ),
+            self.assertRaises(ValidationError),
+        ):
+            self.flow._apply()
+
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            self._snapshot_bytes_modes(missing.target),
+            external_before,
         )
         self.flow._assert_no_temporary_resources()
 

@@ -225,6 +225,123 @@ class Transaction:
         except Exception:
             raise ApplyError("could not reserve managed directory") from None
 
+    def publish_directory(
+        self,
+        path: Path,
+        source: Path,
+        *,
+        remove_tree: bool = True,
+    ) -> bool:
+        """Journal a completed private directory, then publish it without replacement."""
+
+        self._require_active()
+        relative = _managed_relative(self._data_root, self._store, path)
+        if self._overlaps_snapshot(relative) or self._has_active_reservation(
+            relative
+        ):
+            raise ApplyError(
+                "managed directory reservation overlaps transaction state"
+            )
+        source = Path(source)
+        if (
+            not source.is_absolute()
+            or source == path
+            or path.is_relative_to(source)
+            or source.is_relative_to(path)
+        ):
+            raise ApplyError("managed directory publication source is unsafe")
+        index = len(self._journal["entries"])
+        object_name = f"reservation-{index:06d}"
+        marker = uuid.uuid4().hex
+        reservation = self._directory / object_name
+        entry: dict[str, Any] = {
+            "kind": "directory_reservation",
+            "path": relative,
+            "state": "preparing",
+            "identity": None,
+            "object": object_name,
+            "marker": marker,
+            "remove_tree": remove_tree,
+        }
+        self._journal["entries"].append(entry)
+        source_parent: int | None = None
+        source_directory: int | None = None
+        reservation_parent: int | None = None
+        target_parent: int | None = None
+        try:
+            self._write_journal()
+            source_parent = _open_real_directory(source.parent)
+            source_identity = _directory_identity(source)
+            source_directory = _open_directory_at(
+                source_parent,
+                source.name,
+                source_identity,
+            )
+            reservation_parent = _open_real_directory(self._directory)
+            if (
+                os.fstat(source_directory).st_dev
+                != os.fstat(reservation_parent).st_dev
+            ):
+                raise ApplyError(
+                    "managed directory publication source is on another filesystem"
+                )
+            _verify_real_directory(source.parent, source_parent)
+            _verify_real_directory(self._directory, reservation_parent)
+            _rename_noreplace(
+                source_parent,
+                source.name,
+                reservation_parent,
+                object_name,
+            )
+            os.fsync(source_parent)
+            os.fsync(reservation_parent)
+            _verify_real_directory(source.parent, source_parent)
+            _verify_real_directory(self._directory, reservation_parent)
+            if (
+                _directory_identity_at(reservation_parent, object_name)
+                != source_identity
+            ):
+                raise OSError
+            _write_reservation_marker(reservation, marker)
+            entry["identity"] = source_identity
+            entry["state"] = "ready"
+            self._write_journal()
+            _failpoint("entry-ready")
+            target_parent = _open_managed_parent(self._data_root, path)
+            _verify_real_directory(self._directory, reservation_parent)
+            _verify_managed_parent(self._data_root, path, target_parent)
+            try:
+                _rename_noreplace(
+                    reservation_parent,
+                    object_name,
+                    target_parent,
+                    path.name,
+                )
+            except FileExistsError:
+                return False
+            os.fsync(reservation_parent)
+            os.fsync(target_parent)
+            _verify_managed_parent(self._data_root, path, target_parent)
+            if (
+                _directory_identity_at(target_parent, path.name)
+                != source_identity
+            ):
+                raise OSError
+            return True
+        except ApplyError:
+            raise
+        except Exception:
+            raise ApplyError("could not publish managed directory") from None
+        finally:
+            if target_parent is not None:
+                _safe_close(target_parent)
+            if reservation_parent is not None:
+                _safe_close(reservation_parent)
+            if source_directory is not None:
+                _safe_close(source_directory)
+            if source_parent is not None:
+                _safe_close(source_parent)
+
     def commit(self) -> None:
         if self._closed:
             if self._outcome == "committed":

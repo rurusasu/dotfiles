@@ -181,6 +181,40 @@ class TransactionTests(unittest.TestCase):
         self.assertFalse((target / ".bootstrap-reservation").exists())
         self.assertEqual(self.journal_paths(), [])
 
+    def test_completed_directory_is_journaled_before_atomic_publication(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        private_home = self.root / ".private-home"
+        source = private_home / "profiles" / "rick"
+        source.mkdir(parents=True)
+        (source / "config.yaml").write_bytes(b"completed before publish\n")
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.publish_directory(target, source))
+
+        _journal_path, journal = self.journal()
+        entry = journal["entries"][0]
+        self.assertEqual(entry["kind"], "directory_reservation")
+        self.assertEqual(entry["state"], "ready")
+        self.assertEqual(
+            (target / "config.yaml").read_bytes(),
+            b"completed before publish\n",
+        )
+        self.assertTrue((target / ".bootstrap-reservation").is_file())
+        self.assertFalse(source.exists())
+
+        tx.commit()
+
+        self.assertEqual(
+            (target / "config.yaml").read_bytes(),
+            b"completed before publish\n",
+        )
+        self.assertFalse((target / ".bootstrap-reservation").exists())
+        self.assertEqual(self.journal_paths(), [])
+
     def test_nonrecursive_directory_reservation_preserves_an_external_child(
         self,
     ) -> None:
@@ -254,6 +288,39 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(journal["version"], 3)
 
         tx.rollback()
+
+    def test_version_two_active_journal_recovery_restores_snapshot(self) -> None:
+        path = self.root / "config.yaml"
+        path.write_bytes(b"before\n")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_bytes(b"after\n")
+        journal_path, journal = self.journal()
+        journal["version"] = 2
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_bytes(), b"before\n")
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_version_two_committed_journal_recovery_retains_snapshot(self) -> None:
+        path = self.root / "config.yaml"
+        path.write_bytes(b"before\n")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_bytes(b"committed\n")
+        journal_path, journal = self.journal()
+        journal["version"] = 2
+        journal["status"] = "committed"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_bytes(), b"committed\n")
+        self.assertEqual(self.journal_paths(), [])
 
     def test_snapshot_regular_file_restores_bytes_and_executable_mode(self) -> None:
         path = self.root / "tool"

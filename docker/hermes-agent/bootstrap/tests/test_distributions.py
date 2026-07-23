@@ -8,6 +8,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path, PurePosixPath
 from types import FrameType, TracebackType
 from unittest import mock
@@ -43,6 +44,21 @@ class RecordingTransaction:
         del remove_tree
         try:
             path.mkdir()
+        except FileExistsError:
+            return False
+        self.reservations.append(path)
+        return True
+
+    def publish_directory(
+        self,
+        path: Path,
+        source: Path,
+        *,
+        remove_tree: bool = True,
+    ) -> bool:
+        del remove_tree
+        try:
+            source.rename(path)
         except FileExistsError:
             return False
         self.reservations.append(path)
@@ -720,6 +736,141 @@ class DistributionTests(unittest.TestCase):
             external_before,
         )
         install.assert_not_called()
+
+    def test_profile_no_overwrite_never_writes_after_published_target_is_replaced(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        profiles = self.data_root / "profiles"
+        target = profiles / "rick"
+        tx = DurableTransaction.begin(self.data_root)
+        real_reserve = tx.reserve_directory
+        real_publish = getattr(tx, "publish_directory", None)
+        external_before: dict[str, tuple[int, bytes | None]] | None = None
+        install_homes: list[tuple[Path, int]] = []
+        manifest_targets: list[Path] = []
+        real_install = (
+            distributions.profile_distribution.install_distribution
+        )
+        real_write_manifest = (
+            distributions.profile_distribution.write_manifest
+        )
+
+        def replace_with_external() -> None:
+            nonlocal external_before
+            shutil.rmtree(target)
+            target.mkdir()
+            (target / "config.yaml").write_bytes(b"external\n")
+            (target / "config.yaml").chmod(0o600)
+            external_before = {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            }
+
+        def reserve_then_replace(
+            path: Path, *, remove_tree: bool = True
+        ) -> bool:
+            published = real_reserve(path, remove_tree=remove_tree)
+            if path == target and published:
+                replace_with_external()
+            return published
+
+        def publish_then_replace(
+            path: Path,
+            source: Path,
+            *,
+            remove_tree: bool = True,
+        ) -> bool:
+            if real_publish is None:
+                raise AssertionError("publish_directory is unavailable")
+            published = real_publish(
+                path,
+                source,
+                remove_tree=remove_tree,
+            )
+            if path == target and published:
+                replace_with_external()
+            return published
+
+        def record_install(
+            source: str,
+            name: str | None = None,
+            force: bool = False,
+            create_alias: bool = False,
+        ) -> object:
+            home = Path(os.environ["HERMES_HOME"])
+            install_homes.append((home, home.stat().st_dev))
+            return real_install(
+                source,
+                name=name,
+                force=force,
+                create_alias=create_alias,
+            )
+
+        def record_write_manifest(
+            profile_dir: Path, manifest: object
+        ) -> object:
+            manifest_targets.append(Path(profile_dir))
+            return real_write_manifest(profile_dir, manifest)
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(
+                    tx,
+                    "reserve_directory",
+                    side_effect=reserve_then_replace,
+                )
+            )
+            if real_publish is not None:
+                stack.enter_context(
+                    mock.patch.object(
+                        tx,
+                        "publish_directory",
+                        side_effect=publish_then_replace,
+                    )
+                )
+            stack.enter_context(
+                mock.patch(
+                    "hermes_bootstrap.distributions.profile_distribution.install_distribution",
+                    side_effect=record_install,
+                )
+            )
+            stack.enter_context(
+                mock.patch(
+                    "hermes_bootstrap.distributions.profile_distribution.write_manifest",
+                    side_effect=record_write_manifest,
+                )
+            )
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+            )
+
+        tx.rollback()
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            },
+            external_before,
+        )
+        self.assertEqual(len(install_homes), 1)
+        self.assertNotEqual(install_homes[0][0], self.data_root)
+        self.assertEqual(install_homes[0][1], self.data_root.stat().st_dev)
+        self.assertGreaterEqual(len(manifest_targets), 2)
+        self.assertTrue(
+            all(manifest_target != target for manifest_target in manifest_targets)
+        )
 
     def test_profile_no_overwrite_allows_a_byte_identical_existing_target(
         self,
