@@ -229,6 +229,12 @@ owning engine/environment, and repeat dry-run before another real attempt. A
 repair is accepted only when the real aggregate exits `0` and the repaired
 profile is `changed` or `unchanged`.
 
+For `cleanup_failed`, a later successful run is insufficient because new runs
+do not revisit artifacts left by older invocations. Follow the guarded artifact
+inspection and removal procedure in [Hermes Bootstrap
+Operations](bootstrap.md), then require both a zero stale-artifact inventory and
+the successful dry-run/real result before closing recovery.
+
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact
 mirroring.

@@ -272,11 +272,16 @@ copying remote content into the profile home.
 2. Run the real command above.
 3. If real publication fails, use its JSON profile/category for the next repair
    and repeat dry-run before another real attempt.
-4. Accept the repair only when the real aggregate exit is `0` and the repaired
-   profile's status is `changed` or `unchanged`.
+4. Accept the repair only when the real aggregate exit is `0`, the repaired
+   profile's status is `changed` or `unchanged`, and any `cleanup_failed`
+   conditions below are also satisfied.
 
 A different failed profile is a separate repair task. A nonzero aggregate exit
-means the original repair is not complete.
+means the original repair is not complete. If any report used category
+`cleanup_failed`, a later successful run is also insufficient by itself:
+follow the guarded recovery procedure in [Hermes Bootstrap
+Operations](bootstrap.md) and require zero stale profile snapshot, publication,
+and askpass artifacts before closing the repair.
 
 ## Future Cron Handoff (Task 7, `hermes-home`)
 
@@ -306,4 +311,7 @@ replace it.
 Production acceptance is a dry run followed by a real aggregate run, with
 inspection that each remote tree contains only the two canonical control files
 and its local owned paths. Verify the profile homes are unchanged, then confirm
-a repeat real run is `unchanged` without creating commits.
+a repeat real run is `unchanged` without creating commits. The direct
+`/opt/data` inventory for `.hermes-profile-snapshots-*`,
+`.hermes-profile-sync-*`, and `askpass-*` must also be empty; aggregate success
+does not waive stale-artifact cleanup.

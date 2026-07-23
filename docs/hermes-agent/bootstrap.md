@@ -9,9 +9,10 @@ config, profiles, repositories, or `.env` files.
 Prerequisites are a running Docker daemon, Docker Compose, an authenticated
 1Password CLI (`op`), access to the seven configured items, and access to the
 declared private GitHub repositories. Unix requires native `bash`, `jq`,
-`docker`, and `op`. Windows requires `pwsh`, Docker Desktop native `docker` and
-Compose plugin, and authenticated native `op.exe`; the focused adapter does not
-route these commands through WSL.
+`curl`, `docker`, and `op`. The Unix adapter uses `curl` for bounded gateway
+readiness checks. Windows requires `pwsh`, Docker Desktop native `docker` and
+Compose plugin, and authenticated native `op.exe`; the focused adapter does
+not route these commands through WSL.
 
 For a focused full bootstrap on any supported host, run:
 
@@ -236,11 +237,11 @@ and diff arrays are empty. Standalone `sync-profiles` never installs a missing
 target: it exits `4` with a failed aggregate. Only bootstrap `apply` uses the
 missing-target first-install exception.
 
-| Exit | Meaning                                          | Operator action                                                      |
-| ---- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| `0`  | Every profile is `changed` or `unchanged`        | Continue or accept the repair                                        |
-| `3`  | Credentials unavailable                          | Repair the runtime GitHub credential source, then rerun              |
-| `4`  | Missing target, preflight, or repository failure | Repair the reported profile/category or repository state, then rerun |
+| Exit | Meaning                                          | Operator action                                                          |
+| ---- | ------------------------------------------------ | ------------------------------------------------------------------------ |
+| `0`  | Every profile is `changed` or `unchanged`        | Continue; cleanup recovery also requires a zero stale-artifact inventory |
+| `3`  | Credentials unavailable                          | Repair the runtime GitHub credential source, then rerun                  |
+| `4`  | Missing target, preflight, or repository failure | Repair the reported profile/category or repository state, then rerun     |
 
 Invalid arguments exit `2`, manifest validation exits `8`, and unexpected
 command failures exit `6`. Those errors use the safe stderr path and do not
@@ -272,6 +273,44 @@ dry-run. The real aggregate can publish other profiles, and successful pushes
 are not rolled back. Accept the repair only when the real aggregate exits `0`
 and the repaired profile is `changed` or `unchanged`. Do not use remote content
 to repair an existing local profile.
+
+### Profile Sync Cleanup Recovery
+
+A `cleanup_failed` result is not closed by a later successful run alone. Each
+invocation cleans only artifacts it created and still tracks; it does not scan
+for private artifacts left by an earlier invocation.
+
+1. Confirm no bootstrap `apply`, `sync-profiles`, or `sync-repository` process
+   or one-off container is running, and confirm no transaction or repository
+   lock has an owner. Lock files may persist when unlocked, so file existence
+   alone is not evidence either way. If ownership cannot be established, stop
+   and escalate.
+2. Inventory only direct children of `/opt/data` whose names exactly match
+   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, or `askpass-*`.
+   This read-only Compose command prints the service UID/GID and each candidate:
+
+```text
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T --entrypoint /bin/sh hermes-bootstrap -eu -c 'uid=$(id -u); gid=$(id -g); printf "expected owner=%s:%s\n" "$uid" "$gid"; find /opt/data -xdev -mindepth 1 -maxdepth 1 \( -name ".hermes-profile-snapshots-*" -o -name ".hermes-profile-sync-*" -o -name "askpass-*" \) -exec stat -c "%n type=%F owner=%u:%g mode=%a links=%h" -- {} \;'
+```
+
+3. Inspect every candidate individually. Both `.hermes-profile-*` forms must be
+   real, non-symlink directories directly under `/opt/data`, owned by the
+   reported service UID/GID, with mode `0700`. An `askpass-*` candidate must be
+   a real, non-symlink regular file in that same location, with the same owner,
+   mode `0700`, and link count `1`. If any path, type, owner, mode, link count,
+   or location is unexpected, do not remove it; preserve evidence and escalate.
+4. Remove only artifacts that passed every check, one at a time using each
+   exact literal path and the type-appropriate removal command. Do not use a
+   wildcard `rm`, a broad `.hermes-*` pattern, or `find -delete`.
+5. Run the read-only inventory again and require zero matching artifacts. Then
+   run standalone dry-run and real `sync-profiles`, consume each JSON result
+   completely, and require both aggregates to exit `0` with the repaired
+   profile `changed` or `unchanged`. Run the inventory once more after the real
+   command and require it to remain zero.
+
+Cleanup recovery is accepted only when both conditions hold: the stale
+artifact inventory is zero and the dry-run/real verification succeeds. A later
+aggregate `0` without verified artifact removal does not close the incident.
 
 ## Transaction And Rollback
 
@@ -343,7 +382,7 @@ remote URLs.
 
 | Code | Meaning                                                               | Operator action                                                |
 | ---- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `0`  | Success                                                               | Compose may start or the sync may be accepted                  |
+| `0`  | Success                                                               | Continue; cleanup recovery still requires zero stale artifacts |
 | `1`  | Host secret-plan or payload production failed                         | Fix `op` or adapter input and rerun                            |
 | `2`  | Invalid command arguments, payload, or managed env input              | Correct input; no Compose restart                              |
 | `3`  | Missing, invalid, or unauthorized credential                          | Repair 1Password or GitHub access                              |
