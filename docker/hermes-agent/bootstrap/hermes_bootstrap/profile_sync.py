@@ -5,15 +5,14 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import shutil
 import stat
-import tempfile
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
+from .filesystem import PrivateDirectory, create_private_directory
 from .git import (
     _create_askpass,
     _git_environment,
@@ -178,15 +177,19 @@ def synchronize_profiles(
     """Prepare and publish every configured profile from private scratch."""
 
     profiles = manifest.profiles if isinstance(manifest, BootstrapManifest) else ()
-    scratch: Path | None = None
+    scratch: PrivateDirectory | None = None
     report: ProfileSyncReport
     try:
         _validate_manifest_profiles(manifest)
-        scratch = Path(
-            tempfile.mkdtemp(prefix=".hermes-profile-snapshots-", dir=manifest.data_root)
+        scratch = create_private_directory(
+            manifest.data_root,
+            prefix=".hermes-profile-snapshots-",
         )
-        os.chmod(scratch, 0o700)
-        prepared = prepare_profile_snapshots(manifest, scratch, allow_missing=False)
+        prepared = prepare_profile_snapshots(
+            manifest,
+            scratch.path,
+            allow_missing=False,
+        )
         report = synchronize_prepared_profiles(prepared, auth, dry_run=dry_run)
     except ProfileSnapshotError as error:
         invalid_profile = error.profile
@@ -268,20 +271,29 @@ def _synchronize_one_boundary(
     declaration = snapshot.declaration
     data_root = declaration.target.parent.parent
     lock_path = data_root / "locks" / "repositories" / f"profile-{declaration.name}.lock"
-    repository: Path | None = None
+    repository: PrivateDirectory | None = None
     askpass: Path | None = None
     try:
         _validate_snapshot_declaration(snapshot, auth, data_root)
         with _RepositoryLock(lock_path, data_root) as repository_lock:
             repository_lock.require_held()
-            repository = Path(tempfile.mkdtemp(prefix=".hermes-profile-sync-", dir=data_root))
-            os.chmod(repository, 0o700)
+            repository = create_private_directory(
+                data_root,
+                prefix=".hermes-profile-sync-",
+            )
+            repository_path = repository.path
             askpass = _create_askpass(data_root)
             environment = _git_environment(auth, askpass)
-            attempt = _exact_tree_attempt(snapshot, repository, environment)
+            attempt = _exact_tree_attempt(
+                snapshot,
+                repository_path,
+                environment,
+            )
             repository_lock.require_held()
             remote_tree = _git_ascii(
-                ("rev-parse", "FETCH_HEAD^{tree}"), repository, environment
+                ("rev-parse", "FETCH_HEAD^{tree}"),
+                repository_path,
+                environment,
             )
             if remote_tree is None:
                 raise ValueError("remote tree unavailable")
@@ -297,7 +309,10 @@ def _synchronize_one_boundary(
                 )
             else:
                 diff = _profile_diff(
-                    repository, environment, auth, attempt.remote_commit
+                    repository_path,
+                    environment,
+                    auth,
+                    attempt.remote_commit,
                 )
                 if dry_run:
                     commit = attempt.remote_commit
@@ -305,11 +320,17 @@ def _synchronize_one_boundary(
                     message = "profile snapshot changes detected"
                 else:
                     commit, final_parent = _commit_and_push(
-                        snapshot, attempt, repository, environment
+                        snapshot,
+                        attempt,
+                        repository_path,
+                        environment,
                     )
                     if final_parent != attempt.remote_commit:
                         diff = _profile_diff(
-                            repository, environment, auth, final_parent
+                            repository_path,
+                            environment,
+                            auth,
+                            final_parent,
                         )
                     category = "published"
                     message = "profile snapshot published"
@@ -339,7 +360,7 @@ def _synchronize_one_boundary(
         error = _scrub_exception_graph(error)
         outcome = _failed(snapshot, "repository", "profile snapshot synchronization failed")
 
-    resources: list[tuple[Callable[[Path], bool], Path]] = []
+    resources: list[tuple[Callable, object]] = []
     if askpass is not None:
         resources.append((_unlink, askpass))
     if repository is not None:
@@ -783,7 +804,7 @@ def _failed(snapshot: ProfileSnapshot, category: str, message: str) -> ProfileSy
 
 
 def _cleanup_resources(
-    resources: tuple[tuple[Callable[[Path], bool], Path], ...]
+    resources: tuple[tuple[Callable, object], ...]
 ) -> bool:
     failed = False
     for cleanup, path in resources:
@@ -878,13 +899,7 @@ def _unlink(path: Path) -> bool:
     return not path.exists()
 
 
-def _remove_tree(path: Path) -> bool:
-    try:
-        metadata = path.lstat()
-        if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
-            shutil.rmtree(path)
-        else:
-            path.unlink()
-    except OSError:
+def _remove_tree(directory: object) -> bool:
+    if not isinstance(directory, PrivateDirectory):
         return False
-    return not path.exists()
+    return directory.cleanup()

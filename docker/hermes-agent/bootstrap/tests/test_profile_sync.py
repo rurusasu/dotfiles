@@ -1455,12 +1455,17 @@ class ProfileSyncTests(unittest.TestCase):
         captured: list[BaseException] = []
         attempted: list[str] = []
 
-        def remove(path: Path) -> bool:
-            if path.name.startswith(".hermes-profile-snapshots-"):
+        def remove(directory: object) -> bool:
+            if (
+                isinstance(directory, profile_sync.PrivateDirectory)
+                and directory.path.name.startswith(
+                    ".hermes-profile-snapshots-"
+                )
+            ):
                 error = RuntimeError(self.auth.token, owned_marker)
                 captured.append(error)
                 raise error
-            return original_remove(path)
+            return original_remove(directory)
 
         def sync_one(snapshot, auth, dry_run):
             attempted.append(snapshot.declaration.name)
@@ -1596,6 +1601,82 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotIn(self.auth.token, repr(report.as_dict()))
         self.assertNotIn(owned_marker, repr(report.as_dict()))
         self.assert_exception_hides(captured, self.auth.token, owned_marker)
+
+    def test_snapshot_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+        profile = self.profile("profile-a", self.root / "profile-a.git")
+        manifest = self.manifest(profile)
+        replacement_marker = b"snapshot-replacement\n"
+        replacement_path: Path | None = None
+        retired_path: Path | None = None
+
+        def replace_scratch(_manifest, scratch, *, allow_missing):
+            nonlocal replacement_path, retired_path
+            self.assertIs(_manifest, manifest)
+            self.assertFalse(allow_missing)
+            retired = scratch.with_name(f"{scratch.name}-retired")
+            scratch.rename(retired)
+            retired_path = retired
+            scratch.mkdir(mode=0o700)
+            (scratch / "marker").write_bytes(replacement_marker)
+            replacement_path = scratch
+            raise ProfileSnapshotError("profile-a", "invalid_local_profile")
+
+        with mock.patch.object(
+            profile_sync,
+            "prepare_profile_snapshots",
+            side_effect=replace_scratch,
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertIsNotNone(replacement_path)
+        self.assertIsNotNone(retired_path)
+        assert replacement_path is not None
+        assert retired_path is not None
+        self.assertEqual(report.profiles[0].category, "cleanup_failed")
+        self.assertEqual(
+            (replacement_path / "marker").read_bytes(),
+            replacement_marker,
+        )
+        self.assertFalse(retired_path.exists())
+
+    def test_git_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+        profile = self.profile("profile-a", self.root / "profile-a.git")
+        snapshot = self.snapshot(profile, {"SOUL.md": b"a\n"})
+        replacement_marker = b"git-replacement\n"
+        replacement_path: Path | None = None
+        retired_path: Path | None = None
+
+        def replace_repository(_snapshot, repository, _environment):
+            nonlocal replacement_path, retired_path
+            retired = repository.with_name(f"{repository.name}-retired")
+            repository.rename(retired)
+            retired_path = retired
+            repository.mkdir(mode=0o700)
+            (repository / "marker").write_bytes(replacement_marker)
+            replacement_path = repository
+            raise ValueError("force repository cleanup")
+
+        with mock.patch.object(
+            profile_sync,
+            "_exact_tree_attempt",
+            side_effect=replace_repository,
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()),
+                self.auth,
+                dry_run=False,
+            )
+
+        self.assertIsNotNone(replacement_path)
+        self.assertIsNotNone(retired_path)
+        assert replacement_path is not None
+        assert retired_path is not None
+        self.assertEqual(report.profiles[0].category, "cleanup_failed")
+        self.assertEqual(
+            (replacement_path / "marker").read_bytes(),
+            replacement_marker,
+        )
+        self.assertFalse(retired_path.exists())
 
     def test_synchronize_profiles_cleans_scratch_and_maps_preflight_failures(self) -> None:
         remote_a = self.root / "profile-a.git"

@@ -70,6 +70,7 @@ class ProfileSnapshotTests(unittest.TestCase):
             path = home / item
             if item.endswith("/") or item == "assets" or item.startswith("assets/"):
                 path.mkdir(parents=True, exist_ok=True)
+                (path / "fixture.txt").write_bytes(b"safe\n")
             elif not path.exists():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"safe\n")
@@ -128,6 +129,25 @@ class ProfileSnapshotTests(unittest.TestCase):
                 (home / "distribution.yaml").write_text(content, encoding="utf-8")
                 with self.assertRaises(ProfileSnapshotError):
                     prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+
+    def test_rejects_an_owned_directory_without_publishable_files(self) -> None:
+        home = self.write_profile("rick", ["assets"])
+        (home / "assets" / "nested-empty").mkdir(parents=True)
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(
+                self.manifest(self.profile("rick")),
+                self.scratch,
+                allow_missing=False,
+            )
+
+        self.assertEqual(caught.exception.profile, "rick")
+        self.assertEqual(caught.exception.category, "empty_owned_directory")
+        self.assertEqual(
+            str(caught.exception),
+            "profile snapshot rejected (empty_owned_directory)",
+        )
+        self.assertEqual(list(self.scratch.iterdir()), [])
 
     def test_rejects_reserved_paths_and_secret_candidates(self) -> None:
         for unsafe in (

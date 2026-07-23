@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import stat
-import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from io import StringIO
@@ -43,13 +41,20 @@ from .errors import (
     RollbackError,
     ValidationError,
 )
-from .filesystem import open_absolute_directory
+from .filesystem import (
+    PrivateDirectory,
+    create_private_directory,
+    open_absolute_directory,
+)
 from .git import _remote_identity, _same_remote_identity, stage_distribution
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
 from .payload import SecretRedactor, build_secret_plan, read_secret_payload
-from .profile_snapshot import prepare_profile_snapshots
+from .profile_snapshot import (
+    ProfileSnapshotError,
+    prepare_profile_snapshots,
+)
 from .profile_sync import ProfileSyncReport
 from .repositories import (
     RemoteSyncResult,
@@ -136,7 +141,7 @@ def _apply_sensitive(
 ) -> dict[str, object]:
     """Own all secret-bearing values behind the non-raising boundary."""
 
-    scratch: Path | None = None
+    scratch: PrivateDirectory | None = None
     remote_results: list[tuple[SharedRepository, RemoteSyncResult]] = []
     profile_report: ProfileSyncReport | None = None
     tx: Transaction | None = None
@@ -156,7 +161,11 @@ def _apply_sensitive(
         )
 
         scratch = _private_scratch(manifest.data_root)
-        prepared = prepare_profile_snapshots(manifest, scratch, allow_missing=True)
+        prepared = prepare_profile_snapshots(
+            manifest,
+            scratch.path,
+            allow_missing=True,
+        )
         missing_names = frozenset(source.name for source in prepared.missing)
         sync_prepared = replace(prepared, missing=())
         profile_report = profile_sync.synchronize_prepared_profiles(
@@ -197,9 +206,13 @@ def _apply_sensitive(
                 profile_sync_summary[source.name] = status
             profile_sources.append(exact)
 
-        root_stage = stage_distribution(manifest.root_distribution, scratch, auth)
+        root_stage = stage_distribution(
+            manifest.root_distribution,
+            scratch.path,
+            auth,
+        )
         profile_stages = [
-            stage_distribution(source, scratch, auth)
+            stage_distribution(source, scratch.path, auth)
             for source in profile_sources
         ]
         validate_chrome_mcp_sources([root_stage, *profile_stages])
@@ -235,6 +248,14 @@ def _apply_sensitive(
             "repositories": [repo.name for repo in manifest.shared_repositories],
             "profile_sync": profile_sync_summary,
         }
+    except ProfileSnapshotError as error:
+        profile_report = profile_sync._profile_preflight_failure(
+            manifest.profiles,
+            error.profile,
+            error.category,
+            dry_run=False,
+        )
+        primary = RepositoryError(str(error))
     except BootstrapError as error:
         primary = error
     except Exception:
@@ -390,27 +411,25 @@ def _environment_targets(manifest: BootstrapManifest) -> tuple[tuple[str, Path],
     return (("default", manifest.data_root), *((profile.name, profile.target) for profile in manifest.profiles))
 
 
-def _private_scratch(data_root: Path) -> Path:
+def _private_scratch(data_root: Path) -> PrivateDirectory:
     _require_safe_directory(data_root)
     try:
-        scratch = Path(tempfile.mkdtemp(prefix=".hermes-bootstrap-", dir=data_root))
-        os.chmod(scratch, 0o700)
-    except OSError:
+        return create_private_directory(
+            data_root,
+            prefix=".hermes-bootstrap-",
+        )
+    except (OSError, ValueError):
         raise ApplyError("could not create private bootstrap staging") from None
-    if not _is_private_directory(scratch):
-        _remove_tree(scratch)
-        raise ApplyError("could not create private bootstrap staging")
-    return scratch
 
 
 def _cleanup_apply_resources(
-    scratch: Path | None,
+    scratch: PrivateDirectory | None,
     results: list[tuple[SharedRepository, RemoteSyncResult]],
     data_root: Path,
 ) -> bool:
     success = True
     if scratch is not None:
-        success = _remove_tree(scratch) and success
+        success = scratch.cleanup() and success
     for repo, result in results:
         tree = result.working_tree
         if tree is None or tree == repo.target or tree == repo.legacy_target:
@@ -419,7 +438,10 @@ def _cleanup_apply_resources(
         if not repo.target.is_relative_to(data_root):
             success = False
         elif tree.parent == repo.target.parent and tree.name.startswith(".hermes-repository-"):
-            success = _remove_tree(tree) and success
+            if result.private_directory is None:
+                success = False
+            else:
+                success = result.private_directory.cleanup() and success
     return success
 
 
@@ -760,23 +782,6 @@ def _require_regular_file(path: Path) -> None:
         raise ValidationError("installed Hermes layout is invalid") from None
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
         raise ValidationError("installed Hermes layout is invalid")
-
-
-def _is_private_directory(path: Path) -> bool:
-    try:
-        metadata = path.lstat()
-    except OSError:
-        return False
-    return stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode) and stat.S_IMODE(metadata.st_mode) == 0o700
-
-
-def _remove_tree(path: Path) -> bool:
-    try:
-        if path.exists() or path.is_symlink():
-            shutil.rmtree(path)
-    except OSError:
-        return False
-    return True
 
 
 def _source_identity(source: str) -> tuple[str, str] | None:

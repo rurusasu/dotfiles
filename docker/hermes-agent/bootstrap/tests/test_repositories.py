@@ -181,6 +181,43 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
+    def test_private_stage_replacement_is_preserved_and_fails_cleanup(self) -> None:
+        repo = self.repository()
+        replacement_marker = b"shared-stage-replacement\n"
+        replacement_path: Path | None = None
+        retired_path: Path | None = None
+
+        def replace_stage(_repo, stage, _environment):
+            nonlocal replacement_path, retired_path
+            retired = stage.with_name(f"{stage.name}-retired")
+            stage.rename(retired)
+            retired_path = retired
+            stage.mkdir(mode=0o700)
+            (stage / "marker").write_bytes(replacement_marker)
+            replacement_path = stage
+            raise ValueError("force private stage cleanup")
+
+        with mock.patch.object(
+            repositories_module,
+            "_initialize_checkout",
+            side_effect=replace_stage,
+        ):
+            with self.assertRaisesRegex(
+                RepositoryError,
+                "could not clean private repository resources",
+            ):
+                synchronize_remote(repo, self.auth)
+
+        self.assertIsNotNone(replacement_path)
+        self.assertIsNotNone(retired_path)
+        assert replacement_path is not None
+        assert retired_path is not None
+        self.assertEqual(
+            (replacement_path / "marker").read_bytes(),
+            replacement_marker,
+        )
+        self.assertFalse(retired_path.exists())
+
     def test_rejects_an_existing_checkout_beneath_a_symlinked_shared_parent(self) -> None:
         repo = self.repository()
         outside_shared = self.root / "outside-shared"
@@ -1069,14 +1106,11 @@ class RepositoryTests(unittest.TestCase):
 
     def test_failed_private_stage_cleanup_failure_is_fixed_and_redacted(self) -> None:
         repo = replace(self.repository(), ref="missing")
-        real_rmtree = shutil.rmtree
-
-        def fail_stage_cleanup(path: Path, *arguments: object, **keywords: object) -> None:
-            if Path(path).name.startswith(".hermes-repository-"):
-                raise OSError("stage-cleanup-content-marker")
-            real_rmtree(path, *arguments, **keywords)
-
-        with mock.patch.object(repositories_module.shutil, "rmtree", side_effect=fail_stage_cleanup):
+        with mock.patch.object(
+            repositories_module.PrivateDirectory,
+            "cleanup",
+            return_value=False,
+        ):
             with self.assertRaisesRegex(RepositoryError, "could not clean private repository resources") as caught:
                 synchronize_remote(repo, self.auth)
 
@@ -1086,7 +1120,7 @@ class RepositoryTests(unittest.TestCase):
             caught.exception, "stage-cleanup-content-marker", "fixture-token", str(self.remote)
         )
         for leftover in leftovers:
-            real_rmtree(leftover)
+            shutil.rmtree(leftover)
 
     def test_synchronize_rejects_two_real_paths_before_committing_or_pushing_canonical_changes(
         self,

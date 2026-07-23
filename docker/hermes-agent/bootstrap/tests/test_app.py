@@ -1134,6 +1134,7 @@ class AppTests(unittest.TestCase):
 
     def test_apply_cleans_earlier_private_remote_stage_when_later_sync_fails(self) -> None:
         from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
 
         second = SharedRepository(
             "notes", "https://github.com/example/notes.git", "main",
@@ -1144,13 +1145,23 @@ class AppTests(unittest.TestCase):
             self.manifest.root_distribution, self.manifest.profiles,
             (*self.manifest.shared_repositories, second),
         )
-        private = self.root / "shared" / ".hermes-repository-first"
-        private.parent.mkdir()
-        private.mkdir()
+        private_parent = self.root / "shared"
+        private_parent.mkdir()
+        private_directory = create_private_directory(
+            private_parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
         sentinel = self.root / "local-sentinel"
         sentinel.write_bytes(b"unchanged")
         sentinel.chmod(0o640)
-        first = RemoteSyncResult("lifelog", "a" * 40, False, private)
+        first = RemoteSyncResult(
+            "lifelog",
+            "a" * 40,
+            False,
+            private,
+            private_directory,
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -1171,19 +1182,36 @@ class AppTests(unittest.TestCase):
 
     def test_remote_cleanup_failure_wins_and_never_removes_canonical_or_legacy(self) -> None:
         from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
 
         repo = self.manifest.shared_repositories[0]
-        private = repo.target.parent / ".hermes-repository-private"
-        private.parent.mkdir()
-        private.mkdir()
+        repo.target.parent.mkdir()
+        private_directory = create_private_directory(
+            repo.target.parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
         results = [
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.target)),
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.legacy_target)),
-            (repo, RemoteSyncResult(repo.name, "a" * 40, False, private)),
+            (
+                repo,
+                RemoteSyncResult(
+                    repo.name,
+                    "a" * 40,
+                    False,
+                    private,
+                    private_directory,
+                ),
+            ),
         ]
-        with mock.patch.object(app, "_remove_tree", return_value=False) as remove:
+        with mock.patch.object(
+            private_directory,
+            "cleanup",
+            return_value=False,
+        ) as remove:
             self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
-        remove.assert_called_once_with(private)
+        remove.assert_called_once_with()
 
     def test_apply_surfaces_strict_scratch_cleanup_failure(self) -> None:
         from hermes_bootstrap import app
@@ -1195,10 +1223,68 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "_validate_remote_credentials"),
             mock.patch.object(app, "_validate_profile_credentials"),
             mock.patch.object(app, "stage_distribution", side_effect=ApplyError("stage failed")),
-            mock.patch.object(app, "_remove_tree", return_value=False),
+            mock.patch.object(
+                app.PrivateDirectory,
+                "cleanup",
+                return_value=False,
+            ),
         ):
             with self.assertRaisesRegex(ApplyError, "clean bootstrap staging"):
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+    def test_outer_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+        from hermes_bootstrap import app
+
+        replacement_marker = b"outer-replacement\n"
+        replacement_path: Path | None = None
+        retired_path: Path | None = None
+
+        def replace_scratch(_manifest, scratch, *, allow_missing):
+            nonlocal replacement_path, retired_path
+            self.assertIs(_manifest, self.manifest)
+            self.assertTrue(allow_missing)
+            retired = scratch.with_name(f"{scratch.name}-retired")
+            scratch.rename(retired)
+            retired_path = retired
+            scratch.mkdir(mode=0o700)
+            (scratch / "marker").write_bytes(replacement_marker)
+            replacement_path = scratch
+            raise RepositoryError("profile preflight failed")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token",
+                    redactor=SecretRedactor(("token",)),
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app,
+                "prepare_profile_snapshots",
+                side_effect=replace_scratch,
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ApplyError,
+                "could not clean bootstrap staging resources",
+            ):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertIsNotNone(replacement_path)
+        self.assertIsNotNone(retired_path)
+        assert replacement_path is not None
+        assert retired_path is not None
+        self.assertEqual(
+            (replacement_path / "marker").read_bytes(),
+            replacement_marker,
+        )
+        self.assertFalse(retired_path.exists())
 
     def test_every_local_failpoint_restores_exact_state_and_retains_remote_result(self) -> None:
         from hermes_bootstrap import app

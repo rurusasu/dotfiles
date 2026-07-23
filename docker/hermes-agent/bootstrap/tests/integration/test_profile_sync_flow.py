@@ -620,6 +620,57 @@ class ProfileSyncFlowTests(unittest.TestCase):
             self.flow._snapshot_tree(self.flow.data_root), local_before
         )
 
+    def test_empty_owned_directory_blocks_all_apply_side_effects(self) -> None:
+        invalid_name = self.profile_names[len(self.profile_names) // 2]
+        invalid_source = self._source(invalid_name)
+        empty_owned = invalid_source.target / "empty-owned"
+        empty_owned.mkdir()
+        manifest_path = invalid_source.target / "distribution.yaml"
+        manifest_path.write_text(
+            manifest_path.read_text(encoding="ascii")
+            + "- empty-owned\n",
+            encoding="ascii",
+        )
+        remote_before = self._remote_heads()
+        local_before = self.flow._snapshot_tree(self.flow.data_root)
+
+        with (
+            mock.patch.object(
+                profile_sync,
+                "_push_commit",
+                wraps=profile_sync._push_commit,
+            ) as push,
+            mock.patch.object(
+                bootstrap_flow.app,
+                "synchronize_remote",
+                wraps=bootstrap_flow.app.synchronize_remote,
+            ) as synchronize_remote,
+            mock.patch.object(
+                bootstrap_flow.app.Transaction,
+                "begin",
+                wraps=bootstrap_flow.app.Transaction.begin,
+            ) as transaction_begin,
+            self.assertRaises(RepositoryError) as raised,
+        ):
+            self.flow._apply()
+
+        report = raised.exception.profile_sync_report
+        self.assertEqual(report.exit_code, 4)
+        invalid = next(
+            item for item in report.profiles if item.name == invalid_name
+        )
+        self.assertEqual(invalid.category, "empty_owned_directory")
+        self.assertEqual(invalid.message, "local profile snapshot is invalid")
+        push.assert_not_called()
+        synchronize_remote.assert_not_called()
+        transaction_begin.assert_not_called()
+        self.assertEqual(self._remote_heads(), remote_before)
+        self.assertEqual(
+            self.flow._snapshot_tree(self.flow.data_root),
+            local_before,
+        )
+        self.flow._assert_no_temporary_resources()
+
     def test_push_failure_attempts_later_profiles_and_retry_converges(
         self,
     ) -> None:

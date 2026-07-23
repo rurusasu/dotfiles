@@ -1009,7 +1009,7 @@ Do not merge `hermes-home` until dotfiles main contains `sync-profiles`. Use the
 
 ### Task 9: Perform Guarded Production Rollout And Slack Acceptance
 
-**Files:** Runtime state and the three profile remote repositories only; no direct source edits.
+**Files:** Runtime state and the four profile remote repositories only; no direct source edits.
 
 **Interfaces:**
 
@@ -1030,7 +1030,7 @@ Expected: build and Compose validation pass. Do not run `task hermes:bootstrap` 
 - [ ] **Step 2: Inspect branch rules before mutation**
 
 ```bash
-for repo in hermes-profile-rick hermes-profile-hoffman hermes-profile-risarisa; do
+for repo in hermes-profile-rick hermes-profile-hoffman hermes-profile-risarisa hermes-profile-nancy; do
   gh api "repos/rurusasu/$repo/branches/main/protection" || \
     printf '%s\n' "$repo: no classic branch protection response"
   gh api "repos/rurusasu/$repo/rulesets" --jq '.[] | [.id,.name,.enforcement] | @tsv'
@@ -1049,7 +1049,7 @@ docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles --dry-run
 ```
 
-Expected: one JSON report covering Rick, Hoffman, and RisaRisa; snapshot digests are present; planned trees contain only `.gitignore`, `distribution.yaml`, and locally owned paths; Rick/Hoffman include both images; RisaRisa has no undeclared assets; no local file changes occur.
+Expected: one JSON report covering Rick, Hoffman, RisaRisa, and Nancy; snapshot digests are present; planned trees contain only `.gitignore`, `distribution.yaml`, and locally owned paths; Rick/Hoffman/Nancy include both images; RisaRisa has no undeclared assets; no local file changes occur.
 
 - [ ] **Step 4: Run the real sync and prove idempotence**
 
@@ -1067,7 +1067,7 @@ Expected: first command reports `changed` or `unchanged`; second reports all `un
 - [ ] **Step 5: Verify exact remote trees**
 
 ```bash
-for repo in hermes-profile-rick hermes-profile-hoffman hermes-profile-risarisa; do
+for repo in hermes-profile-rick hermes-profile-hoffman hermes-profile-risarisa hermes-profile-nancy; do
   gh api "repos/rurusasu/$repo/git/trees/main?recursive=1" \
     --jq '.tree[] | [.type,.path] | @tsv'
 done
@@ -1099,8 +1099,8 @@ Expected: latest durable attempt is `completed`, wrapper exit is `0`, and output
 
 - [ ] **Step 8: Verify Slack and the next scheduled run**
 
-Open the private `hermes-cron-results` channel and verify a message for `profile-local-sync` contains Rick, Hoffman, and RisaRisa as `unchanged` or `changed`, with no credentials or file contents. Record the next UTC run from `hermes cron list`; `30 */2 * * *` corresponds to odd-hour `:30` runs in JST. After that time, verify a second successful Slack message and no new profile commits for an all-unchanged run.
+Open the private `hermes-cron-results` channel and verify a message for `profile-local-sync` contains Rick, Hoffman, RisaRisa, and Nancy as `unchanged` or `changed`, with no credentials or file contents. Record the next UTC run from `hermes cron list`; `30 */2 * * *` corresponds to odd-hour `:30` runs in JST. After that time, verify a second successful Slack message and no new profile commits for an all-unchanged run.
 
 - [ ] **Step 9: Close with final repository and runtime evidence**
 
-Report both merged PR URLs and SHAs, the three remote heads, unchanged local snapshot digests, cron schedule, durable run ID/status, and Slack message timestamp. Any failed profile, missing Slack post, changed local digest, or unexpected remote path leaves rollout incomplete.
+Report both merged PR URLs and SHAs, the four remote heads, unchanged local snapshot digests for Rick, Hoffman, RisaRisa, and Nancy, cron schedule, durable run ID/status, and Slack message timestamp. Any failed profile, missing Slack post, changed local digest, or unexpected remote path leaves rollout incomplete.

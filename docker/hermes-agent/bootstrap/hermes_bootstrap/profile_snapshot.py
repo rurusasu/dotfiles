@@ -451,6 +451,7 @@ def _prepare_one(
         }
         directory_paths: set[PurePosixPath] = set()
         for owned_path in owned:
+            entry_count = len(entries)
             is_directory = _copy_declared_path(
                 source_fd,
                 owned_path,
@@ -462,6 +463,11 @@ def _prepare_one(
                 fd_budget,
             )
             if is_directory:
+                if len(entries) == entry_count:
+                    raise ProfileSnapshotError(
+                        declaration.name,
+                        "empty_owned_directory",
+                    ) from None
                 directory_paths.add(owned_path)
         _validate_canonical_manifest(output_fd, declaration, owned, manifest_bytes)
         _verify_manifest_current(source_fd, manifest_stat)
