@@ -227,9 +227,13 @@ After any crash-journal recovery, bootstrap validates credentials and
 repositories, then runs the same snapshot-and-publication phase before staging
 or starting a new local transaction. It then stages root, stages profiles in
 manifest order using either the reported exact commit or the configured branch
-for a truly missing target, synchronizes shared repositories, and only then
-begins the transaction. The successful `apply` result includes a
-`profile_sync` summary whose entries are `changed`, `unchanged`, or
+for a truly missing target, runs `validate_chrome_mcp_sources` over the staged
+root and profiles, synchronizes shared repositories, and only then begins the
+transaction. Existing named-profile publication has already completed before
+this staged Chrome gate. Its reported remote commits remain valid and are not
+rolled back if Chrome validation fails; apply stops before shared-repository
+synchronization or `Transaction.begin`. The successful `apply` result includes
+a `profile_sync` summary whose entries are `changed`, `unchanged`, or
 `installed`.
 
 If profile synchronization fails, bootstrap fails before starting the local
@@ -252,11 +256,12 @@ ordinary locked read-write Git synchronization.
 
 Every post-preflight apply publication message is therefore a cleanup inventory
 trigger before retry or closure: its hidden category could be
-`cleanup_failed`. Inventory both profile scratch and outer apply scratch. If
-both guarded inventories are reliably empty, continue ordinary push-failure
-recovery. A candidate or indeterminate check activates the full quiescent,
-mount-aware, atomic-quarantine procedure. Later successful dry-run/real results
-do not waive the earlier inventories.
+`cleanup_failed`. Inventory profile scratch and outer apply scratch directly
+under `/opt/data`, plus private shared-repository stages matching
+`/opt/data/shared/.hermes-repository-*`. If all guarded inventories are reliably
+empty, continue ordinary push-failure recovery. A candidate or indeterminate
+check activates the full quiescent, mount-aware, atomic-quarantine procedure.
+Later successful dry-run/real results do not waive the earlier inventories.
 
 Snapshot-preflight rejection remains separate because its category is public
 and publication has not started. If final outer apply scratch cleanup fails,
@@ -266,7 +271,9 @@ failure and can retain an internal profile report that the CLI does not expose.
 It is therefore an indeterminate trigger requiring both the direct-child
 profile inventory for `.hermes-profile-snapshots-*`,
 `.hermes-profile-sync-*`, and `askpass-*` and the outer inventory for
-`.hermes-bootstrap-*`. A candidate or indeterminate determination activates the
+`.hermes-bootstrap-*` under `/opt/data`, plus the direct-child private
+shared-repository stage inventory for `.hermes-repository-*` under
+`/opt/data/shared`. A candidate or indeterminate determination activates the
 same full recovery procedure. An exact
 `profile snapshot rejected (cleanup_failed)` message means final outer scratch
 cleanup did not replace it and does not alone trigger these inventories.
@@ -305,8 +312,8 @@ Operations](bootstrap.md). Keep every automated, installer, Compose, and manual
 sync launch path, including the gateway and scheduler, disabled under one
 maintenance owner; reject candidate subtrees containing mounts; atomically
 isolate verified artifacts in the same-filesystem private quarantine; and
-require final profile-scratch, outer-bootstrap, quarantine, and mount
-inventories to be clean before re-enabling launch paths.
+require final profile-scratch, outer-bootstrap, private shared-repository stage,
+quarantine, and mount inventories to be clean before re-enabling launch paths.
 
 The same unified pre-retry inventories are mandatory when failed `apply`
 exposes only `named profile repository sync failed: <failed names>` or
@@ -349,6 +356,7 @@ and its local owned paths. Verify the profile homes are unchanged, then confirm
 a repeat real run is `unchanged` without creating commits. The direct
 `/opt/data` inventory for `.hermes-profile-snapshots-*`,
 `.hermes-profile-sync-*`, `askpass-*`, `.hermes-bootstrap-*`, and
-`.hermes-profile-cleanup-quarantine-*` must also be empty, with no candidate or
-descendant mount issue. Aggregate success does not waive the quiescent cleanup
-and quarantine evidence.
+`.hermes-profile-cleanup-quarantine-*`, together with the direct
+`/opt/data/shared` inventory for `.hermes-repository-*`, must also be empty,
+with no candidate or descendant mount issue. Aggregate success does not waive
+the quiescent cleanup and quarantine evidence.

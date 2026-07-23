@@ -159,10 +159,15 @@ Bootstrap validates credentials and repository access, snapshots all existing
 profiles, and completes their exact local-to-remote publication before staging.
 It then stages the remote-authoritative root distribution; stages every profile
 in manifest order using the exact returned commit for an existing profile or
-the configured branch for a truly missing profile; synchronizes shared
-repositories, including lifelog; and only then calls `Transaction.begin`.
-Inside the transaction it applies root, named profiles in manifest order,
-shared working trees, and managed environment files.
+the configured branch for a truly missing profile; runs
+`validate_chrome_mcp_sources` over the staged root and profiles; synchronizes
+shared repositories, including lifelog; and only then calls
+`Transaction.begin`. Inside the transaction it applies root, named profiles in
+manifest order, shared working trees, and managed environment files. Existing
+named-profile publication has already completed before the staged Chrome gate.
+If that validation fails, its reported remote commits remain valid and are not
+rolled back; bootstrap fails before shared-repository synchronization or local
+transaction mutation.
 
 A target directory that is truly absent is seeded from its configured remote
 for the first official Hermes install. An existing malformed or incomplete
@@ -181,10 +186,10 @@ restart Hermes. There are two public diagnostics:
   exception can retain the report internally.
 
 Every `named profile repository sync failed: <failed names>` message requires
-the guarded direct-child profile and outer-bootstrap artifact inventories in
-the cleanup runbook before any retry or closure. The CLI-hidden category could
-be `cleanup_failed`; neither an expected push diagnosis nor a later successful
-sync excludes that possibility.
+the guarded profile, outer-bootstrap, and private shared-repository stage
+artifact inventories in the cleanup runbook before any retry or closure. The
+CLI-hidden category could be `cleanup_failed`; neither an expected push
+diagnosis nor a later successful sync excludes that possibility.
 
 Snapshot-preflight rejection is a different trigger. Publication has not begun,
 and `profile snapshot rejected (<category>)` exposes its category. If the inner
@@ -202,9 +207,10 @@ publication, staging, transaction, validation, or other primary failure. If a
 profile report had already been created, it can remain attached internally, but
 the CLI exposes neither that report nor the replaced primary failure. Before
 retry or closure, inventory both the profile scratch prefixes and the outer
-`.hermes-bootstrap-*` prefix below. A candidate or indeterminate determination
-activates the same full-window quiescent quarantine procedure; a later
-successful command does not waive either inventory.
+`.hermes-bootstrap-*` prefix below, plus private
+`/opt/data/shared/.hermes-repository-*` stages. A candidate or indeterminate
+determination activates the same full-window quiescent quarantine procedure; a
+later successful command does not waive any inventory.
 
 Once synchronization has created `profile_report`, later staging, transaction,
 installed-layout validation, cleanup, or rollback failures can also retain that
@@ -326,19 +332,25 @@ cause is an ordinary push failure.
 2. From a maintenance environment that sees the same `/opt/data` mount
    namespace, inventory only direct children whose complete names match
    `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, `askpass-*`, or
-   `.hermes-bootstrap-*`. Always inventory both the profile-scratch and outer
-   bootstrap groups, even when the public error names only one phase.
-   Separately inventory any prior
-   `.hermes-profile-cleanup-quarantine-*` directory. An existing quarantine is
-   unresolved recovery evidence: do not reuse or remove it; stop and escalate.
+   `.hermes-bootstrap-*` under canonical `/opt/data`. Separately inventory only
+   direct children of canonical `/opt/data/shared` whose complete names match
+   `.hermes-repository-*`; `repositories.py` creates these private first-clone
+   stages in the shared repository target's parent. Always inventory the
+   profile-scratch, outer-bootstrap, and private shared-repository stage groups,
+   even when the public error names only one phase. Separately inventory any
+   prior `.hermes-profile-cleanup-quarantine-*` directory. An existing
+   quarantine is unresolved recovery evidence: do not reuse or remove it; stop
+   and escalate.
 3. Inspect every candidate individually with no symlink following. Both
    `.hermes-profile-*` forms and `.hermes-bootstrap-*` must be real directories
    directly under canonical `/opt/data`, owned by the maintenance service
-   UID/GID, with mode `0700` and the exact expected prefix. An `askpass-*`
-   candidate must be a real regular file in that same location, with the same
-   owner, mode `0700`, link count `1`, and exact prefix. Any unexpected path,
-   descendant mount, type, owner, mode, link count, prefix, or location is an
-   escalation, not a deletion candidate.
+   UID/GID, with mode `0700` and the exact expected prefix. A
+   `.hermes-repository-*` candidate must meet the same directory, owner, and
+   mode checks directly under canonical `/opt/data/shared`. An `askpass-*`
+   candidate must be a real regular file directly under `/opt/data`, with the
+   same owner, mode `0700`, link count `1`, and exact prefix. Any unexpected
+   path, descendant mount, type, owner, mode, link count, prefix, or location is
+   an escalation, not a deletion candidate.
 4. Capture an authoritative mount inventory for that maintenance namespace,
    such as Linux `/proc/self/mountinfo` or reliable mountpoint tooling. Compare
    its canonical mount targets against each canonical candidate subtree.
@@ -346,19 +358,20 @@ cause is an ordinary push failure.
    `find -xdev` is not a mountpoint detector. If canonicalization, mount
    inventory, or subtree comparison is unavailable or ambiguous, do not remove
    anything; preserve evidence and escalate.
-5. Record the decision for both candidate groups before any retry. For a
+5. Record the decision for all candidate groups before any retry. For a
    hidden-category apply publication failure, reliably empty profile and outer
-   inventories plus complete mount determination return to ordinary
-   push-failure recovery in step 8 without creating quarantine. An explicit
-   standalone `cleanup_failed`, or an outer
+   inventories, an empty private shared-repository stage inventory, and
+   complete mount determination return to ordinary push-failure recovery in
+   step 8 without creating quarantine. An explicit standalone `cleanup_failed`,
+   or an outer
    `could not clean bootstrap staging resources`, keeps its cleanup diagnosis
-   even when both inventories are empty and proceeds to controlled verification
-   only after its owning cleanup fault is repaired. If any candidate exists,
-   activate the quarantine path in steps 6 and 7. If any determination is
-   unavailable, the full recovery path is active but cannot safely proceed;
-   preserve evidence and escalate. A later dry-run or real aggregate exit `0`
-   never substitutes for this pre-retry inventory because old artifacts are not
-   revisited.
+   even when all candidate inventories are empty and proceeds to controlled
+   verification only after its owning cleanup fault is repaired. If any
+   candidate exists, activate the quarantine path in steps 6 and 7. If any
+   determination is unavailable, the full recovery path is active but cannot
+   safely proceed; preserve evidence and escalate. A later dry-run or real
+   aggregate exit `0` never substitutes for this pre-retry inventory because
+   old artifacts are not revisited.
 6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
    directly under `/opt/data`. Verify that it is owner-created, non-symlink,
    mode `0700`, contains no mountpoint, and has the same filesystem device as
@@ -373,19 +386,21 @@ cause is an ordinary push failure.
    crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
    pattern, or `find -delete`.
 8. While all ordinary launch paths remain disabled, require zero direct
-   profile-scratch, outer-bootstrap, and quarantine names and no related mount
-   issue. The maintenance owner then runs standalone dry-run and real
-   `sync-profiles`, consumes both JSON reports completely, and requires both
-   aggregates to exit `0` with the repaired profile `changed` or `unchanged`.
-   Refresh both candidate groups plus the quarantine and mount inventories once
-   more and require them to remain clean.
+   profile-scratch and outer-bootstrap names under `/opt/data`, zero private
+   `.hermes-repository-*` stage names under `/opt/data/shared`, zero quarantine
+   names, and no related mount issue. The maintenance owner then runs
+   standalone dry-run and real `sync-profiles`, consumes both JSON reports
+   completely, and requires both aggregates to exit `0` with the repaired
+   profile `changed` or `unchanged`. Refresh all candidate groups plus the
+   quarantine and mount inventories once more and require them to remain clean.
 9. Record the evidence and only then re-enable the gateway, scheduler, future
    profile-sync cron if deployed, installers, and other launch paths.
 
 Cleanup recovery is accepted only when the entire quiescent procedure,
 quarantine removal, dry-run/real verification, and final zero profile-scratch,
-outer-bootstrap, quarantine, and mount inventories succeed. A later aggregate
-`0` without this evidence does not close the incident.
+outer-bootstrap, private shared-repository stage, quarantine, and mount
+inventories succeed. A later aggregate `0` without this evidence does not close
+the incident.
 
 ## Transaction And Rollback
 
@@ -397,8 +412,10 @@ or remove previously journaled managed paths; it is intentionally not covered
 by validation-before-new-write claims.
 
 After recovery completes, credential validation, profile publication,
-root/profile staging, and shared remote synchronization finish before
-`Transaction.begin` because remote pushes cannot be rolled back. Inside the
+root/profile staging, staged `validate_chrome_mcp_sources`, and shared remote
+synchronization finish before `Transaction.begin` because remote pushes cannot
+be rolled back. Existing named-profile publication is already complete when
+the staged Chrome gate runs and remains valid if that gate fails. Inside the
 new transaction, bootstrap snapshots root-owned paths, named profile targets,
 shared working-tree publication, deprecated-path cleanup, and managed `.env`
 files before replacement. Environment files use atomic rename and mode `0600`,
@@ -455,17 +472,17 @@ remote URLs.
 
 ## Complete Exit Codes
 
-| Code | Meaning                                                               | Operator action                                                  |
-| ---- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `0`  | Success                                                               | Continue; cleanup recovery uses the quiescent quarantine runbook |
-| `1`  | Host secret-plan or payload production failed                         | Fix `op` or adapter input and rerun                              |
-| `2`  | Invalid command arguments, payload, or managed env input              | Correct input; no Compose restart                                |
-| `3`  | Missing, invalid, or unauthorized credential                          | Repair 1Password or GitHub access                                |
-| `4`  | Repository access, identity, lock, profile preflight, or sync failure | Repair the reported repository/profile state                     |
-| `5`  | Migration conflict                                                    | Reconcile the named old/new paths manually                       |
-| `6`  | Apply, cleanup, or unexpected command failure                         | Inspect safe diagnostics and rerun                               |
-| `7`  | Rollback failure                                                      | Preserve the journal and inspect managed paths before retrying   |
-| `8`  | Manifest or final installed-layout validation failed                  | Correct manifest/layout state and rerun                          |
+| Code | Meaning                                                                    | Operator action                                                                                                                                                                         |
+| ---- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success                                                                    | Continue; cleanup recovery uses the quiescent quarantine runbook                                                                                                                        |
+| `1`  | Host secret-plan or payload production failed                              | Fix `op` or adapter input and rerun                                                                                                                                                     |
+| `2`  | Invalid command arguments, payload, or managed env input                   | Correct input; no Compose restart                                                                                                                                                       |
+| `3`  | Missing, invalid, or unauthorized credential                               | Repair 1Password or GitHub access                                                                                                                                                       |
+| `4`  | Repository access, identity, lock, profile preflight, or sync failure      | Repair the reported repository/profile state                                                                                                                                            |
+| `5`  | Migration conflict                                                         | Reconcile the named old/new paths manually                                                                                                                                              |
+| `6`  | Apply, cleanup, or unexpected command failure                              | Inspect safe diagnostics and rerun                                                                                                                                                      |
+| `7`  | Rollback failure                                                           | Preserve the journal and inspect managed paths before retrying                                                                                                                          |
+| `8`  | Manifest, staged Chrome source-contract, or final layout validation failed | Repair the manifest, owning root/profile source, or final layout; for an existing local-authoritative profile, repair local declarative config and rerun the documented sync/apply flow |
 
 `sync-profiles` uses its JSON route only for handled exits `0`, `3`, and `4`.
 Its argument error `2`, manifest validation error `8`, and unexpected error `6`

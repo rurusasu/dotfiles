@@ -24,7 +24,7 @@ except ImportError:
     import test_bootstrap_flow as bootstrap_flow
 
 from hermes_bootstrap import cli, profile_sync
-from hermes_bootstrap.errors import RepositoryError
+from hermes_bootstrap.errors import RepositoryError, ValidationError
 from hermes_bootstrap.models import DistributionSource
 
 
@@ -921,6 +921,58 @@ class ProfileSyncFlowTests(unittest.TestCase):
             self.assertIn(source.source, visible_arguments)
         for remote in self.flow.source_remotes.values():
             self.assertNotIn(str(remote), visible_arguments)
+
+    def test_existing_profile_chrome_validation_fails_after_publication_before_local_mutation(
+        self,
+    ) -> None:
+        invalid_name = self.profile_names[0]
+        invalid_source = self._source(invalid_name)
+        config_path = invalid_source.target / "config.yaml"
+        config_path.write_text(
+            bootstrap_flow.source_config(
+                "profile", f"{invalid_name}-invalid-chrome"
+            ).replace(
+                "    connect_timeout: 120\n",
+                "    connect_timeout: 120.0\n",
+            ),
+            encoding="ascii",
+        )
+        remote_before = self._remote_head(invalid_name)
+        local_before = self._snapshot_bytes_modes(invalid_source.target)
+
+        with (
+            mock.patch.object(
+                bootstrap_flow.app,
+                "synchronize_remote",
+                wraps=bootstrap_flow.app.synchronize_remote,
+            ) as synchronize_remote,
+            mock.patch.object(
+                bootstrap_flow.app.Transaction,
+                "begin",
+                wraps=bootstrap_flow.app.Transaction.begin,
+            ) as transaction_begin,
+            self.assertRaises(ValidationError) as raised,
+        ):
+            self.flow._apply()
+
+        report = raised.exception.profile_sync_report
+        self.assertEqual(report.exit_code, 0)
+        published = next(
+            item for item in report.profiles if item.name == invalid_name
+        )
+        self.assertEqual(published.status, "changed")
+        self.assertEqual(published.category, "published")
+        self.assertIsNotNone(published.commit)
+        self.assertNotEqual(published.commit, remote_before)
+        self.assertEqual(self._remote_head(invalid_name), published.commit)
+        self._assert_exact_remote(invalid_name)
+        synchronize_remote.assert_not_called()
+        transaction_begin.assert_not_called()
+        self.assertEqual(
+            self._snapshot_bytes_modes(invalid_source.target),
+            local_before,
+        )
+        self.flow._assert_no_temporary_resources()
 
     def test_existing_invalid_profile_blocks_apply_and_preserves_runtime(
         self,
