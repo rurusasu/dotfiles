@@ -25,6 +25,21 @@ mcp_servers:
 この URL は Compose network 内専用で、host に `8080` や `9222` を publish しない。
 サーバー名は Hermes 組み込みの `browser` toolset と衝突しないよう `chrome` にする。
 
+## Distribution source contract
+
+root distribution と `docker/hermes-agent/bootstrap-manifest.yaml` に宣言された
+全 profile は、source repository の `config.yaml` で上記の
+`mcp_servers.chrome` を所有する。他の MCP server は `chrome` と共存できる。
+
+Bootstrap は全 distribution を stage した後、shared repository の同期や local
+transaction の開始前に、この URL と timeout を検証する。設定の注入、merge、
+修復は行わない。新しい profile を manifest に追加すると、同じ検証へ自動的に
+含まれる。manifest 外で手動作成した profile は管理対象外のままにする。
+
+Hermes 組み込みの `browser_*` tool は、noVNC が表示する Chrome とは別の local
+browser session を起動する。host から操作を確認する必要がある場合、agent は
+`mcp_servers.chrome` から discover された tool を使う。
+
 ## Browser profile
 
 Google Chrome の profile は専用 data directory に保存する。
@@ -52,3 +67,19 @@ task hermes:browser:restart
 Browser が lifelog を参照する場合も canonical path は
 `/opt/data/shared/lifelog` である。migration-only の
 `/opt/data/core/lifelog` を runtime 設定へ追加しない。
+
+## Runtime verification
+
+各 profile home を明示して、同じ Chrome MCP tool set を discover できることを
+確認する。
+
+```text
+docker exec -e HERMES_HOME=/opt/data hermes hermes mcp test chrome
+docker exec -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test chrome
+docker exec -e HERMES_HOME=/opt/data/profiles/hoffman hermes hermes mcp test chrome
+docker exec -e HERMES_HOME=/opt/data/profiles/risarisa hermes hermes mcp test chrome
+docker exec -e HERMES_HOME=/opt/data/profiles/nancy hermes hermes mcp test chrome
+```
+
+全コマンドで接続が成功し、`navigate_page` と `take_snapshot` を含む同じ tool set
+が表示されることを確認する。host noVNC は `http://127.0.0.1:6080/` で開く。

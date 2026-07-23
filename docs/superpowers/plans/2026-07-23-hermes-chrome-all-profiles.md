@@ -101,12 +101,14 @@ Expected after each `worktree add`: `Preparing worktree (new branch 'codex/chrom
 **Repository:** `rurusasu/dotfiles`
 
 **Files:**
+
 - Create: `docker/hermes-agent/bootstrap/hermes_bootstrap/source_contracts.py`
 - Create: `docker/hermes-agent/bootstrap/tests/test_source_contracts.py`
 - Modify: `docker/hermes-agent/bootstrap/hermes_bootstrap/app.py:37-40,131-135`
 - Modify: `docker/hermes-agent/bootstrap/tests/test_app.py:61-70,167-231`
 
 **Interfaces:**
+
 - Consumes: `StagedSource(declaration: DistributionSource, path: Path, commit: str)` from `hermes_bootstrap.git`.
 - Produces: `validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None`.
 - Raises: `ValidationError` with the distribution name and `config.yaml`, without chained parser/file exceptions.
@@ -464,11 +466,13 @@ git commit -m "feat: enforce Chrome MCP in Hermes distributions"
 **Repository:** `rurusasu/hermes-profile-rick`
 
 **Files:**
+
 - Modify: `config.yaml`
 - Modify: `scripts/validate_distribution.py`
 - Modify: `tests/test_validate_distribution.py`
 
 **Interfaces:**
+
 - Consumes: the repository's `config-contract` validator check.
 - Produces: a Rick distribution whose `mcp_servers` retains `xapi` and `x-docs` and adds canonical `chrome`.
 
@@ -477,11 +481,11 @@ git commit -m "feat: enforce Chrome MCP in Hermes distributions"
 In the fixture `config.yaml` string in `tests/test_validate_distribution.py`, make `mcp_servers` begin with:
 
 ```yaml
-            mcp_servers:
-              chrome:
-                url: http://browser-mcp:8080/mcp
-                connect_timeout: 120
-              xapi:
+mcp_servers:
+  chrome:
+    url: http://browser-mcp:8080/mcp
+    connect_timeout: 120
+  xapi:
 ```
 
 Add these tests to `DistributionValidatorTests`:
@@ -591,11 +595,13 @@ git commit -m "feat: add Chrome MCP to Rick"
 **Repository:** `rurusasu/hermes-profile-hoffman`
 
 **Files:**
+
 - Modify: `config.yaml`
 - Modify: `scripts/validate_distribution.py`
 - Modify: `tests/test_validate_distribution.py`
 
 **Interfaces:**
+
 - Consumes: the repository's `config-contract` validator check.
 - Produces: a Hoffman distribution whose `mcp_servers` retains `xapi` and `x-docs` and adds canonical `chrome`.
 
@@ -604,11 +610,11 @@ git commit -m "feat: add Chrome MCP to Rick"
 Insert the canonical `chrome` mapping before `xapi` in the fixture `config.yaml`:
 
 ```yaml
-            mcp_servers:
-              chrome:
-                url: http://browser-mcp:8080/mcp
-                connect_timeout: 120
-              xapi:
+mcp_servers:
+  chrome:
+    url: http://browser-mcp:8080/mcp
+    connect_timeout: 120
+  xapi:
 ```
 
 Add the following complete test methods:
@@ -718,11 +724,13 @@ git commit -m "feat: add Chrome MCP to Hoffman"
 **Repository:** `rurusasu/hermes-profile-risarisa`
 
 **Files:**
+
 - Modify: `config.yaml`
 - Modify: `scripts/validate_distribution.py`
 - Modify: `tests/test_validate_distribution.py`
 
 **Interfaces:**
+
 - Consumes: the repository's `config-contract` validator check.
 - Produces: a Risarisa distribution whose `mcp_servers` retains `xapi` and `x-docs` and adds canonical `chrome`.
 
@@ -731,11 +739,11 @@ git commit -m "feat: add Chrome MCP to Hoffman"
 Insert:
 
 ```yaml
-            mcp_servers:
-              chrome:
-                url: http://browser-mcp:8080/mcp
-                connect_timeout: 120
-              xapi:
+mcp_servers:
+  chrome:
+    url: http://browser-mcp:8080/mcp
+    connect_timeout: 120
+  xapi:
 ```
 
 Add:
@@ -845,6 +853,7 @@ git commit -m "feat: add Chrome MCP to Risarisa"
 **Repository:** `rurusasu/hermes-profile-nancy`
 
 **Files:**
+
 - Create: `distribution.yaml`
 - Create: `scripts/validate_distribution.py`
 - Create: `tests/test_validate_distribution.py`
@@ -854,6 +863,7 @@ git commit -m "feat: add Chrome MCP to Risarisa"
 - Modify: `config.yaml`
 
 **Interfaces:**
+
 - Consumes: Hermes profile distribution schema `>=0.18.2`.
 - Produces: a `name: nancy`, `version: 0.1.0` distribution with no profile-specific environment requirements and a complete independent validation workflow.
 
@@ -1127,7 +1137,7 @@ repos:
 
 Keep `.github/workflows/distribution.yml` on the established pinned images:
 
-```yaml
+````yaml
 name: Distribution validation
 
 on:
@@ -1173,7 +1183,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit "$validator_status"
-```
+````
 
 - [ ] **Step 8: Prove no Rick/X API contract remains in Nancy's tooling**
 
@@ -1210,9 +1220,11 @@ git commit -m "feat: formalize Nancy with Chrome MCP"
 **Repository:** `rurusasu/dotfiles`
 
 **Files:**
+
 - Modify: `docs/hermes-agent/browser-mcp.md`
 
 **Interfaces:**
+
 - Consumes: `validate_chrome_mcp_sources(...)` and the canonical source config.
 - Produces: operator guidance that distinguishes Hermes built-in `browser_*` tools from `mcp_servers.chrome`.
 
@@ -1288,9 +1300,11 @@ git commit -m "docs: explain Chrome MCP profile contract"
 **Repositories:** all five source distributions plus `rurusasu/dotfiles`
 
 **Files:**
+
 - Verify only; no source edits are expected.
 
 **Interfaces:**
+
 - Consumes: the commits from Tasks 1-6.
 - Produces: a reproducible local verification record and, only after approval, publishable branches.
 
@@ -1344,9 +1358,11 @@ Report the five commit SHAs, test results, and the fact that production still re
 **Repositories:** `rurusasu/hermes-profile-rick`, `rurusasu/hermes-profile-hoffman`, `rurusasu/hermes-profile-risarisa`, `rurusasu/hermes-profile-nancy`, then `rurusasu/dotfiles`.
 
 **Files:**
+
 - No additional edits unless CI reveals a defect.
 
 **Interfaces:**
+
 - Consumes: green local commits and source repositories whose `main` branches are referenced by `bootstrap-manifest.yaml`.
 - Produces: merged source distributions, merged bootstrap enforcement, applied runtime state, successful MCP discovery for all profiles, and a noVNC-visible navigation proof.
 
