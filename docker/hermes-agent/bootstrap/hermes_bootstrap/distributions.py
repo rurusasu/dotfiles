@@ -74,11 +74,15 @@ _RUNTIME_DATABASES = frozenset(
 _ROOT_RESERVED_TOP_LEVEL = _RESERVED_TOP_LEVEL | frozenset(
     name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
 )
-_PROFILE_RESERVED_TOP_LEVEL = frozenset(name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE)
+_PROFILE_RESERVED_TOP_LEVEL = frozenset(
+    name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
+) | frozenset({".bootstrap-reservation"})
 
 
 class Transaction(Protocol):
     def snapshot(self, path: Path) -> None: ...
+
+    def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool: ...
 
 
 class _SnapshotTracker:
@@ -424,16 +428,35 @@ def _apply_profile_boundary(
             raise ValueError("could not build sanitized profile")
         sanitized = build_result
         target = expected_target
-        target_exists = _lexists(target)
         prior = _read_prior_profile_manifest(target, stage.declaration.name)
         if _profile_is_current(target, sanitized, manifest, stage, owned, prior):
             result = ChangeSet(())
-        elif target_exists and not replace_existing:
-            raise ValueError("existing profile differs from staged distribution")
         else:
-            snapshots = _SnapshotTracker(tx)
-            _profile_snapshots(target, owned, manifest, snapshots)
-            _remove_stale_profile_paths(target, prior[1] if prior is not None else (), owned, snapshots)
+            snapshots: _SnapshotTracker | None = None
+            changed: list[Path] = []
+            if replace_existing:
+                snapshots = _SnapshotTracker(tx)
+                _profile_snapshots(target, owned, manifest, snapshots)
+                _remove_stale_profile_paths(
+                    target,
+                    prior[1] if prior is not None else (),
+                    owned,
+                    snapshots,
+                )
+            else:
+                profiles = target.parent
+                if not _lexists(profiles):
+                    if tx.reserve_directory(profiles, remove_tree=False):
+                        changed.append(profiles)
+                    else:
+                        _require_regular_directory(profiles)
+                else:
+                    _require_regular_directory(profiles)
+                if not tx.reserve_directory(target):
+                    raise ValueError(
+                        "existing profile differs from staged distribution"
+                    )
+                changed.append(target)
             os.environ["HERMES_HOME"] = str(data_root)
             home_changed = True
             profile_distribution.install_distribution(str(sanitized), name=stage.declaration.name, force=True)
@@ -443,9 +466,12 @@ def _apply_profile_boundary(
                 if installed is None:
                     raise ValueError("profile installation did not write a manifest")
                 installed.source = stage.declaration.source
-                _snapshot(snapshots, manifest_path)
+                if snapshots is not None:
+                    _snapshot(snapshots, manifest_path)
                 profile_distribution.write_manifest(target, installed)
-            result = ChangeSet(tuple(snapshots.paths))
+            result = ChangeSet(
+                tuple(snapshots.paths) if snapshots is not None else tuple(changed)
+            )
     except Exception:
         primary_failure = True
     finally:

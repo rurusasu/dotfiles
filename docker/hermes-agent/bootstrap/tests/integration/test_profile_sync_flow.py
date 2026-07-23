@@ -24,7 +24,8 @@ try:
 except ImportError:
     import test_bootstrap_flow as bootstrap_flow
 
-from hermes_bootstrap import cli, profile_snapshot, profile_sync
+from hermes_bootstrap import cli, distributions, profile_snapshot, profile_sync
+import hermes_bootstrap.transaction as transaction_module
 from hermes_bootstrap.errors import ApplyError, RepositoryError, ValidationError
 from hermes_bootstrap.models import DistributionSource
 
@@ -1133,11 +1134,13 @@ class ProfileSyncFlowTests(unittest.TestCase):
         created_after: dict[
             str, tuple[str, int, bytes | str | None]
         ] | None = None
-        real_apply_root = bootstrap_flow.app.apply_root_distribution
+        real_is_current = distributions._profile_is_current
 
-        def apply_root_then_create(stage, data_root, tx):
+        def probe_then_create(*args, **kwargs):
             nonlocal created_after
-            result = real_apply_root(stage, data_root, tx)
+            result = real_is_current(*args, **kwargs)
+            if args[0] != missing.target:
+                return result
             self._write_bytes(
                 missing.target,
                 self._profile_files(
@@ -1157,9 +1160,9 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 wraps=bootstrap_flow.app.revalidate_profile_snapshots,
             ) as revalidate,
             mock.patch.object(
-                bootstrap_flow.app,
-                "apply_root_distribution",
-                side_effect=apply_root_then_create,
+                distributions,
+                "_profile_is_current",
+                side_effect=probe_then_create,
             ),
             mock.patch.object(
                 bootstrap_flow.app.Transaction,
@@ -1175,6 +1178,67 @@ class ProfileSyncFlowTests(unittest.TestCase):
 
         self.assertEqual(revalidate.call_count, 1)
         self.assertEqual(transaction_begin.call_count, 1)
+        install.assert_not_called()
+        self.assertIsNotNone(created_after)
+        self.assertEqual(
+            self._snapshot_bytes_modes(missing.target),
+            created_after,
+        )
+        self.assertEqual(
+            str(raised.exception),
+            "could not apply the named profile distribution",
+        )
+        self.flow._assert_no_temporary_resources()
+
+    def test_profile_created_after_reservation_bookkeeping_survives_app_rollback(
+        self,
+    ) -> None:
+        self.assertEqual(self.flow._apply()["status"], "applied")
+        missing = self.flow.manifest.profiles[-1]
+        shutil.rmtree(missing.target)
+        created_after: dict[
+            str, tuple[str, int, bytes | str | None]
+        ] | None = None
+        real_rename_noreplace = transaction_module._rename_noreplace
+
+        def create_then_reserve(
+            source_parent: int,
+            source: str,
+            target_parent: int,
+            target: str,
+        ) -> None:
+            nonlocal created_after
+            if target == missing.name:
+                self._write_bytes(
+                    missing.target,
+                    self._profile_files(
+                        missing,
+                        version="9.9.9",
+                        marker="reservation-race",
+                    ),
+                )
+                (missing.target / "config.yaml").chmod(0o600)
+                created_after = self._snapshot_bytes_modes(missing.target)
+            real_rename_noreplace(
+                source_parent,
+                source,
+                target_parent,
+                target,
+            )
+
+        with (
+            mock.patch.object(
+                transaction_module,
+                "_rename_noreplace",
+                side_effect=create_then_reserve,
+            ),
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError) as raised,
+        ):
+            self.flow._apply()
+
         install.assert_not_called()
         self.assertIsNotNone(created_after)
         self.assertEqual(

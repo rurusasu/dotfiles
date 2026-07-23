@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import fcntl
 import json
 import os
@@ -17,12 +19,37 @@ from typing import Any, Callable
 from .errors import ApplyError, RollbackError
 
 
-_VERSION = 2
+_VERSION = 3
+_READABLE_VERSIONS = frozenset({2, _VERSION})
 _JOURNAL_NAME = "journal.json"
 _LOCK_NAME = ".lock"
 _TRANSACTION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
 _BACKUP_ID = re.compile(r"backup-[0-9]{6}\Z")
+_RESERVATION_ID = re.compile(r"reservation-[0-9]{6}\Z")
+_RESERVATION_MARKER = ".bootstrap-reservation"
+_RESERVATION_TOKEN = re.compile(r"[0-9a-f]{32}\Z")
+_RENAME_NOREPLACE = 1
 _failpoint: Callable[[str], None] = lambda _name: None
+
+
+def _load_renameat2() -> Any | None:
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        function = libc.renameat2
+        function.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        function.restype = ctypes.c_int
+        return function
+    except (AttributeError, OSError, TypeError):
+        return None
+
+
+_renameat2 = _load_renameat2()
 
 
 @dataclass(frozen=True)
@@ -109,6 +136,8 @@ class Transaction:
         relative = _managed_relative(self._data_root, self._store, path)
         if self._covered_by_snapshot(relative):
             return
+        if self._covered_by_directory_reservation(relative):
+            return
         if self._has_snapshot_descendant(relative):
             raise ApplyError("snapshot parent follows child")
         original = _entry_kind(path)
@@ -134,6 +163,67 @@ class Transaction:
         except Exception:
             self._abandon()
             raise ApplyError("could not snapshot managed path") from None
+
+    def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool:
+        """Atomically publish and journal a directory owned by this transaction."""
+
+        self._require_active()
+        relative = _managed_relative(self._data_root, self._store, path)
+        if self._overlaps_snapshot(relative) or self._has_active_reservation(relative):
+            raise ApplyError("managed directory reservation overlaps transaction state")
+        index = len(self._journal["entries"])
+        object_name = f"reservation-{index:06d}"
+        marker = uuid.uuid4().hex
+        reservation = self._directory / object_name
+        entry: dict[str, Any] = {
+            "kind": "directory_reservation",
+            "path": relative,
+            "state": "preparing",
+            "identity": None,
+            "object": object_name,
+            "marker": marker,
+            "remove_tree": remove_tree,
+        }
+        self._journal["entries"].append(entry)
+        try:
+            self._write_journal()
+            reservation.mkdir(mode=0o700)
+            reservation.chmod(0o700)
+            _write_reservation_marker(reservation, marker)
+            _fsync_directory(self._directory)
+            entry["identity"] = _directory_identity(reservation)
+            entry["state"] = "ready"
+            self._write_journal()
+            _failpoint("entry-ready")
+            source_parent = _open_real_directory(self._directory)
+            target_parent: int | None = None
+            try:
+                target_parent = _open_managed_parent(self._data_root, path)
+                _verify_real_directory(self._directory, source_parent)
+                _verify_managed_parent(self._data_root, path, target_parent)
+                try:
+                    _rename_noreplace(
+                        source_parent,
+                        object_name,
+                        target_parent,
+                        path.name,
+                    )
+                except FileExistsError:
+                    return False
+                os.fsync(source_parent)
+                os.fsync(target_parent)
+                _verify_managed_parent(self._data_root, path, target_parent)
+                if _directory_identity_at(target_parent, path.name) != entry["identity"]:
+                    raise OSError
+                return True
+            finally:
+                if target_parent is not None:
+                    _safe_close(target_parent)
+                _safe_close(source_parent)
+        except ApplyError:
+            raise
+        except Exception:
+            raise ApplyError("could not reserve managed directory") from None
 
     def commit(self) -> None:
         if self._closed:
@@ -203,13 +293,22 @@ class Transaction:
                 continue
             try:
                 _failpoint("before-restore")
-                _restore_snapshot(
-                    self._data_root,
-                    self._data_root / entry["path"],
-                    self._directory / entry["backup"],
-                    entry["original"],
-                    entry.get("directories"),
-                )
+                if entry["kind"] == "snapshot":
+                    _restore_snapshot(
+                        self._data_root,
+                        self._data_root / entry["path"],
+                        self._directory / entry["backup"],
+                        entry["original"],
+                        entry.get("directories"),
+                    )
+                else:
+                    _restore_directory_reservation(
+                        self._data_root,
+                        self._data_root / entry["path"],
+                        entry["identity"],
+                        entry["marker"],
+                        remove_tree=entry["remove_tree"],
+                    )
                 entry["state"] = "restored"
                 self._write_journal()
             except Exception:
@@ -226,6 +325,11 @@ class Transaction:
 
     def _cleanup_or_raise(self) -> None:
         try:
+            if self._journal["status"] == "committed":
+                _cleanup_reservation_markers(
+                    self._data_root,
+                    self._journal["entries"],
+                )
             _cleanup_transaction(self._directory, self._store)
         except Exception:
             raise ApplyError("could not clean up bootstrap transaction") from None
@@ -245,6 +349,38 @@ class Transaction:
     def _has_snapshot_descendant(self, relative: str) -> bool:
         return any(
             entry["kind"] == "snapshot" and entry["state"] != "restored" and _is_descendant(entry["path"], relative)
+            for entry in self._journal["entries"]
+        )
+
+    def _covered_by_directory_reservation(self, relative: str) -> bool:
+        return any(
+            entry["kind"] == "directory_reservation"
+            and entry["state"] != "restored"
+            and entry["remove_tree"]
+            and (
+                entry["path"] == relative
+                or _is_descendant(relative, entry["path"])
+            )
+            for entry in self._journal["entries"]
+        )
+
+    def _overlaps_snapshot(self, relative: str) -> bool:
+        return any(
+            entry["kind"] == "snapshot"
+            and entry["state"] != "restored"
+            and (
+                entry["path"] == relative
+                or _is_descendant(relative, entry["path"])
+                or _is_descendant(entry["path"], relative)
+            )
+            for entry in self._journal["entries"]
+        )
+
+    def _has_active_reservation(self, relative: str) -> bool:
+        return any(
+            entry["kind"] == "directory_reservation"
+            and entry["state"] != "restored"
+            and entry["path"] == relative
             for entry in self._journal["entries"]
         )
 
@@ -416,6 +552,38 @@ def _entry_kind(path: Path) -> str:
     raise ApplyError("managed path is unsafe")
 
 
+def _directory_identity(path: Path) -> list[int]:
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ApplyError("managed directory is unsafe")
+    return [info.st_dev, info.st_ino]
+
+
+def _write_reservation_marker(directory: Path, marker: str) -> None:
+    parent = _open_real_directory(directory)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            _RESERVATION_MARKER,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_CLOEXEC
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent,
+        )
+        content = (marker + "\n").encode("ascii")
+        if os.write(descriptor, content) != len(content):
+            raise OSError
+        os.fsync(descriptor)
+    finally:
+        if descriptor is not None:
+            _safe_close(descriptor)
+        _safe_close(parent)
+    _fsync_directory(directory)
+
+
 def _publish_backup(path: Path, backup: Path, original: str) -> list[dict[str, Any]] | None:
     temporary: Path | None = None
     directory_metadata: list[dict[str, Any]] | None = None
@@ -558,6 +726,48 @@ def _restore_snapshot(
     _failpoint("restore")
 
 
+def _restore_directory_reservation(
+    data_root: Path,
+    target: Path,
+    identity: list[int],
+    marker: str,
+    *,
+    remove_tree: bool,
+) -> None:
+    parent = _open_managed_parent(data_root, target)
+    try:
+        _verify_managed_parent(data_root, target, parent)
+        if not _directory_reservation_matches_at(
+            parent,
+            target.name,
+            identity,
+            marker,
+        ):
+            _failpoint("restore")
+            return
+        _verify_managed_parent(data_root, target, parent)
+        if remove_tree:
+            _remove_safe_at(parent, target.name)
+        else:
+            directory = _open_directory_at(parent, target.name, identity)
+            try:
+                os.unlink(_RESERVATION_MARKER, dir_fd=directory)
+                os.fsync(directory)
+            finally:
+                _safe_close(directory)
+            try:
+                os.rmdir(target.name, dir_fd=parent)
+            except OSError as error:
+                if error.errno not in {errno.ENOTEMPTY, errno.EEXIST}:
+                    raise
+        os.fsync(parent)
+        _verify_managed_parent(data_root, target, parent)
+        _fsync_directory(target.parent)
+        _failpoint("restore")
+    finally:
+        _safe_close(parent)
+
+
 def _replace_from_backup(
     data_root: Path,
     backup: Path,
@@ -624,43 +834,83 @@ def _read_journal(directory: Path) -> dict[str, Any]:
 
 def _validate_journal(directory: Path, journal: dict[str, Any]) -> None:
     try:
-        if set(journal) != {"version", "status", "entries"} or journal["version"] != _VERSION:
+        if (
+            set(journal) != {"version", "status", "entries"}
+            or journal["version"] not in _READABLE_VERSIONS
+        ):
             raise ValueError
         if journal["status"] not in {"active", "rolling_back", "committed", "rolled_back"} or not isinstance(journal["entries"], list):
             raise ValueError
-        snapshots: list[str] = []
+        managed: list[tuple[str, str]] = []
         backups: set[str] = set()
+        reservations: dict[str, tuple[list[int] | None, str]] = {}
         for index, entry in enumerate(journal["entries"]):
             if not isinstance(entry, dict) or entry.get("state") not in {"preparing", "ready", "restored"}:
                 raise ValueError
-            fields = {"kind", "path", "state", "original", "backup"}
-            if entry.get("kind") != "snapshot" or frozenset(entry) not in {
-                frozenset(fields),
-                frozenset(fields | {"directories"}),
-            }:
-                raise ValueError
-            relative = _validate_relative(entry["path"])
-            if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
-                raise ValueError
-            directory_metadata = entry.get("directories")
-            if directory_metadata is not None:
-                if entry["original"] != "dir":
+            relative = _validate_relative(entry.get("path"))
+            if entry.get("kind") == "snapshot":
+                fields = {"kind", "path", "state", "original", "backup"}
+                if frozenset(entry) not in {
+                    frozenset(fields),
+                    frozenset(fields | {"directories"}),
+                }:
                     raise ValueError
-                _validate_directory_metadata(directory_metadata)
+                if entry["original"] not in {"absent", "file", "dir", "symlink"} or entry["backup"] != f"backup-{index:06d}":
+                    raise ValueError
+                directory_metadata = entry.get("directories")
+                if directory_metadata is not None:
+                    if entry["original"] != "dir":
+                        raise ValueError
+                    _validate_directory_metadata(directory_metadata)
+                backups.add(entry["backup"])
+                backup = directory / entry["backup"]
+                if _lexists(backup):
+                    _validate_backup(backup, entry["original"], directory_metadata)
+                elif journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
+                    raise ValueError
+            elif entry.get("kind") == "directory_reservation":
+                if journal["version"] != _VERSION or set(entry) != {
+                    "kind",
+                    "path",
+                    "state",
+                    "identity",
+                    "object",
+                    "marker",
+                    "remove_tree",
+                }:
+                    raise ValueError
+                if (
+                    entry["object"] != f"reservation-{index:06d}"
+                    or not isinstance(entry["marker"], str)
+                    or _RESERVATION_TOKEN.fullmatch(entry["marker"]) is None
+                    or type(entry["remove_tree"]) is not bool
+                    or entry["identity"] is not None
+                    and not _valid_directory_identity(entry["identity"])
+                    or entry["state"] != "preparing"
+                    and entry["identity"] is None
+                ):
+                    raise ValueError
+                reservations[entry["object"]] = (
+                    entry["identity"],
+                    entry["marker"],
+                )
+            else:
+                raise ValueError
             _validate_journal_managed_path(relative)
-            if any(relative == known or _is_descendant(relative, known) for known in snapshots):
-                raise ValueError
-            if any(_is_descendant(known, relative) for known in snapshots):
-                raise ValueError
-            snapshots.append(relative)
-            backups.add(entry["backup"])
-            backup = directory / entry["backup"]
-            if _lexists(backup):
-                _validate_backup(backup, entry["original"], directory_metadata)
-            elif journal["status"] in {"active", "rolling_back"} and entry["state"] in {"ready", "restored"}:
-                raise ValueError
+            for known, known_kind in managed:
+                if relative == known:
+                    raise ValueError
+                if (
+                    entry["kind"] == "snapshot"
+                    or known_kind == "snapshot"
+                ) and (
+                    _is_descendant(relative, known)
+                    or _is_descendant(known, relative)
+                ):
+                    raise ValueError
+            managed.append((relative, entry["kind"]))
         _validate_entry_states(journal["status"], journal["entries"])
-        _validate_journal_storage(directory, backups)
+        _validate_journal_storage(directory, backups, reservations)
     except ApplyError:
         raise ApplyError("bootstrap transaction journal is invalid") from None
     except Exception:
@@ -670,6 +920,7 @@ def _validate_journal(directory: Path, journal: dict[str, Any]) -> None:
 def _validate_journal_storage(
     directory: Path,
     backups: set[str],
+    reservations: dict[str, tuple[list[int] | None, str]],
 ) -> None:
     with os.scandir(directory) as entries:
         for entry in entries:
@@ -678,6 +929,16 @@ def _validate_journal_storage(
                     raise ValueError
             elif entry.name in backups:
                 if entry.is_symlink():
+                    raise ValueError
+            elif entry.name in reservations:
+                if not entry.is_dir(follow_symlinks=False):
+                    raise ValueError
+                identity, marker = reservations[entry.name]
+                if identity is not None and not _directory_reservation_matches(
+                    Path(entry.path),
+                    identity,
+                    marker,
+                ):
                     raise ValueError
             elif entry.name.startswith(".journal-"):
                 if not entry.is_file(follow_symlinks=False):
@@ -824,6 +1085,102 @@ def _entry_kind_at(parent: int, name: str) -> str:
     raise ApplyError("managed path is unsafe")
 
 
+def _directory_identity_at(parent: int, name: str) -> list[int] | None:
+    try:
+        info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise ApplyError("managed path is unsafe") from None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        return None
+    return [info.st_dev, info.st_ino]
+
+
+def _open_directory_at(parent: int, name: str, identity: list[int]) -> int:
+    descriptor: int | None = None
+    try:
+        flags = (
+            os.O_RDONLY
+            | os.O_CLOEXEC
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        descriptor = os.open(name, flags, dir_fd=parent)
+        info = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or [info.st_dev, info.st_ino] != identity
+        ):
+            raise ValueError
+        result = descriptor
+        descriptor = None
+        return result
+    except Exception:
+        raise ApplyError("managed directory is unsafe") from None
+    finally:
+        if descriptor is not None:
+            _safe_close(descriptor)
+
+
+def _directory_reservation_matches(
+    path: Path,
+    identity: list[int],
+    marker: str,
+) -> bool:
+    parent = _open_real_directory(path.parent)
+    try:
+        return _directory_reservation_matches_at(
+            parent,
+            path.name,
+            identity,
+            marker,
+        )
+    finally:
+        _safe_close(parent)
+
+
+def _directory_reservation_matches_at(
+    parent: int,
+    name: str,
+    identity: list[int],
+    marker: str,
+) -> bool:
+    try:
+        directory = _open_directory_at(parent, name, identity)
+    except ApplyError:
+        return False
+    marker_descriptor: int | None = None
+    try:
+        marker_descriptor = os.open(
+            _RESERVATION_MARKER,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory,
+        )
+        info = os.fstat(marker_descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            return False
+        expected = (marker + "\n").encode("ascii")
+        return os.read(marker_descriptor, len(expected) + 1) == expected
+    except (FileNotFoundError, OSError):
+        return False
+    finally:
+        if marker_descriptor is not None:
+            _safe_close(marker_descriptor)
+        _safe_close(directory)
+
+
+def _valid_directory_identity(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and type(value[0]) is int
+        and type(value[1]) is int
+        and value[0] >= 0
+        and value[1] >= 0
+    )
+
+
 def _validate_backup(backup: Path, original: str, directory_metadata: object | None = None) -> None:
     if _BACKUP_ID.fullmatch(backup.name) is None or not backup.parent.is_dir() or backup.parent.is_symlink():
         raise ValueError
@@ -957,6 +1314,10 @@ def _cleanup_transaction(
                 _remove_safe(directory / name)
                 _fsync_directory(directory)
                 _cleanup_failpoint("cleanup-backup")
+            elif _RESERVATION_ID.fullmatch(name):
+                _remove_safe(directory / name)
+                _fsync_directory(directory)
+                _cleanup_failpoint("cleanup-reservation")
             elif name.startswith(".journal-"):
                 _remove_safe(directory / name)
                 _fsync_directory(directory)
@@ -975,6 +1336,42 @@ def _cleanup_transaction(
     directory.rmdir()
     _fsync_directory(store)
     _cleanup_failpoint("cleanup-directory")
+
+
+def _cleanup_reservation_markers(
+    data_root: Path,
+    entries: list[dict[str, Any]],
+) -> None:
+    for entry in entries:
+        if (
+            entry["kind"] != "directory_reservation"
+            or entry["state"] != "ready"
+        ):
+            continue
+        target = data_root / entry["path"]
+        parent = _open_managed_parent(data_root, target)
+        try:
+            if not _directory_reservation_matches_at(
+                parent,
+                target.name,
+                entry["identity"],
+                entry["marker"],
+            ):
+                continue
+            directory = _open_directory_at(
+                parent,
+                target.name,
+                entry["identity"],
+            )
+            try:
+                os.unlink(_RESERVATION_MARKER, dir_fd=directory)
+                os.fsync(directory)
+            finally:
+                _safe_close(directory)
+            os.fsync(parent)
+            _fsync_directory(target.parent)
+        finally:
+            _safe_close(parent)
 
 
 def _cleanup_failpoint(name: str) -> None:
@@ -1038,6 +1435,32 @@ def _descriptor_child(descriptor: int, name: str) -> Path:
         return base / name
     except Exception:
         raise ApplyError("managed path is unsafe") from None
+
+
+def _rename_noreplace(
+    source_parent: int,
+    source: str,
+    target_parent: int,
+    target: str,
+) -> None:
+    if _renameat2 is None:
+        raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
+    ctypes.set_errno(0)
+    result = _renameat2(
+        source_parent,
+        os.fsencode(source),
+        target_parent,
+        os.fsencode(target),
+        _RENAME_NOREPLACE,
+    )
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error == errno.EEXIST:
+        raise FileExistsError(error, "atomic no-replace destination exists")
+    if error == errno.ENOENT:
+        raise FileNotFoundError(error, "atomic no-replace source is absent")
+    raise OSError(error, "atomic no-replace rename failed")
 
 
 def _lexists_at(parent: int, name: str) -> bool:

@@ -28,14 +28,25 @@ from hermes_bootstrap.distributions import (
 from hermes_bootstrap.errors import ApplyError
 from hermes_bootstrap.git import StagedSource
 from hermes_bootstrap.models import DistributionSource
+from hermes_bootstrap.transaction import Transaction as DurableTransaction
 
 
 class RecordingTransaction:
     def __init__(self) -> None:
         self.snapshots: list[Path] = []
+        self.reservations: list[Path] = []
 
     def snapshot(self, path: Path) -> None:
         self.snapshots.append(path)
+
+    def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool:
+        del remove_tree
+        try:
+            path.mkdir()
+        except FileExistsError:
+            return False
+        self.reservations.append(path)
+        return True
 
 
 class StrictRecordingTransaction(RecordingTransaction):
@@ -564,6 +575,18 @@ class DistributionTests(unittest.TestCase):
         self.write_profile_manifest("rick", ["nested"])
         self.assert_apply_error(lambda: build_sanitized_profile_source(self.source("rick"), self.root / "scratch"))
 
+    def test_profile_rejects_the_transaction_reservation_marker(self) -> None:
+        marker = self.stage_root / ".bootstrap-reservation"
+        marker.write_text("distribution-owned\n", encoding="utf-8")
+        self.write_profile_manifest("rick", [marker.name])
+
+        self.assert_apply_error(
+            lambda: build_sanitized_profile_source(
+                self.source("rick"),
+                self.root / "scratch",
+            )
+        )
+
     def test_sanitized_profile_source_rejects_raw_absolute_and_duplicate_owned_paths(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
         manifests = (
@@ -640,6 +663,63 @@ class DistributionTests(unittest.TestCase):
         target = self.data_root / "profiles" / "rick"
         self.assertNotEqual(changed, ChangeSet(()))
         self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "config\n")
+
+    def test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("staged\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        target = self.data_root / "profiles" / "rick"
+        tx = DurableTransaction.begin(self.data_root)
+        real_is_current = distributions._profile_is_current
+        external_before: dict[str, tuple[int, bytes | None]] | None = None
+
+        def is_current_then_create(*args: object, **kwargs: object) -> bool:
+            nonlocal external_before
+            result = real_is_current(*args, **kwargs)
+            target.mkdir(parents=True)
+            (target / "config.yaml").write_bytes(b"external\n")
+            (target / "config.yaml").chmod(0o600)
+            external_before = {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            }
+            return result
+
+        with (
+            mock.patch.object(
+                distributions,
+                "_profile_is_current",
+                side_effect=is_current_then_create,
+            ),
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+            )
+
+        tx.rollback()
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            },
+            external_before,
+        )
+        install.assert_not_called()
 
     def test_profile_no_overwrite_allows_a_byte_identical_existing_target(
         self,
