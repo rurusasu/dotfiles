@@ -124,3 +124,155 @@ Result: both commands exited 0 with no output.
 - Hermes currently emits an existing `DeprecationWarning` from
   `hermes_cli/profile_distribution.py`; it did not affect results and is
   outside Task 2 ownership.
+
+## Critical Fix
+
+### Result
+
+Replaced the cached target-existence decision with a transaction-owned atomic
+directory reservation. A no-replace install now reaches Hermes only after
+`renameat2(..., RENAME_NOREPLACE)` publishes the reserved target successfully.
+Rollback and recovery require both the reserved directory identity and its
+private transaction nonce, so a race winner or replacement target is preserved.
+
+Implementation commit: `f7687e7`
+
+### RED Evidence
+
+Focused post-probe, post-bookkeeping, and rollback contract command:
+
+```bash
+docker exec -w /tmp/task-2-critical-agent/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_profile_created_after_revalidation_survives_no_overwrite_failure \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_profile_created_after_reservation_bookkeeping_survives_app_rollback \
+    tests.test_transaction.TransactionTests.test_directory_reservation_rollback_removes_only_the_reserved_identity \
+    tests.test_transaction.TransactionTests.test_directory_reservation_recovery_preserves_a_replacement_identity \
+    -v
+```
+
+Result: 5 tests ran; 1 failure and 3 errors. The post-probe test showed
+`install_distribution(..., force=True)` was called once. The other errors
+showed that `Transaction.reserve_directory` and `_rename_noreplace` did not yet
+exist.
+
+Corrected app-level post-probe RED:
+
+```bash
+docker exec -w /tmp/task-2-critical-agent/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_profile_created_after_revalidation_survives_no_overwrite_failure \
+    -v
+```
+
+Result: 1 test ran; 1 failure because `ApplyError` was not raised after the
+target was created following the initial missing probe.
+
+Reservation-marker ownership RED:
+
+```bash
+docker exec -w /tmp/task-2-critical-agent/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_rejects_the_transaction_reservation_marker \
+    -v
+```
+
+Result: 1 test ran; 1 failure because the internal marker was still accepted as
+distribution-owned content.
+
+### GREEN Evidence
+
+Focused race and reservation command:
+
+```bash
+docker exec -w /tmp/task-2-critical-agent/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_distributions.DistributionTests.test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_profile_created_after_revalidation_survives_no_overwrite_failure \
+    tests.integration.test_profile_sync_flow.ProfileSyncFlowTests.test_profile_created_after_reservation_bookkeeping_survives_app_rollback \
+    tests.test_transaction.TransactionTests.test_directory_reservation_rollback_removes_only_the_reserved_identity \
+    tests.test_transaction.TransactionTests.test_directory_reservation_recovery_preserves_a_replacement_identity \
+    tests.test_transaction.TransactionTests.test_directory_reservation_commit_removes_the_private_marker \
+    -v
+```
+
+Result: 6 tests ran; 6 passed; 0 failures; 0 errors.
+
+Complete Task 2 command in a fresh Hermes container copy:
+
+```bash
+docker exec -w /tmp/task-2-critical-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest \
+    tests.test_profile_snapshot \
+    tests.test_distributions \
+    tests.test_app \
+    tests.integration.test_profile_sync_flow \
+    -v
+```
+
+Result: 184 tests ran; 184 passed; 0 failures; 0 errors.
+
+Complete transaction command:
+
+```bash
+docker exec -w /tmp/task-2-critical-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m unittest tests.test_transaction -v
+```
+
+Result: 48 tests ran; 48 passed; 0 failures; 0 errors.
+
+Additional checks:
+
+```bash
+docker exec -w /tmp/task-2-critical-final/bootstrap -e PYTHONPATH=. hermes \
+  python3 -m compileall -q \
+    hermes_bootstrap \
+    tests/test_profile_snapshot.py \
+    tests/test_distributions.py \
+    tests/test_app.py \
+    tests/test_transaction.py \
+    tests/integration/test_profile_sync_flow.py
+git diff --check
+```
+
+Result: both commands exited 0 with no output.
+
+### Changed Files
+
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/distributions.py`
+- `docker/hermes-agent/bootstrap/hermes_bootstrap/transaction.py`
+- `docker/hermes-agent/bootstrap/tests/test_distributions.py`
+- `docker/hermes-agent/bootstrap/tests/test_transaction.py`
+- `docker/hermes-agent/bootstrap/tests/integration/test_profile_sync_flow.py`
+- `.superpowers/sdd/task-2-report.md`
+
+### Self-Review
+
+- The initial target probe is used only for the current-profile no-op. A
+  missing no-replace target must be won by atomic reservation before the forced
+  Hermes API can run.
+- Reservation bookkeeping is write-ahead: the private directory and nonce are
+  journaled before atomic publication. A competing target after the ready
+  journal entry causes `RENAME_NOREPLACE` to fail without calling Hermes.
+- Rollback and crash recovery remove a target only when its directory identity
+  and private nonce both match. This also handles immediate inode reuse after a
+  replacement is created.
+- A transaction-created `profiles` parent uses empty-only rollback. An external
+  child prevents parent removal and survives intact.
+- Successful commit and committed crash recovery preserve installed files and
+  remove only the matching reservation nonce.
+- Version 3 journals add directory reservations while recovery continues to
+  accept version 2 snapshot-only journals.
+- The internal nonce filename is rejected as profile distribution-owned
+  content, preventing the install payload from invalidating rollback ownership.
+- Existing replacement behavior remains behind `replace_existing=True`; all
+  Task 1 and Task 2 coverage remains green.
+
+### Concerns
+
+- Atomic reservation requires Linux `renameat2` with `RENAME_NOREPLACE`, which
+  is available in the authoritative Hermes container. Unsupported runtimes
+  fail closed before Hermes install.
+- Hermes still emits the pre-existing `profile_distribution.py`
+  `DeprecationWarning`; it is outside this fix.
