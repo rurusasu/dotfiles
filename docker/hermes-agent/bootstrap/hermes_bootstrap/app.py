@@ -480,7 +480,8 @@ def _cleanup_apply_resources(
             if result.private_directory is None:
                 success = False
             else:
-                success = result.private_directory.cleanup() and success
+                owner = result.private_directory
+                success = (owner.is_released or owner.cleanup()) and success
     return success
 
 

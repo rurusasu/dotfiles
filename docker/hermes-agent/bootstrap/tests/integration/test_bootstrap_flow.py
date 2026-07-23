@@ -57,6 +57,17 @@ PROFILE_IDENTITIES = {
     }
     for source in PRODUCTION_PROFILES
 }
+PROFILE_USER_DIRECTORIES = (
+    "memories",
+    "sessions",
+    "skills",
+    "skins",
+    "logs",
+    "plans",
+    "workspace",
+    "cron",
+    "home",
+)
 SAFE_PATH = "/usr/bin:/bin"
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
@@ -363,10 +374,11 @@ class BootstrapFlowTests(unittest.TestCase):
             },
         )
         for profile in PROFILE_NAMES:
+            target = self.data_root / "profiles" / profile
             self._write_files(
-                self.data_root / "profiles" / profile,
+                target,
                 {
-                    "distribution.yaml": self._profile_manifest(profile),
+                    "distribution.yaml": self._runtime_profile_manifest(profile),
                     "config.yaml": source_config(
                         "profile", f"{profile}-initial"
                     ),
@@ -376,6 +388,8 @@ class BootstrapFlowTests(unittest.TestCase):
                     ".env": f"# {profile} comment\nCUSTOM_{profile.upper()}=keep\n",
                 },
             )
+            for directory in PROFILE_USER_DIRECTORIES:
+                (target / directory).mkdir(exist_ok=True)
 
     @staticmethod
     def _root_manifest(owned: list[str], version: str = "0.1.0") -> str:
@@ -392,10 +406,16 @@ class BootstrapFlowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _profile_manifest(name: str, version: str = "0.1.0") -> str:
+    def _profile_manifest(
+        name: str,
+        version: str = "0.1.0",
+        *,
+        source: str | None = None,
+    ) -> str:
         return "\n".join(
             [
                 f"name: {name}",
+                *([f"source: {source}"] if source is not None else []),
                 f"version: {version}",
                 "hermes_requires: '>=0.18.2'",
                 "distribution_owned:",
@@ -404,6 +424,15 @@ class BootstrapFlowTests(unittest.TestCase):
                 "",
             ]
         )
+
+    def _runtime_profile_manifest(
+        self, name: str, version: str = "0.1.0"
+    ) -> str:
+        source = next(
+            profile.source for profile in self.manifest.profiles
+            if profile.name == name
+        )
+        return self._profile_manifest(name, version, source=source)
 
     @staticmethod
     def _profile_gitignore() -> str:
@@ -699,6 +728,17 @@ class BootstrapFlowTests(unittest.TestCase):
         )
 
     def test_initial_install_stages_distributions_and_preserves_runtime(self) -> None:
+        profiles_before = {
+            profile: {
+                path: (entry.kind, entry.mode, entry.payload)
+                for path, entry in self._snapshot_tree(
+                    self.data_root / "profiles" / profile
+                ).items()
+                if path != ".env"
+            }
+            for profile in PROFILE_NAMES
+        }
+
         self._initial_apply()
 
         self.assertEqual(
@@ -710,6 +750,14 @@ class BootstrapFlowTests(unittest.TestCase):
             self.assertEqual(
                 (target / "config.yaml").read_text(encoding="utf-8"),
                 source_config("profile", f"{profile}-initial"),
+            )
+            self.assertEqual(
+                {
+                    path: (entry.kind, entry.mode, entry.payload)
+                    for path, entry in self._snapshot_tree(target).items()
+                    if path != ".env"
+                },
+                profiles_before[profile],
             )
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
@@ -917,7 +965,9 @@ class BootstrapFlowTests(unittest.TestCase):
         self._write_files(
             target,
             {
-                "distribution.yaml": self._profile_manifest("rick", "0.2.0"),
+                "distribution.yaml": self._runtime_profile_manifest(
+                    "rick", "0.2.0"
+                ),
                 "config.yaml": source_config("profile", "rick-updated"),
             },
         )
@@ -1051,8 +1101,22 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(sync_exit_code, 5)
         self.assertEqual(stdout.getvalue(), "")
         self._assert_no_protected_output(stderr.getvalue(), "failed sync output")
+        after_sync = self._snapshot_tree(self.data_root)
+        engine_lock = after_sync["locks/bootstrap-engine.lock"]
         self.assertEqual(
-            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
+            (
+                engine_lock.kind,
+                engine_lock.mode,
+                engine_lock.links,
+                engine_lock.size,
+                engine_lock.payload,
+            ),
+            ("file", 0o600, 1, 0, b""),
+        )
+        before["locks"] = after_sync["locks"]
+        before["locks/bootstrap-engine.lock"] = engine_lock
+        self.assertEqual(
+            self._snapshot_tree_contract(after_sync),
             self._snapshot_tree_contract(before),
         )
         self.assertEqual(
@@ -1074,7 +1138,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 5)
         self.assertEqual(stdout.getvalue(), "")
         self._assert_no_protected_output(stderr.getvalue(), "failed apply output")
-        self.assertEqual(self._snapshot_tree_contract(self._snapshot_tree(self.data_root)), self._snapshot_tree_contract(before))
+        self.assertEqual(
+            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
+            self._snapshot_tree_contract(before),
+        )
         self.assertEqual(self._snapshot_coordination_locks(), locks_before)
 
     def test_lifelog_pushes_allowed_changes_and_rejects_forbidden_ones(self) -> None:
@@ -1102,6 +1169,19 @@ class BootstrapFlowTests(unittest.TestCase):
             self._apply("invalid-fixture-token")
 
         after = self._snapshot_tree(self.data_root)
+        engine_lock = after["locks/bootstrap-engine.lock"]
+        self.assertEqual(
+            (
+                engine_lock.kind,
+                engine_lock.mode,
+                engine_lock.links,
+                engine_lock.size,
+                engine_lock.payload,
+            ),
+            ("file", 0o600, 1, 0, b""),
+        )
+        before["locks"] = after["locks"]
+        before["locks/bootstrap-engine.lock"] = engine_lock
         self.assertEqual(after, before)
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
@@ -1323,7 +1403,7 @@ class BootstrapFlowTests(unittest.TestCase):
                         self._write_files(
                             self.data_root / "profiles" / profile,
                             {
-                                "distribution.yaml": self._profile_manifest(
+                                "distribution.yaml": self._runtime_profile_manifest(
                                     profile, version
                                 ),
                                 "config.yaml": desired_profiles[profile],

@@ -50,6 +50,12 @@ class PrivateDirectory:
     def identity(self) -> tuple[int, int]:
         return self._identity
 
+    @property
+    def is_released(self) -> bool:
+        """Report whether verified publication transferred cleanup ownership."""
+
+        return self._state is _PrivateDirectoryState.RELEASED
+
     def cleanup(self) -> bool:
         """Delete a fully validated captured tree and retain uncertain artifacts."""
 

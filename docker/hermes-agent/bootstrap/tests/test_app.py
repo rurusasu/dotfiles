@@ -1726,12 +1726,18 @@ class AppTests(unittest.TestCase):
         from hermes_bootstrap.filesystem import create_private_directory
 
         repo = self.manifest.shared_repositories[0]
-        repo.target.parent.mkdir()
+        repo.target.mkdir(parents=True)
+        (repo.target / "canonical.txt").write_text("canonical\n", encoding="utf-8")
+        self.assertIsNotNone(repo.legacy_target)
+        assert repo.legacy_target is not None
+        repo.legacy_target.mkdir(parents=True)
+        (repo.legacy_target / "legacy.txt").write_text("legacy\n", encoding="utf-8")
         private_directory = create_private_directory(
             repo.target.parent,
             prefix=".hermes-repository-",
         )
         private = private_directory.path
+        os.mkfifo(private / "retained-fifo")
         results = [
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.target)),
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.legacy_target)),
@@ -1746,13 +1752,47 @@ class AppTests(unittest.TestCase):
                 ),
             ),
         ]
-        with mock.patch.object(
+        self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
+        self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
+        self.assertTrue(private.exists())
+        self.assertEqual(
+            (repo.target / "canonical.txt").read_text(encoding="utf-8"),
+            "canonical\n",
+        )
+        self.assertEqual(
+            (repo.legacy_target / "legacy.txt").read_text(encoding="utf-8"),
+            "legacy\n",
+        )
+
+    def test_remote_cleanup_accepts_private_owner_released_by_publication(self) -> None:
+        from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
+
+        repo = self.manifest.shared_repositories[0]
+        repo.target.parent.mkdir(parents=True)
+        private_directory = create_private_directory(
+            repo.target.parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
+        (private / "published.txt").write_text("published\n", encoding="utf-8")
+        private.rename(repo.target)
+        private_directory.release()
+        result = RemoteSyncResult(
+            repo.name,
+            "a" * 40,
+            False,
+            private,
             private_directory,
-            "cleanup",
-            return_value=False,
-        ) as remove:
-            self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
-        remove.assert_called_once_with()
+        )
+
+        self.assertTrue(
+            app._cleanup_apply_resources(None, [(repo, result)], self.root)
+        )
+        self.assertEqual(
+            (repo.target / "published.txt").read_text(encoding="utf-8"),
+            "published\n",
+        )
 
     def test_apply_surfaces_strict_scratch_cleanup_failure(self) -> None:
         from hermes_bootstrap import app
