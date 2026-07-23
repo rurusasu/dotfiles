@@ -188,10 +188,14 @@ def synchronize_profiles(
         prepared = prepare_profile_snapshots(manifest, scratch, allow_missing=False)
         report = synchronize_prepared_profiles(prepared, auth, dry_run=dry_run)
     except ProfileSnapshotError as error:
+        invalid_profile = error.profile
+        invalid_category = error.category
+        _scrub_exception_graph(error)
         report = _profile_preflight_failure(
-            profiles, error.profile, error.category, dry_run=dry_run
+            profiles, invalid_profile, invalid_category, dry_run=dry_run
         )
-    except Exception:
+    except Exception as error:
+        _scrub_exception_graph(error)
         report = failed_profile_report(
             profiles,
             dry_run=dry_run,
@@ -317,17 +321,21 @@ def _synchronize_one_boundary(
                     category=category,
                     message=message,
                 )
-    except _LockBusy:
+    except _LockBusy as error:
+        _scrub_exception_graph(error)
         outcome = _failed(snapshot, "lock_busy", "profile publication lock is busy")
-    except _PushRejected:
+    except _PushRejected as error:
+        _scrub_exception_graph(error)
         outcome = _failed(snapshot, "push_rejected", "profile publication was rejected")
-    except _PushRaceExhausted:
+    except _PushRaceExhausted as error:
+        _scrub_exception_graph(error)
         outcome = _failed(
             snapshot,
             "push_race_exhausted",
             "profile publication changed repeatedly",
         )
-    except Exception:
+    except Exception as error:
+        _scrub_exception_graph(error)
         outcome = _failed(snapshot, "repository", "profile snapshot synchronization failed")
 
     resources: list[tuple[Callable[[Path], bool], Path]] = []
@@ -422,9 +430,9 @@ def _profile_diff(
 
 def _reported_path(raw: bytes, auth: GitAuth) -> PurePosixPath:
     try:
-        text = raw.decode("ascii", "strict")
+        text = raw.decode("utf-8", "strict")
     except UnicodeError:
-        raise ValueError("unsafe profile diff path") from None
+        return _escaped_reported_path(raw)
     path = PurePosixPath(text)
     if (
         not text
@@ -434,8 +442,12 @@ def _reported_path(raw: bytes, auth: GitAuth) -> PurePosixPath:
         or any(ord(character) < 32 or ord(character) == 127 for character in text)
         or auth.redactor.redact(text) != text
     ):
-        raise ValueError("unsafe profile diff path")
+        return _escaped_reported_path(raw)
     return path
+
+
+def _escaped_reported_path(raw: bytes) -> PurePosixPath:
+    return PurePosixPath(".git-path-bytes", raw.hex() or "empty")
 
 
 def _commit_and_push(
@@ -772,32 +784,44 @@ def _cleanup_resources(
 
 
 def _scrub_exception_graph(error: BaseException) -> None:
-    pending = [error]
-    visited: set[int] = set()
-    while pending:
-        current = pending.pop()
-        if id(current) in visited:
-            continue
-        visited.add(id(current))
-        cause = current.__cause__
-        context = current.__context__
-        if cause is not None:
-            pending.append(cause)
-        if context is not None:
-            pending.append(context)
-        if isinstance(current, BaseExceptionGroup):
-            pending.extend(current.exceptions)
-        try:
-            current.args = ()
-        except Exception:
-            pass
-        try:
-            current.__notes__ = []
-        except Exception:
-            pass
-        current.__traceback__ = None
-        current.__cause__ = None
-        current.__context__ = None
+    try:
+        pending = [error]
+        visited: set[int] = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in visited:
+                continue
+            visited.add(id(current))
+            for attribute in ("__cause__", "__context__"):
+                try:
+                    linked = BaseException.__getattribute__(current, attribute)
+                except BaseException:
+                    linked = None
+                if isinstance(linked, BaseException):
+                    pending.append(linked)
+            if isinstance(current, BaseExceptionGroup):
+                try:
+                    children = BaseException.__getattribute__(
+                        current, "exceptions"
+                    )
+                except BaseException:
+                    children = ()
+                pending.extend(
+                    child for child in children if isinstance(child, BaseException)
+                )
+            for attribute, value in (
+                ("args", ()),
+                ("__notes__", []),
+                ("__traceback__", None),
+                ("__cause__", None),
+                ("__context__", None),
+            ):
+                try:
+                    BaseException.__setattr__(current, attribute, value)
+                except BaseException:
+                    pass
+    except BaseException:
+        pass
 
 
 def _safe_directory(path: Path) -> bool:

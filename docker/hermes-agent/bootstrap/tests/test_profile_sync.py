@@ -36,6 +36,11 @@ from hermes_bootstrap.profile_sync import (
 from hermes_bootstrap.repositories import _RepositoryLock
 
 
+class FrozenException(Exception):
+    def __setattr__(self, name: str, value: object) -> None:
+        raise TypeError("immutable exception")
+
+
 class ProfileSyncTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -603,6 +608,34 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotIn(secret_marker.decode("ascii"), serialized)
         self.assertNotIn(str(snapshot.root), serialized)
 
+    def test_remote_only_utf8_path_is_reported_and_deleted(self) -> None:
+        remote = self.root / "profile-a.git"
+        declaration = self.profile("profile-a", remote)
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        remote_only = "README-\u65e5\u672c\u8a9e.md"
+        self.seed_remote_files(
+            remote,
+            declaration.name,
+            {"README.md": b"old\n", remote_only: b"remove me\n"},
+        )
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+
+        result = report.profiles[0]
+        self.assertEqual(result.status, "changed")
+        self.assertEqual(
+            [path.as_posix() for path in result.diff.deleted],
+            sorted(("README.md", remote_only)),
+        )
+        self.assertEqual(
+            self.git(
+                remote, "ls-tree", "-r", "--name-only", "refs/heads/main"
+            ).splitlines(),
+            [".gitignore", "SOUL.md", "distribution.yaml"],
+        )
+
     def test_first_non_fast_forward_rebuilds_once_on_the_new_remote_head(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)
@@ -1122,6 +1155,61 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
 
+    def test_cleanup_scrubber_is_non_throwing_for_frozen_group_children(self) -> None:
+        first_remote = self.root / "first.git"
+        second_remote = self.root / "second.git"
+        owned_marker = "frozen-owned-byte-marker"
+        first = self.snapshot(
+            self.profile("first-profile", first_remote),
+            {"SOUL.md": owned_marker.encode("ascii")},
+        )
+        second = self.snapshot(
+            self.profile("second-profile", second_remote), {"SOUL.md": b"second\n"}
+        )
+        self.seed_remote(first_remote, first)
+        self.seed_remote(second_remote, second)
+        original_unlink = profile_sync._unlink
+        original_remove = profile_sync._remove_tree
+        captured: list[BaseException] = []
+        removed: list[Path] = []
+        calls = 0
+
+        def unlink(path: Path) -> bool:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                child = FrozenException(
+                    self.auth.token, owned_marker.encode("ascii")
+                )
+                BaseException.__setattr__(
+                    child, "__notes__", [f"frozen note {owned_marker}"]
+                )
+                error = ExceptionGroup("cleanup group", [child])
+                captured.append(error)
+                raise error
+            return original_unlink(path)
+
+        def remove(path: Path) -> bool:
+            removed.append(path)
+            return original_remove(path)
+
+        with (
+            mock.patch.object(profile_sync, "_unlink", side_effect=unlink),
+            mock.patch.object(profile_sync, "_remove_tree", side_effect=remove),
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((first, second), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(
+            [item.status for item in report.profiles], ["failed", "unchanged"]
+        )
+        self.assertEqual(report.profiles[0].category, "cleanup_failed")
+        self.assertEqual(len(removed), 2)
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(owned_marker, repr(report.as_dict()))
+        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+
     def test_unexpected_repository_cleanup_exception_is_scrubbed_and_continues(self) -> None:
         first_remote = self.root / "first.git"
         second_remote = self.root / "second.git"
@@ -1230,6 +1318,77 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertEqual([item.name for item in report.profiles], ["bad-profile", "good-profile"])
         self.assertEqual([item.status for item in report.profiles], ["failed", "unchanged"])
         self.assertEqual(report.exit_code, 4)
+
+    def test_repository_exception_group_is_scrubbed_and_later_profile_runs(self) -> None:
+        first_remote = self.root / "first.git"
+        second_remote = self.root / "second.git"
+        owned_marker = "repository-operation-owned-marker"
+        first = self.snapshot(
+            self.profile("first-profile", first_remote),
+            {"SOUL.md": owned_marker.encode("ascii")},
+        )
+        second = self.snapshot(
+            self.profile("second-profile", second_remote), {"SOUL.md": b"second\n"}
+        )
+        self.seed_remote(first_remote, first)
+        self.seed_remote(second_remote, second)
+        original_attempt = profile_sync._exact_tree_attempt
+        captured: list[BaseException] = []
+        calls = 0
+
+        def attempt(snapshot, repository, environment):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                child = RuntimeError(
+                    self.auth.token, owned_marker.encode("ascii")
+                )
+                child.add_note(f"repository note {owned_marker}")
+                error = ExceptionGroup("repository operation", [child])
+                captured.append(error)
+                raise error
+            return original_attempt(snapshot, repository, environment)
+
+        with mock.patch.object(
+            profile_sync, "_exact_tree_attempt", side_effect=attempt
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((first, second), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(
+            [item.status for item in report.profiles], ["failed", "unchanged"]
+        )
+        self.assertEqual(report.profiles[0].category, "repository")
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(owned_marker, repr(report.as_dict()))
+        self.assert_exception_hides(captured[0], self.auth.token, owned_marker)
+
+    def test_snapshot_preflight_exception_group_is_scrubbed(self) -> None:
+        first = self.profile("first-profile", self.root / "first.git")
+        second = self.profile("second-profile", self.root / "second.git")
+        manifest = self.manifest(first, second)
+        owned_marker = "snapshot-preflight-owned-marker"
+        child = RuntimeError(self.auth.token, owned_marker.encode("ascii"))
+        child.add_note(f"snapshot note {owned_marker}")
+        error = ExceptionGroup("snapshot preflight", [child])
+        captured = error
+
+        with mock.patch.object(
+            profile_sync, "prepare_profile_snapshots", side_effect=error
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertTrue(all(item.status == "failed" for item in report.profiles))
+        self.assertTrue(
+            all(
+                item.category == "aggregate_preflight_blocked"
+                for item in report.profiles
+            )
+        )
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(owned_marker, repr(report.as_dict()))
+        self.assert_exception_hides(captured, self.auth.token, owned_marker)
 
     def test_synchronize_profiles_cleans_scratch_and_maps_preflight_failures(self) -> None:
         remote_a = self.root / "profile-a.git"
