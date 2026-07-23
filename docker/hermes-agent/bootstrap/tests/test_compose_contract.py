@@ -22,7 +22,7 @@ DATA_BIND = {
 }
 XURL_BIND = {
     "type": "bind",
-    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes/.xurl",
+    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl",
     "target": "/root/.xurl",
 }
 EXPECTED_TCP_HEALTHCHECK = (
@@ -112,7 +112,7 @@ class ComposeContractTests(unittest.TestCase):
         )
         self.assertNotIn("ports", xapi)
         self.assertEqual(
-            xapi["healthcheck"]["test"],
+            [xapi["healthcheck"]["test"][0], xapi["healthcheck"]["test"][1].strip()],
             ["CMD-SHELL", EXPECTED_TCP_HEALTHCHECK],
         )
         self.assertEqual(

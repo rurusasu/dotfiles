@@ -215,7 +215,7 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
-  if "$docker_runner" compose -f "$compose_file" build hermes hermes-bootstrap; then
+  if "$docker_runner" compose -f "$compose_file" build hermes hermes-bootstrap xapi-mcp; then
     :
   else
     status=$?

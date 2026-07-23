@@ -204,7 +204,33 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp xapi-mcp
+
+  hermes:xapi:auth:
+    desc: Authenticate the X MCP bridge with the headless OAuth flow
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm --no-deps --entrypoint /bin/sh xapi-mcp -lc 'node_modules/.bin/xurl auth oauth2 --headless'
+
+  hermes:xapi:restart:
+    desc: Recreate the Hermes X MCP container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate xapi-mcp
+
+  hermes:xapi:logs:
+    desc: Follow Hermes X MCP logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 xapi-mcp
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker

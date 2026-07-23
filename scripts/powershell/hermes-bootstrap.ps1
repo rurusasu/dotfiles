@@ -252,7 +252,7 @@ function Invoke-HermesBootstrapEntrypoint {
             if ($config.ExitCode -ne 0) { return $config }
 
             $build = Invoke-HermesBootstrapDockerPhase `
-                -Arguments @('compose', '-f', $paths.ComposeFile, 'build', 'hermes', 'hermes-bootstrap') `
+                -Arguments @('compose', '-f', $paths.ComposeFile, 'build', 'hermes', 'hermes-bootstrap', 'xapi-mcp') `
                 -FailureMessage 'Hermes image build failed.'
             if ($build.ExitCode -ne 0) { return $build }
 
