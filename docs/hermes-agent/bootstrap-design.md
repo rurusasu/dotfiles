@@ -2,47 +2,24 @@
 
 ## Status
 
-Approved design for an OS-independent Hermes Agent bootstrap. Implementation is
-split across the dotfiles repository and the Hermes home/profile distribution
-repositories listed below.
-
-## Problem
-
-Hermes setup currently has two independent implementations:
-
-- macOS, Linux, and NixOS source `scripts/sh/hermes-agent.sh`.
-- Windows runs `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
-
-The PowerShell handler provisions a GitHub token, while the shell implementation
-does not. The container's `gh` wrapper only maps an existing process environment
-variable and does not load the active Hermes profile's `.env`. This allows Slack
-to start while `gh auth status` reports that no GitHub host is authenticated.
-
-The duplicated setup logic also lets dashboard, Slack, profile, repository, and
-runtime configuration drift between operating systems.
+Approved design for the container-owned Hermes bootstrap used on every host OS.
+The implementation is split between this dotfiles repository, the
+remote-authoritative root distribution, and the configured named-profile
+remotes.
 
 ## Goals
 
 - Use one bootstrap implementation inside the Hermes image on every host OS.
-- Keep `install.sh` and `install.cmd` as the supported top-level entry points.
-- Treat GitHub as the source of truth for root and profile declarative content.
-- Use Hermes' official profile distribution mechanism for named profiles.
-- Keep runtime state and secrets outside Git repositories.
-- Make shared repositories such as lifelog available to every profile.
-- Fail setup before restarting Hermes when any required credential or source is
-  missing or invalid.
-- Preserve existing runtime data and roll back partially applied changes.
-
-## Non-Goals
-
-- Replacing Hermes' one-container/many-profiles model.
-- Storing secrets in Git, Compose files, command arguments, or image layers.
-- Making profile memories or sessions shared through Git.
-- Running one gateway container per profile.
+- Keep root/default declarative content remote-authoritative.
+- Treat existing named-profile declarative allowlists as local-authoritative.
+- Publish named profiles through the official Hermes distribution API without
+  making a runtime profile home a Git worktree.
+- Keep runtime state and secrets outside distribution repositories.
+- Keep shared repositories, including lifelog, available to every profile.
+- Fail before local transaction and gateway restart when credentials, preflight,
+  or profile publication fail.
 
 ## Runtime Layout
-
-Keep the existing bind mount and upstream-compatible root:
 
 ```text
 host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
@@ -51,9 +28,10 @@ host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
 ├── SOUL.md                        root declarative profile
 ├── profile.yaml
 ├── profiles/
-│   ├── rick/                      official Hermes distribution target
+│   ├── rick/                      official Hermes target; local-authoritative when present
 │   ├── hoffman/
-│   └── risarisa/
+│   ├── risarisa/
+│   └── nancy/
 ├── shared/
 │   └── lifelog/                   writable independent Git repository
 ├── memories/                      root runtime state
@@ -61,329 +39,133 @@ host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
 └── logs/
 ```
 
-`/opt/data` is a runtime root, not a Git checkout. This avoids a parent Git
-repository containing profile distributions, shared repositories, secrets, and
-live state.
+`/opt/data` is a runtime root, not a Git checkout. Its profile homes are also
+never Git repositories. The canonical shared path is
+`/opt/data/shared/lifelog`; `/opt/data/core/lifelog` is migration-only and is
+absent after a successful apply.
 
-`/opt/data/shared/<name>` is the canonical location for repositories shared by
-all profiles. `/opt/data/core/lifelog` is accepted only as a migration source
-and is absent after a successful apply. New configuration and documentation
-use `/opt/data/shared/lifelog`.
+## Source And Authority Matrix
 
-## Source Repositories
+The manifest maps each target to a remote and ref. Authority depends on its
+content class:
 
-The bootstrap manifest maps each target to a source and ref:
+| Target                                                  | Configured source                                | Authority and update mechanism                                                       |
+| ------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Root/default                                            | `rurusasu/hermes-home`                           | remote-authoritative root distribution apply                                         |
+| Named profiles (`rick`, `hoffman`, `risarisa`, `nancy`) | matching `rurusasu/hermes-profile-<name>` remote | existing local allowlist snapshot to exact remote commit, then official Hermes apply |
+| Shared lifelog                                          | `rurusasu/lifelog`                               | locked read-write Git synchronization                                                |
 
-| Target         | Source                             | Ref    | Update mechanism                |
-| -------------- | ---------------------------------- | ------ | ------------------------------- |
-| Root/default   | `rurusasu/hermes-home`             | `main` | Root distribution apply         |
-| Rick           | `rurusasu/hermes-profile-rick`     | `main` | `hermes profile install/update` |
-| Hoffman        | `rurusasu/hermes-profile-hoffman`  | `main` | `hermes profile install/update` |
-| Risarisa       | `rurusasu/hermes-profile-risarisa` | `main` | `hermes profile install/update` |
-| Shared lifelog | `rurusasu/lifelog`                 | `main` | Locked read-write Git sync      |
+The manifest, rather than a hard-coded list, determines named profiles. An
+existing valid profile reads its own local `distribution.yaml`. The bootstrap
+generates a canonical remote manifest and `.gitignore`, snapshots only regular
+files permitted by `distribution_owned`, and publishes an exact remote tree.
+That tree contains only the canonical `.gitignore`, canonical
+`distribution.yaml`, and owned paths. It deletes stale remote workflows,
+README files, validators, tests, scripts, and every other allowlist-external
+path.
 
-Named profile repositories must add `distribution.yaml`. The bootstrap invokes
-Hermes' official distribution API so `.env`, `auth.json`, memories, sessions,
-logs, workspaces, and other user-owned paths remain untouched. It stages the
-declared ref first, then uses forced distribution installation for both initial
-and existing profiles. This replaces `config.yaml` with the same ownership
-result as `profile update --force-config` without performing a second,
-unpinned network fetch.
+The snapshot lives in bootstrap-owned private storage. No normal or dry-run
+operation checks out or clones into `/opt/data/profiles/<name>`, and no normal
+or dry-run operation changes local profile bytes or modes. Empty directories
+are not represented by Git.
 
-Hermes explicitly rejects installing a distribution as `default`, so
-`hermes-home` uses `root-distribution.yaml`. It lists the root-owned paths that
-the bootstrap may replace. The root apply uses the same ownership principles as
-Hermes distributions and never modifies user-owned runtime paths.
-
-The dotfiles repository stops generating or patching tracked `SOUL.md`,
-`config.yaml`, profile policy, cron, scripts, and MCP blocks. Those files move to
-the appropriate root or profile source repository.
-
-## Shared Repository Policy
-
-Shared repositories are declared rather than hard-coded. The initial manifest
-entry is equivalent to:
-
-```yaml
-shared_repositories:
-  - name: lifelog
-    source: https://github.com/rurusasu/lifelog.git
-    ref: main
-    target: /opt/data/shared/lifelog
-    mode: read-write
-    sync_owner: default
-```
-
-Supported policies are:
-
-- `read-only`: bootstrap performs a fast-forward update and profiles do not
-  commit or push.
-- `read-write`: profiles may edit content, while one declared owner performs
-  commit, pull/rebase, and push.
-
-Only the default profile owns the lifelog Git sync cron job. Git operations use
-a repository-specific lock under `/opt/data/locks/repositories/` so cron,
-installer, and manual sync cannot run concurrently. All profiles use the same
-absolute path and follow the shared repository's `AGENTS.md`.
-
-Adding another shared repository requires a manifest entry and declarative
-profile guidance, not new OS-specific installer code.
+Only a target directory that is truly absent uses its configured remote as a
+first-install seed. Existing malformed profiles are failed, never overwritten
+from remote content. The current local layout declares Rick and Hoffman assets,
+does not declare RisaRisa assets, and has no Nancy home yet; a future installed
+Nancy home controls its own assets through its local allowlist.
 
 ## Bootstrap Components
 
-### `hermes-bootstrap` service
-
 `docker/hermes-agent/compose.yml` defines an explicitly invoked
-`hermes-bootstrap` service. It uses the same image and `/opt/data` bind mount as
-the gateway, has no published ports, and is not part of normal `compose up`.
+`hermes-bootstrap` service. It uses the gateway image and `/opt/data` bind
+mount, has no published ports, and is not part of normal `compose up`. Its
+command owns manifest and credential validation, profile snapshotting and
+publication, root and profile staging/apply, lifelog synchronization, `.env`
+updates, transaction management, and redacted reporting.
 
-The image installs a `/usr/local/bin/hermes-bootstrap` command. It owns:
+Host adapters only check prerequisites, obtain the non-secret secret plan,
+stream 1Password JSON to the container, propagate its status, and recreate the
+gateway after successful bootstrap. They do not implement profile Git or merge
+behavior. Secret values are never command arguments or persistent payload
+files.
 
-- manifest validation;
-- GitHub credential validation;
-- root distribution staging and apply;
-- official named-profile distribution install/update;
-- shared repository clone and sync;
-- root/profile `.env` updates;
-- permission enforcement;
-- migration, backup, rollback, and result reporting.
-
-The default profile's lifelog cron invokes
-`hermes-bootstrap sync-repository lifelog`. This command loads the GitHub token
-from the active root `.env` and reuses the same repository identity checks,
-lock, forbidden-path checks, commit, rebase, and push implementation as the
-installer. Distribution repositories do not carry a second Git sync
-implementation.
-
-### Host adapters
-
-The shell and PowerShell adapters only:
-
-1. verify Docker, `op`, and host prerequisites;
-2. request the non-secret item plan that `hermes-bootstrap` derives from the
-   shared manifest;
-3. retrieve each declared 1Password item and stream it immediately as a
-   versioned JSON payload to `hermes-bootstrap` over stdin;
-4. propagate the bootstrap exit status;
-5. start or recreate the Hermes Compose services after success.
-
-Secret values are never passed as command arguments. The adapters do not
-implement `.env`, profile, Git, or config merge behavior.
-
-## Installer Integration
-
-The top-level routing remains unchanged:
-
-```text
-install.sh
-  -> install-macos.sh / install-linux.sh / install-nixos.sh
-  -> shared shell adapter
-  -> docker compose run --rm --no-deps -T hermes-bootstrap
-  -> docker compose up
-```
-
-The duplicated Unix `start_hermes_stack` implementations move into the shared
-Hermes shell module and accept a Docker runner for normal and docker-group
-execution.
-
-```text
-install.cmd
-  -> scripts/powershell/install.ps1
-  -> scripts/powershell/install.admin.ps1
-  -> HermesAgentHandler (Phase 2, non-admin, Order 56)
-  -> PowerShell adapter
-  -> docker compose run --rm --no-deps -T hermes-bootstrap
-  -> docker compose up
-```
-
-The Windows handler remains non-admin so 1Password desktop integration works.
-Its existing Hermes-specific merge and provisioning methods are removed after
-the common bootstrap covers their behavior.
-
-## Secret Sources and Targets
-
-The confirmed 1Password sources are:
-
-| Purpose        | Account            | Vault      | Item                     |
-| -------------- | ------------------ | ---------- | ------------------------ |
-| Dashboard      | `my.1password.com` | `openclaw` | `Hermes Agent Dashboard` |
-| GitHub         | `my.1password.com` | `openclaw` | `GitHubUsedOpenClawPAT`  |
-| Root Slack     | `my.1password.com` | `openclaw` | `SlackBot-OpenClaw`      |
-| Rick Slack     | `my.1password.com` | `openclaw` | `SlackBot-Rick`          |
-| Hoffman Slack  | `my.1password.com` | `openclaw` | `SlackBot-Hoffman`       |
-| Risarisa Slack | `my.1password.com` | `openclaw` | `SlackBot-Risarisa`      |
-
-The GitHub item uses its `credential` field. The same Hermes-specific PAT is
-written to the root and each managed profile as
-`GITHUB_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, and `GITHUB_TOKEN`.
-
-GitHub authentication is mandatory. The bootstrap verifies the PAT with the
-GitHub API and verifies access to every declared private repository before
-changing files. Missing, invalid, or unauthorized credentials fail setup.
-
-Slack and dashboard fields are also mandatory. Managed profile Slack tokens are
-profile-specific and replace any cloned or stale platform token before a
-profile gateway can restart.
-
-Bootstrap generates independent strong random values for `API_SERVER_KEY` and
-`HERMES_DASHBOARD_BASIC_AUTH_SECRET`. The dashboard signing secret is shared by
-private root/profile `.env` files; the bootstrap-issued API key exists only in
-the root `.env`, and stale copies are removed from named profiles so their
-gateways do not bind the root API port. A repeat apply verifies the supplied
-dashboard password against the installed scrypt hash and reuses a valid hash,
-signing secret, and root API key, avoiding unintended credential rotation.
-Compose sets only `API_SERVER_HOST=0.0.0.0` in the container and publishes port
-`8642` on host loopback.
-
-## Runtime `gh` Authentication
-
-`docker/hermes-agent/gh-wrapper.sh` resolves credentials in this order:
-
-1. an existing `GH_TOKEN` process variable;
-2. `${HERMES_HOME}/.env` for the active root or named profile;
-3. `/opt/data/.env` as the shared root fallback.
-
-It maps `GITHUB_PERSONAL_ACCESS_TOKEN` or `GITHUB_TOKEN` to `GH_TOKEN` and then
-executes `/usr/bin/gh`. It does not invoke `gh auth login` or create a separate
-`hosts.yml` credential store. If no token is available, it exits with an error
-that directs the operator to rerun the installer.
-
-Hermes already propagates the active profile's `HERMES_HOME` to subprocesses,
-so the same wrapper works for default and named profiles.
+The required Slack items include `SlackBot-OpenClaw`, `SlackBot-Rick`,
+`SlackBot-Hoffman`, `SlackBot-Risarisa`, and `SlackBot-Nancy`; GitHub access is
+validated for every configured remote before bootstrap modifies local runtime
+data.
 
 ## Apply Sequence
 
-1. Build the Hermes image and validate the Compose model.
-2. Stop the Hermes gateway before secrets or runtime data can change.
-3. Request and validate the non-secret 1Password item plan.
-4. Start `hermes-bootstrap`, retrieving each required item on the host and
-   streaming it directly to stdin.
-5. Parse the payload without logging it.
-6. Validate all required fields, GitHub authentication, manifests, refs, and
-   repository access.
-7. Stage root and profile distributions before modifying runtime targets.
-8. Acquire each shared-repository lock and complete remote synchronization;
-   reacquire it during local publication and legacy cleanup.
-9. Snapshot every locally managed target and record a transaction journal.
-10. Apply the root distribution.
-11. Apply each named profile through the Hermes distribution API.
-12. Clone, migrate, or synchronize shared working trees under
-    `/opt/data/shared/`.
-13. Atomically update root and profile `.env` files with mode `0600` while
-    preserving unmanaged keys.
-14. Validate the final layout and `gh` authentication in every profile context.
-15. Remove the transaction journal and report changed targets without values.
-16. Recreate the Hermes gateway and run health checks.
+1. Build and validate the Compose model, stop the gateway, and read the secret
+   payload without logging it.
+2. Validate required fields, GitHub credentials, remote identities, and access.
+3. Snapshot every existing named profile, complete aggregate preflight, and
+   synchronize each exact local snapshot to its configured remote before any
+   staging or local transaction.
+4. For existing profiles, stage the exact commit reported by publication. For a
+   truly missing target only, stage its configured remote first-install ref.
+5. Stage the remote-authoritative root distribution and synchronize the shared
+   lifelog remote according to its locked read-write policy.
+6. Start the local transaction; apply root and named distributions through the
+   official Hermes APIs, apply shared working trees, and merge private `.env`
+   files with mode `0600`.
+7. Validate the installed layout, commit the transaction, report the
+   `profile_sync` summary, then recreate and health-check the gateway.
 
-The gateway remains stopped during validation, staging, and apply. Runtime files
-are replaced atomically, and the gateway is recreated only after the transaction
-succeeds. On failure, bootstrap rolls back, returns non-zero, and leaves the
-gateway stopped so it cannot observe partially validated runtime state.
+If aggregate profile preflight or publication fails, bootstrap stops before
+starting the local transaction. It preserves the profile-sync report. Earlier
+remote pushes remain valid because remote commits are outside the local
+transaction boundary; they are not rolled back.
 
-Remote commit and push operations are outside the local transaction boundary
-because they cannot be rolled back safely. They complete before local runtime
-files change. If a later local apply fails, the remote synchronization remains
-valid and the next installer run resumes idempotently; root, profile, shared
-working-tree migration, and `.env` changes under `/opt/data` are rolled back.
+## Profile Sync Result Contract
 
-## Migration
+Operators use these exact commands:
 
-The migration keeps `/opt/data` as `HERMES_HOME`, so memories, sessions, logs,
-browser data, X credentials, and other runtime paths do not move.
+```text
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+```
 
-- Existing root declarative files are backed up, then replaced only if listed
-  by `root-distribution.yaml`.
-- Existing named profiles without `distribution.yaml` are converted with
-  `hermes profile install --force`; Hermes preserves user-owned paths.
-- An existing `/opt/data/core/lifelog` checkout is copied to a private sibling,
-  validated, and atomically published at `/opt/data/shared/lifelog`. The legacy
-  path is snapshotted before removal and is absent after success.
-- If both old and new lifelog paths contain data, bootstrap stops and reports a
-  migration conflict rather than merging automatically.
-- Existing `.env` files retain unmanaged keys. Managed secret keys are replaced
-  from 1Password, while a matching dashboard hash, valid signing secret, and
-  valid bootstrap-issued root API key are preserved for repeat-run idempotency.
-  Named-profile API keys are removed.
-- Backups remain until final validation succeeds and are removed only after the
-  transaction commits.
+`sync-profiles` aggregates all manifest profiles. It writes one compact sorted
+JSON result line to stdout for handled success and failure, with empty stderr.
+Its `command` is `sync-profiles`; aggregate `status` is `changed`, `unchanged`,
+or `failed`; profile entries contain `name`, `status`, `commit`, `snapshot`,
+`added`, `modified`, `deleted`, `paths`, `category`, and `message`.
 
-## Failure and Security Rules
+Credential failure exits `3`. Repository, lock, remote, or aggregate-preflight
+failure exits `4`. Unexpected CLI failures use the standard redacted stderr
+boundary. A JSON result paired with nonzero exit remains a failed aggregate.
 
-- Validate all sources and required credentials before writing.
-- Reject malformed manifests, unexpected target paths, symlinks in
-  distributions, non-fast-forward refs, and repository identity mismatches.
-- Constrain every managed path beneath `/opt/data` and reject traversal.
-- Use temporary files, `0600` permissions, atomic rename, and rollback backups.
-- Redact secret values from normal output, exceptions, Docker logs, and test
-  fixtures.
-- Do not place the bootstrap payload in a persistent file or process argument.
-- Do not persist credentials in Git remote URLs. Git uses `GIT_ASKPASS` with a
-  short-lived file removed on exit.
-- Refuse shared-repository commits containing likely secret or runtime paths.
-- Return distinct non-zero exit codes for input, credential, repository,
-  migration, apply, rollback, and validation failures.
+Aggregate preflight completes before any push. Subsequent profile Git work runs
+sequentially; a failure does not prevent later attempts. One race retry fetches
+and rebuilds the snapshot; a same-tree remote descendant is accepted, and a
+second race is `push_race_exhausted`.
 
-## Testing
+## Failure And Recovery
 
-Distribution source repositories use the local/hosted validation contract in
-`distribution-validation-design.md`. GitHub Actions and pre-push invoke the
-same full validator. An explicit GitHub billing block may use current-head
-local evidence for automatic merge; missing or unknown workflow evidence may
-not.
+An operator repairs only the failed profile and redacted category. Fix the
+local authoritative profile content, or the owning engine/environment for a
+non-content failure, then run the dry-run command and the real command. A
+repair is accepted only when the aggregate exits `0` and that profile is
+`changed` or `unchanged`.
 
-### Bootstrap unit tests
+The root remains remote-authoritative throughout recovery. Lifelog remains a
+normal locked read-write Git checkout and is not part of named-profile exact
+mirroring.
 
-- manifest and payload schema validation;
-- path containment and symlink rejection;
-- root distribution ownership boundaries;
-- profile install/update while preserving user-owned data;
-- sanitized profile payloads containing only `distribution.yaml` and declared
-  `distribution_owned` paths;
-- shared repository clone, fast-forward, read-write sync, and locking;
-- `.env` merge, permissions, active-profile resolution, and idempotency;
-- missing and invalid GitHub credentials causing no writes;
-- rollback after failures at each apply stage;
-- log and exception redaction.
+## Future `hermes-home` Work
 
-### Adapter contract tests
+The two-hour aggregate cron handoff and dedicated private Slack channel ID are
+explicitly future Task 7 work in `hermes-home`; they are not deployed by this
+design's current dotfiles implementation. A future root-owned wrapper must call
+the aggregate command and must not import remote content into an existing local
+named profile.
 
-- Bats tests for the shared shell adapter;
-- Pester tests for `HermesAgentHandler` and the PowerShell adapter;
-- identical versioned payloads and error propagation on every OS;
-- no secret values in command arguments or captured logs.
+## Verification
 
-### Container integration tests
-
-Build the real image and use a temporary `HERMES_DATA_DIR` with local bare Git
-repositories and fake 1Password responses. Verify initial install, repeat
-install, profile update, root update, shared repository migration, rollback,
-and gateway configuration without using real credentials.
-
-### Live acceptance
-
-After implementation, run the installer with the confirmed 1Password items and
-verify without printing token values:
-
-- `hermes profile list` contains default, rick, hoffman, and risarisa;
-- each named profile reports distribution source and version;
-- root and every profile pass `gh auth status` or an equivalent API check;
-- `/opt/data/shared/lifelog` is one shared checkout visible to all profiles;
-- `/opt/data/core/lifelog` does not exist after migration;
-- root and profile Slack gateways start with their own app credentials;
-- root API, dashboard, browser viewer, cron ticker, and profile gateways are
-  healthy;
-- a second installer run produces no unintended file changes.
-
-## Implementation Phases
-
-1. Add distribution manifests to the three named-profile repositories and a
-   root distribution manifest to `hermes-home`.
-2. Move dotfiles-generated declarative config, policies, cron, scripts, and MCP
-   settings into their owning distribution repositories.
-3. Add the common bootstrap command, Compose service, manifest, transaction,
-   shared-repository, and `gh` wrapper behavior in this repository.
-4. Reduce the shell and PowerShell implementations to host adapters.
-5. Add unit, contract, container integration, migration, and live acceptance
-   coverage.
-6. Update `profile-home-layout.md`, `browser-mcp.md`, secrets documentation, and
-   Taskfile commands after the new runtime is active.
+`task hermes:bootstrap:test` covers manifest-generic four-profile sequencing,
+including Nancy; existing-local snapshots; missing-only first install; invalid
+existing profiles; exact remote deletion; local immutability; aggregate
+preflight; sequential continuation; retry and same-tree descendant acceptance;
+compact JSON; exit codes; and redaction.

@@ -1,231 +1,144 @@
 # Hermes Bootstrap Operations
 
 Hermes uses one container-owned bootstrap on every supported host. The host
-adapter supplies prerequisites and secrets; it does not write Hermes config,
-profiles, repositories, or `.env` files directly.
+adapter supplies prerequisites and secrets; it does not directly write Hermes
+config, profiles, repositories, or `.env` files.
 
-## Run
+## Run Bootstrap
 
-Prerequisites are a running Docker daemon, Docker Compose, an authenticated
-1Password CLI (`op`), access to the six configured items, and access to the
-declared private GitHub repositories. Unix requires native `bash`, `jq`,
-`docker`, and `op`. Windows requires `pwsh`, Docker Desktop's native `docker`
-and Compose plugin, and an authenticated native `op.exe`; the focused adapter
-does not route these commands through WSL.
-
-For a focused rerun on any supported host:
+For a focused full bootstrap on any supported host, run:
 
 ```text
 task hermes:bootstrap
 ```
 
-On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
-adapter with the canonical Compose file. On Windows, it runs
-`pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
-Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
-rebuild. Both adapters run Compose config validation, build `hermes` and
-`hermes-bootstrap`, invoke the container bootstrap, and only then recreate the
-stack.
+The task validates Compose, builds the Hermes and bootstrap services, streams
+the required 1Password data to the container, runs bootstrap, and recreates the
+stack only after success. The bootstrap manifest currently declares Slack items
+for the root/default profile and four named profiles: Rick, Hoffman, RisaRisa,
+and Nancy.
 
-`install.cmd` remains the Windows full-machine setup entrypoint and continues
-through the PowerShell handler. The exact supported installer chains are:
+The successful bootstrap JSON contains `status: "applied"`, the four profile
+names, `repositories: ["lifelog"]`, and `profile_sync`. `profile_sync` maps
+each named profile to `changed`, `unchanged`, or `installed`; `installed` is
+only the truly missing first-install case.
 
-```text
-install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
-install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter (HermesBootstrap.ps1) -> hermes-bootstrap container -> compose up
-```
+## Sync Existing Named Profiles
 
-`task hermes:bootstrap` returns the selected focused adapter status; it neither
-runs the full-machine installer nor hides a nonzero result.
-
-## Data Flow
-
-The exact bootstrap chain is:
+Use the aggregate profile command before and after a local declarative repair:
 
 ```text
-host adapter
-  -> request the non-secret secret plan
-  -> fetch six full 1Password item JSON objects
-  -> stream header + six item records + end as NDJSON
-  -> docker compose run --rm --no-deps -T hermes-bootstrap apply
-  -> validate and stage every source
-  -> transactional install under /opt/data
-  -> docker compose up -d --force-recreate only after success
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
 ```
 
-Each of the six NDJSON item records embeds the full object returned by
-`op item get <title> --account my.1password.com --vault openclaw --format json`.
-The stream is sent directly to container stdin. It is never stored in a file,
-logged, or placed in a process argument.
+It processes every profile declared in
+`docker/hermes-agent/bootstrap-manifest.yaml` in manifest order. Do not replace
+these commands with a clone or checkout inside a profile home.
 
-All configured items are mandatory:
+For every existing valid named profile, the local `distribution.yaml` and
+`distribution_owned` allowlist are authoritative. The service creates a private
+immutable snapshot, projects it into a temporary Git repository, and pushes a
+normal fast-forward update. It then stages the same reported commit and uses
+the official Hermes distribution API during bootstrap. The profile home itself
+stays non-Git and both dry runs and real sync preserve local bytes and modes.
 
-| Purpose        | Account            | Vault      | Item title               |
-| -------------- | ------------------ | ---------- | ------------------------ |
-| Dashboard      | `my.1password.com` | `openclaw` | `Hermes Agent Dashboard` |
-| GitHub         | `my.1password.com` | `openclaw` | `GitHubUsedOpenClawPAT`  |
-| Root Slack     | `my.1password.com` | `openclaw` | `SlackBot-OpenClaw`      |
-| Rick Slack     | `my.1password.com` | `openclaw` | `SlackBot-Rick`          |
-| Hoffman Slack  | `my.1password.com` | `openclaw` | `SlackBot-Hoffman`       |
-| Risarisa Slack | `my.1password.com` | `openclaw` | `SlackBot-Risarisa`      |
+The remote tree is exact: canonical `.gitignore`, canonical
+`distribution.yaml`, and declared owned paths only. Stale remote README files,
+workflows, validators, tests, or other allowlist-external files are deleted.
+Empty directories are not represented in Git.
 
-Required field labels, without their values, are:
+The configured manifest currently includes `rick`, `hoffman`, `risarisa`, and
+`nancy`. Do not use an obsolete three-profile list in a procedure or test.
+Rick and Hoffman currently declare `assets`, so their local Slack avatar and
+portfolio images are owned. RisaRisa does not declare assets. Nancy's local
+home is currently absent; it has no snapshot or assets until its permitted
+first install creates a valid local manifest, after which its own local
+allowlist controls assets.
 
-- `Hermes Agent Dashboard`: `username` accepts `username` or `user name`; `password` accepts `password`.
-- `GitHubUsedOpenClawPAT`: `credential` accepts `credential`, `token`, `PAT`, or `password`.
-- Each Slack item: `bot_token` accepts `SLACK_BOT_TOKEN`, `bot_token`, or `bot token`; `app_token` accepts `SLACK_APP_TOKEN`, `app_level_token`, `app token`, or `app-level token`; `allowed_users` accepts `SLACK_ALLOWED_USERS`, `allowed_users`, `allowed users`, `allowFrom`, or `allow_from`.
+## First Install And Bootstrap Ordering
 
-The bootstrap validates GitHub authentication and repository access, then writes
-only managed keys to root/profile `.env` files. Secret values never belong in
-this repository or these docs.
+Bootstrap validates credentials and repository access before profile publication.
+It snapshots all existing profiles, completes their exact local-to-remote
+publication before staging, and stages the exact returned commits. Only then
+does it begin the normal transaction that applies root, named profiles, shared
+repositories, and environment files.
 
-Managed runtime keys include the three GitHub token aliases, the dashboard
-username/hash/signing secret, and each profile's Slack credentials. Root also
-owns `API_SERVER_KEY`; bootstrap removes that key from named-profile `.env`
-files so their gateways do not compete for the root API port. The API key and
-dashboard signing secret are independently generated strong values read by
-Hermes from private `.env` files; neither is embedded in Compose. On a repeat
-apply, bootstrap verifies the current dashboard password against the installed
-scrypt hash and preserves that hash, a valid signing secret, and a valid
-bootstrap-issued root API key. This keeps repeat runs idempotent while rotating
-material when its source or installed value is invalid.
+A target directory that is truly absent is seeded from its configured remote
+for the first official Hermes install. An existing malformed or incomplete
+profile is not absent: bootstrap fails before its transaction and never falls
+back to a remote overwrite.
 
-## Sources And Layout
+If synchronization fails, bootstrap does not begin its local transaction or
+restart Hermes. It preserves the profile-sync report for diagnostics. Earlier
+remote pushes remain valid because remote commits cannot be rolled back; a
+subsequent run reports them as `unchanged` when the remote tree matches the
+same local snapshot.
 
-`/opt/data` is the runtime root, not a Git checkout. Its canonical managed
-layout is:
+Root `hermes-home` remains remote-authoritative. `shared/lifelog` remains the
+normal locked read-write Git repository owned for synchronization by the default
+profile. The local-first named-profile policy does not change either model.
+
+## Reading Results And Exit Codes
+
+`sync-profiles` writes one compact, sorted JSON result line to stdout for both
+success and handled sync failure; stderr is empty in those cases. The object
+has `schema_version: 1`, `command: "sync-profiles"`, a boolean `dry_run`, an
+aggregate `status`, and ordered `profiles` entries. Aggregate status is
+`changed`, `unchanged`, or `failed`, not `success`.
+
+Each profile entry includes `name`, `status`, `commit`, `snapshot`, `added`,
+`modified`, `deleted`, `paths`, `category`, and `message`. The three diff
+fields and `paths` are arrays of relative paths; `paths` is the sorted combined
+list. Treat `category` and `message` as redacted diagnostics.
+
+| Exit | Meaning                                            | Operator action                                                      |
+| ---- | -------------------------------------------------- | -------------------------------------------------------------------- |
+| `0`  | Every profile is `changed` or `unchanged`          | Continue or accept the repair                                        |
+| `3`  | Credentials unavailable                            | Repair the runtime GitHub credential source, then rerun              |
+| `4`  | Aggregate preflight or repository operation failed | Repair the reported profile/category or repository state, then rerun |
+
+Other bootstrap CLI failures use their normal typed exit codes and redacted
+stderr error path. A successful JSON parse is not enough: use the process exit
+status as the aggregate success signal.
+
+## Failure And Recovery
+
+The service completes aggregate local preflight before any profile push. A
+preflight failure reports the invalid profile with its redacted category and
+reports all other profile entries as `aggregate_preflight_blocked`; no remote
+tree was compared or modified.
+
+After preflight, profile publication is sequential and independently locked.
+One Git failure does not stop later profiles from being attempted. A push race
+gets one fetch-and-rebuild retry. A matching-tree remote descendant is accepted;
+a second race failure is reported as `push_race_exhausted`.
+
+For a repair handoff, give the repair task only the failed profile and its
+redacted category. Correct the local authoritative profile or the owning
+engine/environment, then run the dry-run command followed by the real command.
+Accept the repair only when the aggregate exits `0` and the repaired profile is
+`changed` or `unchanged`. Do not use remote content to repair an existing local
+profile.
+
+## Future Handoff
+
+The two-hour profile-sync cron handoff and its private Slack channel ID are
+future `hermes-home` Task 7 work. They are not deployed by the current
+bootstrap or this operations change. Any future root-owned wrapper must invoke
+the same aggregate command and must remain local-to-remote for existing named
+profiles.
+
+## Verification Gate
+
+Run the focused test gate for changes to the bootstrap implementation or these
+operations docs:
 
 ```text
-/opt/data/
-├── profiles/{rick,hoffman,risarisa}/
-└── shared/lifelog/
+task hermes:bootstrap:test
 ```
 
-The root source is `rurusasu/hermes-home` at `main`; its
-`root-distribution.yaml` limits which root paths may be replaced. Rick,
-Hoffman, and Risarisa come from their matching
-`rurusasu/hermes-profile-<name>` repositories at `main` and are applied with
-Hermes' official profile distribution API using `distribution.yaml`.
-
-See [Home/Profile Layout](profile-home-layout.md) for ownership boundaries.
-
-## Transaction And Recovery
-
-Before local writes, bootstrap validates credentials, repository access,
-manifests, refs, source ownership, and staged distributions. Shared remote sync
-also completes before the local transaction because a remote push cannot be
-rolled back safely.
-
-The local transaction uses a single-writer lock and journals snapshots under
-`/opt/data/.bootstrap/transactions/`. Root-owned paths, named profiles, shared
-working-tree publication, deprecated-path cleanup, and `.env` files are staged
-or snapshotted before replacement. Environment files are atomically renamed
-with mode `0600`, preserve unmanaged keys, and replace managed secret keys.
-
-The gateway binds its authenticated API to `0.0.0.0:8642` inside the container
-so Docker port forwarding can reach it. Compose publishes that port only on
-host loopback (`127.0.0.1`); Hermes refuses to start the API without the managed
-strong `API_SERVER_KEY`.
-
-The host adapter stops the Hermes gateway before requesting secrets or changing
-runtime data. If a local apply or final validation fails, bootstrap restores
-all recorded local paths and leaves Hermes stopped; rerun bootstrap after
-resolving the reported failure. A remote lifelog commit or push completed
-before the transaction is not reversed; the next run resumes from that valid
-remote state. If the process is interrupted, the next `apply` recovers or
-cleans the journal before accepting a new transaction.
-
-Repository synchronization and working-tree publication use
-`/opt/data/locks/repositories/<name>.lock`. The lock remains held while a
-verified legacy copy is published and the old path is removed. Lock contention
-fails immediately instead of waiting indefinitely. After confirming that the
-other bootstrap or sync process has exited, rerun the same command.
-
-Git status, index, staged-path, and unpushed-history inspection is bounded to
-8 MiB per command and fails closed above that limit. The declared remote tree
-may contain ordinary knowledge filenames such as `authentication-guide.md`.
-Local synchronization still rejects credential artifacts such as `.env`,
-`auth.json`, and `token.txt`, runtime state directories, databases, and nested
-Git repositories before it can commit or push them. The repository-root
-`.env.example` template is allowed; other `.env.*` variants remain rejected.
-Authenticated Git operations execute the root-owned `/usr/bin/git` from the
-pinned image and replace inherited `PATH` with the system default before Git or
-its helpers receive credentials.
-
-## Migration And Conflicts
-
-- A legacy real checkout at `/opt/data/core/lifelog` is copied to a private
-  sibling, validated, and atomically published at `/opt/data/shared/lifelog`.
-  The old path is removed only after it has been snapshotted, and is absent
-  after success. The manifest's `legacy_target` is migration input, not a
-  runtime alias.
-- An empty legacy directory or compatibility symlink created by an older
-  bootstrap version is removed transactionally.
-- If both lifelog paths contain real data, bootstrap exits with migration code
-  `5`. It does not merge, delete, or choose between them; reconcile or back up
-  one path explicitly, then rerun.
-- Existing named profiles are installed from their staged official
-  distributions with forced distribution ownership. User-owned `.env`,
-  `auth.json`, memories, sessions, logs, and workspaces remain outside that
-  ownership.
-- Existing root files are replaced only when declared by
-  `root-distribution.yaml`.
-- Repeated successful runs are supported and converge to the same layout.
-
-## Exit Codes
-
-The container command uses stable typed exit codes:
-
-| Code | Meaning                                                       | Operator action                                                |
-| ---- | ------------------------------------------------------------- | -------------------------------------------------------------- |
-| `0`  | Success                                                       | Compose may start                                              |
-| `1`  | Host secret-plan or payload production failed                 | Fix `op`/adapter input and rerun                               |
-| `2`  | Invalid command, manifest, payload, or managed env input      | Correct input; no Compose restart                              |
-| `3`  | Missing, invalid, or unauthorized credential                  | Repair 1Password/GitHub access                                 |
-| `4`  | Repository access, identity, sync, or repository-lock failure | Resolve repository/lock state and rerun                        |
-| `5`  | Migration conflict                                            | Reconcile the named old/new paths manually                     |
-| `6`  | Apply, staging, cleanup, or active transaction failure        | Inspect redacted diagnostics and rerun/recover                 |
-| `7`  | Rollback failure                                              | Preserve the journal and inspect managed paths before retrying |
-| `8`  | Final installed-layout validation failed                      | Correct layout/source state and rerun                          |
-
-Compose config, build, bootstrap, and startup failures remain nonzero through
-the host adapter. The adapter prints only redacted diagnostics and never runs
-`compose up` after an earlier failure.
-
-## Source Validation Gate
-
-Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
-the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
-pinned Docker test stage and the `gh` wrapper security suite in the
-`Hermes Bootstrap Tests` workflow, so the container transaction, payload, and
-runtime credential path are publication gates rather than optional manual
-checks.
-
-The four source repositories use the same `fast` and `full` validator. Local
-validator exits are `0` pass, `1` validation failure, `2` prerequisite blocked,
-and `3` validator internal error. A result is current only when its `head_sha`
-matches local `HEAD` and the pull request head.
-
-The controller exposes these operator states:
-
-| State                 | Meaning                                                                                       |
-| --------------------- | --------------------------------------------------------------------------------------------- |
-| `PASS_REMOTE`         | Exact-head local full validation and current-head workflow both pass                          |
-| `PASS_LOCAL_FALLBACK` | Exact-head local full validation passes and GitHub explicitly reports a billing startup block |
-| `FAIL_VALIDATION`     | Local or hosted validation reports failed checks                                              |
-| `FIX_FAILED`          | The two-round automated repair limit was reached                                              |
-| `ENV_BLOCKED`         | Docker, image, pre-commit, or authentication prerequisite is absent                           |
-| `REMOTE_PENDING`      | Current-head workflow is queued or running                                                    |
-| `REMOTE_UNKNOWN`      | No usable run and no explicit billing evidence exists                                         |
-| `STALE_EVIDENCE`      | Local or remote evidence is for another commit                                                |
-| `INTERNAL_ERROR`      | Validator or classifier violated its contract                                                 |
-
-Only `PASS_REMOTE` and `PASS_LOCAL_FALLBACK` authorize merge. Local fallback
-requires GitHub-owned current-head evidence that billing, spending, included
-usage, storage billing, or an exhausted budget prevented startup. A missing
-run, missing API permission, or unknown failure is never billing evidence and
-remains `REMOTE_UNKNOWN`. Automated repair is limited to two rounds for the
-same repository and failed check set; `ENV_BLOCKED` does not consume a round.
-
-See [Distribution Validation](distribution-validation-design.md) for the full
-evidence and remediation contract.
+The suite covers four-profile bootstrap sequencing, first-install seeding,
+invalid-existing failure without fallback, aggregate preflight, exact remote
+tree deletion, local immutability, retry behavior, compact JSON, exit status,
+and redaction.

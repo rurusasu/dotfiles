@@ -2,278 +2,99 @@
 
 ## Status
 
-Approved on 2026-07-23. Implementation follows the companion plan under
-`docs/hermes-agent/plans/`.
+Implemented in the `dotfiles` Hermes bootstrap service. This document replaces
+the named-profile source-of-truth statements in
+`bootstrap-design.md`; the root Hermes distribution and shared repositories
+retain their separate ownership rules.
 
-This document supersedes the named-profile source-of-truth statements in
-`bootstrap-design.md`. The root Hermes distribution and shared repositories keep
-their existing ownership rules.
+## Authority Model
 
-## Problem
+The three managed content classes deliberately use different authority models:
 
-The current bootstrap stages each named profile from a GitHub distribution
-repository and applies it to the local Hermes profile home. That makes GitHub
-authoritative for declarative profile files.
+| Content        | Authoritative location                                     | Synchronization model                                                           |
+| -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Named profile  | Existing `/opt/data/profiles/<name>` declarative allowlist | immutable local snapshot to configured remote, then exact commit through Hermes |
+| Root/default   | `rurusasu/hermes-home`                                     | remote distribution to local runtime                                            |
+| Shared lifelog | `/opt/data/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
-The installed profile homes now contain the correct configuration, policy, and
-Slack image assets. Those local files must become authoritative and must be
-backed up to their corresponding GitHub repositories without accidentally
-publishing runtime state or secrets.
+`docker/hermes-agent/bootstrap-manifest.yaml` currently declares four named
+profiles: `rick`, `hoffman`, `risarisa`, and `nancy`. The manifest is the
+configuration source for their name, remote, branch, and target; operations and
+tests must not assume a fixed three-profile set.
 
-Using each entire profile home as a Git worktree would mix Git metadata with
-Hermes-managed runtime state. Preserving every existing remote file would also
-leave stale or unrelated files in repositories that are intended to represent
-only the local declarative profile. A periodic bidirectional pull could
-overwrite the known-correct local state.
+For an existing valid named profile, the local `distribution.yaml` and its
+`distribution_owned` allowlist are authoritative. Remote changes never flow
+back into that existing home. The home remains a Hermes distribution target,
+not a Git worktree: the synchronizer never clones or checks out into it and
+does not alter its bytes or modes. Empty directories are intentionally absent
+from the remote projection because Git cannot represent them.
 
-## Goals
+Only a truly missing profile target is a first install. Bootstrap may stage the
+configured remote for that target and install it through the official Hermes
+distribution API. An existing malformed or incomplete target is not missing:
+it fails closed and is never replaced from remote content.
 
-- Treat each installed named profile's declarative files as the source of
-  truth.
-- Mirror only the locally declared distribution-owned files to the matching
-  GitHub repository.
-- Include Slack profile images when their containing path is locally owned.
-- Remove every tracked remote file outside the generated allowlist.
-- Preserve Hermes' official profile distribution apply mechanism.
-- Keep profile homes free of `.git` directories and other repository metadata.
-- Sync all managed profiles during bootstrap and every two hours afterward.
-- Make dry runs, failures, retries, and Slack delivery observable without
-  exposing secrets or file contents.
-- Keep the behavior identical across macOS, Linux, NixOS, and Windows hosts by
-  implementing it in the containerized bootstrap service.
+At the Task 6 inspection point, Rick and Hoffman locally declare `assets` and
+therefore publish their Slack avatar and portfolio image files. RisaRisa has no
+locally declared `assets` path. Nancy is declared by the manifest but its local
+profile home is missing, so it has no local snapshot or assets to publish until
+the first install has created a valid local manifest. Thereafter Nancy assets
+are included only if its own local `distribution_owned` declares them.
 
-## Non-Goals
+## Snapshot Boundary
 
-- Synchronizing profile memories, sessions, logs, plans, workspaces, cron state,
-  or caches.
-- Synchronizing `.env`, `auth.json`, tokens, credentials, or other secrets.
-- Making the profile home itself a Git checkout.
-- Pulling remote changes into an existing valid local profile during periodic
-  sync.
-- Changing the root `hermes-home` source-of-truth model.
-- Changing the shared `lifelog` repository's read-write Git workflow.
-- Force-pushing or rewriting remote history.
+For each existing valid profile, the synchronizer parses and validates the
+local manifest, removes runtime `source` and `installed_at` values when it
+creates the canonical remote manifest, and builds a private immutable snapshot.
+The projection contains exactly:
 
-## Source-Of-Truth Model
+- canonical `distribution.yaml`;
+- generated canonical `.gitignore`; and
+- regular files beneath validated `distribution_owned` paths.
 
-The three classes of managed content deliberately use different models:
+It excludes `.env`, `auth.json`, credentials, `.git`, runtime memories,
+sessions, logs, plans, workspaces, caches, locks, temporary files, special
+files, hard-link violations, symbolic links, and paths outside the home. The
+preflight also rejects traversal, reserved paths, case collisions, unreadable
+files, and secret candidates.
 
-| Content        | Authoritative location      | Synchronization model                   |
-| -------------- | --------------------------- | --------------------------------------- |
-| Named profiles | `/opt/data/profiles/<name>` | local declarative snapshot to GitHub    |
-| Root profile   | `rurusasu/hermes-home`      | GitHub distribution to local runtime    |
-| Shared lifelog | `/opt/data/shared/lifelog`  | normal locked read-write Git repository |
+The remote tree is an exact projection, not a repository workspace. It contains
+only `.gitignore`, `distribution.yaml`, and declared owned paths. Each real
+publication stages additions, modifications, and deletions, so stale remote
+README files, workflows, validators, tests, and other allowlist-external paths
+are deleted. A local deletion of an owned file deletes it remotely. No force
+push is used.
 
-The managed named profiles are `rick`, `hoffman`, and `risarisa`, as declared in
-`docker/hermes-agent/bootstrap-manifest.yaml`. Each profile maps to exactly one
-remote repository and branch.
+## Operator Command
 
-The local profile home remains an official Hermes distribution target rather
-than a Git repository. Synchronization builds an isolated temporary checkout,
-projects the allowed local files into it, commits that projection, and pushes
-the configured branch. Bootstrap may then stage that exact remote commit and
-apply it through Hermes' existing distribution API. This keeps installation
-semantics compatible with Hermes while reversing only the named-profile
-authority direction.
-
-## Synchronization Boundary
-
-### Included content
-
-For each profile, the synchronizer reads the local `distribution.yaml` and
-includes only:
-
-- a canonicalized `distribution.yaml`;
-- `.gitignore`, generated by the synchronizer; and
-- every regular file beneath each validated path in `distribution_owned`.
-
-An owned regular file is included directly. An owned directory is traversed
-recursively. Empty directories are not represented because Git cannot track
-them.
-
-The current expected ownership is:
-
-| Profile  | Expected owned paths                                                                            |
-| -------- | ----------------------------------------------------------------------------------------------- |
-| Rick     | `.no-bundled-skills`, `SOUL.md`, `config.yaml`, `profile.yaml`, `slack-manifest.json`, `assets` |
-| Hoffman  | `.no-bundled-skills`, `SOUL.md`, `config.yaml`, `profile.yaml`, `slack-manifest.json`, `assets` |
-| RisaRisa | `.no-bundled-skills`, `SOUL.md`, `config.yaml`, `slack-manifest.json`                           |
-
-Rick and Hoffman therefore include their Slack avatar and portfolio images
-under `assets/`. RisaRisa does not synchronize an `assets/` directory unless
-its local manifest first adds that path to `distribution_owned`.
-
-The local manifest, not the table above, is authoritative at runtime. The table
-records the initial expected state and is used by acceptance checks.
-
-### Canonical manifest
-
-The synchronizer parses `distribution.yaml` with the repository's structured
-YAML parser and validates it with the same distribution contract used by
-bootstrap. It removes runtime-generated keys such as `source` and
-`installed_at` before serializing the remote copy. Unknown runtime-only keys
-must be rejected until explicitly classified; they must not be copied by
-accident.
-
-The local manifest is never rewritten merely to canonicalize the remote copy.
-Its declared identity must match the profile and repository mapping in the
-bootstrap manifest.
-
-### Always excluded content
-
-The following content is never included, even if a malformed local manifest
-tries to own it:
-
-- `.env`, `auth.json`, credentials, tokens, and secret-bearing files;
-- `.git` and all repository metadata;
-- memories, sessions, logs, plans, workspaces, home data, and caches;
-- cron output and state;
-- bootstrap state, backups, locks, and temporary files;
-- sockets, devices, FIFOs, hard links that violate the copy policy, and other
-  special files;
-- symbolic links at any depth; and
-- paths outside the profile target, including traversal and absolute paths.
-
-The path validator uses normalized relative POSIX paths and rejects reserved
-names, control characters, ambiguous separators, `.` and `..` components, and
-case-colliding paths. A secret-candidate detector rejects known credential
-filenames and sensitive key material before any remote mutation starts.
-
-## Generated `.gitignore`
-
-Each remote profile repository carries a generated root `.gitignore` as its
-allowlist control file. It ignores the repository by default and then
-unignores only the canonical manifest, the control file itself, and validated
-owned paths.
-
-For Rick and Hoffman the initial generated form is equivalent to:
-
-```gitignore
-/*
-!/.gitignore
-!/distribution.yaml
-!/.no-bundled-skills
-!/SOUL.md
-!/config.yaml
-!/profile.yaml
-!/slack-manifest.json
-!/assets/
-!/assets/**
-```
-
-Generation is deterministic. Entries use root-anchored patterns, include every
-required parent directory before a nested owned path, and use directory plus
-descendant patterns for owned directories. Input paths are restricted to a
-conservative portable character set so generated patterns never depend on
-Gitignore escaping differences between operating systems.
-
-`.gitignore` does not untrack existing files by itself. The synchronizer rebuilds
-the temporary checkout's tracked tree from the exact local projection and stages
-all additions, modifications, and deletions. Therefore remote-only README,
-validation, workflow, test, script, or stale profile files are removed instead
-of silently retained.
-
-### Effect on repository-local validation
-
-This exact-mirror rule intentionally supersedes the named-profile repository
-contract in `distribution-validation-design.md`. In particular, the profile
-repositories' default branches no longer retain `.github/`,
-`.pre-commit-config.yaml`, validator scripts, tests, or generated evidence. A
-GitHub Actions workflow or pre-commit hook stored in those same branches would
-itself be outside the allowlist and would make the remote tree an inexact local
-mirror.
-
-The `hermes-home` root repository keeps its repository-local pre-commit and
-GitHub Actions validation because it remains remote-authoritative. Named-profile
-validation moves to the `dotfiles` bootstrap test suite and the fail-closed
-runtime preflight described below. Those checks run before Git mutation and do
-not rely on paid GitHub-hosted execution.
-
-The configured profile branch must permit the bootstrap identity to make normal
-fast-forward pushes. A branch rule that requires a pull request or a workflow
-stored on that branch is incompatible with unattended exact-mirror sync and is
-reported as a profile failure; the synchronizer does not bypass branch rules.
-
-## Preflight And Snapshot
-
-An aggregate run performs a complete preflight for all managed profiles before
-starting a push:
-
-1. Resolve each target beneath the configured data root.
-2. Require a regular local `distribution.yaml` for an installed profile.
-3. Parse and validate its identity and `distribution_owned` entries.
-4. Walk each owned path without following links.
-5. Reject reserved paths, symlinks, special files, case collisions, unreadable
-   files, and secret candidates.
-6. Build an immutable inventory containing relative paths, modes, sizes, and
-   content hashes.
-7. Generate the canonical manifest and `.gitignore` in memory.
-8. Verify that the final expected tree contains only the allowed projection.
-
-If any installed profile fails preflight, no profile push begins. The process
-reports the failing profile and a redacted reason, leaving all local and remote
-content unchanged.
-
-The snapshot is copied to bootstrap-owned temporary storage after validation.
-Git operations read that copy rather than live profile files, preventing an
-agent edit during synchronization from producing a mixed commit. The local
-profile is never modified by a normal or dry-run sync.
-
-## Git Synchronization Algorithm
-
-After aggregate preflight succeeds, profiles are processed sequentially. Each
-profile uses a repository-specific lock beneath
-`/opt/data/locks/repositories/`, shared by bootstrap, cron, and manual runs.
-
-For each profile:
-
-1. Create a fresh authenticated temporary checkout of the configured remote and
-   branch using the existing askpass/token handling.
-2. Verify the remote repository identity before writing files.
-3. Remove the tracked and untracked worktree projection from the temporary
-   checkout, preserving only `.git` metadata.
-4. Copy the immutable local snapshot into the checkout and write the generated
-   `.gitignore` and canonical manifest.
-5. Stage all changes with Git and independently verify that the staged tree is
-   exactly the expected allowed path set.
-6. If the staged tree is unchanged, return `unchanged` without committing or
-   pushing.
-7. Otherwise create a normal commit with the bootstrap Git identity and a
-   deterministic profile-sync message.
-8. Push the configured branch as a normal fast-forward update.
-
-Local deletion of an owned file deletes it remotely. A remote change to an
-owned file is replaced by the local snapshot. A remote-only file is deleted.
-No force push is permitted.
-
-If another writer advances the branch after checkout, the synchronizer fetches
-the new head, rebuilds the exact local projection on top of it, and retries the
-normal push once. A second rejection returns `failed`. It does not keep retrying
-or resolve content conflicts by pulling remote files into the profile home.
-
-One profile's post-preflight Git failure does not prevent attempts for the
-remaining profiles. Earlier successful pushes are not rolled back because they
-already represent the authoritative local snapshots.
-
-## Command Interface
-
-The container exposes:
+Run the aggregate command from the repository root. These are the supported
+dry-run and real forms:
 
 ```text
-hermes-bootstrap sync-profiles [--dry-run]
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
 ```
 
-With no profile argument, the command processes every named profile in manifest
-order. This aggregate behavior is the only cron entrypoint. An implementation
-may provide an internal single-profile function for tests and orchestration, but
-the public cron contract remains aggregate.
+The command processes every manifest profile in manifest order. `--dry-run`
+does the same aggregate local preflight and remote comparison, reports changed
+relative paths, and does not commit or push. Neither form logs file contents,
+credentials, authenticated URLs, environment values, or token-bearing command
+arguments.
 
-`--dry-run` performs the full local preflight and remote comparison without
-writing, committing, or pushing. It reports additions, modifications, and
-deletions by relative path. It never prints file contents, URLs containing
-credentials, environment values, or token-bearing command arguments.
+On a handled sync result, stdout is exactly one compact, sorted JSON line and
+stderr is empty, even for an aggregate failure. The process status is still
+authoritative: credential unavailability exits `3`; repository, lock, remote,
+or aggregate-preflight failures exit `4`. Argument and unexpected command
+errors follow the normal bootstrap CLI error path and write a redacted message
+to stderr instead of a result document.
 
-The machine-readable result has a stable schema equivalent to:
+The JSON schema is `schema_version: 1`. Its top-level `command` is exactly
+`"sync-profiles"`; `dry_run` is a boolean; `status` is exactly `"changed"`,
+`"unchanged"`, or `"failed"`; and `profiles` is in manifest order. Every
+profile object has exactly the command fields `name`, `status`, `commit`,
+`snapshot`, `added`, `modified`, `deleted`, `paths`, `category`, and `message`.
+The change fields are arrays of relative paths, and `paths` is their sorted
+combined list.
 
 ```json
 {
@@ -285,231 +106,122 @@ The machine-readable result has a stable schema equivalent to:
     {
       "name": "rick",
       "status": "changed",
-      "commit": "0123456789abcdef",
-      "added": 1,
-      "modified": 2,
-      "deleted": 3,
-      "message": "profile snapshot pushed"
+      "commit": "0123456789012345678901234567890123456789",
+      "snapshot": "a4c2d9e80f1a2b3c4d5e6f789012345678901234567890abcdef1234567890ab",
+      "added": ["assets/rick-slack-avatar.png"],
+      "modified": ["config.yaml"],
+      "deleted": [],
+      "paths": ["assets/rick-slack-avatar.png", "config.yaml"],
+      "category": "published",
+      "message": "profile snapshot published"
     },
     {
       "name": "hoffman",
       "status": "unchanged",
-      "commit": null,
-      "added": 0,
-      "modified": 0,
-      "deleted": 0,
-      "message": "remote tree already matches local snapshot"
+      "commit": "1123456789012345678901234567890123456789",
+      "snapshot": "b4c2d9e80f1a2b3c4d5e6f789012345678901234567890abcdef1234567890ab",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "paths": [],
+      "category": "unchanged",
+      "message": "profile snapshot already published"
     },
     {
       "name": "risarisa",
       "status": "failed",
       "commit": null,
-      "added": 0,
-      "modified": 0,
-      "deleted": 0,
-      "message": "remote update rejected after retry"
+      "snapshot": "c4c2d9e80f1a2b3c4d5e6f789012345678901234567890abcdef1234567890ab",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "paths": [],
+      "category": "push_race_exhausted",
+      "message": "profile publication changed repeatedly"
+    },
+    {
+      "name": "nancy",
+      "status": "failed",
+      "commit": null,
+      "snapshot": "",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "paths": [],
+      "category": "aggregate_preflight_blocked",
+      "message": "profile publication blocked by aggregate preflight"
     }
   ]
 }
 ```
 
-Profile statuses are `changed`, `unchanged`, or `failed`. The aggregate status
-is `success` only when no profile failed. Human output is derived from the same
-result and remains redacted. When aggregate preflight blocks all pushes, the
-invalid profile is `failed` and every unattempted profile is also `failed` with
-the redacted category `aggregate_preflight_blocked`; no result implies that its
-remote tree was compared or updated.
+The example illustrates a result shape, not a requirement that those profiles
+have those outcomes. For a blocked aggregate preflight, the invalid profile has
+its redacted validation category and all other entries are `failed` with
+`aggregate_preflight_blocked`; no remote profile comparison or update began.
 
-### Repair task flow
+## Publication And Failure Semantics
 
-A synchronization failure does not authorize the bootstrap to rewrite the
-authoritative local profile. Its JSON result is the handoff contract for a
-human or agent repair task:
+Aggregate preflight completes for every existing profile before any push. The
+synchronizer copies approved files to bootstrap-owned private storage, then
+uses that snapshot for Git work. This prevents a concurrent Hermes edit from
+mixing versions in a commit and keeps local profile bytes and modes immutable.
 
-1. Assign only the failed profile and redacted failure category to the repair
-   task.
-2. Make the smallest correction in the local profile home or, for engine and
-   environment failures, in the owning source repository.
-3. Run `sync-profiles --dry-run` and require successful aggregate preflight.
-4. Run the real aggregate command and independently inspect its exit status and
-   per-profile result.
-5. Treat `changed` or `unchanged` for the repaired profile, with no failed
-   profile, as success.
+After preflight, profiles run sequentially under per-profile repository locks.
+A post-preflight Git failure for one profile is recorded but does not stop
+later profiles from being attempted. Earlier successful pushes remain valid
+and are not rolled back. A normal push race gets one retry: the synchronizer
+fetches the new remote head, rebuilds the same expected tree, and retries. It
+accepts a remote descendant when that descendant has the same expected tree;
+a second race failure is reported as `push_race_exhausted`.
 
-`failed` after the real rerun means the repair did not complete. A prerequisite
-or authentication category means the task is blocked by environment rather
-than profile content. A different failing profile creates a separate task and
-does not invalidate a verified repair. The controller trusts the command result
-and remote ref verification, not an agent's prose claim.
+Bootstrap runs the same snapshot-and-publication phase after credential and
+repository validation but before it starts the local transaction. It stages
+the resulting exact commits and applies them through the official Hermes
+distribution API. Its successful `apply` result includes a `profile_sync`
+summary whose four entries are `changed`, `unchanged`, or `installed`.
 
-## Bootstrap Integration
+If profile synchronization fails, bootstrap fails before starting the local
+transaction; it neither applies runtime distributions nor restarts Hermes.
+Pushes completed for earlier profiles remain valid. Root staging stays
+remote-authoritative and shared lifelog continues its ordinary locked
+read-write Git synchronization.
 
-Bootstrap distinguishes an existing valid profile from a missing first-install
-target.
+## Repair Handoff
 
-For an existing valid local profile:
+Create a repair task with only the failed profile name and its redacted
+`category`. Correct the local authoritative profile data, or correct the
+owning engine/environment for a non-content category. Do not repair by
+checking out, cloning, or copying remote content into the profile home.
 
-1. Complete secret and repository-access validation.
-2. Preflight all local profile snapshots.
-3. Synchronize all snapshots to their remote branches.
-4. Stage the resulting exact remote commits.
-5. Continue the existing transactional root, profile, shared-repository, and
-   environment apply flow.
-6. Restart Hermes only after the whole bootstrap succeeds.
+1. Run the dry-run command above.
+2. Run the real command above.
+3. Accept the repair only when the aggregate exit is `0` and the repaired
+   profile's status is `changed` or `unchanged`.
 
-The staged named-profile content should equal the snapshot just pushed. Applying
-it through Hermes preserves the official distribution ownership behavior and
-provides an integrity check without changing the authoritative local data.
+A different failed profile is a separate repair task. A nonzero aggregate exit
+means the original repair is not complete.
 
-If any profile synchronization fails during bootstrap, bootstrap does not apply
-runtime distributions and the host adapter does not restart Hermes. A remote
-success completed before another profile's failure remains valid and is retried
-as `unchanged` on the next run.
+## Future Cron Handoff (Task 7, `hermes-home`)
 
-For a missing profile target, bootstrap may seed the profile from its configured
-remote distribution because no local source of truth exists yet. After the
-official first install succeeds, the installed local manifest defines all later
-sync boundaries. An existing malformed or incomplete profile is not treated as
-missing and must fail closed rather than being overwritten from remote.
+Two-hour scheduling and Slack delivery are not deployed by this Task 6 change.
+Task 7 in `hermes-home` may add a root-owned wrapper that invokes the aggregate
+command and may configure its dedicated private Slack channel ID there. This
+document makes no claim that a cron job, a channel ID, or Slack delivery is
+currently installed. That future handoff remains local-to-remote only and must
+not apply remote content into an existing named profile.
 
-Root distribution staging and shared lifelog synchronization retain their
-existing order and behavior except for the insertion of the named-profile
-local-to-remote phase before named-profile staging.
+## Verification Coverage
 
-## Cron Integration
+The Task 5 tests cover four manifest profiles, including Nancy in bootstrap
+sequencing and the profile-sync summary. They cover deterministic allowlist
+generation, canonical manifests, exact-tree deletion, immutable local
+snapshots, dry-run behavior, aggregate preflight, sequential continuation,
+one retry and race exhaustion, same-tree descendant acceptance, credential
+exit `3`, repository/preflight exit `4`, compact JSON stdout, and redacted
+stderr behavior.
 
-The default/root profile owns one aggregate job scheduled at:
-
-```cron
-30 */2 * * *
-```
-
-Hermes evaluates this cron expression in UTC. It runs every two hours at minute
-30, which is 01:30, 03:30, 05:30, and so on in Japan Standard Time. It avoids
-the existing article-news job at minute 0. The existing daily lifelog sync
-remains unchanged.
-
-Hermes cron executes a root-distribution-owned wrapper script beneath
-`/opt/data/scripts/`. That wrapper contains no Git or credential logic and only
-executes:
-
-```sh
-exec /usr/local/bin/hermes-bootstrap sync-profiles
-```
-
-The cron job delivers every aggregate result to the dedicated private Slack
-channel `hermes-cron-results` using the existing Hermes cron delivery metadata.
-The summary lists each profile as `changed`, `unchanged`, or `failed`, plus
-redacted counts. Any failed profile makes the command exit nonzero so Hermes
-delivers a failure result rather than a misleading success.
-
-Cron is strictly local-to-remote. It never stages or applies remote profile
-content to an existing local profile and never restarts Hermes.
-
-## Repository Ownership And Delivery Order
-
-The implementation spans two source repositories:
-
-| Repository             | Owned implementation                                                                                                                                      |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rurusasu/dotfiles`    | manifest/model changes, snapshot validation, generated allowlist, Git synchronization, CLI, bootstrap sequencing, container tests, and this documentation |
-| `rurusasu/hermes-home` | root wrapper script, cron job, Slack delivery metadata, root distribution ownership, and repository validation updates                                    |
-
-The three profile repositories require no hand-authored implementation change.
-The first approved real sync intentionally rewrites each remote tree to the
-exact local allowlist projection.
-
-Delivery order is:
-
-1. Merge the `dotfiles` synchronization engine and tests.
-2. Rebuild the Hermes image without running bootstrap apply.
-3. Run `sync-profiles --dry-run` and inspect all planned remote trees.
-4. Run the real aggregate sync and verify local snapshot hashes are unchanged.
-5. Add and merge the `hermes-home` wrapper and cron distribution changes.
-6. Run bootstrap to apply the updated root distribution; profile sync should be
-   idempotently `unchanged` during this apply.
-7. Manually run the installed cron job and confirm Slack delivery.
-
-This order ensures the distributed cron wrapper never refers to a command that
-is absent from the running image.
-
-## Failure Handling
-
-- Invalid local content fails aggregate preflight before any push.
-- Missing GitHub credentials or repository access fails before any mutation.
-- A lock collision reports failure without running concurrent Git operations.
-- A no-change profile does not create an empty commit.
-- A post-preflight failure is isolated to that profile; remaining profiles are
-  attempted and the aggregate exits nonzero.
-- Bootstrap synchronization failure prevents runtime apply and restart.
-- Temporary directories and askpass files are removed on success and failure.
-- Logs and Slack output contain only profile names, statuses, counts, commit
-  identifiers, and redacted error categories.
-- File contents, environment values, credentials, authenticated URLs, and
-  command lines containing tokens are never logged.
-
-## Test Strategy
-
-### Unit tests
-
-Tests cover:
-
-- exact deterministic `.gitignore` generation from `distribution_owned`;
-- required parent unignore rules for nested owned paths;
-- inclusion of Rick and Hoffman avatar and portfolio assets;
-- exclusion of RisaRisa assets until locally declared;
-- rejection of reserved paths, secret candidates, traversal, symlinks, special
-  files, unreadable files, and case collisions;
-- canonical manifest output and removal of `source` and `installed_at`;
-- rejection of unknown runtime-only manifest fields;
-- unchanged remote detection without a commit;
-- local additions, modifications, and deletions;
-- deletion of remote-only tracked files;
-- local replacement of conflicting remote-owned files;
-- staged-tree allowlist verification;
-- lock behavior, push-race retry, retry exhaustion, cleanup, and redaction; and
-- stable aggregate JSON and exit status.
-
-### Integration tests
-
-Tests use three local bare Git remotes and temporary profile homes to prove:
-
-- one aggregate run synchronizes all three profile trees;
-- an invalid profile means no remote push begins;
-- a Git failure after preflight does not prevent attempts for later profiles;
-- retrying a partially successful run produces `unchanged` for completed
-  profiles and completes the failed profile;
-- a missing local profile follows first-install remote seeding;
-- an invalid existing profile is never replaced by remote content;
-- a bootstrap sync failure leaves runtime profiles unchanged and prevents the
-  restart boundary;
-- `--dry-run` reports the same diff as a real run but does not update refs; and
-- the root cron contract schedules every two hours and delivers to the dedicated
-  Slack channel.
-
-The existing bootstrap suite and `test_gh_wrapper.sh` remain regression gates.
-
-## Production Acceptance
-
-Before enabling unattended synchronization:
-
-1. Run the complete dotfiles and distribution validation suites.
-2. Run `hermes-bootstrap sync-profiles --dry-run` against production local
-   profiles.
-3. Inspect every planned addition, modification, and deletion, especially the
-   generated `.gitignore`, canonical manifests, and image assets.
-4. Record local allowed-file hashes and verify the dry run changed no local
-   file.
-5. Run the real aggregate sync once.
-6. Verify each remote tree contains only `.gitignore`, `distribution.yaml`, and
-   its locally declared `distribution_owned` paths.
-7. Verify the recorded local hashes remain unchanged.
-8. Run the cron entry manually and confirm the `changed` or `unchanged` summary
-   appears in `hermes-cron-results`.
-9. Observe the next scheduled run and confirm all unchanged profiles create no
-   new commits.
-
-The feature is accepted only when local declarative files remain byte-for-byte
-unchanged, remote extras are absent, assets are present only where declared,
-the second sync is idempotent, and both manual and scheduled Slack reporting are
-verified.
+Production acceptance is a dry run followed by a real aggregate run, with
+inspection that each remote tree contains only the two canonical control files
+and its local owned paths. Verify the profile homes are unchanged, then confirm
+a repeat real run is `unchanged` without creating commits.
