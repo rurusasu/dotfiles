@@ -83,7 +83,9 @@ class ProfileSyncReport:
     exit_code: int
 
     def as_dict(self) -> dict[str, object]:
-        if any(profile.status == "failed" for profile in self.profiles):
+        if self.exit_code != 0 or any(
+            profile.status == "failed" for profile in self.profiles
+        ):
             status: SyncStatus = "failed"
         elif any(profile.status == "changed" for profile in self.profiles):
             status = "changed"
@@ -289,15 +291,21 @@ def _synchronize_one_boundary(
                     message="profile snapshot already published",
                 )
             else:
-                diff = _profile_diff(repository, environment, auth)
+                diff = _profile_diff(
+                    repository, environment, auth, attempt.remote_commit
+                )
                 if dry_run:
                     commit = attempt.remote_commit
                     category = "dry_run"
                     message = "profile snapshot changes detected"
                 else:
-                    commit = _commit_and_push(
+                    commit, final_parent = _commit_and_push(
                         snapshot, attempt, repository, environment
                     )
+                    if final_parent != attempt.remote_commit:
+                        diff = _profile_diff(
+                            repository, environment, auth, final_parent
+                        )
                     category = "published"
                     message = "profile snapshot published"
                 outcome = ProfileSyncResult(
@@ -352,9 +360,13 @@ def _exact_tree_attempt(
     )
     if observed is None or not _same_remote_identity(declaration.source, observed):
         raise ValueError("remote identity mismatch")
-    _validate_destination_branch(declaration.ref, repository, environment)
+    branch_ref = _validated_branch_ref(
+        declaration.ref, repository, environment
+    )
     _require_git(
-        ("fetch", "--no-tags", "origin", "--", declaration.ref), repository, environment
+        ("fetch", "--no-tags", "origin", "--", branch_ref),
+        repository,
+        environment,
     )
     remote_commit = _git_object_id(
         ("rev-parse", "--verify", "FETCH_HEAD^{commit}"), repository, environment
@@ -368,10 +380,20 @@ def _exact_tree_attempt(
 
 
 def _profile_diff(
-    repository: Path, environment: dict[str, str], auth: GitAuth
+    repository: Path,
+    environment: dict[str, str],
+    auth: GitAuth,
+    base_commit: str,
 ) -> ProfileDiff:
     raw = _git_bytes(
-        ("diff", "--cached", "--name-status", "-z", "--no-renames", "FETCH_HEAD"),
+        (
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            base_commit,
+        ),
         repository,
         environment,
         max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
@@ -421,9 +443,9 @@ def _commit_and_push(
     attempt: _Attempt,
     repository: Path,
     environment: dict[str, str],
-) -> str:
+) -> tuple[str, str]:
     declaration = snapshot.declaration
-    _validate_destination_branch(declaration.ref, repository, environment)
+    _validated_branch_ref(declaration.ref, repository, environment)
     parent = attempt.remote_commit
     for publication_attempt in range(2):
         if publication_attempt:
@@ -448,7 +470,7 @@ def _commit_and_push(
             repository=repository,
             environment=environment,
         ):
-            return remote_commit
+            return remote_commit, parent
         if not pushed and remote_commit == parent:
             raise _PushRejected
         if publication_attempt:
@@ -516,9 +538,9 @@ def _push_commit(
     ) is not None
 
 
-def _validate_destination_branch(
+def _validated_branch_ref(
     branch: str, repository: Path, environment: dict[str, str]
-) -> None:
+) -> str:
     if (
         not _valid_ref(branch)
         or branch == "HEAD"
@@ -530,6 +552,7 @@ def _validate_destination_branch(
     )
     if observed != branch:
         raise ValueError("invalid profile destination branch")
+    return f"refs/heads/{branch}"
 
 
 def _publication_matches(
@@ -560,8 +583,11 @@ def _fetch_remote(
     environment: dict[str, str],
 ) -> tuple[str, str]:
     declaration = snapshot.declaration
+    branch_ref = _validated_branch_ref(
+        declaration.ref, repository, environment
+    )
     _require_git(
-        ("fetch", "--no-tags", "origin", "--", declaration.ref),
+        ("fetch", "--no-tags", "origin", "--", branch_ref),
         repository,
         environment,
     )
@@ -759,8 +785,14 @@ def _scrub_exception_graph(error: BaseException) -> None:
             pending.append(cause)
         if context is not None:
             pending.append(context)
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
         try:
             current.args = ()
+        except Exception:
+            pass
+        try:
+            current.__notes__ = []
         except Exception:
             pass
         current.__traceback__ = None
