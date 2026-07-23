@@ -535,18 +535,21 @@ profiles.
 
 ## Source Validation Gate
 
-Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
-the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
-pinned Docker stage and the `gh` wrapper security suite in the
-`Hermes Bootstrap Tests` workflow. Both paths also run the same host-side
-profile-sync provenance verifier. Locally it reads the sibling
-`hermes-home-profile-sync` worktree; GitHub Actions checks out
-`rurusasu/hermes-home` at the validated provenance commit first. The verifier
-requires clean tracked source and fixture paths, exact bytes, Git blob IDs,
-SHA-256, and committed tree mode `100755`. Task 5 integration coverage is the
-publication gate for aggregate preflight, exact-tree deletion, local
-immutability, missing-only bootstrap install, continuation, retry, and result
-serialization.
+Changes under `docker/hermes-agent/`, or to `Taskfile.yml`,
+`.pre-commit-config.yaml`, or the Hermes bootstrap workflow itself, run
+`task hermes:bootstrap:test` through the local `hermes-bootstrap-tests`
+pre-commit hook. Pull requests run the same pinned Docker stage and the `gh`
+wrapper security suite in the `Hermes Bootstrap Tests` workflow. Both paths
+also run the same host-side profile-sync provenance verifier. Locally it reads
+the sibling `hermes-home-profile-sync` worktree; GitHub Actions checks out
+`rurusasu/hermes-home` at the validated provenance commit first. That private
+checkout requires the `HERMES_HOME_READ_TOKEN` repository secret with read-only
+Contents access, and the provenance commit must already exist on the remote.
+The verifier requires clean tracked source and fixture paths, exact bytes, Git
+blob IDs, SHA-256, and committed tree mode `100755`. Task 5 integration
+coverage is the publication gate for aggregate preflight, exact-tree deletion,
+local immutability, missing-only bootstrap install, continuation, retry, and
+result serialization.
 
 Named-profile default branches are exact mirrors. A real sync deletes
 repository-local `.github` workflows, pre-commit configuration, validators,

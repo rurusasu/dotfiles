@@ -18,6 +18,10 @@ PROVENANCE = (
 VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
+PRE_COMMIT_TRIGGER = (
+    r"^(docker/hermes-agent/.*|Taskfile\.yml|\.pre-commit-config\.yaml|"
+    r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
+)
 
 
 class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
@@ -47,11 +51,30 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         )
 
         pre_commit = PRE_COMMIT.read_text(encoding="utf-8")
-        self.assertRegex(
-            pre_commit,
-            r"id: hermes-bootstrap-tests[\s\S]+?"
-            r"entry: task hermes:bootstrap:test",
+        hook = pre_commit.split(
+            "      - id: hermes-bootstrap-tests\n",
+            maxsplit=1,
+        )[1]
+        hook = hook.split("\n      - id:", maxsplit=1)[0]
+        self.assertIn("entry: task hermes:bootstrap:test", hook)
+
+        filter_match = re.search(
+            r"^\s+files:\s+(['\"])(?P<pattern>.+)\1\s*$",
+            hook,
+            flags=re.MULTILINE,
         )
+        self.assertIsNotNone(filter_match)
+        trigger = filter_match.group("pattern")
+        self.assertEqual(trigger, PRE_COMMIT_TRIGGER)
+        for changed_path in (
+            "docker/hermes-agent/Dockerfile",
+            "Taskfile.yml",
+            ".pre-commit-config.yaml",
+            ".github/workflows/ci-hermes-bootstrap.yml",
+        ):
+            with self.subTest(changed_path=changed_path):
+                self.assertIsNotNone(re.fullmatch(trigger, changed_path))
+        self.assertIsNone(re.fullmatch(trigger, "docs/hermes-agent/bootstrap.md"))
 
     def test_workflow_checks_out_the_validated_commit_and_runs_host_gate(
         self,
@@ -66,12 +89,30 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(len(checkout_pins), 2)
         self.assertEqual(len(set(checkout_pins)), 1)
         self.assertEqual(workflow.count("persist-credentials: false"), 2)
-        self.assertIn('repository: "rurusasu/hermes-home"', workflow)
+        provenance_checkout = workflow.split(
+            "      - name: Checkout provenance-pinned hermes-home\n",
+            maxsplit=1,
+        )[1]
+        provenance_checkout = provenance_checkout.split(
+            "\n      - name:",
+            maxsplit=1,
+        )[0]
+        self.assertIn(
+            'repository: "rurusasu/hermes-home"',
+            provenance_checkout,
+        )
         self.assertIn(
             "ref: ${{ steps.provenance.outputs.source_commit }}",
-            workflow,
+            provenance_checkout,
         )
-        self.assertIn("path: hermes-home-provenance", workflow)
+        self.assertIn("path: hermes-home-provenance", provenance_checkout)
+        self.assertEqual(
+            provenance_checkout.count(
+                "token: ${{ secrets.HERMES_HOME_READ_TOKEN }}"
+            ),
+            1,
+        )
+        self.assertEqual(workflow.count("secrets.HERMES_HOME_READ_TOKEN"), 1)
         self.assertNotIn(provenance["source_commit"], workflow)
         self.assertIn("id: provenance", workflow)
         self.assertIn(

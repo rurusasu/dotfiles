@@ -316,8 +316,36 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
                 self._git(self.dotfiles, "reset", "--hard", "HEAD^")
 
     def test_rejects_untracked_source_path(self) -> None:
-        self._replace_provenance(source_path="scripts/missing.sh")
-        self._commit_all(self.dotfiles, "point at missing source")
+        self._git(
+            self.source,
+            "rm",
+            "--",
+            SOURCE_PATH.as_posix(),
+        )
+        self._git(self.source, "commit", "-m", "remove source wrapper")
+        self._write_executable(
+            self.source / SOURCE_PATH,
+            self.wrapper_bytes,
+        )
+        source_commit = self._git(
+            self.source,
+            "rev-parse",
+            "HEAD",
+        ).stdout.strip()
+        self._replace_provenance(source_commit=source_commit)
+        self._commit_all(self.dotfiles, "update source commit")
+
+        source_status = self._git(
+            self.source,
+            "status",
+            "--short",
+            "--",
+            SOURCE_PATH.as_posix(),
+        )
+        self.assertEqual(
+            source_status.stdout,
+            f"?? {SOURCE_PATH.as_posix()}\n",
+        )
 
         self._assert_failure("source path is not tracked at HEAD")
 

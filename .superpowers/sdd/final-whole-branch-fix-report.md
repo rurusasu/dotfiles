@@ -463,6 +463,14 @@ inputs, wrong source HEAD, mode `100644`, and blob/SHA-256/byte mismatches.
 GitHub Actions checks out the validated `hermes-home` commit before invoking
 the verifier.
 
+Final quality review then found that the private checkout lacked an explicit
+credential and that pre-commit only triggered for `docker/hermes-agent/`
+changes. The workflow now binds exactly
+`secrets.HERMES_HOME_READ_TOKEN`, and the hook's fail-closed filter also covers
+`Taskfile.yml`, `.pre-commit-config.yaml`, and the workflow itself. Contract
+tests enforce both bindings. The source-path regression now recreates a real
+untracked `scripts/profile_sync.sh` after committing its deletion.
+
 Quality review also found that a failed descriptor close during repository
 publication could leave cleanup ownership in `FAILED` while the caller
 reported success. Commit `fe13425` now requires `is_released` for both initial

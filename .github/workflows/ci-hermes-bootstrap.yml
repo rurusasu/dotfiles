@@ -47,6 +47,7 @@ jobs:
           repository: "rurusasu/hermes-home"
           ref: ${{ steps.provenance.outputs.source_commit }}
           path: hermes-home-provenance
+          token: ${{ secrets.HERMES_HOME_READ_TOKEN }}
           persist-credentials: false
 
       - name: Verify profile-sync provenance

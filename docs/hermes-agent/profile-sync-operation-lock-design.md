@@ -147,8 +147,12 @@ committed `hermes-home` source by bytes, Git blob ID, SHA-256, and Git tree mode
 
 The host-side verifier is part of `task hermes:bootstrap:test`, so the local
 pre-commit hook runs it against the real sibling `hermes-home` Git worktree.
-GitHub Actions checks out `rurusasu/hermes-home` at the validated provenance
-commit and runs the same verifier before the pinned container suite.
+The hook is triggered by changes to `docker/hermes-agent/`, `Taskfile.yml`,
+`.pre-commit-config.yaml`, or the Hermes bootstrap workflow. GitHub Actions
+checks out `rurusasu/hermes-home` at the validated provenance commit and runs
+the same verifier before the pinned container suite. The private checkout uses
+the `HERMES_HOME_READ_TOKEN` repository secret, provisioned with read-only
+Contents access; the pinned source commit must already exist on that remote.
 
 The publication procedure still reruns this gate twice:
 
