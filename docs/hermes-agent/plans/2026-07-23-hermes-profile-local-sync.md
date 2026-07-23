@@ -822,7 +822,7 @@ git commit -m "docs: explain local-first Hermes profile sync"
 **Interfaces:**
 
 - Consumes: `/usr/local/bin/hermes-bootstrap sync-profiles` from the merged dotfiles engine.
-- Produces: root-owned executable wrapper and `profile-local-sync` cron job delivered to `slack:C0BK3UYEP6V`.
+- Produces: root-owned executable wrapper and `profile-local-sync` cron job delivered to `slack:C0BK3UYEP6V` on the ordered `hermes-home` dependency branch. The job becomes active only after that branch merges and the root distribution is applied.
 
 - [ ] **Step 1: Create the isolated hermes-home branch**
 
@@ -955,7 +955,7 @@ git rev-parse HEAD
 
 Expected: tests and hooks exit `0`; status is clean; record the exact SHA.
 
-- [ ] **Step 2: Prove cross-repository wrapper provenance before publication**
+- [ ] **Step 2: Prove cross-repository wrapper provenance before dotfiles publication**
 
 ```bash
 dotfiles=/Users/ktome1995/Program/dotfiles-hermes-profile-sync
@@ -988,9 +988,11 @@ test "$source_repository" = rurusasu/hermes-home
 test "$(git -C "$hermes_home" rev-parse HEAD)" = "$source_commit"
 git -C "$hermes_home" diff --quiet HEAD -- "$source_path"
 test "$(git -C "$hermes_home" rev-parse "$source_commit:$source_path")" = "$blob"
+test "$(git -C "$hermes_home" ls-tree "$source_commit" -- "$source_path" | awk '{print $1}')" = 100755
 git -C "$dotfiles" ls-files --error-unmatch \
   "$fixture_path" "$provenance_path" >/dev/null
 git -C "$dotfiles" diff --quiet HEAD -- "$fixture_path" "$provenance_path"
+test "$(git -C "$dotfiles" ls-tree HEAD -- "$fixture_path" | awk '{print $1}')" = 100755
 cmp "$wrapper" "$fixture"
 test "$(git -C "$hermes_home" hash-object --no-filters "$wrapper")" = "$blob"
 test "$(git -C "$dotfiles" hash-object --no-filters "$fixture")" = "$blob"
@@ -1000,9 +1002,9 @@ test "$(shasum -a 256 "$fixture" | awk '{print $1}')" = "$sha256"
 
 Expected: every command exits `0`. The current hermes-home wrapper must be
 unchanged at the provenance commit and must match the committed dotfiles
-fixture byte-for-byte, by Git blob ID, and by SHA-256. A mismatch blocks PR
-publication; update and revalidate the fixture and provenance deliberately
-rather than bypassing this gate.
+fixture byte-for-byte, by Git blob ID, SHA-256, and committed tree mode
+`100755`. A mismatch blocks PR publication; update and revalidate the fixture
+and provenance deliberately rather than bypassing this gate.
 
 - [ ] **Step 3: Push the dotfiles branch and create a PR**
 
@@ -1039,6 +1041,11 @@ git rev-parse HEAD
 ```
 
 Expected: full validation passes and worktree is clean.
+
+Immediately before publishing the `hermes-home` PR, rerun the complete Step 2
+provenance gate from the two worktrees. This second invocation is mandatory
+after the dotfiles PR has merged even when the first invocation passed; it
+again requires both committed `git ls-tree` modes to be `100755`.
 
 - [ ] **Step 6: Push, review, and merge hermes-home**
 

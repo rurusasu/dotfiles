@@ -26,8 +26,9 @@ For an existing valid named profile, the local `distribution.yaml` and its
 `distribution_owned` allowlist are authoritative. Remote changes never flow
 back into that existing home. The home remains a Hermes distribution target,
 not a Git worktree: the synchronizer never clones or checks out into it and
-does not alter its bytes or modes. Empty directories are intentionally absent
-from the remote projection because Git cannot represent them.
+does not alter its bytes or modes. A declared empty owned root is invalid;
+nested empty directories under a nonempty owned root are omitted from the
+remote projection because Git cannot represent them.
 
 Only a truly missing profile target is a first install. Bootstrap may stage the
 configured remote for that target and install it through the official Hermes
@@ -66,6 +67,11 @@ publication stages additions, modifications, and deletions, so stale remote
 README files, workflows, validators, tests, and other allowlist-external paths
 are deleted. A local deletion of an owned file deletes it remotely. No force
 push is used.
+
+All mutating operations use the canonical nonblocking `EngineLock` at
+`/opt/data/locks/bootstrap-engine.lock`. It serializes cooperating `apply`,
+`sync-profiles`, and `sync-repository` invocations from before recovery or
+scratch creation through all cleanup; repository locks remain subordinate.
 
 ## Operator Command
 
@@ -236,6 +242,16 @@ synchronization or `Transaction.begin`. The successful `apply` result includes
 a `profile_sync` summary whose entries are `changed`, `unchanged`, or
 `installed`.
 
+Immediately before `Transaction.begin`, `apply` repeats the full profile
+snapshot and compares the existing/missing target set, canonical manifest and
+`.gitignore` bytes, path inventory, regular-file modes and sizes, per-file
+SHA-256 values, and aggregate digest. A difference fails with
+`local_profile_changed` before local distribution mutation, environment merge,
+or restart. Previously published remote commits remain valid. The final
+profile-apply guard installs remote content only for a target that is still
+missing; an existing target that differs from the staged local projection fails
+closed and is never force-overwritten.
+
 If profile synchronization fails, bootstrap fails before starting the local
 transaction; it neither applies runtime distributions nor restarts Hermes.
 Pushes completed for earlier profiles remain valid. Snapshot preflight throws
@@ -323,14 +339,23 @@ publication error to normal push repair; the outer cleanup error retains its
 cleanup diagnosis until its cleanup fault is repaired. A candidate or
 indeterminate result activates the full cleanup procedure.
 
-## Future Cron Handoff (Task 7, `hermes-home`)
+## Ordered Cron Dependency
 
-Two-hour scheduling and Slack delivery are not deployed by this Task 6 change.
-Task 7 in `hermes-home` may add a root-owned wrapper that invokes the aggregate
-command and may configure its dedicated private Slack channel ID there. This
-document makes no claim that a cron job, a channel ID, or Slack delivery is
-currently installed. That future handoff remains local-to-remote only and must
-not apply remote content into an existing named profile.
+`profile-local-sync` and its two-hour Slack-delivered cron are implemented on
+the ordered `hermes-home` dependency branch. They become active only after that
+branch merges and its root distribution is applied. The root-owned wrapper
+remains local-to-remote only and never applies remote content into an existing
+named profile.
+
+## Threat Model
+
+The supported model includes malformed remotes, malformed or concurrently
+edited local content, crashes, cooperating bootstrap commands, symlinks,
+special files, unexpected mounts, and accidental pathname replacement. It
+assumes a trusted kernel, filesystem, container runtime, and bootstrap context.
+An actively malicious same-UID process that bypasses `EngineLock` is outside
+the model. Cleanup therefore does not claim to defeat that actor or to provide
+an atomic identity-check-and-delete guarantee against it.
 
 ## Verification Coverage
 

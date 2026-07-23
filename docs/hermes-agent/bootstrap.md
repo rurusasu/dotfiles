@@ -144,7 +144,10 @@ stays non-Git and both dry runs and real sync preserve local bytes and modes.
 The remote tree is exact: canonical `.gitignore`, canonical
 `distribution.yaml`, and declared owned paths only. Stale remote README files,
 workflows, validators, tests, or other allowlist-external files are deleted.
-Empty directories are not represented in Git.
+A declared `distribution_owned` directory with no publishable regular-file
+descendant is invalid and fails preflight with `empty_owned_directory`. A nested
+empty directory beneath a nonempty declared owned root is omitted from the Git
+projection because Git cannot represent it.
 
 The configured manifest currently includes `rick`, `hoffman`, `risarisa`, and
 `nancy`. Do not use an obsolete three-profile list in a procedure or test.
@@ -168,6 +171,24 @@ named-profile publication has already completed before the staged Chrome gate.
 If that validation fails, its reported remote commits remain valid and are not
 rolled back; bootstrap fails before shared-repository synchronization or local
 transaction mutation.
+
+`apply` holds the canonical nonblocking `EngineLock` at
+`/opt/data/locks/bootstrap-engine.lock` from before crash-journal recovery
+through transaction and private-scratch cleanup. The same cooperative lock
+wraps `sync-profiles` and `sync-repository`; repository locks are subordinate
+to it. Read-only `secret-plan` and `validate` do not acquire it. Lock
+contention fails through the redacted repository error boundary.
+
+After root/profile staging, staged Chrome validation, and shared-repository
+synchronization, `apply` recreates every profile snapshot before
+`Transaction.begin`. It compares the target set, canonical manifests,
+`.gitignore`, path inventory, regular-file modes and sizes, per-file SHA-256
+values, and aggregate digest. Any drift, including a missing target created
+during apply, fails with `local_profile_changed` before local distribution or
+environment mutation. Remote commits from the original immutable snapshot
+remain valid. A final named-profile apply guard permits remote installation
+only for a missing target; an existing target that differs from the staged
+local projection fails closed and is never force-overwritten.
 
 A target directory that is truly absent is seeded from its configured remote
 for the first official Hermes install. An existing malformed or incomplete
@@ -310,9 +331,17 @@ to repair an existing local profile.
 
 A `cleanup_failed` result is not closed by a later successful run alone. Each
 invocation cleans only artifacts it created and still tracks; it does not scan
-for private artifacts left by an earlier invocation. There is no global lock
-covering aggregate scratch creation before per-profile repository locks are
-acquired, so a one-time process or lock check cannot make deletion safe.
+for private artifacts left by an earlier invocation. The engine lock serializes
+cooperating bootstrap commands, but a one-time process or lock check is not a
+safe cleanup proof by itself.
+
+The supported threat model covers malformed remotes, malformed or concurrently
+edited local content, crashes, cooperating concurrent bootstrap commands,
+symlinks, special files, unexpected mounts, and accidental pathname
+replacement. It trusts the kernel, filesystem, container runtime, and bootstrap
+execution context. An actively malicious same-UID process that deliberately
+bypasses `EngineLock` is outside this model; cleanup does not claim an atomic
+identity-check-and-delete guarantee against that actor.
 
 The full procedure is mandatory for an explicit standalone `cleanup_failed`
 report. A post-preflight apply publication message has a hidden category, and
@@ -393,8 +422,10 @@ cause is an ordinary push failure.
    completely, and requires both aggregates to exit `0` with the repaired
    profile `changed` or `unchanged`. Refresh all candidate groups plus the
    quarantine and mount inventories once more and require them to remain clean.
-9. Record the evidence and only then re-enable the gateway, scheduler, future
-   profile-sync cron if deployed, installers, and other launch paths.
+9. Record the evidence and only then re-enable the gateway, scheduler,
+   `profile-local-sync` when its ordered `hermes-home` dependency branch has
+   merged and the root distribution has been applied, installers, and other
+   launch paths.
 
 Cleanup recovery is accepted only when the entire quiescent procedure,
 quarantine removal, dry-run/real verification, and final zero profile-scratch,

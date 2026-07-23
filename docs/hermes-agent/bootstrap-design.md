@@ -88,8 +88,10 @@ path.
 
 The snapshot lives in bootstrap-owned private storage. No normal or dry-run
 operation checks out or clones into `/opt/data/profiles/<name>`, and no normal
-or dry-run operation changes local profile bytes or modes. Empty directories
-are not represented by Git.
+or dry-run operation changes local profile bytes or modes. A declared owned
+root without a publishable regular-file descendant is invalid; nested empty
+directories under a nonempty owned root are omitted because Git cannot
+represent them.
 
 Only a target directory that is truly absent uses its configured remote as a
 first-install seed. Existing malformed profiles are failed, never overwritten
@@ -113,6 +115,13 @@ stream 1Password JSON to the container, propagate its status, and recreate the
 gateway after successful bootstrap. They do not implement profile Git or merge
 behavior. Secret values are never command arguments or persistent payload
 files.
+
+Every mutating bootstrap command cooperates through the canonical nonblocking
+`EngineLock` at `/opt/data/locks/bootstrap-engine.lock`. It starts before
+crash-journal recovery and remains held through transaction and scratch cleanup
+for `apply`, `sync-profiles`, and `sync-repository`; subordinate repository
+locks retain their repository-specific role. `secret-plan` and `validate` are
+read-only and do not acquire this lock.
 
 On Windows, `HermesAgentHandler` remains Phase `2`, order `56`, with
 `RequiresAdmin = false`. Running in the user context is required so native
@@ -160,6 +169,15 @@ commit/rebase/push workflow. All profiles continue to use
    working trees, and merge private `.env` files with mode `0600`.
 10. Validate the installed layout, commit the transaction, report the
     `profile_sync` summary, then recreate and health-check the gateway.
+
+Before step 9, apply creates a second full local snapshot and compares it to
+the published snapshot by target set, canonical manifests, generated
+`.gitignore`, path inventory, file mode/size/SHA-256, and aggregate digest. A
+mismatch is `local_profile_changed` and fails before local mutation. A missing
+target created during apply is also a mismatch. The final profile install
+allows remote content only for a still-missing target; an existing target that
+differs from the staged local projection fails closed rather than receiving a
+forced overwrite.
 
 For a truly missing profile, `hermes profile install --force` preserves
 user-owned paths. The pinned runtime restricts direct profile installation to
@@ -264,8 +282,8 @@ inspection, mount rejection, atomic quarantine, and removal procedure in
 Compose, and manual sync launch paths remain disabled under one maintenance
 owner until controlled dry-run/real verification and final profile-scratch,
 outer-bootstrap, quarantine, and mount inventories are clean. Repository locks
-alone are insufficient because no global lock covers aggregate scratch
-creation.
+remain subordinate to `EngineLock`; their existence alone is not a cleanup
+proof.
 
 The same unified inventories are mandatory after every post-preflight apply
 publication failure, even when cleanup is not named publicly, and after every
@@ -279,13 +297,22 @@ The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact
 mirroring.
 
-## Future `hermes-home` Work
+## Ordered `hermes-home` Dependency
 
-The two-hour aggregate cron handoff and dedicated private Slack channel ID are
-explicitly future Task 7 work in `hermes-home`; they are not deployed by this
-design's current dotfiles implementation. A future root-owned wrapper must call
-the aggregate command and must not import remote content into an existing local
-named profile.
+The `profile-local-sync` wrapper and two-hour cron are implemented on the
+ordered `hermes-home` dependency branch. They become active only after that
+branch merges and its root distribution is applied. The root-owned wrapper calls
+the aggregate command and never imports remote content into an existing named
+profile.
+
+## Threat Model
+
+The supported model covers malformed remotes, malformed or concurrently edited
+local files, crashes, cooperating concurrent bootstrap commands, symlinks,
+special files, unexpected mounts, and accidental pathname replacement. It
+assumes a trusted kernel, filesystem, container runtime, and bootstrap context.
+An actively malicious same-UID process that bypasses `EngineLock` is outside
+this model, so cleanup makes no unsupported claim to defeat that actor.
 
 ## Verification
 
