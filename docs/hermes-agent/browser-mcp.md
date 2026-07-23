@@ -28,7 +28,9 @@ mcp_servers:
 この URL は Compose network 内専用で、host に `8080` や `9222` を publish しない。
 サーバー名は Hermes 組み込みの `browser` toolset と衝突しないよう `chrome` にする。
 全 managed profile は `agent.disabled_toolsets` で組み込みの `browser` toolset を
-無効化し、別の local browser session を選択できないようにする。
+無効化し、別の local browser session を選択できないようにする。固定した Hermes
+runtime では `web_search` を `browser` toolset から除外して `web` toolset にだけ
+所属させるため、この設定で Web 検索は無効にならない。
 
 ## Distribution source contract
 
@@ -91,5 +93,5 @@ docker exec -e HERMES_HOME=/opt/data/profiles/nancy hermes hermes mcp test chrom
 
 全コマンドで接続が成功し、`navigate_page` と `take_snapshot` を含む同じ tool set
 が表示されることを確認する。`hermes tools list --platform slack` では built-in
-`browser` が disabled と表示されることも確認する。host noVNC は
+`browser` が disabled、`web` が enabled と表示されることも確認する。host noVNC は
 `http://127.0.0.1:6080/` で開く。

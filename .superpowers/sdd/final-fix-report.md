@@ -67,23 +67,23 @@ CRLF. The mixed-ending file was not normalized.
 
 ### Source Unit Suites
 
-| Repository | Result |
-| --- | --- |
-| hermes-home | 49 tests passed |
-| hermes-profile-rick | 38 tests passed |
-| hermes-profile-hoffman | 38 tests passed |
+| Repository              | Result          |
+| ----------------------- | --------------- |
+| hermes-home             | 49 tests passed |
+| hermes-profile-rick     | 38 tests passed |
+| hermes-profile-hoffman  | 38 tests passed |
 | hermes-profile-risarisa | 39 tests passed |
-| hermes-profile-nancy | 38 tests passed |
+| hermes-profile-nancy    | 38 tests passed |
 
 ### Full Source Validators
 
-| Repository | Result |
-| --- | --- |
-| hermes-home | pass, 9/9 checks |
-| hermes-profile-rick | pass, 8/8 checks |
-| hermes-profile-hoffman | pass, 8/8 checks |
+| Repository              | Result           |
+| ----------------------- | ---------------- |
+| hermes-home             | pass, 9/9 checks |
+| hermes-profile-rick     | pass, 8/8 checks |
+| hermes-profile-hoffman  | pass, 8/8 checks |
 | hermes-profile-risarisa | pass, 8/8 checks |
-| hermes-profile-nancy | pass, 8/8 checks |
+| hermes-profile-nancy    | pass, 8/8 checks |
 
 ### Dotfiles Bootstrap Suite
 
@@ -97,13 +97,13 @@ deprecation warning during the container suite. It did not affect the result.
 
 ## Source Commits
 
-| Repository | Commit |
-| --- | --- |
-| hermes-home | `48bfcca` |
-| hermes-profile-rick | `bd39023` |
-| hermes-profile-hoffman | `331241a` |
+| Repository              | Commit    |
+| ----------------------- | --------- |
+| hermes-home             | `48bfcca` |
+| hermes-profile-rick     | `bd39023` |
+| hermes-profile-hoffman  | `331241a` |
 | hermes-profile-risarisa | `8c2139c` |
-| hermes-profile-nancy | `c397cd6` |
+| hermes-profile-nancy    | `c397cd6` |
 
 The dotfiles commit SHA is reported in the completion response because this
 report is contained in that commit.
