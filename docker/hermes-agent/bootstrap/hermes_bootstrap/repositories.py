@@ -447,9 +447,13 @@ def _apply_shared_working_tree_locked(
             _move_verified_working_tree(repo, publication_source, result.commit)
             if publication_copy is not None:
                 publication_copy.release()
+                if not publication_copy.is_released:
+                    raise ValueError("could not release private repository copy")
                 publication_copy = None
             elif result.private_directory is not None:
                 result.private_directory.release()
+                if not result.private_directory.is_released:
+                    raise ValueError("could not release private repository stage")
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:

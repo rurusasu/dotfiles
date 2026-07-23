@@ -171,6 +171,64 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn(repo.legacy_target, transaction.snapshots)
         self.assertFalse(os.path.lexists(repo.legacy_target))
 
+    def test_initial_publication_release_failure_rolls_back_and_can_retry(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+        owner = result.private_directory
+        self.assertIsNotNone(owner)
+        assert owner is not None
+        unrelated = repo.target.parent / "unrelated"
+        unrelated.mkdir()
+        (unrelated / "keep.txt").write_text("keep\n", encoding="utf-8")
+        tx = Transaction.begin(self.data_root)
+        real_close = repositories_module.PrivateDirectory._close_descriptors
+        sensitive_marker = "initial-release-close-sensitive-marker"
+
+        def fail_initial_close(
+            candidate: repositories_module.PrivateDirectory,
+        ) -> None:
+            real_close(candidate)
+            if candidate is owner:
+                raise OSError(sensitive_marker)
+
+        with mock.patch.object(
+            repositories_module.PrivateDirectory,
+            "_close_descriptors",
+            new=fail_initial_close,
+        ):
+            with self.assertRaisesRegex(
+                RepositoryError,
+                "could not apply the shared repository working tree",
+            ) as caught:
+                apply_shared_working_tree(repo, result, tx)
+
+        self.assertFalse(owner.is_released)
+        self.assertTrue(repo.target.is_dir())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            sensitive_marker,
+            self.auth.token,
+            str(self.remote),
+        )
+
+        tx.rollback()
+
+        self.assertFalse(os.path.lexists(repo.target))
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+
+        retry = synchronize_remote(repo, self.auth)
+        retry_tx = Transaction.begin(self.data_root)
+        apply_shared_working_tree(repo, retry, retry_tx)
+        retry_tx.commit()
+
+        self.assertTrue(repo.target.is_dir())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), retry.commit)
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+
     def test_publication_uses_snapshots_without_an_inode_based_move_journal(self) -> None:
         repo = self.repository()
         result = synchronize_remote(repo, self.auth)
@@ -1323,6 +1381,108 @@ class RepositoryTests(unittest.TestCase):
 
         self.assertIn(repo.target, changes.changed_paths)
         self.assertFalse(os.path.lexists(repo.legacy_target))
+
+    def test_legacy_publication_release_failure_rolls_back_and_can_retry(self) -> None:
+        repo = self.repository()
+        assert repo.legacy_target is not None
+        self.clone(repo.legacy_target)
+        run_git(
+            "config",
+            "--local",
+            "hermes.fixture-migration-id",
+            "release-failure-legacy",
+            cwd=repo.legacy_target,
+        )
+        unrelated = repo.target.parent / "unrelated"
+        unrelated.mkdir(parents=True)
+        (unrelated / "keep.txt").write_text("keep\n", encoding="utf-8")
+        result = synchronize_remote(repo, self.auth)
+        tx = Transaction.begin(self.data_root)
+        real_copy = repositories_module._copy_working_tree_for_publication
+        real_close = repositories_module.PrivateDirectory._close_descriptors
+        publication_owner: repositories_module.PrivateDirectory | None = None
+        sensitive_marker = "release-close-sensitive-marker"
+
+        def capture_publication_copy(
+            source_repo: SharedRepository,
+            source: Path,
+            commit: str,
+        ) -> repositories_module.PrivateDirectory:
+            nonlocal publication_owner
+            publication_owner = real_copy(source_repo, source, commit)
+            return publication_owner
+
+        def fail_publication_close(
+            owner: repositories_module.PrivateDirectory,
+        ) -> None:
+            real_close(owner)
+            if owner is publication_owner:
+                raise OSError(sensitive_marker)
+
+        with (
+            mock.patch.object(
+                repositories_module,
+                "_copy_working_tree_for_publication",
+                side_effect=capture_publication_copy,
+            ),
+            mock.patch.object(
+                repositories_module.PrivateDirectory,
+                "_close_descriptors",
+                new=fail_publication_close,
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RepositoryError,
+                "could not clean private repository resources",
+            ) as caught:
+                apply_shared_working_tree(repo, result, tx)
+
+        self.assertIsNotNone(publication_owner)
+        assert publication_owner is not None
+        self.assertFalse(publication_owner.is_released)
+        self.assertTrue(repo.target.is_dir())
+        self.assertTrue(repo.legacy_target.is_dir())
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            sensitive_marker,
+            self.auth.token,
+            str(self.remote),
+        )
+
+        tx.rollback()
+
+        self.assertFalse(os.path.lexists(repo.target))
+        self.assertEqual(
+            run_git(
+                "config",
+                "--local",
+                "--get",
+                "hermes.fixture-migration-id",
+                cwd=repo.legacy_target,
+            ),
+            "release-failure-legacy",
+        )
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+
+        retry = synchronize_remote(repo, self.auth)
+        retry_tx = Transaction.begin(self.data_root)
+        apply_shared_working_tree(repo, retry, retry_tx)
+        retry_tx.commit()
+
+        self.assertTrue(repo.target.is_dir())
+        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertEqual(
+            run_git(
+                "config",
+                "--local",
+                "--get",
+                "hermes.fixture-migration-id",
+                cwd=repo.target,
+            ),
+            "release-failure-legacy",
+        )
+        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
 
     def test_real_legacy_migration_rolls_back_with_identity_and_can_retry(self) -> None:
         repo = self.repository()
