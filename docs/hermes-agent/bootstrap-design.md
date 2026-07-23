@@ -294,7 +294,10 @@ browser data, X credentials, and other runtime paths do not move.
 - Existing root declarative files are backed up, then replaced only if listed
   by `root-distribution.yaml`.
 - Existing named profiles without `distribution.yaml` are converted with
-  `hermes profile install --force`; Hermes preserves user-owned paths.
+  `hermes profile install --force`; Hermes preserves user-owned paths. The
+  pinned runtime also restricts a direct profile install to the manifest's
+  top-level `distribution_owned` roots, so repository workflows, tests, and
+  validator tooling are not copied into the profile.
 - An existing `/opt/data/core/lifelog` checkout is copied to a private sibling,
   validated, and atomically published at `/opt/data/shared/lifelog`. The legacy
   path is snapshotted before removal and is absent after success.

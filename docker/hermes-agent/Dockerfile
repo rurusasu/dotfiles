@@ -13,13 +13,46 @@ COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap
 RUN python3 - <<'PY'
 from pathlib import Path
 
-path = Path("/opt/hermes/gateway/channel_directory.py")
-text = path.read_text(encoding="utf-8")
-old = 'types="public_channel,private_channel",'
-new = 'types="public_channel",'
-if old not in text:
-    raise SystemExit(f"expected Slack channel directory call not found in {path}")
-path.write_text(text.replace(old, new), encoding="utf-8")
+def replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if text.count(old) != 1:
+        raise SystemExit(f"expected exactly one pinned source match in {path}")
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+replace_once(
+    Path("/opt/hermes/gateway/channel_directory.py"),
+    'types="public_channel,private_channel",',
+    'types="public_channel",',
+)
+replace_once(
+    Path("/opt/hermes/toolsets.py"),
+    '"browser_dialog", "web_search"',
+    '"browser_dialog"',
+)
+replace_once(
+    Path("/opt/hermes/hermes_cli/profile_distribution.py"),
+    """\
+    target.mkdir(parents=True, exist_ok=True)
+
+    for entry in staged.iterdir():
+        name = entry.name
+""",
+    """\
+    target.mkdir(parents=True, exist_ok=True)
+
+    owned_roots = {
+        Path(path).parts[0]
+        for path in manifest.owned_paths()
+        if Path(path).parts
+    }
+    for entry in staged.iterdir():
+        name = entry.name
+
+        if name not in owned_roots and name != ENV_TEMPLATE_FILENAME:
+            continue
+""",
+)
 PY
 
 RUN apt-get update \

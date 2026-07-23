@@ -28,7 +28,12 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap import app, cli
-from hermes_bootstrap.errors import ApplyError, CredentialError, RepositoryError
+from hermes_bootstrap.errors import (
+    ApplyError,
+    CredentialError,
+    RepositoryError,
+    ValidationError,
+)
 from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
@@ -75,6 +80,19 @@ PROCESS_STOP_TIMEOUT_SECONDS = 2.0
 SERVER_STOP_TIMEOUT_SECONDS = 2.0
 _REAL_POPEN = subprocess.Popen
 _CHILD_PROCESSES: list[subprocess.Popen[object]] = []
+
+
+def source_config(key: str, value: str) -> str:
+    return (
+        f"{key}: {value}\n"
+        "agent:\n"
+        "  disabled_toolsets:\n"
+        "    - browser\n"
+        "mcp_servers:\n"
+        "  chrome:\n"
+        "    url: http://browser-mcp:8080/mcp\n"
+        "    connect_timeout: 120\n"
+    )
 
 
 @dataclass(frozen=True)
@@ -297,7 +315,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "root",
             {
                 "root-distribution.yaml": self._root_manifest(["config.yaml", "retired.md"]),
-                "config.yaml": "root: initial\n",
+                "config.yaml": source_config("root", "initial"),
                 "retired.md": "retire me\n",
             },
         )
@@ -306,7 +324,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 profile,
                 {
                     "distribution.yaml": self._profile_manifest(profile),
-                    "config.yaml": f"profile: {profile}-initial\n",
+                    "config.yaml": source_config("profile", f"{profile}-initial"),
                     "SOUL.md": f"{profile} initial\n",
                 },
             )
@@ -448,6 +466,11 @@ class BootstrapFlowTests(unittest.TestCase):
                 "bot_token": "xoxb-nancy-bot",
                 "app_token": "xapp-nancy-app",
                 "allowed_users": "UNANCY",
+            },
+            "slack_future": {
+                "bot_token": "xoxb-future-bot",
+                "app_token": "xapp-future-app",
+                "allowed_users": "UFUTURE",
             },
         }
         for item in self.manifest.onepassword_items:
@@ -626,10 +649,16 @@ class BootstrapFlowTests(unittest.TestCase):
     def test_initial_install_stages_distributions_and_preserves_runtime(self) -> None:
         self._initial_apply()
 
-        self.assertEqual((self.data_root / "config.yaml").read_text(encoding="utf-8"), "root: initial\n")
+        self.assertEqual(
+            (self.data_root / "config.yaml").read_text(encoding="utf-8"),
+            source_config("root", "initial"),
+        )
         for profile in PROFILE_NAMES:
             target = self.data_root / "profiles" / profile
-            self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), f"profile: {profile}-initial\n")
+            self.assertEqual(
+                (target / "config.yaml").read_text(encoding="utf-8"),
+                source_config("profile", f"{profile}-initial"),
+            )
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
         self.assertEqual((self.data_root / "memories" / "root.txt").read_text(encoding="utf-8"), "root memory\n")
@@ -766,7 +795,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "rick",
             {
                 "distribution.yaml": self._profile_manifest("rick", "0.2.0"),
-                "config.yaml": "profile: rick-updated\n",
+                "config.yaml": source_config("profile", "rick-updated"),
             },
             "update rick",
         )
@@ -781,7 +810,10 @@ class BootstrapFlowTests(unittest.TestCase):
             installed.source,
             next(source.source for source in self.manifest.profiles if source.name == "rick"),
         )
-        self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "profile: rick-updated\n")
+        self.assertEqual(
+            (target / "config.yaml").read_text(encoding="utf-8"),
+            source_config("profile", "rick-updated"),
+        )
         self.assertEqual(
             (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime)),
             runtime_before,
@@ -938,6 +970,129 @@ class BootstrapFlowTests(unittest.TestCase):
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
 
+    def test_future_profile_chrome_validation_precedes_remote_and_transaction_mutation(
+        self,
+    ) -> None:
+        future = "future"
+        self._create_distribution(
+            future,
+            {
+                "distribution.yaml": self._profile_manifest(future),
+                "config.yaml": source_config("profile", "future-invalid").replace(
+                    "    connect_timeout: 120\n",
+                    "    connect_timeout: 120.0\n",
+                ),
+                "SOUL.md": "future initial\n",
+            },
+        )
+        future_source = DistributionSource(
+            name=future,
+            source="https://github.com/rurusasu/hermes-profile-future.git",
+            ref="main",
+            target=self.data_root / "profiles" / future,
+            manifest_name="distribution.yaml",
+        )
+        future_slack_item = replace(
+            next(
+                item
+                for item in self.manifest.onepassword_items
+                if item.key == "slack_rick"
+            ),
+            key="slack_future",
+            item="Hermes Slack future",
+        )
+        self.manifest = replace(
+            self.manifest,
+            profiles=(*self.manifest.profiles, future_source),
+            onepassword_items=(
+                *self.manifest.onepassword_items,
+                future_slack_item,
+            ),
+        )
+        before = self._snapshot_managed_tree()
+
+        with (
+            self._patched_runtime(),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                wraps=app.synchronize_remote,
+            ) as synchronize_remote,
+            mock.patch.object(
+                app.Transaction,
+                "begin",
+                wraps=app.Transaction.begin,
+            ) as transaction_begin,
+        ):
+            with self.assertRaises(ValidationError):
+                app.apply(PRODUCTION_MANIFEST, self._payload())
+
+        synchronize_remote.assert_not_called()
+        transaction_begin.assert_not_called()
+        self.assertEqual(self._snapshot_managed_tree(), before)
+        self.assertFalse(future_source.target.exists())
+
+    def test_future_profile_must_distribute_its_valid_chrome_config_before_mutation(
+        self,
+    ) -> None:
+        future = "future"
+        self._create_distribution(
+            future,
+            {
+                "distribution.yaml": self._profile_manifest(future).replace(
+                    "  - config.yaml\n", ""
+                ),
+                "config.yaml": source_config("profile", "future-valid"),
+                "SOUL.md": "future initial\n",
+            },
+        )
+        future_source = DistributionSource(
+            name=future,
+            source="https://github.com/rurusasu/hermes-profile-future.git",
+            ref="main",
+            target=self.data_root / "profiles" / future,
+            manifest_name="distribution.yaml",
+        )
+        future_slack_item = replace(
+            next(
+                item
+                for item in self.manifest.onepassword_items
+                if item.key == "slack_rick"
+            ),
+            key="slack_future",
+            item="Hermes Slack future",
+        )
+        self.manifest = replace(
+            self.manifest,
+            profiles=(*self.manifest.profiles, future_source),
+            onepassword_items=(
+                *self.manifest.onepassword_items,
+                future_slack_item,
+            ),
+        )
+        before = self._snapshot_managed_tree()
+
+        with (
+            self._patched_runtime(),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                wraps=app.synchronize_remote,
+            ) as synchronize_remote,
+            mock.patch.object(
+                app.Transaction,
+                "begin",
+                wraps=app.Transaction.begin,
+            ) as transaction_begin,
+        ):
+            with self.assertRaises(ValidationError):
+                app.apply(PRODUCTION_MANIFEST, self._payload())
+
+        synchronize_remote.assert_not_called()
+        transaction_begin.assert_not_called()
+        self.assertEqual(self._snapshot_managed_tree(), before)
+        self.assertFalse(future_source.target.exists())
+
     def test_runtime_failpoints_rollback_each_mutation_phase_without_reversing_remote_pushes(self) -> None:
         self._initial_apply()
         phases = (
@@ -1002,9 +1157,11 @@ class BootstrapFlowTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 try:
                     version = f"0.{revision}.0"
-                    desired_root = f"root: rollback-{revision}\n"
+                    desired_root = source_config("root", f"rollback-{revision}")
                     desired_profiles = {
-                        profile: f"profile: {profile}-rollback-{revision}\n"
+                        profile: source_config(
+                            "profile", f"{profile}-rollback-{revision}"
+                        )
                         for profile in PROFILE_NAMES
                     }
                     self._commit(
