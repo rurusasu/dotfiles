@@ -149,6 +149,16 @@ descendant is invalid and fails preflight with `empty_owned_directory`. A nested
 empty directory beneath a nonempty declared owned root is omitted from the Git
 projection because Git cannot represent it.
 
+Hermes installs an exactly top-level declared `.env.template` as
+`.env.EXAMPLE`. Snapshotting reverses only that mapping: it reads the safe
+installed `.env.EXAMPLE` bytes and publishes them as `.env.template`, while the
+canonical manifest and `.gitignore` retain the declared source name. Missing,
+symbolic-link, non-regular, concurrently replaced, or secret-like installed
+content fails preflight. `.env`, nested `.env.template`, explicitly owned
+`.env.EXAMPLE`, and every other `.env*` path remain invalid. The pre-transaction
+snapshot revalidation repeats the same mapping, so a late `.env.EXAMPLE` change
+fails with `local_profile_changed`.
+
 The configured manifest currently includes `rick`, `hoffman`, `risarisa`, and
 `nancy`. Do not use an obsolete three-profile list in a procedure or test.
 Asset ownership is not hard-coded by profile name: avatar and portfolio files

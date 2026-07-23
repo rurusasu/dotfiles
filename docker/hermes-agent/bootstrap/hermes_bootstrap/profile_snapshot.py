@@ -68,6 +68,8 @@ _RESERVED_COMPONENTS = frozenset(
 _CREDENTIAL_STEMS = frozenset(
     {"auth", "credential", "credentials", "secret", "secrets", "token", "tokens"}
 )
+_ENV_TEMPLATE = PurePosixPath(".env.template")
+_INSTALLED_ENV_EXAMPLE = PurePosixPath(".env.EXAMPLE")
 
 
 @dataclass(frozen=True)
@@ -553,16 +555,27 @@ def _prepare_one(
         directory_paths: set[PurePosixPath] = set()
         for owned_path in owned:
             entry_count = len(entries)
-            is_directory = _copy_declared_path(
-                source_fd,
-                owned_path,
-                output_fd,
-                entries,
-                expected_files,
-                expected_directories,
-                casefolded,
-                fd_budget,
-            )
+            if owned_path == _ENV_TEMPLATE:
+                _copy_installed_env_template(
+                    source_fd,
+                    output_fd,
+                    entries,
+                    expected_files,
+                    casefolded,
+                    fd_budget,
+                )
+                is_directory = False
+            else:
+                is_directory = _copy_declared_path(
+                    source_fd,
+                    owned_path,
+                    output_fd,
+                    entries,
+                    expected_files,
+                    expected_directories,
+                    casefolded,
+                    fd_budget,
+                )
             if is_directory:
                 if len(entries) == entry_count:
                     raise ProfileSnapshotError(
@@ -711,7 +724,7 @@ def _validate_path(path: PurePosixPath) -> None:
         if not _PORTABLE_COMPONENT.fullmatch(component) or component.endswith((".", " ")):
             raise ValueError("nonportable path")
         if (
-            lowered.startswith(".env")
+            (lowered.startswith(".env") and path != _ENV_TEMPLATE)
             or lowered in _RESERVED_COMPONENTS
             or lowered in _GIT_CONTROL_COMPONENTS
         ):
@@ -735,6 +748,35 @@ def _canonical_manifest(raw: dict[str, object], owned: tuple[PurePosixPath, ...]
         elif key in raw:
             canonical[key] = raw[key]
     return yaml.safe_dump(canonical, sort_keys=False, allow_unicode=False).encode("ascii")
+
+
+def _copy_installed_env_template(
+    source_fd: int,
+    output_fd: int,
+    entries: list[SnapshotEntry],
+    expected_files: list[_ExpectedFile],
+    casefolded: dict[str, str],
+    fd_budget: _RetainedFdBudget,
+) -> None:
+    source = os.stat(
+        _INSTALLED_ENV_EXAMPLE.name,
+        dir_fd=source_fd,
+        follow_symlinks=False,
+    )
+    _require_safe_source(source)
+    if not stat.S_ISREG(source.st_mode):
+        raise ValueError("unsafe env template source")
+    _check_casefold(_ENV_TEMPLATE, casefolded)
+    _copy_regular(
+        source_fd,
+        _INSTALLED_ENV_EXAMPLE.name,
+        _ENV_TEMPLATE,
+        output_fd,
+        entries,
+        expected_files,
+        fd_budget,
+        destination_name=_ENV_TEMPLATE.name,
+    )
 
 
 def _copy_declared_path(
@@ -891,14 +933,17 @@ def _copy_regular(
     entries: list[SnapshotEntry],
     expected_files: list[_ExpectedFile],
     fd_budget: _RetainedFdBudget,
+    *,
+    destination_name: str | None = None,
 ) -> None:
     destination_fd: int | None = None
     destination_registered = False
+    output_name = destination_name if destination_name is not None else name
     source_fd = _open_regular(parent_fd, name)
     try:
         before = os.fstat(source_fd)
         fd_budget.require_headroom(additional=1)
-        destination_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=output_fd)
+        destination_fd = os.open(output_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=output_fd)
         created = os.fstat(destination_fd)
         expected_index = len(expected_files)
         expected_files.append(
@@ -928,7 +973,7 @@ def _copy_regular(
         os.fsync(destination_fd)
         destination = _verify_destination_descriptor(
             output_fd,
-            name,
+            output_name,
             destination_fd,
             mode,
             size,

@@ -477,6 +477,20 @@ reported success. Commit `fe13425` now requires `is_released` for both initial
 and legacy publication owners. Deterministic tests cover redacted failure,
 transaction rollback, unrelated sibling preservation, and successful retry.
 
+PR #449 review found an install/snapshot asymmetry for a declared
+`.env.template`: Hermes installs it as `.env.EXAMPLE`, while snapshot validation
+previously rejected the declaration before it could publish the installed
+profile. The focused RED run rejected the valid success and revalidation
+fixtures with `invalid_local_profile`, and the copy-race fixture could not
+reach the mapped source. Snapshotting now reverses only this exact top-level
+mapping, retaining `.env.template` in the canonical manifest, `.gitignore`,
+entry inventory, digest, and remote tree while reading `.env.EXAMPLE` through
+the existing no-follow, identity, bounded-read, and secret-scan boundary.
+Focused coverage preserves rejection of missing, symbolic-link, directory,
+secret-like, concurrently replaced, nested, explicit `.env.EXAMPLE`, and other
+`.env*` inputs. Integration coverage proves local bytes remain installed as
+`.env.EXAMPLE` while the exact remote tree contains `.env.template`.
+
 ### Addendum Verification
 
 The focused filesystem and four existing replacement tests passed:
@@ -499,7 +513,7 @@ Fresh full verification:
 
 ```text
 task hermes:bootstrap:test
-Ran 526 tests
+Ran 532 tests
 OK (skipped=3)
 test_gh_wrapper: PASS
 profile sync provenance verified

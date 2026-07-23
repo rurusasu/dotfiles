@@ -113,6 +113,118 @@ class ProfileSnapshotTests(unittest.TestCase):
             ],
         )
 
+    def test_maps_installed_env_example_back_to_declared_env_template(self) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        installed_content = b"PORTAL_URL=\n"
+        (home / ".env.EXAMPLE").write_bytes(installed_content)
+
+        snapshot = prepare_profile_snapshots(
+            self.manifest(self.profile("rick")),
+            self.scratch,
+            allow_missing=False,
+        ).snapshots[0]
+
+        self.assertEqual(
+            [entry.path.as_posix() for entry in snapshot.entries],
+            [".env.template"],
+        )
+        self.assertEqual(
+            (snapshot.root / ".env.template").read_bytes(),
+            installed_content,
+        )
+        self.assertFalse((snapshot.root / ".env.EXAMPLE").exists())
+        self.assertEqual(
+            yaml.safe_load(snapshot.manifest_bytes)["distribution_owned"],
+            [".env.template"],
+        )
+        self.assertEqual(
+            snapshot.gitignore_bytes.decode("ascii").splitlines(),
+            [
+                "/*",
+                "!/.gitignore",
+                "!/distribution.yaml",
+                "!/.env.template",
+            ],
+        )
+
+    def test_mapped_env_template_requires_a_safe_installed_example(self) -> None:
+        external = self.root / "external-env"
+        external.write_text("SAFE=\n", encoding="utf-8")
+        cases = ("missing", "symlink", "directory")
+
+        for index, case in enumerate(cases):
+            with self.subTest(case=case):
+                name = f"envsafe{index}"
+                home = self.write_profile(name, [".env.template"])
+                installed = home / ".env.EXAMPLE"
+                if case == "symlink":
+                    installed.symlink_to(external)
+                elif case == "directory":
+                    installed.mkdir()
+                scratch = self.root / f"envsafe-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)),
+                        scratch,
+                        allow_missing=False,
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_mapped_env_template_rejects_secret_like_content(self) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        (home / ".env.EXAMPLE").write_bytes(b"SLACK_TOKEN=xoxb-valid\n")
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            prepare_profile_snapshots(
+                self.manifest(self.profile("rick")),
+                self.scratch,
+                allow_missing=False,
+            )
+
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_mapped_env_template_rejects_source_replacement_during_copy(
+        self,
+    ) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        source = home / ".env.EXAMPLE"
+        content = b"SAFE=" + b"A" * (
+            profile_snapshot._READ_CHUNK_BYTES - len(b"SAFE=")
+        )
+        source.write_bytes(content)
+        original_write = profile_snapshot._write_descriptor
+        replaced = False
+
+        def write_then_replace(descriptor: int, chunk: bytes) -> None:
+            nonlocal replaced
+            original_write(descriptor, chunk)
+            if chunk == content and not replaced:
+                replacement = home / ".env.EXAMPLE.replacement"
+                replacement.write_bytes(b"SAFE=replaced\n")
+                replacement.replace(source)
+                replaced = True
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_write_descriptor",
+            side_effect=write_then_replace,
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_manifest_rejects_duplicate_identity_empty_overlap_and_nonportable_ownership(self) -> None:
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
@@ -152,8 +264,9 @@ class ProfileSnapshotTests(unittest.TestCase):
 
     def test_rejects_reserved_paths_and_secret_candidates(self) -> None:
         for unsafe in (
-            ".env", "auth.json", ".git/config", "memories", "sessions", "logs",
-            "plans", "workspace", "home", "cron/output", "cron/state", "locks",
+            ".env", ".env.EXAMPLE", ".env.production", ".env.template/nested",
+            "auth.json", ".git/config", "memories", "sessions", "logs", "plans",
+            "workspace", "home", "cron/output", "cron/state", "locks",
         ):
             with self.subTest(unsafe=unsafe), self.assertRaises(ProfileSnapshotError):
                 self.prepare("rick", owned=[unsafe])
@@ -1078,6 +1191,28 @@ class ProfileSnapshotTests(unittest.TestCase):
         )
 
         self.assertEqual(tuple(self.scratch.iterdir()), before)
+
+    def test_revalidation_detects_mapped_env_example_drift(self) -> None:
+        home = self.write_profile("rick", [".env.template"])
+        installed = home / ".env.EXAMPLE"
+        installed.write_bytes(b"SAFE=before\n")
+        configured = self.manifest(self.profile("rick"))
+        baseline = prepare_profile_snapshots(
+            configured,
+            self.scratch,
+            allow_missing=True,
+        )
+        installed.write_bytes(b"SAFE=after\n")
+
+        with self.assertRaises(ProfileSnapshotError) as caught:
+            profile_snapshot.revalidate_profile_snapshots(
+                configured,
+                baseline,
+                self.scratch,
+            )
+
+        self.assertEqual(caught.exception.profile, "rick")
+        self.assertEqual(caught.exception.category, "local_profile_changed")
 
     def test_revalidation_cleanup_failure_overrides_an_unchanged_result(
         self,

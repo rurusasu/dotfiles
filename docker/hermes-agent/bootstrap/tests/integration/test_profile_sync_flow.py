@@ -280,13 +280,18 @@ class ProfileSyncFlowTests(unittest.TestCase):
         files: set[str] = set()
         for raw in installed.distribution_owned:
             owned = PurePosixPath(raw)
-            path = target.joinpath(*owned.parts)
+            installed_path = (
+                PurePosixPath(".env.EXAMPLE")
+                if owned == PurePosixPath(".env.template")
+                else owned
+            )
+            path = target.joinpath(*installed_path.parts)
             if path.is_file():
                 files.add(owned.as_posix())
             else:
                 self.assertTrue(path.is_dir(), f"missing owned path {owned}")
                 files.update(
-                    child.relative_to(target).as_posix()
+                    (owned / child.relative_to(path)).as_posix()
                     for child in path.rglob("*")
                     if child.is_file()
                 )
@@ -310,12 +315,19 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 seen.add(rule)
                 rules.append(rule)
 
-        for raw in installed.distribution_owned:
-            owned = PurePosixPath(raw)
+        owned_paths = profile_snapshot._normalize_owned(
+            list(installed.distribution_owned)
+        )
+        for owned in owned_paths:
             for depth in range(1, len(owned.parts)):
                 add(f"!/{'/'.join(owned.parts[:depth])}/")
             logical = owned.as_posix()
-            if target.joinpath(*owned.parts).is_dir():
+            installed_path = (
+                target / ".env.EXAMPLE"
+                if owned == PurePosixPath(".env.template")
+                else target.joinpath(*owned.parts)
+            )
+            if installed_path.is_dir():
                 add(f"!/{logical}/")
                 add(f"!/{logical}/**")
             else:
@@ -346,7 +358,11 @@ class ProfileSyncFlowTests(unittest.TestCase):
             ),
         }
         for relative in self._expected_owned_files(target):
-            local = target / relative
+            local = (
+                target / ".env.EXAMPLE"
+                if relative == ".env.template"
+                else target / relative
+            )
             expected[relative] = (
                 stat.S_IFREG | stat.S_IMODE(local.stat().st_mode),
                 local.read_bytes(),
@@ -583,6 +599,50 @@ class ProfileSyncFlowTests(unittest.TestCase):
             {item["name"]: item["commit"] for item in second_profiles},
             first_heads,
         )
+
+    def test_sync_restores_an_installed_env_example_as_source_template(
+        self,
+    ) -> None:
+        source = self._source(self.profile_names[0])
+        manifest_path = source.target / "distribution.yaml"
+        payload = yaml.safe_load(manifest_path.read_text(encoding="ascii"))
+        payload["distribution_owned"].append(".env.template")
+        manifest_path.write_text(
+            yaml.safe_dump(payload, sort_keys=False),
+            encoding="ascii",
+        )
+        installed_content = b"PROFILE_LABEL=local-safe\n"
+        (source.target / ".env.EXAMPLE").write_bytes(installed_content)
+        local_before = self.flow._snapshot_tree(source.target)
+
+        exit_code, result, stdout, stderr = self._run_sync()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertNotIn(bootstrap_flow.FIXTURE_TOKEN, stdout)
+        self.assertEqual(
+            next(
+                item["status"]
+                for item in result["profiles"]
+                if item["name"] == source.name
+            ),
+            "changed",
+        )
+        self.assertEqual(self.flow._snapshot_tree(source.target), local_before)
+        self._assert_exact_remote(source.name)
+        remote = self.flow.source_remotes[source.name]
+        remote_paths = tuple(
+            line.split("\t", 1)[1]
+            for line in bootstrap_flow.run_git(
+                "--git-dir",
+                str(remote),
+                "ls-tree",
+                "-r",
+                "refs/heads/main",
+            ).splitlines()
+        )
+        self.assertIn(".env.template", remote_paths)
+        self.assertNotIn(".env.EXAMPLE", remote_paths)
 
     def test_dry_run_reports_every_change_without_moving_remote_refs(
         self,

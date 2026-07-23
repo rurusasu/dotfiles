@@ -52,14 +52,24 @@ The projection contains exactly:
 - generated canonical `.gitignore`; and
 - regular files beneath validated `distribution_owned` paths.
 
-It rejects `.env*`, credential filenames such as `auth.json`, Git control
+The only `.env*` exception is an exactly top-level declared `.env.template`.
+Hermes installs that source file as `.env.EXAMPLE`; the synchronizer safely
+reads the installed regular file and restores its bytes to `.env.template` in
+the publishable snapshot. The canonical manifest and `.gitignore` continue to
+name `.env.template`, preserving a valid source repository for a later install.
+The same source/destination mapping participates in immutable-copy identity
+checks and pre-transaction snapshot revalidation.
+
+It rejects `.env`, nested `.env.template`, explicitly owned `.env.EXAMPLE`,
+every other `.env*`, credential filenames such as `auth.json`, Git control
 paths, reserved runtime paths such as memories, sessions, logs, plans,
 workspaces, caches, and locks, special files, external hard links, symbolic
-links, and paths outside the home. Preflight also rejects traversal,
-non-portable names, case collisions, unreadable or concurrently replaced
-files, and high-confidence secret content. Other regular files beneath a
-validated owned file or directory are included; a generic temporary-looking
-filename is not excluded merely because of its name.
+links, and paths outside the home. A declared template also fails when the
+installed `.env.EXAMPLE` is missing, non-regular, concurrently replaced, or
+contains high-confidence secret content. Preflight additionally rejects
+traversal, non-portable names, case collisions, and unreadable files. Other
+regular files beneath a validated owned file or directory are included; a
+generic temporary-looking filename is not excluded merely because of its name.
 
 The remote tree is an exact projection, not a repository workspace. It contains
 only `.gitignore`, `distribution.yaml`, and declared owned paths. Each real
