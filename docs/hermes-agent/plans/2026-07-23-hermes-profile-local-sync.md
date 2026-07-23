@@ -955,7 +955,56 @@ git rev-parse HEAD
 
 Expected: tests and hooks exit `0`; status is clean; record the exact SHA.
 
-- [ ] **Step 2: Push the dotfiles branch and create a PR**
+- [ ] **Step 2: Prove cross-repository wrapper provenance before publication**
+
+```bash
+dotfiles=/Users/ktome1995/Program/dotfiles-hermes-profile-sync
+hermes_home=/Users/ktome1995/Program/hermes-home-profile-sync
+fixture=$dotfiles/docker/hermes-agent/bootstrap/tests/fixtures/hermes-home/profile_sync.sh
+provenance=$dotfiles/docker/hermes-agent/bootstrap/tests/fixtures/hermes-home/profile_sync.provenance.json
+
+IFS=$'\t' read -r source_repository source_commit source_path blob sha256 < <(
+  python3 - "$provenance" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="ascii") as stream:
+    value = json.load(stream)
+print(
+    value["source_repository"],
+    value["source_commit"],
+    value["source_path"],
+    value["git_blob_sha1"],
+    value["sha256"],
+    sep="\t",
+)
+PY
+)
+wrapper=$hermes_home/$source_path
+fixture_path=${fixture#"$dotfiles"/}
+provenance_path=${provenance#"$dotfiles"/}
+
+test "$source_repository" = rurusasu/hermes-home
+test "$(git -C "$hermes_home" rev-parse HEAD)" = "$source_commit"
+git -C "$hermes_home" diff --quiet HEAD -- "$source_path"
+test "$(git -C "$hermes_home" rev-parse "$source_commit:$source_path")" = "$blob"
+git -C "$dotfiles" ls-files --error-unmatch \
+  "$fixture_path" "$provenance_path" >/dev/null
+git -C "$dotfiles" diff --quiet HEAD -- "$fixture_path" "$provenance_path"
+cmp "$wrapper" "$fixture"
+test "$(git -C "$hermes_home" hash-object --no-filters "$wrapper")" = "$blob"
+test "$(git -C "$dotfiles" hash-object --no-filters "$fixture")" = "$blob"
+test "$(shasum -a 256 "$wrapper" | awk '{print $1}')" = "$sha256"
+test "$(shasum -a 256 "$fixture" | awk '{print $1}')" = "$sha256"
+```
+
+Expected: every command exits `0`. The current hermes-home wrapper must be
+unchanged at the provenance commit and must match the committed dotfiles
+fixture byte-for-byte, by Git blob ID, and by SHA-256. A mismatch blocks PR
+publication; update and revalidate the fixture and provenance deliberately
+rather than bypassing this gate.
+
+- [ ] **Step 3: Push the dotfiles branch and create a PR**
 
 ```bash
 git push -u origin codex/hermes-profile-local-sync
@@ -967,7 +1016,7 @@ gh pr checks --watch
 
 The PR body must state local authority, exact deletions, secret boundary, first-install exception, cron dependency, and exact test evidence. Do not merge on an unknown/missing check. If GitHub explicitly reports billing exhaustion, classify it using `distribution-validation-design.md` and obtain the same explicit user approval required by that fallback.
 
-- [ ] **Step 3: Merge dotfiles and verify remote main**
+- [ ] **Step 4: Merge dotfiles and verify remote main**
 
 ```bash
 gh pr merge --merge --delete-branch
@@ -978,7 +1027,7 @@ git merge-base --is-ancestor HEAD origin/main
 
 Expected: PR state `MERGED` and the feature head is an ancestor of `origin/main`.
 
-- [ ] **Step 4: Re-run and record exact-head hermes-home evidence**
+- [ ] **Step 5: Re-run and record exact-head hermes-home evidence**
 
 ```bash
 cd /Users/ktome1995/Program/hermes-home-profile-sync
@@ -991,7 +1040,7 @@ git rev-parse HEAD
 
 Expected: full validation passes and worktree is clean.
 
-- [ ] **Step 5: Push, review, and merge hermes-home**
+- [ ] **Step 6: Push, review, and merge hermes-home**
 
 ```bash
 git push -u origin codex/hermes-profile-sync-cron

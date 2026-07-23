@@ -335,3 +335,126 @@ blob or SHA-256 and requires a deliberate fixture update. For final
 adjudication, the current two dedicated worktrees were additionally compared
 byte-for-byte and the actual hermes-home wrapper was executed successfully
 against the built dotfiles engine offline.
+
+## Late Cleanup Race Addendum
+
+### Finding
+
+`PrivateDirectory.cleanup()` checked the original pathname before quarantine
+moves. At the final `"directory"` checkpoint, the original pathname was vacant,
+so a replacement could be created there after the last identity check. Cleanup
+removed the captured inode and returned `True` because its final scan searched
+only for that captured inode.
+
+The deterministic regression uses an empty private directory. At the existing
+final checkpoint it creates a replacement directory and marker through the
+retained parent descriptor. The replacement survives in both RED and GREEN.
+
+### RED
+
+Command:
+
+```bash
+docker run --rm -v "$PWD:/workspace:ro" \
+  -w /workspace/docker/hermes-agent/bootstrap/tests \
+  -e PYTHONPATH=/workspace/docker/hermes-agent/bootstrap \
+  --entrypoint /opt/hermes/.venv/bin/python \
+  local/hermes-bootstrap-test -m unittest -v \
+  test_filesystem.PrivateDirectoryTests.test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint
+```
+
+Output:
+
+```text
+test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint (test_filesystem.PrivateDirectoryTests.test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint) ... FAIL
+
+======================================================================
+FAIL: test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint (test_filesystem.PrivateDirectoryTests.test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/docker/hermes-agent/bootstrap/tests/test_filesystem.py", line 63, in test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint
+    self.assertFalse(private.cleanup())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+```
+
+### GREEN
+
+The smallest fix performs a final no-follow `stat` of the original name through
+the retained parent descriptor after `_remove_directory_entry()` completes.
+Any extant entry, regardless of inode or type, sets `path_changed`; unexpected
+`OSError` continues through the existing fail-closed exception handling. The
+replacement is never deleted.
+
+Command:
+
+```bash
+docker run --rm -v "$PWD:/workspace:ro" \
+  -w /workspace/docker/hermes-agent/bootstrap/tests \
+  -e PYTHONPATH=/workspace/docker/hermes-agent/bootstrap \
+  --entrypoint /opt/hermes/.venv/bin/python \
+  local/hermes-bootstrap-test -m unittest -v \
+  test_filesystem.PrivateDirectoryTests.test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint
+```
+
+Output:
+
+```text
+test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint (test_filesystem.PrivateDirectoryTests.test_cleanup_fails_closed_for_replacement_created_at_final_checkpoint) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
+### Prepublication Provenance Gate
+
+Task 8 now blocks PR publication unless a mechanical gate proves that:
+
+- the current hermes-home wrapper is unchanged at the recorded source commit;
+- the committed hermes-home blob matches the provenance Git blob SHA-1;
+- the current wrapper and committed dotfiles fixture compare byte-for-byte;
+- both files match the recorded Git blob SHA-1 and SHA-256;
+- the fixture and provenance record are committed at the dotfiles HEAD.
+
+The executable, mode-preserving CI fixture test remains unchanged.
+
+### Addendum Verification
+
+The focused filesystem and four existing replacement tests passed:
+
+```text
+Ran 5 tests in 0.081s
+OK
+```
+
+The new provenance gate passed against:
+
+```text
+repository=rurusasu/hermes-home
+commit=a2b82933e415444e04f845f3afb5a0369d52ed4f
+blob=16522f5a8a1fef7c74305203c04e9c44b137f767
+sha256=402d1246b7f94cc9349cbbeae5dd4177206ea69a1f5619de8c975c840dfd7317
+```
+
+Fresh full verification:
+
+```text
+task hermes:bootstrap:test
+Ran 456 tests in 39.091s
+OK (skipped=1)
+test_gh_wrapper: PASS
+
+pre-commit run --all-files
+fix utf-8 byte order marker: Passed
+treefmt: Passed
+powershell tests: Passed
+chezmoi template lint: Passed
+hermes bootstrap container tests: Passed
+```
