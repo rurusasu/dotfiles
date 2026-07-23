@@ -238,6 +238,114 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertFalse((scratch / "rick").exists())
 
+    def test_streaming_secret_match_at_chunk_end_waits_for_lookahead(self) -> None:
+        token = b"xoxb-valid"
+        prefix = b"a" * (
+            profile_snapshot._READ_CHUNK_BYTES - len(token) - 1
+        ) + b"!"
+        cases = ((b"_", False), (b"!", True), (b"", True))
+
+        for index, (suffix, rejected) in enumerate(cases):
+            with self.subTest(suffix=suffix, rejected=rejected):
+                name = f"lookahead{index}"
+                home = self.write_profile(name, ["SOUL.md"])
+                content = prefix + token + suffix
+                (home / "SOUL.md").write_bytes(content)
+                scratch = self.root / f"lookahead-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                if rejected:
+                    with self.assertRaises(ProfileSnapshotError) as caught:
+                        prepare_profile_snapshots(
+                            self.manifest(self.profile(name)),
+                            scratch,
+                            allow_missing=False,
+                        )
+                    self.assertEqual(
+                        caught.exception.category, "invalid_local_profile"
+                    )
+                    self.assertEqual(list(scratch.iterdir()), [])
+                else:
+                    snapshot = prepare_profile_snapshots(
+                        self.manifest(self.profile(name)),
+                        scratch,
+                        allow_missing=False,
+                    ).snapshots[0]
+                    self.assertEqual((snapshot.root / "SOUL.md").read_bytes(), content)
+
+    def test_manifest_growth_is_rejected_after_one_bounded_probe(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        manifest_path = home / "distribution.yaml"
+        initial = manifest_path.stat()
+        growth = b"# late growth\n"
+        original_read = os.read
+        bytes_read = 0
+        appends = 0
+
+        def read_then_grow(descriptor: int, count: int) -> bytes:
+            nonlocal appends, bytes_read
+            chunk = original_read(descriptor, count)
+            status = os.fstat(descriptor)
+            if (status.st_dev, status.st_ino) == (initial.st_dev, initial.st_ino):
+                bytes_read += len(chunk)
+                if chunk and appends < 4:
+                    with manifest_path.open("ab", buffering=0) as handle:
+                        handle.write(growth)
+                    appends += 1
+            return chunk
+
+        started = time.monotonic()
+        with mock.patch.object(profile_snapshot.os, "read", side_effect=read_then_grow):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertGreaterEqual(appends, 1)
+        self.assertEqual(bytes_read, initial.st_size + 1)
+        self.assertLess(time.monotonic() - started, 1.0)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_owned_file_growth_is_rejected_without_copying_past_captured_size(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        source = home / "SOUL.md"
+        content = b"A" * profile_snapshot._READ_CHUNK_BYTES
+        source.write_bytes(content)
+        original_write = profile_snapshot._write_descriptor
+        copied_bytes = 0
+        appends = 0
+
+        def write_then_grow(descriptor: int, chunk: bytes) -> None:
+            nonlocal appends, copied_bytes
+            original_write(descriptor, chunk)
+            if chunk == content:
+                copied_bytes += len(chunk)
+                if appends < 4:
+                    with source.open("ab", buffering=0) as handle:
+                        handle.write(content)
+                    appends += 1
+
+        started = time.monotonic()
+        with mock.patch.object(
+            profile_snapshot, "_write_descriptor", side_effect=write_then_grow
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertGreaterEqual(appends, 1)
+        self.assertEqual(copied_bytes, len(content))
+        self.assertLess(time.monotonic() - started, 1.0)
+        self.assertEqual(caught.exception.category, "invalid_local_profile")
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_accepts_an_owned_file_larger_than_sixteen_mebibytes(self) -> None:
         home = self.write_profile("rick", ["archive.bin"])
         large = home / "archive.bin"
@@ -658,6 +766,105 @@ class ProfileSnapshotTests(unittest.TestCase):
         retained = self.scratch / "rick" / "SOUL.md"
         self.assertEqual(retained.stat().st_ino, replacement_inode)
         self.assertEqual(retained.read_bytes(), marker)
+
+    def test_failure_cleanup_retains_the_unlinked_registered_output_inode(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        source_content = b"registered-output\n"
+        (home / "SOUL.md").write_bytes(source_content)
+        marker = b"replacement-must-survive\n"
+        original_verify = profile_snapshot._verify_destination_descriptor
+        original_remove = profile_snapshot._remove_snapshot
+        old_identity: tuple[int, int] | None = None
+        replacement_identity: tuple[int, int] | None = None
+        retained_descriptor: int | None = None
+        retained_identity: tuple[int, int] | None = None
+        retained_nlink: int | None = None
+        replacements = 0
+
+        def replace_then_verify(
+            parent_fd: int,
+            name: str,
+            descriptor: int,
+            mode: int,
+            size: int,
+        ) -> os.stat_result:
+            nonlocal old_identity, replacement_identity, replacements
+            if name == "SOUL.md":
+                self.assertEqual(replacements, 0)
+                status = os.fstat(descriptor)
+                old_identity = (status.st_dev, status.st_ino)
+                os.unlink(name, dir_fd=parent_fd)
+                replacement_fd = os.open(
+                    name,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+                    mode,
+                    dir_fd=parent_fd,
+                )
+                try:
+                    os.write(replacement_fd, marker)
+                    os.fchmod(replacement_fd, mode)
+                finally:
+                    os.close(replacement_fd)
+                replacement = os.stat(
+                    name, dir_fd=parent_fd, follow_symlinks=False
+                )
+                replacement_identity = (replacement.st_dev, replacement.st_ino)
+                self.assertNotEqual(replacement_identity, old_identity)
+                replacements += 1
+            return original_verify(parent_fd, name, descriptor, mode, size)
+
+        def inspect_then_remove(
+            scratch_fd: int,
+            output_fd: int | None,
+            expected_identity: tuple[int, int],
+            files: tuple[object, ...],
+            directories: tuple[object, ...],
+        ) -> None:
+            nonlocal retained_descriptor, retained_identity, retained_nlink
+            expected = next(
+                item for item in files if item.path.as_posix() == "SOUL.md"
+            )
+            retained_descriptor = getattr(expected, "descriptor", None)
+            if retained_descriptor is not None:
+                retained = os.fstat(retained_descriptor)
+                retained_identity = (retained.st_dev, retained.st_ino)
+                retained_nlink = retained.st_nlink
+            original_remove(
+                scratch_fd,
+                output_fd,
+                expected_identity,
+                files,
+                directories,
+            )
+
+        with mock.patch.object(
+            profile_snapshot,
+            "_verify_destination_descriptor",
+            side_effect=replace_then_verify,
+        ), mock.patch.object(
+            profile_snapshot, "_remove_snapshot", side_effect=inspect_then_remove
+        ):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(
+                    self.manifest(self.profile("rick")),
+                    self.scratch,
+                    allow_missing=False,
+                )
+
+        self.assertEqual(replacements, 1)
+        self.assertIsNotNone(retained_descriptor)
+        self.assertEqual(retained_identity, old_identity)
+        self.assertEqual(retained_nlink, 0)
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        replacement = self.scratch / "rick" / "SOUL.md"
+        self.assertEqual(
+            (replacement.stat().st_dev, replacement.stat().st_ino),
+            replacement_identity,
+        )
+        self.assertEqual(replacement.read_bytes(), marker)
+        assert retained_descriptor is not None
+        with self.assertRaises(OSError):
+            os.fstat(retained_descriptor)
 
     def test_final_recursive_attestation_rejects_late_inventory_mutations(self) -> None:
         for index, mutation in enumerate(("insert", "delete", "replace")):

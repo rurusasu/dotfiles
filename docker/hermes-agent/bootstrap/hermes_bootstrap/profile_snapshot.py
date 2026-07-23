@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import stat
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -95,6 +96,7 @@ class _ExpectedFile:
     sha256: str
     device: int
     inode: int
+    descriptor: int
 
 
 @dataclass(frozen=True)
@@ -183,9 +185,15 @@ def prepare_profile_snapshots(
             raise ProfileSnapshotError(cleanup_profile, "cleanup_failed") from None
         raise
     finally:
-        for item in prepared:
-            os.close(item.output_fd)
-        os.close(scratch_fd)
+        try:
+            for item in prepared:
+                _close_expected_file_descriptors(item.files)
+        finally:
+            try:
+                for item in prepared:
+                    os.close(item.output_fd)
+            finally:
+                os.close(scratch_fd)
     return PreparedProfiles(tuple(item.snapshot for item in prepared), tuple(missing))
 
 
@@ -202,6 +210,7 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
     output_identity: tuple[int, int] | None = None
     output_created = False
     keep_output_open = False
+    keep_expected_files_open = False
     expected_files: list[_ExpectedFile] = []
     expected_directories: dict[PurePosixPath, _ExpectedDirectory] = {}
     try:
@@ -269,6 +278,7 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
         )
         _verify_prepared_snapshot(scratch_root, scratch_fd, result)
         keep_output_open = True
+        keep_expected_files_open = True
         return result
     except Exception:
         if output_created:
@@ -286,9 +296,15 @@ def _prepare_one(declaration: DistributionSource, scratch_root: Path, scratch_fd
                 raise ProfileSnapshotError(declaration.name, "cleanup_failed") from None
         raise
     finally:
-        os.close(source_fd)
-        if output_fd is not None and not keep_output_open:
-            os.close(output_fd)
+        try:
+            os.close(source_fd)
+        finally:
+            try:
+                if not keep_expected_files_open:
+                    _close_expected_file_descriptors(expected_files)
+            finally:
+                if output_fd is not None and not keep_output_open:
+                    os.close(output_fd)
 
 
 def _read_manifest_compatibly(declaration: DistributionSource, source_fd: int) -> tuple[dict[str, object], os.stat_result]:
@@ -540,7 +556,7 @@ def _copy_regular(
 ) -> None:
     source_fd = _open_regular(parent_fd, name)
     destination_fd: int | None = None
-    expected_index: int | None = None
+    destination_registered = False
     try:
         before = os.fstat(source_fd)
         destination_fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=output_fd)
@@ -554,17 +570,20 @@ def _copy_regular(
                 "",
                 created.st_dev,
                 created.st_ino,
+                destination_fd,
             )
         )
+        destination_registered = True
         digest = hashlib.sha256()
         size = 0
         overlap = b""
-        while chunk := os.read(source_fd, _READ_CHUNK_BYTES):
-            _reject_sensitive_bytes(overlap + chunk)
+        for chunk in _read_bounded_chunks(source_fd, before.st_size):
+            _reject_sensitive_bytes(overlap + chunk, final=False)
             _write_descriptor(destination_fd, chunk)
             digest.update(chunk)
             size += len(chunk)
             overlap = (overlap + chunk)[-_SECRET_OVERLAP_BYTES:]
+        _reject_sensitive_bytes(overlap)
         _verify_regular(parent_fd, name, source_fd, before, size)
         mode = _git_mode(before.st_mode)
         os.fchmod(destination_fd, mode)
@@ -584,10 +603,11 @@ def _copy_regular(
             sha256,
             destination.st_dev,
             destination.st_ino,
+            destination_fd,
         )
     finally:
         os.close(source_fd)
-        if destination_fd is not None:
+        if destination_fd is not None and not destination_registered:
             os.close(destination_fd)
     entries.append(SnapshotEntry(relative, mode, size, sha256))
 
@@ -596,14 +616,24 @@ def _read_regular(parent_fd: int, name: str) -> tuple[bytes, os.stat_result]:
     descriptor = _open_regular(parent_fd, name)
     try:
         before = os.fstat(descriptor)
-        chunks: list[bytes] = []
-        while chunk := os.read(descriptor, _READ_CHUNK_BYTES):
-            chunks.append(chunk)
+        chunks = list(_read_bounded_chunks(descriptor, before.st_size))
         content = b"".join(chunks)
         _verify_regular(parent_fd, name, descriptor, before, len(content))
         return content, before
     finally:
         os.close(descriptor)
+
+
+def _read_bounded_chunks(descriptor: int, expected_size: int) -> Iterator[bytes]:
+    remaining = expected_size
+    while remaining:
+        chunk = os.read(descriptor, min(_READ_CHUNK_BYTES, remaining))
+        if not chunk:
+            raise ValueError("file changed while reading")
+        remaining -= len(chunk)
+        yield chunk
+    if os.read(descriptor, 1):
+        raise ValueError("file changed while reading")
 
 
 def _open_regular(parent_fd: int, name: str) -> int:
@@ -786,19 +816,22 @@ def _write_private_file_at(
     expected_files: list[_ExpectedFile],
 ) -> _ExpectedFile:
     descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=parent_fd)
-    created = os.fstat(descriptor)
-    expected_index = len(expected_files)
-    expected_files.append(
-        _ExpectedFile(
-            PurePosixPath(name),
-            mode,
-            0,
-            "",
-            created.st_dev,
-            created.st_ino,
-        )
-    )
+    registered = False
     try:
+        created = os.fstat(descriptor)
+        expected_index = len(expected_files)
+        expected_files.append(
+            _ExpectedFile(
+                PurePosixPath(name),
+                mode,
+                0,
+                "",
+                created.st_dev,
+                created.st_ino,
+                descriptor,
+            )
+        )
+        registered = True
         _write_descriptor(descriptor, content)
         os.fchmod(descriptor, mode)
         os.fsync(descriptor)
@@ -816,11 +849,25 @@ def _write_private_file_at(
             hashlib.sha256(content).hexdigest(),
             status.st_dev,
             status.st_ino,
+            descriptor,
         )
         expected_files[expected_index] = expected
         return expected
     finally:
-        os.close(descriptor)
+        if not registered:
+            os.close(descriptor)
+
+
+def _close_expected_file_descriptors(files: tuple[_ExpectedFile, ...] | list[_ExpectedFile]) -> None:
+    first_error: OSError | None = None
+    for expected in files:
+        try:
+            os.close(expected.descriptor)
+        except OSError as error:
+            if first_error is None:
+                first_error = error
+    if first_error is not None:
+        raise first_error
 
 
 def _verify_destination_descriptor(
@@ -1021,6 +1068,7 @@ def _snapshot_directory_names(directory_fd: int) -> list[str]:
 
 
 def _verify_expected_file(parent_fd: int, name: str, expected: _ExpectedFile) -> None:
+    _require_expected_file_status(os.fstat(expected.descriptor), expected)
     descriptor = os.open(
         name,
         os.O_RDONLY
@@ -1036,11 +1084,12 @@ def _verify_expected_file(parent_fd: int, name: str, expected: _ExpectedFile) ->
         _require_expected_file_status(current, expected)
         digest = hashlib.sha256()
         size = 0
-        while chunk := os.read(descriptor, _READ_CHUNK_BYTES):
+        for chunk in _read_bounded_chunks(descriptor, expected.size):
             digest.update(chunk)
             size += len(chunk)
         after = os.fstat(descriptor)
         _require_expected_file_status(after, expected)
+        _require_expected_file_status(os.fstat(expected.descriptor), expected)
         current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         _require_expected_file_status(current, expected)
         if size != expected.size or digest.hexdigest() != expected.sha256:
@@ -1100,9 +1149,11 @@ def _snapshot_digest(manifest_bytes: bytes, gitignore_bytes: bytes, entries: lis
     return hashlib.sha256(payload).hexdigest()
 
 
-def _reject_sensitive_bytes(content: bytes) -> None:
-    if _GITHUB_TOKEN.search(content) or _SLACK_TOKEN.search(content) or _PRIVATE_KEY.search(content):
-        raise ValueError("secret candidate")
+def _reject_sensitive_bytes(content: bytes, *, final: bool = True) -> None:
+    for pattern in (_GITHUB_TOKEN, _SLACK_TOKEN, _PRIVATE_KEY):
+        match = pattern.search(content)
+        if match is not None and (final or match.end() < len(content)):
+            raise ValueError("secret candidate")
 
 
 def _require_private_scratch(path: Path) -> None:
@@ -1190,6 +1241,8 @@ def _remove_snapshot(
     }
     if len(expected_files) != len(files) or len(expected_directories) != len(directories):
         raise OSError("duplicate snapshot cleanup entry")
+    for expected_file in files:
+        _require_cleanup_retained_file(expected_file)
     file_paths = {item.path for item in files}
     directory_paths = {item.path for item in directories}
     removed_files: set[tuple[int, int]] = set()
@@ -1282,7 +1335,9 @@ def _clear_output_directory(
             if expected_file is not None:
                 if identity in removed_files:
                     raise OSError("duplicate snapshot cleanup file")
-                _remove_cleanup_file(directory_fd, name, identity)
+                _remove_cleanup_file(
+                    directory_fd, name, identity, expected_file
+                )
                 removed_files.add(identity)
             elif expected_directory is not None:
                 if identity in removed_directories:
@@ -1374,8 +1429,16 @@ def _remove_cleanup_directory(
 
 
 def _remove_cleanup_file(
-    parent_fd: int, name: str, expected_identity: tuple[int, int]
+    parent_fd: int,
+    name: str,
+    expected_identity: tuple[int, int],
+    expected_file: _ExpectedFile | None = None,
 ) -> None:
+    retained = (
+        _require_cleanup_retained_file(expected_file)
+        if expected_file is not None
+        else None
+    )
     flags = (
         os.O_RDWR
         | os.O_CLOEXEC
@@ -1386,29 +1449,56 @@ def _remove_cleanup_file(
     try:
         current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         actual = os.fstat(descriptor)
-        for status in (current, actual):
+        statuses = (current, actual) if retained is None else (current, actual, retained)
+        for status in statuses:
             if (
                 not stat.S_ISREG(status.st_mode)
                 or (status.st_dev, status.st_ino) != expected_identity
             ):
                 raise OSError("snapshot cleanup file changed")
-        if actual.st_nlink == 1:
-            os.ftruncate(descriptor, 0)
-            os.fsync(descriptor)
+        action_descriptor = (
+            expected_file.descriptor if expected_file is not None else descriptor
+        )
+        action_status = (
+            _require_cleanup_retained_file(expected_file)
+            if expected_file is not None
+            else actual
+        )
+        if action_status.st_nlink == 1:
+            os.ftruncate(action_descriptor, 0)
+            os.fsync(action_descriptor)
         actual = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(actual.st_mode)
-            or (actual.st_dev, actual.st_ino) != expected_identity
-        ):
-            raise OSError("snapshot cleanup file changed")
+        statuses = (actual,)
+        if expected_file is not None:
+            statuses += (_require_cleanup_retained_file(expected_file),)
+        for status in statuses:
+            if (
+                not stat.S_ISREG(status.st_mode)
+                or (status.st_dev, status.st_ino) != expected_identity
+            ):
+                raise OSError("snapshot cleanup file changed")
         quarantine, collided = _quarantine_cleanup_entry(
             parent_fd, name, expected_identity, directory=False
         )
         _delete_quarantined_file(
-            parent_fd, quarantine, descriptor, expected_identity, collided
+            parent_fd,
+            quarantine,
+            action_descriptor,
+            expected_identity,
+            collided,
         )
     finally:
         os.close(descriptor)
+
+
+def _require_cleanup_retained_file(expected: _ExpectedFile) -> os.stat_result:
+    status = os.fstat(expected.descriptor)
+    if (
+        not stat.S_ISREG(status.st_mode)
+        or (status.st_dev, status.st_ino) != (expected.device, expected.inode)
+    ):
+        raise OSError("snapshot cleanup file changed")
+    return status
 
 
 def _delete_quarantined_file(
