@@ -477,8 +477,8 @@ Fresh full verification:
 
 ```text
 task hermes:bootstrap:test
-Ran 456 tests in 39.091s
-OK (skipped=1)
+Ran 511 tests
+OK (skipped=3)
 test_gh_wrapper: PASS
 
 pre-commit run --all-files
