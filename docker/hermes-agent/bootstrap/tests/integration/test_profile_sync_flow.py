@@ -1190,6 +1190,107 @@ class ProfileSyncFlowTests(unittest.TestCase):
         )
         self.flow._assert_no_temporary_resources()
 
+    def test_existing_profile_deleted_after_revalidation_rejects_install_and_preserves_replacement(
+        self,
+    ) -> None:
+        self.assertEqual(self.flow._apply()["status"], "applied")
+        existing = self.flow.manifest.profiles[-1]
+        external_before: dict[
+            str, tuple[str, int, bytes | str | None]
+        ] | None = None
+        real_revalidate = bootstrap_flow.app.revalidate_profile_snapshots
+        real_apply_profile = bootstrap_flow.app.apply_profile_distribution
+        real_publish = transaction_module.Transaction.publish_directory
+        real_merge_env = bootstrap_flow.app.merge_env_file
+
+        def revalidate_then_delete(*args: object, **kwargs: object) -> None:
+            real_revalidate(*args, **kwargs)
+            shutil.rmtree(existing.target)
+
+        def apply_then_create_replacement(
+            *args: object, **kwargs: object
+        ) -> object:
+            nonlocal external_before
+            stage = args[0]
+            try:
+                return real_apply_profile(*args, **kwargs)
+            except ApplyError:
+                if stage.declaration.name == existing.name:
+                    self._write_bytes(
+                        existing.target,
+                        self._profile_files(
+                            existing,
+                            version="9.9.9",
+                            marker="state-race-winner",
+                        ),
+                    )
+                    (existing.target / ".env").write_bytes(
+                        b"EXTERNAL_PROFILE_VALUE=preserve\n"
+                    )
+                    (existing.target / ".env").chmod(0o640)
+                    external_before = self._snapshot_bytes_modes(
+                        existing.target
+                    )
+                raise
+
+        def publish(
+            tx: transaction_module.Transaction,
+            path: Path,
+            source: Path,
+            *,
+            remove_tree: bool = True,
+        ) -> bool:
+            return real_publish(
+                tx,
+                path,
+                source,
+                remove_tree=remove_tree,
+            )
+
+        with (
+            mock.patch.object(
+                bootstrap_flow.app,
+                "revalidate_profile_snapshots",
+                side_effect=revalidate_then_delete,
+            ),
+            mock.patch.object(
+                bootstrap_flow.app,
+                "apply_profile_distribution",
+                side_effect=apply_then_create_replacement,
+            ),
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution",
+                wraps=profile_distribution.install_distribution,
+            ) as install,
+            mock.patch.object(
+                transaction_module.Transaction,
+                "publish_directory",
+                autospec=True,
+                side_effect=publish,
+            ) as publish_directory,
+            mock.patch.object(
+                bootstrap_flow.app,
+                "merge_env_file",
+                wraps=real_merge_env,
+            ) as merge_env,
+            self.assertRaises(ApplyError) as raised,
+        ):
+            self.flow._apply()
+
+        install.assert_not_called()
+        publish_directory.assert_not_called()
+        merge_env.assert_not_called()
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            self._snapshot_bytes_modes(existing.target),
+            external_before,
+        )
+        self.assertEqual(
+            str(raised.exception),
+            "could not apply the named profile distribution",
+        )
+        self.flow._assert_no_temporary_resources()
+
     def test_profile_created_after_reservation_bookkeeping_survives_app_rollback(
         self,
     ) -> None:

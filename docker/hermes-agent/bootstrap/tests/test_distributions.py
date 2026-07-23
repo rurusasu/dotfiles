@@ -674,11 +674,70 @@ class DistributionTests(unittest.TestCase):
             self.data_root,
             RecordingTransaction(),
             replace_existing=False,
+            expected_missing=True,
         )
 
         target = self.data_root / "profiles" / "rick"
         self.assertNotEqual(changed, ChangeSet(()))
         self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "config\n")
+
+    def test_profile_no_overwrite_requires_revalidated_expected_state(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = RecordingTransaction()
+
+        with (
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+            )
+
+        install.assert_not_called()
+        self.assertEqual(tx.reservations, [])
+
+    def test_profile_expected_existing_rejects_current_absence_before_install(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = RecordingTransaction()
+
+        with (
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            mock.patch.object(
+                tx,
+                "publish_directory",
+                wraps=tx.publish_directory,
+            ) as publish,
+            mock.patch(
+                "hermes_bootstrap.distributions.merge_env_file"
+            ) as merge_env,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=False,
+                managed_environment={"GH_TOKEN": "secret"},
+            )
+
+        install.assert_not_called()
+        publish.assert_not_called()
+        merge_env.assert_not_called()
+        self.assertEqual(tx.reservations, [])
 
     def test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe(
         self,
@@ -721,6 +780,7 @@ class DistributionTests(unittest.TestCase):
                 self.data_root,
                 tx,
                 replace_existing=False,
+                expected_missing=True,
             )
 
         tx.rollback()
@@ -850,6 +910,7 @@ class DistributionTests(unittest.TestCase):
                 self.data_root,
                 tx,
                 replace_existing=False,
+                expected_missing=True,
             )
 
         tx.rollback()
@@ -892,6 +953,7 @@ class DistributionTests(unittest.TestCase):
                 self.data_root,
                 tx,
                 replace_existing=False,
+                expected_missing=False,
             )
 
         self.assertEqual(changed, ChangeSet(()))
@@ -947,6 +1009,7 @@ class DistributionTests(unittest.TestCase):
                         self.data_root,
                         tx,
                         replace_existing=False,
+                        expected_missing=False,
                     )
 
                 self.assertEqual(tx.snapshots, [])

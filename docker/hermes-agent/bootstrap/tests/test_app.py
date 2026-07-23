@@ -773,10 +773,12 @@ class AppTests(unittest.TestCase):
             ["rick", "nancy"],
         )
         self.assertNotIn("managed_environment", applied_profiles[0][1])
+        self.assertIs(applied_profiles[0][1]["expected_missing"], False)
         self.assertEqual(
             applied_profiles[1][1]["managed_environment"],
             {"GH_TOKEN": "token"},
         )
+        self.assertIs(applied_profiles[1][1]["expected_missing"], True)
         self.assertEqual(
             [call.args[0] for call in merge_env.call_args_list],
             [

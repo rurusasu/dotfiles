@@ -204,6 +204,7 @@ def apply_profile_distribution(
     tx: Transaction,
     *,
     replace_existing: bool = True,
+    expected_missing: bool | None = None,
     managed_environment: Mapping[str, str] | None = None,
     environment_remove: AbstractSet[str] = frozenset(),
 ) -> ChangeSet:
@@ -214,6 +215,7 @@ def apply_profile_distribution(
         data_root,
         tx,
         replace_existing=replace_existing,
+        expected_missing=expected_missing,
         managed_environment=managed_environment,
         environment_remove=environment_remove,
     )
@@ -421,6 +423,7 @@ def _apply_profile_boundary(
     tx: Transaction,
     *,
     replace_existing: bool = True,
+    expected_missing: bool | None = None,
     managed_environment: Mapping[str, str] | None = None,
     environment_remove: AbstractSet[str] = frozenset(),
 ) -> ChangeSet | _Failure:
@@ -434,6 +437,10 @@ def _apply_profile_boundary(
     primary_failure = False
     cleanup_ok = True
     try:
+        if not replace_existing and type(expected_missing) is not bool:
+            raise ValueError(
+                "no-replace profile apply requires revalidated expected state"
+            )
         _require_data_root(data_root)
         expected_target = data_root / "profiles" / stage.declaration.name
         if stage.declaration.target != expected_target:
@@ -447,9 +454,29 @@ def _apply_profile_boundary(
         sanitized = build_result
         target = expected_target
         prior = _read_prior_profile_manifest(target, stage.declaration.name)
-        if _profile_is_current(target, sanitized, manifest, stage, owned, prior):
+        current_exists = _lexists(target)
+        current_exact = _profile_is_current(
+            target,
+            sanitized,
+            manifest,
+            stage,
+            owned,
+            prior,
+        )
+        if not replace_existing and expected_missing is True:
+            if current_exists:
+                raise ValueError(
+                    "profile state differs from revalidated baseline"
+                )
+        elif not replace_existing:
+            if not current_exists or not current_exact:
+                raise ValueError(
+                    "profile state differs from revalidated baseline"
+                )
             result = ChangeSet(())
-        else:
+        elif current_exact:
+            result = ChangeSet(())
+        if result is None:
             snapshots: _SnapshotTracker | None = None
             changed: list[Path] = []
             if replace_existing:

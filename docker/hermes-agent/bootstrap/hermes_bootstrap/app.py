@@ -243,6 +243,7 @@ def _apply_sensitive(
                     manifest.data_root,
                     tx,
                     replace_existing=False,
+                    expected_missing=True,
                     managed_environment=environment,
                     environment_remove=(
                         _MANAGED_ENV_KEYS - set(environment)
@@ -254,6 +255,7 @@ def _apply_sensitive(
                     manifest.data_root,
                     tx,
                     replace_existing=False,
+                    expected_missing=False,
                 )
             _failpoint(f"profile-apply:{stage.declaration.name}")
         for repo, result in remote_results:
