@@ -77,6 +77,16 @@ _REAL_POPEN = subprocess.Popen
 _CHILD_PROCESSES: list[subprocess.Popen[object]] = []
 
 
+def source_config(key: str, value: str) -> str:
+    return (
+        f"{key}: {value}\n"
+        "mcp_servers:\n"
+        "  chrome:\n"
+        "    url: http://browser-mcp:8080/mcp\n"
+        "    connect_timeout: 120\n"
+    )
+
+
 @dataclass(frozen=True)
 class TreeEntry:
     kind: str
@@ -297,7 +307,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "root",
             {
                 "root-distribution.yaml": self._root_manifest(["config.yaml", "retired.md"]),
-                "config.yaml": "root: initial\n",
+                "config.yaml": source_config("root", "initial"),
                 "retired.md": "retire me\n",
             },
         )
@@ -306,7 +316,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 profile,
                 {
                     "distribution.yaml": self._profile_manifest(profile),
-                    "config.yaml": f"profile: {profile}-initial\n",
+                    "config.yaml": source_config("profile", f"{profile}-initial"),
                     "SOUL.md": f"{profile} initial\n",
                 },
             )
@@ -626,10 +636,16 @@ class BootstrapFlowTests(unittest.TestCase):
     def test_initial_install_stages_distributions_and_preserves_runtime(self) -> None:
         self._initial_apply()
 
-        self.assertEqual((self.data_root / "config.yaml").read_text(encoding="utf-8"), "root: initial\n")
+        self.assertEqual(
+            (self.data_root / "config.yaml").read_text(encoding="utf-8"),
+            source_config("root", "initial"),
+        )
         for profile in PROFILE_NAMES:
             target = self.data_root / "profiles" / profile
-            self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), f"profile: {profile}-initial\n")
+            self.assertEqual(
+                (target / "config.yaml").read_text(encoding="utf-8"),
+                source_config("profile", f"{profile}-initial"),
+            )
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
         self.assertEqual((self.data_root / "memories" / "root.txt").read_text(encoding="utf-8"), "root memory\n")
@@ -766,7 +782,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "rick",
             {
                 "distribution.yaml": self._profile_manifest("rick", "0.2.0"),
-                "config.yaml": "profile: rick-updated\n",
+                "config.yaml": source_config("profile", "rick-updated"),
             },
             "update rick",
         )
@@ -781,7 +797,10 @@ class BootstrapFlowTests(unittest.TestCase):
             installed.source,
             next(source.source for source in self.manifest.profiles if source.name == "rick"),
         )
-        self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "profile: rick-updated\n")
+        self.assertEqual(
+            (target / "config.yaml").read_text(encoding="utf-8"),
+            source_config("profile", "rick-updated"),
+        )
         self.assertEqual(
             (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime)),
             runtime_before,
@@ -1002,9 +1021,11 @@ class BootstrapFlowTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 try:
                     version = f"0.{revision}.0"
-                    desired_root = f"root: rollback-{revision}\n"
+                    desired_root = source_config("root", f"rollback-{revision}")
                     desired_profiles = {
-                        profile: f"profile: {profile}-rollback-{revision}\n"
+                        profile: source_config(
+                            "profile", f"{profile}-rollback-{revision}"
+                        )
                         for profile in PROFILE_NAMES
                     }
                     self._commit(
