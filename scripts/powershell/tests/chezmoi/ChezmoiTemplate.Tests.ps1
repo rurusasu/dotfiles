@@ -17,6 +17,18 @@ BeforeAll {
 }
 
 Describe 'chezmoi テンプレート バリデーション' {
+    Context 'Codex global instructions deployment' {
+        It 'should deploy AGENTS.override.md and include it in the change hash for both OSes' {
+            $unixScript = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.sh.tmpl') -Raw
+            $windowsScript = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.ps1.tmpl') -Raw
+
+            $unixScript | Should -Match 'include "dot_codex/AGENTS\.override\.md" \| sha256sum'
+            $unixScript | Should -Match 'deploy_file "\$CHEZMOI_SOURCE/dot_codex/AGENTS\.override\.md" "\$HOME_DIR/\.codex/AGENTS\.override\.md"'
+            $windowsScript | Should -Match 'include "dot_codex/AGENTS\.override\.md" \| sha256sum'
+            $windowsScript | Should -Match 'Deploy-File "\$ChezmoiSource\\dot_codex\\AGENTS\.override\.md" "\$HomeDir\\\.codex\\AGENTS\.override\.md"'
+        }
+    }
+
     Context 'onepasswordRead はテンプレート展開中に呼ばない' {
         It 'すべての .tmpl ファイルで onepasswordRead を呼ばないこと' {
             $violations = @()
