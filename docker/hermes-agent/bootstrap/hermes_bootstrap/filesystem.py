@@ -2,46 +2,36 @@
 
 from __future__ import annotations
 
-import ctypes
-import errno
 import os
 import secrets
 import stat
+import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Any
 
 
-_RENAME_NOREPLACE = 1
 _PRIVATE_DIRECTORY_ATTEMPTS = 32
-_CLEANUP_QUARANTINE_ATTEMPTS = 32
 
 
-def _load_renameat2() -> Any | None:
-    try:
-        function = ctypes.CDLL(None, use_errno=True).renameat2
-    except (AttributeError, OSError):
-        return None
-    function.argtypes = (
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    )
-    function.restype = ctypes.c_int
-    return function
+class _PrivateDirectoryState(Enum):
+    ACTIVE = "active"
+    CLEANED = "cleaned"
+    RELEASED = "released"
+    FAILED = "failed"
 
 
-_renameat2 = _load_renameat2()
+@dataclass(frozen=True)
+class _CapturedDirectory:
+    identity: tuple[int, int]
+    entries: tuple[_CapturedEntry, ...]
 
 
-def _private_cleanup_checkpoint(
-    _kind: str,
-    _parent_fd: int,
-    _name: str,
-) -> None:
-    pass
+@dataclass(frozen=True)
+class _CapturedEntry:
+    name: str
+    identity: tuple[int, int]
+    directory: _CapturedDirectory | None
 
 
 @dataclass
@@ -53,89 +43,105 @@ class PrivateDirectory:
     _directory_fd: int
     _parent_identity: tuple[int, int]
     _identity: tuple[int, int]
-    _active: bool = True
+    _mount_id: int | None
+    _state: _PrivateDirectoryState = _PrivateDirectoryState.ACTIVE
 
     @property
     def identity(self) -> tuple[int, int]:
         return self._identity
 
     def cleanup(self) -> bool:
-        """Delete only the captured directory tree and report any replacement."""
+        """Delete a fully validated captured tree and retain uncertain artifacts."""
 
-        if not self._active:
+        if self._state is _PrivateDirectoryState.CLEANED:
             return True
-        success = False
+        if self._state is not _PrivateDirectoryState.ACTIVE:
+            return False
         try:
             _require_directory_identity(self._parent_fd, self._parent_identity)
             verify_absolute_directory(self.path.parent, self._parent_fd)
-            _require_directory_identity(self._directory_fd, self._identity)
-            path_changed = not _entry_matches(
+            _require_directory_entry(
                 self._parent_fd,
                 self.path.name,
                 self._identity,
-                directory=True,
             )
-            if _find_directory_name(
-                self._parent_fd,
-                self._identity,
-            ) is None:
-                raise OSError("private cleanup target is unavailable")
-            _clear_directory(
+            root_status = _require_captured_directory(
                 self._directory_fd,
                 self._identity,
                 self._identity[0],
+                self._mount_id,
             )
+            captured = _preflight_directory(
+                self._directory_fd,
+                self._identity,
+                root_status.st_dev,
+                self._mount_id,
+            )
+            _require_directory_identity(self._parent_fd, self._parent_identity)
             verify_absolute_directory(self.path.parent, self._parent_fd)
-            path_changed = path_changed or not _entry_matches(
+            _require_directory_entry(
                 self._parent_fd,
                 self.path.name,
                 self._identity,
-                directory=True,
             )
-            current_name = _find_directory_name(
+            _remove_captured_directory_contents(
+                self._directory_fd,
+                captured,
+                root_status.st_dev,
+                self._mount_id,
+            )
+            _require_directory_identity(self._parent_fd, self._parent_identity)
+            verify_absolute_directory(self.path.parent, self._parent_fd)
+            _require_directory_entry(
                 self._parent_fd,
+                self.path.name,
                 self._identity,
             )
-            if current_name is None:
-                raise OSError("private cleanup target is unavailable")
-            _remove_directory_entry(
-                self._parent_fd,
-                current_name,
+            _require_captured_directory(
                 self._directory_fd,
                 self._identity,
+                root_status.st_dev,
+                self._mount_id,
             )
-            try:
-                os.stat(
-                    self.path.name,
-                    dir_fd=self._parent_fd,
-                    follow_symlinks=False,
-                )
-            except FileNotFoundError:
-                pass
-            else:
-                path_changed = True
-            if _find_directory_name(self._parent_fd, self._identity) is not None:
-                raise OSError("private cleanup target remains")
-            success = not path_changed
+            if _scan_directory_names(self._directory_fd):
+                raise OSError("private cleanup directory is not empty")
+            os.rmdir(self.path.name, dir_fd=self._parent_fd)
+            self._state = _PrivateDirectoryState.CLEANED
         except Exception:
-            success = False
+            self._state = _PrivateDirectoryState.FAILED
         finally:
-            self._close()
-        return success
+            try:
+                self._close_descriptors()
+            except Exception:
+                self._state = _PrivateDirectoryState.FAILED
+        return self._state is _PrivateDirectoryState.CLEANED
 
     def release(self) -> None:
         """Relinquish cleanup ownership after a verified publication move."""
 
-        self._close()
-
-    def _close(self) -> None:
-        if not self._active:
+        if self._state is not _PrivateDirectoryState.ACTIVE:
             return
-        self._active = False
         try:
-            os.close(self._directory_fd)
-        finally:
-            os.close(self._parent_fd)
+            self._close_descriptors()
+        except Exception:
+            self._state = _PrivateDirectoryState.FAILED
+            return
+        self._state = _PrivateDirectoryState.RELEASED
+
+    def _close_descriptors(self) -> None:
+        failure: OSError | None = None
+        for attribute in ("_directory_fd", "_parent_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor < 0:
+                continue
+            setattr(self, attribute, -1)
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                if failure is None:
+                    failure = error
+        if failure is not None:
+            raise failure
 
 
 def open_absolute_directory(path: Path, *, create: bool = False, mode: int = 0o700) -> int:
@@ -208,6 +214,7 @@ def create_private_directory(parent: Path, *, prefix: str) -> PrivateDirectory:
     parent_fd = open_absolute_directory(parent)
     directory_fd: int | None = None
     created_name: str | None = None
+    mount_id: int | None = None
     try:
         parent_status = os.fstat(parent_fd)
         parent_identity = (parent_status.st_dev, parent_status.st_ino)
@@ -235,13 +242,15 @@ def create_private_directory(parent: Path, *, prefix: str) -> PrivateDirectory:
             or stat.S_IMODE(opened.st_mode) != 0o700
         ):
             raise OSError("private directory changed during creation")
+        mount_id = _descriptor_mount_id(directory_fd)
         verify_absolute_directory(parent, parent_fd)
         result = PrivateDirectory(
-            parent / created_name,
-            parent_fd,
-            directory_fd,
-            parent_identity,
-            identity,
+            path=parent / created_name,
+            _parent_fd=parent_fd,
+            _directory_fd=directory_fd,
+            _parent_identity=parent_identity,
+            _identity=identity,
+            _mount_id=mount_id,
         )
         parent_fd = -1
         directory_fd = None
@@ -250,11 +259,15 @@ def create_private_directory(parent: Path, *, prefix: str) -> PrivateDirectory:
         if created_name is not None and directory_fd is not None:
             status = os.fstat(directory_fd)
             owner = PrivateDirectory(
-                parent / created_name,
-                os.dup(parent_fd),
-                directory_fd,
-                (os.fstat(parent_fd).st_dev, os.fstat(parent_fd).st_ino),
-                (status.st_dev, status.st_ino),
+                path=parent / created_name,
+                _parent_fd=os.dup(parent_fd),
+                _directory_fd=directory_fd,
+                _parent_identity=(
+                    os.fstat(parent_fd).st_dev,
+                    os.fstat(parent_fd).st_ino,
+                ),
+                _identity=(status.st_dev, status.st_ino),
+                _mount_id=mount_id,
             )
             directory_fd = None
             owner.cleanup()
@@ -277,6 +290,16 @@ def _open_directory_at(parent_fd: int, name: str) -> int:
     return os.open(name, flags, dir_fd=parent_fd)
 
 
+def _open_regular_at(parent_fd: int, name: str) -> int:
+    flags = (
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    return os.open(name, flags, dir_fd=parent_fd)
+
+
 def _require_directory_identity(
     descriptor: int,
     expected: tuple[int, int],
@@ -290,275 +313,256 @@ def _require_directory_identity(
     return current
 
 
-def _entry_matches(
+def _require_directory_entry(
     parent_fd: int,
     name: str,
     expected: tuple[int, int],
-    *,
-    directory: bool,
-) -> bool:
-    try:
-        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-    except FileNotFoundError:
-        return False
-    return (
-        stat.S_ISDIR(current.st_mode) == directory
-        and (current.st_dev, current.st_ino) == expected
-    )
+) -> os.stat_result:
+    current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if (
+        not stat.S_ISDIR(current.st_mode)
+        or (current.st_dev, current.st_ino) != expected
+    ):
+        raise OSError("private cleanup directory entry changed")
+    return current
 
 
-def _find_directory_name(
+def _require_regular_entry(
     parent_fd: int,
+    name: str,
     expected: tuple[int, int],
-) -> str | None:
-    with os.scandir(parent_fd) as iterator:
-        names = sorted(entry.name for entry in iterator)
-    found: str | None = None
-    for name in names:
-        try:
-            current = os.stat(
-                name,
-                dir_fd=parent_fd,
-                follow_symlinks=False,
-            )
-        except FileNotFoundError:
+) -> os.stat_result:
+    current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if (
+        not stat.S_ISREG(current.st_mode)
+        or current.st_nlink != 1
+        or (current.st_dev, current.st_ino) != expected
+    ):
+        raise OSError("private cleanup regular file changed")
+    return current
+
+
+def _require_captured_directory(
+    descriptor: int,
+    expected: tuple[int, int],
+    root_device: int,
+    root_mount_id: int | None,
+) -> os.stat_result:
+    current = _require_directory_identity(descriptor, expected)
+    if current.st_dev != root_device:
+        raise OSError("private cleanup crossed a device boundary")
+    _require_captured_mount(descriptor, root_mount_id)
+    return current
+
+
+def _require_captured_regular(
+    descriptor: int,
+    expected: tuple[int, int],
+    root_device: int,
+    root_mount_id: int | None,
+) -> os.stat_result:
+    current = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(current.st_mode)
+        or current.st_nlink != 1
+        or (current.st_dev, current.st_ino) != expected
+    ):
+        raise OSError("private cleanup regular file identity changed")
+    if current.st_dev != root_device:
+        raise OSError("private cleanup crossed a device boundary")
+    _require_captured_mount(descriptor, root_mount_id)
+    return current
+
+
+def _require_captured_mount(
+    descriptor: int,
+    root_mount_id: int | None,
+) -> None:
+    current_mount_id = _descriptor_mount_id(descriptor)
+    if sys.platform.startswith("linux") and (
+        root_mount_id is None or current_mount_id is None
+    ):
+        raise OSError("private cleanup mount information is unavailable")
+    if current_mount_id != root_mount_id:
+        raise OSError("private cleanup crossed a mount boundary")
+
+
+def _descriptor_mount_id(descriptor: int) -> int | None:
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        with open(
+            f"/proc/self/fdinfo/{descriptor}",
+            "r",
+            encoding="ascii",
+        ) as stream:
+            contents = stream.read(4097)
+    except (OSError, UnicodeError) as error:
+        raise OSError("private cleanup mount information is unavailable") from error
+    if len(contents) > 4096:
+        raise OSError("private cleanup mount information is malformed")
+    values: list[int] = []
+    for line in contents.splitlines():
+        key, separator, raw_value = line.partition(":")
+        if key != "mnt_id":
             continue
-        if (
-            stat.S_ISDIR(current.st_mode)
-            and (current.st_dev, current.st_ino) == expected
-        ):
-            if found is not None:
-                raise OSError("private cleanup target is ambiguous")
-            found = name
-    return found
+        value = raw_value.strip()
+        if separator != ":" or not value.isascii() or not value.isdecimal():
+            raise OSError("private cleanup mount information is malformed")
+        values.append(int(value))
+    if len(values) != 1:
+        raise OSError("private cleanup mount information is malformed")
+    return values[0]
 
 
-def _clear_directory(
+def _scan_directory_names(directory_fd: int) -> tuple[str, ...]:
+    with os.scandir(directory_fd) as iterator:
+        return tuple(sorted(entry.name for entry in iterator))
+
+
+def _preflight_directory(
     directory_fd: int,
     expected: tuple[int, int],
     root_device: int,
-) -> None:
-    _require_directory_identity(directory_fd, expected)
-    with os.scandir(directory_fd) as iterator:
-        names = sorted(entry.name for entry in iterator)
-    failed = False
-    for name in names:
-        try:
-            current = os.stat(
-                name,
-                dir_fd=directory_fd,
-                follow_symlinks=False,
-            )
-            if current.st_dev != root_device:
-                raise OSError("private cleanup crossed a device boundary")
-            identity = (current.st_dev, current.st_ino)
-            if stat.S_ISDIR(current.st_mode):
-                child_fd = _open_directory_at(directory_fd, name)
-                try:
-                    _require_directory_identity(child_fd, identity)
-                    _clear_directory(child_fd, identity, root_device)
-                    _remove_directory_entry(
-                        directory_fd,
-                        name,
-                        child_fd,
-                        identity,
-                    )
-                finally:
-                    os.close(child_fd)
-            else:
-                _remove_nondirectory_entry(
-                    directory_fd,
-                    name,
-                    current,
-                )
-        except Exception:
-            failed = True
-    _require_directory_identity(directory_fd, expected)
-    with os.scandir(directory_fd) as iterator:
-        remaining = next(iterator, None) is not None
-    if failed or remaining:
-        raise OSError("private cleanup did not quiesce")
-
-
-def _remove_directory_entry(
-    parent_fd: int,
-    name: str,
-    descriptor: int,
-    expected: tuple[int, int],
-) -> None:
-    _require_directory_identity(descriptor, expected)
-    with os.scandir(descriptor) as iterator:
-        if next(iterator, None) is not None:
-            raise OSError("private cleanup directory is not empty")
-    final_name = _transfer_twice(
-        parent_fd,
-        name,
+    root_mount_id: int | None,
+) -> _CapturedDirectory:
+    _require_captured_directory(
+        directory_fd,
         expected,
-        directory=True,
+        root_device,
+        root_mount_id,
     )
-    _private_cleanup_checkpoint("directory", parent_fd, final_name)
-    _require_directory_identity(descriptor, expected)
-    if not _entry_matches(
-        parent_fd,
-        final_name,
-        expected,
-        directory=True,
-    ):
-        raise OSError("private cleanup directory changed")
-    with os.scandir(descriptor) as iterator:
-        if next(iterator, None) is not None:
-            raise OSError("private cleanup directory changed")
-    os.rmdir(final_name, dir_fd=parent_fd)
-
-
-def _remove_nondirectory_entry(
-    parent_fd: int,
-    name: str,
-    current: os.stat_result,
-) -> None:
-    expected = (current.st_dev, current.st_ino)
-    descriptor: int | None = None
-    if stat.S_ISREG(current.st_mode):
-        flags = (
-            os.O_RDONLY
-            | os.O_CLOEXEC
-            | getattr(os, "O_NOFOLLOW", 0)
-            | getattr(os, "O_NONBLOCK", 0)
-        )
-        descriptor = os.open(name, flags, dir_fd=parent_fd)
-        opened = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or (opened.st_dev, opened.st_ino) != expected
-        ):
-            os.close(descriptor)
-            raise OSError("private cleanup file changed")
-    try:
-        final_name = _transfer_twice(
-            parent_fd,
+    captured: list[_CapturedEntry] = []
+    for name in _scan_directory_names(directory_fd):
+        current = os.stat(
             name,
-            expected,
-            directory=False,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
         )
-        _private_cleanup_checkpoint("entry", parent_fd, final_name)
-        if not _entry_matches(
-            parent_fd,
-            final_name,
-            expected,
-            directory=False,
-        ):
-            raise OSError("private cleanup entry changed")
-        if descriptor is not None:
-            opened = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(opened.st_mode)
-                or (opened.st_dev, opened.st_ino) != expected
-            ):
-                raise OSError("private cleanup file changed")
-        os.unlink(final_name, dir_fd=parent_fd)
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-
-
-def _transfer_twice(
-    parent_fd: int,
-    name: str,
-    expected: tuple[int, int],
-    *,
-    directory: bool,
-) -> str:
-    first = _quarantine_entry(
-        parent_fd,
-        name,
-        expected,
-        directory=directory,
-    )
-    return _quarantine_entry(
-        parent_fd,
-        first,
-        expected,
-        directory=directory,
-    )
-
-
-def _quarantine_entry(
-    parent_fd: int,
-    name: str,
-    expected: tuple[int, int],
-    *,
-    directory: bool,
-) -> str:
-    for _attempt in range(_CLEANUP_QUARANTINE_ATTEMPTS):
-        quarantine = _unused_cleanup_name(parent_fd)
-        try:
-            _rename_noreplace_at(
-                parent_fd,
-                name,
-                parent_fd,
-                quarantine,
-            )
-        except FileExistsError:
-            continue
-        if not _entry_matches(
-            parent_fd,
-            quarantine,
-            expected,
-            directory=directory,
-        ):
+        if current.st_dev != root_device:
+            raise OSError("private cleanup crossed a device boundary")
+        identity = (current.st_dev, current.st_ino)
+        if stat.S_ISDIR(current.st_mode):
+            child_fd = _open_directory_at(directory_fd, name)
             try:
-                _rename_noreplace_at(
-                    parent_fd,
-                    quarantine,
-                    parent_fd,
-                    name,
+                _require_captured_directory(
+                    child_fd,
+                    identity,
+                    root_device,
+                    root_mount_id,
                 )
-            except OSError:
-                pass
-            raise OSError("private cleanup entry changed")
-        return quarantine
-    raise OSError("private cleanup quarantine is unavailable")
-
-
-def _rename_noreplace_at(
-    source_fd: int,
-    source_name: str,
-    destination_fd: int,
-    destination_name: str,
-) -> None:
-    if _renameat2 is None:
-        raise OSError(
-            errno.ENOSYS,
-            "atomic no-replace rename is unavailable",
-        )
-    ctypes.set_errno(0)
-    result = _renameat2(
-        source_fd,
-        os.fsencode(source_name),
-        destination_fd,
-        os.fsencode(destination_name),
-        _RENAME_NOREPLACE,
-    )
-    if result == 0:
-        return
-    error_number = ctypes.get_errno() or errno.EIO
-    if error_number == errno.EEXIST:
-        raise FileExistsError(
-            error_number,
-            "atomic no-replace destination exists",
-        )
-    raise OSError(error_number, "atomic no-replace rename failed")
-
-
-def _unused_cleanup_name(parent_fd: int) -> str:
-    for _attempt in range(_CLEANUP_QUARANTINE_ATTEMPTS):
-        candidate = f".hermes-private-cleanup-{secrets.token_hex(16)}"
+                directory = _preflight_directory(
+                    child_fd,
+                    identity,
+                    root_device,
+                    root_mount_id,
+                )
+            finally:
+                os.close(child_fd)
+            captured.append(_CapturedEntry(name, identity, directory))
+            continue
+        if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+            raise OSError("private cleanup entry type is unsupported")
+        child_fd = _open_regular_at(directory_fd, name)
         try:
-            os.stat(
-                candidate,
-                dir_fd=parent_fd,
-                follow_symlinks=False,
+            _require_captured_regular(
+                child_fd,
+                identity,
+                root_device,
+                root_mount_id,
             )
-        except FileNotFoundError:
-            return candidate
-    raise OSError("private cleanup quarantine is unavailable")
+        finally:
+            os.close(child_fd)
+        captured.append(_CapturedEntry(name, identity, None))
+    _require_captured_directory(
+        directory_fd,
+        expected,
+        root_device,
+        root_mount_id,
+    )
+    return _CapturedDirectory(expected, tuple(captured))
+
+
+def _remove_captured_directory_contents(
+    directory_fd: int,
+    captured: _CapturedDirectory,
+    root_device: int,
+    root_mount_id: int | None,
+) -> None:
+    _require_captured_directory(
+        directory_fd,
+        captured.identity,
+        root_device,
+        root_mount_id,
+    )
+    if _scan_directory_names(directory_fd) != tuple(
+        entry.name for entry in captured.entries
+    ):
+        raise OSError("private cleanup directory contents changed")
+    for entry in captured.entries:
+        if entry.directory is not None:
+            _require_directory_entry(
+                directory_fd,
+                entry.name,
+                entry.identity,
+            )
+            child_fd = _open_directory_at(directory_fd, entry.name)
+            try:
+                _require_captured_directory(
+                    child_fd,
+                    entry.identity,
+                    root_device,
+                    root_mount_id,
+                )
+                _remove_captured_directory_contents(
+                    child_fd,
+                    entry.directory,
+                    root_device,
+                    root_mount_id,
+                )
+                _require_directory_entry(
+                    directory_fd,
+                    entry.name,
+                    entry.identity,
+                )
+                _require_captured_directory(
+                    child_fd,
+                    entry.identity,
+                    root_device,
+                    root_mount_id,
+                )
+                if _scan_directory_names(child_fd):
+                    raise OSError("private cleanup directory is not empty")
+                os.rmdir(entry.name, dir_fd=directory_fd)
+            finally:
+                os.close(child_fd)
+            continue
+        _require_regular_entry(
+            directory_fd,
+            entry.name,
+            entry.identity,
+        )
+        child_fd = _open_regular_at(directory_fd, entry.name)
+        try:
+            _require_captured_regular(
+                child_fd,
+                entry.identity,
+                root_device,
+                root_mount_id,
+            )
+            _require_regular_entry(
+                directory_fd,
+                entry.name,
+                entry.identity,
+            )
+            os.unlink(entry.name, dir_fd=directory_fd)
+        finally:
+            os.close(child_fd)
+    _require_captured_directory(
+        directory_fd,
+        captured.identity,
+        root_device,
+        root_mount_id,
+    )
+    if _scan_directory_names(directory_fd):
+        raise OSError("private cleanup directory is not empty")

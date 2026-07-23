@@ -181,42 +181,39 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
         self.assertEqual(changes.changed_paths, tuple(sorted(changes.changed_paths, key=lambda path: path.as_posix())))
 
-    def test_private_stage_replacement_is_preserved_and_fails_cleanup(self) -> None:
+    def test_private_stage_anomaly_is_retained_and_cleanup_error_is_redacted(
+        self,
+    ) -> None:
         repo = self.repository()
-        replacement_marker = b"shared-stage-replacement\n"
-        replacement_path: Path | None = None
-        retired_path: Path | None = None
+        sensitive_marker = "private-stage-sensitive-marker"
+        stage_path: Path | None = None
 
-        def replace_stage(_repo, stage, _environment):
-            nonlocal replacement_path, retired_path
-            retired = stage.with_name(f"{stage.name}-retired")
-            stage.rename(retired)
-            retired_path = retired
-            stage.mkdir(mode=0o700)
-            (stage / "marker").write_bytes(replacement_marker)
-            replacement_path = stage
-            raise ValueError("force private stage cleanup")
+        def leave_anomaly(_repo, stage, _environment):
+            nonlocal stage_path
+            stage_path = stage
+            os.mkfifo(stage / "retained-fifo")
+            raise ValueError(self.auth.token, sensitive_marker)
 
         with mock.patch.object(
             repositories_module,
             "_initialize_checkout",
-            side_effect=replace_stage,
+            side_effect=leave_anomaly,
         ):
             with self.assertRaisesRegex(
                 RepositoryError,
                 "could not clean private repository resources",
-            ):
+            ) as caught:
                 synchronize_remote(repo, self.auth)
 
-        self.assertIsNotNone(replacement_path)
-        self.assertIsNotNone(retired_path)
-        assert replacement_path is not None
-        assert retired_path is not None
-        self.assertEqual(
-            (replacement_path / "marker").read_bytes(),
-            replacement_marker,
+        self.assertIsNotNone(stage_path)
+        assert stage_path is not None
+        self.assertTrue((stage_path / "retained-fifo").exists())
+        self.assert_hidden_in_bootstrap_error_graph(
+            caught.exception,
+            self.auth.token,
+            sensitive_marker,
+            str(self.remote),
         )
-        self.assertFalse(retired_path.exists())
 
     def test_rejects_an_existing_checkout_beneath_a_symlinked_shared_parent(self) -> None:
         repo = self.repository()

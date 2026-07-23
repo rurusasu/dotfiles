@@ -1773,24 +1773,21 @@ class AppTests(unittest.TestCase):
             with self.assertRaisesRegex(ApplyError, "clean bootstrap staging"):
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
-    def test_outer_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+    def test_outer_scratch_anomaly_is_retained_and_cleanup_error_is_redacted(
+        self,
+    ) -> None:
         from hermes_bootstrap import app
 
-        replacement_marker = b"outer-replacement\n"
-        replacement_path: Path | None = None
-        retired_path: Path | None = None
+        sensitive_marker = "outer-scratch-sensitive-marker"
+        scratch_path: Path | None = None
 
-        def replace_scratch(_manifest, scratch, *, allow_missing):
-            nonlocal replacement_path, retired_path
+        def leave_anomaly(_manifest, scratch, *, allow_missing):
+            nonlocal scratch_path
             self.assertIs(_manifest, self.manifest)
             self.assertTrue(allow_missing)
-            retired = scratch.with_name(f"{scratch.name}-retired")
-            scratch.rename(retired)
-            retired_path = retired
-            scratch.mkdir(mode=0o700)
-            (scratch / "marker").write_bytes(replacement_marker)
-            replacement_path = scratch
-            raise RepositoryError("profile preflight failed")
+            scratch_path = scratch
+            os.mkfifo(scratch / "retained-fifo")
+            raise RepositoryError(sensitive_marker)
 
         with (
             mock.patch.object(app, "load_manifest", return_value=self.manifest),
@@ -1808,24 +1805,19 @@ class AppTests(unittest.TestCase):
             mock.patch.object(
                 app,
                 "prepare_profile_snapshots",
-                side_effect=replace_scratch,
+                side_effect=leave_anomaly,
             ),
         ):
             with self.assertRaisesRegex(
                 ApplyError,
                 "could not clean bootstrap staging resources",
-            ):
+            ) as caught:
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
-        self.assertIsNotNone(replacement_path)
-        self.assertIsNotNone(retired_path)
-        assert replacement_path is not None
-        assert retired_path is not None
-        self.assertEqual(
-            (replacement_path / "marker").read_bytes(),
-            replacement_marker,
-        )
-        self.assertFalse(retired_path.exists())
+        self.assertIsNotNone(scratch_path)
+        assert scratch_path is not None
+        self.assertTrue((scratch_path / "retained-fifo").exists())
+        self.assertNotIn(sensitive_marker, repr(caught.exception))
 
     def test_every_local_failpoint_restores_exact_state_and_retains_remote_result(self) -> None:
         from hermes_bootstrap import app

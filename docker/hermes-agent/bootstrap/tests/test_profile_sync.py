@@ -1602,64 +1602,50 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertNotIn(owned_marker, repr(report.as_dict()))
         self.assert_exception_hides(captured, self.auth.token, owned_marker)
 
-    def test_snapshot_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+    def test_snapshot_scratch_anomaly_is_retained_and_cleanup_is_redacted(self) -> None:
         profile = self.profile("profile-a", self.root / "profile-a.git")
         manifest = self.manifest(profile)
-        replacement_marker = b"snapshot-replacement\n"
-        replacement_path: Path | None = None
-        retired_path: Path | None = None
+        sensitive_marker = "snapshot-sensitive-marker"
+        scratch_path: Path | None = None
 
-        def replace_scratch(_manifest, scratch, *, allow_missing):
-            nonlocal replacement_path, retired_path
+        def leave_anomaly(_manifest, scratch, *, allow_missing):
+            nonlocal scratch_path
             self.assertIs(_manifest, manifest)
             self.assertFalse(allow_missing)
-            retired = scratch.with_name(f"{scratch.name}-retired")
-            scratch.rename(retired)
-            retired_path = retired
-            scratch.mkdir(mode=0o700)
-            (scratch / "marker").write_bytes(replacement_marker)
-            replacement_path = scratch
-            raise ProfileSnapshotError("profile-a", "invalid_local_profile")
+            scratch_path = scratch
+            os.mkfifo(scratch / "retained-fifo")
+            raise RuntimeError(self.auth.token, sensitive_marker)
 
         with mock.patch.object(
             profile_sync,
             "prepare_profile_snapshots",
-            side_effect=replace_scratch,
+            side_effect=leave_anomaly,
         ):
             report = synchronize_profiles(manifest, self.auth, dry_run=False)
 
-        self.assertIsNotNone(replacement_path)
-        self.assertIsNotNone(retired_path)
-        assert replacement_path is not None
-        assert retired_path is not None
+        self.assertIsNotNone(scratch_path)
+        assert scratch_path is not None
         self.assertEqual(report.profiles[0].category, "cleanup_failed")
-        self.assertEqual(
-            (replacement_path / "marker").read_bytes(),
-            replacement_marker,
-        )
-        self.assertFalse(retired_path.exists())
+        self.assertTrue((scratch_path / "retained-fifo").exists())
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(sensitive_marker, repr(report.as_dict()))
 
-    def test_git_scratch_replacement_is_preserved_and_fails_cleanup(self) -> None:
+    def test_git_scratch_anomaly_is_retained_and_cleanup_is_redacted(self) -> None:
         profile = self.profile("profile-a", self.root / "profile-a.git")
         snapshot = self.snapshot(profile, {"SOUL.md": b"a\n"})
-        replacement_marker = b"git-replacement\n"
-        replacement_path: Path | None = None
-        retired_path: Path | None = None
+        sensitive_marker = "git-sensitive-marker"
+        repository_path: Path | None = None
 
-        def replace_repository(_snapshot, repository, _environment):
-            nonlocal replacement_path, retired_path
-            retired = repository.with_name(f"{repository.name}-retired")
-            repository.rename(retired)
-            retired_path = retired
-            repository.mkdir(mode=0o700)
-            (repository / "marker").write_bytes(replacement_marker)
-            replacement_path = repository
-            raise ValueError("force repository cleanup")
+        def leave_anomaly(_snapshot, repository, _environment):
+            nonlocal repository_path
+            repository_path = repository
+            os.mkfifo(repository / "retained-fifo")
+            raise ValueError(self.auth.token, sensitive_marker)
 
         with mock.patch.object(
             profile_sync,
             "_exact_tree_attempt",
-            side_effect=replace_repository,
+            side_effect=leave_anomaly,
         ):
             report = synchronize_prepared_profiles(
                 PreparedProfiles((snapshot,), ()),
@@ -1667,16 +1653,12 @@ class ProfileSyncTests(unittest.TestCase):
                 dry_run=False,
             )
 
-        self.assertIsNotNone(replacement_path)
-        self.assertIsNotNone(retired_path)
-        assert replacement_path is not None
-        assert retired_path is not None
+        self.assertIsNotNone(repository_path)
+        assert repository_path is not None
         self.assertEqual(report.profiles[0].category, "cleanup_failed")
-        self.assertEqual(
-            (replacement_path / "marker").read_bytes(),
-            replacement_marker,
-        )
-        self.assertFalse(retired_path.exists())
+        self.assertTrue((repository_path / "retained-fifo").exists())
+        self.assertNotIn(self.auth.token, repr(report.as_dict()))
+        self.assertNotIn(sensitive_marker, repr(report.as_dict()))
 
     def test_synchronize_profiles_cleans_scratch_and_maps_preflight_failures(self) -> None:
         remote_a = self.root / "profile-a.git"
