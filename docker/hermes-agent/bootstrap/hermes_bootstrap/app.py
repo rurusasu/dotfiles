@@ -33,6 +33,7 @@ from .envfiles import (
     merge_env_file,
     read_environment_values,
 )
+from .engine_lock import EngineLock
 from .errors import (
     ApplyError,
     BootstrapError,
@@ -93,8 +94,10 @@ def apply(manifest_path: Path, input_stream: TextIO) -> dict[str, object]:
     """Perform one fully staged bootstrap transaction without printing secrets."""
 
     manifest = load_manifest(manifest_path)
-    Transaction.recover_if_needed(manifest.data_root)
-    outcome = _apply_sensitive_boundary(manifest_path, manifest, input_stream)
+    with EngineLock.acquire(manifest.data_root) as engine_lock:
+        engine_lock.require_held()
+        Transaction.recover_if_needed(manifest.data_root)
+        outcome = _apply_sensitive_boundary(manifest_path, manifest, input_stream)
     del input_stream
     if outcome.error_type is not None:
         error_type = outcome.error_type
@@ -331,9 +334,11 @@ def _sync_profiles_boundary(
 ) -> ProfileSyncReport:
     token: str | None = None
     try:
-        token = _runtime_token(manifest, environ)
-        auth = GitAuth(token, SecretRedactor((token,)))
-        return profile_sync.synchronize_profiles(manifest, auth, dry_run=dry_run)
+        with EngineLock.acquire(manifest.data_root) as engine_lock:
+            engine_lock.require_held()
+            token = _runtime_token(manifest, environ)
+            auth = GitAuth(token, SecretRedactor((token,)))
+            return profile_sync.synchronize_profiles(manifest, auth, dry_run=dry_run)
     except CredentialError as error:
         error = profile_sync._scrub_exception_graph(error)
         return profile_sync.failed_profile_report(
@@ -361,10 +366,12 @@ def _sync_repository_boundary(
 ) -> dict[str, object]:
     token: str | None = None
     try:
-        token = _runtime_token(manifest, environ)
-        auth = GitAuth(token, SecretRedactor((token,)))
-        result = synchronize_named_repository(name, manifest, auth, require_canonical=True)
-        return {"status": "synchronized", "name": result.name, "commit": result.commit, "pushed": result.pushed}
+        with EngineLock.acquire(manifest.data_root) as engine_lock:
+            engine_lock.require_held()
+            token = _runtime_token(manifest, environ)
+            auth = GitAuth(token, SecretRedactor((token,)))
+            result = synchronize_named_repository(name, manifest, auth, require_canonical=True)
+            return {"status": "synchronized", "name": result.name, "commit": result.commit, "pushed": result.pushed}
     except BootstrapError:
         raise
     except Exception:

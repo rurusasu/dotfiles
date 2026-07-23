@@ -86,13 +86,31 @@ class FakeTransaction:
         self.events.append("rollback")
 
 
+class RecordingEngineLock:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def require_held(self) -> None:
+        self.events.append("lock-require")
+
+    def close(self) -> None:
+        self.events.append("lock-close")
+
+    def __enter__(self) -> RecordingEngineLock:
+        return self
+
+    def __exit__(self, kind: object, value: object, traceback: object) -> None:
+        del kind, value, traceback
+        self.close()
+
+
 class AppTests(unittest.TestCase):
     def setUp(self) -> None:
         from hermes_bootstrap import app
 
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "data"
+        self.root = Path(os.path.realpath(self.temp.name)) / "data"
         self.root.mkdir()
         self.manifest = manifest(self.root)
         source_contract_patcher = mock.patch.object(
@@ -185,6 +203,244 @@ class AppTests(unittest.TestCase):
         store = self.root / ".bootstrap" / "transactions"
         store.mkdir(parents=True)
         return store / ".lock"
+
+    def test_apply_holds_the_engine_lock_until_staging_cleanup_finishes(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ())
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+        transaction = FakeTransaction(events)
+        report = ProfileSyncReport(dry_run=False, profiles=(), exit_code=0)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        def recover(root: Path) -> None:
+            self.assertIs(root, self.root)
+            events.append("recovery")
+
+        def scratch(root: Path) -> mock.Mock:
+            self.assertIs(root, self.root)
+            events.append("scratch")
+            return mock.Mock(path=self.root / "scratch")
+
+        def begin(root: Path) -> FakeTransaction:
+            self.assertIs(root, self.root)
+            events.append("transaction-begin")
+            return transaction
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(
+                app.Transaction, "recover_if_needed", side_effect=recover
+            ),
+            mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials", return_value={}),
+            mock.patch.object(app, "_private_scratch", side_effect=scratch),
+            mock.patch.object(
+                app, "prepare_profile_snapshots", return_value=PreparedProfiles((), ())
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                return_value=report,
+            ),
+            mock.patch.object(
+                app, "stage_distribution", side_effect=lambda source, *_: mock.Mock(declaration=source)
+            ),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                return_value=RemoteSyncResult("lifelog", "a" * 40, False, self.root / "remote"),
+            ),
+            mock.patch.object(app.Transaction, "begin", side_effect=begin),
+            mock.patch.object(app, "apply_root_distribution"),
+            mock.patch.object(app, "apply_shared_working_tree"),
+            mock.patch.object(app, "build_dashboard_environment", return_value={}),
+            mock.patch.object(app, "build_profile_environment", return_value={}),
+            mock.patch.object(app, "merge_env_file"),
+            mock.patch.object(app, "_validate_installed_layout", return_value={}),
+            mock.patch.object(
+                app,
+                "_cleanup_apply_resources",
+                side_effect=lambda *_: events.append("cleanup") or True,
+            ),
+        ):
+            result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(result["status"], "applied")
+        self.assertLess(events.index("lock-acquire"), events.index("recovery"))
+        self.assertLess(events.index("recovery"), events.index("scratch"))
+        self.assertLess(events.index("scratch"), events.index("transaction-begin"))
+        self.assertLess(events.index("transaction-begin"), events.index("cleanup"))
+        self.assertLess(events.index("cleanup"), events.index("lock-close"))
+
+    def test_sync_profiles_holds_the_engine_lock_through_snapshot_cleanup(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+        report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(app, "_runtime_token", return_value="token"),
+            mock.patch.object(
+                app.profile_sync,
+                "create_private_directory",
+                side_effect=lambda *_args, **_kwargs: events.append("snapshot-scratch")
+                or mock.Mock(path=self.root / "scratch"),
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "prepare_profile_snapshots",
+                return_value=PreparedProfiles((), ()),
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                side_effect=lambda *_args, **_kwargs: events.append("publication")
+                or report,
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "_cleanup_resources",
+                side_effect=lambda *_args, **_kwargs: events.append("cleanup")
+                or False,
+            ),
+        ):
+            result = app.sync_profiles(Path("manifest.yaml"), dry_run=True, environ={})
+
+        self.assertIs(result, report)
+        self.assertLess(events.index("lock-acquire"), events.index("snapshot-scratch"))
+        self.assertLess(events.index("snapshot-scratch"), events.index("publication"))
+        self.assertLess(events.index("publication"), events.index("cleanup"))
+        self.assertLess(events.index("cleanup"), events.index("lock-close"))
+
+    def test_sync_repository_holds_the_engine_lock_through_repository_cleanup(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        def synchronize(*_args: object, **_kwargs: object) -> RemoteSyncResult:
+            events.append("repository-sync")
+            events.append("repository-cleanup")
+            return RemoteSyncResult("lifelog", "a" * 40, False, self.root / "shared")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(app, "_runtime_token", return_value="token"),
+            mock.patch.object(
+                app, "synchronize_named_repository", side_effect=synchronize
+            ),
+        ):
+            result = app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        self.assertEqual(result["name"], "lifelog")
+        self.assertLess(events.index("lock-acquire"), events.index("repository-sync"))
+        self.assertLess(events.index("repository-sync"), events.index("repository-cleanup"))
+        self.assertLess(events.index("repository-cleanup"), events.index("lock-close"))
+
+    def test_secret_plan_and_validate_do_not_acquire_the_engine_lock(self) -> None:
+        from hermes_bootstrap import app
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "build_secret_plan", return_value={}),
+            mock.patch.object(
+                app,
+                "_validate_installed_layout",
+                return_value={"profiles": [], "repositories": []},
+            ),
+            mock.patch.object(app.EngineLock, "acquire") as acquire,
+        ):
+            self.assertEqual(app.secret_plan(Path("manifest.yaml")), {})
+            self.assertEqual(
+                app.validate(Path("manifest.yaml")),
+                {"status": "valid", "profiles": [], "repositories": []},
+            )
+
+        acquire.assert_not_called()
+
+    def test_engine_lock_contention_blocks_mutating_work_before_side_effects(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+
+        def unavailable(_root: Path) -> RecordingEngineLock:
+            events.append("lock-acquire")
+            raise RepositoryError("bootstrap engine lock is unavailable")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app.Transaction, "recover_if_needed", side_effect=lambda *_: events.append("recovery")),
+            mock.patch.object(app, "_private_scratch", side_effect=lambda *_: events.append("scratch")),
+            mock.patch.object(app, "stage_distribution", side_effect=lambda *_: events.append("git")),
+            mock.patch.object(app, "synchronize_remote", side_effect=lambda *_: events.append("git")),
+            mock.patch.object(app.Transaction, "begin", side_effect=lambda *_: events.append("transaction")),
+        ):
+            with self.assertRaisesRegex(RepositoryError, "bootstrap engine lock is unavailable"):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(events, ["lock-acquire"])
+
+        events.clear()
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app, "_runtime_token", side_effect=lambda *_: events.append("token")),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_profiles",
+                side_effect=lambda *_args, **_kwargs: events.append("git"),
+            ),
+        ):
+            report = app.sync_profiles(Path("manifest.yaml"), dry_run=False, environ={})
+
+        self.assertEqual(events, ["lock-acquire"])
+        self.assertEqual(report.exit_code, RepositoryError.exit_code)
+        self.assertTrue(
+            all(profile.category == "repository" for profile in report.profiles)
+        )
+
+        events.clear()
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app, "_runtime_token", side_effect=lambda *_: events.append("token")),
+            mock.patch.object(
+                app,
+                "synchronize_named_repository",
+                side_effect=lambda *_args, **_kwargs: events.append("git"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RepositoryError, "bootstrap engine lock is unavailable"
+            ):
+                app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        self.assertEqual(events, ["lock-acquire"])
 
     def test_apply_recovers_before_reading_secrets_and_network_before_transaction(self) -> None:
         from hermes_bootstrap import app
