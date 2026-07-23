@@ -280,8 +280,12 @@ A different failed profile is a separate repair task. A nonzero aggregate exit
 means the original repair is not complete. If any report used category
 `cleanup_failed`, a later successful run is also insufficient by itself:
 follow the guarded recovery procedure in [Hermes Bootstrap
-Operations](bootstrap.md) and require zero stale profile snapshot, publication,
-and askpass artifacts before closing the repair.
+Operations](bootstrap.md). Keep every automated, installer, Compose, and manual
+sync launch path, including the gateway and scheduler, disabled under one
+maintenance owner; reject candidate subtrees containing mounts; atomically
+isolate verified artifacts in the same-filesystem private quarantine; and
+require final candidate, quarantine, and mount inventories to be clean before
+re-enabling launch paths.
 
 ## Future Cron Handoff (Task 7, `hermes-home`)
 
@@ -313,5 +317,7 @@ inspection that each remote tree contains only the two canonical control files
 and its local owned paths. Verify the profile homes are unchanged, then confirm
 a repeat real run is `unchanged` without creating commits. The direct
 `/opt/data` inventory for `.hermes-profile-snapshots-*`,
-`.hermes-profile-sync-*`, and `askpass-*` must also be empty; aggregate success
-does not waive stale-artifact cleanup.
+`.hermes-profile-sync-*`, `askpass-*`, and
+`.hermes-profile-cleanup-quarantine-*` must also be empty, with no candidate or
+descendant mount issue. Aggregate success does not waive the quiescent cleanup
+and quarantine evidence.

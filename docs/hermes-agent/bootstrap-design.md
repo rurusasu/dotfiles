@@ -231,9 +231,12 @@ profile is `changed` or `unchanged`.
 
 For `cleanup_failed`, a later successful run is insufficient because new runs
 do not revisit artifacts left by older invocations. Follow the guarded artifact
-inspection and removal procedure in [Hermes Bootstrap
-Operations](bootstrap.md), then require both a zero stale-artifact inventory and
-the successful dry-run/real result before closing recovery.
+inspection, mount rejection, atomic quarantine, and removal procedure in
+[Hermes Bootstrap Operations](bootstrap.md). All scheduler, gateway, installer,
+Compose, and manual sync launch paths remain disabled under one maintenance
+owner until controlled dry-run/real verification and final candidate,
+quarantine, and mount inventories are clean. Repository locks alone are
+insufficient because no global lock covers aggregate scratch creation.
 
 The root remains remote-authoritative throughout recovery. Lifelog remains a
 normal locked read-write Git checkout and is not part of named-profile exact

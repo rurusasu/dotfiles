@@ -237,11 +237,11 @@ and diff arrays are empty. Standalone `sync-profiles` never installs a missing
 target: it exits `4` with a failed aggregate. Only bootstrap `apply` uses the
 missing-target first-install exception.
 
-| Exit | Meaning                                          | Operator action                                                          |
-| ---- | ------------------------------------------------ | ------------------------------------------------------------------------ |
-| `0`  | Every profile is `changed` or `unchanged`        | Continue; cleanup recovery also requires a zero stale-artifact inventory |
-| `3`  | Credentials unavailable                          | Repair the runtime GitHub credential source, then rerun                  |
-| `4`  | Missing target, preflight, or repository failure | Repair the reported profile/category or repository state, then rerun     |
+| Exit | Meaning                                          | Operator action                                                      |
+| ---- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `0`  | Every profile is `changed` or `unchanged`        | Continue; cleanup recovery uses the quiescent quarantine runbook     |
+| `3`  | Credentials unavailable                          | Repair the runtime GitHub credential source, then rerun              |
+| `4`  | Missing target, preflight, or repository failure | Repair the reported profile/category or repository state, then rerun |
 
 Invalid arguments exit `2`, manifest validation exits `8`, and unexpected
 command failures exit `6`. Those errors use the safe stderr path and do not
@@ -278,39 +278,65 @@ to repair an existing local profile.
 
 A `cleanup_failed` result is not closed by a later successful run alone. Each
 invocation cleans only artifacts it created and still tracks; it does not scan
-for private artifacts left by an earlier invocation.
+for private artifacts left by an earlier invocation. There is no global lock
+covering aggregate scratch creation before per-profile repository locks are
+acquired, so a one-time process or lock check cannot make deletion safe.
 
-1. Confirm no bootstrap `apply`, `sync-profiles`, or `sync-repository` process
-   or one-off container is running, and confirm no transaction or repository
-   lock has an owner. Lock files may persist when unlocked, so file existence
-   alone is not evidence either way. If ownership cannot be established, stop
-   and escalate.
-2. Inventory only direct children of `/opt/data` whose names exactly match
+1. Establish one named maintenance owner. Stop and disable every launch path
+   for the entire recovery window: the Hermes gateway and scheduler, any
+   deployed profile-sync cron or scheduled task, bootstrap Compose runs, host
+   installers and Taskfile entrypoints, and manual `apply`, `sync-profiles`, or
+   `sync-repository` commands. Confirm existing runs have exited and no
+   transaction or repository lock has an owner. Lock files may persist while
+   unlocked. Do not re-enable any launcher until the final step; only the
+   maintenance owner may run the controlled verification commands below.
+2. From a maintenance environment that sees the same `/opt/data` mount
+   namespace, inventory only direct children whose complete names match
    `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, or `askpass-*`.
-   This read-only Compose command prints the service UID/GID and each candidate:
+   Separately inventory any prior
+   `.hermes-profile-cleanup-quarantine-*` directory. An existing quarantine is
+   unresolved recovery evidence: do not reuse or remove it; stop and escalate.
+3. Inspect every candidate individually with no symlink following. Both
+   `.hermes-profile-*` forms must be real directories directly under canonical
+   `/opt/data`, owned by the maintenance service UID/GID, with mode `0700` and
+   the exact expected prefix. An `askpass-*` candidate must be a real regular
+   file in that same location, with the same owner, mode `0700`, link count `1`,
+   and exact prefix. Any unexpected path, descendant mount, type, owner, mode,
+   link count, prefix, or location is an escalation, not a deletion candidate.
+4. Capture an authoritative mount inventory for that maintenance namespace,
+   such as Linux `/proc/self/mountinfo` or reliable mountpoint tooling. Compare
+   its canonical mount targets against each canonical candidate subtree.
+   Reject a candidate if it or any descendant is a mountpoint or bind mount.
+   `find -xdev` is not a mountpoint detector. If canonicalization, mount
+   inventory, or subtree comparison is unavailable or ambiguous, do not remove
+   anything; preserve evidence and escalate.
+5. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
+   directly under `/opt/data`. Verify that it is owner-created, non-symlink,
+   mode `0700`, contains no mountpoint, and has the same filesystem device as
+   every candidate. Revalidate each candidate immediately before moving it,
+   then atomically rename each exact candidate into quarantine without using
+   globs. Any rename failure, including `EXDEV` or `EBUSY`, aborts the operation;
+   leave the quarantine untouched and escalate.
+6. After every candidate is isolated, refresh the mount inventory and recheck
+   the quarantine and every descendant. Confirm the quarantined entries match
+   the reviewed candidate set and remain mount-free. Only then remove the
+   quarantine with a no-follow, type-aware procedure that refuses mount
+   crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
+   pattern, or `find -delete`.
+7. While all ordinary launch paths remain disabled, require zero direct
+   candidate and quarantine names and no related mount issue. The maintenance
+   owner then runs standalone dry-run and real `sync-profiles`, consumes both
+   JSON reports completely, and requires both aggregates to exit `0` with the
+   repaired profile `changed` or `unchanged`. Refresh the candidate,
+   quarantine, and mount inventories once more and require them to remain
+   clean.
+8. Record the evidence and only then re-enable the gateway, scheduler, future
+   profile-sync cron if deployed, installers, and other launch paths.
 
-```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T --entrypoint /bin/sh hermes-bootstrap -eu -c 'uid=$(id -u); gid=$(id -g); printf "expected owner=%s:%s\n" "$uid" "$gid"; find /opt/data -xdev -mindepth 1 -maxdepth 1 \( -name ".hermes-profile-snapshots-*" -o -name ".hermes-profile-sync-*" -o -name "askpass-*" \) -exec stat -c "%n type=%F owner=%u:%g mode=%a links=%h" -- {} \;'
-```
-
-3. Inspect every candidate individually. Both `.hermes-profile-*` forms must be
-   real, non-symlink directories directly under `/opt/data`, owned by the
-   reported service UID/GID, with mode `0700`. An `askpass-*` candidate must be
-   a real, non-symlink regular file in that same location, with the same owner,
-   mode `0700`, and link count `1`. If any path, type, owner, mode, link count,
-   or location is unexpected, do not remove it; preserve evidence and escalate.
-4. Remove only artifacts that passed every check, one at a time using each
-   exact literal path and the type-appropriate removal command. Do not use a
-   wildcard `rm`, a broad `.hermes-*` pattern, or `find -delete`.
-5. Run the read-only inventory again and require zero matching artifacts. Then
-   run standalone dry-run and real `sync-profiles`, consume each JSON result
-   completely, and require both aggregates to exit `0` with the repaired
-   profile `changed` or `unchanged`. Run the inventory once more after the real
-   command and require it to remain zero.
-
-Cleanup recovery is accepted only when both conditions hold: the stale
-artifact inventory is zero and the dry-run/real verification succeeds. A later
-aggregate `0` without verified artifact removal does not close the incident.
+Cleanup recovery is accepted only when the entire quiescent procedure,
+quarantine removal, dry-run/real verification, and final zero inventories
+succeed. A later aggregate `0` without this evidence does not close the
+incident.
 
 ## Transaction And Rollback
 
@@ -380,17 +406,17 @@ remote URLs.
 
 ## Complete Exit Codes
 
-| Code | Meaning                                                               | Operator action                                                |
-| ---- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `0`  | Success                                                               | Continue; cleanup recovery still requires zero stale artifacts |
-| `1`  | Host secret-plan or payload production failed                         | Fix `op` or adapter input and rerun                            |
-| `2`  | Invalid command arguments, payload, or managed env input              | Correct input; no Compose restart                              |
-| `3`  | Missing, invalid, or unauthorized credential                          | Repair 1Password or GitHub access                              |
-| `4`  | Repository access, identity, lock, profile preflight, or sync failure | Repair the reported repository/profile state                   |
-| `5`  | Migration conflict                                                    | Reconcile the named old/new paths manually                     |
-| `6`  | Apply, cleanup, or unexpected command failure                         | Inspect safe diagnostics and rerun                             |
-| `7`  | Rollback failure                                                      | Preserve the journal and inspect managed paths before retrying |
-| `8`  | Manifest or final installed-layout validation failed                  | Correct manifest/layout state and rerun                        |
+| Code | Meaning                                                               | Operator action                                                  |
+| ---- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `0`  | Success                                                               | Continue; cleanup recovery uses the quiescent quarantine runbook |
+| `1`  | Host secret-plan or payload production failed                         | Fix `op` or adapter input and rerun                              |
+| `2`  | Invalid command arguments, payload, or managed env input              | Correct input; no Compose restart                                |
+| `3`  | Missing, invalid, or unauthorized credential                          | Repair 1Password or GitHub access                                |
+| `4`  | Repository access, identity, lock, profile preflight, or sync failure | Repair the reported repository/profile state                     |
+| `5`  | Migration conflict                                                    | Reconcile the named old/new paths manually                       |
+| `6`  | Apply, cleanup, or unexpected command failure                         | Inspect safe diagnostics and rerun                               |
+| `7`  | Rollback failure                                                      | Preserve the journal and inspect managed paths before retrying   |
+| `8`  | Manifest or final installed-layout validation failed                  | Correct manifest/layout state and rerun                          |
 
 `sync-profiles` uses its JSON route only for handled exits `0`, `3`, and `4`.
 Its argument error `2`, manifest validation error `8`, and unexpected error `6`
