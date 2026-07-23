@@ -145,7 +145,12 @@ The committed dotfiles fixture for `scripts/profile_sync.sh` must match the
 committed `hermes-home` source by bytes, Git blob ID, SHA-256, and Git tree mode
 `100755`.
 
-This provenance gate runs twice:
+The host-side verifier is part of `task hermes:bootstrap:test`, so the local
+pre-commit hook runs it against the real sibling `hermes-home` Git worktree.
+GitHub Actions checks out `rurusasu/hermes-home` at the validated provenance
+commit and runs the same verifier before the pinned container suite.
+
+The publication procedure still reruns this gate twice:
 
 1. before the dotfiles pull request is published; and
 2. again immediately before the `hermes-home` pull request is published, after
@@ -171,9 +176,12 @@ Tests must prove:
   fail-closed;
 - failed cleanup cannot become a later successful result on the same cleanup
   object;
+- publication succeeds only after private cleanup ownership reaches the
+  `released` state;
 - declared empty owned roots remain invalid, while nested empty directories are
   omitted from the Git projection because Git cannot represent them; and
-- the provenance gate rejects source or fixture modes other than `100755`.
+- the host-side provenance gate rejects dirty, untracked, mismatched, or
+  non-`100755` source and fixture state.
 
 The complete bootstrap suite and repository pre-commit hooks must pass before
 publication. After the ordered merges, production acceptance still requires a

@@ -538,7 +538,12 @@ profiles.
 Changes under `docker/hermes-agent/` run `task hermes:bootstrap:test` through
 the local `hermes-bootstrap-tests` pre-commit hook. Pull requests run the same
 pinned Docker stage and the `gh` wrapper security suite in the
-`Hermes Bootstrap Tests` workflow. Task 5 integration coverage is the
+`Hermes Bootstrap Tests` workflow. Both paths also run the same host-side
+profile-sync provenance verifier. Locally it reads the sibling
+`hermes-home-profile-sync` worktree; GitHub Actions checks out
+`rurusasu/hermes-home` at the validated provenance commit first. The verifier
+requires clean tracked source and fixture paths, exact bytes, Git blob IDs,
+SHA-256, and committed tree mode `100755`. Task 5 integration coverage is the
 publication gate for aggregate preflight, exact-tree deletion, local
 immutability, missing-only bootstrap install, continuation, retry, and result
 serialization.

@@ -455,6 +455,20 @@ The executable fixture test verifies the committed fixture tree mode, and a
 temporary non-executable committed fixture is rejected without relying on its
 worktree mode.
 
+Quality review found that Docker-only positive checks skipped without Git
+metadata. Commit `d78cc8c` added one fail-closed host verifier shared by
+`task hermes:bootstrap:test`, pre-commit, and GitHub Actions. Its focused suite
+covers malformed provenance, traversal, non-Git roots, dirty or untracked
+inputs, wrong source HEAD, mode `100644`, and blob/SHA-256/byte mismatches.
+GitHub Actions checks out the validated `hermes-home` commit before invoking
+the verifier.
+
+Quality review also found that a failed descriptor close during repository
+publication could leave cleanup ownership in `FAILED` while the caller
+reported success. Commit `fe13425` now requires `is_released` for both initial
+and legacy publication owners. Deterministic tests cover redacted failure,
+transaction rollback, unrelated sibling preservation, and successful retry.
+
 ### Addendum Verification
 
 The focused filesystem and four existing replacement tests passed:
@@ -477,9 +491,10 @@ Fresh full verification:
 
 ```text
 task hermes:bootstrap:test
-Ran 511 tests
+Ran 526 tests
 OK (skipped=3)
 test_gh_wrapper: PASS
+profile sync provenance verified
 
 pre-commit run --all-files
 fix utf-8 byte order marker: Passed
