@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
 
 COPY entrypoint.sh /usr/local/bin/hermes-xapi-mcp
 
