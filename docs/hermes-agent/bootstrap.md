@@ -23,9 +23,9 @@ On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
 adapter with the canonical Compose file. On Windows, it runs
 `pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
 Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
-rebuild. Both adapters run Compose config validation, build `hermes` and
-`hermes-bootstrap`, invoke the container bootstrap, and only then recreate the
-stack.
+rebuild. Both adapters run Compose config validation, build `hermes`,
+`hermes-bootstrap`, and `xapi-mcp`, invoke the container bootstrap, and only
+then recreate the stack.
 
 `install.cmd` remains the Windows full-machine setup entrypoint and continues
 through the PowerShell handler. The exact supported installer chains are:
@@ -200,6 +200,11 @@ pinned Docker test stage and the `gh` wrapper security suite in the
 `Hermes Bootstrap Tests` workflow, so the container transaction, payload, and
 runtime credential path are publication gates rather than optional manual
 checks.
+
+The same source validation requires every root and managed profile distribution
+to declare `mcp_servers.xapi` with URL `http://xapi-mcp:8080/mcp` and
+`connect_timeout: 300`. The declaration stays in the source repository; the
+bootstrap process validates it but does not mutate or synthesize it.
 
 The four source repositories use the same `fast` and `full` validator. Local
 validator exits are `0` pass, `1` validation failure, `2` prerequisite blocked,
