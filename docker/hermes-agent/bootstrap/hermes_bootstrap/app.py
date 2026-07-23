@@ -16,6 +16,7 @@ from typing import Callable, TextIO
 
 from dotenv.parser import parse_stream
 
+from . import profile_sync
 from .distributions import (
     _normalize_owned_paths,
     _read_profile_manifest_at,
@@ -34,13 +35,21 @@ from .envfiles import (
     merge_env_file,
     read_environment_values,
 )
-from .errors import ApplyError, BootstrapError, CredentialError, RollbackError, ValidationError
+from .errors import (
+    ApplyError,
+    BootstrapError,
+    CredentialError,
+    RepositoryError,
+    RollbackError,
+    ValidationError,
+)
 from .filesystem import open_absolute_directory
 from .git import _remote_identity, _same_remote_identity, stage_distribution
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
 from .payload import SecretRedactor, build_secret_plan, read_secret_payload
+from .profile_sync import ProfileSyncReport
 from .repositories import (
     RemoteSyncResult,
     apply_shared_working_tree,
@@ -202,6 +211,52 @@ def sync_repository(
     manifest = load_manifest(manifest_path)
     environment = os.environ if environ is None else environ
     return _sync_repository_boundary(manifest, name, environment)
+
+
+def sync_profiles(
+    manifest_path: Path,
+    *,
+    dry_run: bool,
+    environ: Mapping[str, str] | None = None,
+) -> ProfileSyncReport:
+    """Synchronize every configured local profile using a runtime token."""
+
+    manifest = load_manifest(manifest_path)
+    environment = os.environ if environ is None else environ
+    return _sync_profiles_boundary(manifest, dry_run=dry_run, environ=environment)
+
+
+def _sync_profiles_boundary(
+    manifest: BootstrapManifest,
+    *,
+    dry_run: bool,
+    environ: Mapping[str, str],
+) -> ProfileSyncReport:
+    token: str | None = None
+    try:
+        token = _runtime_token(manifest, environ)
+        auth = GitAuth(token, SecretRedactor((token,)))
+        return profile_sync.synchronize_profiles(manifest, auth, dry_run=dry_run)
+    except CredentialError as error:
+        error = profile_sync._scrub_exception_graph(error)
+        return profile_sync.failed_profile_report(
+            manifest.profiles,
+            dry_run=dry_run,
+            category="credentials_unavailable",
+            message="GitHub credentials are unavailable",
+            exit_code=CredentialError.exit_code,
+        )
+    except Exception as error:
+        error = profile_sync._scrub_exception_graph(error)
+        return profile_sync.failed_profile_report(
+            manifest.profiles,
+            dry_run=dry_run,
+            category="repository",
+            message="profile synchronization failed",
+            exit_code=RepositoryError.exit_code,
+        )
+    finally:
+        token = None
 
 
 def _sync_repository_boundary(

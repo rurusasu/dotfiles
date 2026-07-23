@@ -23,6 +23,11 @@ from hermes_bootstrap.errors import (
 )
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource
 from hermes_bootstrap.payload import SecretRedactor
+from hermes_bootstrap.profile_sync import (
+    ProfileDiff,
+    ProfileSyncReport,
+    ProfileSyncResult,
+)
 
 
 class CliTests(unittest.TestCase):
@@ -57,6 +62,84 @@ class CliTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), '{"profiles":["rick"],"status":"applied"}\n')
         self.assertEqual(errors.getvalue(), "")
         self.assertIs(apply.call_args.args[1], stream)
+
+    def test_sync_profiles_dry_run_writes_one_compact_report_json_line(self) -> None:
+        from hermes_bootstrap import cli
+
+        report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+        with mock.patch.object(
+            cli.app, "sync_profiles", return_value=report
+        ) as sync_profiles:
+            code, stdout, stderr = self.invoke(["sync-profiles", "--dry-run"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            '{"command":"sync-profiles","dry_run":true,"profiles":[],"schema_version":1,"status":"unchanged"}\n',
+        )
+        self.assertEqual(json.loads(stdout)["command"], "sync-profiles")
+        self.assertEqual(stderr, "")
+        sync_profiles.assert_called_once_with(
+            Path(cli.DEFAULT_MANIFEST), dry_run=True, environ={}
+        )
+
+    def test_sync_profiles_failed_report_stays_on_stdout_and_sets_exit_code(self) -> None:
+        from hermes_bootstrap import cli
+
+        failed = ProfileSyncResult(
+            name="alpha",
+            status="failed",
+            commit=None,
+            snapshot="",
+            diff=ProfileDiff(),
+            category="repository",
+            message="profile synchronization failed",
+        )
+        report = ProfileSyncReport(
+            dry_run=False,
+            profiles=(failed,),
+            exit_code=RepositoryError.exit_code,
+        )
+        with mock.patch.object(cli.app, "sync_profiles", return_value=report):
+            code, stdout, stderr = self.invoke(
+                ["sync-profiles", "--manifest", "/manifest.yaml"]
+            )
+
+        self.assertEqual(code, RepositoryError.exit_code)
+        self.assertEqual(json.loads(stdout), report.as_dict())
+        self.assertEqual(stdout.count("\n"), 1)
+        self.assertEqual(stderr, "")
+
+    def test_sync_profiles_invalid_arguments_are_code_two_and_stdin_is_never_read(self) -> None:
+        from hermes_bootstrap import cli
+
+        class ExplodingInput(io.StringIO):
+            def read(self, *args: object, **kwargs: object) -> str:
+                raise AssertionError("stdin must remain unread")
+
+        report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+        with mock.patch.object(cli.app, "sync_profiles", return_value=report):
+            invalid_errors = io.StringIO()
+            code = cli.main(
+                ["sync-profiles", "extra"],
+                stdin=ExplodingInput(),
+                stdout=io.StringIO(),
+                stderr=invalid_errors,
+                environ={},
+            )
+            self.assertEqual(code, InputError.exit_code)
+            self.assertEqual(
+                invalid_errors.getvalue(), "invalid command arguments\n"
+            )
+
+            code = cli.main(
+                ["sync-profiles", "--dry-run"],
+                stdin=ExplodingInput(),
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+                environ={},
+            )
+            self.assertEqual(code, 0)
 
     def test_typed_errors_map_to_fixed_exit_codes_and_redact_messages(self) -> None:
         from hermes_bootstrap import cli
@@ -171,4 +254,35 @@ class CliTests(unittest.TestCase):
 
         with mock.patch.object(cli.app, "validate", return_value={"status": "valid", "profiles": [], "repositories": []}):
             code = cli.main(["validate"], stdin=io.StringIO(), stdout=BrokenOutput(), stderr=io.StringIO(), environ={})
+        self.assertEqual(code, 0)
+
+    def test_sync_profiles_broken_pipe_keeps_the_existing_silent_success_contract(self) -> None:
+        from hermes_bootstrap import cli
+
+        class BrokenOutput(io.StringIO):
+            def write(self, _value: str) -> int:
+                raise BrokenPipeError
+
+        failed = ProfileSyncResult(
+            name="alpha",
+            status="failed",
+            commit=None,
+            snapshot="",
+            diff=ProfileDiff(),
+            category="repository",
+            message="profile synchronization failed",
+        )
+        report = ProfileSyncReport(
+            dry_run=False,
+            profiles=(failed,),
+            exit_code=RepositoryError.exit_code,
+        )
+        with mock.patch.object(cli.app, "sync_profiles", return_value=report):
+            code = cli.main(
+                ["sync-profiles"],
+                stdin=io.StringIO(),
+                stdout=BrokenOutput(),
+                stderr=io.StringIO(),
+                environ={},
+            )
         self.assertEqual(code, 0)

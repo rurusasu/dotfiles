@@ -15,7 +15,13 @@ from unittest import mock
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
-from hermes_bootstrap.errors import ApplyError, CredentialError, RollbackError, ValidationError
+from hermes_bootstrap.errors import (
+    ApplyError,
+    CredentialError,
+    RepositoryError,
+    RollbackError,
+    ValidationError,
+)
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import (
     BootstrapManifest,
@@ -23,10 +29,13 @@ from hermes_bootstrap.models import (
     SharedRepository,
 )
 from hermes_bootstrap.payload import SecretRedactor
+from hermes_bootstrap.profile_sync import ProfileSyncReport
 from hermes_bootstrap.repositories import RemoteSyncResult
 
 
-def manifest(root: Path) -> BootstrapManifest:
+def manifest(
+    root: Path, profile_names: tuple[str, ...] = ("rick",)
+) -> BootstrapManifest:
     return BootstrapManifest(
         schema_version=1,
         data_root=root,
@@ -34,14 +43,15 @@ def manifest(root: Path) -> BootstrapManifest:
         root_distribution=DistributionSource(
             "default", "https://github.com/example/root.git", "main", root, "root-distribution.yaml"
         ),
-        profiles=(
+        profiles=tuple(
             DistributionSource(
-                "rick",
-                "https://github.com/example/rick.git",
+                name,
+                f"https://github.com/example/{name}.git",
                 "main",
-                root / "profiles" / "rick",
+                root / "profiles" / name,
                 "distribution.yaml",
-            ),
+            )
+            for name in profile_names
         ),
         shared_repositories=(
             SharedRepository(
@@ -414,6 +424,169 @@ class AppTests(unittest.TestCase):
         auth = sync.call_args.args[2]
         self.assertEqual(auth.token, "active-token")
         self.assertTrue(sync.call_args.kwargs["require_canonical"])
+
+    def test_sync_profiles_uses_process_active_home_then_root_token_precedence(self) -> None:
+        from hermes_bootstrap import app
+
+        root_env = self.root / ".env"
+        root_env.write_text("GH_TOKEN='root-token'\n", encoding="utf-8")
+        active = self.root / "profiles" / "rick"
+        active.mkdir(parents=True)
+        (active / ".env").write_text(
+            "$(touch should-not-exist)\nGH_TOKEN='active-token'\n",
+            encoding="utf-8",
+        )
+        expected_report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+        cases = (
+            (
+                {"GH_TOKEN": "process-token", "HERMES_HOME": str(active)},
+                "process-token",
+            ),
+            ({"HERMES_HOME": str(active)}, "active-token"),
+            ({}, "root-token"),
+        )
+
+        for environ, expected_token in cases:
+            with (
+                self.subTest(expected_token=expected_token),
+                mock.patch.object(app, "load_manifest", return_value=self.manifest),
+                mock.patch.object(
+                    app.profile_sync,
+                    "synchronize_profiles",
+                    return_value=expected_report,
+                ) as sync,
+            ):
+                report = app.sync_profiles(
+                    Path("manifest.yaml"), dry_run=True, environ=environ
+                )
+
+            self.assertIs(report, expected_report)
+            auth = sync.call_args.args[1]
+            self.assertEqual(auth.token, expected_token)
+            self.assertEqual(
+                sync.call_args.kwargs,
+                {"dry_run": True},
+            )
+        self.assertFalse((active / "should-not-exist").exists())
+
+    def test_sync_profiles_reports_missing_credentials_for_every_configured_profile(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ("alpha", "beta", "gamma"))
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.profile_sync, "synchronize_profiles") as sync,
+        ):
+            report = app.sync_profiles(Path("manifest.yaml"), dry_run=False, environ={})
+
+        self.assertEqual(report.exit_code, CredentialError.exit_code)
+        self.assertEqual(
+            [profile.name for profile in report.profiles],
+            [profile.name for profile in configured.profiles],
+        )
+        self.assertTrue(
+            all(
+                profile.status == "failed"
+                and profile.category == "credentials_unavailable"
+                and profile.message == "GitHub credentials are unavailable"
+                for profile in report.profiles
+            )
+        )
+        sync.assert_not_called()
+
+    def test_sync_profiles_sanitizes_repository_and_unexpected_failures_for_all_profiles(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ("alpha", "beta", "gamma"))
+        token = "profile-sync-token-marker"
+        (self.root / ".env").write_text(f"GH_TOKEN={token}\n", encoding="utf-8")
+
+        for failure in (
+            RepositoryError(token),
+            RuntimeError(token),
+        ):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                mock.patch.object(app, "load_manifest", return_value=configured),
+                mock.patch.object(
+                    app.profile_sync,
+                    "synchronize_profiles",
+                    side_effect=failure,
+                ),
+            ):
+                report = app.sync_profiles(
+                    Path("manifest.yaml"), dry_run=False, environ={}
+                )
+
+            self.assertEqual(report.exit_code, RepositoryError.exit_code)
+            self.assertEqual(
+                [profile.name for profile in report.profiles],
+                [profile.name for profile in configured.profiles],
+            )
+            self.assertTrue(
+                all(
+                    profile.status == "failed"
+                    and profile.category == "repository"
+                    and profile.message == "profile synchronization failed"
+                    for profile in report.profiles
+                )
+            )
+            self.assertNotIn(token, json.dumps(report.as_dict()))
+            self.assertIsNone(failure.__traceback__)
+            self.assertIsNone(failure.__context__)
+
+    def test_sync_profiles_reports_unsafe_runtime_and_token_files_as_credentials_unavailable(self) -> None:
+        from hermes_bootstrap import app
+
+        for scenario in ("unrelated", "symlink", "duplicate", "hardlink", "fifo"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "data"
+                root.mkdir()
+                configured = manifest(root, ("alpha", "beta"))
+                environ: dict[str, str] = {}
+                if scenario == "unrelated":
+                    unrelated = root.parent / "unrelated"
+                    unrelated.mkdir()
+                    environ["HERMES_HOME"] = str(unrelated)
+                elif scenario == "symlink":
+                    outside = root.parent / "outside"
+                    outside.mkdir()
+                    linked = root / "linked"
+                    linked.symlink_to(outside, target_is_directory=True)
+                    environ["HERMES_HOME"] = str(linked)
+                elif scenario == "duplicate":
+                    (root / ".env").write_text(
+                        "GH_TOKEN=one\nGH_TOKEN=two\n", encoding="utf-8"
+                    )
+                elif scenario == "hardlink":
+                    external = root.parent / "external.env"
+                    external.write_text("GH_TOKEN=secret\n", encoding="utf-8")
+                    os.link(external, root / ".env")
+                else:
+                    os.mkfifo(root / ".env")
+
+                with (
+                    mock.patch.object(app, "load_manifest", return_value=configured),
+                    mock.patch.object(
+                        app.profile_sync, "synchronize_profiles"
+                    ) as sync,
+                ):
+                    report = app.sync_profiles(
+                        Path("manifest.yaml"), dry_run=True, environ=environ
+                    )
+
+                self.assertEqual(report.exit_code, CredentialError.exit_code)
+                self.assertEqual(
+                    [profile.name for profile in report.profiles],
+                    [profile.name for profile in configured.profiles],
+                )
+                self.assertTrue(
+                    all(
+                        profile.category == "credentials_unavailable"
+                        for profile in report.profiles
+                    )
+                )
+                sync.assert_not_called()
 
     def test_sync_repository_rejects_unrelated_or_symlinked_hermes_home(self) -> None:
         from hermes_bootstrap import app
