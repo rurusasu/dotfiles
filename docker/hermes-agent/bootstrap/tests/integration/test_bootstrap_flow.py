@@ -47,33 +47,27 @@ API_URL_ENV = "HERMES_BOOTSTRAP_GITHUB_API_URL"
 HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
 HOST_SECRET_VALUE = "planted-host-secret-marker"
 PRODUCTION_MANIFEST = BOOTSTRAP_ROOT.parent / "bootstrap-manifest.yaml"
-PROFILE_NAMES = ("rick", "hoffman", "risarisa", "nancy")
+PRODUCTION_PROFILES = load_manifest(PRODUCTION_MANIFEST).profiles
+PROFILE_NAMES = tuple(source.name for source in PRODUCTION_PROFILES)
 PROFILE_IDENTITIES = {
-    "rick": {
-        "source": "https://github.com/rurusasu/hermes-profile-rick.git",
+    source.name: {
         "version": "0.1.0",
         "hermes_requires": ">=0.18.2",
         "distribution_owned": ("SOUL.md", "config.yaml"),
-    },
-    "hoffman": {
-        "source": "https://github.com/rurusasu/hermes-profile-hoffman.git",
-        "version": "0.1.0",
-        "hermes_requires": ">=0.18.2",
-        "distribution_owned": ("SOUL.md", "config.yaml"),
-    },
-    "risarisa": {
-        "source": "https://github.com/rurusasu/hermes-profile-risarisa.git",
-        "version": "0.1.0",
-        "hermes_requires": ">=0.18.2",
-        "distribution_owned": ("SOUL.md", "config.yaml"),
-    },
-    "nancy": {
-        "source": "https://github.com/rurusasu/hermes-profile-nancy.git",
-        "version": "0.1.0",
-        "hermes_requires": ">=0.18.2",
-        "distribution_owned": ("SOUL.md", "config.yaml"),
-    },
+    }
+    for source in PRODUCTION_PROFILES
 }
+PROFILE_USER_DIRECTORIES = (
+    "memories",
+    "sessions",
+    "skills",
+    "skins",
+    "logs",
+    "plans",
+    "workspace",
+    "cron",
+    "home",
+)
 SAFE_PATH = "/usr/bin:/bin"
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
@@ -282,6 +276,8 @@ class BootstrapFlowTests(unittest.TestCase):
         self.addCleanup(self.host_secret.stop)
         self.fixture_root = Path(self.temporary.name)
         self.child_process_offset = len(_CHILD_PROCESSES)
+        self.child_arguments: list[tuple[str, ...]] = []
+        self.profile_stage_refs: list[tuple[str, str, str, str, str]] = []
         self.child_home = self.fixture_root / "child-home"
         self.profile_tmpdir = self.fixture_root / "tmp"
         self.child_home.mkdir()
@@ -299,10 +295,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.seed_root.mkdir()
         self.seeds: dict[str, Path] = {}
         self.source_remotes: dict[str, Path] = {}
-        self.source_identities: dict[str, tuple[str, str]] = {}
         self._create_sources()
         self.manifest = self._local_manifest()
         self._write_runtime_sentinels()
+        self._ensure_profile_locks()
 
     def tearDown(self) -> None:
         try:
@@ -323,6 +319,7 @@ class BootstrapFlowTests(unittest.TestCase):
             self._create_distribution(
                 profile,
                 {
+                    ".gitignore": self._profile_gitignore(),
                     "distribution.yaml": self._profile_manifest(profile),
                     "config.yaml": source_config("profile", f"{profile}-initial"),
                     "SOUL.md": f"{profile} initial\n",
@@ -344,7 +341,6 @@ class BootstrapFlowTests(unittest.TestCase):
         run_git("push", "origin", "main", cwd=seed)
         self.seeds[name] = seed
         self.source_remotes[name] = remote
-        self.source_identities[str(remote)] = ("fixture", name)
 
     def _local_manifest(self) -> BootstrapManifest:
         parsed = load_manifest(PRODUCTION_MANIFEST)
@@ -359,7 +355,6 @@ class BootstrapFlowTests(unittest.TestCase):
         repositories = tuple(
             replace(
                 repository,
-                source=str(self.source_remotes[repository.name]),
                 target=self.data_root / "shared" / repository.name,
                 legacy_target=self.data_root / "core" / repository.name,
             )
@@ -379,14 +374,22 @@ class BootstrapFlowTests(unittest.TestCase):
             },
         )
         for profile in PROFILE_NAMES:
+            target = self.data_root / "profiles" / profile
             self._write_files(
-                self.data_root / "profiles" / profile,
+                target,
                 {
+                    "distribution.yaml": self._runtime_profile_manifest(profile),
+                    "config.yaml": source_config(
+                        "profile", f"{profile}-initial"
+                    ),
+                    "SOUL.md": f"{profile} initial\n",
                     "memories/runtime.txt": f"{profile} memory\n",
                     "sessions/runtime.txt": f"{profile} session\n",
                     ".env": f"# {profile} comment\nCUSTOM_{profile.upper()}=keep\n",
                 },
             )
+            for directory in PROFILE_USER_DIRECTORIES:
+                (target / directory).mkdir(exist_ok=True)
 
     @staticmethod
     def _root_manifest(owned: list[str], version: str = "0.1.0") -> str:
@@ -403,15 +406,43 @@ class BootstrapFlowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _profile_manifest(name: str, version: str = "0.1.0") -> str:
+    def _profile_manifest(
+        name: str,
+        version: str = "0.1.0",
+        *,
+        source: str | None = None,
+    ) -> str:
         return "\n".join(
             [
                 f"name: {name}",
+                *([f"source: {source}"] if source is not None else []),
                 f"version: {version}",
                 "hermes_requires: '>=0.18.2'",
                 "distribution_owned:",
-                "  - config.yaml",
-                "  - SOUL.md",
+                "- SOUL.md",
+                "- config.yaml",
+                "",
+            ]
+        )
+
+    def _runtime_profile_manifest(
+        self, name: str, version: str = "0.1.0"
+    ) -> str:
+        source = next(
+            profile.source for profile in self.manifest.profiles
+            if profile.name == name
+        )
+        return self._profile_manifest(name, version, source=source)
+
+    @staticmethod
+    def _profile_gitignore() -> str:
+        return "\n".join(
+            [
+                "/*",
+                "!/.gitignore",
+                "!/distribution.yaml",
+                "!/SOUL.md",
+                "!/config.yaml",
                 "",
             ]
         )
@@ -485,8 +516,12 @@ class BootstrapFlowTests(unittest.TestCase):
     @contextmanager
     def _patched_runtime(self) -> Iterator[None]:
         production_source_identity = app._source_identity
-        api_identities = set(self.source_identities.values())
-        for source in (self.manifest.root_distribution, *self.manifest.profiles):
+        api_identities: set[tuple[str, str]] = set()
+        for source in (
+            self.manifest.root_distribution,
+            *self.manifest.profiles,
+            *self.manifest.shared_repositories,
+        ):
             identity = production_source_identity(source.source)
             if identity is not None:
                 api_identities.add(identity)
@@ -502,6 +537,15 @@ class BootstrapFlowTests(unittest.TestCase):
                 environment = kwargs.get("env")
                 self.assertIsInstance(environment, dict)
                 assert isinstance(environment, dict)
+                command = args[0] if args else kwargs.get("args")
+                self.assertIsInstance(command, (list, tuple))
+                assert isinstance(command, (list, tuple))
+                child_arguments = tuple(str(argument) for argument in command)
+                self.child_arguments.append(child_arguments)
+                visible_arguments = repr(child_arguments)
+                self._assert_no_protected_output(
+                    visible_arguments, "child process arguments"
+                )
                 self.assertFalse(
                     HOST_SECRET_ENV in environment,
                     "child environment contained a protected host key",
@@ -511,7 +555,6 @@ class BootstrapFlowTests(unittest.TestCase):
                     "child environment contained a protected host value",
                 )
                 expected_base = _minimal_environment(self.child_home)
-                command = args[0] if args else kwargs.get("args")
                 if (
                     isinstance(command, (list, tuple))
                     and command
@@ -530,6 +573,9 @@ class BootstrapFlowTests(unittest.TestCase):
                     and key != "HERMES_BOOTSTRAP_GITHUB_TOKEN"
                 }
                 self.assertEqual(unexpected, set())
+                if child_arguments[0] == "/usr/bin/git":
+                    environment = self._redirect_git_transport(environment)
+                    kwargs["env"] = environment
                 process = _REAL_POPEN(*args, **kwargs)  # type: ignore[arg-type]
                 _CHILD_PROCESSES.append(process)
                 return process
@@ -540,26 +586,34 @@ class BootstrapFlowTests(unittest.TestCase):
                 def client_factory(auth: object) -> GitHubClient:
                     return GitHubClient(auth, api_base=api_base)  # type: ignore[arg-type]
 
-                def source_identity(source: str) -> tuple[str, str] | None:
-                    return self.source_identities.get(
-                        source, production_source_identity(source)
-                    )
-
-                def local_stage(
+                def audited_stage(
                     source: DistributionSource, workdir: Path, auth: object
                 ) -> StagedSource:
                     fixture_name = "root" if source.name == "default" else source.name
-                    transport = replace(
-                        source, source=str(self.source_remotes[fixture_name])
-                    )
-                    staged = stage_distribution(transport, workdir, auth)  # type: ignore[arg-type]
-                    return replace(staged, declaration=source)
+                    staged = stage_distribution(source, workdir, auth)  # type: ignore[arg-type]
+                    if fixture_name in PROFILE_NAMES:
+                        self.profile_stage_refs.append(
+                            (
+                                fixture_name,
+                                source.source,
+                                source.ref,
+                                staged.commit,
+                                run_git(
+                                    "--git-dir",
+                                    str(self.source_remotes[fixture_name]),
+                                    "rev-parse",
+                                    "main",
+                                ),
+                            )
+                        )
+                    return staged
 
                 with (
                     mock.patch.object(app, "load_manifest", return_value=self.manifest),
                     mock.patch.object(app, "GitHubClient", side_effect=client_factory),
-                    mock.patch.object(app, "_source_identity", side_effect=source_identity),
-                    mock.patch.object(app, "stage_distribution", side_effect=local_stage),
+                    mock.patch.object(
+                        app, "stage_distribution", side_effect=audited_stage
+                    ),
                     mock.patch.object(subprocess, "Popen", side_effect=audited_popen),
                     mock.patch.object(tempfile, "tempdir", str(self.profile_tmpdir)),
                     mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
@@ -569,6 +623,31 @@ class BootstrapFlowTests(unittest.TestCase):
                     ),
                 ):
                     yield
+
+    def _redirect_git_transport(
+        self, environment: dict[str, str]
+    ) -> dict[str, str]:
+        redirected = dict(environment)
+        transport_remotes = {
+            self.manifest.root_distribution.source: self.source_remotes["root"],
+            **{
+                source.source: self.source_remotes[source.name]
+                for source in self.manifest.profiles
+            },
+            **{
+                repository.source: self.source_remotes[repository.name]
+                for repository in self.manifest.shared_repositories
+            },
+        }
+        first = int(redirected.get("GIT_CONFIG_COUNT", "0"))
+        for offset, (source, remote) in enumerate(transport_remotes.items()):
+            index = first + offset
+            redirected[f"GIT_CONFIG_KEY_{index}"] = (
+                f"url.{remote.as_posix()}.insteadOf"
+            )
+            redirected[f"GIT_CONFIG_VALUE_{index}"] = source
+        redirected["GIT_CONFIG_COUNT"] = str(first + len(transport_remotes))
+        return redirected
 
     def _next_fixture_secret(self, nbytes: int) -> str:
         self.assertEqual(nbytes, 48)
@@ -598,6 +677,8 @@ class BootstrapFlowTests(unittest.TestCase):
                 if path.name.startswith(
                     (
                         ".hermes-bootstrap-",
+                        ".hermes-profile-snapshots-",
+                        ".hermes-profile-sync-",
                         ".hermes-repository-",
                         "askpass-",
                         "stage-",
@@ -625,7 +706,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 _stop_process(process)
         del _CHILD_PROCESSES[self.child_process_offset :]
         self.assertEqual(live, [])
-        for _attempt in range(64):
+        for _attempt in range(4096):
             try:
                 child, _status = os.waitpid(-1, os.WNOHANG)
             except ChildProcessError:
@@ -647,6 +728,17 @@ class BootstrapFlowTests(unittest.TestCase):
         )
 
     def test_initial_install_stages_distributions_and_preserves_runtime(self) -> None:
+        profiles_before = {
+            profile: {
+                path: (entry.kind, entry.mode, entry.payload)
+                for path, entry in self._snapshot_tree(
+                    self.data_root / "profiles" / profile
+                ).items()
+                if path != ".env"
+            }
+            for profile in PROFILE_NAMES
+        }
+
         self._initial_apply()
 
         self.assertEqual(
@@ -658,6 +750,14 @@ class BootstrapFlowTests(unittest.TestCase):
             self.assertEqual(
                 (target / "config.yaml").read_text(encoding="utf-8"),
                 source_config("profile", f"{profile}-initial"),
+            )
+            self.assertEqual(
+                {
+                    path: (entry.kind, entry.mode, entry.payload)
+                    for path, entry in self._snapshot_tree(target).items()
+                    if path != ".env"
+                },
+                profiles_before[profile],
             )
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
@@ -684,8 +784,33 @@ class BootstrapFlowTests(unittest.TestCase):
                 self._assert_no_temporary_resources()
         finally:
             profile_leak.rmdir()
+        for prefix in (
+            ".hermes-profile-snapshots-",
+            ".hermes-profile-sync-",
+        ):
+            production_leak = self.data_root / f"{prefix}review-probe"
+            production_leak.mkdir()
+            try:
+                with self.subTest(prefix=prefix):
+                    with self.assertRaises(AssertionError):
+                        self._assert_no_temporary_resources()
+            finally:
+                production_leak.rmdir()
 
     def test_profile_targets_keep_canonical_source_token_and_manifest_identity(self) -> None:
+        production_profiles = {
+            source.name: source for source in load_manifest(PRODUCTION_MANIFEST).profiles
+        }
+        self.assertEqual(
+            tuple(
+                (source.name, source.source, source.ref)
+                for source in self.manifest.profiles
+            ),
+            tuple(
+                (source.name, source.source, source.ref)
+                for source in production_profiles.values()
+            ),
+        )
         command_stdout = io.StringIO()
         command_stderr = io.StringIO()
         ambient_stdout = io.StringIO()
@@ -715,13 +840,51 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             command_stdout.getvalue(),
-            '{"profiles":["rick","hoffman","risarisa","nancy"],'
+            '{"profile_sync":{"hoffman":"unchanged","nancy":"unchanged",'
+            '"rick":"unchanged","risarisa":"unchanged"},'
+            '"profiles":["rick","hoffman","risarisa","nancy"],'
             '"repositories":["lifelog"],"status":"applied"}\n',
         )
         self.assertEqual(command_stderr.getvalue(), "")
         self.assertEqual(ambient_stdout.getvalue(), "")
         # The pinned hermes_cli emits deprecation warnings here; the leak scan
         # above still treats ambient stderr as protected output.
+
+        declared_sources = (
+            self.manifest.root_distribution,
+            *self.manifest.profiles,
+            *self.manifest.shared_repositories,
+        )
+        visible_arguments = {
+            argument
+            for command in self.child_arguments
+            for argument in command
+        }
+        for source in declared_sources:
+            self.assertIn(source.source, visible_arguments)
+        for remote in self.source_remotes.values():
+            self.assertNotIn(str(remote), visible_arguments)
+
+        self.assertEqual(
+            [
+                name
+                for name, _source, _ref, _staged_commit, _head
+                in self.profile_stage_refs
+            ],
+            list(PROFILE_NAMES),
+        )
+        for (
+            name,
+            source,
+            ref,
+            staged_commit,
+            remote_head,
+        ) in self.profile_stage_refs:
+            with self.subTest(staged_profile=name):
+                self.assertEqual(source, production_profiles[name].source)
+                self.assertEqual(ref, remote_head)
+                self.assertEqual(staged_commit, ref)
+                self.assertRegex(ref, r"\A[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 
         for name, expected in PROFILE_IDENTITIES.items():
             with self.subTest(profile=name):
@@ -740,7 +903,11 @@ class BootstrapFlowTests(unittest.TestCase):
                         "hermes_requires": installed.hermes_requires,
                         "distribution_owned": tuple(sorted(installed.distribution_owned)),
                     },
-                    {"name": name, **expected},
+                    {
+                        "name": name,
+                        "source": production_profiles[name].source,
+                        **expected,
+                    },
                 )
                 token = read_environment_values(target / ".env", GITHUB_KEYS)["GH_TOKEN"]
                 self.assertEqual(sha256(token.encode("utf-8")).digest(), sha256(FIXTURE_TOKEN.encode("utf-8")).digest())
@@ -787,22 +954,26 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=lifelog), lifelog_head)
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=lifelog), lifelog_commits)
 
-    def test_profile_update_replaces_only_owned_profile_content(self) -> None:
+    def test_local_profile_update_publishes_and_preserves_runtime_content(self) -> None:
         self._initial_apply()
-        runtime = self.data_root / "profiles" / "rick" / "memories" / "runtime.txt"
+        target = self.data_root / "profiles" / "rick"
+        runtime = target / "memories" / "runtime.txt"
         runtime_before = (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime))
-        self._commit(
-            "rick",
+        remote_before = run_git(
+            "--git-dir", str(self.source_remotes["rick"]), "rev-parse", "main"
+        )
+        self._write_files(
+            target,
             {
-                "distribution.yaml": self._profile_manifest("rick", "0.2.0"),
+                "distribution.yaml": self._runtime_profile_manifest(
+                    "rick", "0.2.0"
+                ),
                 "config.yaml": source_config("profile", "rick-updated"),
             },
-            "update rick",
         )
 
         self._initial_apply()
 
-        target = self.data_root / "profiles" / "rick"
         installed = profile_distribution.read_manifest(target)
         self.assertIsNotNone(installed)
         self.assertEqual(installed.version, "0.2.0")
@@ -819,6 +990,15 @@ class BootstrapFlowTests(unittest.TestCase):
             runtime_before,
         )
         self.assertEqual((target / "sessions" / "runtime.txt").read_text(encoding="utf-8"), "rick session\n")
+        self.assertNotEqual(
+            run_git(
+                "--git-dir",
+                str(self.source_remotes["rick"]),
+                "rev-parse",
+                "main",
+            ),
+            remote_before,
+        )
 
     def test_root_update_removes_retired_owned_path_without_runtime_loss(self) -> None:
         self._initial_apply()
@@ -844,6 +1024,12 @@ class BootstrapFlowTests(unittest.TestCase):
             str(self.source_remotes["lifelog"]),
             str(legacy),
         )
+        lifelog_source = next(
+            repository.source
+            for repository in self.manifest.shared_repositories
+            if repository.name == "lifelog"
+        )
+        run_git("remote", "set-url", "origin", lifelog_source, cwd=legacy)
         run_git("config", "user.name", "Fixture", cwd=legacy)
         run_git("config", "user.email", "fixture@example.test", cwd=legacy)
         run_git(
@@ -915,8 +1101,22 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(sync_exit_code, 5)
         self.assertEqual(stdout.getvalue(), "")
         self._assert_no_protected_output(stderr.getvalue(), "failed sync output")
+        after_sync = self._snapshot_tree(self.data_root)
+        engine_lock = after_sync["locks/bootstrap-engine.lock"]
         self.assertEqual(
-            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
+            (
+                engine_lock.kind,
+                engine_lock.mode,
+                engine_lock.links,
+                engine_lock.size,
+                engine_lock.payload,
+            ),
+            ("file", 0o600, 1, 0, b""),
+        )
+        before["locks"] = after_sync["locks"]
+        before["locks/bootstrap-engine.lock"] = engine_lock
+        self.assertEqual(
+            self._snapshot_tree_contract(after_sync),
             self._snapshot_tree_contract(before),
         )
         self.assertEqual(
@@ -938,7 +1138,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 5)
         self.assertEqual(stdout.getvalue(), "")
         self._assert_no_protected_output(stderr.getvalue(), "failed apply output")
-        self.assertEqual(self._snapshot_tree_contract(self._snapshot_tree(self.data_root)), self._snapshot_tree_contract(before))
+        self.assertEqual(
+            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
+            self._snapshot_tree_contract(before),
+        )
         self.assertEqual(self._snapshot_coordination_locks(), locks_before)
 
     def test_lifelog_pushes_allowed_changes_and_rejects_forbidden_ones(self) -> None:
@@ -966,6 +1169,19 @@ class BootstrapFlowTests(unittest.TestCase):
             self._apply("invalid-fixture-token")
 
         after = self._snapshot_tree(self.data_root)
+        engine_lock = after["locks/bootstrap-engine.lock"]
+        self.assertEqual(
+            (
+                engine_lock.kind,
+                engine_lock.mode,
+                engine_lock.links,
+                engine_lock.size,
+                engine_lock.payload,
+            ),
+            ("file", 0o600, 1, 0, b""),
+        )
+        before["locks"] = after["locks"]
+        before["locks/bootstrap-engine.lock"] = engine_lock
         self.assertEqual(after, before)
         journal = self.data_root / ".bootstrap" / "transactions"
         self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
@@ -1040,7 +1256,7 @@ class BootstrapFlowTests(unittest.TestCase):
             future,
             {
                 "distribution.yaml": self._profile_manifest(future).replace(
-                    "  - config.yaml\n", ""
+                    "- config.yaml\n", ""
                 ),
                 "config.yaml": source_config("profile", "future-valid"),
                 "SOUL.md": "future initial\n",
@@ -1174,16 +1390,24 @@ class BootstrapFlowTests(unittest.TestCase):
                         },
                         f"rollback root {revision}",
                     )
+                    profile_remote_before = {
+                        profile: run_git(
+                            "--git-dir",
+                            str(self.source_remotes[profile]),
+                            "rev-parse",
+                            "main",
+                        )
+                        for profile in PROFILE_NAMES
+                    }
                     for profile in PROFILE_NAMES:
-                        self._commit(
-                            profile,
+                        self._write_files(
+                            self.data_root / "profiles" / profile,
                             {
-                                "distribution.yaml": self._profile_manifest(
+                                "distribution.yaml": self._runtime_profile_manifest(
                                     profile, version
                                 ),
                                 "config.yaml": desired_profiles[profile],
                             },
-                            f"rollback {profile} {revision}",
                         )
 
                     stale_marker = f"stale-managed-{revision}".encode("utf-8")
@@ -1266,6 +1490,17 @@ class BootstrapFlowTests(unittest.TestCase):
                         self.assertNotEqual(current, before.payload)
                         self.assertEqual(current, expected.encode("utf-8"))
 
+                    def assert_owned_file_unchanged(
+                        relative: str, expected: str
+                    ) -> None:
+                        before = baseline_entry(relative)
+                        path = self.data_root / relative
+                        self.assertEqual(before.kind, "file")
+                        self.assertTrue(path.is_file())
+                        current = path.read_bytes()
+                        self.assertEqual(current, before.payload)
+                        self.assertEqual(current, expected.encode("utf-8"))
+
                     def assert_environment_mutated(profile: str) -> None:
                         relative = env_paths[profile]
                         before = baseline_entry(relative)
@@ -1298,7 +1533,7 @@ class BootstrapFlowTests(unittest.TestCase):
                     def assert_all_representative_mutations() -> None:
                         assert_owned_file_mutated("config.yaml", desired_root)
                         for profile in PROFILE_NAMES:
-                            assert_owned_file_mutated(
+                            assert_owned_file_unchanged(
                                 f"profiles/{profile}/config.yaml",
                                 desired_profiles[profile],
                             )
@@ -1311,7 +1546,7 @@ class BootstrapFlowTests(unittest.TestCase):
                             assert_owned_file_mutated("config.yaml", desired_root)
                         elif name.startswith("profile-apply:"):
                             profile = name.partition(":")[2]
-                            assert_owned_file_mutated(
+                            assert_owned_file_unchanged(
                                 f"profiles/{profile}/config.yaml",
                                 desired_profiles[profile],
                             )
@@ -1359,7 +1594,7 @@ class BootstrapFlowTests(unittest.TestCase):
                         desired_root.encode("utf-8"),
                     )
                     for profile in PROFILE_NAMES:
-                        self.assertNotEqual(
+                        self.assertEqual(
                             baseline_entry(
                                 f"profiles/{profile}/config.yaml"
                             ).payload,
@@ -1411,6 +1646,16 @@ class BootstrapFlowTests(unittest.TestCase):
                     )
                     self.assertNotEqual(transaction_remote, remote_before)
                     self.assertEqual(remote_after, transaction_remote)
+                    for profile in PROFILE_NAMES:
+                        self.assertNotEqual(
+                            run_git(
+                                "--git-dir",
+                                str(self.source_remotes[profile]),
+                                "rev-parse",
+                                "main",
+                            ),
+                            profile_remote_before[profile],
+                        )
                 except Exception as primary_error:
                     for cleanup_error in reset_phase_fixture():
                         primary_error.add_note(
@@ -1577,11 +1822,27 @@ class BootstrapFlowTests(unittest.TestCase):
         lock.touch(exist_ok=True)
         lock.chmod(0o600)
 
+    def _ensure_profile_locks(self) -> None:
+        for profile in PROFILE_NAMES:
+            lock = (
+                self.data_root
+                / "locks"
+                / "repositories"
+                / f"profile-{profile}.lock"
+            )
+            lock.parent.mkdir(parents=True, exist_ok=True)
+            lock.touch(exist_ok=True)
+            lock.chmod(0o600)
+
     def _snapshot_coordination_locks(self) -> dict[str, TreeEntry | None]:
         tree = self._snapshot_tree(self.data_root)
         lock_paths = (
             ".bootstrap/transactions/.lock",
             "locks/repositories/lifelog.lock",
+            *(
+                f"locks/repositories/profile-{profile}.lock"
+                for profile in PROFILE_NAMES
+            ),
         )
         return {path: tree.get(path) for path in lock_paths}
 

@@ -21,6 +21,7 @@ DEFAULT_MANIFEST = "/usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml"
 @dataclass(frozen=True)
 class _CommandOutcome:
     result: object | None = None
+    exit_code: int = 0
     error_type: type[BootstrapError] | None = None
     message: str | None = None
 
@@ -54,10 +55,11 @@ def main(
             message = outcome.message or "bootstrap command failed"
             del outcome
             raise error_type(message) from None
+        exit_code = outcome.exit_code
         result = outcome.result
         del outcome
         _write_json(stdout, result)
-        return 0
+        return exit_code
     except BrokenPipeError:
         return 0
     except BootstrapError as error:
@@ -80,9 +82,22 @@ def _dispatch_boundary(
             result = app.apply(args.manifest, stdin)
         elif args.command == "validate":
             result = app.validate(args.manifest)
-        else:
+        elif args.command == "sync-repository":
             result = app.sync_repository(args.manifest, args.name, environ)
-        return _CommandOutcome(result=result)
+        elif args.command == "sync-profiles":
+            report = app.sync_profiles(
+                args.manifest,
+                dry_run=args.dry_run,
+                environ=environ,
+            )
+            result = report.as_dict()
+            return _CommandOutcome(result=result, exit_code=report.exit_code)
+        else:
+            return _CommandOutcome(
+                error_type=InputError,
+                message="invalid command arguments",
+            )
+        return _CommandOutcome(result=result, exit_code=0)
     except BootstrapError as error:
         outcome = _CommandOutcome(error_type=type(error), message=str(error))
         del error
@@ -105,6 +120,9 @@ def _parser() -> argparse.ArgumentParser:
     sync = commands.add_parser("sync-repository")
     sync.add_argument("name")
     sync.add_argument("--manifest", default=DEFAULT_MANIFEST, type=_path)
+    sync_profiles = commands.add_parser("sync-profiles")
+    sync_profiles.add_argument("--dry-run", action="store_true")
+    sync_profiles.add_argument("--manifest", default=DEFAULT_MANIFEST, type=_path)
     return parser
 
 

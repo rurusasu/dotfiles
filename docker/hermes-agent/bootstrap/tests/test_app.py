@@ -15,7 +15,15 @@ from unittest import mock
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
-from hermes_bootstrap.errors import ApplyError, CredentialError, RollbackError, ValidationError
+import hermes_bootstrap.repositories as repositories_module
+from hermes_bootstrap import profile_snapshot
+from hermes_bootstrap.errors import (
+    ApplyError,
+    CredentialError,
+    RepositoryError,
+    RollbackError,
+    ValidationError,
+)
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import (
     BootstrapManifest,
@@ -23,10 +31,18 @@ from hermes_bootstrap.models import (
     SharedRepository,
 )
 from hermes_bootstrap.payload import SecretRedactor
+from hermes_bootstrap.profile_snapshot import PreparedProfiles
+from hermes_bootstrap.profile_sync import (
+    ProfileDiff,
+    ProfileSyncReport,
+    ProfileSyncResult,
+)
 from hermes_bootstrap.repositories import RemoteSyncResult
 
 
-def manifest(root: Path) -> BootstrapManifest:
+def manifest(
+    root: Path, profile_names: tuple[str, ...] = ("rick",)
+) -> BootstrapManifest:
     return BootstrapManifest(
         schema_version=1,
         data_root=root,
@@ -34,14 +50,15 @@ def manifest(root: Path) -> BootstrapManifest:
         root_distribution=DistributionSource(
             "default", "https://github.com/example/root.git", "main", root, "root-distribution.yaml"
         ),
-        profiles=(
+        profiles=tuple(
             DistributionSource(
-                "rick",
-                "https://github.com/example/rick.git",
+                name,
+                f"https://github.com/example/{name}.git",
                 "main",
-                root / "profiles" / "rick",
+                root / "profiles" / name,
                 "distribution.yaml",
-            ),
+            )
+            for name in profile_names
         ),
         shared_repositories=(
             SharedRepository(
@@ -71,13 +88,31 @@ class FakeTransaction:
         self.events.append("rollback")
 
 
+class RecordingEngineLock:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def require_held(self) -> None:
+        self.events.append("lock-require")
+
+    def close(self) -> None:
+        self.events.append("lock-close")
+
+    def __enter__(self) -> RecordingEngineLock:
+        return self
+
+    def __exit__(self, kind: object, value: object, traceback: object) -> None:
+        del kind, value, traceback
+        self.close()
+
+
 class AppTests(unittest.TestCase):
     def setUp(self) -> None:
         from hermes_bootstrap import app
 
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "data"
+        self.root = Path(os.path.realpath(self.temp.name)) / "data"
         self.root.mkdir()
         self.manifest = manifest(self.root)
         source_contract_patcher = mock.patch.object(
@@ -85,6 +120,13 @@ class AppTests(unittest.TestCase):
         )
         self.validate_chrome_mcp_sources = source_contract_patcher.start()
         self.addCleanup(source_contract_patcher.stop)
+        revalidate_patcher = mock.patch.object(
+            app,
+            "revalidate_profile_snapshots",
+            create=True,
+        )
+        self.revalidate_profile_snapshots = revalidate_patcher.start()
+        self.addCleanup(revalidate_patcher.stop)
 
     def write_installed_profile(
         self,
@@ -171,20 +213,305 @@ class AppTests(unittest.TestCase):
         store.mkdir(parents=True)
         return store / ".lock"
 
+    def test_apply_holds_the_engine_lock_until_staging_cleanup_finishes(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ())
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+        transaction = FakeTransaction(events)
+        report = ProfileSyncReport(dry_run=False, profiles=(), exit_code=0)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        def recover(root: Path) -> None:
+            self.assertIs(root, self.root)
+            events.append("recovery")
+
+        def scratch(root: Path) -> mock.Mock:
+            self.assertIs(root, self.root)
+            events.append("scratch")
+            return mock.Mock(path=self.root / "scratch")
+
+        def begin(root: Path) -> FakeTransaction:
+            self.assertIs(root, self.root)
+            events.append("transaction-begin")
+            return transaction
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(
+                app.Transaction, "recover_if_needed", side_effect=recover
+            ),
+            mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials", return_value={}),
+            mock.patch.object(app, "_private_scratch", side_effect=scratch),
+            mock.patch.object(
+                app, "prepare_profile_snapshots", return_value=PreparedProfiles((), ())
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                return_value=report,
+            ),
+            mock.patch.object(
+                app, "stage_distribution", side_effect=lambda source, *_: mock.Mock(declaration=source)
+            ),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                return_value=RemoteSyncResult("lifelog", "a" * 40, False, self.root / "remote"),
+            ),
+            mock.patch.object(app.Transaction, "begin", side_effect=begin),
+            mock.patch.object(app, "apply_root_distribution"),
+            mock.patch.object(app, "apply_shared_working_tree"),
+            mock.patch.object(app, "build_dashboard_environment", return_value={}),
+            mock.patch.object(app, "build_profile_environment", return_value={}),
+            mock.patch.object(app, "merge_env_file"),
+            mock.patch.object(app, "_validate_installed_layout", return_value={}),
+            mock.patch.object(
+                app,
+                "_cleanup_apply_resources",
+                side_effect=lambda *_: events.append("cleanup") or True,
+            ),
+        ):
+            result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(result["status"], "applied")
+        self.assertLess(events.index("lock-acquire"), events.index("recovery"))
+        self.assertLess(events.index("recovery"), events.index("scratch"))
+        self.assertLess(events.index("scratch"), events.index("transaction-begin"))
+        self.assertLess(events.index("transaction-begin"), events.index("cleanup"))
+        self.assertLess(events.index("cleanup"), events.index("lock-close"))
+
+    def test_sync_profiles_holds_the_engine_lock_through_snapshot_cleanup(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+        report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(app, "_runtime_token", return_value="token"),
+            mock.patch.object(
+                app.profile_sync,
+                "create_private_directory",
+                side_effect=lambda *_args, **_kwargs: events.append("snapshot-scratch")
+                or mock.Mock(path=self.root / "scratch"),
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "prepare_profile_snapshots",
+                return_value=PreparedProfiles((), ()),
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                side_effect=lambda *_args, **_kwargs: events.append("publication")
+                or report,
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "_cleanup_resources",
+                side_effect=lambda *_args, **_kwargs: events.append("cleanup")
+                or False,
+            ),
+        ):
+            result = app.sync_profiles(Path("manifest.yaml"), dry_run=True, environ={})
+
+        self.assertIs(result, report)
+        self.assertLess(events.index("lock-acquire"), events.index("snapshot-scratch"))
+        self.assertLess(events.index("snapshot-scratch"), events.index("publication"))
+        self.assertLess(events.index("publication"), events.index("cleanup"))
+        self.assertLess(events.index("cleanup"), events.index("lock-close"))
+
+    def test_sync_repository_holds_the_engine_lock_through_real_askpass_cleanup(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        lock = RecordingEngineLock(events)
+        repository = self.manifest.shared_repositories[0]
+        (repository.target / ".git").mkdir(parents=True)
+
+        def acquire(root: Path) -> RecordingEngineLock:
+            self.assertIs(root, self.root)
+            events.append("lock-acquire")
+            return lock
+
+        def synchronize(*_args: object, **_kwargs: object) -> tuple[str, bool]:
+            events.append("repository-sync")
+            return "a" * 40, False
+
+        real_unlink = repositories_module._unlink_path
+
+        def cleanup(path: Path) -> bool:
+            self.assertTrue(path.name.startswith("askpass-"))
+            self.assertTrue(path.exists())
+            events.append("repository-cleanup")
+            return real_unlink(path)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=acquire),
+            mock.patch.object(app, "_runtime_token", return_value="token"),
+            mock.patch.object(
+                repositories_module, "_verify_checkout_identity"
+            ),
+            mock.patch.object(
+                repositories_module, "_synchronize_checkout", side_effect=synchronize
+            ),
+            mock.patch.object(
+                repositories_module, "_unlink_path", side_effect=cleanup
+            ),
+        ):
+            result = app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        self.assertEqual(result["name"], "lifelog")
+        self.assertLess(events.index("lock-acquire"), events.index("repository-sync"))
+        self.assertLess(events.index("repository-sync"), events.index("repository-cleanup"))
+        self.assertLess(events.index("repository-cleanup"), events.index("lock-close"))
+
+    def test_secret_plan_and_validate_do_not_acquire_the_engine_lock(self) -> None:
+        from hermes_bootstrap import app
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "build_secret_plan", return_value={}),
+            mock.patch.object(
+                app,
+                "_validate_installed_layout",
+                return_value={"profiles": [], "repositories": []},
+            ),
+            mock.patch.object(app.EngineLock, "acquire") as acquire,
+        ):
+            self.assertEqual(app.secret_plan(Path("manifest.yaml")), {})
+            self.assertEqual(
+                app.validate(Path("manifest.yaml")),
+                {"status": "valid", "profiles": [], "repositories": []},
+            )
+
+        acquire.assert_not_called()
+
+    def test_engine_lock_contention_blocks_mutating_work_before_side_effects(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+
+        def unavailable(_root: Path) -> RecordingEngineLock:
+            events.append("lock-acquire")
+            raise RepositoryError("bootstrap engine lock is unavailable")
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app.Transaction, "recover_if_needed", side_effect=lambda *_: events.append("recovery")),
+            mock.patch.object(app, "_private_scratch", side_effect=lambda *_: events.append("scratch")),
+            mock.patch.object(app, "stage_distribution", side_effect=lambda *_: events.append("git")),
+            mock.patch.object(app, "synchronize_remote", side_effect=lambda *_: events.append("git")),
+            mock.patch.object(app.Transaction, "begin", side_effect=lambda *_: events.append("transaction")),
+        ):
+            with self.assertRaisesRegex(RepositoryError, "bootstrap engine lock is unavailable"):
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(events, ["lock-acquire"])
+
+        events.clear()
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app, "_runtime_token", side_effect=lambda *_: events.append("token")),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_profiles",
+                side_effect=lambda *_args, **_kwargs: events.append("git"),
+            ),
+        ):
+            report = app.sync_profiles(Path("manifest.yaml"), dry_run=False, environ={})
+
+        self.assertEqual(events, ["lock-acquire"])
+        self.assertEqual(report.exit_code, RepositoryError.exit_code)
+        self.assertTrue(
+            all(profile.category == "repository" for profile in report.profiles)
+        )
+
+        events.clear()
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.EngineLock, "acquire", side_effect=unavailable),
+            mock.patch.object(app, "_runtime_token", side_effect=lambda *_: events.append("token")),
+            mock.patch.object(
+                app,
+                "synchronize_named_repository",
+                side_effect=lambda *_args, **_kwargs: events.append("git"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RepositoryError, "bootstrap engine lock is unavailable"
+            ):
+                app.sync_repository(Path("manifest.yaml"), "lifelog", {})
+
+        self.assertEqual(events, ["lock-acquire"])
+
     def test_apply_recovers_before_reading_secrets_and_network_before_transaction(self) -> None:
         from hermes_bootstrap import app
 
+        configured = manifest(
+            self.root, ("rick", "hoffman", "risarisa", "nancy")
+        )
         events: list[str] = []
         tx = FakeTransaction(events)
         secrets = mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))
         client = mock.Mock(spec=app.GitHubClient)
-        staged_root = mock.Mock(declaration=self.manifest.root_distribution)
-        staged_profile = mock.Mock(declaration=self.manifest.profiles[0])
+        snapshots = tuple(
+            mock.Mock(declaration=profile) for profile in configured.profiles
+        )
+        prepared = PreparedProfiles(snapshots, ())
+        commits = {
+            profile.name: str(index) * 40
+            for index, profile in enumerate(configured.profiles, start=1)
+        }
+        statuses = {
+            "rick": "changed",
+            "hoffman": "unchanged",
+            "risarisa": "changed",
+            "nancy": "unchanged",
+        }
+        profile_report = ProfileSyncReport(
+            dry_run=False,
+            profiles=tuple(
+                ProfileSyncResult(
+                    name=profile.name,
+                    status=statuses[profile.name],  # type: ignore[arg-type]
+                    commit=commits[profile.name],
+                    snapshot=f"snapshot-{profile.name}",
+                    diff=ProfileDiff(),
+                    category=statuses[profile.name],
+                    message="safe",
+                )
+                for profile in configured.profiles
+            ),
+            exit_code=0,
+        )
         remote = RemoteSyncResult("lifelog", "a" * 40, False, self.root / ".remote")
+        staged_sources: list[DistributionSource] = []
 
         def read_payload(stream: io.StringIO, loaded: BootstrapManifest):
             events.append("payload")
-            self.assertIs(loaded, self.manifest)
+            self.assertIs(loaded, configured)
             self.assertEqual(stream.read(), "payload")
             return secrets
 
@@ -192,21 +519,72 @@ class AppTests(unittest.TestCase):
             events.append("recover")
             self.assertIs(root, self.root)
 
+        def prepare(
+            loaded: BootstrapManifest, _scratch: Path, *, allow_missing: bool
+        ) -> PreparedProfiles:
+            events.append("profile-preflight")
+            self.assertIs(loaded, configured)
+            self.assertTrue(allow_missing)
+            return prepared
+
+        def sync_profiles(
+            sync_prepared: PreparedProfiles, _auth: GitAuth, *, dry_run: bool
+        ) -> ProfileSyncReport:
+            self.assertEqual(sync_prepared.missing, ())
+            self.assertEqual(sync_prepared.snapshots, snapshots)
+            self.assertFalse(dry_run)
+            events.extend(
+                f"profile-sync:{snapshot.declaration.name}"
+                for snapshot in sync_prepared.snapshots
+            )
+            return profile_report
+
         def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
-            events.append(f"stage:{source.name}")
-            return staged_root if source.name == "default" else staged_profile
+            staged_sources.append(source)
+            if source.name == "default":
+                events.append("stage:default")
+            else:
+                events.append(f"stage:{source.name}:{source.ref}")
+            return mock.Mock(declaration=source)
 
         def sync(repo: SharedRepository, _auth: GitAuth):
             events.append(f"sync:{repo.name}")
             return remote
 
+        def begin(root: Path) -> FakeTransaction:
+            self.assertIs(root, self.root)
+            self.assertEqual(
+                events,
+                [
+                    "recover",
+                    "payload",
+                    "profile-preflight",
+                    "profile-sync:rick",
+                    "profile-sync:hoffman",
+                    "profile-sync:risarisa",
+                    "profile-sync:nancy",
+                    "stage:default",
+                    f"stage:rick:{commits['rick']}",
+                    f"stage:hoffman:{commits['hoffman']}",
+                    f"stage:risarisa:{commits['risarisa']}",
+                    f"stage:nancy:{commits['nancy']}",
+                    "source-contract:default,rick,hoffman,risarisa,nancy",
+                    "sync:lifelog",
+                    "revalidate",
+                ],
+            )
+            return tx
+
         def validate_installed(
             loaded: BootstrapManifest, *, allow_active_transaction: bool
         ) -> dict[str, list[str]]:
-            self.assertIs(loaded, self.manifest)
+            self.assertIs(loaded, configured)
             self.assertTrue(allow_active_transaction)
             events.append("validate")
-            return {"profiles": ["rick"], "repositories": ["lifelog"]}
+            return {
+                "profiles": [profile.name for profile in configured.profiles],
+                "repositories": ["lifelog"],
+            }
 
         self.validate_chrome_mcp_sources.side_effect = (
             lambda staged: events.append(
@@ -214,17 +592,32 @@ class AppTests(unittest.TestCase):
                 + ",".join(stage.declaration.name for stage in staged)
             )
         )
+        self.revalidate_profile_snapshots.side_effect = (
+            lambda _manifest, _baseline, _scratch: events.append("revalidate")
+        )
 
         with (
-            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app, "load_manifest", return_value=configured),
             mock.patch.object(app.Transaction, "recover_if_needed", side_effect=recover),
             mock.patch.object(app, "read_secret_payload", side_effect=read_payload),
             mock.patch.object(app, "GitHubClient", return_value=client),
+            mock.patch.object(app, "prepare_profile_snapshots", side_effect=prepare),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                side_effect=sync_profiles,
+            ),
             mock.patch.object(app, "stage_distribution", side_effect=stage),
             mock.patch.object(app, "synchronize_remote", side_effect=sync),
-            mock.patch.object(app.Transaction, "begin", return_value=tx),
+            mock.patch.object(app.Transaction, "begin", side_effect=begin),
             mock.patch.object(app, "apply_root_distribution", side_effect=lambda *_: events.append("root")),
-            mock.patch.object(app, "apply_profile_distribution", side_effect=lambda *_: events.append("profile:rick")),
+            mock.patch.object(
+                app,
+                "apply_profile_distribution",
+                side_effect=lambda stage, *_args, **_kwargs: events.append(
+                    f"profile:{stage.declaration.name}"
+                ),
+            ),
             mock.patch.object(app, "apply_shared_working_tree", side_effect=lambda *_: events.append("shared:lifelog")),
             mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
             mock.patch.object(app, "build_profile_environment", side_effect=lambda name, *_: {"PROFILE": name, "GH_TOKEN": "token"}),
@@ -234,26 +627,648 @@ class AppTests(unittest.TestCase):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
         self.assertEqual(result["status"], "applied")
+        self.assertEqual(result["profile_sync"], statuses)
         self.assertEqual(
             events,
             [
                 "recover",
                 "payload",
+                "profile-preflight",
+                "profile-sync:rick",
+                "profile-sync:hoffman",
+                "profile-sync:risarisa",
+                "profile-sync:nancy",
                 "stage:default",
-                "stage:rick",
-                "source-contract:default,rick",
+                f"stage:rick:{commits['rick']}",
+                f"stage:hoffman:{commits['hoffman']}",
+                f"stage:risarisa:{commits['risarisa']}",
+                f"stage:nancy:{commits['nancy']}",
+                "source-contract:default,rick,hoffman,risarisa,nancy",
                 "sync:lifelog",
+                "revalidate",
                 "root",
                 "profile:rick",
+                "profile:hoffman",
+                "profile:risarisa",
+                "profile:nancy",
                 "shared:lifelog",
                 "env:data",
                 "env:rick",
+                "env:hoffman",
+                "env:risarisa",
+                "env:nancy",
                 "validate",
                 "commit",
             ],
         )
-        self.assertEqual(client.authenticated_login.call_count, 3)
-        self.assertEqual(client.assert_repository_access.call_count, 3)
+        self.assertEqual(
+            [source.name for source in staged_sources],
+            ["default", "rick", "hoffman", "risarisa", "nancy"],
+        )
+        for source, declaration in zip(staged_sources[1:], configured.profiles):
+            self.assertEqual(source.source, declaration.source)
+            self.assertEqual(source.ref, commits[source.name])
+        self.assertEqual(client.authenticated_login.call_count, 6)
+        self.assertEqual(client.assert_repository_access.call_count, 6)
+
+    def test_apply_installs_only_missing_profiles_from_their_configured_remote_branch(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ("rick", "nancy"))
+        existing = mock.Mock(declaration=configured.profiles[0])
+        prepared = PreparedProfiles((existing,), (configured.profiles[1],))
+        exact_commit = "1" * 40
+        report = ProfileSyncReport(
+            dry_run=False,
+            profiles=(
+                ProfileSyncResult(
+                    "rick",
+                    "unchanged",
+                    exact_commit,
+                    "snapshot-rick",
+                    ProfileDiff(),
+                    "unchanged",
+                    "safe",
+                ),
+            ),
+            exit_code=0,
+        )
+        tx = FakeTransaction([])
+        staged_sources: list[DistributionSource] = []
+        applied_profiles: list[tuple[str, dict[str, object]]] = []
+
+        def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
+            staged_sources.append(source)
+            return mock.Mock(declaration=source)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token", redactor=SecretRedactor(("token",))
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app, "prepare_profile_snapshots", return_value=prepared
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                return_value=report,
+            ) as sync,
+            mock.patch.object(app, "stage_distribution", side_effect=stage),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                return_value=RemoteSyncResult(
+                    "lifelog", "a" * 40, False, self.root / "shared" / "lifelog"
+                ),
+            ),
+            mock.patch.object(app.Transaction, "begin", return_value=tx),
+            mock.patch.object(app, "apply_root_distribution"),
+            mock.patch.object(
+                app,
+                "apply_profile_distribution",
+                side_effect=lambda staged, *_args, **kwargs: (
+                    self.assertFalse(kwargs["replace_existing"]),
+                    applied_profiles.append(
+                        (staged.declaration.name, kwargs)
+                    ),
+                )[-1],
+            ),
+            mock.patch.object(app, "apply_shared_working_tree"),
+            mock.patch.object(
+                app, "build_dashboard_environment", return_value={"DASH": "value"}
+            ),
+            mock.patch.object(
+                app,
+                "build_profile_environment",
+                return_value={"GH_TOKEN": "token"},
+            ),
+            mock.patch.object(app, "merge_env_file") as merge_env,
+            mock.patch.object(app, "_validate_installed_layout"),
+        ):
+            result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        sync_prepared = sync.call_args.args[0]
+        self.assertEqual(sync_prepared.snapshots, (existing,))
+        self.assertEqual(sync_prepared.missing, ())
+        self.assertEqual(
+            [(source.name, source.ref) for source in staged_sources],
+            [
+                ("default", "main"),
+                ("rick", exact_commit),
+                ("nancy", "main"),
+            ],
+        )
+        self.assertEqual(
+            [name for name, _kwargs in applied_profiles],
+            ["rick", "nancy"],
+        )
+        self.assertNotIn("managed_environment", applied_profiles[0][1])
+        self.assertIs(applied_profiles[0][1]["expected_missing"], False)
+        self.assertEqual(
+            applied_profiles[1][1]["managed_environment"],
+            {"GH_TOKEN": "token"},
+        )
+        self.assertIs(applied_profiles[1][1]["expected_missing"], True)
+        self.assertEqual(
+            [call.args[0] for call in merge_env.call_args_list],
+            [
+                configured.data_root / ".env",
+                configured.profiles[0].target / ".env",
+            ],
+        )
+        self.assertEqual(
+            result["profile_sync"],
+            {"rick": "unchanged", "nancy": "installed"},
+        )
+
+    def test_apply_rejects_existing_and_new_profile_drift_at_every_late_checkpoint(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        checkpoints = (
+            "profile-publication",
+            "distribution-staging",
+            "chrome-validation",
+            "shared-remote-sync",
+        )
+        for checkpoint in checkpoints:
+            for mutation in ("existing-edit", "missing-target-creation"):
+                with self.subTest(checkpoint=checkpoint, mutation=mutation):
+                    case_root = self.root.parent / f"{checkpoint}-{mutation}"
+                    case_root.mkdir()
+                    configured = manifest(case_root)
+                    target = configured.profiles[0].target
+                    if mutation == "existing-edit":
+                        target.mkdir(parents=True)
+                        (target / "distribution.yaml").write_text(
+                            json.dumps(
+                                {
+                                    "name": "rick",
+                                    "version": "0.1.0",
+                                    "hermes_requires": ">=0.18.2",
+                                    "distribution_owned": ["config.yaml"],
+                                    "source": configured.profiles[0].source,
+                                }
+                            ),
+                            encoding="ascii",
+                        )
+                        (target / "config.yaml").write_bytes(b"original\n")
+                        (target / "config.yaml").chmod(0o644)
+
+                    report = ProfileSyncReport(
+                        dry_run=False,
+                        profiles=(
+                            (
+                                ProfileSyncResult(
+                                    "rick",
+                                    "changed",
+                                    "1" * 40,
+                                    "snapshot-rick",
+                                    ProfileDiff(),
+                                    "published",
+                                    "safe",
+                                ),
+                            )
+                            if mutation == "existing-edit"
+                            else ()
+                        ),
+                        exit_code=0,
+                    )
+                    expected_after: dict[
+                        str, tuple[str, int, bytes | None]
+                    ] | None = None
+                    mutated = False
+
+                    def snapshot_target() -> dict[
+                        str, tuple[str, int, bytes | None]
+                    ]:
+                        return {
+                            path.relative_to(target).as_posix(): (
+                                "directory" if path.is_dir() else "file",
+                                stat.S_IMODE(path.stat().st_mode),
+                                None if path.is_dir() else path.read_bytes(),
+                            )
+                            for path in (target, *sorted(target.rglob("*")))
+                        }
+
+                    def mutate() -> None:
+                        nonlocal expected_after, mutated
+                        if mutated:
+                            return
+                        mutated = True
+                        if mutation == "existing-edit":
+                            config = target / "config.yaml"
+                            config.write_bytes(b"late-edit\n")
+                            config.chmod(0o600)
+                        else:
+                            target.mkdir(parents=True)
+                            (target / "distribution.yaml").write_text(
+                                json.dumps(
+                                    {
+                                        "name": "rick",
+                                        "version": "9.9.9",
+                                        "hermes_requires": ">=0.18.2",
+                                        "distribution_owned": ["config.yaml"],
+                                    }
+                                ),
+                                encoding="ascii",
+                            )
+                            (target / "config.yaml").write_bytes(
+                                b"new-local-profile\n"
+                            )
+                            (target / "config.yaml").chmod(0o600)
+                        expected_after = snapshot_target()
+
+                    def synchronize_profiles(
+                        *_args: object,
+                        **_kwargs: object,
+                    ) -> ProfileSyncReport:
+                        if checkpoint == "profile-publication":
+                            mutate()
+                        return report
+
+                    def stage(
+                        source: DistributionSource,
+                        *_args: object,
+                    ) -> mock.Mock:
+                        if (
+                            checkpoint == "distribution-staging"
+                            and source.name == "rick"
+                        ):
+                            mutate()
+                        return mock.Mock(declaration=source)
+
+                    def validate_stages(_stages: object) -> None:
+                        if checkpoint == "chrome-validation":
+                            mutate()
+
+                    def synchronize_shared(
+                        *_args: object,
+                    ) -> RemoteSyncResult:
+                        if checkpoint == "shared-remote-sync":
+                            mutate()
+                        return RemoteSyncResult(
+                            "lifelog",
+                            "a" * 40,
+                            False,
+                            case_root / "shared" / "lifelog",
+                        )
+
+                    self.revalidate_profile_snapshots.side_effect = (
+                        profile_snapshot.revalidate_profile_snapshots
+                    )
+                    self.validate_chrome_mcp_sources.side_effect = validate_stages
+                    with (
+                        mock.patch.object(
+                            app,
+                            "load_manifest",
+                            return_value=configured,
+                        ),
+                        mock.patch.object(
+                            app.Transaction,
+                            "recover_if_needed",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "read_secret_payload",
+                            return_value=mock.Mock(
+                                github_token="token",
+                                redactor=SecretRedactor(("token",)),
+                            ),
+                        ),
+                        mock.patch.object(
+                            app,
+                            "_validate_remote_credentials",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "_validate_profile_credentials",
+                            return_value={},
+                        ),
+                        mock.patch.object(
+                            app.profile_sync,
+                            "synchronize_prepared_profiles",
+                            side_effect=synchronize_profiles,
+                        ),
+                        mock.patch.object(
+                            app,
+                            "stage_distribution",
+                            side_effect=stage,
+                        ),
+                        mock.patch.object(
+                            app,
+                            "synchronize_remote",
+                            side_effect=synchronize_shared,
+                        ),
+                        mock.patch.object(
+                            app.Transaction,
+                            "begin",
+                        ) as transaction_begin,
+                        mock.patch.object(
+                            app,
+                            "apply_root_distribution",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "apply_profile_distribution",
+                        ) as apply_profile,
+                        mock.patch.object(
+                            app,
+                            "apply_shared_working_tree",
+                        ),
+                        mock.patch.object(
+                            app,
+                            "build_profile_environment",
+                            return_value={},
+                        ),
+                        mock.patch.object(app, "merge_env_file"),
+                        mock.patch.object(app, "_validate_installed_layout"),
+                        mock.patch.object(
+                            app,
+                            "_cleanup_apply_resources",
+                            return_value=True,
+                        ),
+                        self.assertRaises(RepositoryError) as raised,
+                    ):
+                        app.apply(
+                            Path("manifest.yaml"),
+                            io.StringIO("payload"),
+                        )
+
+                    self.assertTrue(mutated)
+                    transaction_begin.assert_not_called()
+                    apply_profile.assert_not_called()
+                    self.assertEqual(snapshot_target(), expected_after)
+                    self.assertEqual(
+                        str(raised.exception),
+                        "profile snapshot rejected (local_profile_changed)",
+                    )
+                    failure = raised.exception.profile_sync_report.profiles[0]
+                    self.assertEqual(failure.name, "rick")
+                    self.assertEqual(
+                        failure.category,
+                        "local_profile_changed",
+                    )
+
+    def test_apply_rejects_an_invalid_existing_profile_without_remote_fallback(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        target = self.root / "profiles" / "rick"
+        target.mkdir(parents=True)
+        invalid = b"name: rick\nversion: [\n"
+        (target / "distribution.yaml").write_bytes(invalid)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token", redactor=SecretRedactor(("token",))
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app.profile_sync, "synchronize_prepared_profiles"
+            ) as sync,
+            mock.patch.object(app, "stage_distribution") as stage,
+            mock.patch.object(app, "synchronize_remote") as shared_sync,
+            mock.patch.object(app.Transaction, "begin") as begin,
+            self.assertRaises(RepositoryError),
+        ):
+            app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        sync.assert_not_called()
+        stage.assert_not_called()
+        shared_sync.assert_not_called()
+        begin.assert_not_called()
+        self.assertEqual((target / "distribution.yaml").read_bytes(), invalid)
+        self.assertFalse(any(self.root.glob(".hermes-bootstrap-*")))
+
+    def test_profile_sync_failure_precedes_mutation_and_preserves_partial_report(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(
+            self.root, ("rick", "hoffman", "risarisa", "nancy")
+        )
+        prepared = PreparedProfiles(
+            tuple(mock.Mock(declaration=profile) for profile in configured.profiles),
+            (),
+        )
+        report = ProfileSyncReport(
+            dry_run=False,
+            profiles=(
+                ProfileSyncResult(
+                    "rick",
+                    "changed",
+                    "1" * 40,
+                    "snapshot-rick",
+                    ProfileDiff(),
+                    "published",
+                    "safe",
+                ),
+                ProfileSyncResult(
+                    "hoffman",
+                    "failed",
+                    None,
+                    "snapshot-hoffman",
+                    ProfileDiff(),
+                    "repository",
+                    "safe",
+                ),
+                ProfileSyncResult(
+                    "risarisa",
+                    "changed",
+                    "3" * 40,
+                    "snapshot-risarisa",
+                    ProfileDiff(),
+                    "published",
+                    "safe",
+                ),
+                ProfileSyncResult(
+                    "nancy",
+                    "failed",
+                    None,
+                    "snapshot-nancy",
+                    ProfileDiff(),
+                    "repository",
+                    "safe",
+                ),
+            ),
+            exit_code=RepositoryError.exit_code,
+        )
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token", redactor=SecretRedactor(("token",))
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app, "prepare_profile_snapshots", return_value=prepared
+            ),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                return_value=report,
+            ),
+            mock.patch.object(app, "stage_distribution") as stage,
+            mock.patch.object(app, "synchronize_remote") as shared_sync,
+            mock.patch.object(app.Transaction, "begin") as begin,
+            mock.patch.object(app, "apply_root_distribution") as apply_root,
+            mock.patch.object(app, "apply_profile_distribution") as apply_profile,
+            mock.patch.object(app, "apply_shared_working_tree") as apply_shared,
+            self.assertRaisesRegex(
+                RepositoryError,
+                r"^named profile repository sync failed: hoffman,nancy$",
+            ) as caught,
+        ):
+            app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        stage.assert_not_called()
+        shared_sync.assert_not_called()
+        begin.assert_not_called()
+        apply_root.assert_not_called()
+        apply_profile.assert_not_called()
+        apply_shared.assert_not_called()
+        self.assertIs(caught.exception.profile_sync_report, report)
+        self.assertEqual(
+            [
+                (item.name, item.status, item.commit)
+                for item in caught.exception.profile_sync_report.profiles
+            ],
+            [
+                ("rick", "changed", "1" * 40),
+                ("hoffman", "failed", None),
+                ("risarisa", "changed", "3" * 40),
+                ("nancy", "failed", None),
+            ],
+        )
+        self.assertNotIn("rick", str(caught.exception))
+        self.assertNotIn("risarisa", str(caught.exception))
+        self.assertFalse(any(self.root.glob(".hermes-bootstrap-*")))
+
+    def test_apply_cleans_profile_snapshots_and_git_stages_without_local_changes(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        target = self.write_installed_profile()
+        config = target / "config.yaml"
+        config.write_bytes(b"local-authoritative\n")
+        config.chmod(0o640)
+        manifest_path = target / "distribution.yaml"
+        before = {
+            path.name: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
+            for path in (manifest_path, config)
+        }
+        exact_commit = "1" * 40
+        report = ProfileSyncReport(
+            dry_run=False,
+            profiles=(
+                ProfileSyncResult(
+                    "rick",
+                    "unchanged",
+                    exact_commit,
+                    "snapshot-rick",
+                    ProfileDiff(),
+                    "unchanged",
+                    "safe",
+                ),
+            ),
+            exit_code=0,
+        )
+        tx = FakeTransaction([])
+
+        def sync_profiles(
+            prepared: PreparedProfiles, _auth: GitAuth, *, dry_run: bool
+        ) -> ProfileSyncReport:
+            self.assertFalse(dry_run)
+            git_scratch = prepared.snapshots[0].root.parent / "git-scratch"
+            git_scratch.mkdir()
+            (git_scratch / "private").write_bytes(b"temporary")
+            return report
+
+        def stage(source: DistributionSource, scratch: Path, _auth: GitAuth):
+            stage_root = scratch / f"stage-{source.name}"
+            stage_root.mkdir()
+            (stage_root / "private").write_bytes(b"temporary")
+            return mock.Mock(declaration=source)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token", redactor=SecretRedactor(("token",))
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app.profile_sync,
+                "synchronize_prepared_profiles",
+                side_effect=sync_profiles,
+            ),
+            mock.patch.object(app, "stage_distribution", side_effect=stage),
+            mock.patch.object(
+                app,
+                "synchronize_remote",
+                return_value=RemoteSyncResult(
+                    "lifelog", "a" * 40, False, self.root / "shared" / "lifelog"
+                ),
+            ),
+            mock.patch.object(app.Transaction, "begin", return_value=tx),
+            mock.patch.object(app, "apply_root_distribution"),
+            mock.patch.object(app, "apply_profile_distribution"),
+            mock.patch.object(app, "apply_shared_working_tree"),
+            mock.patch.object(
+                app, "build_dashboard_environment", return_value={"DASH": "value"}
+            ),
+            mock.patch.object(
+                app,
+                "build_profile_environment",
+                return_value={"GH_TOKEN": "token"},
+            ),
+            mock.patch.object(app, "merge_env_file"),
+            mock.patch.object(app, "_validate_installed_layout"),
+        ):
+            result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertEqual(result["profile_sync"], {"rick": "unchanged"})
+        self.assertEqual(
+            {
+                path.name: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
+                for path in (manifest_path, config)
+            },
+            before,
+        )
+        self.assertFalse(any(self.root.glob(".hermes-bootstrap-*")))
 
     def test_source_contract_failure_precedes_remote_sync_and_transaction(self) -> None:
         from hermes_bootstrap import app
@@ -348,7 +1363,7 @@ class AppTests(unittest.TestCase):
         remote = RemoteSyncResult("lifelog", "a" * 40, False, self.root / ".remote")
 
         def failpoint(name: str) -> None:
-            if name == "env-merge:rick":
+            if name == "env-merge:default":
                 raise ApplyError("injected failure")
 
         with (
@@ -398,7 +1413,13 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "synchronize_remote", return_value=remote),
             mock.patch.object(app.Transaction, "begin", return_value=tx),
             mock.patch.object(app, "apply_root_distribution", side_effect=lambda *_: events.append("root")),
-            mock.patch.object(app, "apply_profile_distribution", side_effect=lambda *_: events.append("profile:rick")),
+            mock.patch.object(
+                app,
+                "apply_profile_distribution",
+                side_effect=lambda *_args, **_kwargs: events.append(
+                    "profile:rick"
+                ),
+            ),
             mock.patch.object(app, "apply_shared_working_tree", side_effect=lambda *_: events.append("shared:lifelog")),
             mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
             mock.patch.object(app, "build_profile_environment", return_value={"GH_TOKEN": "token"}),
@@ -410,7 +1431,7 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(
             events,
-            ["root", "profile:rick", "shared:lifelog", "env:data", "env:rick", "validate", "rollback"],
+            ["root", "profile:rick", "shared:lifelog", "env:data", "validate", "rollback"],
         )
         self.assertNotIn("commit", events)
 
@@ -474,6 +1495,169 @@ class AppTests(unittest.TestCase):
         self.assertEqual(auth.token, "active-token")
         self.assertTrue(sync.call_args.kwargs["require_canonical"])
 
+    def test_sync_profiles_uses_process_active_home_then_root_token_precedence(self) -> None:
+        from hermes_bootstrap import app
+
+        root_env = self.root / ".env"
+        root_env.write_text("GH_TOKEN='root-token'\n", encoding="utf-8")
+        active = self.root / "profiles" / "rick"
+        active.mkdir(parents=True)
+        (active / ".env").write_text(
+            "$(touch should-not-exist)\nGH_TOKEN='active-token'\n",
+            encoding="utf-8",
+        )
+        expected_report = ProfileSyncReport(dry_run=True, profiles=(), exit_code=0)
+        cases = (
+            (
+                {"GH_TOKEN": "process-token", "HERMES_HOME": str(active)},
+                "process-token",
+            ),
+            ({"HERMES_HOME": str(active)}, "active-token"),
+            ({}, "root-token"),
+        )
+
+        for environ, expected_token in cases:
+            with (
+                self.subTest(expected_token=expected_token),
+                mock.patch.object(app, "load_manifest", return_value=self.manifest),
+                mock.patch.object(
+                    app.profile_sync,
+                    "synchronize_profiles",
+                    return_value=expected_report,
+                ) as sync,
+            ):
+                report = app.sync_profiles(
+                    Path("manifest.yaml"), dry_run=True, environ=environ
+                )
+
+            self.assertIs(report, expected_report)
+            auth = sync.call_args.args[1]
+            self.assertEqual(auth.token, expected_token)
+            self.assertEqual(
+                sync.call_args.kwargs,
+                {"dry_run": True},
+            )
+        self.assertFalse((active / "should-not-exist").exists())
+
+    def test_sync_profiles_reports_missing_credentials_for_every_configured_profile(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ("alpha", "beta", "gamma"))
+        with (
+            mock.patch.object(app, "load_manifest", return_value=configured),
+            mock.patch.object(app.profile_sync, "synchronize_profiles") as sync,
+        ):
+            report = app.sync_profiles(Path("manifest.yaml"), dry_run=False, environ={})
+
+        self.assertEqual(report.exit_code, CredentialError.exit_code)
+        self.assertEqual(
+            [profile.name for profile in report.profiles],
+            [profile.name for profile in configured.profiles],
+        )
+        self.assertTrue(
+            all(
+                profile.status == "failed"
+                and profile.category == "credentials_unavailable"
+                and profile.message == "GitHub credentials are unavailable"
+                for profile in report.profiles
+            )
+        )
+        sync.assert_not_called()
+
+    def test_sync_profiles_sanitizes_repository_and_unexpected_failures_for_all_profiles(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = manifest(self.root, ("alpha", "beta", "gamma"))
+        token = "profile-sync-token-marker"
+        (self.root / ".env").write_text(f"GH_TOKEN={token}\n", encoding="utf-8")
+
+        for failure in (
+            RepositoryError(token),
+            RuntimeError(token),
+        ):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                mock.patch.object(app, "load_manifest", return_value=configured),
+                mock.patch.object(
+                    app.profile_sync,
+                    "synchronize_profiles",
+                    side_effect=failure,
+                ),
+            ):
+                report = app.sync_profiles(
+                    Path("manifest.yaml"), dry_run=False, environ={}
+                )
+
+            self.assertEqual(report.exit_code, RepositoryError.exit_code)
+            self.assertEqual(
+                [profile.name for profile in report.profiles],
+                [profile.name for profile in configured.profiles],
+            )
+            self.assertTrue(
+                all(
+                    profile.status == "failed"
+                    and profile.category == "repository"
+                    and profile.message == "profile synchronization failed"
+                    for profile in report.profiles
+                )
+            )
+            self.assertNotIn(token, json.dumps(report.as_dict()))
+            self.assertIsNone(failure.__traceback__)
+            self.assertIsNone(failure.__context__)
+
+    def test_sync_profiles_reports_unsafe_runtime_and_token_files_as_credentials_unavailable(self) -> None:
+        from hermes_bootstrap import app
+
+        for scenario in ("unrelated", "symlink", "duplicate", "hardlink", "fifo"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "data"
+                root.mkdir()
+                configured = manifest(root, ("alpha", "beta"))
+                environ: dict[str, str] = {}
+                if scenario == "unrelated":
+                    unrelated = root.parent / "unrelated"
+                    unrelated.mkdir()
+                    environ["HERMES_HOME"] = str(unrelated)
+                elif scenario == "symlink":
+                    outside = root.parent / "outside"
+                    outside.mkdir()
+                    linked = root / "linked"
+                    linked.symlink_to(outside, target_is_directory=True)
+                    environ["HERMES_HOME"] = str(linked)
+                elif scenario == "duplicate":
+                    (root / ".env").write_text(
+                        "GH_TOKEN=one\nGH_TOKEN=two\n", encoding="utf-8"
+                    )
+                elif scenario == "hardlink":
+                    external = root.parent / "external.env"
+                    external.write_text("GH_TOKEN=secret\n", encoding="utf-8")
+                    os.link(external, root / ".env")
+                else:
+                    os.mkfifo(root / ".env")
+
+                with (
+                    mock.patch.object(app, "load_manifest", return_value=configured),
+                    mock.patch.object(
+                        app.profile_sync, "synchronize_profiles"
+                    ) as sync,
+                ):
+                    report = app.sync_profiles(
+                        Path("manifest.yaml"), dry_run=True, environ=environ
+                    )
+
+                self.assertEqual(report.exit_code, CredentialError.exit_code)
+                self.assertEqual(
+                    [profile.name for profile in report.profiles],
+                    [profile.name for profile in configured.profiles],
+                )
+                self.assertTrue(
+                    all(
+                        profile.category == "credentials_unavailable"
+                        for profile in report.profiles
+                    )
+                )
+                sync.assert_not_called()
+
     def test_sync_repository_rejects_unrelated_or_symlinked_hermes_home(self) -> None:
         from hermes_bootstrap import app
 
@@ -491,6 +1675,7 @@ class AppTests(unittest.TestCase):
 
     def test_apply_cleans_earlier_private_remote_stage_when_later_sync_fails(self) -> None:
         from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
 
         second = SharedRepository(
             "notes", "https://github.com/example/notes.git", "main",
@@ -501,13 +1686,23 @@ class AppTests(unittest.TestCase):
             self.manifest.root_distribution, self.manifest.profiles,
             (*self.manifest.shared_repositories, second),
         )
-        private = self.root / "shared" / ".hermes-repository-first"
-        private.parent.mkdir()
-        private.mkdir()
+        private_parent = self.root / "shared"
+        private_parent.mkdir()
+        private_directory = create_private_directory(
+            private_parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
         sentinel = self.root / "local-sentinel"
         sentinel.write_bytes(b"unchanged")
         sentinel.chmod(0o640)
-        first = RemoteSyncResult("lifelog", "a" * 40, False, private)
+        first = RemoteSyncResult(
+            "lifelog",
+            "a" * 40,
+            False,
+            private,
+            private_directory,
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -528,19 +1723,76 @@ class AppTests(unittest.TestCase):
 
     def test_remote_cleanup_failure_wins_and_never_removes_canonical_or_legacy(self) -> None:
         from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
 
         repo = self.manifest.shared_repositories[0]
-        private = repo.target.parent / ".hermes-repository-private"
-        private.parent.mkdir()
-        private.mkdir()
+        repo.target.mkdir(parents=True)
+        (repo.target / "canonical.txt").write_text("canonical\n", encoding="utf-8")
+        self.assertIsNotNone(repo.legacy_target)
+        assert repo.legacy_target is not None
+        repo.legacy_target.mkdir(parents=True)
+        (repo.legacy_target / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        private_directory = create_private_directory(
+            repo.target.parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
+        os.mkfifo(private / "retained-fifo")
         results = [
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.target)),
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.legacy_target)),
-            (repo, RemoteSyncResult(repo.name, "a" * 40, False, private)),
+            (
+                repo,
+                RemoteSyncResult(
+                    repo.name,
+                    "a" * 40,
+                    False,
+                    private,
+                    private_directory,
+                ),
+            ),
         ]
-        with mock.patch.object(app, "_remove_tree", return_value=False) as remove:
-            self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
-        remove.assert_called_once_with(private)
+        self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
+        self.assertFalse(app._cleanup_apply_resources(None, results, self.root))
+        self.assertTrue(private.exists())
+        self.assertEqual(
+            (repo.target / "canonical.txt").read_text(encoding="utf-8"),
+            "canonical\n",
+        )
+        self.assertEqual(
+            (repo.legacy_target / "legacy.txt").read_text(encoding="utf-8"),
+            "legacy\n",
+        )
+
+    def test_remote_cleanup_accepts_private_owner_released_by_publication(self) -> None:
+        from hermes_bootstrap import app
+        from hermes_bootstrap.filesystem import create_private_directory
+
+        repo = self.manifest.shared_repositories[0]
+        repo.target.parent.mkdir(parents=True)
+        private_directory = create_private_directory(
+            repo.target.parent,
+            prefix=".hermes-repository-",
+        )
+        private = private_directory.path
+        (private / "published.txt").write_text("published\n", encoding="utf-8")
+        private.rename(repo.target)
+        private_directory.release()
+        result = RemoteSyncResult(
+            repo.name,
+            "a" * 40,
+            False,
+            private,
+            private_directory,
+        )
+
+        self.assertTrue(
+            app._cleanup_apply_resources(None, [(repo, result)], self.root)
+        )
+        self.assertEqual(
+            (repo.target / "published.txt").read_text(encoding="utf-8"),
+            "published\n",
+        )
 
     def test_apply_surfaces_strict_scratch_cleanup_failure(self) -> None:
         from hermes_bootstrap import app
@@ -552,10 +1804,60 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "_validate_remote_credentials"),
             mock.patch.object(app, "_validate_profile_credentials"),
             mock.patch.object(app, "stage_distribution", side_effect=ApplyError("stage failed")),
-            mock.patch.object(app, "_remove_tree", return_value=False),
+            mock.patch.object(
+                app.PrivateDirectory,
+                "cleanup",
+                return_value=False,
+            ),
         ):
             with self.assertRaisesRegex(ApplyError, "clean bootstrap staging"):
                 app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+    def test_outer_scratch_anomaly_is_retained_and_cleanup_error_is_redacted(
+        self,
+    ) -> None:
+        from hermes_bootstrap import app
+
+        sensitive_marker = "outer-scratch-sensitive-marker"
+        scratch_path: Path | None = None
+
+        def leave_anomaly(_manifest, scratch, *, allow_missing):
+            nonlocal scratch_path
+            self.assertIs(_manifest, self.manifest)
+            self.assertTrue(allow_missing)
+            scratch_path = scratch
+            os.mkfifo(scratch / "retained-fifo")
+            raise RepositoryError(sensitive_marker)
+
+        with (
+            mock.patch.object(app, "load_manifest", return_value=self.manifest),
+            mock.patch.object(app.Transaction, "recover_if_needed"),
+            mock.patch.object(
+                app,
+                "read_secret_payload",
+                return_value=mock.Mock(
+                    github_token="token",
+                    redactor=SecretRedactor(("token",)),
+                ),
+            ),
+            mock.patch.object(app, "_validate_remote_credentials"),
+            mock.patch.object(app, "_validate_profile_credentials"),
+            mock.patch.object(
+                app,
+                "prepare_profile_snapshots",
+                side_effect=leave_anomaly,
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ApplyError,
+                "could not clean bootstrap staging resources",
+            ) as caught:
+                app.apply(Path("manifest.yaml"), io.StringIO("payload"))
+
+        self.assertIsNotNone(scratch_path)
+        assert scratch_path is not None
+        self.assertTrue((scratch_path / "retained-fifo").exists())
+        self.assertNotIn(sensitive_marker, repr(caught.exception))
 
     def test_every_local_failpoint_restores_exact_state_and_retains_remote_result(self) -> None:
         from hermes_bootstrap import app
@@ -587,6 +1889,25 @@ class AppTests(unittest.TestCase):
                 profile_env = profile_root / ".env"
                 shared_marker = data_root / "shared-local"
                 remote_marker = Path(directory) / "remote-result"
+                prepared = PreparedProfiles(
+                    (mock.Mock(declaration=configured.profiles[0]),),
+                    (),
+                )
+                profile_report = ProfileSyncReport(
+                    dry_run=False,
+                    profiles=(
+                        ProfileSyncResult(
+                            "rick",
+                            "unchanged",
+                            "1" * 40,
+                            "snapshot-rick",
+                            ProfileDiff(),
+                            "unchanged",
+                            "safe",
+                        ),
+                    ),
+                    exit_code=0,
+                )
 
                 def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
                     return mock.Mock(declaration=source)
@@ -600,7 +1921,12 @@ class AppTests(unittest.TestCase):
                     root_file.write_bytes(b"root-after")
                     root_file.chmod(0o600)
 
-                def profile_apply(_stage: object, _root: Path, tx: object) -> None:
+                def profile_apply(
+                    _stage: object,
+                    _root: Path,
+                    tx: object,
+                    **_kwargs: object,
+                ) -> None:
                     tx.snapshot(profile_link)
                     profile_link.unlink()
                     profile_link.write_bytes(b"not-a-link")
@@ -623,6 +1949,16 @@ class AppTests(unittest.TestCase):
                     mock.patch.object(app, "read_secret_payload", return_value=mock.Mock(github_token="token", redactor=SecretRedactor(("token",)))),
                     mock.patch.object(app, "_validate_remote_credentials"),
                     mock.patch.object(app, "_validate_profile_credentials"),
+                    mock.patch.object(
+                        app,
+                        "prepare_profile_snapshots",
+                        return_value=prepared,
+                    ),
+                    mock.patch.object(
+                        app.profile_sync,
+                        "synchronize_prepared_profiles",
+                        return_value=profile_report,
+                    ),
                     mock.patch.object(app, "stage_distribution", side_effect=stage),
                     mock.patch.object(app, "synchronize_remote", side_effect=sync),
                     mock.patch.object(app, "apply_root_distribution", side_effect=root_apply),
