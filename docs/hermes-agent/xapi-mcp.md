@@ -49,7 +49,9 @@ task hermes:xapi:auth
 
 The command runs X's documented headless OAuth flow. Complete the displayed
 browser/code exchange once; subsequent service restarts reuse and refresh the
-cache under `~/.hermes/.xurl`.
+cache under `~/.hermes/.xurl`. Unix hosts run the bash adapter; Windows hosts
+run `scripts/powershell/hermes-xapi.ps1` and read the same 1Password item
+through native `op.exe`.
 
 Start or recreate the stack after authentication:
 
@@ -65,8 +67,8 @@ task hermes:bootstrap
 ```
 
 This path uses the same 1Password-backed credential wrapper as
-`task hermes:up`, so no `X_API_CLIENT_*` values need to be exported before
-bootstrap.
+`task hermes:up` on Unix and Windows, so no `X_API_CLIENT_*` values need to be
+exported before bootstrap.
 
 ## Verification
 

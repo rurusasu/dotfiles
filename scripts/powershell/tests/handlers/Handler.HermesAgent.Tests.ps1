@@ -4,6 +4,7 @@ BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../lib/HermesBootstrap.ps1
+    . $PSScriptRoot/../../lib/HermesXApi.ps1
     . $PSScriptRoot/../../handlers/Handler.NixOSWSL.ps1
     . $PSScriptRoot/../../handlers/Handler.NixRebuild.ps1
     . $PSScriptRoot/../../handlers/Handler.HermesAgent.ps1
@@ -56,6 +57,10 @@ Describe 'HermesAgentHandler' {
         Mock Invoke-HermesBootstrap {
             $script:eventLog.Add('bootstrap')
             [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
+        }
+        Mock Invoke-HermesXApiCredentialScope {
+            $script:eventLog.Add('xapi-credentials')
+            & $Action
         }
         Mock Invoke-WebRequest {
             $script:readinessAttempts++
@@ -155,7 +160,7 @@ Describe 'HermesAgentHandler' {
                 "compose -f $script:composeFile stop hermes",
                 "compose -f $script:composeFile up -d --force-recreate"
             )
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up', 'health')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
                 $Uri -eq 'http://127.0.0.1:8642/health' -and
                 $Method -eq 'Get' -and
@@ -164,6 +169,7 @@ Describe 'HermesAgentHandler' {
             Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
                 $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
             }
+            Should -Invoke Invoke-HermesXApiCredentialScope -Times 1 -Exactly
         }
 
         It 'does not bootstrap or recreate services when compose validation fails' {
@@ -253,6 +259,20 @@ Describe 'HermesAgentHandler' {
             $result.Message | Should -Match 'startup failure'
             $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
             $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
+        }
+
+        It 'fails without exposing X API credentials when credential retrieval fails' {
+            Mock Invoke-HermesXApiCredentialScope {
+                $script:eventLog.Add('xapi-credentials')
+                throw [System.InvalidOperationException]::new('Hermes X API credential retrieval failed.')
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
+            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
         }
 
         It 'waits through transient API failures before reporting startup success' {
@@ -348,7 +368,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         }
 
         It 'propagates migration exit code 5 without starting services or writing host content' {
@@ -396,6 +416,7 @@ $libPath = Join-Path $RepositoryRoot 'scripts/powershell/lib'
 . (Join-Path $libPath 'SetupHandler.ps1')
 . (Join-Path $libPath 'Invoke-ExternalCommand.ps1')
 . (Join-Path $libPath 'HermesBootstrap.ps1')
+. (Join-Path $libPath 'HermesXApi.ps1')
 
 $handlersPath = Join-Path $RepositoryRoot 'scripts/powershell/handlers'
 $handlers = Get-SetupHandler -HandlersPath $handlersPath
@@ -403,8 +424,11 @@ $hermes = @($handlers | Where-Object { $_.Name -eq 'HermesAgent' })
 if ($hermes.Count -ne 1) { throw "Expected one Hermes handler, found $($hermes.Count)." }
 
 $adapter = Get-Command Invoke-HermesBootstrap -CommandType Function -ErrorAction Stop
+$xapiAdapter = Get-Command Invoke-HermesXApiCredentialScope -CommandType Function -ErrorAction Stop
 $expectedAdapterPath = (Resolve-Path -LiteralPath (Join-Path $libPath 'HermesBootstrap.ps1')).Path
+$expectedXApiAdapterPath = (Resolve-Path -LiteralPath (Join-Path $libPath 'HermesXApi.ps1')).Path
 $actualAdapterPath = (Resolve-Path -LiteralPath $adapter.ScriptBlock.File).Path
+$actualXApiAdapterPath = (Resolve-Path -LiteralPath $xapiAdapter.ScriptBlock.File).Path
 $types = @(
     ('HermesBootstrapBoundedDrain' -as [type]),
     ('HermesBootstrapErrorHistory' -as [type])
@@ -416,6 +440,7 @@ $types = @(
     Phase = $hermes[0].Phase
     Order = $hermes[0].Order
     AdapterIsActual = $actualAdapterPath -eq $expectedAdapterPath
+    XApiAdapterIsActual = $actualXApiAdapterPath -eq $expectedXApiAdapterPath
     BootstrapTypeCount = @($types | Where-Object { $null -ne $_ }).Count
 } | ConvertTo-Json -Compress
 '@
@@ -432,6 +457,7 @@ $types = @(
             $loaded.Phase | Should -Be 2
             $loaded.Order | Should -Be 56
             $loaded.AdapterIsActual | Should -BeTrue
+            $loaded.XApiAdapterIsActual | Should -BeTrue
             $loaded.BootstrapTypeCount | Should -Be 2
         }
 

@@ -15,6 +15,7 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/Invoke-ExternalCommand.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesBootstrap.ps1')
+. (Join-Path $PSScriptRoot 'lib/HermesXApi.ps1')
 
 function New-HermesBootstrapEntrypointResult {
     [CmdletBinding()]
@@ -280,9 +281,21 @@ function Invoke-HermesBootstrapEntrypoint {
                     -Message $message
             }
 
-            $startup = Invoke-HermesBootstrapDockerPhase `
-                -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
-                -FailureMessage 'Hermes Compose startup failed.'
+            try {
+                $startup = Invoke-HermesXApiCredentialScope -Action {
+                    Invoke-HermesBootstrapDockerPhase `
+                        -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
+                        -FailureMessage 'Hermes Compose startup failed.'
+                }
+            }
+            catch {
+                if ($_.Exception.Message -ne 'Hermes X API credential retrieval failed.') {
+                    throw
+                }
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode 1 `
+                    -Message 'Hermes X API credential retrieval failed.'
+            }
             if ($startup.ExitCode -ne 0) { return $startup }
 
             if (-not (Wait-HermesBootstrapApi)) {

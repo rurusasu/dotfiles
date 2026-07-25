@@ -12,6 +12,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
 HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
+XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
 
 
 class TaskfileContractTests(unittest.TestCase):
@@ -25,11 +26,23 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:xapi:auth"),
         )
         self.assertIn(
+            "scripts/powershell/hermes-xapi.ps1 -Action auth",
+            self._command_text("hermes:xapi:auth"),
+        )
+        self.assertIn(
             "scripts/sh/hermes-xapi.sh restart",
             self._command_text("hermes:xapi:restart"),
         )
         self.assertIn(
+            "scripts/powershell/hermes-xapi.ps1 -Action restart",
+            self._command_text("hermes:xapi:restart"),
+        )
+        self.assertIn(
             "scripts/sh/hermes-xapi.sh up",
+            self._command_text("hermes:up"),
+        )
+        self.assertIn(
+            "scripts/powershell/hermes-xapi.ps1 -Action up",
             self._command_text("hermes:up"),
         )
         self.assertIn(
@@ -53,12 +66,19 @@ class TaskfileContractTests(unittest.TestCase):
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
+        windows_wrapper = XAPI_WINDOWS_WRAPPER.read_text(encoding="utf-8")
         adapter = HERMES_AGENT.read_text(encoding="utf-8")
 
         self.assertIn("dotfiles_hermes_with_xapi_credentials", wrapper)
         self.assertIn("xurl auth oauth2 --headless", wrapper)
         self.assertIn("up -d --force-recreate xapi-mcp", wrapper)
         self.assertIn("up -d --force-recreate", wrapper)
+        self.assertIn("Invoke-HermesXApiCredentialScope", windows_wrapper)
+        self.assertIn("xurl auth oauth2 --headless", windows_wrapper)
+        self.assertIn("'up', '-d', '--force-recreate', 'xapi-mcp'", windows_wrapper)
+        self.assertIn("'up', '-d', '--force-recreate'", windows_wrapper)
+        self.assertIn("X_API_CLIENT_ID", windows_wrapper)
+        self.assertIn("X_API_CLIENT_SECRET", windows_wrapper)
 
         self.assertIn("Hermes X API MCP", adapter)
         self.assertIn("X_API_CLIENT_ID", adapter)

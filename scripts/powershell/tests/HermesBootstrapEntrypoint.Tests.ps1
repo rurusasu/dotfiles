@@ -95,6 +95,11 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             }
         }
 
+        Mock Invoke-HermesXApiCredentialScope {
+            $script:eventLog.Add('xapi-credentials')
+            & $Action
+        }
+
         Mock Invoke-WebRequest {
             [PSCustomObject]@{ StatusCode = 200 }
         }
@@ -126,7 +131,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 0
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         $script:dockerCalls | Should -Be @(
             'info',
             'compose version',
@@ -160,6 +165,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
             $ComposeFile -eq $script:composeFile -and $DataDir -eq $script:dataDir
         }
+        Should -Invoke Invoke-HermesXApiCredentialScope -Times 1 -Exactly
         Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
             $Uri -eq 'http://127.0.0.1:8642/health' -and
             $Method -eq 'Get' -and
@@ -427,7 +433,24 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 29
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
+    }
+
+    It 'should fail without exposing X API credentials when credential retrieval fails' {
+        Mock Invoke-HermesXApiCredentialScope {
+            $script:eventLog.Add('xapi-credentials')
+            throw [System.InvalidOperationException]::new('Hermes X API credential retrieval failed.')
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
+        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
     }
 }

@@ -26,7 +26,10 @@ adapter with the canonical Compose file. On Windows, it runs
 Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
 rebuild. Both adapters validate Compose, build `hermes`, `hermes-bootstrap`,
 and `xapi-mcp`, run the container bootstrap, and recreate the stack only after
-success. The full installer chains remain:
+success. The final recreate is wrapped with the host X API credential adapter
+on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
+configured 1Password item instead of being exported or stored locally. The full
+installer chains remain:
 
 ```text
 install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
