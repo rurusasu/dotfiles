@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+if [ "$#" -eq 3 ] && [ "$1" = signin ] && [ "$2" = --account ] && \
+	[ "$3" = my.1password.com ]; then
+	printf 'acceptance-session\n'
+	exit 0
+fi
+
 if [ "$#" -ne 9 ] || [ "$1" != item ] || [ "$2" != get ] || \
 	[ "$4" != --account ] || [ "$5" != my.1password.com ] || \
 	[ "$6" != --vault ] || [ "$7" != openclaw ] || \
@@ -17,6 +23,10 @@ case "$3" in
 	"SlackBot-Hoffman" | \
 	"SlackBot-Risarisa" | \
 	"SlackBot-Nancy") ;;
+"Hermes X API MCP")
+	printf '{"id":"acceptance-Hermes X API MCP","fields":[{"label":"X_API_CLIENT_ID","value":"acceptance-x-api-client-id"},{"label":"X_API_CLIENT_SECRET","value":"acceptance-x-api-client-secret"}]}\n'
+	exit 0
+	;;
 *)
 	printf 'acceptance op fixture rejected item: %s\n' "$3" >&2
 	exit 2

@@ -2,6 +2,9 @@ services:
   hermes:
     image: nginx:1.29-alpine
 
+  xapi-mcp:
+    image: nginx:1.29-alpine
+
   acceptance:
     image: nginx:1.29-alpine
     command:

@@ -61,7 +61,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
             }
 
-            $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap'))
+            $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap', 'xapi-mcp'))
             if (-not $build.Success) {
                 return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
             }

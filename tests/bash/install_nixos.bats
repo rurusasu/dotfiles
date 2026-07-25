@@ -121,8 +121,8 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap xapi-mcp")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap xapi-mcp")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
 	[ "$(line_of 'hermes-bootstrap secret-plan')" -lt "$(line_of 'hermes-bootstrap apply')" ]
 	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" ]

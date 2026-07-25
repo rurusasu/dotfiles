@@ -76,6 +76,17 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'"id":"acceptance-SlackBot-Nancy"'* ]]
 
+	run "$op" signin --account my.1password.com
+	[ "$status" -eq 0 ]
+	[[ "$output" == 'acceptance-session' ]]
+
+	run "$op" item get "Hermes X API MCP" \
+		--account my.1password.com --vault openclaw --format json
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'"id":"acceptance-Hermes X API MCP"'* ]]
+	[[ "$output" == *'"label":"X_API_CLIENT_ID"'* ]]
+	[[ "$output" == *'"label":"X_API_CLIENT_SECRET"'* ]]
+
 	run "$op" item get "Unapproved Item" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -ne 0 ]
@@ -86,6 +97,7 @@ EOF
 
 	grep -Fq 'exec /bin/httpd -f -p 80 -h /www' "$compose"
 	grep -Fq "exec nginx -g 'daemon off;'" "$compose"
+	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
 }

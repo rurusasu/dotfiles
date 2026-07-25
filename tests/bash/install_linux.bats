@@ -160,7 +160,7 @@ assert_log_order() {
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap" \
+		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap xapi-mcp" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \

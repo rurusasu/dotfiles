@@ -151,7 +151,7 @@ Describe 'HermesAgentHandler' {
             $browserDir | Should -Exist
             $script:dockerCalls | Should -Be @(
                 "compose -f $script:composeFile config --quiet",
-                "compose -f $script:composeFile build hermes hermes-bootstrap",
+                "compose -f $script:composeFile build hermes hermes-bootstrap xapi-mcp",
                 "compose -f $script:composeFile stop hermes",
                 "compose -f $script:composeFile up -d --force-recreate"
             )
@@ -184,7 +184,7 @@ Describe 'HermesAgentHandler' {
         It 'does not request secrets or recreate services when image build fails' {
             Mock Invoke-Docker {
                 $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments[-1] -eq 'hermes-bootstrap') {
+                if ($Arguments[-1] -eq 'xapi-mcp') {
                     $global:LASTEXITCODE = 18
                     return 'build failure'
                 }

@@ -526,7 +526,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<SlackBot-Nancy>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
+	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<SlackBot-Nancy>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
 	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 9 ]
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:slack_default item:slack_rick item:slack_hoffman item:slack_risarisa item:slack_nancy end:' ]
