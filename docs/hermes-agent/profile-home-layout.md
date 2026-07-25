@@ -47,6 +47,10 @@ host ~/.hermes/                    container /opt/data/
   profile uses the same path.
 - `core/lifelog` is accepted only as a migration source and is absent after
   bootstrap. Runtime configuration uses `/opt/data/shared/lifelog`.
+- Bootstrap installs the shared X API MCP endpoint into every staged managed
+  distribution as `mcp_servers.xapi.url: http://xapi-mcp:8080/mcp` with
+  `connect_timeout: 300`. The endpoint is served by the separate Compose
+  `xapi-mcp` container and uses the shared root `.xurl` OAuth cache.
 
 Remote named-profile repositories are exact local projections: canonical
 `.gitignore`, canonical `distribution.yaml`, and declared owned paths only.

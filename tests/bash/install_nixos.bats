@@ -23,6 +23,7 @@ setup() {
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
 	export DOTFILES_CURRENT_SYSTEM_PATH="$CURRENT_SYSTEM"
@@ -65,7 +66,11 @@ exec "$@"
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
-printf "%s\n" "$HERMES_ITEM_JSON"
+if [ "${3:-}" = "Hermes X API MCP" ]; then
+	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
+else
+	printf "%s\n" "$HERMES_ITEM_JSON"
+fi
 '
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
@@ -116,14 +121,15 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap xapi-mcp")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build hermes hermes-bootstrap xapi-mcp")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
 	[ "$(line_of 'hermes-bootstrap secret-plan')" -lt "$(line_of 'hermes-bootstrap apply')" ]
 	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" ]
 	[ "$(line_of 'docker compose')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 7 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 8 ]
+	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 

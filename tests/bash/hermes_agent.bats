@@ -20,6 +20,7 @@ setup() {
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
+	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
 	export OP_DELAY_SECONDS=0
@@ -42,7 +43,11 @@ fi
 if [[ $OP_DELAY_SECONDS != 0 ]]; then
 	/bin/sleep "$OP_DELAY_SECONDS"
 fi
-printf "%s\n" "$OP_ITEM_JSON"
+if [ "${3:-}" = "Hermes X API MCP" ]; then
+	printf "%s\n" "$XAPI_OP_ITEM_JSON"
+else
+	printf "%s\n" "$OP_ITEM_JSON"
+fi
 '
 	write_stub docker '
 printf "docker" >>"$COMMAND_LOG"
@@ -389,6 +394,22 @@ dotfiles_hermes_browser_data_dir
 	[ "$output" = "$TEST_HOME/custom-data/.browser" ]
 }
 
+@test "injects X API OAuth credentials from 1Password for explicit wrapper commands" {
+	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
+	grep -q '^op <item> <get> <Hermes X API MCP> <--account> <my.1password.com> <--vault> <openclaw> <--format> <json>$' "$COMMAND_LOG"
+	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
+}
+
 @test "fails preflight before Compose when op is unavailable" {
 	run_start_stack op
 
@@ -505,8 +526,8 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<SlackBot-Nancy>' '<up> <-d> <--force-recreate>'
-	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 7 ]
+	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<SlackBot-Nancy>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
+	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 9 ]
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:slack_default item:slack_rick item:slack_hoffman item:slack_risarisa item:slack_nancy end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null

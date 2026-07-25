@@ -175,6 +175,12 @@ tasks:
 
   hermes:bootstrap:
     desc: Bootstrap the Hermes runtime through the supported host adapter
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
     cmds:
       - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
         platforms: [linux, darwin]
@@ -214,7 +220,39 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp xapi-mcp
+
+  hermes:xapi:auth:
+    desc: Authenticate the X MCP bridge with the headless OAuth flow
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh auth
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action auth -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
+
+  hermes:xapi:restart:
+    desc: Recreate the Hermes X MCP container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh restart
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action restart -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
+
+  hermes:xapi:logs:
+    desc: Follow Hermes X MCP logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 xapi-mcp
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
@@ -222,7 +260,10 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh up
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action up -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
 
   hermes:down:
     desc: Stop Hermes Agent Docker container

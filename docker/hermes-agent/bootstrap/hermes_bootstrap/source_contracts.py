@@ -15,6 +15,10 @@ _CHROME_MCP = {
     "url": "http://browser-mcp:8080/mcp",
     "connect_timeout": 120,
 }
+_XAPI_MCP = {
+    "url": "http://xapi-mcp:8080/mcp",
+    "connect_timeout": 300,
+}
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
@@ -48,7 +52,7 @@ class _UniqueKeySafeLoader(yaml.SafeLoader):
 
 
 def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
-    """Require the canonical Chrome MCP entry in every staged distribution."""
+    """Require Chrome MCP and install the canonical X API MCP entry."""
 
     for source in staged:
         try:
@@ -82,7 +86,7 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
         ):
             _invalid(source)
         mcp_servers = config.get("mcp_servers")
-        if not isinstance(mcp_servers, Mapping):
+        if not isinstance(mcp_servers, dict):
             _invalid(source)
         chrome = mcp_servers.get("chrome")
         if (
@@ -91,12 +95,44 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
             or dict(chrome) != _CHROME_MCP
         ):
             _invalid(source)
+        _install_xapi_mcp(source, config, mcp_servers)
+
+
+def _install_xapi_mcp(
+    source: StagedSource,
+    config: Mapping[object, object],
+    mcp_servers: dict[object, object],
+) -> None:
+    xapi = mcp_servers.get("xapi")
+    if (
+        isinstance(xapi, Mapping)
+        and type(xapi.get("connect_timeout")) is int
+        and dict(xapi) == _XAPI_MCP
+    ):
+        return
+
+    if not isinstance(config, dict):
+        _invalid_xapi(source)
+    mcp_servers["xapi"] = dict(_XAPI_MCP)
+    try:
+        (source.path / "config.yaml").write_text(
+            yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+        )
+    except (OSError, UnicodeError):
+        _invalid_xapi(source)
 
 
 def _invalid(source: StagedSource) -> NoReturn:
     name = source.declaration.name
     raise ValidationError(
         f"distribution {name!r} config.yaml has invalid Chrome MCP configuration"
+    ) from None
+
+
+def _invalid_xapi(source: StagedSource) -> NoReturn:
+    name = source.declaration.name
+    raise ValidationError(
+        f"distribution {name!r} config.yaml has invalid X API MCP configuration"
     ) from None
 
 

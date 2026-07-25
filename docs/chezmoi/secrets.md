@@ -106,6 +106,14 @@ absent after bootstrap.
 Browser lifecycle and source-owned MCP configuration are described in
 [Hermes Browser MCP](../hermes-agent/browser-mcp.md).
 
+Hermes X API MCP OAuth client credentials are centralized in account
+`my.1password.com`, vault `openclaw`, item `Hermes X API MCP`. The required
+fields are `X_API_CLIENT_ID` and `X_API_CLIENT_SECRET`. The explicit
+`task hermes:xapi:auth`, `task hermes:xapi:restart`, and `task hermes:up`
+wrappers read those fields at runtime; do not store them in `~/.hermes/.env`,
+Compose files, Git, Slack, or profile repositories. The `.xurl` OAuth cache
+remains local runtime state and must not be shared.
+
 ## パターン
 
 PowerShell deploy script で値を取得する場合:

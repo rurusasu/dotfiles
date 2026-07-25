@@ -6,6 +6,7 @@
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\Invoke-ExternalCommand.ps1')
 . (Join-Path $libPath 'lib\HermesBootstrap.ps1')
+. (Join-Path $libPath 'lib\HermesXApi.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
     [int]$DockerCheckTimeoutSeconds = 15
@@ -61,7 +62,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
             }
 
-            $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap'))
+            $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap', 'xapi-mcp'))
             if (-not $build.Success) {
                 return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
             }
@@ -76,7 +77,18 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes bootstrap failed: $($bootstrap.Message)")
             }
 
-            $start = $this.InvokeCompose($composeFile, @('up', '-d', '--force-recreate'))
+            try {
+                $handler = $this
+                $start = Invoke-HermesXApiCredentialScope -Action {
+                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate'))
+                }
+            }
+            catch {
+                if ($_.Exception.Message -ne 'Hermes X API credential retrieval failed.') {
+                    throw
+                }
+                return $this.CreateFailureResult('Hermes X API credential retrieval failed.')
+            }
             if (-not $start.Success) {
                 return $this.CreateFailureResult("Hermes Agent startup failed: $($start.Message)")
             }

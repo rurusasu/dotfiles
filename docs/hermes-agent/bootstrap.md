@@ -21,11 +21,15 @@ task hermes:bootstrap
 ```
 
 On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
-adapter. On Windows, it runs
-`pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`. Both adapters
-validate Compose, build `hermes` and `hermes-bootstrap`, run the container
-bootstrap, and recreate the stack only after success. The full installer chains
-remain:
+adapter with the canonical Compose file. On Windows, it runs
+`pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
+Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
+rebuild. Both adapters validate Compose, build `hermes`, `hermes-bootstrap`,
+and `xapi-mcp`, run the container bootstrap, and recreate the stack only after
+success. The final recreate is wrapped with the host X API credential adapter
+on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
+configured 1Password item instead of being exported or stored locally. The full
+installer chains remain:
 
 ```text
 install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
@@ -566,6 +570,12 @@ blob IDs, SHA-256, and committed tree mode `100755`. Task 5 integration
 coverage is the publication gate for aggregate preflight, exact-tree deletion,
 local immutability, missing-only bootstrap install, continuation, retry, and
 result serialization.
+
+The same source validation requires every root and managed profile distribution
+to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
+synthesizes the non-secret `mcp_servers.xapi` entry in the staged runtime copy
+with URL `http://xapi-mcp:8080/mcp` and `connect_timeout: 300`. The generated
+entry is not written back to source repositories.
 
 Named-profile default branches are exact mirrors. A real sync deletes
 repository-local `.github` workflows, pre-commit configuration, validators,

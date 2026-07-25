@@ -13,6 +13,8 @@ services:
     depends_on:
       browser-mcp:
         condition: service_healthy
+      xapi-mcp:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${HERMES_API_PORT:-8642}:8642"
       - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
@@ -95,6 +97,42 @@ services:
     depends_on:
       chromium:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          node -e "const net=require('node:net');const s=net.connect({host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - hermes-browser
+
+  xapi-mcp:
+    build:
+      context: ../hermes-xapi-mcp
+      dockerfile: Dockerfile
+    image: local/hermes-xapi-mcp:latest
+    container_name: hermes-xapi-mcp
+    restart: unless-stopped
+    command:
+      - node_modules/.bin/mcp-proxy
+      - --server
+      - stream
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --
+      - /usr/local/bin/hermes-xapi-mcp
+    environment:
+      X_API_CLIENT_ID: "${X_API_CLIENT_ID:-}"
+      X_API_CLIENT_SECRET: "${X_API_CLIENT_SECRET:-}"
+    volumes:
+      - type: bind
+        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
+        target: /root/.xurl
     healthcheck:
       test:
         - CMD-SHELL

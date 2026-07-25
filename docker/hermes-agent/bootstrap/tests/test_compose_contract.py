@@ -20,6 +20,16 @@ DATA_BIND = {
     "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}",
     "target": "/opt/data",
 }
+XURL_BIND = {
+    "type": "bind",
+    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl",
+    "target": "/root/.xurl",
+}
+EXPECTED_TCP_HEALTHCHECK = (
+    "node -e \"const net=require('node:net');const s=net.connect("
+    "{host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});"
+    "s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);\""
+)
 
 
 class ComposeContractTests(unittest.TestCase):
@@ -78,6 +88,50 @@ class ComposeContractTests(unittest.TestCase):
                 "--browser-url=http://chromium:9222",
                 "--no-usage-statistics",
             ],
+        )
+
+    def test_xapi_mcp_is_an_internal_shared_service(self) -> None:
+        xapi = self.services.get("xapi-mcp")
+        self.assertIsNotNone(xapi)
+        assert xapi is not None
+
+        self.assertEqual(
+            xapi["build"],
+            {"context": "../hermes-xapi-mcp", "dockerfile": "Dockerfile"},
+        )
+        self.assertEqual(xapi["image"], "local/hermes-xapi-mcp:latest")
+        self.assertEqual(xapi["container_name"], "hermes-xapi-mcp")
+        self.assertEqual(xapi["networks"], ["hermes-browser"])
+        self.assertEqual(xapi["volumes"], [XURL_BIND])
+        self.assertEqual(
+            xapi["environment"],
+            {
+                "X_API_CLIENT_ID": "${X_API_CLIENT_ID:-}",
+                "X_API_CLIENT_SECRET": "${X_API_CLIENT_SECRET:-}",
+            },
+        )
+        self.assertNotIn("ports", xapi)
+        self.assertEqual(
+            [xapi["healthcheck"]["test"][0], xapi["healthcheck"]["test"][1].strip()],
+            ["CMD-SHELL", EXPECTED_TCP_HEALTHCHECK],
+        )
+        self.assertEqual(
+            xapi["command"],
+            [
+                "node_modules/.bin/mcp-proxy",
+                "--server",
+                "stream",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--",
+                "/usr/local/bin/hermes-xapi-mcp",
+            ],
+        )
+        self.assertEqual(
+            self.hermes["depends_on"]["xapi-mcp"],
+            {"condition": "service_healthy"},
         )
 
     def test_dockerfile_builds_runtime_test_and_final_stages(self) -> None:

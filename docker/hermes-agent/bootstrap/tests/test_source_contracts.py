@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
@@ -25,6 +27,9 @@ mcp_servers:
   chrome:
     url: http://browser-mcp:8080/mcp
     connect_timeout: 120
+  xapi:
+    url: http://xapi-mcp:8080/mcp
+    connect_timeout: 300
   retained:
     url: https://example.invalid/mcp
 """
@@ -84,6 +89,38 @@ distribution_owned:
         )
 
         validate_chrome_mcp_sources(staged)
+
+    def test_installs_xapi_mcp_configuration_when_missing_from_source(self) -> None:
+        config = VALID_CONFIG.replace(
+            "  xapi:\n    url: http://xapi-mcp:8080/mcp\n    connect_timeout: 300\n", ""
+        )
+        staged = self.staged("default", config)
+
+        validate_chrome_mcp_sources((staged,))
+
+        updated = yaml.safe_load((staged.path / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(
+            updated["mcp_servers"]["xapi"],
+            {"url": "http://xapi-mcp:8080/mcp", "connect_timeout": 300},
+        )
+
+    def test_replaces_noncanonical_xapi_mcp_configuration_without_leaking_values(self) -> None:
+        config = VALID_CONFIG.replace(
+            "  xapi:\n    url: http://xapi-mcp:8080/mcp\n    connect_timeout: 300\n",
+            "  xapi:\n    url: https://secret.invalid/mcp\n    connect_timeout: 60\n    token: secret-marker\n",
+        )
+        staged = self.staged("default", config)
+
+        validate_chrome_mcp_sources((staged,))
+
+        updated_text = (staged.path / "config.yaml").read_text(encoding="utf-8")
+        updated = yaml.safe_load(updated_text)
+        self.assertEqual(
+            updated["mcp_servers"]["xapi"],
+            {"url": "http://xapi-mcp:8080/mcp", "connect_timeout": 300},
+        )
+        self.assertNotIn("secret.invalid", updated_text)
+        self.assertNotIn("secret-marker", updated_text)
 
     def test_rejects_every_noncanonical_shape_without_exposing_values(self) -> None:
         invalid = {
@@ -148,6 +185,8 @@ mcp_servers:
         }
         for case, config in invalid.items():
             with self.subTest(case=case):
+                if case not in {"missing-xapi"}:
+                    config = _with_valid_xapi(config)
                 staged = self.staged(case, config)
                 with self.assertRaises(ValidationError) as caught:
                     validate_chrome_mcp_sources((staged,))
@@ -185,6 +224,16 @@ distribution_owned:
             ValidationError, "future-profile.*distribution_owned.*config.yaml"
         ):
             validate_chrome_mcp_sources((staged,))
+
+
+def _with_valid_xapi(config: str | None) -> str | None:
+    if config is None or "xapi:" in config or "mcp_servers:\n" not in config:
+        return config
+    return config.replace(
+        "mcp_servers:\n",
+        "mcp_servers:\n  xapi:\n    url: http://xapi-mcp:8080/mcp\n    connect_timeout: 300\n",
+        1,
+    )
 
 
 if __name__ == "__main__":
