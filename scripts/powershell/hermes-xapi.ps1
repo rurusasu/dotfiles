@@ -77,10 +77,11 @@ function Invoke-HermesXApiDocker {
 
 try {
     $resolvedComposeFile = Get-HermesXApiComposeFile -ComposeFile $ComposeFile
+    $commandName = $Action
     Initialize-HermesXApiRuntimeHome
 
     $exitCode = Invoke-HermesXApiCredentialScope -Action {
-        switch ($Action) {
+        switch ($commandName) {
             'auth' {
                 Invoke-HermesXApiDocker -Arguments @(
                     'compose', '-f', $resolvedComposeFile,
