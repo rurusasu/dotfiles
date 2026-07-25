@@ -1,14 +1,23 @@
 # Hermes Distribution Validation Design
 
-## Status
+## Status And Scope
 
 Approved design for repository-local validation, GitHub Actions fallback, and
-agent-driven remediation across the Hermes root and named-profile source
-repositories.
+agent-driven remediation for the remote-authoritative `rurusasu/hermes-home`
+root repository. The same contract can apply to another source repository only
+when that repository explicitly opts in and retains the complete validation
+tooling bundle defined below.
+
+This document is not the current contract for named-profile exact mirrors.
+Those repositories intentionally delete repository-local workflows,
+pre-commit configuration, validators, tests, README files, and other paths
+outside the declarative profile allowlist. For named mirrors, the
+[Local-Authoritative Profile Sync Design](profile-local-authoritative-sync-design.md)
+supersedes the former scope of this document.
 
 ## Problem
 
-The Hermes distribution repositories need hosted pull-request checks, but
+In-scope source repositories need hosted pull-request checks, but
 GitHub-hosted Actions for private repositories are metered. Exhausted minutes
 or a budget configured to stop usage can prevent a workflow from starting even
 when the distribution is valid.
@@ -24,7 +33,7 @@ specific failure and the controller can independently verify the repair.
 
 ## Goals
 
-- Give every distribution repository the same self-contained local guard.
+- Give each explicitly in-scope source repository a self-contained local guard.
 - Run the same full validation contract locally and in GitHub Actions.
 - Minimize hosted runner usage without weakening pull-request validation.
 - Distinguish code failures, local prerequisite failures, stale evidence,
@@ -33,11 +42,12 @@ specific failure and the controller can independently verify the repair.
   billing block.
 - Define when an agent repair succeeded, failed, or requires human/context
   intervention.
-- Keep repository tooling and CI metadata out of installed Hermes profile
-  homes.
+- Keep repository tooling and CI metadata outside root-owned runtime paths.
 
 ## Non-Goals
 
+- Applying a repository-local validation bundle to named-profile exact mirrors.
+- Preserving allowlist-external tooling in a named-profile remote tree.
 - Replacing GitHub Actions when hosted execution is available.
 - Automatically merging when no workflow run appears for an unknown reason.
 - Allowing agents to bypass failed local validation with `--no-verify`.
@@ -47,14 +57,15 @@ specific failure and the controller can independently verify the repair.
 
 ## Repository Contract
 
-Each of these repositories carries the same thin guard implementation:
+The current repository contract contains:
 
-- `rurusasu/hermes-home`;
-- `rurusasu/hermes-profile-rick`;
-- `rurusasu/hermes-profile-hoffman`;
-- `rurusasu/hermes-profile-risarisa`.
+| Repository             | Distribution manifest    | Runtime boundary |
+| ---------------------- | ------------------------ | ---------------- |
+| `rurusasu/hermes-home` | `root-distribution.yaml` | `/opt/data` root |
 
-Required paths are:
+No named-profile repository is part of this table. A new source repository is
+in scope only after an explicit contract change names it, defines its
+distribution manifest and boundary checks, and requires all of these paths:
 
 ```text
 .github/workflows/distribution.yml
@@ -63,17 +74,20 @@ scripts/validate_distribution.py
 .gitignore
 ```
 
+A distribution declaration, profile manifest entry, or remote URL alone does
+not opt a repository into this contract.
+
 The Python driver contains no YAML implementation of its own. It invokes the
 pinned Hermes image for distribution parsing and installation behavior, and a
-pinned Gitleaks image for secret scanning. Keeping the driver repository-local
-allows a fresh clone to validate without access to another private repository.
-The small amount of duplicated orchestration is preferable to a networked
-pre-commit dependency.
+pinned Gitleaks image for secret scanning. Keeping the driver
+repository-local allows a fresh clone to validate without access to another
+private repository. The small amount of duplicated orchestration is preferable
+to a networked pre-commit dependency.
 
-The driver reads identity and owned paths from `distribution.yaml`, or from
-`root-distribution.yaml` for `hermes-home`. Repository-specific assertions are
-declared as data near the top of the driver rather than implemented as
-different control flow.
+For `hermes-home`, the driver reads identity and owned paths from
+`root-distribution.yaml`. An explicitly added source repository must declare
+its own manifest and repository-specific assertions as data near the top of
+the driver rather than introduce divergent control flow.
 
 ## Validation Levels
 
@@ -93,25 +107,25 @@ python3 scripts/validate_distribution.py full [--json] [--output PATH]
 - `secret-patterns`.
 
 `secret-patterns` asks Git for tracked files plus non-ignored untracked files
-(`git ls-files --cached --others --exclude-standard -z`) and scans those regular
-files only. It separately asks Git for worktree deletions (`git ls-files
---deleted -z`) and excludes those absent paths because they cannot enter the
-next source commit; malformed or failed deletion enumeration remains a
-fail-closed error. Ignored runtime material such as `.env`, auth state,
-memories, and caches is not part of the source-distribution guard. Failure to
-enumerate or read any other in-scope file fails the check closed with a
-redacted count.
+(`git ls-files --cached --others --exclude-standard -z`) and scans those
+regular files only. It separately asks Git for worktree deletions
+(`git ls-files --deleted -z`) and excludes those absent paths because they
+cannot enter the next source commit; malformed or failed deletion enumeration
+remains a fail-closed error. Ignored runtime material such as `.env`, auth
+state, memories, and caches is not part of the source-distribution guard.
+Failure to enumerate or read any other in-scope file fails the check closed
+with a redacted count.
 
 `full` runs every fast check plus:
 
 - `hermes-parser`;
-- `user-data-preservation` for named profiles or `root-boundary` for root;
+- `root-boundary` for `hermes-home`, or the boundary probe explicitly declared
+  by another in-scope source repository;
 - `gitleaks`.
 
-The user-data preservation probe runs as the image's `hermes` user because the
-Hermes CLI shim drops root to UID 10000. It asserts that `.env`, auth, memory,
-session, log, and workspace sentinels remain unchanged after forced
-distribution installation.
+The root-boundary probe asserts that installation changes only paths declared
+by `root-distribution.yaml`. There is no implicit named-profile boundary probe
+in this contract.
 
 Exit codes are stable:
 
@@ -132,16 +146,16 @@ an atomic rename under a caller-selected ignored path.
 {
   "schema_version": 1,
   "validator_version": "1.0.0",
-  "repository": "hermes-profile-rick",
+  "repository": "hermes-home",
   "head_sha": "0123456789abcdef",
   "level": "full",
   "status": "pass",
   "exit_code": 0,
   "checks": [
     {
-      "id": "hermes-parser",
+      "id": "root-boundary",
       "status": "pass",
-      "message": "Hermes distribution contract accepted"
+      "message": "Hermes root ownership contract accepted"
     }
   ]
 }
@@ -151,12 +165,12 @@ Allowed check statuses are `pass`, `fail`, and `blocked`. Messages are
 redacted, single-line summaries. A result is valid only when `head_sha` equals
 both local `HEAD` and the pull request's current `headRefOid`.
 
-Generated reports live under `.hermes-validation/`, which every repository
-ignores.
+Generated reports live under `.hermes-validation/`, which every in-scope
+repository ignores.
 
 ## Local Git Guards
 
-`.pre-commit-config.yaml` defines repository-local hooks:
+The retained `.pre-commit-config.yaml` defines repository-local hooks:
 
 - pre-commit stage: `validate_distribution.py fast`;
 - pre-push stage: `validate_distribution.py full`.
@@ -178,9 +192,9 @@ bypassed; it reruns full validation independently for the exact commit.
 
 ## GitHub Actions Guard
 
-Each repository has one `distribution` workflow with one Linux job. It runs on
-`pull_request` and manual dispatch, not on both pull request and branch push.
-It uses:
+Each in-scope repository has one `distribution` workflow with one Linux job. It
+runs on `pull_request` and manual dispatch, not on both pull request and branch
+push. It uses:
 
 - one job and no matrix;
 - `concurrency` keyed by workflow and pull request with
@@ -228,7 +242,7 @@ billing fallback. A missing run by itself is always `REMOTE_UNKNOWN`.
 
 ## Agent Remediation Flow
 
-For each failed repository task:
+For each failed in-scope repository task:
 
 1. The controller records the repository, base SHA, current head SHA,
    validator version, failed check IDs, redacted messages, and exact rerun
@@ -284,25 +298,27 @@ redacted GitHub billing classification. It then performs the repository's
 allowed merge method. The comment is evidence, not a substitute for comparing
 SHA values immediately before merge.
 
-## Runtime Isolation
+## Runtime Boundary
 
-Hermes 0.18.2 copies most top-level distribution repository files during
-installation. Adding `.github`, `.pre-commit-config.yaml`, and validator
-scripts would therefore pollute profile runtime homes if the raw checkout were
-installed.
+Root apply uses the explicit ownership in `root-distribution.yaml`; validator
+tooling and CI metadata outside those root-owned paths are not installed into
+the runtime.
 
-The common bootstrap constructs a sanitized temporary profile payload before
-calling Hermes' official distribution API. The payload contains only:
+Named-profile remotes have a different contract. They are exact projections of
+the local profile allowlist and contain only canonical `.gitignore`,
+`distribution.yaml`, and declared owned paths. A real sync deletes this
+document's repository-local tooling bundle from such a mirror. Their
+replacement validation gate is:
 
-- `distribution.yaml`;
-- paths declared by `distribution_owned`.
+- the runtime aggregate snapshot preflight and exact-sync result contract;
+- the dotfiles repository's pre-commit and `Hermes Bootstrap Tests` GitHub
+  Actions workflow; and
+- the pinned unit and integration command `task hermes:bootstrap:test`.
 
-It rejects missing, overlapping, traversing, symlinked, or special-file owned
-paths. CI metadata, local hooks, repository `.gitignore`, and validator tooling
-remain in the source checkout and never reach `/opt/data/profiles/<name>`.
-
-Root apply already uses explicit `root-distribution.yaml` ownership and follows
-the same exclusion rule.
+See [Hermes Bootstrap Operations](bootstrap.md#source-validation-gate) for the
+operator gate and
+[Local-Authoritative Profile Sync Design](profile-local-authoritative-sync-design.md#verification-coverage)
+for the normative named-mirror behavior and coverage.
 
 ## Security
 
@@ -319,30 +335,39 @@ the same exclusion rule.
 
 ## Testing
 
-The guard itself is tested with fixture repositories for:
+The in-scope repository guard is tested with fixture repositories for:
 
 - pass, fail, blocked, and internal-error exit codes;
 - stable JSON schema and deterministic check ordering;
 - secret redaction;
 - stale SHA rejection;
-- named-profile preservation and root ownership boundaries;
+- root ownership boundaries;
 - missing Docker/image prerequisites;
 - successful current-head workflow classification;
 - explicit billing startup failure classification;
 - no-run `REMOTE_UNKNOWN` classification;
-- two-round repair success and `FIX_FAILED` exhaustion;
-- sanitized profile payload excluding `.github`, hooks, and tooling.
+- two-round repair success and `FIX_FAILED` exhaustion.
 
-## Rollout
+Named-profile preservation, exact-tree publication, snapshot validation, and
+aggregate sync result behavior belong to the replacement dotfiles integration
+gate linked above, not this repository-local guard.
 
-1. Amend the open Rick pull request with the local guard and GitHub Actions.
-2. Apply the same guard contract to Hoffman and Risarisa while creating their
-   distribution manifests.
-3. Add the root variant to `hermes-home`.
-4. Require task review and either `PASS_REMOTE` or
-   `PASS_LOCAL_FALLBACK` before merging each source repository.
-5. Implement sanitized named-profile staging in the container bootstrap before
-   installing the merged source repositories into a real runtime.
+## Current Acceptance
+
+For `hermes-home` or another explicitly added source repository, task review
+requires both local `fast` and `full` passes and either `PASS_REMOTE` or
+`PASS_LOCAL_FALLBACK` at the exact pull-request head. Adding another
+repository requires an explicit update to the Repository Contract; the
+contract is never inferred from a named-profile manifest entry.
+
+## Non-Normative Historical Note
+
+An earlier version of this design treated then-planned named-profile source
+repositories as tooling-bearing repositories and specified sanitized staging,
+profile user-data preservation probes, and a multi-repository rollout. Exact
+local-authoritative mirroring superseded those assumptions. They are retained
+here only as design history and are not current requirements, acceptance
+criteria, or rollout instructions for any named profile.
 
 ## References
 

@@ -7,11 +7,15 @@ on:
     paths:
       - "docker/hermes-agent/**"
       - ".github/workflows/ci-hermes-bootstrap.yml"
+      - ".pre-commit-config.yaml"
+      - "Taskfile.yml"
   pull_request:
     branches: [main]
     paths:
       - "docker/hermes-agent/**"
       - ".github/workflows/ci-hermes-bootstrap.yml"
+      - ".pre-commit-config.yaml"
+      - "Taskfile.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +33,30 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - name: Read the validated provenance commit
+        id: provenance
+        shell: bash
+        run: |
+          source_commit="$(python3 docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py source-commit --dotfiles-repository .)"
+          printf 'source_commit=%s\n' "$source_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout provenance-pinned hermes-home
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: "rurusasu/hermes-home"
+          ref: ${{ steps.provenance.outputs.source_commit }}
+          path: hermes-home-provenance
+          token: ${{ secrets.HERMES_HOME_READ_TOKEN }}
+          persist-credentials: false
+
+      - name: Verify profile-sync provenance
+        env:
+          HERMES_HOME_PROVENANCE_REPOSITORY: ${{ github.workspace }}/hermes-home-provenance
+        run: python3 docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-repository "$HERMES_HOME_PROVENANCE_REPOSITORY"
+
+      - name: Verify provenance gate wiring
+        run: python3 docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
 
       - name: Run the pinned container suite
         run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent

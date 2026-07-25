@@ -116,13 +116,211 @@ class TransactionTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(path))
         self.assertEqual(self.journal_paths(), [])
 
-    def test_snapshot_only_journal_uses_schema_version_two(self) -> None:
+    def test_directory_reservation_rollback_removes_only_the_reserved_identity(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.reserve_directory(target))
+        shutil.rmtree(target)
+        target.mkdir()
+        (target / "external.txt").write_bytes(b"external\n")
+        external_identity = (target.lstat().st_dev, target.lstat().st_ino)
+
+        tx.rollback()
+
+        self.assertEqual(
+            (target.lstat().st_dev, target.lstat().st_ino),
+            external_identity,
+        )
+        self.assertEqual((target / "external.txt").read_bytes(), b"external\n")
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_directory_reservation_recovery_preserves_a_replacement_identity(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.reserve_directory(target))
+        shutil.rmtree(target)
+        target.mkdir()
+        (target / "external.txt").write_bytes(b"external after crash\n")
+        replacement_identity = (target.lstat().st_dev, target.lstat().st_ino)
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(
+            (target.lstat().st_dev, target.lstat().st_ino),
+            replacement_identity,
+        )
+        self.assertEqual(
+            (target / "external.txt").read_bytes(),
+            b"external after crash\n",
+        )
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_directory_reservation_commit_removes_the_private_marker(self) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.reserve_directory(target))
+        self.assertTrue((target / ".bootstrap-reservation").is_file())
+
+        tx.commit()
+
+        self.assertTrue(target.is_dir())
+        self.assertFalse((target / ".bootstrap-reservation").exists())
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_completed_directory_is_journaled_before_atomic_publication(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        private_home = self.root / ".private-home"
+        source = private_home / "profiles" / "rick"
+        source.mkdir(parents=True)
+        (source / "config.yaml").write_bytes(b"completed before publish\n")
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.publish_directory(target, source))
+
+        _journal_path, journal = self.journal()
+        entry = journal["entries"][0]
+        self.assertEqual(entry["kind"], "directory_reservation")
+        self.assertEqual(entry["state"], "ready")
+        self.assertEqual(
+            (target / "config.yaml").read_bytes(),
+            b"completed before publish\n",
+        )
+        self.assertTrue((target / ".bootstrap-reservation").is_file())
+        self.assertFalse(source.exists())
+
+        tx.commit()
+
+        self.assertEqual(
+            (target / "config.yaml").read_bytes(),
+            b"completed before publish\n",
+        )
+        self.assertFalse((target / ".bootstrap-reservation").exists())
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_nonrecursive_directory_reservation_preserves_an_external_child(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.reserve_directory(profiles, remove_tree=False))
+        external = profiles / "rick"
+        external.mkdir()
+        (external / "config.yaml").write_bytes(b"external\n")
+
+        tx.rollback()
+
+        self.assertEqual(
+            (external / "config.yaml").read_bytes(),
+            b"external\n",
+        )
+        self.assertFalse((profiles / ".bootstrap-reservation").exists())
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_directory_reservation_crash_recovery_removes_the_owned_tree(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+
+        self.assertTrue(tx.reserve_directory(target))
+        (target / "config.yaml").write_bytes(b"transaction-owned\n")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertFalse(target.exists())
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_committed_directory_reservation_recovery_removes_only_the_marker(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+        self.assertTrue(tx.reserve_directory(target))
+        (target / "config.yaml").write_bytes(b"committed\n")
+
+        with mock.patch.object(
+            transaction_module,
+            "_failpoint",
+            side_effect=lambda name: (
+                (_ for _ in ()).throw(OSError())
+                if name == "status-update"
+                else None
+            ),
+        ):
+            with self.assertRaises(ApplyError):
+                tx.commit()
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual((target / "config.yaml").read_bytes(), b"committed\n")
+        self.assertFalse((target / ".bootstrap-reservation").exists())
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_snapshot_only_journal_uses_schema_version_three(self) -> None:
         tx = Transaction.begin(self.root)
 
         _journal_path, journal = self.journal()
-        self.assertEqual(journal["version"], 2)
+        self.assertEqual(journal["version"], 3)
 
         tx.rollback()
+
+    def test_version_two_active_journal_recovery_restores_snapshot(self) -> None:
+        path = self.root / "config.yaml"
+        path.write_bytes(b"before\n")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_bytes(b"after\n")
+        journal_path, journal = self.journal()
+        journal["version"] = 2
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_bytes(), b"before\n")
+        self.assertEqual(self.journal_paths(), [])
+
+    def test_version_two_committed_journal_recovery_retains_snapshot(self) -> None:
+        path = self.root / "config.yaml"
+        path.write_bytes(b"before\n")
+        tx = Transaction.begin(self.root)
+        tx.snapshot(path)
+        path.write_bytes(b"committed\n")
+        journal_path, journal = self.journal()
+        journal["version"] = 2
+        journal["status"] = "committed"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        self.crash(tx)
+
+        Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(path.read_bytes(), b"committed\n")
+        self.assertEqual(self.journal_paths(), [])
 
     def test_snapshot_regular_file_restores_bytes_and_executable_mode(self) -> None:
         path = self.root / "tool"

@@ -10,13 +10,18 @@ import re
 import shutil
 import stat
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 from .distributions import ChangeSet
 from .errors import MigrationError, RepositoryError
-from .filesystem import open_absolute_directory, verify_absolute_directory
+from .filesystem import (
+    PrivateDirectory,
+    create_private_directory,
+    open_absolute_directory,
+    verify_absolute_directory,
+)
 from .git import (
     _create_askpass,
     _git_environment,
@@ -119,6 +124,11 @@ class RemoteSyncResult:
     commit: str
     pushed: bool
     working_tree: Path | None
+    private_directory: PrivateDirectory | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
 
 
 class Transaction(Protocol):
@@ -340,7 +350,7 @@ def synchronize_named_repository(
 def _synchronize_remote_boundary(
     repo: SharedRepository, auth: GitAuth
 ) -> RemoteSyncResult | _Failure | _MigrationFailure:
-    stage: Path | None = None
+    stage: PrivateDirectory | None = None
     askpass: Path | None = None
     outcome: RemoteSyncResult | _Failure
     try:
@@ -355,21 +365,29 @@ def _synchronize_remote_boundary(
                 return working_tree
             if working_tree is None:
                 _ensure_safe_managed_directory(repo.target.parent, data_root)
-                stage = Path(tempfile.mkdtemp(prefix=".hermes-repository-", dir=repo.target.parent))
-                os.chmod(stage, 0o700)
-                working_tree = stage
+                stage = create_private_directory(
+                    repo.target.parent,
+                    prefix=".hermes-repository-",
+                )
+                working_tree = stage.path
             askpass = _create_askpass(working_tree.parent)
             environment = _git_environment(auth, askpass)
             local_environment = _local_git_environment(environment)
             if stage is not None:
                 repository_lock.require_held()
-                _initialize_checkout(repo, stage, environment)
+                _initialize_checkout(repo, stage.path, environment)
             else:
                 _verify_checkout_identity(repo, working_tree, local_environment)
             repository_lock.require_held()
             commit, pushed = _synchronize_checkout(repo, working_tree, environment)
             repository_lock.require_held()
-            outcome = RemoteSyncResult(repo.name, commit, pushed, working_tree)
+            outcome = RemoteSyncResult(
+                repo.name,
+                commit,
+                pushed,
+                working_tree,
+                stage,
+            )
     except _LockBusy as error:
         outcome = _Failure(str(error.path))
     except Exception:
@@ -377,7 +395,7 @@ def _synchronize_remote_boundary(
 
     cleanup_failed = askpass is not None and not _unlink_path(askpass)
     if stage is not None and (isinstance(outcome, _Failure) or cleanup_failed):
-        cleanup_failed = not _remove_private_tree(stage) or cleanup_failed
+        cleanup_failed = not stage.cleanup() or cleanup_failed
     if cleanup_failed:
         return _Failure("could not clean private repository resources")
     return outcome
@@ -400,7 +418,7 @@ def _apply_shared_working_tree_boundary(
 def _apply_shared_working_tree_locked(
     repo: SharedRepository, result: RemoteSyncResult, tx: Transaction
 ) -> ChangeSet | _Failure | _MigrationFailure:
-    publication_copy: Path | None = None
+    publication_copy: PrivateDirectory | None = None
     try:
         _validate_result(repo, result)
         _require_safe_repository_parents(repo)
@@ -424,17 +442,25 @@ def _apply_shared_working_tree_locked(
             publication_source = working_tree
             if migrated_legacy:
                 publication_copy = _copy_working_tree_for_publication(repo, working_tree, result.commit)
-                publication_source = publication_copy
+                publication_source = publication_copy.path
             _require_same_filesystem(publication_source, repo.target.parent)
             _move_verified_working_tree(repo, publication_source, result.commit)
-            publication_copy = None
+            if publication_copy is not None:
+                publication_copy.release()
+                if not publication_copy.is_released:
+                    raise ValueError("could not release private repository copy")
+                publication_copy = None
+            elif result.private_directory is not None:
+                result.private_directory.release()
+                if not result.private_directory.is_released:
+                    raise ValueError("could not release private repository stage")
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
         if repo.legacy_target is not None:
             _remove_legacy_target(repo, tx, changed, allow_populated=migrated_legacy)
         return ChangeSet(tuple(changed))
     except Exception:
-        if publication_copy is not None and not _remove_private_tree(publication_copy):
+        if publication_copy is not None and not publication_copy.cleanup():
             return _Failure("could not clean private repository resources")
         return _Failure("could not apply the shared repository working tree")
 
@@ -1035,8 +1061,15 @@ def _validate_result(repo: SharedRepository, result: RemoteSyncResult) -> None:
     if repo.legacy_target is not None:
         allowed.add(repo.legacy_target)
     if result.working_tree not in allowed:
-        if result.working_tree.parent != repo.target.parent or not result.working_tree.name.startswith(".hermes-repository-"):
+        if (
+            result.working_tree.parent != repo.target.parent
+            or not result.working_tree.name.startswith(".hermes-repository-")
+            or result.private_directory is None
+            or result.private_directory.path != result.working_tree
+        ):
             raise ValueError("synchronization result path is invalid")
+    elif result.private_directory is not None:
+        raise ValueError("canonical synchronization result owns private cleanup")
 
 
 def _validate_working_tree(repo: SharedRepository, checkout: Path, commit: str) -> None:
@@ -1118,15 +1151,22 @@ def _copy_working_tree_for_publication(
     repo: SharedRepository,
     source: Path,
     commit: str,
-) -> Path:
-    copy = Path(tempfile.mkdtemp(prefix=".hermes-repository-", dir=repo.target.parent))
+) -> PrivateDirectory:
+    copy = create_private_directory(
+        repo.target.parent,
+        prefix=".hermes-repository-",
+    )
     try:
-        shutil.copytree(source, copy, symlinks=True, dirs_exist_ok=True)
-        os.chmod(copy, 0o700)
-        _validate_working_tree(repo, copy, commit)
+        shutil.copytree(
+            source,
+            copy.path,
+            symlinks=True,
+            dirs_exist_ok=True,
+        )
+        _validate_working_tree(repo, copy.path, commit)
         return copy
     except Exception:
-        if not _remove_private_tree(copy):
+        if not copy.cleanup():
             raise ValueError("could not clean private repository copy") from None
         raise
 

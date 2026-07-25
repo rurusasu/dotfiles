@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import tempfile
+from collections.abc import Mapping, Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol
@@ -16,7 +17,9 @@ import yaml
 from hermes_cli import __version__ as HERMES_VERSION
 from hermes_cli import profile_distribution
 
+from .envfiles import merge_env_file
 from .errors import ApplyError
+from .filesystem import PrivateDirectory, create_private_directory
 from .git import StagedSource
 
 
@@ -74,11 +77,23 @@ _RUNTIME_DATABASES = frozenset(
 _ROOT_RESERVED_TOP_LEVEL = _RESERVED_TOP_LEVEL | frozenset(
     name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
 )
-_PROFILE_RESERVED_TOP_LEVEL = frozenset(name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE)
+_PROFILE_RESERVED_TOP_LEVEL = frozenset(
+    name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
+) | frozenset({".bootstrap-reservation"})
 
 
 class Transaction(Protocol):
     def snapshot(self, path: Path) -> None: ...
+
+    def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool: ...
+
+    def publish_directory(
+        self,
+        path: Path,
+        source: Path,
+        *,
+        remove_tree: bool = True,
+    ) -> bool: ...
 
 
 class _SnapshotTracker:
@@ -183,10 +198,27 @@ def build_sanitized_profile_source(stage: StagedSource, scratch_root: Path) -> P
     return result
 
 
-def apply_profile_distribution(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet:
+def apply_profile_distribution(
+    stage: StagedSource,
+    data_root: Path,
+    tx: Transaction,
+    *,
+    replace_existing: bool = True,
+    expected_missing: bool | None = None,
+    managed_environment: Mapping[str, str] | None = None,
+    environment_remove: AbstractSet[str] = frozenset(),
+) -> ChangeSet:
     """Install one staged profile through Hermes' supported distribution API."""
 
-    result = _apply_profile_boundary(stage, data_root, tx)
+    result = _apply_profile_boundary(
+        stage,
+        data_root,
+        tx,
+        replace_existing=replace_existing,
+        expected_missing=expected_missing,
+        managed_environment=managed_environment,
+        environment_remove=environment_remove,
+    )
     if isinstance(result, _Failure):
         message = result.message
         del result
@@ -385,9 +417,19 @@ def _read_prior_profile_manifest(target: Path, name: str) -> tuple[Any, tuple[Pu
         return None
 
 
-def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transaction) -> ChangeSet | _Failure:
+def _apply_profile_boundary(
+    stage: StagedSource,
+    data_root: Path,
+    tx: Transaction,
+    *,
+    replace_existing: bool = True,
+    expected_missing: bool | None = None,
+    managed_environment: Mapping[str, str] | None = None,
+    environment_remove: AbstractSet[str] = frozenset(),
+) -> ChangeSet | _Failure:
     sanitized: Path | None = None
     scratch_root: Path | None = None
+    private_home: PrivateDirectory | None = None
     prior_home = os.environ.get("HERMES_HOME")
     home_was_set = "HERMES_HOME" in os.environ
     home_changed = False
@@ -395,6 +437,10 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
     primary_failure = False
     cleanup_ok = True
     try:
+        if not replace_existing and type(expected_missing) is not bool:
+            raise ValueError(
+                "no-replace profile apply requires revalidated expected state"
+            )
         _require_data_root(data_root)
         expected_target = data_root / "profiles" / stage.declaration.name
         if stage.declaration.target != expected_target:
@@ -408,24 +454,102 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
         sanitized = build_result
         target = expected_target
         prior = _read_prior_profile_manifest(target, stage.declaration.name)
-        if _profile_is_current(target, sanitized, manifest, stage, owned, prior):
+        current_exists = _lexists(target)
+        current_exact = _profile_is_current(
+            target,
+            sanitized,
+            manifest,
+            stage,
+            owned,
+            prior,
+        )
+        if not replace_existing and expected_missing is True:
+            if current_exists:
+                raise ValueError(
+                    "profile state differs from revalidated baseline"
+                )
+        elif not replace_existing:
+            if not current_exists or not current_exact:
+                raise ValueError(
+                    "profile state differs from revalidated baseline"
+                )
             result = ChangeSet(())
-        else:
-            snapshots = _SnapshotTracker(tx)
-            _profile_snapshots(target, owned, manifest, snapshots)
-            _remove_stale_profile_paths(target, prior[1] if prior is not None else (), owned, snapshots)
-            os.environ["HERMES_HOME"] = str(data_root)
+        elif current_exact:
+            result = ChangeSet(())
+        if result is None:
+            snapshots: _SnapshotTracker | None = None
+            changed: list[Path] = []
+            if replace_existing:
+                snapshots = _SnapshotTracker(tx)
+                _profile_snapshots(target, owned, manifest, snapshots)
+                _remove_stale_profile_paths(
+                    target,
+                    prior[1] if prior is not None else (),
+                    owned,
+                    snapshots,
+                )
+                install_home = data_root
+                install_target = target
+            else:
+                if _lexists(target):
+                    raise ValueError(
+                        "existing profile differs from staged distribution"
+                    )
+                private_home = create_private_directory(
+                    data_root,
+                    prefix=".hermes-profile-home-",
+                )
+                install_home = private_home.path
+                install_target = (
+                    private_home.path
+                    / "profiles"
+                    / stage.declaration.name
+                )
+            os.environ["HERMES_HOME"] = str(install_home)
             home_changed = True
-            profile_distribution.install_distribution(str(sanitized), name=stage.declaration.name, force=True)
-            if target.exists():
-                manifest_path = target / "distribution.yaml"
-                installed = profile_distribution.read_manifest(target)
-                if installed is None:
-                    raise ValueError("profile installation did not write a manifest")
-                installed.source = stage.declaration.source
+            profile_distribution.install_distribution(
+                str(sanitized),
+                name=stage.declaration.name,
+                force=True,
+            )
+            if not install_target.exists():
+                raise ValueError(
+                    "profile installation did not create the target"
+                )
+            manifest_path = install_target / "distribution.yaml"
+            installed = profile_distribution.read_manifest(install_target)
+            if installed is None:
+                raise ValueError(
+                    "profile installation did not write a manifest"
+                )
+            installed.source = stage.declaration.source
+            if snapshots is not None:
                 _snapshot(snapshots, manifest_path)
-                profile_distribution.write_manifest(target, installed)
-            result = ChangeSet(tuple(snapshots.paths))
+            profile_distribution.write_manifest(install_target, installed)
+            if not replace_existing:
+                if managed_environment is not None:
+                    merge_env_file(
+                        install_target / ".env",
+                        managed_environment,
+                        environment_remove,
+                    )
+                _fsync_tree(install_target)
+                profiles = target.parent
+                if not _lexists(profiles):
+                    if tx.reserve_directory(profiles, remove_tree=False):
+                        changed.append(profiles)
+                    else:
+                        _require_regular_directory(profiles)
+                else:
+                    _require_regular_directory(profiles)
+                if not tx.publish_directory(target, install_target):
+                    raise ValueError(
+                        "existing profile differs from staged distribution"
+                    )
+                changed.append(target)
+            result = ChangeSet(
+                tuple(snapshots.paths) if snapshots is not None else tuple(changed)
+            )
     except Exception:
         primary_failure = True
     finally:
@@ -438,6 +562,8 @@ def _apply_profile_boundary(stage: StagedSource, data_root: Path, tx: Transactio
             cleanup_ok = _safe_remove_tree(sanitized) and cleanup_ok
         if scratch_root is not None:
             cleanup_ok = _safe_remove_tree(scratch_root) and cleanup_ok
+        if private_home is not None:
+            cleanup_ok = private_home.cleanup() and cleanup_ok
     if primary_failure:
         return _Failure("could not apply the named profile distribution")
     if not cleanup_ok:

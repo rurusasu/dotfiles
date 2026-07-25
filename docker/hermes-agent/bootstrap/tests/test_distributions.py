@@ -8,6 +8,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path, PurePosixPath
 from types import FrameType, TracebackType
 from unittest import mock
@@ -28,14 +29,40 @@ from hermes_bootstrap.distributions import (
 from hermes_bootstrap.errors import ApplyError
 from hermes_bootstrap.git import StagedSource
 from hermes_bootstrap.models import DistributionSource
+from hermes_bootstrap.transaction import Transaction as DurableTransaction
 
 
 class RecordingTransaction:
     def __init__(self) -> None:
         self.snapshots: list[Path] = []
+        self.reservations: list[Path] = []
 
     def snapshot(self, path: Path) -> None:
         self.snapshots.append(path)
+
+    def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool:
+        del remove_tree
+        try:
+            path.mkdir()
+        except FileExistsError:
+            return False
+        self.reservations.append(path)
+        return True
+
+    def publish_directory(
+        self,
+        path: Path,
+        source: Path,
+        *,
+        remove_tree: bool = True,
+    ) -> bool:
+        del remove_tree
+        try:
+            source.rename(path)
+        except FileExistsError:
+            return False
+        self.reservations.append(path)
+        return True
 
 
 class StrictRecordingTransaction(RecordingTransaction):
@@ -564,6 +591,18 @@ class DistributionTests(unittest.TestCase):
         self.write_profile_manifest("rick", ["nested"])
         self.assert_apply_error(lambda: build_sanitized_profile_source(self.source("rick"), self.root / "scratch"))
 
+    def test_profile_rejects_the_transaction_reservation_marker(self) -> None:
+        marker = self.stage_root / ".bootstrap-reservation"
+        marker.write_text("distribution-owned\n", encoding="utf-8")
+        self.write_profile_manifest("rick", [marker.name])
+
+        self.assert_apply_error(
+            lambda: build_sanitized_profile_source(
+                self.source("rick"),
+                self.root / "scratch",
+            )
+        )
+
     def test_sanitized_profile_source_rejects_raw_absolute_and_duplicate_owned_paths(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
         manifests = (
@@ -625,6 +664,357 @@ class DistributionTests(unittest.TestCase):
         install.assert_not_called()
         self.assertEqual((target / "distribution.yaml").read_text(encoding="utf-8"), manifest_before)
         self.assertEqual({path: path.stat().st_ino for path in inodes}, inodes)
+
+    def test_profile_no_overwrite_installs_a_still_missing_target(self) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+
+        changed = apply_profile_distribution(
+            self.source("rick"),
+            self.data_root,
+            RecordingTransaction(),
+            replace_existing=False,
+            expected_missing=True,
+        )
+
+        target = self.data_root / "profiles" / "rick"
+        self.assertNotEqual(changed, ChangeSet(()))
+        self.assertEqual((target / "config.yaml").read_text(encoding="utf-8"), "config\n")
+
+    def test_profile_no_overwrite_requires_revalidated_expected_state(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = RecordingTransaction()
+
+        with (
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+            )
+
+        install.assert_not_called()
+        self.assertEqual(tx.reservations, [])
+
+    def test_profile_expected_existing_rejects_current_absence_before_install(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        tx = RecordingTransaction()
+
+        with (
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            mock.patch.object(
+                tx,
+                "publish_directory",
+                wraps=tx.publish_directory,
+            ) as publish,
+            mock.patch(
+                "hermes_bootstrap.distributions.merge_env_file"
+            ) as merge_env,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=False,
+                managed_environment={"GH_TOKEN": "secret"},
+            )
+
+        install.assert_not_called()
+        publish.assert_not_called()
+        merge_env.assert_not_called()
+        self.assertEqual(tx.reservations, [])
+
+    def test_profile_no_overwrite_rejects_a_target_created_after_the_missing_probe(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("staged\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        target = self.data_root / "profiles" / "rick"
+        tx = DurableTransaction.begin(self.data_root)
+        real_is_current = distributions._profile_is_current
+        external_before: dict[str, tuple[int, bytes | None]] | None = None
+
+        def is_current_then_create(*args: object, **kwargs: object) -> bool:
+            nonlocal external_before
+            result = real_is_current(*args, **kwargs)
+            target.mkdir(parents=True)
+            (target / "config.yaml").write_bytes(b"external\n")
+            (target / "config.yaml").chmod(0o600)
+            external_before = {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            }
+            return result
+
+        with (
+            mock.patch.object(
+                distributions,
+                "_profile_is_current",
+                side_effect=is_current_then_create,
+            ),
+            mock.patch(
+                "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+            ) as install,
+            self.assertRaises(ApplyError),
+        ):
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=True,
+            )
+
+        tx.rollback()
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            },
+            external_before,
+        )
+        install.assert_not_called()
+
+    def test_profile_no_overwrite_never_writes_after_published_target_is_replaced(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_bytes(b"staged\n")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        profiles = self.data_root / "profiles"
+        target = profiles / "rick"
+        tx = DurableTransaction.begin(self.data_root)
+        real_reserve = tx.reserve_directory
+        real_publish = getattr(tx, "publish_directory", None)
+        external_before: dict[str, tuple[int, bytes | None]] | None = None
+        install_homes: list[tuple[Path, int]] = []
+        manifest_targets: list[Path] = []
+        real_install = (
+            distributions.profile_distribution.install_distribution
+        )
+        real_write_manifest = (
+            distributions.profile_distribution.write_manifest
+        )
+
+        def replace_with_external() -> None:
+            nonlocal external_before
+            shutil.rmtree(target)
+            target.mkdir()
+            (target / "config.yaml").write_bytes(b"external\n")
+            (target / "config.yaml").chmod(0o600)
+            external_before = {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            }
+
+        def reserve_then_replace(
+            path: Path, *, remove_tree: bool = True
+        ) -> bool:
+            published = real_reserve(path, remove_tree=remove_tree)
+            if path == target and published:
+                replace_with_external()
+            return published
+
+        def publish_then_replace(
+            path: Path,
+            source: Path,
+            *,
+            remove_tree: bool = True,
+        ) -> bool:
+            if real_publish is None:
+                raise AssertionError("publish_directory is unavailable")
+            published = real_publish(
+                path,
+                source,
+                remove_tree=remove_tree,
+            )
+            if path == target and published:
+                replace_with_external()
+            return published
+
+        def record_install(
+            source: str,
+            name: str | None = None,
+            force: bool = False,
+            create_alias: bool = False,
+        ) -> object:
+            home = Path(os.environ["HERMES_HOME"])
+            install_homes.append((home, home.stat().st_dev))
+            return real_install(
+                source,
+                name=name,
+                force=force,
+                create_alias=create_alias,
+            )
+
+        def record_write_manifest(
+            profile_dir: Path, manifest: object
+        ) -> object:
+            manifest_targets.append(Path(profile_dir))
+            return real_write_manifest(profile_dir, manifest)
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(
+                    tx,
+                    "reserve_directory",
+                    side_effect=reserve_then_replace,
+                )
+            )
+            if real_publish is not None:
+                stack.enter_context(
+                    mock.patch.object(
+                        tx,
+                        "publish_directory",
+                        side_effect=publish_then_replace,
+                    )
+                )
+            stack.enter_context(
+                mock.patch(
+                    "hermes_bootstrap.distributions.profile_distribution.install_distribution",
+                    side_effect=record_install,
+                )
+            )
+            stack.enter_context(
+                mock.patch(
+                    "hermes_bootstrap.distributions.profile_distribution.write_manifest",
+                    side_effect=record_write_manifest,
+                )
+            )
+            apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=True,
+            )
+
+        tx.rollback()
+        self.assertIsNotNone(external_before)
+        self.assertEqual(
+            {
+                path.relative_to(target).as_posix(): (
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (target, *sorted(target.rglob("*")))
+            },
+            external_before,
+        )
+        self.assertEqual(len(install_homes), 1)
+        self.assertNotEqual(install_homes[0][0], self.data_root)
+        self.assertEqual(install_homes[0][1], self.data_root.stat().st_dev)
+        self.assertGreaterEqual(len(manifest_targets), 2)
+        self.assertTrue(
+            all(manifest_target != target for manifest_target in manifest_targets)
+        )
+
+    def test_profile_no_overwrite_allows_a_byte_identical_existing_target(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+        apply_profile_distribution(
+            self.source("rick"),
+            self.data_root,
+            RecordingTransaction(),
+        )
+        tx = RecordingTransaction()
+
+        with mock.patch(
+            "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+        ) as install:
+            changed = apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=False,
+            )
+
+        self.assertEqual(changed, ChangeSet(()))
+        self.assertEqual(tx.snapshots, [])
+        install.assert_not_called()
+
+    def test_profile_no_overwrite_rejects_differing_and_malformed_existing_targets_without_mutation(
+        self,
+    ) -> None:
+        (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
+        self.write_profile_manifest("rick", ["config.yaml"])
+
+        def snapshot_tree(root: Path) -> dict[
+            str, tuple[str, int, bytes | None]
+        ]:
+            return {
+                path.relative_to(root).as_posix(): (
+                    "directory" if path.is_dir() else "file",
+                    stat.S_IMODE(path.stat().st_mode),
+                    None if path.is_dir() else path.read_bytes(),
+                )
+                for path in (root, *sorted(root.rglob("*")))
+            }
+
+        for condition in ("differing", "malformed"):
+            with self.subTest(condition=condition):
+                shutil.rmtree(self.data_root / "profiles", ignore_errors=True)
+                apply_profile_distribution(
+                    self.source("rick"),
+                    self.data_root,
+                    RecordingTransaction(),
+                )
+                target = self.data_root / "profiles" / "rick"
+                if condition == "differing":
+                    (target / "config.yaml").write_bytes(b"local-authoritative\n")
+                    (target / "config.yaml").chmod(0o600)
+                else:
+                    (target / "distribution.yaml").write_bytes(
+                        b"name: rick\nversion: [\n"
+                    )
+                    (target / "distribution.yaml").chmod(0o600)
+                before = snapshot_tree(target)
+                tx = RecordingTransaction()
+
+                with (
+                    mock.patch(
+                        "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+                    ) as install,
+                    self.assertRaises(ApplyError),
+                ):
+                    apply_profile_distribution(
+                        self.source("rick"),
+                        self.data_root,
+                        tx,
+                        replace_existing=False,
+                        expected_missing=False,
+                    )
+
+                self.assertEqual(tx.snapshots, [])
+                install.assert_not_called()
+                self.assertEqual(snapshot_tree(target), before)
 
     def test_profile_rejects_hardlinked_direct_managed_files_before_official_install(self) -> None:
         cases = (
