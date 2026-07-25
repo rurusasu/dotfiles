@@ -22,10 +22,12 @@
 ### Task 1: Add failing Compose and Taskfile contract tests
 
 **Files:**
+
 - Modify: `docker/hermes-agent/bootstrap/tests/test_compose_contract.py`
 - Create: `tests/python/test_taskfile_contract.py`
 
 **Interfaces:**
+
 - Consumes: current `docker/hermes-agent/compose.yml` and `Taskfile.yml`.
 - Produces: executable contracts for the `xapi-mcp` service and its task entry points.
 
@@ -83,12 +85,14 @@ git commit -m "test: define Hermes X MCP compose contracts"
 ### Task 2: Build the isolated X MCP image
 
 **Files:**
+
 - Create: `docker/hermes-xapi-mcp/Dockerfile`
 - Create: `docker/hermes-xapi-mcp/package.json`
 - Create: `docker/hermes-xapi-mcp/package-lock.json`
 - Create: `docker/hermes-xapi-mcp/entrypoint.sh`
 
 **Interfaces:**
+
 - Consumes: `CLIENT_ID`, `CLIENT_SECRET`, and `/root/.xurl` at runtime.
 - Produces: a stdio `xurl mcp https://api.x.com/mcp` bridge wrapped as a
   Streamable HTTP server on port 8080.
@@ -163,12 +167,14 @@ git commit -m "feat: add isolated X MCP bridge image"
 ### Task 3: Wire `xapi-mcp` into Compose and Taskfile
 
 **Files:**
+
 - Modify: `docker/hermes-agent/compose.yml`
 - Modify: `Taskfile.yml`
 - Modify: `scripts/sh/hermes-agent.sh`
 - Modify: `scripts/powershell/hermes-bootstrap.ps1`
 
 **Interfaces:**
+
 - Consumes: `local/hermes-xapi-mcp:latest`, host `${HERMES_DATA_DIR}/.xurl`,
   `X_API_CLIENT_ID`, and `X_API_CLIENT_SECRET`.
 - Produces: a healthy internal `xapi-mcp` service available at
@@ -204,7 +210,11 @@ xapi-mcp:
       source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
       target: /root/.xurl
   healthcheck:
-    test: ["CMD-SHELL", "node -e \"const net=require('node:net');const s=net.connect({host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);\""]
+    test:
+      [
+        "CMD-SHELL",
+        'node -e "const net=require(''node:net'');const s=net.connect({host:''127.0.0.1'',port:8080},()=>{s.end();process.exit(0)});s.on(''error'',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);"',
+      ]
     interval: 10s
     timeout: 5s
     retries: 12
@@ -266,6 +276,7 @@ git commit -m "feat: run X MCP as a Hermes compose service"
 ### Task 4: Enforce and document the all-profile MCP contract
 
 **Files:**
+
 - Modify: `docker/hermes-agent/bootstrap/hermes_bootstrap/source_contracts.py`
 - Modify: `docker/hermes-agent/bootstrap/tests/test_source_contracts.py`
 - Create: `docs/hermes-agent/xapi-mcp.md`
@@ -273,6 +284,7 @@ git commit -m "feat: run X MCP as a Hermes compose service"
 - Modify: `docs/hermes-agent/profile-home-layout.md`
 
 **Interfaces:**
+
 - Consumes: staged root/profile `config.yaml` files.
 - Produces: a validation error when any managed distribution lacks the
   canonical `xapi` MCP entry.
@@ -346,6 +358,7 @@ git commit -m "feat: require X MCP in every Hermes profile"
 ### Task 5: Verify the complete change
 
 **Files:**
+
 - Modify: none
 
 - [ ] **Step 1: Run focused Python and shell tests**

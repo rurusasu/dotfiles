@@ -91,4 +91,3 @@ task hermes:bootstrap / task hermes:up
 - The pinned bootstrap test stage remains green.
 - With Docker and valid X credentials available, `task hermes:xapi:auth`,
   `task hermes:up`, and `hermes mcp test xapi` are the runtime smoke path.
-

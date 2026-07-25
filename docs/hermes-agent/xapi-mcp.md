@@ -36,9 +36,9 @@ does not write the generated entry back to source repositories.
 Create or update the X OAuth application credentials in 1Password. Do not put
 them in Compose files, Git, profile configuration, Slack, or local env files:
 
-| Account              | Vault      | Item               | Fields                                      |
-| -------------------- | ---------- | ------------------ | ------------------------------------------- |
-| `my.1password.com`   | `openclaw` | `Hermes X API MCP` | `X_API_CLIENT_ID`, `X_API_CLIENT_SECRET`    |
+| Account            | Vault      | Item               | Fields                                   |
+| ------------------ | ---------- | ------------------ | ---------------------------------------- |
+| `my.1password.com` | `openclaw` | `Hermes X API MCP` | `X_API_CLIENT_ID`, `X_API_CLIENT_SECRET` |
 
 Then run the headless OAuth flow. The task reads those fields from 1Password
 only for this explicit command:
