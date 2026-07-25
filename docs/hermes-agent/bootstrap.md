@@ -202,9 +202,10 @@ runtime credential path are publication gates rather than optional manual
 checks.
 
 The same source validation requires every root and managed profile distribution
-to declare `mcp_servers.xapi` with URL `http://xapi-mcp:8080/mcp` and
-`connect_timeout: 300`. The declaration stays in the source repository; the
-bootstrap process validates it but does not mutate or synthesize it.
+to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
+synthesizes the non-secret `mcp_servers.xapi` entry in the staged runtime copy
+with URL `http://xapi-mcp:8080/mcp` and `connect_timeout: 300`. The generated
+entry is not written back to source repositories.
 
 The four source repositories use the same `fast` and `full` validator. Local
 validator exits are `0` pass, `1` validation failure, `2` prerequisite blocked,

@@ -46,6 +46,71 @@ dotfiles_hermes_require_secret_tools() {
   dotfiles_have curl || dotfiles_die "curl is required for Hermes readiness checks."
 }
 
+dotfiles_hermes_xapi_secret_item() {
+  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-Hermes X API MCP}"
+}
+
+dotfiles_hermes_xapi_secret_account() {
+  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_ACCOUNT:-my.1password.com}"
+}
+
+dotfiles_hermes_xapi_secret_vault() {
+  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_VAULT:-openclaw}"
+}
+
+dotfiles_hermes_extract_xapi_credentials() {
+  jq -e -c '
+    def field($labels):
+      .fields
+      | map(select((.label // "") as $label | $labels | index($label)))
+      | if length == 1 and (.[0].value | type == "string" and length > 0)
+        then .[0].value
+        else error("missing required X API OAuth field")
+        end;
+    {
+      client_id: field(["X_API_CLIENT_ID", "client_id", "Client ID"]),
+      client_secret: field(["X_API_CLIENT_SECRET", "client_secret", "Client Secret"])
+    }
+  '
+}
+
+dotfiles_hermes_read_xapi_credentials() {
+  local op_command account vault item
+  op_command="$(dotfiles_hermes_op_command)" || return 1
+  account="$(dotfiles_hermes_xapi_secret_account)"
+  vault="$(dotfiles_hermes_xapi_secret_vault)"
+  item="$(dotfiles_hermes_xapi_secret_item)"
+
+  "$op_command" signin --account "$account" >/dev/null
+  "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+    dotfiles_hermes_extract_xapi_credentials
+}
+
+dotfiles_hermes_with_xapi_credentials() {
+  local credentials client_id client_secret status=0 xtrace_enabled=0
+
+  dotfiles_hermes_op_command >/dev/null ||
+    dotfiles_die "1Password CLI (op) is required for Hermes X API credentials."
+  dotfiles_have jq || dotfiles_die "jq is required for Hermes X API credentials."
+
+  if [[ $- == *x* ]]; then
+    xtrace_enabled=1
+    set +x
+  fi
+  if credentials="$(dotfiles_hermes_read_xapi_credentials)" &&
+    client_id="$(printf '%s\n' "$credentials" | jq -r '.client_id')" &&
+    client_secret="$(printf '%s\n' "$credentials" | jq -r '.client_secret')"; then
+    X_API_CLIENT_ID="$client_id" X_API_CLIENT_SECRET="$client_secret" "$@" || status=$?
+  else
+    status=1
+  fi
+  unset credentials client_id client_secret
+  if ((xtrace_enabled)); then
+    set -x
+  fi
+  return "$status"
+}
+
 dotfiles_hermes_validate_secret_plan() {
   jq -Ssce '
     if length == 1 and (.[0] | type == "object") then .[0] else false end
@@ -236,7 +301,7 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
-  if "$docker_runner" compose -f "$compose_file" up -d --force-recreate; then
+  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --force-recreate; then
     :
   else
     status=$?

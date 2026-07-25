@@ -39,8 +39,8 @@ host ~/.hermes/                    container /opt/data/
   cron, scripts, and MCP declarations. The bootstrap stages those sources and
   applies them transactionally without turning runtime homes into Git working
   trees.
-- Every managed distribution declares the shared X API MCP endpoint as
-  `mcp_servers.xapi.url: http://xapi-mcp:8080/mcp` with
+- Bootstrap installs the shared X API MCP endpoint into every staged managed
+  distribution as `mcp_servers.xapi.url: http://xapi-mcp:8080/mcp` with
   `connect_timeout: 300`. The endpoint is served by the separate Compose
   `xapi-mcp` container and uses the shared root `.xurl` OAuth cache.
 

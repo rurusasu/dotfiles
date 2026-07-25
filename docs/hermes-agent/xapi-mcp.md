@@ -17,8 +17,8 @@ The `xapi-mcp` service uses the existing `hermes-browser` network and does not
 publish port 8080 to the host. Its OAuth cache is the host runtime directory
 `${HERMES_DATA_DIR:-~/.hermes}/.xurl`, mounted at `/root/.xurl`.
 
-Every managed distribution must own this non-secret configuration in its
-`config.yaml`:
+Every managed distribution must own `config.yaml`. During bootstrap, Hermes
+installs this non-secret MCP entry into the staged runtime copy:
 
 ```yaml
 mcp_servers:
@@ -27,18 +27,23 @@ mcp_servers:
     connect_timeout: 300
 ```
 
-The bootstrap source contract validates this exact entry in the root
-distribution and every managed profile. Bootstrap does not inject or merge it
-into source repositories.
+The bootstrap source contract still validates the source-owned Chrome MCP
+guardrails, but X API MCP is synthesized in the staged runtime copy. Bootstrap
+does not write the generated entry back to source repositories.
 
 ## First authentication
 
-Set the X OAuth application credentials in the host environment. Do not put
-them in Compose files, Git, or profile configuration:
+Create or update the X OAuth application credentials in 1Password. Do not put
+them in Compose files, Git, profile configuration, Slack, or local env files:
+
+| Account              | Vault      | Item               | Fields                                      |
+| -------------------- | ---------- | ------------------ | ------------------------------------------- |
+| `my.1password.com`   | `openclaw` | `Hermes X API MCP` | `X_API_CLIENT_ID`, `X_API_CLIENT_SECRET`    |
+
+Then run the headless OAuth flow. The task reads those fields from 1Password
+only for this explicit command:
 
 ```bash
-export X_API_CLIENT_ID='...'
-export X_API_CLIENT_SECRET='...'
 task hermes:xapi:auth
 ```
 
@@ -59,6 +64,10 @@ The normal bootstrap path also builds and starts `xapi-mcp`:
 task hermes:bootstrap
 ```
 
+This path uses the same 1Password-backed credential wrapper as
+`task hermes:up`, so no `X_API_CLIENT_*` values need to be exported before
+bootstrap.
+
 ## Verification
 
 Check the service and test the same MCP endpoint from each profile:
@@ -74,4 +83,3 @@ docker exec hermes hermes -p nancy mcp test xapi
 If authentication is missing, inspect `task hermes:xapi:logs` and rerun
 `task hermes:xapi:auth`. Never expose the internal MCP port or copy the
 `.xurl` cache into a profile repository.
-

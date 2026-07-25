@@ -18,6 +18,11 @@ class XapiImageContractTests(unittest.TestCase):
         self.assertIn("npm ci --omit=dev", dockerfile)
         self.assertNotIn("npm ci --omit=dev --ignore-scripts", dockerfile)
 
+    def test_image_has_system_certificate_roots_for_x_api_tls(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn("ca-certificates", dockerfile)
+
 
 if __name__ == "__main__":
     unittest.main()

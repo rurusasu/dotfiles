@@ -26,6 +26,7 @@ setup() {
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
@@ -70,7 +71,11 @@ exec "$@"
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
-printf "%s\n" "$HERMES_ITEM_JSON"
+if [ "${3:-}" = "Hermes X API MCP" ]; then
+	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
+else
+	printf "%s\n" "$HERMES_ITEM_JSON"
+fi
 '
 }
 
@@ -199,7 +204,8 @@ assert_log_order() {
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
 		"verify-environment --runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 7 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 8 ]
+	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
