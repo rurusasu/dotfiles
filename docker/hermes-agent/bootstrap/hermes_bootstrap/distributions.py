@@ -642,7 +642,7 @@ def _profile_is_current(
         payload = tuple(entry for entry in sanitized.iterdir() if entry.name != "distribution.yaml")
         for source in payload:
             destination = target / (".env.EXAMPLE" if source.name == ".env.template" else source.name)
-            if not _same_path(source, destination):
+            if not _same_profile_payload_path(source, destination):
                 return False
         if getattr(manifest, "env_requires", None) and not _is_regular_file(target / ".env.EXAMPLE"):
             return False
@@ -773,6 +773,25 @@ def _same_path(source: Path, destination: Path) -> bool:
         destination_entries = sorted(entry.name for entry in os.scandir(destination))
         return source_entries == destination_entries and all(
             _same_path(source / name, destination / name) for name in source_entries
+        )
+    except OSError:
+        return False
+
+
+def _same_profile_payload_path(source: Path, destination: Path) -> bool:
+    if _same_path(source, destination):
+        return True
+    if source.name != "config.yaml" or not _lexists(destination):
+        return False
+    try:
+        source_mode = source.lstat().st_mode
+        destination_mode = destination.lstat().st_mode
+        return (
+            stat.S_ISREG(source_mode)
+            and stat.S_ISREG(destination_mode)
+            and stat.S_IMODE(source_mode) == 0o644
+            and stat.S_IMODE(destination_mode) == 0o600
+            and source.read_bytes() == destination.read_bytes()
         )
     except OSError:
         return False
