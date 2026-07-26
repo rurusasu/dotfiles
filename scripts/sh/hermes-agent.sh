@@ -135,17 +135,18 @@ dotfiles_hermes_validate_secret_plan() {
     type == "object"
     and (keys | sort == ["items", "schema_version"])
     and (.schema_version == 1)
-    and (.items | type == "array" and length == 7)
+    and (.items | type == "array" and length == 8)
     and ([.items[] | {key, account, vault, item}] == [
       {"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard"},
       {"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT"},
+      {"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP"},
       {"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw"},
       {"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick"},
       {"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman"},
       {"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa"},
       {"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy"}
     ])
-    and ([.items[].key] | unique | length == 7)
+    and ([.items[].key] | unique | length == 8)
     and all(.items[]; plan_item)
     ) as $valid
     | if $valid then $plan else false end

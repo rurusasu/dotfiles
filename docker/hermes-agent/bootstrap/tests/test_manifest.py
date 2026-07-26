@@ -116,12 +116,13 @@ class ManifestTests(unittest.TestCase):
                 Path("/opt/data/profiles/nancy"),
             ),
         )
-        self.assertEqual(len(manifest.onepassword_items), 7)
+        self.assertEqual(len(manifest.onepassword_items), 8)
         self.assertEqual(
             tuple(item.item for item in manifest.onepassword_items),
             (
                 "Hermes Agent Dashboard",
                 "GitHubUsedOpenClawPAT",
+                "Google Calendar MCP",
                 "SlackBot-OpenClaw",
                 "SlackBot-Rick",
                 "SlackBot-Hoffman",

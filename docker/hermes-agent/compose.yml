@@ -18,6 +18,7 @@ services:
     ports:
       - "127.0.0.1:${HERMES_API_PORT:-8642}:8642"
       - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
+      - "127.0.0.1:3500-3505:3500-3505"
     volumes:
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}

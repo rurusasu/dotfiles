@@ -425,6 +425,40 @@ tasks:
     cmds:
       - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/risarisa/current'
 
+  hermes:nancy:up:
+    desc: Start Nancy Hermes profile gateway in the Hermes container
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway start
+
+  hermes:nancy:down:
+    desc: Stop Nancy Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway stop
+
+  hermes:nancy:restart:
+    desc: Restart Nancy Hermes profile gateway
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway restart
+
+  hermes:nancy:logs:
+    desc: Follow Nancy Hermes gateway logs
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/nancy/current'
+
   hermes:ps:
     desc: Show Hermes Agent Docker container status
     preconditions:

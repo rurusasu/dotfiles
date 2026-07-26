@@ -120,6 +120,16 @@ class AppTests(unittest.TestCase):
         )
         self.validate_chrome_mcp_sources = source_contract_patcher.start()
         self.addCleanup(source_contract_patcher.stop)
+        calendar_patcher = mock.patch.object(
+            app, "install_google_calendar_credentials"
+        )
+        self.install_google_calendar_credentials = calendar_patcher.start()
+        self.addCleanup(calendar_patcher.stop)
+        calendar_config_patcher = mock.patch.object(
+            app, "install_google_calendar_configurations"
+        )
+        self.install_google_calendar_configurations = calendar_config_patcher.start()
+        self.addCleanup(calendar_config_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -184,7 +194,31 @@ class AppTests(unittest.TestCase):
 
         self.write_root_state()
         target = self.write_installed_profile()
-        (target / "config.yaml").write_text("config\n", encoding="utf-8")
+        calendar_config = (
+            "mcp_servers:\n"
+            "  calendar:\n"
+            "    command: google-calendar-mcp\n"
+            "    connect_timeout: 300\n"
+            "    env:\n"
+            "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
+            "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
+        )
+        for config in (self.root / "config.yaml", target / "config.yaml"):
+            config.write_text(calendar_config, encoding="utf-8")
+        credentials = self.root / "google-calendar-mcp"
+        credentials.mkdir(mode=0o700)
+        oauth = credentials / "gcp-oauth.keys.json"
+        tokens = credentials / "tokens.json"
+        oauth.write_text(
+            '{"installed":{"client_id":"id","client_secret":"secret"}}',
+            encoding="utf-8",
+        )
+        tokens.write_text(
+            '{"accounts":{"shared":{"refresh_token":"refresh"}}}',
+            encoding="utf-8",
+        )
+        oauth.chmod(0o600)
+        tokens.chmod(0o600)
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
         secret_body = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 

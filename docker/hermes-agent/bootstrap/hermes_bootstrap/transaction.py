@@ -66,7 +66,7 @@ class Transaction:
         data_root: Path,
         store: Path,
         directory: Path,
-        lock: _TransactionLock,
+        lock: _TransactionLock | None,
         journal: dict[str, Any],
     ) -> None:
         self._data_root = data_root
@@ -115,7 +115,7 @@ class Transaction:
                     continue
                 journal = _read_journal(directory)
                 _validate_journal(directory, journal)
-                tx = Transaction(root, store, directory, lock, journal)
+                tx = Transaction(root, store, directory, None, journal)
                 if journal["status"] == "committed":
                     tx._cleanup_or_raise()
                     continue

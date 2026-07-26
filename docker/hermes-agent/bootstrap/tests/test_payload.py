@@ -21,6 +21,7 @@ from hermes_bootstrap.payload import (
     MAX_LINE_BYTES,
     MAX_TOTAL_BYTES,
     DashboardSecret,
+    GoogleCalendarSecret,
     SecretRedactor,
     SlackSecret,
     build_secret_plan,
@@ -46,6 +47,22 @@ def secret_items() -> dict[str, dict[str, object]]:
     return {
         "dashboard": raw_item("dashboard-id", {"user name": "dash-user", "PASSWORD": "dash-pass"}),
         "github": raw_item("github-id", {"PAT": "github-token"}),
+        "google_calendar": raw_item(
+            "google-calendar-id",
+            {
+                "oauth credentials json": json.dumps(
+                    {
+                        "installed": {
+                            "client_id": "calendar-client-id",
+                            "client_secret": "calendar-client-secret",
+                        }
+                    }
+                ),
+                "tokens json": json.dumps(
+                    {"accounts": {"shared": {"refresh_token": "calendar-refresh-token"}}}
+                ),
+            },
+        ),
         "slack_default": raw_item(
             "slack-default-id",
             {"bot token": "xoxb-default", "app-level token": "xapp-default", "allow_from": "UDEFAULT"},
@@ -152,6 +169,25 @@ class PayloadTests(unittest.TestCase):
                             {"canonical_name": "credential", "labels": ["credential", "token", "PAT", "password"]}
                         ],
                     },
+                    {
+                        "key": "google_calendar",
+                        "account": "my.1password.com",
+                        "vault": "Private",
+                        "item": "Google Calendar MCP",
+                        "fields": [
+                            {
+                                "canonical_name": "oauth_credentials_json",
+                                "labels": [
+                                    "oauth_credentials_json",
+                                    "oauth credentials json",
+                                ],
+                            },
+                            {
+                                "canonical_name": "tokens_json",
+                                "labels": ["tokens_json", "tokens json"],
+                            },
+                        ],
+                    },
                     *[
                         {
                             "key": key,
@@ -181,12 +217,47 @@ class PayloadTests(unittest.TestCase):
 
         self.assertEqual(secrets.github_token, "github-token")
         self.assertEqual(secrets.dashboard, DashboardSecret(username="dash-user", password="dash-pass"))
+        self.assertEqual(
+            secrets.google_calendar,
+            GoogleCalendarSecret(
+                oauth_credentials_json=json.dumps(
+                    {
+                        "installed": {
+                            "client_id": "calendar-client-id",
+                            "client_secret": "calendar-client-secret",
+                        }
+                    }
+                ),
+                tokens_json=json.dumps(
+                    {"accounts": {"shared": {"refresh_token": "calendar-refresh-token"}}}
+                ),
+            ),
+        )
         self.assertEqual(secrets.slack_by_profile["rick"], SlackSecret("xoxb-rick", "xapp-rick", "URICK"))
         self.assertIsInstance(secrets.slack_by_profile, MappingProxyType)
         with self.assertRaises(TypeError):
             secrets.slack_by_profile["rick"] = SlackSecret("a", "b", "c")
         with self.assertRaises(FrozenInstanceError):
             secrets.github_token = "changed"
+
+    def test_invalid_google_calendar_json_is_rejected_without_leaking_values(self) -> None:
+        items = secret_items()
+        items["google_calendar"] = raw_item(
+            "google-calendar-id",
+            {
+                "oauth_credentials_json": '{"installed":{"client_id":"secret-marker"}}',
+                "tokens_json": '{"refresh_token":"calendar-refresh-token"}',
+            },
+        )
+
+        error = capture_payload_error(payload_stream(items), self.manifest)
+
+        self.assertIsInstance(error, CredentialError)
+        self.assert_exception_hides_markers(
+            error,
+            "secret-marker",
+            "calendar-refresh-token",
+        )
 
     def test_unmatched_optional_fields_with_null_values_are_ignored(self) -> None:
         items = secret_items()

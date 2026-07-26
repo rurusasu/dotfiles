@@ -20,7 +20,13 @@ API_KEY_BODY = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_
 
 import hermes_bootstrap.envfiles as envfiles_module
 from hermes_bootstrap.errors import ApplyError, InputError
-from hermes_bootstrap.payload import DashboardSecret, SecretBundle, SecretRedactor, SlackSecret
+from hermes_bootstrap.payload import (
+    DashboardSecret,
+    GoogleCalendarSecret,
+    SecretBundle,
+    SecretRedactor,
+    SlackSecret,
+)
 from hermes_bootstrap.envfiles import (
     API_SERVER_KEYS,
     DASHBOARD_KEYS,
@@ -37,6 +43,10 @@ def secret_bundle() -> SecretBundle:
     return SecretBundle(
         github_token="github-secret-value",
         dashboard=DashboardSecret(username="dashboard-user", password="dashboard-password"),
+        google_calendar=GoogleCalendarSecret(
+            '{"installed":{"client_id":"id","client_secret":"secret"}}',
+            '{"refresh_token":"refresh"}',
+        ),
         slack_by_profile=MappingProxyType(
             {
                 "default": SlackSecret("default-bot", "default-app", "default-users"),
@@ -63,6 +73,10 @@ def capture_dashboard_build_error() -> BaseException:
     bundle = SecretBundle(
         github_token="build-github-marker",
         dashboard=DashboardSecret("build-user-marker", "build-password-marker"),
+        google_calendar=GoogleCalendarSecret(
+            '{"installed":{"client_id":"id","client_secret":"secret"}}',
+            '{"refresh_token":"refresh"}',
+        ),
         slack_by_profile=MappingProxyType(
             {"default": SlackSecret("build-bot-marker", "build-app-marker", "build-users-marker")}
         ),
