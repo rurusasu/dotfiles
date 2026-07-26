@@ -71,6 +71,13 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'"id":"acceptance-GitHubUsedOpenClawPAT"'* ]]
 
+	run "$op" item get "Google Calendar MCP" \
+		--account my.1password.com --vault Private --format json
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'"id":"acceptance-Google Calendar MCP"'* ]]
+	[[ "$output" == *'"label":"oauth_credentials_json"'* ]]
+	[[ "$output" == *'"label":"tokens_json"'* ]]
+
 	run "$op" item get "SlackBot-Nancy" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -eq 0 ]
@@ -88,6 +95,10 @@ EOF
 	[[ "$output" == *'"label":"X_API_CLIENT_SECRET"'* ]]
 
 	run "$op" item get "Unapproved Item" \
+		--account my.1password.com --vault openclaw --format json
+	[ "$status" -ne 0 ]
+
+	run "$op" item get "Google Calendar MCP" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -ne 0 ]
 }
