@@ -3,6 +3,7 @@ FROM docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57
 USER root
 
 ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
+ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 
 COPY xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
 COPY gh-wrapper.sh /usr/local/bin/gh
@@ -70,6 +71,9 @@ RUN apt-get update \
   && /usr/bin/gh --version \
   && npm --version \
   && npx --version \
+  && npm install --global --omit=dev --no-audit --no-fund \
+    "@cocal/google-calendar-mcp@${GOOGLE_CALENDAR_MCP_VERSION}" \
+  && google-calendar-mcp --version \
   && article-collector --help \
   && chmod 0755 /usr/local/bin/gh \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \

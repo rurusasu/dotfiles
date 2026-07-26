@@ -89,6 +89,12 @@ def source_config(key: str, value: str) -> str:
         "  xapi:\n"
         "    url: http://xapi-mcp:8080/mcp\n"
         "    connect_timeout: 300\n"
+        "  calendar:\n"
+        "    command: google-calendar-mcp\n"
+        "    connect_timeout: 300\n"
+        "    env:\n"
+        "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
+        "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
     )
 
 
@@ -476,6 +482,25 @@ class BootstrapFlowTests(unittest.TestCase):
         values = {
             "dashboard": {"username": "fixture-user", "password": "fixture-password"},
             "github": {"credential": token},
+            "google_calendar": {
+                "oauth_credentials_json": json.dumps(
+                    {
+                        "installed": {
+                            "client_id": "fixture-calendar-client",
+                            "client_secret": "fixture-calendar-secret",
+                        }
+                    }
+                ),
+                "tokens_json": json.dumps(
+                    {
+                        "accounts": {
+                            "shared": {
+                                "refresh_token": "fixture-calendar-refresh"
+                            }
+                        }
+                    }
+                ),
+            },
             "slack_default": {
                 "bot_token": "xoxb-default-bot",
                 "app_token": "xapp-default-app",

@@ -40,9 +40,19 @@ class DashboardSecret:
 
 
 @dataclass(frozen=True, repr=False)
+class GoogleCalendarSecret:
+    oauth_credentials_json: str
+    tokens_json: str
+
+    def __repr__(self) -> str:
+        return "GoogleCalendarSecret(<redacted>)"
+
+
+@dataclass(frozen=True, repr=False)
 class SecretBundle:
     github_token: str
     dashboard: DashboardSecret
+    google_calendar: GoogleCalendarSecret
     slack_by_profile: Mapping[str, SlackSecret]
     redactor: "SecretRedactor"
 
@@ -334,8 +344,14 @@ def _bundle_from_fields(
             password=parsed["dashboard"]["password"],
         )
         github_token = parsed["github"]["credential"]
+        calendar_fields = parsed["google_calendar"]
+        google_calendar = GoogleCalendarSecret(
+            oauth_credentials_json=calendar_fields["oauth_credentials_json"],
+            tokens_json=calendar_fields["tokens_json"],
+        )
     except KeyError as error:
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
+    _validate_google_calendar_secret(google_calendar)
 
     slack_by_profile: dict[str, SlackSecret] = {}
     required_profiles = ("default", *(profile.name for profile in manifest.profiles))
@@ -358,9 +374,43 @@ def _bundle_from_fields(
     return SecretBundle(
         github_token=github_token,
         dashboard=dashboard,
+        google_calendar=google_calendar,
         slack_by_profile=MappingProxyType(slack_by_profile),
         redactor=redactor,
     )
+
+
+def _validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
+    try:
+        oauth = json.loads(secret.oauth_credentials_json)
+        tokens = json.loads(secret.tokens_json)
+        installed = oauth["installed"]
+        client_id = installed["client_id"]
+        client_secret = installed["client_secret"]
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        raise CredentialError("Google Calendar credentials are invalid") from None
+    if (
+        not isinstance(oauth, dict)
+        or not isinstance(installed, dict)
+        or not isinstance(client_id, str)
+        or not client_id
+        or not isinstance(client_secret, str)
+        or not client_secret
+        or not isinstance(tokens, dict)
+        or not _contains_refresh_token(tokens)
+    ):
+        raise CredentialError("Google Calendar credentials are invalid") from None
+
+
+def _contains_refresh_token(value: object) -> bool:
+    if isinstance(value, dict):
+        refresh_token = value.get("refresh_token")
+        if isinstance(refresh_token, str) and refresh_token:
+            return True
+        return any(_contains_refresh_token(child) for child in value.values())
+    if isinstance(value, list):
+        return any(_contains_refresh_token(child) for child in value)
+    return False
 
 
 def _exact_keys(record: Mapping[str, object], expected: set[str], context: str) -> None:

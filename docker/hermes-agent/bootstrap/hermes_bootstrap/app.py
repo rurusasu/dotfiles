@@ -48,6 +48,10 @@ from .filesystem import (
     open_absolute_directory,
 )
 from .git import _remote_identity, _same_remote_identity, stage_distribution
+from .google_calendar import (
+    install_google_calendar_configurations,
+    install_google_calendar_credentials,
+)
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
@@ -261,6 +265,16 @@ def _apply_sensitive(
         for repo, result in remote_results:
             apply_shared_working_tree(repo, result, tx)
             _failpoint(f"shared-apply:{repo.name}")
+
+        install_google_calendar_configurations(
+            [target for _profile, target in _environment_targets(manifest)],
+            tx,
+        )
+        install_google_calendar_credentials(
+            manifest.data_root,
+            secrets.google_calendar,
+            tx,
+        )
 
         for profile, target in _environment_targets(manifest):
             if profile in missing_names:

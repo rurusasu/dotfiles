@@ -120,6 +120,16 @@ class AppTests(unittest.TestCase):
         )
         self.validate_chrome_mcp_sources = source_contract_patcher.start()
         self.addCleanup(source_contract_patcher.stop)
+        calendar_patcher = mock.patch.object(
+            app, "install_google_calendar_credentials"
+        )
+        self.install_google_calendar_credentials = calendar_patcher.start()
+        self.addCleanup(calendar_patcher.stop)
+        calendar_config_patcher = mock.patch.object(
+            app, "install_google_calendar_configurations"
+        )
+        self.install_google_calendar_configurations = calendar_config_patcher.start()
+        self.addCleanup(calendar_config_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",

@@ -135,6 +135,12 @@ transaction writes. Crash-journal recovery is the exception: it runs first and
 may restore or remove previously journaled managed paths before secret or
 credential validation.
 
+The `Private/Google Calendar MCP` item supplies `oauth_credentials_json` and
+`tokens_json`. Bootstrap writes one shared credential set under
+`/opt/data/google-calendar-mcp` and installs the same stdio Calendar MCP entry in
+the root and every named profile. Calendar setup therefore has no dependency on
+Nancy or any other profile being synchronized first.
+
 ## Shared Lifelog Operation
 
 Lifelog is not an exact named-profile mirror. The manifest declares it as a
@@ -161,12 +167,13 @@ commit/rebase/push workflow. All profiles continue to use
    publication for an existing profile, or the configured branch only for a
    truly missing first install.
 7. Validate the staged root and every named profile against the required Chrome
-   MCP source contract.
+   MCP source contract, then install the canonical X API entry.
 8. Synchronize each shared repository remote, including lifelog under its
    locked read-write policy.
 9. Call `Transaction.begin`, apply the root distribution, apply the staged
    profiles in manifest order through the official Hermes API, publish shared
-   working trees, and merge private `.env` files with mode `0600`.
+   working trees, install the Google Calendar MCP entry and shared credentials,
+   and merge private `.env` files with mode `0600`.
 10. Validate the installed layout, commit the transaction, report the
     `profile_sync` summary, then recreate and health-check the gateway.
 

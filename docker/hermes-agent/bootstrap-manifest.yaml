@@ -17,6 +17,15 @@ onepassword_items:
     fields:
       - canonical_name: credential
         labels: [credential, token, PAT, password]
+  - key: google_calendar
+    account: my.1password.com
+    vault: Private
+    item: Google Calendar MCP
+    fields:
+      - canonical_name: oauth_credentials_json
+        labels: [oauth_credentials_json, oauth credentials json]
+      - canonical_name: tokens_json
+        labels: [tokens_json, tokens json]
   - key: slack_default
     account: my.1password.com
     vault: openclaw

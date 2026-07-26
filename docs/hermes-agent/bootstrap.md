@@ -60,18 +60,22 @@ host adapter
 
 Each item record embeds the full `op item get <title> --account
 my.1password.com --vault openclaw --format json` object. The stdin stream is
-never stored, logged, or placed in a process argument. All seven items are
+never stored, logged, or placed in a process argument. All eight items are
 mandatory: `Hermes Agent Dashboard`, `GitHubUsedOpenClawPAT`,
 `SlackBot-OpenClaw`, `SlackBot-Rick`, `SlackBot-Hoffman`,
 `SlackBot-Risarisa`, and `SlackBot-Nancy` in account `my.1password.com`, vault
-`openclaw`.
+`openclaw`, plus `Google Calendar MCP` in account `my.1password.com`, vault
+`Private`.
 
 Required labels are `username` or `user name` and `password` for the dashboard;
 `credential`, `token`, `PAT`, or `password` for the GitHub item; and
 `SLACK_BOT_TOKEN`/`bot_token`/`bot token`,
 `SLACK_APP_TOKEN`/`app_level_token`/`app token`/`app-level token`, and
 `SLACK_ALLOWED_USERS`/`allowed_users`/`allowed users`/`allowFrom`/`allow_from`
-for each Slack item. Bootstrap validates GitHub authentication and all remote
+for each Slack item. The Calendar item requires `oauth_credentials_json` and
+`tokens_json`; bootstrap installs both as mode `0600` files in the shared
+`/opt/data/google-calendar-mcp` directory, independently of named-profile
+synchronization. Bootstrap validates GitHub authentication and all remote
 access after crash-journal recovery and before it begins new staging or
 transaction writes. Recovery may restore or delete previously journaled managed
 paths before secrets and credentials are validated. Managed `.env` keys include
