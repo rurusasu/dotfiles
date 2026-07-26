@@ -51,7 +51,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $script:dockerArguments = @()
         $script:dockerExitCode = 0
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -70,7 +70,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "secret-plan"
         )
         $plan.schema_version | Should -Be 1
-        @($plan.items).Count | Should -Be 7
+        @($plan.items).Count | Should -Be 8
     }
 
     It "rejects plans that replace an allowlisted 1Password reference" {
@@ -95,14 +95,14 @@ Describe "Get-HermesBootstrapSecretPlan" {
     It "rejects a reordered allowlisted 1Password plan" {
         $invalidPlan = $script:dockerOutput[0] | ConvertFrom-Json -Depth 32
         $items = @($invalidPlan.items)
-        $invalidPlan.items = @($items[1], $items[0]) + $items[2..6]
+        $invalidPlan.items = @($items[1], $items[0]) + $items[2..7]
         $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
         { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
             Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
     }
 
-    It "rejects plans that do not satisfy the exact seven-item metadata schema" {
+    It "rejects plans that do not satisfy the exact eight-item metadata schema" {
         $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
         $invalidPlans = @()
 
@@ -306,7 +306,7 @@ Describe "Invoke-HermesBootstrap" {
 
     BeforeEach {
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -376,6 +376,7 @@ Describe "Invoke-HermesBootstrap" {
         $script:onePasswordCalls | Should -Be @(
             "item|get|Hermes Agent Dashboard|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|GitHubUsedOpenClawPAT|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|Google Calendar MCP|--account|my.1password.com|--vault|Private|--format|json",
             "item|get|SlackBot-OpenClaw|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|SlackBot-Rick|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|SlackBot-Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
@@ -385,13 +386,13 @@ Describe "Invoke-HermesBootstrap" {
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
-        @($records).Count | Should -Be 9
+        @($records).Count | Should -Be 10
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
-        @($records[1..7] | ForEach-Object { $_.key }) | Should -Be @(
-            "dashboard", "github", "slack_default", "slack_rick", "slack_hoffman", "slack_risarisa", "slack_nancy"
+        @($records[1..8] | ForEach-Object { $_.key }) | Should -Be @(
+            "dashboard", "github", "google_calendar", "slack_default", "slack_rick", "slack_hoffman", "slack_risarisa", "slack_nancy"
         )
-        $records[8].type | Should -Be "end"
+        $records[9].type | Should -Be "end"
 
         $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
         $source | Should -Match "ArgumentList\.Add"
@@ -417,8 +418,8 @@ Describe "Invoke-HermesBootstrap" {
         $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
-        $rawLines[8] | Should -Be '{"type":"end"}'
-        foreach ($index in 1..7) {
+        $rawLines[9] | Should -Be '{"type":"end"}'
+        foreach ($index in 1..8) {
             $rawLines[$index] | Should -Match '^\{"type":"item","key":"[a-z_]+","item":\{'
             $rawLines[$index] | Should -Not -Match '(?:\{|,)\s+"|,\s*\}'
         }

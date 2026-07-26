@@ -10,8 +10,8 @@ from pathlib import Path
 import yaml
 
 from .distributions import _atomic_write
-from .errors import ApplyError
-from .payload import GoogleCalendarSecret
+from .errors import ApplyError, BootstrapError, ValidationError
+from .payload import GoogleCalendarSecret, validate_google_calendar_secret
 from .transaction import Transaction
 
 
@@ -118,6 +118,55 @@ def install_google_calendar_credentials(
         )
     except (OSError, TypeError, UnicodeError, ValueError):
         raise ApplyError("could not install Google Calendar credentials") from None
+
+
+def validate_google_calendar_installation(
+    data_root: Path,
+    targets: Sequence[Path],
+) -> None:
+    """Validate the shared credentials and every managed Calendar MCP entry."""
+
+    try:
+        for target in targets:
+            candidate = _load_managed_config(target / "config.yaml")
+            if (
+                candidate is None
+                or candidate[2].get("calendar") != _MCP_CONFIGURATION
+            ):
+                raise ValueError
+
+        credentials = data_root / _DIRECTORY
+        directory = credentials.lstat()
+        if (
+            stat.S_ISLNK(directory.st_mode)
+            or not stat.S_ISDIR(directory.st_mode)
+            or stat.S_IMODE(directory.st_mode) != 0o700
+        ):
+            raise ValueError
+
+        contents: dict[str, str] = {}
+        for name in (_OAUTH_FILE, _TOKENS_FILE):
+            path = credentials / name
+            metadata = path.lstat()
+            if (
+                stat.S_ISLNK(metadata.st_mode)
+                or not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+            ):
+                raise ValueError
+            contents[name] = path.read_text(encoding="utf-8")
+
+        validate_google_calendar_secret(
+            GoogleCalendarSecret(
+                oauth_credentials_json=contents[_OAUTH_FILE],
+                tokens_json=contents[_TOKENS_FILE],
+            )
+        )
+    except ValidationError:
+        raise
+    except (BootstrapError, OSError, TypeError, UnicodeError, ValueError):
+        raise ValidationError("installed Google Calendar configuration is invalid") from None
 
 
 def _credentials_are_current(

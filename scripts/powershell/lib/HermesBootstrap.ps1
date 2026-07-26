@@ -127,6 +127,7 @@ $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
 $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "dashboard"; account = "my.1password.com"; vault = "openclaw"; item = "Hermes Agent Dashboard" },
     [PSCustomObject]@{ key = "github"; account = "my.1password.com"; vault = "openclaw"; item = "GitHubUsedOpenClawPAT" },
+    [PSCustomObject]@{ key = "google_calendar"; account = "my.1password.com"; vault = "Private"; item = "Google Calendar MCP" },
     [PSCustomObject]@{ key = "slack_default"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-OpenClaw" },
     [PSCustomObject]@{ key = "slack_rick"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Rick" },
     [PSCustomObject]@{ key = "slack_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Hoffman" },
@@ -229,7 +230,7 @@ function Test-HermesBootstrapSecretPlan {
     if ($Plan.schema_version -ne 1) { return $false }
 
     $items = @($Plan.items)
-    if ($items.Count -ne 7) { return $false }
+    if ($items.Count -ne $script:HermesBootstrapAllowedOnePasswordItems.Count) { return $false }
 
     $keys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     for ($itemIndex = 0; $itemIndex -lt $items.Count; $itemIndex++) {

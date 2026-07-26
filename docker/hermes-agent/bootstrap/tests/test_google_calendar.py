@@ -12,7 +12,9 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 from hermes_bootstrap.google_calendar import (
     install_google_calendar_configurations,
     install_google_calendar_credentials,
+    validate_google_calendar_installation,
 )
+from hermes_bootstrap.errors import ValidationError
 from hermes_bootstrap.payload import GoogleCalendarSecret
 from hermes_bootstrap.transaction import Transaction
 
@@ -27,6 +29,22 @@ class GoogleCalendarCredentialTests(unittest.TestCase):
             oauth_credentials_json='{"installed":{"client_id":"id","client_secret":"secret"}}',
             tokens_json='{"accounts":{"shared":{"refresh_token":"refresh"}}}',
         )
+
+    def install_valid_layout(self) -> tuple[Path, ...]:
+        targets = (self.root, self.root / "profiles" / "nancy")
+        for target in targets:
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "config.yaml").write_text(
+                "mcp_servers:\n"
+                "  chrome:\n"
+                "    url: http://browser-mcp:8080/mcp\n",
+                encoding="utf-8",
+            )
+        tx = Transaction.begin(self.root)
+        install_google_calendar_configurations(targets, tx)
+        install_google_calendar_credentials(self.root, self.secret, tx)
+        tx.commit()
+        return targets
 
     def test_installs_shared_credentials_with_private_permissions(self) -> None:
         tx = Transaction.begin(self.root)
@@ -111,6 +129,63 @@ class GoogleCalendarCredentialTests(unittest.TestCase):
                 expected,
                 (target / "config.yaml").read_text(encoding="utf-8"),
             )
+
+    def test_validation_accepts_every_calendar_configuration_and_shared_credentials(
+        self,
+    ) -> None:
+        targets = self.install_valid_layout()
+
+        validate_google_calendar_installation(self.root, targets)
+
+    def test_validation_rejects_each_missing_calendar_configuration(self) -> None:
+        targets = self.install_valid_layout()
+
+        for target in targets:
+            config = target / "config.yaml"
+            original = config.read_text(encoding="utf-8")
+            with self.subTest(target=target):
+                config.write_text("mcp_servers: {}\n", encoding="utf-8")
+                with self.assertRaisesRegex(
+                    ValidationError,
+                    "installed Google Calendar configuration is invalid",
+                ):
+                    validate_google_calendar_installation(self.root, targets)
+                config.write_text(original, encoding="utf-8")
+
+    def test_validation_rejects_malformed_symlinked_or_public_credentials(
+        self,
+    ) -> None:
+        targets = self.install_valid_layout()
+        credentials = self.root / "google-calendar-mcp"
+
+        for name in ("gcp-oauth.keys.json", "tokens.json"):
+            path = credentials / name
+            original = path.read_text(encoding="utf-8")
+            with self.subTest(name=name, case="missing"):
+                path.unlink()
+                with self.assertRaises(ValidationError):
+                    validate_google_calendar_installation(self.root, targets)
+                path.write_text(original, encoding="utf-8")
+                path.chmod(0o600)
+            with self.subTest(name=name, case="malformed"):
+                path.write_text("{}", encoding="utf-8")
+                with self.assertRaises(ValidationError):
+                    validate_google_calendar_installation(self.root, targets)
+                path.write_text(original, encoding="utf-8")
+                path.chmod(0o600)
+            with self.subTest(name=name, case="symlink"):
+                path.unlink()
+                path.symlink_to(self.root / "outside-secret")
+                with self.assertRaises(ValidationError):
+                    validate_google_calendar_installation(self.root, targets)
+                path.unlink()
+                path.write_text(original, encoding="utf-8")
+                path.chmod(0o600)
+            with self.subTest(name=name, case="mode"):
+                path.chmod(0o644)
+                with self.assertRaises(ValidationError):
+                    validate_google_calendar_installation(self.root, targets)
+                path.chmod(0o600)
 
 
 if __name__ == "__main__":

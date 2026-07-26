@@ -645,9 +645,30 @@ class TransactionTests(unittest.TestCase):
 
     def test_recovery_accepts_private_transaction_directory_hierarchy(self) -> None:
         hierarchy, journal_path = self.private_recovery_hierarchy(self.root, bootstrap_mode=0o755)
+        acquired_locks: list[transaction_module._TransactionLock] = []
+        acquire_lock = transaction_module._acquire_lock
 
-        Transaction.recover_if_needed(self.root)
+        def record_acquired_lock(store: Path) -> transaction_module._TransactionLock:
+            lock = acquire_lock(store)
+            acquired_locks.append(lock)
+            return lock
 
+        with (
+            mock.patch.object(transaction_module, "_acquire_lock", side_effect=record_acquired_lock),
+            mock.patch.object(
+                transaction_module,
+                "_release_lock",
+                wraps=transaction_module._release_lock,
+            ) as release_lock,
+        ):
+            Transaction.recover_if_needed(self.root)
+
+        self.assertEqual(len(acquired_locks), 1)
+        recovery_lock = acquired_locks[0]
+        self.assertEqual(
+            sum(call.args == (recovery_lock,) for call in release_lock.call_args_list),
+            1,
+        )
         bootstrap_info = hierarchy["bootstrap"].lstat()
         self.assertEqual(bootstrap_info.st_uid, os.geteuid())
         self.assertEqual(stat.S_IMODE(bootstrap_info.st_mode), 0o755)

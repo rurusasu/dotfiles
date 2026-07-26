@@ -351,7 +351,7 @@ def _bundle_from_fields(
         )
     except KeyError as error:
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
-    _validate_google_calendar_secret(google_calendar)
+    validate_google_calendar_secret(google_calendar)
 
     slack_by_profile: dict[str, SlackSecret] = {}
     required_profiles = ("default", *(profile.name for profile in manifest.profiles))
@@ -380,7 +380,7 @@ def _bundle_from_fields(
     )
 
 
-def _validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
+def validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
     try:
         oauth = json.loads(secret.oauth_credentials_json)
         tokens = json.loads(secret.tokens_json)
