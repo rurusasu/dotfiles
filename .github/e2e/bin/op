@@ -21,7 +21,9 @@ case "$3" in
 		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
 		exit 2
 	fi
-	printf '{"id":"acceptance-Google Calendar MCP","fields":[{"label":"oauth_credentials_json","value":"{\"installed\":{\"client_id\":\"acceptance-client-id\",\"client_secret\":\"acceptance-client-secret\"}}"},{"label":"tokens_json","value":"{\"accounts\":{\"shared\":{\"refresh_token\":\"acceptance-refresh-token\"}}}"}]}\n'
+	cat <<'JSON'
+{"id":"acceptance-Google Calendar MCP","fields":[{"label":"oauth_credentials_json","value":"{\"installed\":{\"client_id\":\"acceptance-client-id\",\"client_secret\":\"acceptance-client-secret\"}}"},{"label":"tokens_json","value":"{\"accounts\":{\"shared\":{\"refresh_token\":\"acceptance-refresh-token\"}}}"}]}
+JSON
 	exit 0
 	;;
 "Hermes Agent Dashboard" | \
