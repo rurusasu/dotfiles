@@ -960,6 +960,39 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(tx.snapshots, [])
         install.assert_not_called()
 
+    def test_profile_no_overwrite_allows_owner_only_config_mode(
+        self,
+    ) -> None:
+        config = self.stage_root / "config.yaml"
+        config.write_text("config\n", encoding="utf-8")
+        config.chmod(0o644)
+        self.write_profile_manifest("rick", ["config.yaml"])
+        apply_profile_distribution(
+            self.source("rick"),
+            self.data_root,
+            RecordingTransaction(),
+        )
+        target = self.data_root / "profiles" / "rick"
+        installed_config = target / "config.yaml"
+        installed_config.chmod(0o600)
+        tx = RecordingTransaction()
+
+        with mock.patch(
+            "hermes_bootstrap.distributions.profile_distribution.install_distribution"
+        ) as install:
+            changed = apply_profile_distribution(
+                self.source("rick"),
+                self.data_root,
+                tx,
+                replace_existing=False,
+                expected_missing=False,
+            )
+
+        self.assertEqual(changed, ChangeSet(()))
+        self.assertEqual(stat.S_IMODE(installed_config.stat().st_mode), 0o600)
+        self.assertEqual(tx.snapshots, [])
+        install.assert_not_called()
+
     def test_profile_no_overwrite_rejects_differing_and_malformed_existing_targets_without_mutation(
         self,
     ) -> None:
