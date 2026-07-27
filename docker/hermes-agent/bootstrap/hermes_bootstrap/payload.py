@@ -290,6 +290,7 @@ def _parse_item_record(
         raise ValidationError("secret payload item id is invalid")
     if not isinstance(fields, list):
         raise ValidationError("secret payload item fields are invalid")
+    section_labels = _item_section_labels(item)
 
     extracted: dict[str, list[str]] = {field.canonical_name: [] for field in declared[key].fields}
     aliases = _field_aliases(declared[key])
@@ -310,7 +311,7 @@ def _parse_item_record(
             raise ValidationError("secret payload item field is invalid")
         if section is not None and not isinstance(section, dict):
             raise ValidationError("secret payload item field is invalid")
-        matches = _reference_matches(declared[key], raw_field)
+        matches = _reference_matches(declared[key], raw_field, section_labels)
         alias_matches = set(aliases.get(_normalize_label(label), ()))
         if field_id:
             alias_matches.update(aliases.get(_normalize_label(field_id), ()))
@@ -346,17 +347,52 @@ def _field_aliases(item: OnePasswordItem) -> dict[str, tuple[str, ...]]:
     return {label: tuple(sorted(names)) for label, names in aliases.items()}
 
 
-def _reference_matches(item: OnePasswordItem, raw_field: Mapping[str, object]) -> set[str]:
+def _item_section_labels(item: Mapping[str, object]) -> dict[str, str]:
+    raw_sections = item.get("sections")
+    if raw_sections is None:
+        return {}
+    if not isinstance(raw_sections, list):
+        raise ValidationError("secret payload item sections are invalid")
+
+    labels: dict[str, str] = {}
+    for raw_section in raw_sections:
+        if not isinstance(raw_section, Mapping):
+            raise ValidationError("secret payload item section is invalid")
+        section_id = raw_section.get("id")
+        label = raw_section.get("label")
+        if (
+            not isinstance(section_id, str)
+            or not section_id
+            or not isinstance(label, str)
+            or not label
+            or section_id in labels
+        ):
+            raise ValidationError("secret payload item section is invalid")
+        labels[section_id] = label
+    return labels
+
+
+def _reference_matches(
+    item: OnePasswordItem,
+    raw_field: Mapping[str, object],
+    section_labels: Mapping[str, str],
+) -> set[str]:
     return {
         field.canonical_name
         for field in item.fields
         if field.reference_name is not None
-        and _raw_field_matches_reference(raw_field, field.reference_name)
+        and _raw_field_matches_reference(
+            raw_field,
+            field.reference_name,
+            section_labels,
+        )
     }
 
 
 def _raw_field_matches_reference(
-    raw_field: Mapping[str, object], reference_name: str
+    raw_field: Mapping[str, object],
+    reference_name: str,
+    section_labels: Mapping[str, str],
 ) -> bool:
     section_name, separator, field_name = reference_name.rpartition("/")
     field_candidates = {
@@ -377,6 +413,9 @@ def _raw_field_matches_reference(
         for key in ("id", "label")
         if isinstance((value := section.get(key)), str)
     }
+    section_id = section.get("id")
+    if isinstance(section_id, str) and section_id in section_labels:
+        section_candidates.add(_normalize_label(section_labels[section_id]))
     return _normalize_label(section_name) in section_candidates
 
 

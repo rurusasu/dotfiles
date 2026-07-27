@@ -257,29 +257,33 @@ class PayloadTests(unittest.TestCase):
         items = secret_items()
         items["discord_default"] = {
             "id": "discord-default-id",
+            "sections": [
+                {"id": "generated-discord-section-id", "label": "Discord"},
+                {"id": "generated-slack-section-id", "label": "Slack"},
+            ],
             "fields": [
                 {
                     "id": "bot_token",
                     "label": "bot_token",
-                    "section": {"id": "discord", "label": "Discord"},
+                    "section": {"id": "generated-discord-section-id"},
                     "value": "discord-default-token",
                 },
                 {
                     "id": "allowed_users",
                     "label": "allowed_users",
-                    "section": {"id": "discord", "label": "Discord"},
+                    "section": {"id": "generated-discord-section-id"},
                     "value": "UDEFAULT",
                 },
                 {
                     "id": "bot_token",
                     "label": "bot_token",
-                    "section": {"id": "slack", "label": "Slack"},
+                    "section": {"id": "generated-slack-section-id"},
                     "value": "slack-default-token",
                 },
                 {
                     "id": "allowed_users",
                     "label": "allowed_users",
-                    "section": {"id": "slack", "label": "Slack"},
+                    "section": {"id": "generated-slack-section-id"},
                     "value": "USLACK",
                 },
             ],
