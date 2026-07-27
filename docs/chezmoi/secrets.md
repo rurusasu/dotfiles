@@ -95,8 +95,8 @@ item is shared as required by the bootstrap manifest. Values stay in runtime
 `.env` files with mode `0600`, never in source distributions or repository
 logs.
 
-Discord bot registration or rotation follows one strict rule: tool output に token
-値を戻さない。Use noVNC or another
+Discord bot registration or rotation follows one strict rule:
+Browser MCP や tool output に token 値を戻さない。Use noVNC or another
 approved non-logged secret channel to save generated values in the matching
 profile-named 1Password item's `Discord` section, then rerun bootstrap. Browser-driven
 setup does not write runtime credentials directly; without an approved secret

@@ -57,7 +57,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'op run --env-file' -Because 'docs should describe the official env-file injection pattern'
         }
 
-        It 'should keep Hermes Slack app token capture out of logged Browser MCP output' {
+        It 'should keep Hermes Discord bot token capture out of logged Browser MCP output' {
             $secretsDocPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
             $content = Get-Content -LiteralPath $secretsDocPath -Raw
 
