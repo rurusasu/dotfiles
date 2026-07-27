@@ -303,7 +303,7 @@ def _apply_root_boundary(stage: StagedSource, data_root: Path, tx: Transaction) 
             _require_safe_managed_path(data_root, destination)
             if owned in next_set:
                 source = stage.path.joinpath(*owned.parts)
-                if _same_path(source, destination):
+                if _same_distribution_path(source, destination):
                     continue
                 _ensure_destination_parent(destination.parent, snapshots)
                 _snapshot(snapshots, destination)
@@ -642,7 +642,7 @@ def _profile_is_current(
         payload = tuple(entry for entry in sanitized.iterdir() if entry.name != "distribution.yaml")
         for source in payload:
             destination = target / (".env.EXAMPLE" if source.name == ".env.template" else source.name)
-            if not _same_profile_payload_path(source, destination):
+            if not _same_distribution_path(source, destination):
                 return False
         if getattr(manifest, "env_requires", None) and not _is_regular_file(target / ".env.EXAMPLE"):
             return False
@@ -795,6 +795,36 @@ def _same_profile_payload_path(source: Path, destination: Path) -> bool:
         )
     except OSError:
         return False
+
+def _same_distribution_path(source: Path, destination: Path) -> bool:
+    """Compare distribution files while ignoring managed config sections."""
+
+    if _same_profile_payload_path(source, destination):
+        return True
+    if source.name != "config.yaml" or destination.name != "config.yaml":
+        return False
+    try:
+        source_config = yaml.safe_load(source.read_text(encoding="utf-8"))
+        destination_config = yaml.safe_load(destination.read_text(encoding="utf-8"))
+        if not isinstance(source_config, dict) or not isinstance(destination_config, dict):
+            return False
+        return _without_bootstrap_onepassword(source_config) == _without_bootstrap_onepassword(destination_config)
+    except (OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError):
+        return False
+
+
+def _without_bootstrap_onepassword(config: dict[object, object]) -> dict[object, object]:
+    result = dict(config)
+    secrets = result.get("secrets")
+    if not isinstance(secrets, dict):
+        return result
+    remaining_secrets = dict(secrets)
+    remaining_secrets.pop("onepassword", None)
+    if remaining_secrets:
+        result["secrets"] = remaining_secrets
+    else:
+        result.pop("secrets", None)
+    return result
 
 
 def _replace_from_source(source: Path, destination: Path, snapshots: _SnapshotTracker) -> None:

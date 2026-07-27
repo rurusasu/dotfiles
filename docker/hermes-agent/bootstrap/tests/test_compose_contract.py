@@ -56,6 +56,16 @@ class ComposeContractTests(unittest.TestCase):
     def test_gateway_uses_the_canonical_shared_lifelog_path(self) -> None:
         self.assertEqual(self.hermes["environment"]["LIFELOG_ROOT"], "/opt/data/shared/lifelog")
 
+    def test_hermes_services_load_the_private_service_account_environment_file(self) -> None:
+        expected = [
+            {
+                "path": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env",
+                "required": False,
+            }
+        ]
+        self.assertEqual(self.hermes["env_file"], expected)
+        self.assertEqual(self.bootstrap["env_file"], expected)
+
     def test_gateway_exposes_the_authenticated_api_on_the_container_interface(self) -> None:
         self.assertEqual(self.hermes["environment"]["API_SERVER_HOST"], "0.0.0.0")
         self.assertIn("127.0.0.1:${HERMES_API_PORT:-8642}:8642", self.hermes["ports"])
@@ -153,6 +163,20 @@ class ComposeContractTests(unittest.TestCase):
         self.assertIn("COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests", dockerfile)
         self.assertIn("python -m unittest discover", dockerfile)
         self.assertTrue(dockerfile.rstrip().endswith("FROM hermes-bootstrap-runtime\n\nWORKDIR /"))
+
+    def test_runtime_image_installs_the_official_onepassword_cli(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "https://downloads.1password.com/linux/keys/1password.asc",
+            dockerfile,
+        )
+        self.assertIn(
+            "https://downloads.1password.com/linux/debian/%s stable main",
+            dockerfile,
+        )
+        self.assertIn("apt-get install -y --no-install-recommends 1password-cli", dockerfile)
+        self.assertIn("op --version", dockerfile)
 
     def test_host_resolved_contract_matches_the_structural_contract(self) -> None:
         config_path = os.environ.get(RESOLVED_CONFIG_ENV)

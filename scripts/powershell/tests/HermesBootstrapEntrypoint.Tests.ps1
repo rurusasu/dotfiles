@@ -95,6 +95,8 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             }
         }
 
+        Mock Initialize-HermesBootstrapServiceAccountEnvironment { $true }
+
         Mock Invoke-HermesXApiCredentialScope {
             $script:eventLog.Add('xapi-credentials')
             & $Action

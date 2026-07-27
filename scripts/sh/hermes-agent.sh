@@ -19,11 +19,73 @@ dotfiles_hermes_browser_data_dir() {
 }
 
 dotfiles_hermes_prepare_runtime_home() {
-  local data_dir browser_data_dir
+  local data_dir browser_data_dir op_env_path
   data_dir="$(dotfiles_hermes_data_dir)"
   browser_data_dir="$(dotfiles_hermes_browser_data_dir)"
+  op_env_path="$data_dir/.op.env"
 
   mkdir -p "$data_dir" "$data_dir/.xurl" "$browser_data_dir"
+  if [[ -L $op_env_path ]]; then
+    dotfiles_die "Hermes service-account environment file must not be a symlink."
+  fi
+  if [[ -e $op_env_path && ! -f $op_env_path ]]; then
+    dotfiles_die "Hermes service-account environment file must be regular."
+  fi
+  if [[ ! -e $op_env_path ]]; then
+    (umask 077 && : >"$op_env_path") ||
+      dotfiles_die "Could not create Hermes service-account environment file."
+  fi
+  chmod 600 "$op_env_path" ||
+    dotfiles_die "Could not protect Hermes service-account environment file."
+}
+
+dotfiles_hermes_service_account_ref() {
+  printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF:-op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential}"
+}
+
+dotfiles_hermes_service_account_account() {
+  printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT:-my.1password.com}"
+}
+
+dotfiles_hermes_prepare_service_account_environment() {
+  local data_dir op_env_path temporary op_command account reference token status=0 xtrace_enabled=0
+
+  data_dir="$(dotfiles_hermes_data_dir)"
+  op_env_path="$data_dir/.op.env"
+  op_command="$(dotfiles_hermes_op_command)" || return 1
+  account="$(dotfiles_hermes_service_account_account)"
+  reference="$(dotfiles_hermes_service_account_ref)"
+
+  if [[ $- == *x* ]]; then
+    xtrace_enabled=1
+    set +x
+  fi
+  if token="$("$op_command" --account "$account" read "$reference" 2>/dev/null)" &&
+    [[ -n $token && $token != *$'\n'* && $token != *$'\r'* ]]; then
+    temporary="$(mktemp "$data_dir/.op.env.XXXXXX")" || status=1
+    if ((status == 0)); then
+      if (umask 077 && printf 'OP_SERVICE_ACCOUNT_TOKEN=%s\n' "$token" >"$temporary") &&
+        chmod 600 "$temporary" &&
+        mv -f "$temporary" "$op_env_path"; then
+        :
+      else
+        status=1
+      fi
+    fi
+  else
+    status=1
+  fi
+  if [[ -n ${temporary:-} && -e $temporary ]]; then
+    rm -f -- "$temporary"
+  fi
+  unset token temporary op_command account reference
+  if ((xtrace_enabled)); then
+    set -x
+  fi
+  if ((status != 0)); then
+    printf 'Hermes 1Password Service Account could not be loaded.\n' >&2
+  fi
+  return "$status"
 }
 
 dotfiles_hermes_op_command() {
@@ -120,9 +182,11 @@ dotfiles_hermes_validate_secret_plan() {
       type == "string" and test("[^[:space:]]") and test("^[^[:cntrl:]]+$");
     def field:
       type == "object"
-      and (keys | sort == ["canonical_name", "labels"])
+      and ((keys | sort == ["canonical_name", "labels"]) or
+        (keys | sort == ["canonical_name", "labels", "reference"]))
       and (.canonical_name | nonblank_string)
-      and (.labels | type == "array" and length > 0 and all(.[]; nonblank_string));
+      and (.labels | type == "array" and length > 0 and all(.[]; nonblank_string))
+      and ((has("reference") | not) or (.reference | nonblank_string));
     def plan_item:
       type == "object"
       and (keys | sort == ["account", "fields", "item", "key", "vault"])
@@ -273,6 +337,8 @@ dotfiles_hermes_start_stack() {
 
   dotfiles_hermes_require_secret_tools
   dotfiles_hermes_prepare_runtime_home
+  dotfiles_hermes_prepare_service_account_environment ||
+    dotfiles_die "Hermes 1Password Service Account is unavailable."
 
   if "$docker_runner" compose -f "$compose_file" config --quiet; then
     :

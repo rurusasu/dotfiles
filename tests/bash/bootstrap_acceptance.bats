@@ -94,6 +94,11 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == 'acceptance-session' ]]
 
+	run "$op" --account my.1password.com read \
+		'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential'
+	[ "$status" -eq 0 ]
+	[ "$output" = 'acceptance-hermes-service-account-token' ]
+
 	run "$op" item get "Hermes X API MCP" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -eq 0 ]

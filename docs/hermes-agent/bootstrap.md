@@ -1,13 +1,17 @@
 # Hermes Bootstrap Operations
 
 Hermes uses one container-owned bootstrap on every supported host. The host
-adapter supplies prerequisites and secrets; it does not directly write Hermes
-config, profiles, repositories, or `.env` files.
+adapter supplies prerequisites and secrets, and writes only the private
+Compose-side `.op.env` service-account file; Hermes config, profiles,
+repositories, and managed `.env` files remain container-owned.
+
+Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で
+1Password を使う](./onepassword.md)を参照してください。
 
 ## Run Bootstrap
 
 Prerequisites are a running Docker daemon, Docker Compose, an authenticated
-1Password CLI (`op`), access to the seven configured items, and access to the
+1Password CLI (`op`), access to the eight configured items, and access to the
 declared private GitHub repositories. Unix requires native `bash`, `jq`,
 `curl`, `docker`, and `op`. The Unix adapter uses `curl` for bounded gateway
 readiness checks. Windows requires `pwsh`, Docker Desktop native `docker` and
@@ -47,13 +51,15 @@ runs the full-machine installer nor hides a nonzero result.
 
 ```text
 host adapter
+  -> resolve the existing 1Password Service Account into private .op.env
   -> request the non-secret secret plan
-  -> fetch seven full 1Password item JSON objects
-  -> stream header + seven item records + end as NDJSON
+  -> fetch eight full 1Password item JSON objects
+  -> stream header + eight item records + end as NDJSON
   -> docker compose run --rm --no-deps -T hermes-bootstrap apply
   -> load manifest and recover any crash journal
   -> validate payload, credentials, and source access
   -> publish existing profiles, stage sources, and sync shared remotes
+  -> reconcile Hermes onepassword references in root and profile config.yaml files
   -> transactional install under /opt/data
   -> docker compose up -d --force-recreate only after success
 ```

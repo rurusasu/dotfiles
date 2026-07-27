@@ -58,6 +58,7 @@ Describe 'HermesAgentHandler' {
             $script:eventLog.Add('bootstrap')
             [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
         }
+        Mock Initialize-HermesBootstrapServiceAccountEnvironment { $true }
         Mock Invoke-HermesXApiCredentialScope {
             $script:eventLog.Add('xapi-credentials')
             & $Action

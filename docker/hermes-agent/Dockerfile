@@ -57,12 +57,22 @@ replace_once(
 PY
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl gh \
+  && apt-get install -y --no-install-recommends ca-certificates curl gh gnupg \
   && arch="$(dpkg --print-architecture)" \
+  && case "$arch" in \
+    amd64|arm64) ;; \
+    *) echo "unsupported architecture for 1Password CLI: $arch" >&2; exit 1 ;; \
+  esac \
+  && install -d -m 0755 /usr/share/keyrings /etc/apt/sources.list.d \
+  && curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | \
+    gpg --dearmor --batch --yes -o /usr/share/keyrings/1password-archive-keyring.gpg \
+  && printf 'deb [arch=%s signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/%s stable main\n' "$arch" "$arch" > /etc/apt/sources.list.d/1password.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends 1password-cli \
+  && op --version \
   && case "$arch" in \
     amd64) article_collector_asset="article-collector-linux-amd64" ;; \
     arm64) article_collector_asset="article-collector-linux-arm64" ;; \
-    *) echo "unsupported architecture for article-collector: $arch" >&2; exit 1 ;; \
   esac \
   && curl -fsSL \
     "https://github.com/rurusasu/article-collector/releases/download/${ARTICLE_COLLECTOR_VERSION}/${article_collector_asset}" \

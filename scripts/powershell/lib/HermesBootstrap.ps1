@@ -134,6 +134,135 @@ $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "slack_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Risarisa" },
     [PSCustomObject]@{ key = "slack_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "SlackBot-Nancy" }
 )
+$script:DefaultHermesBootstrapServiceAccountInvoker = {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Account,
+        [Parameter(Mandatory)]
+        [string]$Reference
+    )
+
+    $output = @(& op read --account $Account $Reference 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw [System.InvalidOperationException]::new('Hermes service account lookup failed.')
+    }
+    return (($output -join "`n").Trim())
+}
+
+function Get-HermesBootstrapServiceAccountReference {
+    [CmdletBinding()]
+    param()
+
+    $reference = [Environment]::GetEnvironmentVariable(
+        'DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF',
+        'Process'
+    )
+    if ([string]::IsNullOrWhiteSpace($reference)) {
+        return 'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential'
+    }
+    return $reference
+}
+
+function Get-HermesBootstrapServiceAccountAccount {
+    [CmdletBinding()]
+    param()
+
+    $account = [Environment]::GetEnvironmentVariable(
+        'DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT',
+        'Process'
+    )
+    if ([string]::IsNullOrWhiteSpace($account)) {
+        return 'my.1password.com'
+    }
+    return $account
+}
+
+function Protect-HermesBootstrapServiceAccountFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $isWindowsPlatform = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
+    if (-not $isWindowsPlatform) {
+        return
+    }
+
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    if ($null -eq $currentSid) {
+        throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
+    }
+
+    $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
+    $fileSecurity.SetOwner($currentSid)
+    $fileSecurity.SetAccessRuleProtection($true, $false)
+    $readRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $currentSid,
+        [System.Security.AccessControl.FileSystemRights]::Read,
+        [System.Security.AccessControl.InheritanceFlags]::None,
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    [void]$fileSecurity.AddAccessRule($readRule)
+    Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+}
+
+function Initialize-HermesBootstrapServiceAccountEnvironment {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DataDir,
+        [scriptblock]$InvokeOnePassword = $script:DefaultHermesBootstrapServiceAccountInvoker
+    )
+
+    $null = New-Item -ItemType Directory -Path $DataDir -Force
+    $path = Join-Path $DataDir '.op.env'
+    if (Test-Path -LiteralPath $path) {
+        $existing = Get-Item -LiteralPath $path -Force
+        if (($existing.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            -not ($existing.PSIsContainer -eq $false)) {
+            throw [System.InvalidOperationException]::new('Hermes service-account environment file is invalid.')
+        }
+    }
+    elseif (Test-Path -LiteralPath $path) {
+        throw [System.InvalidOperationException]::new('Hermes service-account environment file is invalid.')
+    }
+
+    $account = Get-HermesBootstrapServiceAccountAccount
+    $reference = Get-HermesBootstrapServiceAccountReference
+    $token = $null
+    $temporary = Join-Path $DataDir ('.op.env.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        $token = [string](& $InvokeOnePassword $account $reference)
+        if ([string]::IsNullOrWhiteSpace($token) -or $token.Contains("`n") -or $token.Contains("`r")) {
+            throw [System.InvalidOperationException]::new('Hermes service account lookup failed.')
+        }
+        $encoding = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText(
+            $temporary,
+            "OP_SERVICE_ACCOUNT_TOKEN=$token`n",
+            $encoding
+        )
+        Protect-HermesBootstrapServiceAccountFile -Path $temporary
+        if (Test-Path -LiteralPath $path) {
+            [System.IO.File]::Replace($temporary, $path, $null, $true)
+        }
+        else {
+            [System.IO.File]::Move($temporary, $path)
+        }
+        Protect-HermesBootstrapServiceAccountFile -Path $path
+        return $true
+    }
+    finally {
+        if ($null -ne $token) {
+            $token = $null
+        }
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
 
 function ConvertFrom-HermesBootstrapJson {
     [CmdletBinding()]
@@ -254,10 +383,19 @@ function Test-HermesBootstrapSecretPlan {
         if ($fields.Count -eq 0) { return $false }
         $fieldNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($field in $fields) {
-            if (-not (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels"))) { return $false }
+            $fieldProperties = @($field.PSObject.Properties.Name | Sort-Object)
+            $validFieldProperties = @(
+                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels")),
+                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels", "reference"))
+            )
+            if (-not ($validFieldProperties -contains $true)) { return $false }
             if ($field.canonical_name -isnot [string] -or
                 [string]::IsNullOrWhiteSpace($field.canonical_name) -or
                 $field.canonical_name.Trim() -cne $field.canonical_name) { return $false }
+            if ($fieldProperties -contains "reference" -and
+                ($field.reference -isnot [string] -or
+                [string]::IsNullOrWhiteSpace($field.reference) -or
+                $field.reference.Trim() -cne $field.reference)) { return $false }
             if (-not $fieldNames.Add($field.canonical_name)) { return $false }
             if ($field.labels -is [string] -or $field.labels -isnot [System.Collections.IEnumerable]) { return $false }
             $labels = @($field.labels)
