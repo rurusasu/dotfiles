@@ -176,7 +176,7 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
     }
 
     BeforeEach {
-        $script:serviceAccountDirectory = Join-Path $TestDrive 'hermes-data'
+        $script:serviceAccountDirectory = Join-Path $TestDrive ('hermes-data-' + [Guid]::NewGuid().ToString('N'))
         $null = New-Item -ItemType Directory -Path $script:serviceAccountDirectory
     }
 
