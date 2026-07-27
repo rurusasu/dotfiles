@@ -21,13 +21,12 @@ _REDACTED = "[REDACTED]"
 
 
 @dataclass(frozen=True, repr=False)
-class SlackSecret:
+class DiscordSecret:
     bot_token: str
-    app_token: str
     allowed_users: str
 
     def __repr__(self) -> str:
-        return "SlackSecret(<redacted>)"
+        return "DiscordSecret(<redacted>)"
 
 
 @dataclass(frozen=True, repr=False)
@@ -53,7 +52,7 @@ class SecretBundle:
     github_token: str
     dashboard: DashboardSecret
     google_calendar: GoogleCalendarSecret
-    slack_by_profile: Mapping[str, SlackSecret]
+    discord_by_profile: Mapping[str, DiscordSecret]
     redactor: "SecretRedactor"
 
     def __repr__(self) -> str:
@@ -291,21 +290,35 @@ def _parse_item_record(
         raise ValidationError("secret payload item id is invalid")
     if not isinstance(fields, list):
         raise ValidationError("secret payload item fields are invalid")
+    section_labels = _item_section_labels(item)
 
     extracted: dict[str, list[str]] = {field.canonical_name: [] for field in declared[key].fields}
     aliases = _field_aliases(declared[key])
+    unreferenced = {
+        field.canonical_name
+        for field in declared[key].fields
+        if field.reference_name is None
+    }
     discovered: list[str] = []
     for raw_field in fields:
         if not isinstance(raw_field, dict):
             raise ValidationError("secret payload item field is invalid")
         field_id = raw_field.get("id")
         label = raw_field.get("label")
+        section = raw_field.get("section")
         value = raw_field.get("value")
         if (field_id is not None and not isinstance(field_id, str)) or not isinstance(label, str):
             raise ValidationError("secret payload item field is invalid")
-        matches = set(aliases.get(_normalize_label(label), ()))
+        if section is not None and not isinstance(section, dict):
+            raise ValidationError("secret payload item field is invalid")
+        matches = _reference_matches(declared[key], raw_field, section_labels)
+        alias_matches = set(aliases.get(_normalize_label(label), ()))
         if field_id:
-            matches.update(aliases.get(_normalize_label(field_id), ()))
+            alias_matches.update(aliases.get(_normalize_label(field_id), ()))
+        if section is None:
+            matches.update(alias_matches)
+        else:
+            matches.update(alias_matches.intersection(unreferenced))
         if len(matches) > 1:
             raise ValidationError("secret payload item field label is ambiguous")
         if value is None:
@@ -334,6 +347,78 @@ def _field_aliases(item: OnePasswordItem) -> dict[str, tuple[str, ...]]:
     return {label: tuple(sorted(names)) for label, names in aliases.items()}
 
 
+def _item_section_labels(item: Mapping[str, object]) -> dict[str, str]:
+    raw_sections = item.get("sections")
+    if raw_sections is None:
+        return {}
+    if not isinstance(raw_sections, list):
+        raise ValidationError("secret payload item sections are invalid")
+
+    labels: dict[str, str] = {}
+    for raw_section in raw_sections:
+        if not isinstance(raw_section, Mapping):
+            raise ValidationError("secret payload item section is invalid")
+        section_id = raw_section.get("id")
+        label = raw_section.get("label")
+        if (
+            not isinstance(section_id, str)
+            or not section_id
+            or not isinstance(label, str)
+            or not label
+            or section_id in labels
+        ):
+            raise ValidationError("secret payload item section is invalid")
+        labels[section_id] = label
+    return labels
+
+
+def _reference_matches(
+    item: OnePasswordItem,
+    raw_field: Mapping[str, object],
+    section_labels: Mapping[str, str],
+) -> set[str]:
+    return {
+        field.canonical_name
+        for field in item.fields
+        if field.reference_name is not None
+        and _raw_field_matches_reference(
+            raw_field,
+            field.reference_name,
+            section_labels,
+        )
+    }
+
+
+def _raw_field_matches_reference(
+    raw_field: Mapping[str, object],
+    reference_name: str,
+    section_labels: Mapping[str, str],
+) -> bool:
+    section_name, separator, field_name = reference_name.rpartition("/")
+    field_candidates = {
+        _normalize_label(value)
+        for key in ("id", "label")
+        if isinstance((value := raw_field.get(key)), str)
+    }
+    if _normalize_label(field_name) not in field_candidates:
+        return False
+    if not separator:
+        return True
+
+    section = raw_field.get("section")
+    if not isinstance(section, Mapping):
+        return False
+    section_candidates = {
+        _normalize_label(value)
+        for key in ("id", "label")
+        if isinstance((value := section.get(key)), str)
+    }
+    section_id = section.get("id")
+    if isinstance(section_id, str) and section_id in section_labels:
+        section_candidates.add(_normalize_label(section_labels[section_id]))
+    return _normalize_label(section_name) in section_candidates
+
+
 def _normalize_label(label: str) -> str:
     return "".join(character for character in label.casefold() if character not in " -_")
 
@@ -358,19 +443,18 @@ def _bundle_from_fields(
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
     validate_google_calendar_secret(google_calendar)
 
-    slack_by_profile: dict[str, SlackSecret] = {}
+    discord_by_profile: dict[str, DiscordSecret] = {}
     required_profiles = ("default", *(profile.name for profile in manifest.profiles))
     for profile in required_profiles:
-        key = f"slack_{profile}"
+        key = f"discord_{profile}"
         try:
             fields = parsed[key]
-            slack_by_profile[profile] = SlackSecret(
+            discord_by_profile[profile] = DiscordSecret(
                 bot_token=fields["bot_token"],
-                app_token=fields["app_token"],
                 allowed_users=fields["allowed_users"],
             )
         except KeyError as error:
-            raise ValidationError("manifest is missing a required Slack credential declaration") from error
+            raise ValidationError("manifest is missing a required Discord credential declaration") from error
 
     redactor = SecretRedactor(
         discovered_values,
@@ -380,7 +464,7 @@ def _bundle_from_fields(
         github_token=github_token,
         dashboard=dashboard,
         google_calendar=google_calendar,
-        slack_by_profile=MappingProxyType(slack_by_profile),
+        discord_by_profile=MappingProxyType(discord_by_profile),
         redactor=redactor,
     )
 

@@ -10,7 +10,7 @@ Hermes コンテナには公式の 1Password CLI (`op`) を含めています。
 個人アカウント `my.1password.com` の
 `op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential` からSAを取得し、
 HERMESデータディレクトリの0600 `.op.env` に保存します。その後、defaultと全named
-profileの `config.yaml` にDashboard、GitHub、Slackの `op://` 参照を冪等に登録します。
+profileの `config.yaml` にDashboard、GitHub、Discordの `op://` 参照を冪等に登録します。
 
 1Passwordアイテムの作成やSAの発行は行いません。既存の8アイテムを検証し、Google
 Calendarの認証情報はMCPが要求する0600 JSONファイルとして引き続き同期します。
@@ -20,7 +20,7 @@ task hermes:bootstrap
 ```
 
 SAの読み取りに失敗した場合は、ホストの1Password CLIで対象アカウントへサインインし、
-もう一度同じコマンドを実行してください。SA値をSlack、Git、シェル引数、ログへ貼り付けないでください。
+もう一度同じコマンドを実行してください。SA値をDiscord、Git、シェル引数、ログへ貼り付けないでください。
 
 `sync` は参照を解決できるか確認する dry-run です。
 

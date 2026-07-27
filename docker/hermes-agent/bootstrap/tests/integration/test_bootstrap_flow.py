@@ -515,34 +515,28 @@ class BootstrapFlowTests(unittest.TestCase):
                     }
                 ),
             },
-            "slack_default": {
-                "bot_token": "xoxb-default-bot",
-                "app_token": "xapp-default-app",
+            "discord_default": {
+                "bot_token": "discord-default-bot-token-123",
                 "allowed_users": "UDEFAULT",
             },
-            "slack_rick": {
-                "bot_token": "xoxb-rick-bot",
-                "app_token": "xapp-rick-app",
+            "discord_rick": {
+                "bot_token": "discord-rick-bot-token-123",
                 "allowed_users": "URICK",
             },
-            "slack_hoffman": {
-                "bot_token": "xoxb-hoffman-bot",
-                "app_token": "xapp-hoffman-app",
+            "discord_hoffman": {
+                "bot_token": "discord-hoffman-bot-token-123",
                 "allowed_users": "UHOFFMAN",
             },
-            "slack_risarisa": {
-                "bot_token": "xoxb-risarisa-bot",
-                "app_token": "xapp-risarisa-app",
+            "discord_risarisa": {
+                "bot_token": "discord-risarisa-bot-token-123",
                 "allowed_users": "URISARISA",
             },
-            "slack_nancy": {
-                "bot_token": "xoxb-nancy-bot",
-                "app_token": "xapp-nancy-app",
+            "discord_nancy": {
+                "bot_token": "discord-nancy-bot-token-123",
                 "allowed_users": "UNANCY",
             },
-            "slack_future": {
-                "bot_token": "xoxb-future-bot",
-                "app_token": "xapp-future-app",
+            "discord_future": {
+                "bot_token": "discord-future-bot-token-123",
                 "allowed_users": "UFUTURE",
             },
         }
@@ -1254,21 +1248,21 @@ class BootstrapFlowTests(unittest.TestCase):
             target=self.data_root / "profiles" / future,
             manifest_name="distribution.yaml",
         )
-        future_slack_item = replace(
+        future_discord_item = replace(
             next(
                 item
                 for item in self.manifest.onepassword_items
-                if item.key == "slack_rick"
+                if item.key == "discord_rick"
             ),
-            key="slack_future",
-            item="Hermes Slack future",
+            key="discord_future",
+            item="Hermes Discord future",
         )
         self.manifest = replace(
             self.manifest,
             profiles=(*self.manifest.profiles, future_source),
             onepassword_items=(
                 *self.manifest.onepassword_items,
-                future_slack_item,
+                future_discord_item,
             ),
         )
         before = self._snapshot_managed_tree()
@@ -1315,21 +1309,21 @@ class BootstrapFlowTests(unittest.TestCase):
             target=self.data_root / "profiles" / future,
             manifest_name="distribution.yaml",
         )
-        future_slack_item = replace(
+        future_discord_item = replace(
             next(
                 item
                 for item in self.manifest.onepassword_items
-                if item.key == "slack_rick"
+                if item.key == "discord_rick"
             ),
-            key="slack_future",
-            item="Hermes Slack future",
+            key="discord_future",
+            item="Hermes Discord future",
         )
         self.manifest = replace(
             self.manifest,
             profiles=(*self.manifest.profiles, future_source),
             onepassword_items=(
                 *self.manifest.onepassword_items,
-                future_slack_item,
+                future_discord_item,
             ),
         )
         before = self._snapshot_managed_tree()
@@ -1381,9 +1375,8 @@ class BootstrapFlowTests(unittest.TestCase):
                 "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
                 "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
                 "API_SERVER_KEY",
-                "SLACK_BOT_TOKEN",
-                "SLACK_APP_TOKEN",
-                "SLACK_ALLOWED_USERS",
+                "DISCORD_BOT_TOKEN",
+                "DISCORD_ALLOWED_USERS",
             }
         )
         env_paths = {
@@ -1740,9 +1733,8 @@ class BootstrapFlowTests(unittest.TestCase):
             "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
             "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
             "API_SERVER_KEY",
-            "SLACK_BOT_TOKEN",
-            "SLACK_APP_TOKEN",
-            "SLACK_ALLOWED_USERS",
+            "DISCORD_BOT_TOKEN",
+            "DISCORD_ALLOWED_USERS",
         ):
             self.assertEqual(sum(line.startswith(f"{key}=") for line in root_env.splitlines()), 1)
         root_values = dict(

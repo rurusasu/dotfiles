@@ -225,9 +225,8 @@ class AppTests(unittest.TestCase):
         def environment(keys: frozenset[str]) -> str:
             values = {key: "value" for key in keys}
             values.update({key: "github-token" for key in app.GITHUB_KEYS & keys})
-            values["SLACK_BOT_TOKEN"] = "xoxb-valid"
-            values["SLACK_APP_TOKEN"] = "xapp-valid"
-            values["SLACK_ALLOWED_USERS"] = "UVALID"
+            values["DISCORD_BOT_TOKEN"] = "discord-valid-token-123456"
+            values["DISCORD_ALLOWED_USERS"] = "UVALID"
             values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"] = secret_body
             if "API_SERVER_KEY" in keys:
                 values["API_SERVER_KEY"] = f"hermes-bootstrap-v1_{secret_body}"
@@ -2306,15 +2305,14 @@ class AppTests(unittest.TestCase):
         self.assertNotIn(marker, str(raised.exception))
         self.assertNotIn(marker, repr(raised.exception))
 
-    def test_installed_layout_validation_rejects_invalid_slack_token_formats_without_secret_details(self) -> None:
+    def test_installed_layout_validation_rejects_invalid_discord_token_formats_without_secret_details(self) -> None:
         from hermes_bootstrap import app
 
         self.write_valid_layout()
         root_env = self.root / ".env"
         valid = root_env.read_text(encoding="utf-8")
         invalid_values = {
-            "SLACK_BOT_TOKEN": "xapp-wrong-role-secret-marker",
-            "SLACK_APP_TOKEN": "xoxb-wrong-role-secret-marker",
+            "DISCORD_BOT_TOKEN": "too-short",
         }
         for key, marker in invalid_values.items():
             with self.subTest(key=key):

@@ -27,7 +27,8 @@ from .envfiles import (
     API_SERVER_KEYS,
     DASHBOARD_KEYS,
     GITHUB_KEYS,
-    SLACK_KEYS,
+    DISCORD_KEYS,
+    LEGACY_SLACK_KEYS,
     build_dashboard_environment,
     build_profile_environment,
     merge_env_file,
@@ -76,9 +77,8 @@ from .transaction import Transaction
 
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
-_SLACK_BOT_TOKEN = re.compile(r"xoxb-[A-Za-z0-9-]+\Z")
-_SLACK_APP_TOKEN = re.compile(r"xapp-[A-Za-z0-9-]+\Z")
-_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | SLACK_KEYS
+_DISCORD_BOT_TOKEN = re.compile(r"[A-Za-z0-9_\-.]{20,}\Z")
+_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
 
@@ -252,7 +252,7 @@ def _apply_sensitive(
                     expected_missing=True,
                     managed_environment=environment,
                     environment_remove=(
-                        _MANAGED_ENV_KEYS - set(environment)
+                        (_MANAGED_ENV_KEYS - set(environment)) | LEGACY_SLACK_KEYS
                     ),
                 )
             else:
@@ -290,7 +290,11 @@ def _apply_sensitive(
             environment = build_profile_environment(profile, secrets, dashboard)
             env_path = target / ".env"
             tx.snapshot(env_path)
-            merge_env_file(env_path, environment, _MANAGED_ENV_KEYS - set(environment))
+            merge_env_file(
+                env_path,
+                environment,
+                (_MANAGED_ENV_KEYS - set(environment)) | LEGACY_SLACK_KEYS,
+            )
             _failpoint(f"env-merge:{profile}")
 
         del dashboard
@@ -702,10 +706,7 @@ def _validate_env_file(path: Path, required: frozenset[str]) -> None:
         raise ValidationError("installed environment file is invalid")
     if len({values[key] for key in GITHUB_KEYS}) != 1:
         raise ValidationError("installed environment file is invalid")
-    if (
-        _SLACK_BOT_TOKEN.fullmatch(values["SLACK_BOT_TOKEN"]) is None
-        or _SLACK_APP_TOKEN.fullmatch(values["SLACK_APP_TOKEN"]) is None
-    ):
+    if _DISCORD_BOT_TOKEN.fullmatch(values["DISCORD_BOT_TOKEN"]) is None:
         raise ValidationError("installed environment file is invalid")
     if not _is_reusable_signing_secret(
         values.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET")

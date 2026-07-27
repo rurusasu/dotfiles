@@ -128,11 +128,12 @@ On Windows, `HermesAgentHandler` remains Phase `2`, order `56`, with
 `op.exe` can use 1Password desktop integration; elevating this handler would
 break that credential path.
 
-The required Slack items include `SlackBot-OpenClaw`, `SlackBot-Rick`,
-`SlackBot-Hoffman`, `SlackBot-Risarisa`, and `SlackBot-Nancy`; GitHub access is
-validated for every configured remote before bootstrap begins new staging or
-transaction writes. Crash-journal recovery is the exception: it runs first and
-may restore or remove previously journaled managed paths before secret or
+The required profile items are `Master`, `Rick`, `Hoffman`, `RisaRisa`, and
+`Nancy`. Discord credentials are read from each item's `Discord` section;
+retained Slack credentials live in the separate `Slack` section. GitHub access
+is validated for every configured remote before bootstrap begins new staging
+or transaction writes. Crash-journal recovery is the exception: it runs first
+and may restore or remove previously journaled managed paths before secret or
 credential validation.
 
 The `Private/Google Calendar MCP` item supplies `oauth_credentials_json` and

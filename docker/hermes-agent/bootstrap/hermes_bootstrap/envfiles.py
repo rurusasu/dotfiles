@@ -36,7 +36,13 @@ DASHBOARD_KEYS = frozenset(
     }
 )
 API_SERVER_KEYS = frozenset({"API_SERVER_KEY"})
-SLACK_KEYS = frozenset(
+DISCORD_KEYS = frozenset(
+    {
+        "DISCORD_BOT_TOKEN",
+        "DISCORD_ALLOWED_USERS",
+    }
+)
+LEGACY_SLACK_KEYS = frozenset(
     {
         "SLACK_BOT_TOKEN",
         "SLACK_APP_TOKEN",
@@ -250,9 +256,9 @@ def _build_profile_environment(
     profile: str, secrets: SecretBundle, dashboard: Mapping[str, str]
 ) -> Mapping[str, str]:
     try:
-        slack = secrets.slack_by_profile[profile]
+        discord = secrets.discord_by_profile[profile]
     except (AttributeError, KeyError, TypeError):
-        raise InputError("profile has no declared Slack credentials") from None
+        raise InputError("profile has no declared Discord credentials") from None
 
     environment = {
         "GITHUB_PERSONAL_ACCESS_TOKEN": secrets.github_token,
@@ -265,9 +271,8 @@ def _build_profile_environment(
         environment.update({key: dashboard[key] for key in API_SERVER_KEYS})
     environment.update(
         {
-            "SLACK_BOT_TOKEN": slack.bot_token,
-            "SLACK_APP_TOKEN": slack.app_token,
-            "SLACK_ALLOWED_USERS": slack.allowed_users,
+            "DISCORD_BOT_TOKEN": discord.bot_token,
+            "DISCORD_ALLOWED_USERS": discord.allowed_users,
         }
     )
     _validate_environment_mapping(environment, frozenset())

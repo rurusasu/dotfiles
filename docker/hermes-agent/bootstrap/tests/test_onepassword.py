@@ -15,7 +15,7 @@ class OnePasswordConfigTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.manifest = load_manifest(MANIFEST)
 
-    def test_default_config_maps_shared_and_default_slack_references(self) -> None:
+    def test_default_config_maps_shared_and_default_discord_references(self) -> None:
         config = build_onepassword_config(self.manifest, "default")
 
         self.assertEqual(config["enabled"], True)
@@ -34,18 +34,17 @@ class OnePasswordConfigTests(unittest.TestCase):
                 ),
                 "GH_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
                 "GITHUB_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
-                "SLACK_BOT_TOKEN": "op://openclaw/SlackBot-OpenClaw/bot_token",
-                "SLACK_APP_TOKEN": "op://openclaw/SlackBot-OpenClaw/app_level_token",
-                "SLACK_ALLOWED_USERS": "op://openclaw/SlackBot-OpenClaw/SLACK_ALLOWED_USERS",
+                "DISCORD_BOT_TOKEN": "op://openclaw/Master/Discord/bot_token",
+                "DISCORD_ALLOWED_USERS": "op://openclaw/Master/Discord/allowed_users",
             },
         )
 
-    def test_named_profile_uses_its_slack_item(self) -> None:
+    def test_named_profile_uses_its_discord_item(self) -> None:
         config = build_onepassword_config(self.manifest, "rick")
 
         self.assertEqual(
-            config["env"]["SLACK_BOT_TOKEN"],
-            "op://openclaw/SlackBot-Rick/bot_token",
+            config["env"]["DISCORD_BOT_TOKEN"],
+            "op://openclaw/Rick/Discord/bot_token",
         )
         self.assertNotIn("API_SERVER_KEY", config["env"])
         self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH", config["env"])

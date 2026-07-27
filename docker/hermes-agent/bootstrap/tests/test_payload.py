@@ -23,7 +23,7 @@ from hermes_bootstrap.payload import (
     DashboardSecret,
     GoogleCalendarSecret,
     SecretRedactor,
-    SlackSecret,
+    DiscordSecret,
     build_secret_plan,
     read_secret_payload,
 )
@@ -63,25 +63,25 @@ def secret_items() -> dict[str, dict[str, object]]:
                 ),
             },
         ),
-        "slack_default": raw_item(
-            "slack-default-id",
-            {"bot token": "xoxb-default", "app-level token": "xapp-default", "allow_from": "UDEFAULT"},
+        "discord_default": raw_item(
+            "discord-default-id",
+            {"bot token": "discord-default-token", "allow_from": "UDEFAULT"},
         ),
-        "slack_rick": raw_item(
-            "slack-rick-id",
-            {"SLACK_BOT_TOKEN": "xoxb-rick", "app token": "xapp-rick", "allowed users": "URICK"},
+        "discord_rick": raw_item(
+            "discord-rick-id",
+            {"DISCORD_BOT_TOKEN": "discord-rick-token", "allowed users": "URICK"},
         ),
-        "slack_hoffman": raw_item(
-            "slack-hoffman-id",
-            {"bot_token": "xoxb-hoffman", "app_token": "xapp-hoffman", "allowed_users": "UHOFFMAN"},
+        "discord_hoffman": raw_item(
+            "discord-hoffman-id",
+            {"bot_token": "discord-hoffman-token", "allowed_users": "UHOFFMAN"},
         ),
-        "slack_risarisa": raw_item(
-            "slack-risarisa-id",
-            {"bot_token": "xoxb-risarisa", "app_token": "xapp-risarisa", "allowed_users": "URISARISA"},
+        "discord_risarisa": raw_item(
+            "discord-risarisa-id",
+            {"bot_token": "discord-risarisa-token", "allowed_users": "URISARISA"},
         ),
-        "slack_nancy": raw_item(
-            "slack-nancy-id",
-            {"bot_token": "xoxb-nancy", "app_token": "xapp-nancy", "allowed_users": "UNANCY"},
+        "discord_nancy": raw_item(
+            "discord-nancy-id",
+            {"bot_token": "discord-nancy-token", "allowed_users": "UNANCY"},
         ),
     }
 
@@ -195,17 +195,30 @@ class PayloadTests(unittest.TestCase):
                             "vault": "openclaw",
                             "item": item,
                             "fields": [
-                                {"canonical_name": "bot_token", "labels": ["SLACK_BOT_TOKEN", "bot_token", "bot token"]},
-                                {"canonical_name": "app_token", "labels": ["SLACK_APP_TOKEN", "app_level_token", "app token", "app-level token"], "reference": "app_level_token"},
-                                {"canonical_name": "allowed_users", "labels": ["SLACK_ALLOWED_USERS", "allowed_users", "allowed users", "allowFrom", "allow_from"], "reference": "SLACK_ALLOWED_USERS"},
+                                {
+                                    "canonical_name": "bot_token",
+                                    "labels": ["DISCORD_BOT_TOKEN", "bot_token", "bot token"],
+                                    "reference": "Discord/bot_token",
+                                },
+                                {
+                                    "canonical_name": "allowed_users",
+                                    "labels": [
+                                        "DISCORD_ALLOWED_USERS",
+                                        "allowed_users",
+                                        "allowed users",
+                                        "allowFrom",
+                                        "allow_from",
+                                    ],
+                                    "reference": "Discord/allowed_users",
+                                },
                             ],
                         }
                         for key, item in (
-                            ("slack_default", "SlackBot-OpenClaw"),
-                            ("slack_rick", "SlackBot-Rick"),
-                            ("slack_hoffman", "SlackBot-Hoffman"),
-                            ("slack_risarisa", "SlackBot-Risarisa"),
-                            ("slack_nancy", "SlackBot-Nancy"),
+                            ("discord_default", "Master"),
+                            ("discord_rick", "Rick"),
+                            ("discord_hoffman", "Hoffman"),
+                            ("discord_risarisa", "RisaRisa"),
+                            ("discord_nancy", "Nancy"),
                         )
                     ],
                 ],
@@ -233,12 +246,55 @@ class PayloadTests(unittest.TestCase):
                 ),
             ),
         )
-        self.assertEqual(secrets.slack_by_profile["rick"], SlackSecret("xoxb-rick", "xapp-rick", "URICK"))
-        self.assertIsInstance(secrets.slack_by_profile, MappingProxyType)
+        self.assertEqual(secrets.discord_by_profile["rick"], DiscordSecret("discord-rick-token", "URICK"))
+        self.assertIsInstance(secrets.discord_by_profile, MappingProxyType)
         with self.assertRaises(TypeError):
-            secrets.slack_by_profile["rick"] = SlackSecret("a", "b", "c")
+            secrets.discord_by_profile["rick"] = DiscordSecret("a", "b")
         with self.assertRaises(FrozenInstanceError):
             secrets.github_token = "changed"
+
+    def test_explicit_reference_selects_discord_section_when_slack_labels_overlap(self) -> None:
+        items = secret_items()
+        items["discord_default"] = {
+            "id": "discord-default-id",
+            "sections": [
+                {"id": "generated-discord-section-id", "label": "Discord"},
+                {"id": "generated-slack-section-id", "label": "Slack"},
+            ],
+            "fields": [
+                {
+                    "id": "bot_token",
+                    "label": "bot_token",
+                    "section": {"id": "generated-discord-section-id"},
+                    "value": "discord-default-token",
+                },
+                {
+                    "id": "allowed_users",
+                    "label": "allowed_users",
+                    "section": {"id": "generated-discord-section-id"},
+                    "value": "UDEFAULT",
+                },
+                {
+                    "id": "bot_token",
+                    "label": "bot_token",
+                    "section": {"id": "generated-slack-section-id"},
+                    "value": "slack-default-token",
+                },
+                {
+                    "id": "allowed_users",
+                    "label": "allowed_users",
+                    "section": {"id": "generated-slack-section-id"},
+                    "value": "USLACK",
+                },
+            ],
+        }
+
+        secrets = read_secret_payload(payload_stream(items), self.manifest)
+
+        self.assertEqual(
+            secrets.discord_by_profile["default"],
+            DiscordSecret("discord-default-token", "UDEFAULT"),
+        )
 
     def test_invalid_google_calendar_json_is_rejected_without_leaking_values(self) -> None:
         items = secret_items()
@@ -264,7 +320,7 @@ class PayloadTests(unittest.TestCase):
         items["github"]["fields"].append(
             {"id": "notesPlain", "type": "STRING", "label": "notes", "value": None}
         )
-        items["slack_default"]["fields"].append(
+        items["discord_default"]["fields"].append(
             {"id": "app_id", "type": "STRING", "label": "app_id", "value": None}
         )
 
@@ -272,8 +328,8 @@ class PayloadTests(unittest.TestCase):
 
         self.assertEqual(secrets.github_token, "github-token")
         self.assertEqual(
-            secrets.slack_by_profile["default"],
-            SlackSecret("xoxb-default", "xapp-default", "UDEFAULT"),
+            secrets.discord_by_profile["default"],
+            DiscordSecret("discord-default-token", "UDEFAULT"),
         )
 
     def test_matching_required_field_with_null_value_is_missing(self) -> None:
@@ -295,10 +351,10 @@ class PayloadTests(unittest.TestCase):
 
     def test_conflicting_field_id_and_label_matches_are_rejected(self) -> None:
         items = secret_items()
-        items["slack_default"] = {
-            "id": "slack-default-id",
+        items["discord_default"] = {
+            "id": "discord-default-id",
             "fields": [
-                {"id": "bot_token", "label": "app_level_token", "value": "conflicting-secret"},
+                {"id": "bot_token", "label": "allowed_users", "value": "conflicting-secret"},
                 {"id": "allowed_users", "label": "allowed_users", "value": "UDEFAULT"},
             ],
         }
@@ -391,14 +447,14 @@ class PayloadTests(unittest.TestCase):
 
     def test_label_normalization_is_case_insensitive_and_ignores_spaces_hyphens_and_underscores(self) -> None:
         normalized = secret_items()
-        normalized["slack_default"] = raw_item(
-            "slack-default-id",
-            {"sLaCk BoT-tOkEn": "xoxb-default", "slack_app token": "xapp-default", "ALLOWED USERS": "UDEFAULT"},
+        normalized["discord_default"] = raw_item(
+            "discord-default-id",
+            {"dIsCoRd BoT-tOkEn": "discord-default-token", "ALLOWED USERS": "UDEFAULT"},
         )
 
         secrets = read_secret_payload(payload_stream(normalized), self.manifest)
 
-        self.assertEqual(secrets.slack_by_profile["default"], SlackSecret("xoxb-default", "xapp-default", "UDEFAULT"))
+        self.assertEqual(secrets.discord_by_profile["default"], DiscordSecret("discord-default-token", "UDEFAULT"))
 
     def test_line_and_total_size_limits_are_checked_before_unbounded_decoding(self) -> None:
         overlong = b"x" * (MAX_LINE_BYTES + 1) + b"\n"

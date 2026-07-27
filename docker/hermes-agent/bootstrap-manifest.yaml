@@ -26,39 +26,37 @@ onepassword_items:
         labels: [oauth_credentials_json, oauth credentials json]
       - canonical_name: tokens_json
         labels: [tokens_json, tokens json]
-  - key: slack_default
+  - key: discord_default
     account: my.1password.com
     vault: openclaw
-    item: SlackBot-OpenClaw
-    fields: &slack_fields
+    item: Master
+    fields: &discord_fields
       - canonical_name: bot_token
-        labels: [SLACK_BOT_TOKEN, bot_token, bot token]
-      - canonical_name: app_token
-        reference: app_level_token
-        labels: [SLACK_APP_TOKEN, app_level_token, app token, app-level token]
+        reference: Discord/bot_token
+        labels: [DISCORD_BOT_TOKEN, bot_token, bot token]
       - canonical_name: allowed_users
-        reference: SLACK_ALLOWED_USERS
-        labels: [SLACK_ALLOWED_USERS, allowed_users, allowed users, allowFrom, allow_from]
-  - key: slack_rick
+        reference: Discord/allowed_users
+        labels: [DISCORD_ALLOWED_USERS, allowed_users, allowed users, allowFrom, allow_from]
+  - key: discord_rick
     account: my.1password.com
     vault: openclaw
-    item: SlackBot-Rick
-    fields: *slack_fields
-  - key: slack_hoffman
+    item: Rick
+    fields: *discord_fields
+  - key: discord_hoffman
     account: my.1password.com
     vault: openclaw
-    item: SlackBot-Hoffman
-    fields: *slack_fields
-  - key: slack_risarisa
+    item: Hoffman
+    fields: *discord_fields
+  - key: discord_risarisa
     account: my.1password.com
     vault: openclaw
-    item: SlackBot-Risarisa
-    fields: *slack_fields
-  - key: slack_nancy
+    item: RisaRisa
+    fields: *discord_fields
+  - key: discord_nancy
     account: my.1password.com
     vault: openclaw
-    item: SlackBot-Nancy
-    fields: *slack_fields
+    item: Nancy
+    fields: *discord_fields
 root_distribution:
   name: default
   source: https://github.com/rurusasu/hermes-home.git

@@ -69,11 +69,11 @@ GitHub Actions では mock Pester で双方向同期、競合時の GitHub 優�
 
 ## Hermes Agent
 
-Hermes bootstrap requires all six declared 1Password items from account
+Hermes bootstrap requires all eight declared 1Password items from account
 `my.1password.com`, vault `openclaw`: `Hermes Agent Dashboard`,
-`GitHubUsedOpenClawPAT`, `SlackBot-OpenClaw`, `SlackBot-Rick`,
-`SlackBot-Hoffman`, and `SlackBot-Risarisa`. It does not create dashboard,
-Slack, or GitHub fallback credentials. See
+`GitHubUsedOpenClawPAT`, `Master`, `Rick`,
+`Hoffman`, `RisaRisa`, and `Nancy`. It does not create dashboard,
+Discord, or GitHub fallback credentials. See
 [Hermes Bootstrap Operations](../hermes-agent/bootstrap.md) for the item and
 field-label contract.
 
@@ -86,16 +86,19 @@ root and every managed Hermes profile `.env` as `GH_TOKEN`,
 falls back to root only when needed, and never creates a separate `gh`
 credential store.
 
-Each Slack item (`SlackBot-OpenClaw`, `SlackBot-Rick`, `SlackBot-Hoffman`, and
-`SlackBot-Risarisa`) supplies the target profile's Slack fields. The dashboard
+Each profile item (`Master`, `Rick`, `Hoffman`, `RisaRisa`, and `Nancy`)
+supplies the target profile's Discord fields from its `Discord` section.
+Existing Slack credentials live in the same item's `Slack` section as
+`bot_token`, `app_level_token`, and `allowed_users`. Other service credentials
+use separate sections in the same profile item. The dashboard
 item is shared as required by the bootstrap manifest. Values stay in runtime
 `.env` files with mode `0600`, never in source distributions or repository
 logs.
 
-Slack app registration or rotation through Hermes Browser MCP follows one
-strict rule: Browser MCP や tool output に token 値を戻さない。Use noVNC or another
+Discord bot registration or rotation follows one strict rule:
+Browser MCP や tool output に token 値を戻さない。Use noVNC or another
 approved non-logged secret channel to save generated values in the matching
-`SlackBot-<ProfileTitle>` 1Password item, then rerun bootstrap. Browser-driven
+profile-named 1Password item's `Discord` section, then rerun bootstrap. Browser-driven
 setup does not write runtime credentials directly; without an approved secret
 channel, profile の `.env` を変更しない。
 
