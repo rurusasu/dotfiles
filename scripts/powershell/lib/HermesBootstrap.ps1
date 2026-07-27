@@ -128,11 +128,11 @@ $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "dashboard"; account = "my.1password.com"; vault = "openclaw"; item = "Hermes Agent Dashboard" },
     [PSCustomObject]@{ key = "github"; account = "my.1password.com"; vault = "openclaw"; item = "GitHubUsedOpenClawPAT" },
     [PSCustomObject]@{ key = "google_calendar"; account = "my.1password.com"; vault = "Private"; item = "Google Calendar MCP" },
-    [PSCustomObject]@{ key = "discord_default"; account = "my.1password.com"; vault = "openclaw"; item = "DiscordBot-OpenClaw" },
-    [PSCustomObject]@{ key = "discord_rick"; account = "my.1password.com"; vault = "openclaw"; item = "DiscordBot-Rick" },
-    [PSCustomObject]@{ key = "discord_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "DiscordBot-Hoffman" },
-    [PSCustomObject]@{ key = "discord_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "DiscordBot-RisaRisa" },
-    [PSCustomObject]@{ key = "discord_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "DiscordBot-Nancy" }
+    [PSCustomObject]@{ key = "discord_default"; account = "my.1password.com"; vault = "openclaw"; item = "Master" },
+    [PSCustomObject]@{ key = "discord_rick"; account = "my.1password.com"; vault = "openclaw"; item = "Rick" },
+    [PSCustomObject]@{ key = "discord_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "Hoffman" },
+    [PSCustomObject]@{ key = "discord_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "RisaRisa" },
+    [PSCustomObject]@{ key = "discord_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "Nancy" }
 )
 $script:DefaultHermesBootstrapServiceAccountInvoker = {
     param(

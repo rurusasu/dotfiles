@@ -34,8 +34,8 @@ class OnePasswordConfigTests(unittest.TestCase):
                 ),
                 "GH_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
                 "GITHUB_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
-                "DISCORD_BOT_TOKEN": "op://openclaw/DiscordBot-OpenClaw/bot_token",
-                "DISCORD_ALLOWED_USERS": "op://openclaw/DiscordBot-OpenClaw/DISCORD_ALLOWED_USERS",
+                "DISCORD_BOT_TOKEN": "op://openclaw/Master/Discord/bot_token",
+                "DISCORD_ALLOWED_USERS": "op://openclaw/Master/Discord/allowed_users",
             },
         )
 
@@ -44,7 +44,7 @@ class OnePasswordConfigTests(unittest.TestCase):
 
         self.assertEqual(
             config["env"]["DISCORD_BOT_TOKEN"],
-            "op://openclaw/DiscordBot-Rick/bot_token",
+            "op://openclaw/Rick/Discord/bot_token",
         )
         self.assertNotIn("API_SERVER_KEY", config["env"])
         self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH", config["env"])

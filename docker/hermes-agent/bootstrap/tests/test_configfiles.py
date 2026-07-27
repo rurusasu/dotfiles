@@ -50,7 +50,7 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         )
         self.assertEqual(
             onepassword["env"]["DISCORD_BOT_TOKEN"],
-            "op://openclaw/DiscordBot-OpenClaw/bot_token",
+            "op://openclaw/Master/Discord/bot_token",
         )
 
     def test_reconciler_is_idempotent(self) -> None:

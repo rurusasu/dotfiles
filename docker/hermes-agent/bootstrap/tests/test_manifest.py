@@ -123,11 +123,11 @@ class ManifestTests(unittest.TestCase):
                 "Hermes Agent Dashboard",
                 "GitHubUsedOpenClawPAT",
                 "Google Calendar MCP",
-                "DiscordBot-OpenClaw",
-                "DiscordBot-Rick",
-                "DiscordBot-Hoffman",
-                "DiscordBot-RisaRisa",
-                "DiscordBot-Nancy",
+                "Master",
+                "Rick",
+                "Hoffman",
+                "RisaRisa",
+                "Nancy",
             ),
         )
         self.assertEqual(manifest.shared_repositories[0].sync_owner, "default")

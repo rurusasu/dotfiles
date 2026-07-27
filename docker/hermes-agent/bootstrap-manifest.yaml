@@ -29,32 +29,33 @@ onepassword_items:
   - key: discord_default
     account: my.1password.com
     vault: openclaw
-    item: DiscordBot-OpenClaw
+    item: Master
     fields: &discord_fields
       - canonical_name: bot_token
+        reference: Discord/bot_token
         labels: [DISCORD_BOT_TOKEN, bot_token, bot token]
       - canonical_name: allowed_users
-        reference: DISCORD_ALLOWED_USERS
+        reference: Discord/allowed_users
         labels: [DISCORD_ALLOWED_USERS, allowed_users, allowed users, allowFrom, allow_from]
   - key: discord_rick
     account: my.1password.com
     vault: openclaw
-    item: DiscordBot-Rick
+    item: Rick
     fields: *discord_fields
   - key: discord_hoffman
     account: my.1password.com
     vault: openclaw
-    item: DiscordBot-Hoffman
+    item: Hoffman
     fields: *discord_fields
   - key: discord_risarisa
     account: my.1password.com
     vault: openclaw
-    item: DiscordBot-RisaRisa
+    item: RisaRisa
     fields: *discord_fields
   - key: discord_nancy
     account: my.1password.com
     vault: openclaw
-    item: DiscordBot-Nancy
+    item: Nancy
     fields: *discord_fields
 root_distribution:
   name: default

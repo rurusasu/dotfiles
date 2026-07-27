@@ -68,8 +68,8 @@ Each item record embeds the full `op item get <title> --account
 my.1password.com --vault openclaw --format json` object. The stdin stream is
 never stored, logged, or placed in a process argument. All eight items are
 mandatory: `Hermes Agent Dashboard`, `GitHubUsedOpenClawPAT`,
-`DiscordBot-OpenClaw`, `DiscordBot-Rick`, `DiscordBot-Hoffman`,
-`DiscordBot-RisaRisa`, and `DiscordBot-Nancy` in account `my.1password.com`, vault
+`Master`, `Rick`, `Hoffman`,
+`RisaRisa`, and `Nancy` in account `my.1password.com`, vault
 `openclaw`, plus `Google Calendar MCP` in account `my.1password.com`, vault
 `Private`.
 
@@ -87,6 +87,13 @@ paths before secrets and credentials are validated. Managed `.env` keys include
 the three GitHub aliases, dashboard username/hash/signing secret, and profile
 Discord credentials; root also owns `API_SERVER_KEY`, which is removed from named
 profile `.env` files.
+
+The five profile-named items keep service credentials in separate sections.
+Discord uses `Discord/bot_token` and `Discord/allowed_users`; additional
+services must use their own sections rather than service-specific item names.
+The retained Slack credentials use `Slack/bot_token`,
+`Slack/app_level_token`, and `Slack/allowed_users`. The current bootstrap
+consumes only the `Discord` section for messaging.
 
 ## Runtime `gh` Authentication
 

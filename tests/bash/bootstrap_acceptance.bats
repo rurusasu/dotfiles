@@ -85,10 +85,10 @@ EOF
 		  and .tokens_json.accounts.shared.refresh_token == "acceptance-refresh-token"
 	' >/dev/null
 
-	run "$op" item get "SlackBot-Nancy" \
+	run "$op" item get "Nancy" \
 		--account my.1password.com --vault openclaw --format json
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'"id":"acceptance-SlackBot-Nancy"'* ]]
+	[[ "$output" == *'"id":"acceptance-Nancy"'* ]]
 
 	run "$op" signin --account my.1password.com
 	[ "$status" -eq 0 ]

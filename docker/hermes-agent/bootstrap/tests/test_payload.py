@@ -195,16 +195,30 @@ class PayloadTests(unittest.TestCase):
                             "vault": "openclaw",
                             "item": item,
                             "fields": [
-                                {"canonical_name": "bot_token", "labels": ["DISCORD_BOT_TOKEN", "bot_token", "bot token"]},
-                                {"canonical_name": "allowed_users", "labels": ["DISCORD_ALLOWED_USERS", "allowed_users", "allowed users", "allowFrom", "allow_from"], "reference": "DISCORD_ALLOWED_USERS"},
+                                {
+                                    "canonical_name": "bot_token",
+                                    "labels": ["DISCORD_BOT_TOKEN", "bot_token", "bot token"],
+                                    "reference": "Discord/bot_token",
+                                },
+                                {
+                                    "canonical_name": "allowed_users",
+                                    "labels": [
+                                        "DISCORD_ALLOWED_USERS",
+                                        "allowed_users",
+                                        "allowed users",
+                                        "allowFrom",
+                                        "allow_from",
+                                    ],
+                                    "reference": "Discord/allowed_users",
+                                },
                             ],
                         }
                         for key, item in (
-                            ("discord_default", "DiscordBot-OpenClaw"),
-                            ("discord_rick", "DiscordBot-Rick"),
-                            ("discord_hoffman", "DiscordBot-Hoffman"),
-                            ("discord_risarisa", "DiscordBot-RisaRisa"),
-                            ("discord_nancy", "DiscordBot-Nancy"),
+                            ("discord_default", "Master"),
+                            ("discord_rick", "Rick"),
+                            ("discord_hoffman", "Hoffman"),
+                            ("discord_risarisa", "RisaRisa"),
+                            ("discord_nancy", "Nancy"),
                         )
                     ],
                 ],
