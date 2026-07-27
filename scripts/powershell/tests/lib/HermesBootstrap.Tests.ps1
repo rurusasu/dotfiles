@@ -205,9 +205,12 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
         $envPath = Join-Path $script:serviceAccountDirectory '.op.env'
         $acl = Get-Acl -LiteralPath $envPath
         $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $accessSid = $acl.Access[0].IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
 
         @($acl.Access).Count | Should -Be 1
-        $acl.Access[0].IdentityReference.Value | Should -Be $currentSid
+        $accessSid | Should -Be $currentSid
         $acl.Access[0].IsInherited | Should -BeFalse
     }
 }
