@@ -247,6 +247,15 @@ function Invoke-HermesBootstrapEntrypoint {
                 $null = New-Item -ItemType Directory -Path $directory -Force
             }
 
+            try {
+                $null = Initialize-HermesBootstrapServiceAccountEnvironment -DataDir $paths.DataDir
+            }
+            catch {
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode 1 `
+                    -Message 'Hermes 1Password Service Account is unavailable.'
+            }
+
             $config = Invoke-HermesBootstrapDockerPhase `
                 -Arguments @('compose', '-f', $paths.ComposeFile, 'config', '--quiet') `
                 -FailureMessage 'Hermes Compose validation failed.'

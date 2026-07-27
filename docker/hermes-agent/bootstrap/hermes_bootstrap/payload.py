@@ -122,6 +122,11 @@ def build_secret_plan(manifest: BootstrapManifest) -> dict[str, object]:
                     {
                         "canonical_name": field.canonical_name,
                         "labels": list(field.labels),
+                        **(
+                            {"reference": field.reference_name}
+                            if field.reference_name is not None
+                            else {}
+                        ),
                     }
                     for field in item.fields
                 ],

@@ -527,7 +527,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -eq 0 ]
 	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<SlackBot-OpenClaw>' '<SlackBot-Rick>' '<SlackBot-Hoffman>' '<SlackBot-Risarisa>' '<SlackBot-Nancy>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
-	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 10 ]
+	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 11 ]
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:slack_default item:slack_rick item:slack_hoffman item:slack_risarisa item:slack_nancy end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null

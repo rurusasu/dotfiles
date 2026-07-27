@@ -170,6 +170,34 @@ Describe "Get-HermesBootstrapSecretPlan" {
     }
 }
 
+Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1")
+    }
+
+    BeforeEach {
+        $script:serviceAccountDirectory = Join-Path $TestDrive 'hermes-data'
+        $null = New-Item -ItemType Directory -Path $script:serviceAccountDirectory
+    }
+
+    It "writes the existing service account reference into a private Compose env file" {
+        $result = Initialize-HermesBootstrapServiceAccountEnvironment `
+            -DataDir $script:serviceAccountDirectory `
+            -InvokeOnePassword {
+                param($Account, $Reference)
+                $Account | Should -Be 'my.1password.com'
+                $Reference | Should -Be 'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential'
+                return 'test-service-account-token'
+            }
+
+        $result | Should -BeTrue
+        $envPath = Join-Path $script:serviceAccountDirectory '.op.env'
+        $content = Get-Content -LiteralPath $envPath -Raw
+        $content | Should -Be "OP_SERVICE_ACCOUNT_TOKEN=test-service-account-token`n"
+        $content.Length | Should -BeGreaterThan 0
+    }
+}
+
 function global:New-HermesBootstrapFakeDocker {
     param([Parameter(Mandatory)][string]$Directory)
 

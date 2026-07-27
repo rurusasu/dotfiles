@@ -60,6 +60,7 @@ scripts/powershell/test-results.xml
 
 # Docker env files
 docker/**/.env
+**/.op.env
 
 # WSL config (machine-specific)
 windows/.wslconfig

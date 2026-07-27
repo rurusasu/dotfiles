@@ -11,6 +11,7 @@ from typing import Literal
 class OnePasswordField:
     canonical_name: str
     labels: tuple[str, ...]
+    reference_name: str | None = None
 
 
 @dataclass(frozen=True)

@@ -196,8 +196,8 @@ class PayloadTests(unittest.TestCase):
                             "item": item,
                             "fields": [
                                 {"canonical_name": "bot_token", "labels": ["SLACK_BOT_TOKEN", "bot_token", "bot token"]},
-                                {"canonical_name": "app_token", "labels": ["SLACK_APP_TOKEN", "app_level_token", "app token", "app-level token"]},
-                                {"canonical_name": "allowed_users", "labels": ["SLACK_ALLOWED_USERS", "allowed_users", "allowed users", "allowFrom", "allow_from"]},
+                                {"canonical_name": "app_token", "labels": ["SLACK_APP_TOKEN", "app_level_token", "app token", "app-level token"], "reference": "app_level_token"},
+                                {"canonical_name": "allowed_users", "labels": ["SLACK_ALLOWED_USERS", "allowed_users", "allowed users", "allowFrom", "allow_from"], "reference": "SLACK_ALLOWED_USERS"},
                             ],
                         }
                         for key, item in (

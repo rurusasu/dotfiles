@@ -149,15 +149,26 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
         for field_index, raw_field in enumerate(_sequence(item["fields"], f"{context}.fields")):
             field_context = f"{context}.fields[{field_index}]"
             field = _mapping(raw_field, field_context)
-            _keys(field, {"canonical_name", "labels"}, field_context)
+            _keys(field, {"canonical_name", "labels"}, field_context, optional={"reference"})
             canonical_name = _text(field["canonical_name"], f"{field_context}.canonical_name")
+            reference_name = (
+                _text(field["reference"], f"{field_context}.reference")
+                if "reference" in field
+                else None
+            )
             labels = tuple(
                 _text(label, f"{field_context}.labels[{label_index}]")
                 for label_index, label in enumerate(_sequence(field["labels"], f"{field_context}.labels"))
             )
             if not labels:
                 _invalid(f"{field_context}.labels must not be empty")
-            fields.append(OnePasswordField(canonical_name=canonical_name, labels=labels))
+            fields.append(
+                OnePasswordField(
+                    canonical_name=canonical_name,
+                    labels=labels,
+                    reference_name=reference_name,
+                )
+            )
         if not fields:
             _invalid(f"{context}.fields must not be empty")
         _unique((field.canonical_name for field in fields), f"{context} field names")

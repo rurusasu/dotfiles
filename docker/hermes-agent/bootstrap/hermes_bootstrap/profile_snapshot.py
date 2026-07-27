@@ -988,13 +988,22 @@ def _copy_regular(
         digest = hashlib.sha256()
         size = 0
         scanner = _SensitiveStreamScanner()
+        source_chunks: list[bytes] | None = [] if relative == PurePosixPath("config.yaml") else None
         for chunk in _read_bounded_chunks(source_fd, before.st_size):
             _reject_sensitive_bytes(chunk, final=False, scanner=scanner)
-            _write_descriptor(destination_fd, chunk)
-            digest.update(chunk)
-            size += len(chunk)
+            if source_chunks is None:
+                _write_descriptor(destination_fd, chunk)
+                digest.update(chunk)
+                size += len(chunk)
+            else:
+                source_chunks.append(chunk)
         _reject_sensitive_bytes(b"", scanner=scanner)
-        _verify_regular(parent_fd, name, source_fd, before, size)
+        _verify_regular(parent_fd, name, source_fd, before, before.st_size)
+        if source_chunks is not None:
+            content = _public_profile_config(b"".join(source_chunks))
+            _write_descriptor(destination_fd, content)
+            digest.update(content)
+            size = len(content)
         mode = _git_mode(before.st_mode)
         os.fchmod(destination_fd, mode)
         os.fsync(destination_fd)
@@ -1020,6 +1029,73 @@ def _copy_regular(
         if destination_fd is not None and not destination_registered:
             os.close(destination_fd)
     entries.append(SnapshotEntry(relative, mode, size, sha256))
+
+
+def _public_profile_config(content: bytes) -> bytes:
+    try:
+        config = yaml.safe_load(content)
+    except yaml.YAMLError:
+        return content
+    if not isinstance(config, dict):
+        return content
+    secrets = config.get("secrets")
+    if not isinstance(secrets, dict) or "onepassword" not in secrets:
+        return content
+    lines = content.decode("utf-8").splitlines(keepends=True)
+    secrets_index: int | None = None
+    secrets_indent = -1
+    for index, line in enumerate(lines):
+        stripped = line.lstrip(" ")
+        if stripped == "secrets:\n" or stripped == "secrets:\r\n" or stripped == "secrets:":
+            secrets_index = index
+            secrets_indent = len(line) - len(stripped)
+            break
+    if secrets_index is None:
+        return yaml.safe_dump(
+            {key: value for key, value in config.items() if key != "secrets"},
+            sort_keys=False,
+        ).encode("utf-8")
+    onepassword_index: int | None = None
+    onepassword_indent = -1
+    for index in range(secrets_index + 1, len(lines)):
+        line = lines[index]
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= secrets_indent:
+            break
+        if line.strip() == "onepassword:" or line.lstrip(" ").startswith("onepassword:"):
+            onepassword_index = index
+            onepassword_indent = indent
+            break
+    if onepassword_index is None:
+        return content
+    end = onepassword_index + 1
+    while end < len(lines):
+        line = lines[end]
+        if line.strip() and len(line) - len(line.lstrip(" ")) <= onepassword_indent:
+            break
+        end += 1
+    secrets_end = secrets_index + 1
+    while secrets_end < len(lines):
+        line = lines[secrets_end]
+        if line.strip() and len(line) - len(line.lstrip(" ")) <= secrets_indent:
+            break
+        secrets_end += 1
+    remaining_secret_children = any(
+        line.strip()
+        and len(line) - len(line.lstrip(" ")) > secrets_indent
+        for line in lines[secrets_index + 1:onepassword_index]
+    ) or any(
+        line.strip()
+        and len(line) - len(line.lstrip(" ")) > secrets_indent
+        for line in lines[end:secrets_end]
+    )
+    if remaining_secret_children:
+        return "".join(
+            (*lines[:onepassword_index], *lines[end:])
+        ).encode("utf-8")
+    return "".join((*lines[:secrets_index], *lines[end:])).encode("utf-8")
 
 
 def _read_regular(parent_fd: int, name: str) -> tuple[bytes, os.stat_result]:

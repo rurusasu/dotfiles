@@ -53,6 +53,7 @@ from .google_calendar import (
     install_google_calendar_credentials,
     validate_google_calendar_installation,
 )
+from .configfiles import reconcile_onepassword_configurations
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
@@ -274,6 +275,12 @@ def _apply_sensitive(
         install_google_calendar_credentials(
             manifest.data_root,
             secrets.google_calendar,
+            tx,
+        )
+
+        reconcile_onepassword_configurations(
+            manifest,
+            _environment_targets(manifest),
             tx,
         )
 

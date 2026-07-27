@@ -57,6 +57,13 @@ class HermesAgentHandler : SetupHandlerBase {
             $this.EnsureDirectory((Join-Path $dataDir '.xurl'))
             $this.EnsureDirectory($this.GetBrowserDataDir())
 
+            try {
+                $null = Initialize-HermesBootstrapServiceAccountEnvironment -DataDir $dataDir
+            }
+            catch {
+                return $this.CreateFailureResult('Hermes 1Password Service Account is unavailable.')
+            }
+
             $validation = $this.InvokeCompose($composeFile, @('config', '--quiet'))
             if (-not $validation.Success) {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")

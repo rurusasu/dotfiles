@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Iterator
 from unittest import mock
 
+import yaml
+
 from hermes_cli import profile_distribution
 
 
@@ -39,6 +41,7 @@ from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
 from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource, SharedRepository
+from hermes_bootstrap.onepassword import build_onepassword_config
 from hermes_bootstrap.payload import SCHEMA_VERSION
 
 
@@ -95,6 +98,17 @@ def source_config(key: str, value: str) -> str:
         "    env:\n"
         "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
         "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
+    )
+
+
+def managed_source_config(
+    manifest: BootstrapManifest, profile: str, key: str, value: str
+) -> str:
+    managed = build_onepassword_config(manifest, profile)
+    return (
+        source_config(key, value).rstrip("\n")
+        + "\n"
+        + yaml.safe_dump({"secrets": {"onepassword": managed}}, sort_keys=False)
     )
 
 
@@ -762,7 +776,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 for path, entry in self._snapshot_tree(
                     self.data_root / "profiles" / profile
                 ).items()
-                if path != ".env"
+                if path not in {".env", "config.yaml"}
             }
             for profile in PROFILE_NAMES
         }
@@ -771,19 +785,21 @@ class BootstrapFlowTests(unittest.TestCase):
 
         self.assertEqual(
             (self.data_root / "config.yaml").read_text(encoding="utf-8"),
-            source_config("root", "initial"),
+            managed_source_config(self.manifest, "default", "root", "initial"),
         )
         for profile in PROFILE_NAMES:
             target = self.data_root / "profiles" / profile
             self.assertEqual(
                 (target / "config.yaml").read_text(encoding="utf-8"),
-                source_config("profile", f"{profile}-initial"),
+                managed_source_config(
+                    self.manifest, profile, "profile", f"{profile}-initial"
+                ),
             )
             self.assertEqual(
                 {
                     path: (entry.kind, entry.mode, entry.payload)
                     for path, entry in self._snapshot_tree(target).items()
-                    if path != ".env"
+                    if path not in {".env", "config.yaml"}
                 },
                 profiles_before[profile],
             )
@@ -1011,7 +1027,9 @@ class BootstrapFlowTests(unittest.TestCase):
         )
         self.assertEqual(
             (target / "config.yaml").read_text(encoding="utf-8"),
-            source_config("profile", "rick-updated"),
+            managed_source_config(
+                self.manifest, "rick", "profile", "rick-updated"
+            ),
         )
         self.assertEqual(
             (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime)),
@@ -1401,10 +1419,18 @@ class BootstrapFlowTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 try:
                     version = f"0.{revision}.0"
-                    desired_root = source_config("root", f"rollback-{revision}")
+                    desired_root = managed_source_config(
+                        self.manifest,
+                        "default",
+                        "root",
+                        f"rollback-{revision}",
+                    )
                     desired_profiles = {
-                        profile: source_config(
-                            "profile", f"{profile}-rollback-{revision}"
+                        profile: managed_source_config(
+                            self.manifest,
+                            profile,
+                            "profile",
+                            f"{profile}-rollback-{revision}",
                         )
                         for profile in PROFILE_NAMES
                     }
