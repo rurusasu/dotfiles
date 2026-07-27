@@ -14,10 +14,9 @@ _MANAGED_ENV_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("GH_TOKEN", "github", "credential"),
     ("GITHUB_TOKEN", "github", "credential"),
 )
-_SLACK_ENV_FIELDS: tuple[tuple[str, str], ...] = (
-    ("SLACK_BOT_TOKEN", "bot_token"),
-    ("SLACK_APP_TOKEN", "app_token"),
-    ("SLACK_ALLOWED_USERS", "allowed_users"),
+_DISCORD_ENV_FIELDS: tuple[tuple[str, str], ...] = (
+    ("DISCORD_BOT_TOKEN", "bot_token"),
+    ("DISCORD_ALLOWED_USERS", "allowed_users"),
 )
 
 
@@ -27,14 +26,14 @@ def build_onepassword_config(
     """Return the non-secret onepassword block for one Hermes home."""
 
     items = {item.key: item for item in manifest.onepassword_items}
-    slack_key = "slack_default" if profile == "default" else f"slack_{profile}"
+    discord_key = "discord_default" if profile == "default" else f"discord_{profile}"
     required = {key for _env, key, _field in _MANAGED_ENV_FIELDS}
-    required.update({"dashboard", "github", slack_key})
+    required.update({"dashboard", "github", discord_key})
     missing = sorted(key for key in required if key not in items)
     if missing:
         raise ValidationError("1Password manifest is missing managed items")
 
-    managed_items = [items[key] for key in ("dashboard", "github", slack_key)]
+    managed_items = [items[key] for key in ("dashboard", "github", discord_key)]
     accounts = {item.account for item in managed_items}
     if len(accounts) != 1:
         raise ValidationError("managed 1Password items use different accounts")
@@ -43,8 +42,8 @@ def build_onepassword_config(
     environment: dict[str, str] = {}
     for env_name, item_key, field_name in _MANAGED_ENV_FIELDS:
         environment[env_name] = _reference(items[item_key], field_name)
-    for env_name, field_name in _SLACK_ENV_FIELDS:
-        environment[env_name] = _reference(items[slack_key], field_name)
+    for env_name, field_name in _DISCORD_ENV_FIELDS:
+        environment[env_name] = _reference(items[discord_key], field_name)
 
     return {
         "enabled": True,

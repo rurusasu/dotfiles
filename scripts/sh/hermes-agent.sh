@@ -204,11 +204,11 @@ dotfiles_hermes_validate_secret_plan() {
       {"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard"},
       {"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT"},
       {"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP"},
-      {"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw"},
-      {"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick"},
-      {"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman"},
-      {"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa"},
-      {"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy"}
+      {"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-OpenClaw"},
+      {"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Rick"},
+      {"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Hoffman"},
+      {"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-RisaRisa"},
+      {"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Nancy"}
     ])
     and ([.items[].key] | unique | length == 8)
     and all(.items[]; plan_item)

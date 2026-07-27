@@ -51,7 +51,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $script:dockerArguments = @()
         $script:dockerExitCode = 0
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -351,7 +351,7 @@ Describe "Invoke-HermesBootstrap" {
 
     BeforeEach {
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"slack_default","account":"my.1password.com","vault":"openclaw","item":"SlackBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_rick","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_hoffman","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_risarisa","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Risarisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"slack_nancy","account":"my.1password.com","vault":"openclaw","item":"SlackBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-OpenClaw","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"DiscordBot-Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -422,11 +422,11 @@ Describe "Invoke-HermesBootstrap" {
             "item|get|Hermes Agent Dashboard|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|GitHubUsedOpenClawPAT|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Google Calendar MCP|--account|my.1password.com|--vault|Private|--format|json",
-            "item|get|SlackBot-OpenClaw|--account|my.1password.com|--vault|openclaw|--format|json",
-            "item|get|SlackBot-Rick|--account|my.1password.com|--vault|openclaw|--format|json",
-            "item|get|SlackBot-Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
-            "item|get|SlackBot-Risarisa|--account|my.1password.com|--vault|openclaw|--format|json",
-            "item|get|SlackBot-Nancy|--account|my.1password.com|--vault|openclaw|--format|json"
+            "item|get|DiscordBot-OpenClaw|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|DiscordBot-Rick|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|DiscordBot-Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|DiscordBot-RisaRisa|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|DiscordBot-Nancy|--account|my.1password.com|--vault|openclaw|--format|json"
         )
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
@@ -435,7 +435,7 @@ Describe "Invoke-HermesBootstrap" {
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
         @($records[1..8] | ForEach-Object { $_.key }) | Should -Be @(
-            "dashboard", "github", "google_calendar", "slack_default", "slack_rick", "slack_hoffman", "slack_risarisa", "slack_nancy"
+            "dashboard", "github", "google_calendar", "discord_default", "discord_rick", "discord_hoffman", "discord_risarisa", "discord_nancy"
         )
         $records[9].type | Should -Be "end"
 

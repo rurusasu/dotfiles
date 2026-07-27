@@ -49,8 +49,8 @@ class OnePasswordConfigFileTests(unittest.TestCase):
             "op://Private/OpenAI/credential",
         )
         self.assertEqual(
-            onepassword["env"]["SLACK_BOT_TOKEN"],
-            "op://openclaw/SlackBot-OpenClaw/bot_token",
+            onepassword["env"]["DISCORD_BOT_TOKEN"],
+            "op://openclaw/DiscordBot-OpenClaw/bot_token",
         )
 
     def test_reconciler_is_idempotent(self) -> None:

@@ -38,11 +38,11 @@ JSON
 	;;
 "Hermes Agent Dashboard" | \
 	"GitHubUsedOpenClawPAT" | \
-	"SlackBot-OpenClaw" | \
-	"SlackBot-Rick" | \
-	"SlackBot-Hoffman" | \
-	"SlackBot-Risarisa" | \
-	"SlackBot-Nancy")
+"DiscordBot-OpenClaw" | \
+"DiscordBot-Rick" | \
+"DiscordBot-Hoffman" | \
+"DiscordBot-RisaRisa" | \
+"DiscordBot-Nancy")
 	if [ "$7" != openclaw ]; then
 		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
 		exit 2

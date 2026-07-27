@@ -21,13 +21,12 @@ _REDACTED = "[REDACTED]"
 
 
 @dataclass(frozen=True, repr=False)
-class SlackSecret:
+class DiscordSecret:
     bot_token: str
-    app_token: str
     allowed_users: str
 
     def __repr__(self) -> str:
-        return "SlackSecret(<redacted>)"
+        return "DiscordSecret(<redacted>)"
 
 
 @dataclass(frozen=True, repr=False)
@@ -53,7 +52,7 @@ class SecretBundle:
     github_token: str
     dashboard: DashboardSecret
     google_calendar: GoogleCalendarSecret
-    slack_by_profile: Mapping[str, SlackSecret]
+    discord_by_profile: Mapping[str, DiscordSecret]
     redactor: "SecretRedactor"
 
     def __repr__(self) -> str:
@@ -358,19 +357,18 @@ def _bundle_from_fields(
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
     validate_google_calendar_secret(google_calendar)
 
-    slack_by_profile: dict[str, SlackSecret] = {}
+    discord_by_profile: dict[str, DiscordSecret] = {}
     required_profiles = ("default", *(profile.name for profile in manifest.profiles))
     for profile in required_profiles:
-        key = f"slack_{profile}"
+        key = f"discord_{profile}"
         try:
             fields = parsed[key]
-            slack_by_profile[profile] = SlackSecret(
+            discord_by_profile[profile] = DiscordSecret(
                 bot_token=fields["bot_token"],
-                app_token=fields["app_token"],
                 allowed_users=fields["allowed_users"],
             )
         except KeyError as error:
-            raise ValidationError("manifest is missing a required Slack credential declaration") from error
+            raise ValidationError("manifest is missing a required Discord credential declaration") from error
 
     redactor = SecretRedactor(
         discovered_values,
@@ -380,7 +378,7 @@ def _bundle_from_fields(
         github_token=github_token,
         dashboard=dashboard,
         google_calendar=google_calendar,
-        slack_by_profile=MappingProxyType(slack_by_profile),
+        discord_by_profile=MappingProxyType(discord_by_profile),
         redactor=redactor,
     )
 

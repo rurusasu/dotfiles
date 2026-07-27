@@ -25,13 +25,13 @@ from hermes_bootstrap.payload import (
     GoogleCalendarSecret,
     SecretBundle,
     SecretRedactor,
-    SlackSecret,
+    DiscordSecret,
 )
 from hermes_bootstrap.envfiles import (
     API_SERVER_KEYS,
     DASHBOARD_KEYS,
     GITHUB_KEYS,
-    SLACK_KEYS,
+    DISCORD_KEYS,
     build_dashboard_environment,
     build_profile_environment,
     merge_env_file,
@@ -47,11 +47,11 @@ def secret_bundle() -> SecretBundle:
             '{"installed":{"client_id":"id","client_secret":"secret"}}',
             '{"refresh_token":"refresh"}',
         ),
-        slack_by_profile=MappingProxyType(
+        discord_by_profile=MappingProxyType(
             {
-                "default": SlackSecret("default-bot", "default-app", "default-users"),
-                "rick": SlackSecret("rick-bot", "rick-app", "rick-users"),
-                "hoffman": SlackSecret("hoffman-bot", "hoffman-app", "hoffman-users"),
+                "default": DiscordSecret("default-bot", "default-users"),
+                "rick": DiscordSecret("rick-bot", "rick-users"),
+                "hoffman": DiscordSecret("hoffman-bot", "hoffman-users"),
             }
         ),
         redactor=SecretRedactor(("github-secret-value", "dashboard-user", "dashboard-password")),
@@ -77,8 +77,8 @@ def capture_dashboard_build_error() -> BaseException:
             '{"installed":{"client_id":"id","client_secret":"secret"}}',
             '{"refresh_token":"refresh"}',
         ),
-        slack_by_profile=MappingProxyType(
-            {"default": SlackSecret("build-bot-marker", "build-app-marker", "build-users-marker")}
+        discord_by_profile=MappingProxyType(
+            {"default": DiscordSecret("build-bot-marker", "build-users-marker")}
         ),
         redactor=SecretRedactor(("build-password-marker",)),
     )
@@ -117,22 +117,39 @@ class EnvFileTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            SLACK_KEYS,
-            frozenset({"SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"}),
+            DISCORD_KEYS,
+            frozenset({"DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"}),
         )
         self.assertEqual(API_SERVER_KEYS, frozenset({"API_SERVER_KEY"}))
+
+    def test_profile_environment_uses_discord_credentials_only(self) -> None:
+        environment = build_profile_environment(
+            "rick",
+            secret_bundle(),
+            {
+                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": "dashboard-user",
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "hash",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "secret",
+                "API_SERVER_KEY": "api-key",
+            },
+        )
+
+        self.assertEqual(environment["DISCORD_BOT_TOKEN"], "rick-bot")
+        self.assertEqual(environment["DISCORD_ALLOWED_USERS"], "rick-users")
+        self.assertNotIn("SLACK_BOT_TOKEN", environment)
+        self.assertNotIn("SLACK_APP_TOKEN", environment)
 
     def test_absent_file_creates_parents_and_canonical_managed_block(self) -> None:
         changed = merge_env_file(
             self.path,
-            {"GH_TOKEN": "token=value", "SLACK_APP_TOKEN": "app"},
+            {"GH_TOKEN": "token=value", "DISCORD_ALLOWED_USERS": "users"},
             frozenset(),
         )
 
         self.assertTrue(changed)
         self.assertEqual(
             self.path.read_bytes(),
-            b"GH_TOKEN='token=value'\nSLACK_APP_TOKEN='app'\n",
+            b"GH_TOKEN='token=value'\nDISCORD_ALLOWED_USERS='users'\n",
         )
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
@@ -588,8 +605,8 @@ class EnvFileTests(unittest.TestCase):
         root_environment = build_profile_environment("default", secrets, dashboard)
         rick_environment = build_profile_environment("rick", secrets, dashboard)
         self.assertIsInstance(root_environment, MappingProxyType)
-        self.assertEqual(root_environment["SLACK_BOT_TOKEN"], "default-bot")
-        self.assertEqual(rick_environment["SLACK_BOT_TOKEN"], "rick-bot")
+        self.assertEqual(root_environment["DISCORD_BOT_TOKEN"], "default-bot")
+        self.assertEqual(rick_environment["DISCORD_BOT_TOKEN"], "rick-bot")
         for key in GITHUB_KEYS | DASHBOARD_KEYS:
             self.assertEqual(root_environment[key], rick_environment[key])
         self.assertEqual(
