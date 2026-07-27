@@ -1046,6 +1046,8 @@ def _public_profile_config(content: bytes) -> bytes:
     secrets_indent = -1
     for index, line in enumerate(lines):
         stripped = line.lstrip(" ")
+        if len(line) - len(stripped) != 0:
+            continue
         if stripped == "secrets:\n" or stripped == "secrets:\r\n" or stripped == "secrets:":
             secrets_index = index
             secrets_indent = len(line) - len(stripped)

@@ -177,6 +177,37 @@ function Get-HermesBootstrapServiceAccountAccount {
     return $account
 }
 
+function Protect-HermesBootstrapServiceAccountFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $isWindowsPlatform = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
+    if (-not $isWindowsPlatform) {
+        return
+    }
+
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    if ($null -eq $currentSid) {
+        throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
+    }
+
+    $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
+    $fileSecurity.SetOwner($currentSid)
+    $fileSecurity.SetAccessRuleProtection($true, $false)
+    $readRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $currentSid,
+        [System.Security.AccessControl.FileSystemRights]::Read,
+        [System.Security.AccessControl.InheritanceFlags]::None,
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    [void]$fileSecurity.AddAccessRule($readRule)
+    Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+}
+
 function Initialize-HermesBootstrapServiceAccountEnvironment {
     [CmdletBinding()]
     param(
@@ -213,12 +244,14 @@ function Initialize-HermesBootstrapServiceAccountEnvironment {
             "OP_SERVICE_ACCOUNT_TOKEN=$token`n",
             $encoding
         )
+        Protect-HermesBootstrapServiceAccountFile -Path $temporary
         if (Test-Path -LiteralPath $path) {
             [System.IO.File]::Replace($temporary, $path, $null, $true)
         }
         else {
             [System.IO.File]::Move($temporary, $path)
         }
+        Protect-HermesBootstrapServiceAccountFile -Path $path
         return $true
     }
     finally {

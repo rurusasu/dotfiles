@@ -196,6 +196,20 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
         $content | Should -Be "OP_SERVICE_ACCOUNT_TOKEN=test-service-account-token`n"
         $content.Length | Should -BeGreaterThan 0
     }
+
+    It "writes the service account env file with a user-only ACL on Windows" -Skip:(-not $IsWindows) {
+        Initialize-HermesBootstrapServiceAccountEnvironment `
+            -DataDir $script:serviceAccountDirectory `
+            -InvokeOnePassword { return 'test-service-account-token' }
+
+        $envPath = Join-Path $script:serviceAccountDirectory '.op.env'
+        $acl = Get-Acl -LiteralPath $envPath
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+
+        @($acl.Access).Count | Should -Be 1
+        $acl.Access[0].IdentityReference.Value | Should -Be $currentSid
+        $acl.Access[0].IsInherited | Should -BeFalse
+    }
 }
 
 function global:New-HermesBootstrapFakeDocker {

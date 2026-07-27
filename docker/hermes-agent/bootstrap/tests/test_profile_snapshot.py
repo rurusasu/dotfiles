@@ -103,6 +103,24 @@ class ProfileSnapshotTests(unittest.TestCase):
         with self.assertRaises(ProfileSnapshotError):
             prepare_profile_snapshots(self.manifest(self.profile("rick")), clean_scratch, allow_missing=False)
 
+    def test_public_profile_config_only_strips_root_onepassword_block(self) -> None:
+        content = (
+            "settings:\n"
+            "  secrets:\n"
+            "    onepassword:\n"
+            "      nested: true\n"
+            "secrets:\n"
+            "  onepassword:\n"
+            "    root: true\n"
+            "  retained: true\n"
+        ).encode("utf-8")
+
+        public = yaml.safe_load(profile_snapshot._public_profile_config(content))
+
+        self.assertEqual(public["settings"]["secrets"]["onepassword"]["nested"], True)
+        self.assertNotIn("onepassword", public["secrets"])
+        self.assertEqual(public["secrets"]["retained"], True)
+
     def test_gitignore_is_an_exact_root_allowlist_with_nested_parents(self) -> None:
         snapshot = self.prepare("rick", owned=["SOUL.md", "assets/icons"])
         self.assertEqual(
