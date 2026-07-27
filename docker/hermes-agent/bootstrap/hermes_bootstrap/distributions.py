@@ -778,21 +778,39 @@ def _same_path(source: Path, destination: Path) -> bool:
         return False
 
 
-def _same_distribution_path(source: Path, destination: Path) -> bool:
-    """Compare distribution files while ignoring bootstrap-owned onepassword config."""
+def _same_profile_payload_path(source: Path, destination: Path) -> bool:
+    if _same_path(source, destination):
+        return True
+    if source.name != "config.yaml" or not _lexists(destination):
+        return False
+    try:
+        source_mode = source.lstat().st_mode
+        destination_mode = destination.lstat().st_mode
+        return (
+            stat.S_ISREG(source_mode)
+            and stat.S_ISREG(destination_mode)
+            and stat.S_IMODE(source_mode) == 0o644
+            and stat.S_IMODE(destination_mode) == 0o600
+            and source.read_bytes() == destination.read_bytes()
+        )
+    except OSError:
+        return False
 
+def _same_distribution_path(source: Path, destination: Path) -> bool:
+    """Compare distribution files while ignoring managed config sections."""
+
+    if _same_profile_payload_path(source, destination):
+        return True
     if source.name != "config.yaml" or destination.name != "config.yaml":
-        return _same_path(source, destination)
+        return False
     try:
         source_config = yaml.safe_load(source.read_text(encoding="utf-8"))
         destination_config = yaml.safe_load(destination.read_text(encoding="utf-8"))
         if not isinstance(source_config, dict) or not isinstance(destination_config, dict):
-            return _same_path(source, destination)
-        source_config = _without_bootstrap_onepassword(source_config)
-        destination_config = _without_bootstrap_onepassword(destination_config)
-        return source_config == destination_config
+            return False
+        return _without_bootstrap_onepassword(source_config) == _without_bootstrap_onepassword(destination_config)
     except (OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError):
-        return _same_path(source, destination)
+        return False
 
 
 def _without_bootstrap_onepassword(config: dict[object, object]) -> dict[object, object]:
@@ -807,6 +825,8 @@ def _without_bootstrap_onepassword(config: dict[object, object]) -> dict[object,
     else:
         result.pop("secrets", None)
     return result
+
+
 def _replace_from_source(source: Path, destination: Path, snapshots: _SnapshotTracker) -> None:
     _validate_source_path(source)
     _ensure_destination_parent(destination.parent, snapshots)
