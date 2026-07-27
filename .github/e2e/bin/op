@@ -7,6 +7,16 @@ if [ "$#" -eq 3 ] && [ "$1" = signin ] && [ "$2" = --account ] && \
 	exit 0
 fi
 
+if [ "$#" -eq 4 ] && [ "$1" = --account ] && \
+	[ "$2" = my.1password.com ] && [ "$3" = read ]; then
+	if [ "$4" = 'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential' ]; then
+		printf 'acceptance-hermes-service-account-token\n'
+		exit 0
+	fi
+	printf 'acceptance op fixture rejected reference: %s\n' "$4" >&2
+	exit 2
+fi
+
 if [ "$#" -ne 9 ] || [ "$1" != item ] || [ "$2" != get ] || \
 	[ "$4" != --account ] || [ "$5" != my.1password.com ] || \
 	[ "$6" != --vault ] || \
