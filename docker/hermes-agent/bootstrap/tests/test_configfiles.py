@@ -30,7 +30,10 @@ class OnePasswordConfigFileTests(unittest.TestCase):
             "  onepassword:\n"
             "    cache_ttl_seconds: 42\n"
             "    env:\n"
-            "      OPENAI_API_KEY: op://Private/OpenAI/credential\n",
+            "      OPENAI_API_KEY: op://Private/OpenAI/credential\n"
+            "      SLACK_BOT_TOKEN: op://openclaw/SlackBot/bot_token\n"
+            "      SLACK_APP_TOKEN: op://openclaw/SlackBot/app_level_token\n"
+            "      SLACK_ALLOWED_USERS: op://openclaw/SlackBot/SLACK_ALLOWED_USERS\n",
             encoding="utf-8",
         )
 
@@ -52,6 +55,9 @@ class OnePasswordConfigFileTests(unittest.TestCase):
             onepassword["env"]["DISCORD_BOT_TOKEN"],
             "op://openclaw/Master/Discord/bot_token",
         )
+        self.assertNotIn("SLACK_BOT_TOKEN", onepassword["env"])
+        self.assertNotIn("SLACK_APP_TOKEN", onepassword["env"])
+        self.assertNotIn("SLACK_ALLOWED_USERS", onepassword["env"])
 
     def test_reconciler_is_idempotent(self) -> None:
         path = self.root / "config.yaml"

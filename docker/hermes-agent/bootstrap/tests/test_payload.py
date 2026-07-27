@@ -253,6 +253,45 @@ class PayloadTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             secrets.github_token = "changed"
 
+    def test_explicit_reference_selects_discord_section_when_slack_labels_overlap(self) -> None:
+        items = secret_items()
+        items["discord_default"] = {
+            "id": "discord-default-id",
+            "fields": [
+                {
+                    "id": "bot_token",
+                    "label": "bot_token",
+                    "section": {"id": "discord", "label": "Discord"},
+                    "value": "discord-default-token",
+                },
+                {
+                    "id": "allowed_users",
+                    "label": "allowed_users",
+                    "section": {"id": "discord", "label": "Discord"},
+                    "value": "UDEFAULT",
+                },
+                {
+                    "id": "bot_token",
+                    "label": "bot_token",
+                    "section": {"id": "slack", "label": "Slack"},
+                    "value": "slack-default-token",
+                },
+                {
+                    "id": "allowed_users",
+                    "label": "allowed_users",
+                    "section": {"id": "slack", "label": "Slack"},
+                    "value": "USLACK",
+                },
+            ],
+        }
+
+        secrets = read_secret_payload(payload_stream(items), self.manifest)
+
+        self.assertEqual(
+            secrets.discord_by_profile["default"],
+            DiscordSecret("discord-default-token", "UDEFAULT"),
+        )
+
     def test_invalid_google_calendar_json_is_rejected_without_leaking_values(self) -> None:
         items = secret_items()
         items["google_calendar"] = raw_item(

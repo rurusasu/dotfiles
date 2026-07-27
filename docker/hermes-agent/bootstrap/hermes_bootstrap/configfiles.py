@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from .distributions import _atomic_write
+from .envfiles import LEGACY_SLACK_KEYS
 from .errors import ApplyError
 from .models import BootstrapManifest
 from .onepassword import build_onepassword_config
@@ -64,6 +65,11 @@ def reconcile_onepassword_configurations(
                 existing_env = {}
             if not isinstance(existing_env, dict):
                 continue
+            retained_env = {
+                key: value
+                for key, value in existing_env.items()
+                if key not in LEGACY_SLACK_KEYS
+            }
 
             managed = build_onepassword_config(manifest, profile)
             if "secrets" not in config:
@@ -85,7 +91,7 @@ def reconcile_onepassword_configurations(
             merged_onepassword = dict(onepassword)
             merged_onepassword.update(managed)
             merged_onepassword["env"] = {
-                **existing_env,
+                **retained_env,
                 **managed["env"],
             }
             merged_secrets = dict(secrets)

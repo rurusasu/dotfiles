@@ -293,18 +293,31 @@ def _parse_item_record(
 
     extracted: dict[str, list[str]] = {field.canonical_name: [] for field in declared[key].fields}
     aliases = _field_aliases(declared[key])
+    unreferenced = {
+        field.canonical_name
+        for field in declared[key].fields
+        if field.reference_name is None
+    }
     discovered: list[str] = []
     for raw_field in fields:
         if not isinstance(raw_field, dict):
             raise ValidationError("secret payload item field is invalid")
         field_id = raw_field.get("id")
         label = raw_field.get("label")
+        section = raw_field.get("section")
         value = raw_field.get("value")
         if (field_id is not None and not isinstance(field_id, str)) or not isinstance(label, str):
             raise ValidationError("secret payload item field is invalid")
-        matches = set(aliases.get(_normalize_label(label), ()))
+        if section is not None and not isinstance(section, dict):
+            raise ValidationError("secret payload item field is invalid")
+        matches = _reference_matches(declared[key], raw_field)
+        alias_matches = set(aliases.get(_normalize_label(label), ()))
         if field_id:
-            matches.update(aliases.get(_normalize_label(field_id), ()))
+            alias_matches.update(aliases.get(_normalize_label(field_id), ()))
+        if section is None:
+            matches.update(alias_matches)
+        else:
+            matches.update(alias_matches.intersection(unreferenced))
         if len(matches) > 1:
             raise ValidationError("secret payload item field label is ambiguous")
         if value is None:
@@ -331,6 +344,40 @@ def _field_aliases(item: OnePasswordItem) -> dict[str, tuple[str, ...]]:
         for label in field.labels:
             aliases.setdefault(_normalize_label(label), set()).add(field.canonical_name)
     return {label: tuple(sorted(names)) for label, names in aliases.items()}
+
+
+def _reference_matches(item: OnePasswordItem, raw_field: Mapping[str, object]) -> set[str]:
+    return {
+        field.canonical_name
+        for field in item.fields
+        if field.reference_name is not None
+        and _raw_field_matches_reference(raw_field, field.reference_name)
+    }
+
+
+def _raw_field_matches_reference(
+    raw_field: Mapping[str, object], reference_name: str
+) -> bool:
+    section_name, separator, field_name = reference_name.rpartition("/")
+    field_candidates = {
+        _normalize_label(value)
+        for key in ("id", "label")
+        if isinstance((value := raw_field.get(key)), str)
+    }
+    if _normalize_label(field_name) not in field_candidates:
+        return False
+    if not separator:
+        return True
+
+    section = raw_field.get("section")
+    if not isinstance(section, Mapping):
+        return False
+    section_candidates = {
+        _normalize_label(value)
+        for key in ("id", "label")
+        if isinstance((value := section.get(key)), str)
+    }
+    return _normalize_label(section_name) in section_candidates
 
 
 def _normalize_label(label: str) -> str:
