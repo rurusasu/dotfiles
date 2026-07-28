@@ -20,10 +20,12 @@
 ### Task 1: Leader Backspace Passthrough
 
 **Files:**
+
 - Modify: `scripts/powershell/tests/chezmoi/Keybindings.Tests.ps1`
 - Modify: `chezmoi/terminals/wezterm/wezterm.lua`
 
 **Interfaces:**
+
 - Consumes: WezTerm `LEADER` modifier and `act.SendKey`
 - Produces: A `LEADER+Backspace` assignment that sends an unmodified Backspace event
 
@@ -62,10 +64,12 @@ Expected: all tests in `Keybindings.Tests.ps1` pass.
 ### Task 2: macOS WezTerm Nightly Provider
 
 **Files:**
+
 - Modify: `tests/bash/package_catalog.bats`
 - Modify: `nix/packages/sets.nix`
 
 **Interfaces:**
+
 - Consumes: package catalog `pkg` and `support` metadata
 - Produces: Darwin cask `wezterm@nightly`, Linux Nix provider, existing Windows winget provider
 
@@ -124,9 +128,11 @@ Expected: all package catalog tests pass.
 ### Task 3: Final Verification
 
 **Files:**
+
 - Verify all modified implementation and test files
 
 **Interfaces:**
+
 - Consumes: completed Tasks 1 and 2
 - Produces: formatted, evaluated, regression-tested branch
 

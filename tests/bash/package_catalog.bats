@@ -71,6 +71,41 @@ setup() {
 	grep -q 'cask = "stablyai/orca/orca"' "$SETS"
 }
 
+@test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
+	run awk '
+		/wezterm = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;'* ]]
+	[[ "$output" == *'cask = "wezterm@nightly"'* ]]
+	[[ "$output" == *'darwin = {'* ]]
+	[[ "$output" == *'linux = {'* ]]
+	[[ "$output" == *'provider = "homebrew-cask"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+}
+
+@test "Darwin evaluation installs only the WezTerm nightly cask" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
+		let
+		  flake = builtins.getFlake (toString $REPO_ROOT);
+		  config = flake.darwinConfigurations.macos.config;
+		  caskNames = builtins.map (cask: if builtins.isString cask then cask else cask.name) config.homebrew.casks;
+		  homePackages = config.home-manager.users.codex.home.packages;
+		in {
+		  casks = builtins.filter (name: name == \"wezterm@nightly\") caskNames;
+		  nixPackages = builtins.map (package: package.name) (
+		    builtins.filter (package: (package.pname or \"\") == \"wezterm\") homePackages
+		  );
+		}
+	"
+	[ "$status" -eq 0 ]
+	[ "$output" = '{"casks":["wezterm@nightly"],"nixPackages":[]}' ]
+}
+
 @test "Warp is removed from the package catalog" {
 	! grep -q 'warp-terminal' "$SETS"
 	! grep -q 'Warp.Warp' "$SETS"
