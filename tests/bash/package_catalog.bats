@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	SETS="$REPO_ROOT/nix/packages/sets.nix"
@@ -89,7 +91,7 @@ setup() {
 @test "Darwin evaluation installs only the WezTerm nightly cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
-	run env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
 		let
 		  flake = builtins.getFlake (toString $REPO_ROOT);
 		  config = flake.darwinConfigurations.macos.config;
