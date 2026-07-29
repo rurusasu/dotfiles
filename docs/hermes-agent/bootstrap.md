@@ -11,7 +11,7 @@ Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes
 ## Run Bootstrap
 
 Prerequisites are a running Docker daemon, Docker Compose, an authenticated
-1Password CLI (`op`), access to the eight configured items, and access to the
+1Password CLI (`op`), access to the ten configured items, and access to the
 declared private GitHub repositories. Unix requires native `bash`, `jq`,
 `curl`, `docker`, and `op`. The Unix adapter uses `curl` for bounded gateway
 readiness checks. Windows requires `pwsh`, Docker Desktop native `docker` and
@@ -53,8 +53,8 @@ runs the full-machine installer nor hides a nonzero result.
 host adapter
   -> resolve the existing 1Password Service Account into private .op.env
   -> request the non-secret secret plan
-  -> fetch eight full 1Password item JSON objects
-  -> stream header + eight item records + end as NDJSON
+  -> fetch ten full 1Password item JSON objects
+  -> stream header + ten item records + end as NDJSON
   -> docker compose run --rm --no-deps -T hermes-bootstrap apply
   -> load manifest and recover any crash journal
   -> validate payload, credentials, and source access
@@ -66,10 +66,10 @@ host adapter
 
 Each item record embeds the full `op item get <title> --account
 my.1password.com --vault openclaw --format json` object. The stdin stream is
-never stored, logged, or placed in a process argument. All eight items are
+never stored, logged, or placed in a process argument. All ten items are
 mandatory: `Hermes Agent Dashboard`, `GitHubUsedOpenClawPAT`,
 `Master`, `Rick`, `Hoffman`,
-`RisaRisa`, and `Nancy` in account `my.1password.com`, vault
+`RisaRisa`, `Nancy`, `Kuroda`, and `Shiraishi` in account `my.1password.com`, vault
 `openclaw`, plus `Google Calendar MCP` in account `my.1password.com`, vault
 `Private`.
 
@@ -88,7 +88,7 @@ the three GitHub aliases, dashboard username/hash/signing secret, and profile
 Discord credentials; root also owns `API_SERVER_KEY`, which is removed from named
 profile `.env` files.
 
-The five profile-named items keep service credentials in separate sections.
+The seven profile-named items keep service credentials in separate sections.
 Discord uses `Discord/bot_token` and `Discord/allowed_users`; additional
 services must use their own sections rather than service-specific item names.
 The retained Slack credentials use `Slack/bot_token`,
@@ -185,12 +185,13 @@ content fails preflight. `.env`, nested `.env.template`, explicitly owned
 snapshot revalidation repeats the same mapping, so a late `.env.EXAMPLE` change
 fails with `local_profile_changed`.
 
-The configured manifest currently includes `rick`, `hoffman`, `risarisa`, and
-`nancy`. Do not use an obsolete three-profile list in a procedure or test.
+The configured manifest currently includes `rick`, `hoffman`, `risarisa`,
+`nancy`, `kuroda`, and `shiraishi`. Do not use an obsolete profile list in a
+procedure or test.
 Asset ownership is not hard-coded by profile name: avatar and portfolio files
 are included only when that profile's valid local manifest declares `assets`.
 Task 5 fixtures cover declared assets for Rick, Hoffman, and Nancy and no
-`assets` declaration for RisaRisa.
+`assets` declaration for RisaRisa, Kuroda, or Shiraishi.
 
 ## First Install And Bootstrap Ordering
 

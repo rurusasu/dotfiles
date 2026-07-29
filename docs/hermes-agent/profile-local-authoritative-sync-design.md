@@ -18,7 +18,8 @@ The three managed content classes deliberately use different authority models:
 | Shared lifelog | `/opt/data/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
 `docker/hermes-agent/bootstrap-manifest.yaml` currently declares four named
-profiles: `rick`, `hoffman`, `risarisa`, and `nancy`. The manifest is the
+profiles: `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`.
+The manifest is the
 configuration source for their name, remote, branch, and target; operations and
 tests must not assume a fixed three-profile set.
 
@@ -38,7 +39,8 @@ it fails closed and is never replaced from remote content.
 Asset ownership follows the same rule for every profile. If a valid local
 manifest declares `assets`, regular avatar and portfolio files beneath it are
 published; otherwise they are not. Task 5 fixtures exercise declared assets for
-Rick, Hoffman, and Nancy and no `assets` declaration for RisaRisa without
+Rick, Hoffman, and Nancy and no `assets` declaration for RisaRisa, Kuroda, or
+Shiraishi without
 turning that fixture layout into a production-state rule.
 
 ## Snapshot Boundary
@@ -374,7 +376,7 @@ an atomic identity-check-and-delete guarantee against it.
 
 ## Verification Coverage
 
-The Task 5 tests cover four manifest profiles, including Nancy in bootstrap
+The Task 5 tests cover six manifest profiles, including Nancy in bootstrap
 sequencing and the profile-sync summary. They cover deterministic allowlist
 generation, canonical manifests, exact-tree deletion, immutable local
 snapshots, dry-run behavior, aggregate preflight, sequential continuation,

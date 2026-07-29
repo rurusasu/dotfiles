@@ -71,11 +71,11 @@ absent after a successful apply.
 The manifest maps each target to a remote and ref. Authority depends on its
 content class:
 
-| Target                                                  | Configured source                                | Authority and update mechanism                                                       |
-| ------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Root/default                                            | `rurusasu/hermes-home`                           | remote-authoritative root distribution apply                                         |
-| Named profiles (`rick`, `hoffman`, `risarisa`, `nancy`) | matching `rurusasu/hermes-profile-<name>` remote | existing local allowlist snapshot to exact remote commit, then official Hermes apply |
-| Shared lifelog                                          | `rurusasu/lifelog`                               | locked read-write Git synchronization                                                |
+| Target                                                                         | Configured source                                | Authority and update mechanism                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Root/default                                                                   | `rurusasu/hermes-home`                           | remote-authoritative root distribution apply                                         |
+| Named profiles (`rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, `shiraishi`) | matching `rurusasu/hermes-profile-<name>` remote | existing local allowlist snapshot to exact remote commit, then official Hermes apply |
+| Shared lifelog                                                                 | `rurusasu/lifelog`                               | locked read-write Git synchronization                                                |
 
 The manifest, rather than a hard-coded list, determines named profiles. An
 existing valid profile reads its own local `distribution.yaml`. The bootstrap
@@ -128,8 +128,9 @@ On Windows, `HermesAgentHandler` remains Phase `2`, order `56`, with
 `op.exe` can use 1Password desktop integration; elevating this handler would
 break that credential path.
 
-The required profile items are `Master`, `Rick`, `Hoffman`, `RisaRisa`, and
-`Nancy`. Discord credentials are read from each item's `Discord` section;
+The required profile items are `Master`, `Rick`, `Hoffman`, `RisaRisa`,
+`Nancy`, `Kuroda`, and `Shiraishi`. Discord credentials are read from each
+item's `Discord` section;
 retained Slack credentials live in the separate `Slack` section. GitHub access
 is validated for every configured remote before bootstrap begins new staging
 or transaction writes. Crash-journal recovery is the exception: it runs first

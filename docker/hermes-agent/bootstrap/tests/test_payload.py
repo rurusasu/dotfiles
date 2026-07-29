@@ -83,6 +83,14 @@ def secret_items() -> dict[str, dict[str, object]]:
             "discord-nancy-id",
             {"bot_token": "discord-nancy-token", "allowed_users": "UNANCY"},
         ),
+        "discord_kuroda": raw_item(
+            "discord-kuroda-id",
+            {"bot_token": "discord-kuroda-token", "allowed_users": "UKURODA"},
+        ),
+        "discord_shiraishi": raw_item(
+            "discord-shiraishi-id",
+            {"bot_token": "discord-shiraishi-token", "allowed_users": "USHIRAISHI"},
+        ),
     }
 
 
@@ -219,6 +227,8 @@ class PayloadTests(unittest.TestCase):
                             ("discord_hoffman", "Hoffman"),
                             ("discord_risarisa", "RisaRisa"),
                             ("discord_nancy", "Nancy"),
+                            ("discord_kuroda", "Kuroda"),
+                            ("discord_shiraishi", "Shiraishi"),
                         )
                     ],
                 ],
@@ -247,6 +257,14 @@ class PayloadTests(unittest.TestCase):
             ),
         )
         self.assertEqual(secrets.discord_by_profile["rick"], DiscordSecret("discord-rick-token", "URICK"))
+        self.assertEqual(
+            secrets.discord_by_profile["kuroda"],
+            DiscordSecret("discord-kuroda-token", "UKURODA"),
+        )
+        self.assertEqual(
+            secrets.discord_by_profile["shiraishi"],
+            DiscordSecret("discord-shiraishi-token", "USHIRAISHI"),
+        )
         self.assertIsInstance(secrets.discord_by_profile, MappingProxyType)
         with self.assertRaises(TypeError):
             secrets.discord_by_profile["rick"] = DiscordSecret("a", "b")

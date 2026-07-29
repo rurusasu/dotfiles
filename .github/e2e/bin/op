@@ -42,7 +42,9 @@ JSON
 "Rick" | \
 "Hoffman" | \
 "RisaRisa" | \
-"Nancy")
+"Nancy" | \
+"Kuroda" | \
+"Shiraishi")
 	if [ "$7" != openclaw ]; then
 		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
 		exit 2
