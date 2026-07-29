@@ -104,6 +104,8 @@ config.send_composed_key_when_right_alt_is_pressed = false
 config.keys = {
     -- Shift+Enter → insert newline (Claude Code, Codex, multi-line prompts)
     { key = "Return", mods = "SHIFT", action = act.SendString("\n") },
+    -- Preserve Backspace when it is pressed immediately after the leader key.
+    { key = "Backspace", mods = "LEADER", action = act.SendKey({ key = "Backspace" }) },
     -- Pass Ctrl+Shift+h/l through to Neovim; WezTerm defaults Ctrl+Shift+l to the debug overlay.
     { key = "h", mods = "CTRL|SHIFT", action = act.SendKey({ key = "h", mods = "CTRL|SHIFT" }) },
     { key = "l", mods = "CTRL|SHIFT", action = act.SendKey({ key = "l", mods = "CTRL|SHIFT" }) },

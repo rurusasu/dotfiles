@@ -50,6 +50,11 @@ Ubuntu / Debian:  ./install.sh
 
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
+macOS で Homebrew cask の適用に失敗する場合は、
+[Homebrew cask のトラブルシューティング](./homebrew-cask-troubleshooting.md)
+を参照してください。WezTerm nightly の既知の一時回避と、公式状態へ戻す手順を
+記載しています。
+
 ## 生成ファイル
 
 Windows manifest は直接編集しません。更新時は以下を生成し、repository の JSON と一致させます。

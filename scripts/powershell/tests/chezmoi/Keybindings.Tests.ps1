@@ -115,6 +115,7 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "j", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
         $content | Should -Match '\{ key = "k", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
         $content | Should -Match '\{ key = "l", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
+        $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
 
     It 'Warp keybindings are no longer managed' {
