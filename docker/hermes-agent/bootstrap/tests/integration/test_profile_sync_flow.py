@@ -49,7 +49,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
             for source in self.flow.manifest.profiles
         )
         production = bootstrap_flow.load_manifest(bootstrap_flow.PRODUCTION_MANIFEST)
-        self.assertEqual(len(production.profiles), 4)
+        self.assertEqual(len(production.profiles), 6)
         self.assertEqual(
             self.profile_declarations,
             tuple(
@@ -144,11 +144,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
             ).encode("ascii")
             + b"\n",
         }
-        rich_fixture_names = {
-            self.profile_names[0],
-            self.profile_names[1],
-            self.profile_names[-1],
-        }
+        rich_fixture_names = {"rick", "hoffman", "nancy"}
         if name in rich_fixture_names:
             files["profile.yaml"] = f"name: {name}-{marker}\n".encode("ascii")
             files[f"assets/{name}-portfolio.png"] = (

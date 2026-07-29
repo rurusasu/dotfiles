@@ -27,7 +27,7 @@ host ~/.hermes/                    container /opt/data/
   `rurusasu/hermes-home` at `main`; `root-distribution.yaml` declares the only
   root paths bootstrap may replace.
 - The bootstrap manifest currently declares four named distribution targets:
-  `rick`, `hoffman`, `risarisa`, and `nancy`, each with a matching
+  `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`, each with a matching
   `rurusasu/hermes-profile-<name>` remote.
 - An existing valid named home is local-authoritative. Bootstrap snapshots only
   its locally declared `distribution_owned` content, publishes the exact

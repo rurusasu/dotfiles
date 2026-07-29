@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,36 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
 
     def test_accepts_matching_clean_git_repositories(self) -> None:
         result = self._verify()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "profile sync provenance verified\n",
+        )
+        self.assertEqual(result.stderr, "")
+
+    def test_ignores_an_inherited_git_index_file_from_a_parent_hook(self) -> None:
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = str(self.root / "parent-index")
+
+        result = subprocess.run(
+            (
+                sys.executable,
+                str(VERIFIER),
+                "verify",
+                "--dotfiles-repository",
+                str(self.dotfiles),
+                "--source-repository",
+                str(self.source),
+            ),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=10,
+        )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(

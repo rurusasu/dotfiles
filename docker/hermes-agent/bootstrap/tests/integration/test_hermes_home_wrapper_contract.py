@@ -128,7 +128,7 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
         self.assertEqual(payload["command"], "sync-profiles")
         self.assertEqual(
             [profile["name"] for profile in payload["profiles"]],
-            ["rick", "hoffman", "risarisa", "nancy"],
+            ["rick", "hoffman", "risarisa", "nancy", "kuroda", "shiraishi"],
         )
         self.assertTrue(
             all(

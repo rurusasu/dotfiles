@@ -535,6 +535,14 @@ class BootstrapFlowTests(unittest.TestCase):
                 "bot_token": "discord-nancy-bot-token-123",
                 "allowed_users": "UNANCY",
             },
+            "discord_kuroda": {
+                "bot_token": "discord-kuroda-bot-token-123",
+                "allowed_users": "UKURODA",
+            },
+            "discord_shiraishi": {
+                "bot_token": "discord-shiraishi-bot-token-123",
+                "allowed_users": "USHIRAISHI",
+            },
             "discord_future": {
                 "bot_token": "discord-future-bot-token-123",
                 "allowed_users": "UFUTURE",
@@ -878,9 +886,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             command_stdout.getvalue(),
-            '{"profile_sync":{"hoffman":"unchanged","nancy":"unchanged",'
-            '"rick":"unchanged","risarisa":"unchanged"},'
-            '"profiles":["rick","hoffman","risarisa","nancy"],'
+            '{"profile_sync":{"hoffman":"unchanged","kuroda":"unchanged",'
+            '"nancy":"unchanged","rick":"unchanged","risarisa":"unchanged",'
+            '"shiraishi":"unchanged"},'
+            '"profiles":["rick","hoffman","risarisa","nancy","kuroda","shiraishi"],'
             '"repositories":["lifelog"],"status":"applied"}\n',
         )
         self.assertEqual(command_stderr.getvalue(), "")
@@ -1357,12 +1366,16 @@ class BootstrapFlowTests(unittest.TestCase):
             "profile-apply:hoffman",
             "profile-apply:risarisa",
             "profile-apply:nancy",
+            "profile-apply:kuroda",
+            "profile-apply:shiraishi",
             "shared-apply:lifelog",
             "env-merge:default",
             "env-merge:rick",
             "env-merge:hoffman",
             "env-merge:risarisa",
             "env-merge:nancy",
+            "env-merge:kuroda",
+            "env-merge:shiraishi",
             "final-validation",
             "commit-cleanup",
         )

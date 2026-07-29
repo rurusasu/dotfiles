@@ -199,7 +199,7 @@ dotfiles_hermes_validate_secret_plan() {
     type == "object"
     and (keys | sort == ["items", "schema_version"])
     and (.schema_version == 1)
-    and (.items | type == "array" and length == 8)
+    and (.items | type == "array" and length == 10)
     and ([.items[] | {key, account, vault, item}] == [
       {"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard"},
       {"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT"},
@@ -208,9 +208,11 @@ dotfiles_hermes_validate_secret_plan() {
       {"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick"},
       {"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman"},
       {"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa"},
-      {"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy"}
+      {"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy"},
+      {"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda"},
+      {"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi"}
     ])
-    and ([.items[].key] | unique | length == 8)
+    and ([.items[].key] | unique | length == 10)
     and all(.items[]; plan_item)
     ) as $valid
     | if $valid then $plan else false end

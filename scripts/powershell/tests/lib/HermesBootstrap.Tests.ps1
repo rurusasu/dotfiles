@@ -51,7 +51,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $script:dockerArguments = @()
         $script:dockerExitCode = 0
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -70,7 +70,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "secret-plan"
         )
         $plan.schema_version | Should -Be 1
-        @($plan.items).Count | Should -Be 8
+        @($plan.items).Count | Should -Be 10
     }
 
     It "rejects plans that replace an allowlisted 1Password reference" {
@@ -102,7 +102,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
             Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
     }
 
-    It "rejects plans that do not satisfy the exact eight-item metadata schema" {
+    It "rejects plans that do not satisfy the exact ten-item metadata schema" {
         $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
         $invalidPlans = @()
 
@@ -351,7 +351,7 @@ Describe "Invoke-HermesBootstrap" {
 
     BeforeEach {
         $script:dockerOutput = @(
-            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
+            '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
         function global:Invoke-Docker {
             param([string[]]$Arguments)
@@ -426,18 +426,20 @@ Describe "Invoke-HermesBootstrap" {
             "item|get|Rick|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|RisaRisa|--account|my.1password.com|--vault|openclaw|--format|json",
-            "item|get|Nancy|--account|my.1password.com|--vault|openclaw|--format|json"
+            "item|get|Nancy|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|Kuroda|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|Shiraishi|--account|my.1password.com|--vault|openclaw|--format|json"
         )
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
-        @($records).Count | Should -Be 10
+        @($records).Count | Should -Be 12
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
-        @($records[1..8] | ForEach-Object { $_.key }) | Should -Be @(
-            "dashboard", "github", "google_calendar", "discord_default", "discord_rick", "discord_hoffman", "discord_risarisa", "discord_nancy"
+        @($records[1..10] | ForEach-Object { $_.key }) | Should -Be @(
+            "dashboard", "github", "google_calendar", "discord_default", "discord_rick", "discord_hoffman", "discord_risarisa", "discord_nancy", "discord_kuroda", "discord_shiraishi"
         )
-        $records[9].type | Should -Be "end"
+        $records[11].type | Should -Be "end"
 
         $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
         $source | Should -Match "ArgumentList\.Add"
@@ -463,8 +465,8 @@ Describe "Invoke-HermesBootstrap" {
         $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
-        $rawLines[9] | Should -Be '{"type":"end"}'
-        foreach ($index in 1..8) {
+        $rawLines[11] | Should -Be '{"type":"end"}'
+        foreach ($index in 1..10) {
             $rawLines[$index] | Should -Match '^\{"type":"item","key":"[a-z_]+","item":\{'
             $rawLines[$index] | Should -Not -Match '(?:\{|,)\s+"|,\s*\}'
         }

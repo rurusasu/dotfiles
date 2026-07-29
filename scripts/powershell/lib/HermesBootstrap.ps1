@@ -132,7 +132,9 @@ $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "discord_rick"; account = "my.1password.com"; vault = "openclaw"; item = "Rick" },
     [PSCustomObject]@{ key = "discord_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "Hoffman" },
     [PSCustomObject]@{ key = "discord_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "RisaRisa" },
-    [PSCustomObject]@{ key = "discord_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "Nancy" }
+    [PSCustomObject]@{ key = "discord_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "Nancy" },
+    [PSCustomObject]@{ key = "discord_kuroda"; account = "my.1password.com"; vault = "openclaw"; item = "Kuroda" },
+    [PSCustomObject]@{ key = "discord_shiraishi"; account = "my.1password.com"; vault = "openclaw"; item = "Shiraishi" }
 )
 $script:DefaultHermesBootstrapServiceAccountInvoker = {
     param(
