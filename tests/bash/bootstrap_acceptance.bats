@@ -90,6 +90,13 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'"id":"acceptance-Nancy"'* ]]
 
+	for profile in Kuroda Shiraishi; do
+		run "$op" item get "$profile" \
+			--account my.1password.com --vault openclaw --format json
+		[ "$status" -eq 0 ]
+		[[ "$output" == *"\"id\":\"acceptance-$profile\""* ]]
+	done
+
 	run "$op" signin --account my.1password.com
 	[ "$status" -eq 0 ]
 	[[ "$output" == 'acceptance-session' ]]
