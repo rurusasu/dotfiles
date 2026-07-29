@@ -212,9 +212,18 @@ let
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
-      pkg = pkgs.wezterm;
+      pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;
       winget = "wez.wezterm.nightly";
       category = "terminal";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "wezterm@nightly";
+        };
+        linux = {
+          provider = "nix";
+        };
+      };
     };
     tmux = {
       pkg = pkgs.tmux;
