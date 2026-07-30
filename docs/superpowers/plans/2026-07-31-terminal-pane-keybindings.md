@@ -38,7 +38,7 @@ wezterm --config-file chezmoi/terminals/wezterm/wezterm.lua show-keys --lua \
   | rg "SplitHorizontal|SplitVertical|ActivatePaneDirection|AdjustPaneSize|CloseCurrentPane"
 ```
 
-期待するキーは、分割が`ALT|SHIFT`の`=`と`-`、移動が`ALT`の`LeftArrow`/`UpArrow`/`RightArrow`/`DownArrow`、リサイズが`ALT|SHIFT`の同じ矢印、closeが`CTRL|SHIFT`の`w`である。
+期待するキーは、分割が`ALT|SHIFT`の`+`と`-`（物理操作は`Alt+Shift+=`と`Alt+Shift+-`）、移動が`ALT`の`LeftArrow`/`UpArrow`/`RightArrow`/`DownArrow`、リサイズが`ALT|SHIFT`の同じ矢印、closeが`CTRL|SHIFT`の`w`である。
 
 - [ ] **Step 2: 記号キー依存の旧ペイン操作を削除する**
 
@@ -57,7 +57,7 @@ wezterm --config-file chezmoi/terminals/wezterm/wezterm.lua show-keys --lua \
 `config.keys`に次を追加する。
 
 ```lua
-{ key = "=", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+{ key = "+", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
 { key = "-", mods = "ALT|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
 { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
 { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
