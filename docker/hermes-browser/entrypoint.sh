@@ -195,7 +195,6 @@ socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 EXEC:"python3 /tmp/hermes-cdp-
 cdp_pid=$!
 
 /usr/bin/google-chrome-stable \
-  --disable-gpu \
   --lang=ja \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port=9223 \
