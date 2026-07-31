@@ -116,27 +116,27 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane split/close/zoom (Windows Terminal standard)
-    { key = "+", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "-", mods = "ALT|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    -- Pane split/close/zoom (leader avoids macOS Option composition)
+    { key = "phys:Backslash", mods = "LEADER|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
-    -- Pane navigation (Alt + Arrow)
-    { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
-    { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
-    { key = "RightArrow", mods = "ALT", action = act.ActivatePaneDirection("Right") },
-    { key = "DownArrow", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+    -- Pane navigation (leader + Arrow)
+    { key = "LeftArrow", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
+    { key = "UpArrow", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
+    { key = "RightArrow", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
+    { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
 
-    -- Window focus (Alt+Shift + H/L)
-    { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
-    { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
+    -- Window focus (leader + H/L)
+    { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
+    { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
 
-    -- Pane resize (Alt+Shift + Arrow)
-    { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
-    { key = "UpArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
-    { key = "RightArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
-    { key = "DownArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
+    -- Pane resize (leader + Shift + Arrow)
+    { key = "LeftArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+    { key = "UpArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+    { key = "RightArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+    { key = "DownArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
 
     -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
