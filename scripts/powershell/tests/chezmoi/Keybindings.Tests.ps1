@@ -87,23 +87,23 @@ Describe '標準キーバインド方針' {
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
-    It 'Windows Terminal は Alt focus, Alt+Shift swap, Ctrl+Alt resize に揃えること' {
+    It 'Windows Terminal は Alt 矢印 focus, Alt+Shift swap/resize に揃えること' {
         $settings = Get-JsonContent "chezmoi/terminals/windows-terminal/settings.json"
 
-        Assert-WindowsTerminalDirectionalAction $settings "alt+h" "moveFocus" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+j" "moveFocus" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+k" "moveFocus" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+l" "moveFocus" "right"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+left" "moveFocus" "left"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+down" "moveFocus" "down"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+up" "moveFocus" "up"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+right" "moveFocus" "right"
 
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+h" "swapPane" "left"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+j" "swapPane" "down"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+k" "swapPane" "up"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+l" "swapPane" "right"
 
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+h" "resizePane" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+j" "resizePane" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+k" "resizePane" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+l" "resizePane" "right"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+left" "resizePane" "left"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+down" "resizePane" "down"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+up" "resizePane" "up"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+right" "resizePane" "right"
     }
 
     It 'WezTerm macOS は Command で pane split を行うこと' {
