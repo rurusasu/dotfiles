@@ -91,10 +91,23 @@ in
     autoMigrate = true;
   };
 
+  # This runs after nix-darwin's Homebrew activation. The nightly cask is
+  # intentionally filtered below because its preflight currently rejects the
+  # official archive layout.
+  system.activationScripts.postActivation.text = lib.mkAfter (
+    builtins.readFile ../../scripts/sh/install-wezterm-nightly.sh
+  );
+
   homebrew = {
     enable = true;
-    casks = sets.darwinCasks;
-    greedyCasks = true;
+    # The official nightly archive currently does not match Homebrew's
+    # source_glob preflight. Install it from the archive in an activation
+    # script while retaining the catalog entry for provider reporting.
+    casks = builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks;
+    # Nightly casks use version = :latest. Do not force an upgrade on every
+    # activation while the upstream archive layout is not stable; regular
+    # versioned casks still upgrade through onActivation.upgrade.
+    greedyCasks = false;
     onActivation = {
       autoUpdate = true;
       upgrade = true;

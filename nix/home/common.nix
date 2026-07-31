@@ -20,13 +20,16 @@ let
   user = if bootstrapUser != "" then bootstrapUser else builtins.getEnv "USER";
   home = if bootstrapHome != "" then bootstrapHome else builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
+  darwinTerminfoPackages = lib.optionals pkgs.stdenv.isDarwin [ pkgs.wezterm.terminfo ];
 in
 {
   home = {
     username = lib.mkDefault (if user != "" then user else "unknown");
     homeDirectory = lib.mkDefault (if home != "" then home else "/home/unknown");
     stateVersion = "25.05";
-    packages = sets.all;
+    # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
+    # output separately for shells and tools that resolve TERM=wezterm.
+    packages = sets.all ++ darwinTerminfoPackages;
 
     sessionVariables = {
       # qmd (markdown search engine)

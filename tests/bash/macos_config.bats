@@ -17,16 +17,17 @@ setup() {
 }
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
-  grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'activationScripts.postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
 }
 
-@test "Darwin activation updates and upgrades every managed cask" {
-  grep -q 'greedyCasks = true' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'autoUpdate = true' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'upgrade = true' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'cleanup = "none"' "$REPO_ROOT/nix/darwin/default.nix"
+@test "Darwin activation updates cask metadata without forcing latest cask upgrades" {
+	grep -q 'greedyCasks = false' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'autoUpdate = true' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'upgrade = true' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'cleanup = "none"' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
 @test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {
@@ -55,7 +56,7 @@ setup() {
 
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {
 	run awk '
-		/lib\.optionals pkgs\.stdenv\.isDarwin/ { in_darwin=1 }
+		/sessionPath = \[/ { in_darwin=1 }
 		in_darwin && /"\/opt\/homebrew\/bin"/ { bin=1 }
 		in_darwin && /"\/opt\/homebrew\/sbin"/ { sbin=1 }
 		in_darwin && /"\/Applications\/Docker\.app\/Contents\/Resources\/bin"/ { docker=1 }
