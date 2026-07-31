@@ -17,9 +17,10 @@ setup() {
 }
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
-  grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
-  grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'activationScripts.postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
 }
 
 @test "Darwin activation updates cask metadata without forcing latest cask upgrades" {
