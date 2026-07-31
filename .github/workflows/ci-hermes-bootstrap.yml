@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - "docker/hermes-agent/**"
+      - "docker/hermes-browser/**"
+      - "docker/hermes-browser-mcp/**"
       - ".github/workflows/ci-hermes-bootstrap.yml"
       - ".pre-commit-config.yaml"
       - "Taskfile.yml"
@@ -13,6 +15,8 @@ on:
     branches: [main]
     paths:
       - "docker/hermes-agent/**"
+      - "docker/hermes-browser/**"
+      - "docker/hermes-browser-mcp/**"
       - ".github/workflows/ci-hermes-bootstrap.yml"
       - ".pre-commit-config.yaml"
       - "Taskfile.yml"
@@ -60,6 +64,9 @@ jobs:
 
       - name: Run the pinned container suite
         run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+
+      - name: Run Hermes browser runtime contracts
+        run: docker/hermes-browser/tests/test_runtime_contract.sh
 
       - name: Run the gh wrapper security suite
         run: docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
