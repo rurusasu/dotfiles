@@ -7,7 +7,7 @@ host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host 
 ## 構成
 
 - `chromium`: 互換性のため service 名は維持しつつ、Xvfb 上の visible Google Chrome を container 内で起動する。CDP は Compose network 内だけに公開し、noVNC viewer だけを `127.0.0.1` に公開する。
-- `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。
+- `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。MCP要求は120秒で打ち切り、ページ単位の操作はDevToolsのpage IDでルーティングする。
 - `hermes`: `browser-mcp` service 名で Browser MCP に接続する。
 
 Google Chrome container は `ja_JP.UTF-8` locale と `--lang=ja` で起動し、Chrome UI と日本語入力内容を表示できるようにする。
@@ -95,3 +95,11 @@ docker exec -e HERMES_HOME=/opt/data/profiles/nancy hermes hermes mcp test chrom
 が表示されることを確認する。`hermes tools list --platform slack` では built-in
 `browser` が disabled、`web` が enabled と表示されることも確認する。host noVNC は
 `http://127.0.0.1:6080/` で開く。
+
+長時間のブラウザ処理は、Chrome操作を逐次化し、一覧1ページまたは詳細2〜5件を
+1バッチとして扱う。各バッチの完了時にページ番号・候補ID・URLをcheckpointへ
+記録し、詳細ページを閉じる。`take_snapshot`、`click`、`navigate_page` のいずれかが
+タイムアウトした場合は、そのバッチを未完了として停止し、1回だけ限定的な再読込を
+試す。再発時は同じページへ操作を重ねず、browser servicesを再起動してcheckpoint
+から再開する。レビューや候補判定の並列化は、Chromeからの証拠取得が終わった後に
+行う。

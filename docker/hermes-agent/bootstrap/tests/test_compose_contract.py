@@ -89,6 +89,8 @@ class ComposeContractTests(unittest.TestCase):
                 "node_modules/.bin/mcp-proxy",
                 "--server",
                 "stream",
+                "--requestTimeout",
+                "120000",
                 "--host",
                 "0.0.0.0",
                 "--port",
@@ -96,8 +98,20 @@ class ComposeContractTests(unittest.TestCase):
                 "--",
                 "node_modules/.bin/chrome-devtools-mcp",
                 "--browser-url=http://chromium:9222",
+                "--experimentalPageIdRouting",
                 "--no-usage-statistics",
             ],
+        )
+
+    def test_browser_mcp_routes_page_operations_and_bounds_stuck_requests(self) -> None:
+        command = self.services["browser-mcp"]["command"]
+
+        self.assertIn("--experimentalPageIdRouting", command)
+        self.assertEqual(
+            command[
+                command.index("--requestTimeout") + 1
+            ],
+            "120000",
         )
 
     def test_chrome_entrypoint_does_not_disable_gpu_rendering(self) -> None:
