@@ -44,6 +44,7 @@ end
 
 -- Detect Windows for default shell
 local is_windows = wezterm.target_triple:find("windows") ~= nil
+local is_macos = wezterm.target_triple:find("darwin") ~= nil
 if is_windows then
     config.default_prog = { "pwsh.exe", "-NoLogo" }
     config.exit_behavior = "Close"
@@ -116,27 +117,9 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane split/close/zoom (Ctrl+Alt)
-    { key = "\\", mods = "CTRL|ALT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "-", mods = "CTRL|ALT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
-    { key = "x", mods = "CTRL|ALT", action = act.CloseCurrentPane({ confirm = true }) },
+    -- Pane close/zoom
+    { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
-
-    -- Pane navigation (Alt + H/J/K/L)
-    { key = "h", mods = "ALT", action = act.ActivatePaneDirection("Left") },
-    { key = "j", mods = "ALT", action = act.ActivatePaneDirection("Down") },
-    { key = "k", mods = "ALT", action = act.ActivatePaneDirection("Up") },
-    { key = "l", mods = "ALT", action = act.ActivatePaneDirection("Right") },
-
-    -- Window focus (Alt+Shift + H/L)
-    { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
-    { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
-
-    -- Pane resize (Ctrl+Alt + H/J/K/L)
-    { key = "h", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Left", 5 }) },
-    { key = "j", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Down", 5 }) },
-    { key = "k", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Up", 5 }) },
-    { key = "l", mods = "CTRL|ALT", action = act.AdjustPaneSize({ "Right", 5 }) },
 
     -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
@@ -159,7 +142,6 @@ config.keys = {
     { key = "0", mods = "CTRL", action = act.DisableDefaultAssignment },
     { key = "=", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
     { key = "\\", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
-    { key = "w", mods = "CTRL|SHIFT", action = act.DisableDefaultAssignment },
 
     -- Font size via Ctrl+Shift+{+/-/0}
     { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
@@ -177,5 +159,44 @@ config.keys = {
     { key = "8", mods = "LEADER", action = act.ActivateTab(7) },
     { key = "9", mods = "LEADER", action = act.ActivateTab(8) },
 }
+
+-- macOS uses Terminal/iTerm2 conventions. Other platforms retain the
+-- existing Alt-based pane controls.
+local pane_control_bindings
+if is_macos then
+    pane_control_bindings = {
+        { key = "d", mods = "SUPER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+        { key = "d", mods = "SUPER|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+        { key = "LeftArrow", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
+        { key = "UpArrow", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
+        { key = "RightArrow", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
+        { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
+        { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
+        { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
+        { key = "LeftArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+        { key = "UpArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+        { key = "RightArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+        { key = "DownArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
+    }
+else
+    pane_control_bindings = {
+        { key = "+", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+        { key = "-", mods = "ALT|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+        { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
+        { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
+        { key = "RightArrow", mods = "ALT", action = act.ActivatePaneDirection("Right") },
+        { key = "DownArrow", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+        { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
+        { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
+        { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+        { key = "UpArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+        { key = "RightArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+        { key = "DownArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
+    }
+end
+
+for _, binding in ipairs(pane_control_bindings) do
+    table.insert(config.keys, binding)
+end
 
 return config

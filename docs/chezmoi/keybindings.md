@@ -10,15 +10,17 @@
 
 ## 統一ルール
 
-| グループ           | 役割                          | 例                                    |
-| ------------------ | ----------------------------- | ------------------------------------- |
-| `Alt`              | GUI pane/window focus         | `Alt+H/J/K/L`                         |
-| `Alt+Shift`        | GUI pane/window move/swap     | `Alt+Shift+H/J/K/L`（対応アプリのみ） |
-| `Ctrl+Alt`         | GUI pane/window resize/layout | `Ctrl+Alt+H/J/K/L`, split/close/zoom  |
-| `Ctrl`             | Unix/Vim/tmux focus           | `Ctrl+H/J/K/L`                        |
-| `Shift+Enter`      | 複数行入力                    | AI CLI / terminal prompt 改行         |
-| `Space` (`Leader`) | ツール機能呼び出し            | 検索、エクスプローラ、タブ操作        |
-| `Alt` (Shell)      | CLI 補助操作                  | fzf/zoxide ウィジェット (`Q/D/T/R`)   |
+| グループ                  | 役割                  | 例                                  |
+| ------------------------- | --------------------- | ----------------------------------- |
+| `Command` (WezTerm macOS) | GUI pane split        | `Command+D` / `Command+Shift+D`     |
+| `Leader` (WezTerm macOS)  | GUI pane/window 操作  | `Ctrl+Space` + key                  |
+| `Alt` (Windows GUI)       | GUI pane/window focus | `Alt+矢印`                          |
+| `Alt+Shift` (Windows GUI) | GUI pane split/resize | `Alt+Shift+=/-`、`Alt+Shift+矢印`   |
+| `Ctrl+Shift`              | GUI pane close        | `Ctrl+Shift+W`                      |
+| `Ctrl`                    | Unix/Vim/tmux focus   | `Ctrl+H/J/K/L`                      |
+| `Shift+Enter`             | 複数行入力            | AI CLI / terminal prompt 改行       |
+| `Space` (`Leader`)        | ツール機能呼び出し    | 検索、エクスプローラ、タブ操作      |
+| `Alt` (Shell)             | CLI 補助操作          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
 
 ## 現在の適用状況
 
@@ -26,19 +28,24 @@
 
 - WezTerm
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Alt+H/J/K/L`: ペイン移動
-  - `Alt+Shift+H/L`: WezTerm window focus
-  - `Ctrl+Alt+H/J/K/L`: ペイン resize
-  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: 分割/close/ズーム
-  - `Leader` (`Ctrl+Space`) + `t/x/h/l/1-9`: タブ操作
+  - `Command+D`: 右分割
+  - `Command+Shift+D`: 下分割
+  - `Leader` (`Ctrl+Space`) + 矢印: ペイン移動
+  - `Leader` (`Ctrl+Space`) + `Shift+矢印`: ペイン resize
+  - `Ctrl+Shift+W`: ペイン close
+  - `Leader` (`Ctrl+Space`) + `h/l`: WezTerm window focus
+  - `Ctrl+Alt+W`: ペイン zoom
+  - `Leader` (`Ctrl+Space`) + `t/x/1-9`: タブ操作
   - `Leader` (`Ctrl+Space`) + `c/v`: コピー/ペースト
+  - Windows/Linux: `Alt+Shift+=/-` で分割、`Alt+矢印` で pane 移動、`Alt+Shift+矢印` で resize、`Alt+Shift+H/L` で window focus
 - Windows Terminal
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力 (`CSI u`)
   - `Ctrl+Enter`: Windows Terminal 用 fallback (`CSI u`)
-  - `Alt+H/J/K/L`: ペイン移動
+  - `Alt+矢印`: ペイン移動
+  - `Alt+Shift+=/-`: 右/下分割
+  - `Alt+Shift+矢印`: ペイン resize
+  - `Ctrl+Shift+W`: ペイン close
   - `Alt+Shift+H/J/K/L`: ペイン swap
-  - `Ctrl+Alt+H/J/K/L`: ペイン resize
-  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: 分割/close/ズーム
 
 ### Editors
 
@@ -97,6 +104,7 @@
 ## 運用ルール
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
-- GUI アプリの pane/window 操作は `Alt` / `Alt+Shift` / `Ctrl+Alt` の役割を優先する
+- GUI アプリの pane split は、WezTerm macOSでは`Command+D` / `Command+Shift+D`、Windows Terminalでは`Alt+Shift`を優先する
+- WezTerm macOS の pane 移動・window focus は`Leader`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
 - tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

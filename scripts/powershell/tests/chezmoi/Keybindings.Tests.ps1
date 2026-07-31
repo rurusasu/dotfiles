@@ -78,43 +78,65 @@ Describe '標準キーバインド方針' {
     It 'docs は GUI と Unix/Vim 系の標準レイヤーを明示すること' {
         $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
 
-        $docs | Should -Match 'Alt\+H/J/K/L' -Because "GUI pane/window focus should use Alt+H/J/K/L"
-        $docs | Should -Match 'Alt\+Shift\+H/J/K/L' -Because "GUI pane/window move should add Shift"
-        $docs | Should -Match 'Ctrl\+Alt\+H/J/K/L' -Because "GUI pane/window resize should use Ctrl+Alt+H/J/K/L"
+        $docs | Should -Match 'Command\+D' -Because "macOS WezTerm should use the standard split shortcut"
+        $docs | Should -Match 'Command\+Shift\+D' -Because "macOS WezTerm should provide the second standard split shortcut"
+        $docs | Should -Match 'Leader.*WezTerm' -Because "macOS WezTerm navigation should keep the leader"
+        $docs | Should -Match 'Ctrl\+Space' -Because "macOS WezTerm leader should be Ctrl+Space"
+        $docs | Should -Match 'Leader.*pane' -Because "macOS WezTerm leader should control panes"
+        $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
-    It 'Windows Terminal は Alt focus, Alt+Shift swap, Ctrl+Alt resize に揃えること' {
+    It 'Windows Terminal は Alt 矢印 focus, Alt+Shift swap/resize に揃えること' {
         $settings = Get-JsonContent "chezmoi/terminals/windows-terminal/settings.json"
 
-        Assert-WindowsTerminalDirectionalAction $settings "alt+h" "moveFocus" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+j" "moveFocus" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+k" "moveFocus" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+l" "moveFocus" "right"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+left" "moveFocus" "left"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+down" "moveFocus" "down"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+up" "moveFocus" "up"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+right" "moveFocus" "right"
 
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+h" "swapPane" "left"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+j" "swapPane" "down"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+k" "swapPane" "up"
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+l" "swapPane" "right"
 
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+h" "resizePane" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+j" "resizePane" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+k" "resizePane" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+l" "resizePane" "right"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+left" "resizePane" "left"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+down" "resizePane" "down"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+up" "resizePane" "up"
+        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+right" "resizePane" "right"
     }
 
-    It 'WezTerm は Alt focus と Ctrl+Alt resize に揃えること' {
+    It 'WezTerm は macOS だけ Command、他 OS は従来の Alt で pane 操作を行うこと' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
-        $content | Should -Match '\{ key = "h", mods = "ALT", action = act\.ActivatePaneDirection\("Left"\) \}'
-        $content | Should -Match '\{ key = "j", mods = "ALT", action = act\.ActivatePaneDirection\("Down"\) \}'
-        $content | Should -Match '\{ key = "k", mods = "ALT", action = act\.ActivatePaneDirection\("Up"\) \}'
-        $content | Should -Match '\{ key = "l", mods = "ALT", action = act\.ActivatePaneDirection\("Right"\) \}'
+        $content | Should -Match '\{ key = "d", mods = "SUPER", action = act\.SplitHorizontal'
+        $content | Should -Match '\{ key = "d", mods = "SUPER\|SHIFT", action = act\.SplitVertical'
+        $content | Should -Match '\{ key = "\+", mods = "ALT\|SHIFT", action = act\.SplitHorizontal'
+        $content | Should -Match '\{ key = "-", mods = "ALT\|SHIFT", action = act\.SplitVertical'
+        $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Left"\) \}'
+        $content | Should -Match '\{ key = "UpArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Up"\) \}'
+        $content | Should -Match '\{ key = "RightArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Right"\) \}'
+        $content | Should -Match '\{ key = "DownArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Down"\) \}'
 
-        $content | Should -Match '\{ key = "h", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Left", 5 \}\) \}'
-        $content | Should -Match '\{ key = "j", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
-        $content | Should -Match '\{ key = "k", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
-        $content | Should -Match '\{ key = "l", mods = "CTRL\|ALT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
+        $content | Should -Match '\{ key = "LeftArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Left"\) \}'
+        $content | Should -Match '\{ key = "UpArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Up"\) \}'
+        $content | Should -Match '\{ key = "RightArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Right"\) \}'
+        $content | Should -Match '\{ key = "DownArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Down"\) \}'
+
+        $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Left", 5 \}\) \}'
+        $content | Should -Match '\{ key = "UpArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
+        $content | Should -Match '\{ key = "RightArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
+        $content | Should -Match '\{ key = "DownArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
+
+        $content | Should -Match '\{ key = "LeftArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Left", 5 \}\) \}'
+        $content | Should -Match '\{ key = "UpArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
+        $content | Should -Match '\{ key = "RightArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
+        $content | Should -Match '\{ key = "DownArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
+
+        $content | Should -Match '\{ key = "h", mods = "LEADER", action = focus_adjacent_window\("left"\) \}'
+        $content | Should -Match '\{ key = "l", mods = "LEADER", action = focus_adjacent_window\("right"\) \}'
+        $content | Should -Match '\{ key = "h", mods = "ALT\|SHIFT", action = focus_adjacent_window\("left"\) \}'
+        $content | Should -Match '\{ key = "l", mods = "ALT\|SHIFT", action = focus_adjacent_window\("right"\) \}'
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
 
