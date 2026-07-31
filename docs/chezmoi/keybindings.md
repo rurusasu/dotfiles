@@ -37,6 +37,7 @@
   - `Ctrl+Alt+W`: ペイン zoom
   - `Leader` (`Ctrl+Space`) + `t/x/1-9`: タブ操作
   - `Leader` (`Ctrl+Space`) + `c/v`: コピー/ペースト
+  - Windows/Linux: `Alt+Shift+=/-` で分割、`Alt+矢印` で pane 移動、`Alt+Shift+矢印` で resize、`Alt+Shift+H/L` で window focus
 - Windows Terminal
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力 (`CSI u`)
   - `Ctrl+Enter`: Windows Terminal 用 fallback (`CSI u`)

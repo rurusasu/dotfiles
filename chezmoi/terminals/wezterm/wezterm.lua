@@ -121,22 +121,6 @@ config.keys = {
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
-    -- Pane navigation (leader + Arrow)
-    { key = "LeftArrow", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
-    { key = "UpArrow", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
-    { key = "RightArrow", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
-    { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
-
-    -- Window focus (leader + H/L)
-    { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
-    { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
-
-    -- Pane resize (leader + Shift + Arrow)
-    { key = "LeftArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
-    { key = "UpArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
-    { key = "RightArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
-    { key = "DownArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
-
     -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
     { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "t", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
@@ -176,22 +160,42 @@ config.keys = {
     { key = "9", mods = "LEADER", action = act.ActivateTab(8) },
 }
 
--- Pane split: use macOS Terminal/iTerm2 conventions on macOS and retain the
--- leader bindings on other platforms.
-local pane_split_bindings
+-- macOS uses Terminal/iTerm2 conventions. Other platforms retain the
+-- existing Alt-based pane controls.
+local pane_control_bindings
 if is_macos then
-    pane_split_bindings = {
+    pane_control_bindings = {
         { key = "d", mods = "SUPER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
         { key = "d", mods = "SUPER|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+        { key = "LeftArrow", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
+        { key = "UpArrow", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
+        { key = "RightArrow", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
+        { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
+        { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
+        { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
+        { key = "LeftArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+        { key = "UpArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+        { key = "RightArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+        { key = "DownArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
     }
 else
-    pane_split_bindings = {
-        { key = "mapped:|", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-        { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    pane_control_bindings = {
+        { key = "+", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+        { key = "-", mods = "ALT|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+        { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
+        { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
+        { key = "RightArrow", mods = "ALT", action = act.ActivatePaneDirection("Right") },
+        { key = "DownArrow", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+        { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
+        { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
+        { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+        { key = "UpArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+        { key = "RightArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+        { key = "DownArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
     }
 end
 
-for _, binding in ipairs(pane_split_bindings) do
+for _, binding in ipairs(pane_control_bindings) do
     table.insert(config.keys, binding)
 end
 
