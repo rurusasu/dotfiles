@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 }
@@ -64,6 +66,19 @@ setup() {
 		END { if (!in_darwin) exit 1 }
 	' "$REPO_ROOT/nix/home/common.nix"
 	[ "$status" -eq 0 ]
+}
+
+@test "Darwin zsh restores WezTerm terminfo after inherited Home Manager sentinels" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --raw --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+		in flake.darwinConfigurations.macos.config.home-manager.users.codex.programs.zsh.envExtra
+	"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'TERMINFO_DIRS'* ]]
+	[[ "$output" == *'/etc/profiles/per-user/'* ]]
 }
 
 @test "Chromium Compose service is pinned to linux amd64" {
