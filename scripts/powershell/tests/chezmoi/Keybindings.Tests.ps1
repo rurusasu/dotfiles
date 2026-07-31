@@ -78,7 +78,9 @@ Describe '標準キーバインド方針' {
     It 'docs は GUI と Unix/Vim 系の標準レイヤーを明示すること' {
         $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
 
-        $docs | Should -Match 'Leader.*WezTerm macOS' -Because "macOS WezTerm pane/window controls should use the leader"
+        $docs | Should -Match 'Command\+D' -Because "macOS WezTerm should use the standard split shortcut"
+        $docs | Should -Match 'Command\+Shift\+D' -Because "macOS WezTerm should provide the second standard split shortcut"
+        $docs | Should -Match 'Leader.*WezTerm' -Because "macOS WezTerm navigation should keep the leader"
         $docs | Should -Match 'Ctrl\+Space' -Because "macOS WezTerm leader should be Ctrl+Space"
         $docs | Should -Match 'Leader.*pane' -Because "macOS WezTerm leader should control panes"
         $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
@@ -104,11 +106,11 @@ Describe '標準キーバインド方針' {
         Assert-WindowsTerminalDirectionalAction $settings "ctrl+alt+l" "resizePane" "right"
     }
 
-    It 'WezTerm macOS は leader で pane/window 操作を行うこと' {
+    It 'WezTerm macOS は Command で pane split を行うこと' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
-        $content | Should -Match '\{ key = "mapped:\|", mods = "LEADER", action = act\.SplitHorizontal'
-        $content | Should -Match '\{ key = "-", mods = "LEADER", action = act\.SplitVertical'
+        $content | Should -Match '\{ key = "d", mods = "SUPER", action = act\.SplitHorizontal'
+        $content | Should -Match '\{ key = "d", mods = "SUPER\|SHIFT", action = act\.SplitVertical'
         $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Left"\) \}'
         $content | Should -Match '\{ key = "UpArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Up"\) \}'
         $content | Should -Match '\{ key = "RightArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Right"\) \}'

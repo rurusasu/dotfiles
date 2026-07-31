@@ -12,6 +12,7 @@
 
 | グループ                  | 役割                  | 例                                  |
 | ------------------------- | --------------------- | ----------------------------------- |
+| `Command` (WezTerm macOS) | GUI pane split        | `Command+D` / `Command+Shift+D`     |
 | `Leader` (WezTerm macOS)  | GUI pane/window 操作  | `Ctrl+Space` + key                  |
 | `Alt` (Windows GUI)       | GUI pane/window focus | `Alt+矢印`                          |
 | `Alt+Shift` (Windows GUI) | GUI pane split/resize | `Alt+Shift+=/-`、`Alt+Shift+矢印`   |
@@ -27,7 +28,8 @@
 
 - WezTerm
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Leader` (`Ctrl+Space`) + `Shift+\\` (`|`)/`-`: 右/下分割
+  - `Command+D`: 右分割
+  - `Command+Shift+D`: 下分割
   - `Leader` (`Ctrl+Space`) + 矢印: ペイン移動
   - `Leader` (`Ctrl+Space`) + `Shift+矢印`: ペイン resize
   - `Ctrl+Shift+W`: ペイン close
@@ -101,6 +103,7 @@
 ## 運用ルール
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
-- GUI アプリの pane/window 操作は、WezTerm macOSでは`Leader`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
+- GUI アプリの pane split は、WezTerm macOSでは`Command+D` / `Command+Shift+D`、Windows Terminalでは`Alt+Shift`を優先する
+- WezTerm macOS の pane 移動・window focus は`Leader`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
 - tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

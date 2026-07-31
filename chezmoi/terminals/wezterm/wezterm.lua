@@ -44,6 +44,7 @@ end
 
 -- Detect Windows for default shell
 local is_windows = wezterm.target_triple:find("windows") ~= nil
+local is_macos = wezterm.target_triple:find("darwin") ~= nil
 if is_windows then
     config.default_prog = { "pwsh.exe", "-NoLogo" }
     config.exit_behavior = "Close"
@@ -116,11 +117,7 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane split/close/zoom (leader avoids macOS Option composition).
-    -- macOS composes Shift+Backslash into `|` and removes SHIFT from the
-    -- mapped modifiers, so bind the mapped character explicitly.
-    { key = "mapped:|", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    -- Pane close/zoom
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
@@ -178,5 +175,24 @@ config.keys = {
     { key = "8", mods = "LEADER", action = act.ActivateTab(7) },
     { key = "9", mods = "LEADER", action = act.ActivateTab(8) },
 }
+
+-- Pane split: use macOS Terminal/iTerm2 conventions on macOS and retain the
+-- leader bindings on other platforms.
+local pane_split_bindings
+if is_macos then
+    pane_split_bindings = {
+        { key = "d", mods = "SUPER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+        { key = "d", mods = "SUPER|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    }
+else
+    pane_split_bindings = {
+        { key = "mapped:|", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+        { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    }
+end
+
+for _, binding in ipairs(pane_split_bindings) do
+    table.insert(config.keys, binding)
+end
 
 return config
