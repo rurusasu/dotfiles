@@ -100,6 +100,15 @@ class ComposeContractTests(unittest.TestCase):
             ],
         )
 
+    def test_chrome_entrypoint_does_not_disable_gpu_rendering(self) -> None:
+        entrypoint_path = REPOSITORY_ROOT / "docker/hermes-browser/entrypoint.sh"
+        if not entrypoint_path.is_file():
+            self.skipTest("hermes-browser source is outside the bootstrap test context")
+
+        self.assertNotIn(
+            "--disable-gpu", entrypoint_path.read_text(encoding="utf-8")
+        )
+
     def test_xapi_mcp_is_an_internal_shared_service(self) -> None:
         xapi = self.services.get("xapi-mcp")
         self.assertIsNotNone(xapi)
