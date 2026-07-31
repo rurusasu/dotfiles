@@ -116,8 +116,10 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane split/close/zoom (leader avoids macOS Option composition)
-    { key = "phys:Backslash", mods = "LEADER|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    -- Pane split/close/zoom (leader avoids macOS Option composition).
+    -- macOS composes Shift+Backslash into `|` and removes SHIFT from the
+    -- mapped modifiers, so bind the mapped character explicitly.
+    { key = "mapped:|", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
     { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },

@@ -107,7 +107,7 @@ Describe '標準キーバインド方針' {
     It 'WezTerm macOS は leader で pane/window 操作を行うこと' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
-        $content | Should -Match '\{ key = "phys:Backslash", mods = "LEADER\|SHIFT", action = act\.SplitHorizontal'
+        $content | Should -Match '\{ key = "mapped:\|", mods = "LEADER", action = act\.SplitHorizontal'
         $content | Should -Match '\{ key = "-", mods = "LEADER", action = act\.SplitVertical'
         $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Left"\) \}'
         $content | Should -Match '\{ key = "UpArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Up"\) \}'

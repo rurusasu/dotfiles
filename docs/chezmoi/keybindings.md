@@ -27,7 +27,7 @@
 
 - WezTerm
   - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Leader` (`Ctrl+Space`) + `|/-`: 右/下分割
+  - `Leader` (`Ctrl+Space`) + `Shift+\\` (`|`)/`-`: 右/下分割
   - `Leader` (`Ctrl+Space`) + 矢印: ペイン移動
   - `Leader` (`Ctrl+Space`) + `Shift+矢印`: ペイン resize
   - `Ctrl+Shift+W`: ペイン close
