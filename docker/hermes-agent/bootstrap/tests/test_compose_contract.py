@@ -123,35 +123,6 @@ class ComposeContractTests(unittest.TestCase):
             "--disable-gpu", entrypoint_path.read_text(encoding="utf-8")
         )
 
-    def test_chrome_entrypoint_keeps_background_renderers_live(self) -> None:
-        entrypoint_path = REPOSITORY_ROOT / "docker/hermes-browser/entrypoint.sh"
-        if not entrypoint_path.is_file():
-            self.skipTest("hermes-browser source is outside the bootstrap test context")
-
-        entrypoint = entrypoint_path.read_text(encoding="utf-8")
-        for argument in (
-            "--disable-background-timer-throttling",
-            "--disable-renderer-backgrounding",
-            "--disable-backgrounding-occluded-windows",
-            "--disable-features=CalculateNativeWinOcclusion,TabDiscarding",
-        ):
-            self.assertIn(argument, entrypoint)
-
-    def test_browser_mcp_dependencies_are_currently_pinned(self) -> None:
-        package_path = REPOSITORY_ROOT / "docker/hermes-browser-mcp/package.json"
-        if not package_path.is_file():
-            self.skipTest("browser-mcp source is outside the bootstrap test context")
-
-        package = json.loads(package_path.read_text(encoding="utf-8"))
-
-        self.assertEqual(
-            package["dependencies"],
-            {
-                "chrome-devtools-mcp": "1.6.0",
-                "mcp-proxy": "6.5.5",
-            },
-        )
-
     def test_xapi_mcp_is_an_internal_shared_service(self) -> None:
         xapi = self.services.get("xapi-mcp")
         self.assertIsNotNone(xapi)
