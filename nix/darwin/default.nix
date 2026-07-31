@@ -94,7 +94,10 @@ in
   homebrew = {
     enable = true;
     casks = sets.darwinCasks;
-    greedyCasks = true;
+    # Nightly casks use version = :latest. Do not force an upgrade on every
+    # activation while the upstream archive layout is not stable; regular
+    # versioned casks still upgrade through onActivation.upgrade.
+    greedyCasks = false;
     onActivation = {
       autoUpdate = true;
       upgrade = true;

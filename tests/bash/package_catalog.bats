@@ -88,7 +88,7 @@ setup() {
 	[[ "$output" == *'provider = "nix"'* ]]
 }
 
-@test "Darwin evaluation installs only the WezTerm nightly cask" {
+@test "Darwin evaluation installs the WezTerm nightly cask and terminfo" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
@@ -99,13 +99,13 @@ setup() {
 		  homePackages = config.home-manager.users.codex.home.packages;
 		in {
 		  casks = builtins.filter (name: name == \"wezterm@nightly\") caskNames;
-		  nixPackages = builtins.map (package: package.name) (
-		    builtins.filter (package: (package.pname or \"\") == \"wezterm\") homePackages
+		  terminfoPackages = builtins.map (package: package.name) (
+		    builtins.filter (package: package.name == \"wezterm-terminfo\") homePackages
 		  );
 		}
 	"
 	[ "$status" -eq 0 ]
-	[ "$output" = '{"casks":["wezterm@nightly"],"nixPackages":[]}' ]
+	[ "$output" = '{"casks":["wezterm@nightly"],"terminfoPackages":["wezterm-terminfo"]}' ]
 }
 
 @test "Warp is removed from the package catalog" {
