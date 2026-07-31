@@ -196,6 +196,10 @@ cdp_pid=$!
 
 /usr/bin/google-chrome-stable \
   --lang=ja \
+  --disable-background-timer-throttling \
+  --disable-renderer-backgrounding \
+  --disable-backgrounding-occluded-windows \
+  --disable-features=CalculateNativeWinOcclusion,TabDiscarding \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port=9223 \
   --user-data-dir=/data \

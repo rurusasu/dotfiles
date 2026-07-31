@@ -7,10 +7,10 @@ host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host 
 ## 構成
 
 - `chromium`: 互換性のため service 名は維持しつつ、Xvfb 上の visible Google Chrome を container 内で起動する。CDP は Compose network 内だけに公開し、noVNC viewer だけを `127.0.0.1` に公開する。
-- `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。MCP要求は120秒で打ち切り、ページ単位の操作はDevToolsのpage IDでルーティングする。
+- `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。MCP要求は120秒で打ち切り、ページ単位の操作はDevToolsのpage IDでルーティングする。Chrome DevTools MCPは1.6.0、MCP proxyは6.5.5に固定する。
 - `hermes`: `browser-mcp` service 名で Browser MCP に接続する。
 
-Google Chrome container は `ja_JP.UTF-8` locale と `--lang=ja` で起動し、Chrome UI と日本語入力内容を表示できるようにする。
+Google Chrome container は `ja_JP.UTF-8` locale と `--lang=ja` で起動し、Chrome UI と日本語入力内容を表示できるようにする。長寿命の専用ブラウザでバックグラウンドページが凍結・破棄されると、CDPの `Runtime.enable` や `Accessibility.getFullAXTree` が停止してMCP全体のsnapshotがタイムアウトするため、背景Rendererの抑制とTabDiscardingを無効化する。
 noVNC viewer は通常の `Cmd/Ctrl+C`、`Cmd/Ctrl+X`、`Cmd/Ctrl+V` を Google Chrome 側のショートカットへ変換し、プレーンテキストの clipboard をホストと双方向に同期する。
 
 Hermes から接続する内部 URL は次の固定値にする。
