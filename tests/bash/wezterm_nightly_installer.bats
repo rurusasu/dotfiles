@@ -9,29 +9,55 @@ setup() {
 	BASH_COMPLETION="$TEST_ROOT/bash/wezterm"
 	FISH_COMPLETION="$TEST_ROOT/fish/wezterm.fish"
 	ZSH_COMPLETION="$TEST_ROOT/zsh/_wezterm"
-	ARCHIVE="$TEST_ROOT/WezTerm-macos-nightly.zip"
+	SOURCE_APP="$TEST_ROOT/source/WezTerm.app"
 
 	mkdir -p \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/MacOS" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/Resources/shell-completion" \
-		"$BIN_DIR"
+		"$SOURCE_APP/Contents/MacOS" \
+		"$SOURCE_APP/Contents/Resources/shell-completion" \
+		"$BIN_DIR" \
+		"$TEST_ROOT/bin"
 	touch \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/MacOS/wezterm" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/MacOS/wezterm-gui" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/MacOS/wezterm-mux-server" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/MacOS/strip-ansi-escapes" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/Resources/shell-completion/bash" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/Resources/shell-completion/fish" \
-		"$TEST_ROOT/archive/WezTerm.app/Contents/Resources/shell-completion/zsh"
-	(
-		cd "$TEST_ROOT/archive"
-		zip -qr "$ARCHIVE" WezTerm.app
-	)
+		"$SOURCE_APP/Contents/MacOS/wezterm" \
+		"$SOURCE_APP/Contents/MacOS/wezterm-gui" \
+		"$SOURCE_APP/Contents/MacOS/wezterm-mux-server" \
+		"$SOURCE_APP/Contents/MacOS/strip-ansi-escapes" \
+		"$SOURCE_APP/Contents/Resources/shell-completion/bash" \
+		"$SOURCE_APP/Contents/Resources/shell-completion/fish" \
+		"$SOURCE_APP/Contents/Resources/shell-completion/zsh"
+	cat >"$TEST_ROOT/bin/curl" <<'EOF'
+#!/bin/sh
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-o" ]; then
+		touch "$2"
+		shift 2
+		continue
+	fi
+	shift
+done
+EOF
+	cat >"$TEST_ROOT/bin/unzip" <<'EOF'
+#!/bin/sh
+source_app="$WEZTERM_TEST_SOURCE_APP"
+destination=""
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-d" ]; then
+		destination="$2"
+		shift 2
+		continue
+	fi
+	shift
+done
+mkdir -p "$destination"
+cp -R "$source_app" "$destination/WezTerm.app"
+EOF
+	chmod +x "$TEST_ROOT/bin/curl" "$TEST_ROOT/bin/unzip"
 }
 
 @test "installs the nightly app and command links when WezTerm is absent" {
 	run env \
-		WEZTERM_NIGHTLY_URL="file://$ARCHIVE" \
+		PATH="$TEST_ROOT/bin:$PATH" \
+		WEZTERM_TEST_SOURCE_APP="$SOURCE_APP" \
+		WEZTERM_NIGHTLY_URL="https://example.invalid/WezTerm-macos-nightly.zip" \
 		WEZTERM_APP_PATH="$APP_PATH" \
 		WEZTERM_BIN_DIR="$BIN_DIR" \
 		WEZTERM_BASH_COMPLETION_PATH="$BASH_COMPLETION" \
@@ -58,7 +84,8 @@ EOF
 	chmod +x "$TEST_ROOT/failing-curl"
 
 	run env \
-		PATH="$TEST_ROOT:$PATH" \
+		PATH="$TEST_ROOT/bin:$TEST_ROOT:$PATH" \
+		WEZTERM_TEST_SOURCE_APP="$SOURCE_APP" \
 		WEZTERM_NIGHTLY_URL="https://invalid.example/wezterm.zip" \
 		WEZTERM_APP_PATH="$APP_PATH" \
 		WEZTERM_BIN_DIR="$BIN_DIR" \
