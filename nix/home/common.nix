@@ -64,6 +64,16 @@ in
     zsh = {
       enable = true;
 
+      # A long-lived GUI process can inherit Home Manager's session sentinel
+      # without retaining the variables that were set alongside it. Restore
+      # WezTerm's Darwin terminfo path in .zshenv so interactive shells can
+      # initialize zsh/terminfo even in that state.
+      envExtra = lib.optionalString pkgs.stdenv.isDarwin ''
+        if [[ "''${TERM-}" == wezterm && -d "/etc/profiles/per-user/''${USER}/share/terminfo" ]]; then
+          export TERMINFO_DIRS="/etc/profiles/per-user/''${USER}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}:/usr/share/terminfo"
+        fi
+      '';
+
       shellAliases = {
         find = "fd";
         grep = "rg";
