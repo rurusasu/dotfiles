@@ -81,6 +81,17 @@ setup() {
 	[[ "$output" == *'/etc/profiles/per-user/'* ]]
 }
 
+@test "WezTerm provides Darwin terminfo before spawning shells" {
+	local config="$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua"
+
+	run grep -F 'config.set_environment_variables.TERMINFO_DIRS' "$config"
+	[ "$status" -eq 0 ]
+	run grep -F 'os.getenv("TERMINFO_DIRS")' "$config"
+	[ "$status" -eq 0 ]
+	run grep -F '/etc/profiles/per-user/' "$config"
+	[ "$status" -eq 0 ]
+}
+
 @test "Chromium Compose service is pinned to linux amd64" {
 	run awk '
 		/^  chromium:/ { in_chromium=1; next }
