@@ -98,6 +98,18 @@ config.set_environment_variables = {
     SNACKS_WEZTERM = "true",
 }
 
+-- zsh resolves TERM=wezterm while it starts, before .zshenv can restore
+-- Home Manager's terminfo path. Provide the Darwin path to child shells
+-- directly from WezTerm so startup never begins without a definition.
+if is_macos then
+    local terminfo_user = os.getenv("USER")
+    if terminfo_user and terminfo_user ~= "" then
+        config.set_environment_variables.TERMINFO_DIRS = "/etc/profiles/per-user/"
+            .. terminfo_user
+            .. "/share/terminfo:/usr/share/terminfo"
+    end
+end
+
 -- Alt key sends escape sequence for fzf Alt+C support
 config.send_composed_key_when_left_alt_is_pressed = false
 config.send_composed_key_when_right_alt_is_pressed = false
