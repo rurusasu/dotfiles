@@ -104,9 +104,12 @@ config.set_environment_variables = {
 if is_macos then
     local terminfo_user = os.getenv("USER")
     if terminfo_user and terminfo_user ~= "" then
-        config.set_environment_variables.TERMINFO_DIRS = "/etc/profiles/per-user/"
-            .. terminfo_user
-            .. "/share/terminfo:/usr/share/terminfo"
+        local inherited_terminfo_dirs = os.getenv("TERMINFO_DIRS")
+        local terminfo_dirs = "/etc/profiles/per-user/" .. terminfo_user .. "/share/terminfo:/usr/share/terminfo"
+        if inherited_terminfo_dirs and inherited_terminfo_dirs ~= "" then
+            terminfo_dirs = terminfo_dirs .. ":" .. inherited_terminfo_dirs
+        end
+        config.set_environment_variables.TERMINFO_DIRS = terminfo_dirs
     end
 end
 

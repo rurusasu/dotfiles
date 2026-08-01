@@ -86,6 +86,8 @@ setup() {
 
 	run grep -F 'config.set_environment_variables.TERMINFO_DIRS' "$config"
 	[ "$status" -eq 0 ]
+	run grep -F 'os.getenv("TERMINFO_DIRS")' "$config"
+	[ "$status" -eq 0 ]
 	run grep -F '/etc/profiles/per-user/' "$config"
 	[ "$status" -eq 0 ]
 }
