@@ -130,6 +130,20 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_calendar_configurations = calendar_config_patcher.start()
         self.addCleanup(calendar_config_patcher.stop)
+        gmail_config_patcher = mock.patch.object(
+            app,
+            "install_google_gmail_configurations",
+            create=True,
+        )
+        self.install_google_gmail_configurations = gmail_config_patcher.start()
+        self.addCleanup(gmail_config_patcher.stop)
+        gmail_credentials_patcher = mock.patch.object(
+            app,
+            "install_google_gmail_credentials",
+            create=True,
+        )
+        self.install_google_gmail_credentials = gmail_credentials_patcher.start()
+        self.addCleanup(gmail_credentials_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -202,6 +216,23 @@ class AppTests(unittest.TestCase):
             "    env:\n"
             "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
             "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
+            "  gmail:\n"
+            "    command: gmail-mcp\n"
+            "    connect_timeout: 300\n"
+            "    env:\n"
+            "      GMAIL_OAUTH_PATH: /opt/data/google-gmail-mcp/gcp-oauth.keys.json\n"
+            "      GMAIL_CREDENTIALS_PATH: /opt/data/google-gmail-mcp/credentials.json\n"
+            "    tools:\n"
+            "      include:\n"
+            "        - search_emails\n"
+            "        - read_email\n"
+            "        - get_thread\n"
+            "        - list_inbox_threads\n"
+            "        - get_inbox_with_threads\n"
+            "        - list_email_labels\n"
+            "        - draft_email\n"
+            "      resources: false\n"
+            "      prompts: false\n"
         )
         for config in (self.root / "config.yaml", target / "config.yaml"):
             config.write_text(calendar_config, encoding="utf-8")
@@ -219,6 +250,21 @@ class AppTests(unittest.TestCase):
         )
         oauth.chmod(0o600)
         tokens.chmod(0o600)
+        gmail_credentials = self.root / "google-gmail-mcp"
+        gmail_credentials.mkdir(mode=0o700)
+        gmail_oauth = gmail_credentials / "gcp-oauth.keys.json"
+        gmail_tokens = gmail_credentials / "credentials.json"
+        gmail_oauth.write_text(
+            '{"installed":{"client_id":"id","client_secret":"secret"}}',
+            encoding="utf-8",
+        )
+        gmail_tokens.write_text(
+            '{"tokens":{"refresh_token":"refresh"},'
+            '"scopes":["gmail.readonly","gmail.compose"]}',
+            encoding="utf-8",
+        )
+        gmail_oauth.chmod(0o600)
+        gmail_tokens.chmod(0o600)
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
         secret_body = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
@@ -628,6 +674,20 @@ class AppTests(unittest.TestCase):
         self.revalidate_profile_snapshots.side_effect = (
             lambda _manifest, _baseline, _scratch: events.append("revalidate")
         )
+        self.install_google_calendar_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "calendar-config:"
+                + ",".join(target.name for target in targets)
+                + f":{transaction is tx}"
+            )
+        )
+        self.install_google_gmail_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "gmail-config:"
+                + ",".join(target.name for target in targets)
+                + f":{transaction is tx}"
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -685,6 +745,8 @@ class AppTests(unittest.TestCase):
                 "profile:risarisa",
                 "profile:nancy",
                 "shared:lifelog",
+                "calendar-config:data,rick,hoffman,risarisa,nancy:True",
+                "gmail-config:data,rick,hoffman,risarisa,nancy:True",
                 "env:data",
                 "env:rick",
                 "env:hoffman",

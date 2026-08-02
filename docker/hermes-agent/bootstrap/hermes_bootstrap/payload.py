@@ -470,9 +470,25 @@ def _bundle_from_fields(
 
 
 def validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
+    _google_calendar_oauth_client_values(secret)
+    try:
+        tokens = json.loads(secret.tokens_json)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        raise CredentialError("Google Calendar credentials are invalid") from None
+    if (
+        not isinstance(tokens, dict)
+        or not _contains_refresh_token(tokens)
+    ):
+        raise CredentialError("Google Calendar credentials are invalid") from None
+
+
+def _google_calendar_oauth_client_values(
+    secret: GoogleCalendarSecret,
+) -> tuple[str, str]:
+    """Extract the validated OAuth client values from the shared Calendar secret."""
+
     try:
         oauth = json.loads(secret.oauth_credentials_json)
-        tokens = json.loads(secret.tokens_json)
         installed = oauth["installed"]
         client_id = installed["client_id"]
         client_secret = installed["client_secret"]
@@ -485,10 +501,9 @@ def validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
         or not client_id
         or not isinstance(client_secret, str)
         or not client_secret
-        or not isinstance(tokens, dict)
-        or not _contains_refresh_token(tokens)
     ):
         raise CredentialError("Google Calendar credentials are invalid") from None
+    return client_id, client_secret
 
 
 def _contains_refresh_token(value: object) -> bool:

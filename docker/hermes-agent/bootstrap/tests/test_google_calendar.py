@@ -130,6 +130,31 @@ class GoogleCalendarCredentialTests(unittest.TestCase):
                 (target / "config.yaml").read_text(encoding="utf-8"),
             )
 
+    def test_calendar_installation_preserves_an_existing_gmail_server(self) -> None:
+        gmail = (
+            "  gmail:\n"
+            "    url: https://gmailmcp.googleapis.com/mcp/v1\n"
+            "    auth: oauth\n"
+            "    connect_timeout: 315\n"
+        )
+        target = self.root
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "config.yaml").write_text(
+            "mcp_servers:\n"
+            "  retained:\n"
+            "    url: https://example.invalid/mcp\n"
+            + gmail,
+            encoding="utf-8",
+        )
+        tx = Transaction.begin(self.root)
+
+        install_google_calendar_configurations((target,), tx)
+        tx.commit()
+
+        installed = (target / "config.yaml").read_text(encoding="utf-8")
+        self.assertIn(gmail, installed)
+        self.assertIn("retained:\n    url: https://example.invalid/mcp", installed)
+
     def test_validation_accepts_every_calendar_configuration_and_shared_credentials(
         self,
     ) -> None:

@@ -21,6 +21,7 @@ from .envfiles import merge_env_file
 from .errors import ApplyError
 from .filesystem import PrivateDirectory, create_private_directory
 from .git import StagedSource
+from .google_gmail import is_google_gmail_configuration
 
 
 _ROOT_MANIFEST = "root-distribution.yaml"
@@ -808,7 +809,9 @@ def _same_distribution_path(source: Path, destination: Path) -> bool:
         destination_config = yaml.safe_load(destination.read_text(encoding="utf-8"))
         if not isinstance(source_config, dict) or not isinstance(destination_config, dict):
             return False
-        return _without_bootstrap_onepassword(source_config) == _without_bootstrap_onepassword(destination_config)
+        return without_bootstrap_managed_config(
+            source_config
+        ) == without_bootstrap_managed_config(destination_config)
     except (OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError):
         return False
 
@@ -824,6 +827,27 @@ def _without_bootstrap_onepassword(config: dict[object, object]) -> dict[object,
         result["secrets"] = remaining_secrets
     else:
         result.pop("secrets", None)
+    return result
+
+
+def without_bootstrap_managed_config(
+    config: dict[object, object],
+) -> dict[object, object]:
+    """Compare distribution content without bootstrap-owned config additions."""
+
+    result = _without_bootstrap_onepassword(config)
+    mcp_servers = result.get("mcp_servers")
+    if not isinstance(mcp_servers, dict):
+        return result
+    gmail = mcp_servers.get("gmail")
+    if not is_google_gmail_configuration(gmail):
+        return result
+    retained_servers = dict(mcp_servers)
+    retained_servers.pop("gmail")
+    if retained_servers:
+        result["mcp_servers"] = retained_servers
+    else:
+        result.pop("mcp_servers", None)
     return result
 
 

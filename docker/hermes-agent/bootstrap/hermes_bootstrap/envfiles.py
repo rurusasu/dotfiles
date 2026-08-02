@@ -42,6 +42,12 @@ DISCORD_KEYS = frozenset(
         "DISCORD_ALLOWED_USERS",
     }
 )
+GMAIL_MCP_KEYS = frozenset(
+    {
+        "GMAIL_MCP_CLIENT_ID",
+        "GMAIL_MCP_CLIENT_SECRET",
+    }
+)
 LEGACY_SLACK_KEYS = frozenset(
     {
         "SLACK_BOT_TOKEN",
