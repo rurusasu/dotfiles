@@ -12,7 +12,9 @@ setup() {
 	[ "$status" -eq 0 ]
 	run grep -F '"auth": "oauth"' "$source_file"
 	[ "$status" -eq 0 ]
-	run grep -F 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose' "$source_file"
+	run grep -F 'https://www.googleapis.com/auth/gmail.readonly' "$source_file"
+	[ "$status" -eq 0 ]
+	run grep -F 'https://www.googleapis.com/auth/gmail.compose' "$source_file"
 	[ "$status" -eq 0 ]
 }
 
