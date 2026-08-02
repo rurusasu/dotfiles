@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
+import yaml
+
+from .distributions import without_bootstrap_managed_config
 from .filesystem import PrivateDirectory, create_private_directory
 from .git import (
     _create_askpass,
@@ -314,7 +317,23 @@ def _synchronize_one_boundary(
                     auth,
                     attempt.remote_commit,
                 )
-                if dry_run:
+                bootstrap_config_only = _is_bootstrap_config_only_difference(
+                    diff,
+                    attempt.remote_commit,
+                    repository_path,
+                    environment,
+                )
+                if bootstrap_config_only:
+                    outcome = ProfileSyncResult(
+                        name=declaration.name,
+                        status="unchanged",
+                        commit=attempt.remote_commit,
+                        snapshot=snapshot.digest,
+                        diff=ProfileDiff(),
+                        category="unchanged",
+                        message="profile snapshot only differs by bootstrap configuration",
+                    )
+                elif dry_run:
                     commit = attempt.remote_commit
                     category = "dry_run"
                     message = "profile snapshot changes detected"
@@ -334,15 +353,16 @@ def _synchronize_one_boundary(
                         )
                     category = "published"
                     message = "profile snapshot published"
-                outcome = ProfileSyncResult(
-                    name=declaration.name,
-                    status="changed",
-                    commit=commit,
-                    snapshot=snapshot.digest,
-                    diff=diff,
-                    category=category,
-                    message=message,
-                )
+                if not bootstrap_config_only:
+                    outcome = ProfileSyncResult(
+                        name=declaration.name,
+                        status="changed",
+                        commit=commit,
+                        snapshot=snapshot.digest,
+                        diff=diff,
+                        category=category,
+                        message=message,
+                    )
     except _LockBusy as error:
         error = _scrub_exception_graph(error)
         outcome = _failed(snapshot, "lock_busy", "profile publication lock is busy")
@@ -447,6 +467,33 @@ def _profile_diff(
         added=tuple(changes[b"A"]),
         modified=tuple(changes[b"M"]),
         deleted=tuple(changes[b"D"]),
+    )
+
+
+def _is_bootstrap_config_only_difference(
+    diff: ProfileDiff,
+    remote_commit: str,
+    repository: Path,
+    environment: dict[str, str],
+) -> bool:
+    if diff != ProfileDiff(modified=(PurePosixPath("config.yaml"),)):
+        return False
+    try:
+        local = yaml.safe_load((repository / "config.yaml").read_text(encoding="utf-8"))
+        remote = yaml.safe_load(
+            _git_bytes(
+                ("show", f"{remote_commit}:config.yaml"),
+                repository,
+                environment,
+            ).decode("utf-8")
+        )
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+        return False
+    return (
+        isinstance(local, dict)
+        and isinstance(remote, dict)
+        and without_bootstrap_managed_config(local)
+        == without_bootstrap_managed_config(remote)
     )
 
 

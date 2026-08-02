@@ -71,6 +71,46 @@ PROFILE_USER_DIRECTORIES = (
     "cron",
     "home",
 )
+GMAIL_CONFIGURATION = {
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "auth": "oauth",
+    "connect_timeout": 315,
+    "oauth": {
+        "client_id": "${GMAIL_MCP_CLIENT_ID}",
+        "client_secret": "${GMAIL_MCP_CLIENT_SECRET}",
+        "scope": (
+            "https://www.googleapis.com/auth/gmail.readonly "
+            "https://www.googleapis.com/auth/gmail.compose"
+        ),
+    },
+    "tools": {
+        "include": [
+            "search_threads",
+            "get_thread",
+            "get_message",
+            "list_labels",
+            "list_drafts",
+            "create_draft",
+        ],
+        "resources": False,
+        "prompts": False,
+    },
+}
+PROFILE_ENV_KEYS = frozenset(
+    {
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
+        "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
+        "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
+        "DISCORD_BOT_TOKEN",
+        "DISCORD_ALLOWED_USERS",
+        "GMAIL_MCP_CLIENT_ID",
+        "GMAIL_MCP_CLIENT_SECRET",
+    }
+)
+DEFAULT_ENV_KEYS = PROFILE_ENV_KEYS | {"API_SERVER_KEY"}
 SAFE_PATH = "/usr/bin:/bin"
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
@@ -104,10 +144,14 @@ def source_config(key: str, value: str) -> str:
 def managed_source_config(
     manifest: BootstrapManifest, profile: str, key: str, value: str
 ) -> str:
+    config = yaml.safe_load(source_config(key, value))
+    assert isinstance(config, dict)
+    mcp_servers = config["mcp_servers"]
+    assert isinstance(mcp_servers, dict)
+    mcp_servers["gmail"] = GMAIL_CONFIGURATION
     managed = build_onepassword_config(manifest, profile)
     return (
-        source_config(key, value).rstrip("\n")
-        + "\n"
+        yaml.safe_dump(config, sort_keys=False)
         + yaml.safe_dump({"secrets": {"onepassword": managed}}, sort_keys=False)
     )
 
@@ -1379,19 +1423,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "final-validation",
             "commit-cleanup",
         )
-        managed_env_keys = frozenset(
-            {
-                "GH_TOKEN",
-                "GITHUB_TOKEN",
-                "GITHUB_PERSONAL_ACCESS_TOKEN",
-                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
-                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
-                "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
-                "API_SERVER_KEY",
-                "DISCORD_BOT_TOKEN",
-                "DISCORD_ALLOWED_USERS",
-            }
-        )
+        managed_env_keys = DEFAULT_ENV_KEYS
         env_paths = {
             "default": ".env",
             **{
@@ -1738,17 +1770,7 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertIn("# root comment", root_env)
         self.assertIn("CUSTOM_ROOT=keep", root_env)
         self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=", root_env)
-        for key in (
-            "GH_TOKEN",
-            "GITHUB_TOKEN",
-            "GITHUB_PERSONAL_ACCESS_TOKEN",
-            "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
-            "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
-            "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
-            "API_SERVER_KEY",
-            "DISCORD_BOT_TOKEN",
-            "DISCORD_ALLOWED_USERS",
-        ):
+        for key in DEFAULT_ENV_KEYS:
             self.assertEqual(sum(line.startswith(f"{key}=") for line in root_env.splitlines()), 1)
         root_values = dict(
             line.partition("=")[::2]
@@ -1770,6 +1792,14 @@ class BootstrapFlowTests(unittest.TestCase):
                     for line in profile_env.splitlines()
                 )
             )
+            for key in PROFILE_ENV_KEYS:
+                self.assertEqual(
+                    sum(
+                        line.startswith(f"{key}=")
+                        for line in profile_env.splitlines()
+                    ),
+                    1,
+                )
 
         original_api_key = root_values["API_SERVER_KEY"]
         root_path = self.data_root / ".env"

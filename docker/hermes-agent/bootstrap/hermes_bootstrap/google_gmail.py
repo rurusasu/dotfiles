@@ -9,7 +9,6 @@ from pathlib import Path
 
 import yaml
 
-from .distributions import _atomic_write
 from .errors import ApplyError, BootstrapError, ValidationError
 from .transaction import Transaction
 
@@ -46,6 +45,8 @@ def install_google_gmail_configurations(
     transaction: Transaction,
 ) -> None:
     """Install the same Gmail MCP entry in root and every named profile."""
+
+    from .distributions import _atomic_write
 
     try:
         for target in targets:
@@ -96,6 +97,12 @@ def _gmail_configuration() -> dict[str, object]:
             "prompts": _MCP_CONFIGURATION["tools"]["prompts"],
         },
     }
+
+
+def is_google_gmail_configuration(value: object) -> bool:
+    """Return whether a config entry is the bootstrap-owned Gmail declaration."""
+
+    return value == _MCP_CONFIGURATION
 
 
 def _load_managed_config(
