@@ -25,6 +25,13 @@ setup() {
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
 }
 
+@test "Darwin activation zaps an existing Arc cask" {
+	grep -q 'builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q '/usr/bin/sudo --user=' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'company.thebrowser.Browser' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
+}
+
 @test "Darwin activation updates cask metadata without forcing latest cask upgrades" {
 	grep -q 'greedyCasks = false' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'autoUpdate = true' "$REPO_ROOT/nix/darwin/default.nix"
