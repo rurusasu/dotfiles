@@ -52,6 +52,57 @@ function Test-HermesGmailWindows {
     return [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 }
 
+function Set-HermesGmailPrivateAcl {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidateSet('File', 'Directory')][string]$PathType
+    )
+    if (-not (Test-HermesGmailWindows)) { return }
+    $expectedType = if ($PathType -eq 'Directory') { 'Container' } else { 'Leaf' }
+    if (-not (Test-Path -LiteralPath $Path -PathType $expectedType)) {
+        throw "Gmail credential $($PathType.ToLowerInvariant()) is missing."
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Gmail credential $($PathType.ToLowerInvariant()) is invalid."
+    }
+
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+    if ($null -eq $owner) { throw 'Gmail credential owner is unavailable.' }
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    if ($null -eq $currentUser) { throw 'Current Windows identity is unavailable.' }
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($access in @($acl.Access)) {
+        $null = $acl.RemoveAccessRuleSpecific($access)
+    }
+
+    $inheritance = if ($PathType -eq 'Directory') {
+        [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+        [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+    }
+    else {
+        [System.Security.AccessControl.InheritanceFlags]::None
+    }
+    foreach ($sidValue in @(
+            $owner.Value,
+            $currentUser.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+        ) | Select-Object -Unique) {
+        $identity = [System.Security.Principal.SecurityIdentifier]::new($sidValue)
+        $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $identity,
+            [System.Security.AccessControl.FileSystemRights]::FullControl,
+            $inheritance,
+            [System.Security.AccessControl.PropagationFlags]::None,
+            [System.Security.AccessControl.AccessControlType]::Allow
+        )
+        $acl.AddAccessRule($rule)
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
+
 function Test-HermesGmailPrivateFile {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
@@ -63,7 +114,14 @@ function Test-HermesGmailPrivateFile {
         $acl = Get-Acl -LiteralPath $Path
         $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
         if ($null -eq $owner) { return $false }
-        $allowedSids = @($owner.Value, 'S-1-5-18', 'S-1-5-32-544')
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        if ($null -eq $currentUser -or -not $acl.AreAccessRulesProtected) { return $false }
+        $allowedSids = @(
+            $owner.Value,
+            $currentUser.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+        )
         foreach ($access in $acl.Access) {
             $grantsRead =
             $access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
@@ -101,7 +159,9 @@ function Get-HermesGmailSharedContext {
     if (($directoryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw 'Shared Gmail credential directory is missing or invalid.'
     }
+    Set-HermesGmailPrivateAcl -Path $directory -PathType Directory
     $oauth = Join-Path $directory 'gcp-oauth.keys.json'
+    Set-HermesGmailPrivateAcl -Path $oauth -PathType File
     if (-not (Test-HermesGmailPrivateFile -Path $oauth)) {
         throw 'Shared Gmail OAuth client is missing or not private.'
     }
@@ -155,7 +215,12 @@ try {
             $env:GMAIL_OAUTH_PATH = $oldOAuth
             $env:GMAIL_CREDENTIALS_PATH = $oldCredentials
         }
-        if (-not (Test-HermesGmailWindows)) { & chmod 600 $shared.Credentials }
+        if (Test-HermesGmailWindows) {
+            Set-HermesGmailPrivateAcl -Path $shared.Credentials -PathType File
+        }
+        else {
+            & chmod 600 $shared.Credentials
+        }
         if (-not (Test-HermesGmailPrivateFile -Path $shared.Credentials)) {
             throw 'Shared Gmail OAuth credentials are missing or not private.'
         }
@@ -165,6 +230,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($HermesProfile)) {
         throw 'A Hermes profile is required for Gmail MCP testing.'
     }
+    Set-HermesGmailPrivateAcl -Path $shared.Credentials -PathType File
     if (-not (Test-HermesGmailPrivateFile -Path $shared.Credentials)) {
         throw 'Shared Gmail OAuth credentials are missing or not private.'
     }

@@ -20,8 +20,15 @@ BeforeAll {
     if (-not $script:runningOnWindows) { & chmod 600 $oauth }
 
     if ($script:runningOnWindows) {
-        Set-Content -LiteralPath (Join-Path $script:fakeBin 'docker.cmd') -Value '@echo off' -NoNewline
-        Set-Content -LiteralPath (Join-Path $script:fakeBin 'npx.cmd') -Value '@echo off' -NoNewline
+        Set-Content -LiteralPath (Join-Path $script:fakeBin 'docker.cmd') -Value @'
+@echo off
+echo docker %*>>"%COMMAND_LOG%"
+'@
+        Set-Content -LiteralPath (Join-Path $script:fakeBin 'npx.cmd') -Value @'
+@echo off
+echo npx %*>>"%COMMAND_LOG%"
+echo {}>"%GMAIL_CREDENTIALS_PATH%"
+'@
     }
     else {
         $docker = Join-Path $script:fakeBin 'docker'
@@ -58,22 +65,49 @@ Describe 'Hermes Gmail shared command adapter' {
         Remove-Item -LiteralPath (Join-Path $script:gmailDir 'credentials.json') -Force -ErrorAction SilentlyContinue
     }
 
-    It 'runs one shared host OAuth flow' -Skip:([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    It 'should run one shared host OAuth flow with private credentials' {
         & $script:adapterPath -Action auth
         $LASTEXITCODE | Should -Be 0
         (Get-Content -LiteralPath $script:commandLog -Raw) | Should -Match 'npx --yes @artymclabin/gmail-mcp@1.2.3 auth --scopes=gmail.readonly,gmail.compose'
+        if ($script:runningOnWindows) {
+            $allowedSids = @(
+                (Get-Acl -LiteralPath $script:gmailDir).GetOwner(
+                    [System.Security.Principal.SecurityIdentifier]
+                ).Value
+                [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+                'S-1-5-18'
+                'S-1-5-32-544'
+            )
+            foreach ($path in @(
+                    $script:gmailDir,
+                    (Join-Path $script:gmailDir 'gcp-oauth.keys.json'),
+                    (Join-Path $script:gmailDir 'credentials.json')
+                )) {
+                $acl = Get-Acl -LiteralPath $path
+                $acl.AreAccessRulesProtected | Should -BeTrue
+                foreach ($access in $acl.Access) {
+                    if ($access.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+                        continue
+                    }
+                    $identity = $access.IdentityReference.Translate(
+                        [System.Security.Principal.SecurityIdentifier]
+                    ).Value
+                    $allowedSids | Should -Contain $identity
+                }
+            }
+        }
     }
 
-    It 'rejects a profile-specific auth invocation' {
+    It 'should reject a profile-specific auth invocation' {
         & $script:adapterPath -Action auth -Profile rick
         $LASTEXITCODE | Should -Be 1
         Test-Path -LiteralPath $script:commandLog | Should -BeFalse
     }
 
-    It 'uses shared credentials to test a selected profile' -Skip:([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    It 'should use shared credentials to test a selected profile' {
         $credentials = Join-Path $script:gmailDir 'credentials.json'
         Set-Content -LiteralPath $credentials -Value '{}' -NoNewline
-        & chmod 600 $credentials
+        if (-not $script:runningOnWindows) { & chmod 600 $credentials }
         & $script:adapterPath -Action test -Profile rick
         $LASTEXITCODE | Should -Be 0
         (Get-Content -LiteralPath $script:commandLog -Raw) | Should -Match 'docker compose .* run --rm --no-deps -T -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail'
