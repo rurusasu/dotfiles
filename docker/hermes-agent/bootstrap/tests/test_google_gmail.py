@@ -14,31 +14,29 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 from hermes_bootstrap.errors import ValidationError
 from hermes_bootstrap.google_gmail import (
     install_google_gmail_configurations,
+    install_google_gmail_credentials,
     validate_google_gmail_installation,
 )
+from hermes_bootstrap.payload import GoogleCalendarSecret
 from hermes_bootstrap.transaction import Transaction
 
 
 EXPECTED_GMAIL = {
-    "url": "https://gmailmcp.googleapis.com/mcp/v1",
-    "auth": "oauth",
-    "connect_timeout": 315,
-    "oauth": {
-        "client_id": "${GMAIL_MCP_CLIENT_ID}",
-        "client_secret": "${GMAIL_MCP_CLIENT_SECRET}",
-        "scope": (
-            "https://www.googleapis.com/auth/gmail.readonly "
-            "https://www.googleapis.com/auth/gmail.compose"
-        ),
+    "command": "gmail-mcp",
+    "connect_timeout": 300,
+    "env": {
+        "GMAIL_OAUTH_PATH": "/opt/data/google-gmail-mcp/gcp-oauth.keys.json",
+        "GMAIL_CREDENTIALS_PATH": "/opt/data/google-gmail-mcp/credentials.json",
     },
     "tools": {
         "include": [
-            "search_threads",
+            "search_emails",
+            "read_email",
             "get_thread",
-            "get_message",
-            "list_labels",
-            "list_drafts",
-            "create_draft",
+            "list_inbox_threads",
+            "get_inbox_with_threads",
+            "list_email_labels",
+            "draft_email",
         ],
         "resources": False,
         "prompts": False,
@@ -52,6 +50,12 @@ class GoogleGmailConfigurationTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve() / "data"
         self.root.mkdir(mode=0o700)
+        self.secret = GoogleCalendarSecret(
+            oauth_credentials_json=(
+                '{"installed":{"client_id":"id","client_secret":"secret"}}'
+            ),
+            tokens_json='{"refresh_token":"calendar-refresh"}',
+        )
 
     def targets_with_unrelated_servers(self) -> tuple[Path, ...]:
         targets = (self.root, self.root / "profiles" / "nancy")
@@ -72,8 +76,40 @@ class GoogleGmailConfigurationTests(unittest.TestCase):
         targets = self.targets_with_unrelated_servers()
         tx = Transaction.begin(self.root)
         install_google_gmail_configurations(targets, tx)
+        install_google_gmail_credentials(self.root, self.secret, tx)
         tx.commit()
         return targets
+
+    def test_installs_shared_credentials_with_private_permissions(self) -> None:
+        tx = Transaction.begin(self.root)
+
+        install_google_gmail_credentials(self.root, self.secret, tx)
+        tx.commit()
+
+        target = self.root / "google-gmail-mcp"
+        self.assertEqual(target.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(
+            (target / "gcp-oauth.keys.json").read_text(encoding="utf-8"),
+            self.secret.oauth_credentials_json,
+        )
+        self.assertEqual(
+            (target / "gcp-oauth.keys.json").stat().st_mode & 0o777,
+            0o600,
+        )
+        self.assertFalse((target / "credentials.json").exists())
+
+    def test_rollback_restores_previous_credentials(self) -> None:
+        target = self.root / "google-gmail-mcp"
+        target.mkdir(mode=0o700)
+        oauth = target / "gcp-oauth.keys.json"
+        oauth.write_text("old-oauth", encoding="utf-8")
+        oauth.chmod(0o600)
+        tx = Transaction.begin(self.root)
+
+        install_google_gmail_credentials(self.root, self.secret, tx)
+        tx.rollback()
+
+        self.assertEqual(oauth.read_text(encoding="utf-8"), "old-oauth")
 
     def test_inserts_the_same_gmail_configuration_for_every_target(self) -> None:
         targets = self.targets_with_unrelated_servers()
@@ -124,26 +160,39 @@ class GoogleGmailConfigurationTests(unittest.TestCase):
                         validate_google_gmail_installation(self.root, targets)
                     config_path.write_text(original, encoding="utf-8")
 
-    def test_validation_rejects_missing_scope_and_forbidden_tool(self) -> None:
+    def test_validation_rejects_malformed_or_public_credentials(self) -> None:
         targets = self.install_valid_layout()
-        config_path = targets[0] / "config.yaml"
-        original = config_path.read_text(encoding="utf-8")
+        credentials = self.root / "google-gmail-mcp" / "credentials.json"
+        original = (
+            '{"tokens":{"refresh_token":"refresh"},'
+            '"scopes":["gmail.readonly","gmail.compose"]}'
+        )
+        credentials.write_text(original, encoding="utf-8")
+        credentials.chmod(0o600)
 
-        for case in ("missing-scope", "forbidden-tool"):
+        for case in ("missing-compose-scope", "missing-refresh-token", "public"):
             with self.subTest(case=case):
-                config = yaml.safe_load(original)
-                gmail = config["mcp_servers"]["gmail"]
-                if case == "missing-scope":
-                    gmail["oauth"]["scope"] = "https://www.googleapis.com/auth/gmail.readonly"
+                if case == "missing-compose-scope":
+                    credentials.write_text(
+                        '{"tokens":{"refresh_token":"refresh"},'
+                        '"scopes":["gmail.readonly"]}',
+                        encoding="utf-8",
+                    )
+                elif case == "missing-refresh-token":
+                    credentials.write_text(
+                        '{"tokens":{"access_token":"access"},'
+                        '"scopes":["gmail.readonly","gmail.compose"]}',
+                        encoding="utf-8",
+                    )
                 else:
-                    gmail["tools"]["include"].append("send_message")
-                config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+                    credentials.chmod(0o644)
                 with self.assertRaisesRegex(
                     ValidationError,
                     "installed Google Gmail configuration is invalid",
                 ):
                     validate_google_gmail_installation(self.root, targets)
-                config_path.write_text(original, encoding="utf-8")
+                credentials.write_text(original, encoding="utf-8")
+                credentials.chmod(0o600)
 
 
 if __name__ == "__main__":

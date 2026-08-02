@@ -127,7 +127,7 @@ class EnvFileTests(unittest.TestCase):
         )
         self.assertEqual(API_SERVER_KEYS, frozenset({"API_SERVER_KEY"}))
 
-    def test_profile_environment_includes_private_gmail_oauth_client_values(self) -> None:
+    def test_profile_environment_uses_shared_gmail_files_not_oauth_env(self) -> None:
         environment = build_profile_environment(
             "rick",
             secret_bundle(),
@@ -141,23 +141,9 @@ class EnvFileTests(unittest.TestCase):
 
         self.assertEqual(environment["DISCORD_BOT_TOKEN"], "rick-bot")
         self.assertEqual(environment["DISCORD_ALLOWED_USERS"], "rick-users")
-        self.assertEqual(environment["GMAIL_MCP_CLIENT_ID"], "id")
-        self.assertEqual(environment["GMAIL_MCP_CLIENT_SECRET"], "secret")
         self.assertIsInstance(environment, MappingProxyType)
-        self.assertIsInstance(
-            environment["GMAIL_MCP_CLIENT_ID"],
-            envfiles_module._SecretEnvironmentValue,
-        )
-        self.assertIsInstance(
-            environment["GMAIL_MCP_CLIENT_SECRET"],
-            envfiles_module._SecretEnvironmentValue,
-        )
-        self.assertEqual(repr(environment["GMAIL_MCP_CLIENT_ID"]), "'[REDACTED]'")
-        self.assertEqual(repr(environment["GMAIL_MCP_CLIENT_SECRET"]), "'[REDACTED]'")
-        self.assertNotIn("id", repr(environment))
-        self.assertNotIn("secret", repr(environment))
-        with self.assertRaises(TypeError):
-            environment["GMAIL_MCP_CLIENT_ID"] = "changed"
+        self.assertNotIn("GMAIL_MCP_CLIENT_ID", environment)
+        self.assertNotIn("GMAIL_MCP_CLIENT_SECRET", environment)
         self.assertNotIn("SLACK_BOT_TOKEN", environment)
         self.assertNotIn("SLACK_APP_TOKEN", environment)
 

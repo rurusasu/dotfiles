@@ -137,6 +137,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_gmail_configurations = gmail_config_patcher.start()
         self.addCleanup(gmail_config_patcher.stop)
+        gmail_credentials_patcher = mock.patch.object(
+            app,
+            "install_google_gmail_credentials",
+            create=True,
+        )
+        self.install_google_gmail_credentials = gmail_credentials_patcher.start()
+        self.addCleanup(gmail_credentials_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -210,21 +217,20 @@ class AppTests(unittest.TestCase):
             "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
             "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
             "  gmail:\n"
-            "    url: https://gmailmcp.googleapis.com/mcp/v1\n"
-            "    auth: oauth\n"
-            "    connect_timeout: 315\n"
-            "    oauth:\n"
-            "      client_id: ${GMAIL_MCP_CLIENT_ID}\n"
-            "      client_secret: ${GMAIL_MCP_CLIENT_SECRET}\n"
-            "      scope: https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose\n"
+            "    command: gmail-mcp\n"
+            "    connect_timeout: 300\n"
+            "    env:\n"
+            "      GMAIL_OAUTH_PATH: /opt/data/google-gmail-mcp/gcp-oauth.keys.json\n"
+            "      GMAIL_CREDENTIALS_PATH: /opt/data/google-gmail-mcp/credentials.json\n"
             "    tools:\n"
             "      include:\n"
-            "        - search_threads\n"
+            "        - search_emails\n"
+            "        - read_email\n"
             "        - get_thread\n"
-            "        - get_message\n"
-            "        - list_labels\n"
-            "        - list_drafts\n"
-            "        - create_draft\n"
+            "        - list_inbox_threads\n"
+            "        - get_inbox_with_threads\n"
+            "        - list_email_labels\n"
+            "        - draft_email\n"
             "      resources: false\n"
             "      prompts: false\n"
         )
@@ -244,6 +250,21 @@ class AppTests(unittest.TestCase):
         )
         oauth.chmod(0o600)
         tokens.chmod(0o600)
+        gmail_credentials = self.root / "google-gmail-mcp"
+        gmail_credentials.mkdir(mode=0o700)
+        gmail_oauth = gmail_credentials / "gcp-oauth.keys.json"
+        gmail_tokens = gmail_credentials / "credentials.json"
+        gmail_oauth.write_text(
+            '{"installed":{"client_id":"id","client_secret":"secret"}}',
+            encoding="utf-8",
+        )
+        gmail_tokens.write_text(
+            '{"tokens":{"refresh_token":"refresh"},'
+            '"scopes":["gmail.readonly","gmail.compose"]}',
+            encoding="utf-8",
+        )
+        gmail_oauth.chmod(0o600)
+        gmail_tokens.chmod(0o600)
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
         secret_body = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 

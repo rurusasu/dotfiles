@@ -4,161 +4,78 @@ BeforeAll {
     $script:originalPath = $env:PATH
     $script:originalDataDir = $env:HERMES_DATA_DIR
     $script:originalComposeFile = $env:HERMES_COMPOSE_FILE
-    $script:originalDockerLog = $env:DOCKER_LOG
-    $script:originalClientId = $env:GMAIL_MCP_CLIENT_ID
-    $script:originalClientSecret = $env:GMAIL_MCP_CLIENT_SECRET
-    $script:originalSwapGmailTokenParent = $env:SWAP_GMAIL_TOKEN_PARENT
-    $script:originalGmailTokenOutside = $env:GMAIL_TOKEN_OUTSIDE
-
+    $script:originalCommandLog = $env:COMMAND_LOG
+    $script:runningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
     $script:fakeBin = Join-Path $TestDrive 'bin'
     $script:dataDir = Join-Path $TestDrive 'hermes-data'
     $script:composeFile = Join-Path $TestDrive 'compose.yml'
-    $script:dockerLog = Join-Path $TestDrive 'docker.log'
+    $script:commandLog = Join-Path $TestDrive 'commands.log'
+    $script:gmailDir = Join-Path $script:dataDir 'google-gmail-mcp'
     $null = New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'profiles/rick') -Force
+    $null = New-Item -ItemType Directory -Path $script:gmailDir -Force
     $null = New-Item -ItemType Directory -Path $script:fakeBin -Force
     Set-Content -LiteralPath $script:composeFile -Value '' -NoNewline
+    $oauth = Join-Path $script:gmailDir 'gcp-oauth.keys.json'
+    Set-Content -LiteralPath $oauth -Value '{}' -NoNewline
+    if (-not $script:runningOnWindows) { & chmod 600 $oauth }
 
-    if ($IsWindows) {
-        Set-Content -LiteralPath (Join-Path $script:fakeBin 'docker.cmd') -Value "@echo off`r`necho %*>>`"%DOCKER_LOG%`"" -NoNewline
+    if ($script:runningOnWindows) {
+        Set-Content -LiteralPath (Join-Path $script:fakeBin 'docker.cmd') -Value '@echo off' -NoNewline
+        Set-Content -LiteralPath (Join-Path $script:fakeBin 'npx.cmd') -Value '@echo off' -NoNewline
     }
     else {
-        $dockerPath = Join-Path $script:fakeBin 'docker'
-        $fakeDocker = @'
-#!/usr/bin/env sh
-printf '%s\n' "$*" >> "$DOCKER_LOG"
-if [ "${SWAP_GMAIL_TOKEN_PARENT:-0}" = 1 ] && [ -n "${GMAIL_TOKEN_OUTSIDE:-}" ] && [ "${*#*hermes mcp login gmail}" != "$*" ]; then
-  mkdir -p "$GMAIL_TOKEN_OUTSIDE"
-  rmdir "$HERMES_DATA_DIR/profiles/rick/mcp-tokens" 2>/dev/null || true
-  ln -s "$GMAIL_TOKEN_OUTSIDE" "$HERMES_DATA_DIR/profiles/rick/mcp-tokens"
-  : > "$GMAIL_TOKEN_OUTSIDE/gmail.json"
-  chmod 600 "$GMAIL_TOKEN_OUTSIDE/gmail.json"
-fi
+        $docker = Join-Path $script:fakeBin 'docker'
+        $npx = Join-Path $script:fakeBin 'npx'
+        $dockerScript = @'
+#!/bin/sh
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
 '@
-        [System.IO.File]::WriteAllText(
-            $dockerPath,
-            $fakeDocker.Replace("`r`n", "`n"),
-            [System.Text.UTF8Encoding]::new($false)
-        )
-        & chmod +x $dockerPath
+        $npxScript = @'
+#!/bin/sh
+printf 'npx %s\n' "$*" >>"$COMMAND_LOG"
+printf '{}' >"$GMAIL_CREDENTIALS_PATH"
+'@
+        [System.IO.File]::WriteAllText($docker, $dockerScript.Replace("`r`n", "`n"), [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($npx, $npxScript.Replace("`r`n", "`n"), [System.Text.UTF8Encoding]::new($false))
+        & chmod +x $docker $npx
     }
-
     $env:PATH = "$script:fakeBin$([System.IO.Path]::PathSeparator)$script:originalPath"
     $env:HERMES_DATA_DIR = $script:dataDir
     $env:HERMES_COMPOSE_FILE = $script:composeFile
-    $env:DOCKER_LOG = $script:dockerLog
+    $env:COMMAND_LOG = $script:commandLog
 }
 
 AfterAll {
     $env:PATH = $script:originalPath
     $env:HERMES_DATA_DIR = $script:originalDataDir
     $env:HERMES_COMPOSE_FILE = $script:originalComposeFile
-    $env:DOCKER_LOG = $script:originalDockerLog
-    $env:GMAIL_MCP_CLIENT_ID = $script:originalClientId
-    $env:GMAIL_MCP_CLIENT_SECRET = $script:originalClientSecret
-    $env:SWAP_GMAIL_TOKEN_PARENT = $script:originalSwapGmailTokenParent
-    $env:GMAIL_TOKEN_OUTSIDE = $script:originalGmailTokenOutside
+    $env:COMMAND_LOG = $script:originalCommandLog
 }
 
-Describe 'Hermes Gmail command adapter' {
+Describe 'Hermes Gmail shared command adapter' {
     BeforeEach {
-        Remove-Item -LiteralPath $script:dockerLog -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath (Join-Path $script:dataDir 'profiles/rick/mcp-tokens') -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $script:commandLog -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath (Join-Path $script:gmailDir 'credentials.json') -Force -ErrorAction SilentlyContinue
     }
 
-    It 'rejects unsafe and unknown profiles before Docker starts' {
-        & $script:adapterPath -Action auth -Profile '../outside'
-        $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
-
-        & $script:adapterPath -Action auth -Profile missing
-        $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
-    }
-
-    It 'runs Gmail login in the named profile home without OAuth values in Docker arguments' {
-        $tokenDir = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
-        $null = New-Item -ItemType Directory -Path $tokenDir -Force
-        $tokenPath = Join-Path $tokenDir 'gmail.json'
-        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
-        if (-not $IsWindows) { & chmod 600 $tokenPath }
-        $env:GMAIL_MCP_CLIENT_ID = 'client-id-marker'
-        $env:GMAIL_MCP_CLIENT_SECRET = 'client-secret-marker'
-
-        & $script:adapterPath -Action auth -Profile rick
+    It 'runs one shared host OAuth flow' -Skip:$script:runningOnWindows {
+        & $script:adapterPath -Action auth
         $LASTEXITCODE | Should -Be 0
-
-        $arguments = Get-Content -LiteralPath $script:dockerLog -Raw
-        $arguments | Should -Match ([regex]::Escape("compose -f $script:composeFile run --rm --no-deps --volume ${tokenDir}:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp login gmail"))
-        $arguments | Should -Not -Match 'client-id-marker|client-secret-marker'
+        (Get-Content -LiteralPath $script:commandLog -Raw) | Should -Match 'npx --yes @artymclabin/gmail-mcp@1.2.3 auth --scopes=gmail.readonly,gmail.compose'
     }
 
-    It 'fails when Gmail login completes without a private token cache' {
+    It 'rejects a profile-specific auth invocation' {
         & $script:adapterPath -Action auth -Profile rick
-
         $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeTrue
+        Test-Path -LiteralPath $script:commandLog | Should -BeFalse
     }
 
-    It 'rejects an mcp-tokens symlink before Docker starts' -Skip:$IsWindows {
-        $outside = Join-Path $TestDrive 'outside'
-        $null = New-Item -ItemType Directory -Path $outside -Force
-        $tokenPath = Join-Path $outside 'gmail.json'
-        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
-        & chmod 600 $tokenPath
-        $tokenDirectory = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
-        $null = New-Item -ItemType SymbolicLink -Path $tokenDirectory -Target $outside
-
-        & $script:adapterPath -Action test -Profile rick
-
-        $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
-    }
-
-    It 'rejects an mcp-tokens symlink installed during OAuth login' -Skip:$IsWindows {
-        $outside = Join-Path $TestDrive 'outside'
-        $env:SWAP_GMAIL_TOKEN_PARENT = '1'
-        $env:GMAIL_TOKEN_OUTSIDE = $outside
-
-        & $script:adapterPath -Action auth -Profile rick
-
-        $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeTrue
-    }
-
-    It 'rejects Authenticated Users read access to the token cache' -Skip:(-not $IsWindows) {
-        $tokenDir = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
-        $null = New-Item -ItemType Directory -Path $tokenDir -Force
-        $tokenPath = Join-Path $tokenDir 'gmail.json'
-        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
-        $acl = Get-Acl -LiteralPath $tokenPath
-        $authenticatedUsers = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-11')
-        $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-            $authenticatedUsers,
-            [System.Security.AccessControl.FileSystemRights]::ReadData,
-            [System.Security.AccessControl.AccessControlType]::Allow
-        )
-        $acl.AddAccessRule($rule)
-        Set-Acl -LiteralPath $tokenPath -AclObject $acl
-
-        & $script:adapterPath -Action auth -Profile rick
-
-        $LASTEXITCODE | Should -Be 1
-    }
-
-    It 'requires a token cache before probing Gmail MCP' {
-        & $script:adapterPath -Action test -Profile rick
-        $LASTEXITCODE | Should -Be 1
-        Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
-
-        $tokenDir = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
-        $null = New-Item -ItemType Directory -Path $tokenDir -Force
-        $tokenPath = Join-Path $tokenDir 'gmail.json'
-        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
-        if (-not $IsWindows) { & chmod 600 $tokenPath }
-
+    It 'uses shared credentials to test a selected profile' -Skip:$script:runningOnWindows {
+        $credentials = Join-Path $script:gmailDir 'credentials.json'
+        Set-Content -LiteralPath $credentials -Value '{}' -NoNewline
+        & chmod 600 $credentials
         & $script:adapterPath -Action test -Profile rick
         $LASTEXITCODE | Should -Be 0
-        $arguments = Get-Content -LiteralPath $script:dockerLog -Raw
-        $arguments | Should -Match ([regex]::Escape("compose -f $script:composeFile run --rm --no-deps -T --volume ${tokenDir}:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail"))
+        (Get-Content -LiteralPath $script:commandLog -Raw) | Should -Match 'docker compose .* run --rm --no-deps -T -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail'
     }
 }

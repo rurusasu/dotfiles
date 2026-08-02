@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Hermes Gmail MCP の OAuth と接続確認を、プロファイル単位で実行する。
+    Hermes 全プロフィールで共有する Gmail MCP OAuth と接続確認を実行する。
 #>
 
 [CmdletBinding()]
@@ -9,9 +9,8 @@ param(
     [ValidateSet('auth', 'test')]
     [string]$Action,
 
-    [Parameter(Mandatory)]
     [Alias('Profile')]
-    [string]$HermesProfile,
+    [string]$HermesProfile = '',
 
     [string]$ComposeFile = ''
 )
@@ -21,222 +20,164 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/Invoke-ExternalCommand.ps1')
 
-function Get-HermesGmailComposeFile {
-    [CmdletBinding()]
-    param([string]$ComposeFile = '')
+function Get-HermesGmailDataDir {
+    if (-not [string]::IsNullOrWhiteSpace($env:HERMES_DATA_DIR)) {
+        return [System.IO.Path]::GetFullPath($env:HERMES_DATA_DIR)
+    }
+    $homePath = if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $env:USERPROFILE
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:HOME)) {
+        $env:HOME
+    }
+    else {
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $homePath '.hermes'))
+}
 
-    if (-not [string]::IsNullOrWhiteSpace($ComposeFile)) {
-        return [System.IO.Path]::GetFullPath($ComposeFile)
+function Get-HermesGmailComposeFile {
+    param([string]$Requested)
+    if (-not [string]::IsNullOrWhiteSpace($Requested)) {
+        return [System.IO.Path]::GetFullPath($Requested)
     }
     if (-not [string]::IsNullOrWhiteSpace($env:HERMES_COMPOSE_FILE)) {
         return [System.IO.Path]::GetFullPath($env:HERMES_COMPOSE_FILE)
     }
-
-    $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    return [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'))
+    $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+    return Join-Path $root 'docker/hermes-agent/compose.yml'
 }
 
-function Get-HermesGmailDataDir {
-    [CmdletBinding()]
-    param()
-
-    if (-not [string]::IsNullOrWhiteSpace($env:HERMES_DATA_DIR)) {
-        return [System.IO.Path]::GetFullPath($env:HERMES_DATA_DIR)
-    }
-    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-        return [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.hermes'))
-    }
-    if (-not [string]::IsNullOrWhiteSpace($env:HOME)) {
-        return [System.IO.Path]::GetFullPath((Join-Path $env:HOME '.hermes'))
-    }
-
-    $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-    if ([string]::IsNullOrWhiteSpace($userProfile)) {
-        throw [System.InvalidOperationException]::new('Unable to resolve the current user profile.')
-    }
-    return [System.IO.Path]::GetFullPath((Join-Path $userProfile '.hermes'))
+function Test-HermesGmailWindows {
+    return [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 }
 
-function Get-HermesGmailProfileContext {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$HermesProfile,
-        [Parameter(Mandatory)]
-        [string]$DataDir
-    )
-
-    if ($HermesProfile -notmatch '^[a-z0-9][a-z0-9_-]*$') {
-        throw [System.InvalidOperationException]::new("Invalid Hermes profile: $HermesProfile")
-    }
-
-    if ($HermesProfile -eq 'default') {
-        $hostHome = $DataDir
-        $containerHome = '/opt/data'
-    }
-    else {
-        $hostHome = Join-Path (Join-Path $DataDir 'profiles') $HermesProfile
-        $containerHome = "/opt/data/profiles/$HermesProfile"
-    }
-
-    if (-not (Test-Path -LiteralPath $hostHome -PathType Container)) {
-        throw [System.InvalidOperationException]::new("Hermes profile is not installed: $HermesProfile")
-    }
-    $item = Get-Item -LiteralPath $hostHome -Force
-    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw [System.InvalidOperationException]::new("Hermes profile must not be a symbolic link: $HermesProfile")
-    }
-
-    return [PSCustomObject]@{
-        HostHome      = $hostHome
-        ContainerHome = $containerHome
-        TokenCache    = Join-Path $hostHome 'mcp-tokens/gmail.json'
-    }
-}
-
-function Test-HermesGmailPathUnderRoot {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path,
-        [Parameter(Mandatory)]
-        [string]$Root
-    )
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path)
-    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd(
-        [System.IO.Path]::DirectorySeparatorChar,
-        [System.IO.Path]::AltDirectorySeparatorChar
-    )
-    $rootWithSeparator = $fullRoot + [System.IO.Path]::DirectorySeparatorChar
-    return $fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-    $fullPath.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
-}
-
-function Get-HermesGmailTokenCacheContext {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$HostHome)
-
-    $tokenCacheParent = Join-Path $HostHome 'mcp-tokens'
-    if (-not (Test-Path -LiteralPath $tokenCacheParent)) {
-        $null = New-Item -ItemType Directory -Path $tokenCacheParent -Force
-    }
-    $parent = Get-Item -LiteralPath $tokenCacheParent -Force
-    if (($parent.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
-        -not $parent.PSIsContainer) {
-        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
-    }
-
-    $resolvedHostHome = (Resolve-Path -LiteralPath $HostHome).ProviderPath
-    $resolvedParent = (Resolve-Path -LiteralPath $tokenCacheParent).ProviderPath
-    $expectedParent = Join-Path $resolvedHostHome 'mcp-tokens'
-    if (-not $resolvedParent.Equals($expectedParent, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
-    }
-
-    $tokenCache = Join-Path $resolvedParent 'gmail.json'
-    if (-not (Test-HermesGmailPathUnderRoot -Path $tokenCache -Root $resolvedHostHome)) {
-        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
-    }
-    return [PSCustomObject]@{
-        Parent     = $resolvedParent
-        TokenCache = $tokenCache
-    }
-}
-
-function Test-HermesGmailTokenCache {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$TokenCache)
-
-    if (-not (Test-Path -LiteralPath $TokenCache -PathType Leaf)) {
-        return $false
-    }
-    $item = Get-Item -LiteralPath $TokenCache -Force
+function Test-HermesGmailPrivateFile {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $item = Get-Item -LiteralPath $Path -Force
     if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         return $false
     }
-
-    if ($IsWindows) {
-        $acl = Get-Acl -LiteralPath $TokenCache
+    if (Test-HermesGmailWindows) {
+        $acl = Get-Acl -LiteralPath $Path
         $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
-        if ($null -eq $owner) {
-            return $false
-        }
-        $allowedSids = @(
-            $owner.Value,
-            'S-1-5-18',
-            'S-1-5-32-544'
-        )
+        if ($null -eq $owner) { return $false }
+        $allowedSids = @($owner.Value, 'S-1-5-18', 'S-1-5-32-544')
         foreach ($access in $acl.Access) {
-            $grantsRead = $access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+            $grantsRead =
+            $access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
                 (($access.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadData) -ne 0)
-            if (-not $grantsRead) {
-                continue
-            }
+            if (-not $grantsRead) { continue }
             try {
                 $identity = $access.IdentityReference.Translate(
                     [System.Security.Principal.SecurityIdentifier]
                 ).Value
             }
-            catch {
-                return $false
-            }
-            if ($allowedSids -notcontains $identity) {
-                return $false
-            }
+            catch { return $false }
+            if ($allowedSids -notcontains $identity) { return $false }
         }
         return $true
     }
-
-    $mode = & stat -f '%Lp' $TokenCache 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        $mode = & stat -c '%a' $TokenCache 2>$null
-    }
+    $mode = & stat -f '%Lp' $Path 2>$null
+    if ($LASTEXITCODE -ne 0) { $mode = & stat -c '%a' $Path 2>$null }
     return $LASTEXITCODE -eq 0 -and $mode -eq '600'
 }
 
-function Invoke-HermesGmailDocker {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string[]]$Arguments)
+function Get-HermesGmailSharedContext {
+    $dataDir = Get-HermesGmailDataDir
+    if (-not (Test-Path -LiteralPath $dataDir -PathType Container)) {
+        throw 'Hermes data directory is not installed.'
+    }
+    $dataItem = Get-Item -LiteralPath $dataDir -Force
+    if (($dataItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Hermes data directory is invalid.'
+    }
+    $directory = Join-Path $dataDir 'google-gmail-mcp'
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        throw 'Shared Gmail credential directory is missing or invalid.'
+    }
+    $directoryItem = Get-Item -LiteralPath $directory -Force
+    if (($directoryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Shared Gmail credential directory is missing or invalid.'
+    }
+    $oauth = Join-Path $directory 'gcp-oauth.keys.json'
+    if (-not (Test-HermesGmailPrivateFile -Path $oauth)) {
+        throw 'Shared Gmail OAuth client is missing or not private.'
+    }
+    return [PSCustomObject]@{
+        DataDir     = $dataDir
+        OAuth       = $oauth
+        Credentials = Join-Path $directory 'credentials.json'
+    }
+}
 
-    $global:LASTEXITCODE = 0
-    Invoke-Docker -Arguments $Arguments | Out-Host
-    return $global:LASTEXITCODE
+function Get-HermesGmailProfileContext {
+    param(
+        [Parameter(Mandatory)][string]$ProfileName,
+        [Parameter(Mandatory)][string]$DataDir
+    )
+    if ($ProfileName -notmatch '^[a-z0-9][a-z0-9_-]*$') {
+        throw "Invalid Hermes profile: $ProfileName"
+    }
+    if ($ProfileName -eq 'default') {
+        $hostHome = $DataDir
+        $containerHome = '/opt/data'
+    }
+    else {
+        $hostHome = Join-Path (Join-Path $DataDir 'profiles') $ProfileName
+        $containerHome = "/opt/data/profiles/$ProfileName"
+    }
+    if (-not (Test-Path -LiteralPath $hostHome -PathType Container)) {
+        throw "Hermes profile is not installed: $ProfileName"
+    }
+    return [PSCustomObject]@{ ContainerHome = $containerHome }
 }
 
 try {
-    $resolvedComposeFile = Get-HermesGmailComposeFile -ComposeFile $ComposeFile
-    $context = Get-HermesGmailProfileContext -HermesProfile $HermesProfile -DataDir (Get-HermesGmailDataDir)
-    $tokenCacheContext = Get-HermesGmailTokenCacheContext -HostHome $context.HostHome
-
-    if ($Action -eq 'test' -and -not (Test-HermesGmailTokenCache -TokenCache $tokenCacheContext.TokenCache)) {
-        throw [System.InvalidOperationException]::new("Gmail OAuth token cache is missing or not private for profile: $HermesProfile")
+    $shared = Get-HermesGmailSharedContext
+    if ($Action -eq 'auth') {
+        if (-not [string]::IsNullOrWhiteSpace($HermesProfile)) {
+            throw 'Gmail authentication is shared; do not specify a profile.'
+        }
+        $oldOAuth = $env:GMAIL_OAUTH_PATH
+        $oldCredentials = $env:GMAIL_CREDENTIALS_PATH
+        try {
+            $env:GMAIL_OAUTH_PATH = $shared.OAuth
+            $env:GMAIL_CREDENTIALS_PATH = $shared.Credentials
+            Invoke-NativeCommand -Command 'npx' -Arguments @(
+                '--yes', '@artymclabin/gmail-mcp@1.2.3', 'auth',
+                '--scopes=gmail.readonly,gmail.compose'
+            ) | Out-Host
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        finally {
+            $env:GMAIL_OAUTH_PATH = $oldOAuth
+            $env:GMAIL_CREDENTIALS_PATH = $oldCredentials
+        }
+        if (-not (Test-HermesGmailWindows)) { & chmod 600 $shared.Credentials }
+        if (-not (Test-HermesGmailPrivateFile -Path $shared.Credentials)) {
+            throw 'Shared Gmail OAuth credentials are missing or not private.'
+        }
+        exit 0
     }
 
-    $dockerArguments = @(
-        'compose', '-f', $resolvedComposeFile,
-        'run', '--rm', '--no-deps'
+    if ([string]::IsNullOrWhiteSpace($HermesProfile)) {
+        throw 'A Hermes profile is required for Gmail MCP testing.'
+    }
+    if (-not (Test-HermesGmailPrivateFile -Path $shared.Credentials)) {
+        throw 'Shared Gmail OAuth credentials are missing or not private.'
+    }
+    $profileContext = Get-HermesGmailProfileContext `
+        -ProfileName $HermesProfile -DataDir $shared.DataDir
+    $arguments = @(
+        'compose', '-f', (Get-HermesGmailComposeFile -Requested $ComposeFile),
+        'run', '--rm', '--no-deps', '-T',
+        '-e', "HERMES_HOME=$($profileContext.ContainerHome)",
+        'hermes', 'hermes', 'mcp', 'test', 'gmail'
     )
-    if ($Action -eq 'test') {
-        $dockerArguments += '-T'
-    }
-    $tokenCacheVolume = "$($tokenCacheContext.Parent):$($context.ContainerHome)/mcp-tokens:rw"
-    $hermesAction = if ($Action -eq 'auth') { 'login' } else { 'test' }
-    $dockerArguments += @(
-        '--volume', $tokenCacheVolume,
-        '-e', "HERMES_HOME=$($context.ContainerHome)",
-        'hermes', 'hermes', 'mcp', $hermesAction, 'gmail'
-    )
-
-    $exitCode = Invoke-HermesGmailDocker -Arguments $dockerArguments
-    if ($exitCode -ne 0) {
-        exit $exitCode
-    }
-    $tokenCacheContext = Get-HermesGmailTokenCacheContext -HostHome $context.HostHome
-    if ($Action -eq 'auth' -and -not (Test-HermesGmailTokenCache -TokenCache $tokenCacheContext.TokenCache)) {
-        throw [System.InvalidOperationException]::new("Gmail OAuth token cache is missing or not private for profile: $HermesProfile")
-    }
-    exit 0
+    Invoke-Docker -Arguments $arguments | Out-Host
+    exit $global:LASTEXITCODE
 }
 catch {
     [Console]::Error.WriteLine('Hermes Gmail MCP command failed.')

@@ -80,7 +80,14 @@ Required labels are `username` or `user name` and `password` for the dashboard;
 for each Discord item. The Calendar item requires `oauth_credentials_json` and
 `tokens_json`; bootstrap installs both as mode `0600` files in the shared
 `/opt/data/google-calendar-mcp` directory, independently of named-profile
-synchronization. Bootstrap validates GitHub authentication and all remote
+synchronization.
+
+Gmail reuses the Calendar OAuth client in the shared
+`/opt/data/google-gmail-mcp` directory. Its host-local `credentials.json` is
+preserved across bootstrap runs and shared by all profiles; it is not added to
+the 1Password item plan.
+
+Bootstrap validates GitHub authentication and all remote
 access after crash-journal recovery and before it begins new staging or
 transaction writes. Recovery may restore or delete previously journaled managed
 paths before secrets and credentials are validated. Managed `.env` keys include

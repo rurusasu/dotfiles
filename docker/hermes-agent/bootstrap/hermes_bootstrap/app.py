@@ -57,6 +57,7 @@ from .google_calendar import (
 )
 from .google_gmail import (
     install_google_gmail_configurations,
+    install_google_gmail_credentials,
     validate_google_gmail_installation,
 )
 from .configfiles import reconcile_onepassword_configurations
@@ -83,9 +84,8 @@ from .transaction import Transaction
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _DISCORD_BOT_TOKEN = re.compile(r"[A-Za-z0-9_\-.]{20,}\Z")
-_MANAGED_ENV_KEYS = (
-    GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS | GMAIL_MCP_KEYS
-)
+_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS
+_LEGACY_ENV_KEYS = LEGACY_SLACK_KEYS | GMAIL_MCP_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
 
@@ -259,7 +259,7 @@ def _apply_sensitive(
                     expected_missing=True,
                     managed_environment=environment,
                     environment_remove=(
-                        (_MANAGED_ENV_KEYS - set(environment)) | LEGACY_SLACK_KEYS
+                        (_MANAGED_ENV_KEYS - set(environment)) | _LEGACY_ENV_KEYS
                     ),
                 )
             else:
@@ -288,6 +288,11 @@ def _apply_sensitive(
             secrets.google_calendar,
             tx,
         )
+        install_google_gmail_credentials(
+            manifest.data_root,
+            secrets.google_calendar,
+            tx,
+        )
 
         reconcile_onepassword_configurations(
             manifest,
@@ -304,7 +309,7 @@ def _apply_sensitive(
             merge_env_file(
                 env_path,
                 environment,
-                (_MANAGED_ENV_KEYS - set(environment)) | LEGACY_SLACK_KEYS,
+                (_MANAGED_ENV_KEYS - set(environment)) | _LEGACY_ENV_KEYS,
             )
             _failpoint(f"env-merge:{profile}")
 

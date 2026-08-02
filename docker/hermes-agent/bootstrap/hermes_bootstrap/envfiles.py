@@ -18,7 +18,7 @@ from plugins.dashboard_auth.basic import _verify_password, hash_password
 
 from .errors import ApplyError, BootstrapError, InputError
 from .filesystem import open_absolute_directory, verify_absolute_directory
-from .payload import SecretBundle, _google_calendar_oauth_client_values
+from .payload import SecretBundle
 
 
 GITHUB_KEYS = frozenset(
@@ -279,15 +279,6 @@ def _build_profile_environment(
         {
             "DISCORD_BOT_TOKEN": discord.bot_token,
             "DISCORD_ALLOWED_USERS": discord.allowed_users,
-        }
-    )
-    gmail_client_id, gmail_client_secret = _google_calendar_oauth_client_values(
-        secrets.google_calendar
-    )
-    environment.update(
-        {
-            "GMAIL_MCP_CLIENT_ID": gmail_client_id,
-            "GMAIL_MCP_CLIENT_SECRET": gmail_client_secret,
         }
     )
     _validate_environment_mapping(environment, frozenset())

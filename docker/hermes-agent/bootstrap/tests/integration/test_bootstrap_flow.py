@@ -72,25 +72,21 @@ PROFILE_USER_DIRECTORIES = (
     "home",
 )
 GMAIL_CONFIGURATION = {
-    "url": "https://gmailmcp.googleapis.com/mcp/v1",
-    "auth": "oauth",
-    "connect_timeout": 315,
-    "oauth": {
-        "client_id": "${GMAIL_MCP_CLIENT_ID}",
-        "client_secret": "${GMAIL_MCP_CLIENT_SECRET}",
-        "scope": (
-            "https://www.googleapis.com/auth/gmail.readonly "
-            "https://www.googleapis.com/auth/gmail.compose"
-        ),
+    "command": "gmail-mcp",
+    "connect_timeout": 300,
+    "env": {
+        "GMAIL_OAUTH_PATH": "/opt/data/google-gmail-mcp/gcp-oauth.keys.json",
+        "GMAIL_CREDENTIALS_PATH": "/opt/data/google-gmail-mcp/credentials.json",
     },
     "tools": {
         "include": [
-            "search_threads",
+            "search_emails",
+            "read_email",
             "get_thread",
-            "get_message",
-            "list_labels",
-            "list_drafts",
-            "create_draft",
+            "list_inbox_threads",
+            "get_inbox_with_threads",
+            "list_email_labels",
+            "draft_email",
         ],
         "resources": False,
         "prompts": False,
@@ -106,8 +102,6 @@ PROFILE_ENV_KEYS = frozenset(
         "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
         "DISCORD_BOT_TOKEN",
         "DISCORD_ALLOWED_USERS",
-        "GMAIL_MCP_CLIENT_ID",
-        "GMAIL_MCP_CLIENT_SECRET",
     }
 )
 DEFAULT_ENV_KEYS = PROFILE_ENV_KEYS | {"API_SERVER_KEY"}
