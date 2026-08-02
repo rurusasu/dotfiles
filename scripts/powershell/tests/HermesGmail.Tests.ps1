@@ -7,6 +7,8 @@ BeforeAll {
     $script:originalDockerLog = $env:DOCKER_LOG
     $script:originalClientId = $env:GMAIL_MCP_CLIENT_ID
     $script:originalClientSecret = $env:GMAIL_MCP_CLIENT_SECRET
+    $script:originalSwapGmailTokenParent = $env:SWAP_GMAIL_TOKEN_PARENT
+    $script:originalGmailTokenOutside = $env:GMAIL_TOKEN_OUTSIDE
 
     $script:fakeBin = Join-Path $TestDrive 'bin'
     $script:dataDir = Join-Path $TestDrive 'hermes-data'
@@ -24,8 +26,19 @@ BeforeAll {
         $fakeDocker = @'
 #!/usr/bin/env sh
 printf '%s\n' "$*" >> "$DOCKER_LOG"
+if [ "${SWAP_GMAIL_TOKEN_PARENT:-0}" = 1 ] && [ -n "${GMAIL_TOKEN_OUTSIDE:-}" ] && [ "${*#*hermes mcp login gmail}" != "$*" ]; then
+  mkdir -p "$GMAIL_TOKEN_OUTSIDE"
+  rmdir "$HERMES_DATA_DIR/profiles/rick/mcp-tokens" 2>/dev/null || true
+  ln -s "$GMAIL_TOKEN_OUTSIDE" "$HERMES_DATA_DIR/profiles/rick/mcp-tokens"
+  : > "$GMAIL_TOKEN_OUTSIDE/gmail.json"
+  chmod 600 "$GMAIL_TOKEN_OUTSIDE/gmail.json"
+fi
 '@
-        Set-Content -LiteralPath $dockerPath -Value $fakeDocker -NoNewline
+        [System.IO.File]::WriteAllText(
+            $dockerPath,
+            $fakeDocker.Replace("`r`n", "`n"),
+            [System.Text.UTF8Encoding]::new($false)
+        )
         & chmod +x $dockerPath
     }
 
@@ -42,6 +55,8 @@ AfterAll {
     $env:DOCKER_LOG = $script:originalDockerLog
     $env:GMAIL_MCP_CLIENT_ID = $script:originalClientId
     $env:GMAIL_MCP_CLIENT_SECRET = $script:originalClientSecret
+    $env:SWAP_GMAIL_TOKEN_PARENT = $script:originalSwapGmailTokenParent
+    $env:GMAIL_TOKEN_OUTSIDE = $script:originalGmailTokenOutside
 }
 
 Describe 'Hermes Gmail command adapter' {
@@ -82,6 +97,52 @@ Describe 'Hermes Gmail command adapter' {
 
         $LASTEXITCODE | Should -Be 1
         Test-Path -LiteralPath $script:dockerLog | Should -BeTrue
+    }
+
+    It 'rejects an mcp-tokens symlink before Docker starts' -Skip:$IsWindows {
+        $outside = Join-Path $TestDrive 'outside'
+        $null = New-Item -ItemType Directory -Path $outside -Force
+        $tokenPath = Join-Path $outside 'gmail.json'
+        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
+        & chmod 600 $tokenPath
+        $tokenDirectory = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
+        $null = New-Item -ItemType SymbolicLink -Path $tokenDirectory -Target $outside
+
+        & $script:adapterPath -Action test -Profile rick
+
+        $LASTEXITCODE | Should -Be 1
+        Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
+    }
+
+    It 'rejects an mcp-tokens symlink installed during OAuth login' -Skip:$IsWindows {
+        $outside = Join-Path $TestDrive 'outside'
+        $env:SWAP_GMAIL_TOKEN_PARENT = '1'
+        $env:GMAIL_TOKEN_OUTSIDE = $outside
+
+        & $script:adapterPath -Action auth -Profile rick
+
+        $LASTEXITCODE | Should -Be 1
+        Test-Path -LiteralPath $script:dockerLog | Should -BeTrue
+    }
+
+    It 'rejects Authenticated Users read access to the token cache' -Skip:(-not $IsWindows) {
+        $tokenDir = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
+        $null = New-Item -ItemType Directory -Path $tokenDir -Force
+        $tokenPath = Join-Path $tokenDir 'gmail.json'
+        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
+        $acl = Get-Acl -LiteralPath $tokenPath
+        $authenticatedUsers = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-11')
+        $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $authenticatedUsers,
+            [System.Security.AccessControl.FileSystemRights]::ReadData,
+            [System.Security.AccessControl.AccessControlType]::Allow
+        )
+        $acl.AddAccessRule($rule)
+        Set-Acl -LiteralPath $tokenPath -AclObject $acl
+
+        & $script:adapterPath -Action auth -Profile rick
+
+        $LASTEXITCODE | Should -Be 1
     }
 
     It 'requires a token cache before probing Gmail MCP' {

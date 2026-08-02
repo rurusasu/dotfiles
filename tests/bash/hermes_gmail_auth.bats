@@ -14,7 +14,13 @@ setup() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_LOG"
-if [[ ${CREATE_GMAIL_TOKEN:-0} == 1 && $* == *'hermes mcp login gmail'* ]]; then
+if [[ ${SWAP_GMAIL_TOKEN_PARENT:-0} == 1 && $* == *'hermes mcp login gmail'* ]]; then
+  mkdir -p "$GMAIL_TOKEN_OUTSIDE"
+  rmdir "$HERMES_DATA_DIR/profiles/rick/mcp-tokens" 2>/dev/null || true
+  ln -s "$GMAIL_TOKEN_OUTSIDE" "$HERMES_DATA_DIR/profiles/rick/mcp-tokens"
+  : >"$GMAIL_TOKEN_OUTSIDE/gmail.json"
+  chmod 600 "$GMAIL_TOKEN_OUTSIDE/gmail.json"
+elif [[ ${CREATE_GMAIL_TOKEN:-0} == 1 && $* == *'hermes mcp login gmail'* ]]; then
   mkdir -p "$HERMES_DATA_DIR/profiles/rick/mcp-tokens"
   : >"$HERMES_DATA_DIR/profiles/rick/mcp-tokens/gmail.json"
   chmod 600 "$HERMES_DATA_DIR/profiles/rick/mcp-tokens/gmail.json"
@@ -51,9 +57,29 @@ EOF
 }
 
 @test "auth fails when login completes without a private Gmail token cache" {
-	run "$SUT" auth rick
-	[ "$status" -eq 1 ]
-	[[ "$output" == *"Gmail OAuth token cache is missing or not private"* ]]
+  run "$SUT" auth rick
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Gmail OAuth token cache is missing or not private"* ]]
+}
+
+@test "auth rejects an mcp-tokens symlink before starting OAuth" {
+  mkdir -p "$BATS_TEST_TMPDIR/outside"
+  ln -s "$BATS_TEST_TMPDIR/outside" "$HERMES_DATA_DIR/profiles/rick/mcp-tokens"
+
+  run "$SUT" auth rick
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Gmail token cache parent is invalid"* ]]
+  [ ! -s "$DOCKER_LOG" ]
+}
+
+@test "auth rejects an mcp-tokens parent replaced by a symlink during OAuth" {
+  export SWAP_GMAIL_TOKEN_PARENT=1
+  export GMAIL_TOKEN_OUTSIDE="$BATS_TEST_TMPDIR/outside"
+
+  run "$SUT" auth rick
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Gmail token cache parent is invalid"* ]]
+  [ -s "$DOCKER_LOG" ]
 }
 
 @test "test requires a private token cache and invokes the profile-local Gmail MCP probe" {

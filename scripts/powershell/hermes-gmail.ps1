@@ -94,6 +94,56 @@ function Get-HermesGmailProfileContext {
     }
 }
 
+function Test-HermesGmailPathUnderRoot {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [string]$Root
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    $rootWithSeparator = $fullRoot + [System.IO.Path]::DirectorySeparatorChar
+    return $fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $fullPath.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-HermesGmailTokenCacheContext {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$HostHome)
+
+    $tokenCacheParent = Join-Path $HostHome 'mcp-tokens'
+    if (-not (Test-Path -LiteralPath $tokenCacheParent)) {
+        $null = New-Item -ItemType Directory -Path $tokenCacheParent -Force
+    }
+    $parent = Get-Item -LiteralPath $tokenCacheParent -Force
+    if (($parent.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        -not $parent.PSIsContainer) {
+        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
+    }
+
+    $resolvedHostHome = (Resolve-Path -LiteralPath $HostHome).ProviderPath
+    $resolvedParent = (Resolve-Path -LiteralPath $tokenCacheParent).ProviderPath
+    $expectedParent = Join-Path $resolvedHostHome 'mcp-tokens'
+    if (-not $resolvedParent.Equals($expectedParent, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
+    }
+
+    $tokenCache = Join-Path $resolvedParent 'gmail.json'
+    if (-not (Test-HermesGmailPathUnderRoot -Path $tokenCache -Root $resolvedHostHome)) {
+        throw [System.InvalidOperationException]::new('Gmail token cache parent is invalid.')
+    }
+    return [PSCustomObject]@{
+        Parent     = $resolvedParent
+        TokenCache = $tokenCache
+    }
+}
+
 function Test-HermesGmailTokenCache {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$TokenCache)
@@ -107,12 +157,35 @@ function Test-HermesGmailTokenCache {
     }
 
     if ($IsWindows) {
-        $unsafeAccess = (Get-Acl -LiteralPath $TokenCache).Access | Where-Object {
-            $_.AccessControlType -eq 'Allow' -and
-            $_.IdentityReference.Value -match '(Everyone|\\Users)$' -and
-            ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadData)
+        $acl = Get-Acl -LiteralPath $TokenCache
+        $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+        if ($null -eq $owner) {
+            return $false
         }
-        return $null -eq $unsafeAccess
+        $allowedSids = @(
+            $owner.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+        )
+        foreach ($access in $acl.Access) {
+            $grantsRead = $access.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+                (($access.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadData) -ne 0)
+            if (-not $grantsRead) {
+                continue
+            }
+            try {
+                $identity = $access.IdentityReference.Translate(
+                    [System.Security.Principal.SecurityIdentifier]
+                ).Value
+            }
+            catch {
+                return $false
+            }
+            if ($allowedSids -notcontains $identity) {
+                return $false
+            }
+        }
+        return $true
     }
 
     $mode = & stat -f '%Lp' $TokenCache 2>$null
@@ -134,8 +207,9 @@ function Invoke-HermesGmailDocker {
 try {
     $resolvedComposeFile = Get-HermesGmailComposeFile -ComposeFile $ComposeFile
     $context = Get-HermesGmailProfileContext -HermesProfile $HermesProfile -DataDir (Get-HermesGmailDataDir)
+    $tokenCacheContext = Get-HermesGmailTokenCacheContext -HostHome $context.HostHome
 
-    if ($Action -eq 'test' -and -not (Test-HermesGmailTokenCache -TokenCache $context.TokenCache)) {
+    if ($Action -eq 'test' -and -not (Test-HermesGmailTokenCache -TokenCache $tokenCacheContext.TokenCache)) {
         throw [System.InvalidOperationException]::new("Gmail OAuth token cache is missing or not private for profile: $HermesProfile")
     }
 
@@ -156,7 +230,8 @@ try {
     if ($exitCode -ne 0) {
         exit $exitCode
     }
-    if ($Action -eq 'auth' -and -not (Test-HermesGmailTokenCache -TokenCache $context.TokenCache)) {
+    $tokenCacheContext = Get-HermesGmailTokenCacheContext -HostHome $context.HostHome
+    if ($Action -eq 'auth' -and -not (Test-HermesGmailTokenCache -TokenCache $tokenCacheContext.TokenCache)) {
         throw [System.InvalidOperationException]::new("Gmail OAuth token cache is missing or not private for profile: $HermesProfile")
     }
     exit 0

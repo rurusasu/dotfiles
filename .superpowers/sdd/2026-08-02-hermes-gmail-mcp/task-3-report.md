@@ -36,3 +36,36 @@
 - 指示どおり live OAuth、Gmail MCP 接続、Discord の実行検証は行っていない。
 - PowerShell の ACL 判定は静的検査と macOS 上の Pester 契約で検証した。Windows
   filesystem 上の ACL 分岐は Windows runner または実機での追加確認が必要である。
+
+## Fix round 1: OAuth キャッシュ親と ACL の防御
+
+### 修正内容
+
+- Unix / PowerShell adapter は OAuth login 前に profile 内の `mcp-tokens` を作成して
+  検証し、symlink・非ディレクトリ・profile home 外へ解決される親を拒否する。
+  OAuth login 後も親と `gmail.json` の profile home 内包含を再検証するため、認証中の
+  symlink 置換で token を profile 外へ保存した状態を成功扱いにしない。
+- Windows の token cache ACL は、file owner、`SYSTEM` (`S-1-5-18`)、
+  `Administrators` (`S-1-5-32-544`) だけを read-capable Allow ACE の許可対象とする。
+  `Authenticated Users` を含むほかの identity の `ReadData` Allow ACE は拒否する。
+- OAuth consent の正確な scope を
+  `https://www.googleapis.com/auth/gmail.readonly` と
+  `https://www.googleapis.com/auth/gmail.compose` として文書化した。
+- Bash と PowerShell の両方に、login 前と login 後の parent-symlink 置換を検証する
+  契約を追加した。PowerShell には、Windows で `Authenticated Users` の ReadData を
+  付与して拒否を確認する契約も追加した（非 Windows ではこの ACL 契約のみ skip）。
+
+### 検証結果
+
+- `bats tests/bash/hermes_gmail_auth.bats`: 6/6 passed
+- `pwsh -NoProfile -Command 'Invoke-Pester -Path scripts/powershell/tests/HermesGmail.Tests.ps1 -Output Detailed'`: 6 passed, 0 failed, 1 skipped / 7 total
+- 必須 runner:
+  `pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/HermesGmail.Tests.ps1 -MinimumCoverage 0`
+  は `6 passed, 0 failed, 1 skipped / 7 total` で exit 0。
+- Bash syntax、PowerShell parser、PSScriptAnalyzer（Error/Warning）、
+  `nix fmt -- --fail-on-change`、`git diff --check` を実行した。
+
+### 未実施・留意事項
+
+- Task 4 の live OAuth、Gmail MCP、Discord 検証は実行していない。
+- `Authenticated Users` ACL 契約は Windows 専用であり、この macOS 実行では skip。

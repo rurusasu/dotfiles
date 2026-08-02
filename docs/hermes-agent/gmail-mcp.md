@@ -14,7 +14,9 @@ profile で個別に OAuth を完了します。OAuth トークンは各 profile
 3. Calendar MCP で使っている既存の OAuth client を再利用します。client ID/secret は
    bootstrap が private profile `.env` にのみ配置するため、手入力や新しい
    1Password item は不要です。
-4. 同意画面では `gmail.readonly` と `gmail.compose` のみを許可します。
+4. 同意画面では
+   `https://www.googleapis.com/auth/gmail.readonly` と
+   `https://www.googleapis.com/auth/gmail.compose` のみを許可します。
 
 bootstrap 済みであることを確認してから、profile ごとに認証します。
 
