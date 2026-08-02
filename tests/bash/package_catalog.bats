@@ -73,6 +73,18 @@ setup() {
 	grep -q 'cask = "stablyai/orca/orca"' "$SETS"
 }
 
+@test "Arc remains Windows-only and Dia remains macOS-only" {
+	run grep -n -A18 '^    arc-browser = {' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'winget = "TheBrowserCompany.Arc"'* ]]
+	[[ "$output" == *'unsupported = "Use Dia instead of Arc on macOS"'* ]]
+	[[ "$output" != *'cask = "arc"'* ]]
+
+	run grep -n -A12 '^    dia-browser = {' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
+}
+
 @test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
 	run awk '
 		/wezterm = \{/ { in_entry=1 }

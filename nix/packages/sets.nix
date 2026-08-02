@@ -349,8 +349,7 @@ let
           provider = "winget";
         };
         darwin = {
-          provider = "homebrew-cask";
-          cask = "arc";
+          unsupported = "Use Dia instead of Arc on macOS";
         };
         linux = {
           unsupported = "Vendor does not publish a Linux build";

@@ -95,7 +95,12 @@ in
   # intentionally filtered below because its preflight currently rejects the
   # official archive layout.
   system.activationScripts.postActivation.text = lib.mkAfter (
-    builtins.readFile ../../scripts/sh/install-wezterm-nightly.sh
+    (builtins.readFile ../../scripts/sh/install-wezterm-nightly.sh)
+    + ''
+
+      /usr/bin/sudo --user=${lib.escapeShellArg user} -- /bin/bash -c ${lib.escapeShellArg (builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh)}
+      /bin/rm -rf -- ${lib.escapeShellArg "${home}/Library/Caches/CloudKit/company.thebrowser.Browser"} 2>/dev/null || true
+    ''
   );
 
   homebrew = {

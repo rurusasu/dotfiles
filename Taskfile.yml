@@ -122,7 +122,7 @@ tasks:
   test:bash:
     desc: Run bats unit tests for shell helpers
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"'
+      - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'
 
   # ===========================================
   # Windows Setup
