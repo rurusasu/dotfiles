@@ -69,3 +69,37 @@
 
 - Task 4 の live OAuth、Gmail MCP、Discord 検証は実行していない。
 - `Authenticated Users` ACL 契約は Windows 専用であり、この macOS 実行では skip。
+
+## Fix round 2: OAuth login 中の mcp-tokens bind mount 固定
+
+### 修正内容
+
+- re-review で確認された race は、login 前後の host path 検査だけでは閉じられず、
+  Hermes が主 `/opt/data` bind mount 経由で host の `mcp-tokens` を再解決できる点
+  だった。
+- Unix と PowerShell の `auth` / `test` で、検証済みの canonical host
+  `mcp-tokens` directory を source とする dedicated read-write mount を追加した。
+  target は named profile では
+  `/opt/data/profiles/<profile>/mcp-tokens`、default では
+  `/opt/data/mcp-tokens` となる。既存の profile、symlink、cache privacy の検証と
+  login 後の再検証は維持している。
+- 契約テストで auth と test の `--volume <source>:<target>:rw` bind mount を確認し、
+  source が profile home の `mcp-tokens`、target が同じ profile の container path
+  であることを固定した。
+
+### 検証結果
+
+- `bats tests/bash/hermes_gmail_auth.bats`: 6/6 passed
+- `pwsh -NoProfile -Command 'Invoke-Pester -Path scripts/powershell/tests/HermesGmail.Tests.ps1 -Output Detailed'`: 6 passed, 0 failed, 1 skipped / 7 total
+- 必須 runner:
+  `pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/HermesGmail.Tests.ps1 -MinimumCoverage 0`
+  は `6 passed, 0 failed, 1 skipped / 7 total` で exit 0。
+- Bash syntax、PowerShell parser、PSScriptAnalyzer（Error/Warning）、
+  `nix fmt -- --fail-on-change`、`git diff --check` を最終実行した。
+
+### 未実施・留意事項
+
+- Task 4 の live OAuth、Gmail MCP、Discord 検証は引き続き実行していない。
+- dedicated bind mount は Docker が mount source を解決した後の login 中の path
+  置換を防ぐ。Docker daemon 起動前の host path race はこのホスト adapter の検査と
+  Docker の mount 作成境界に依存するため、実 Docker を用いた live OAuth は未検証。

@@ -50,7 +50,8 @@ EOF
 	[ "$status" -eq 0 ]
 
 	command_line="$(<"$DOCKER_LOG")"
-	[[ "$command_line" == *"compose -f $HERMES_COMPOSE_FILE run --rm --no-deps -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp login gmail"* ]]
+	profile_home="$(cd -P "$HERMES_DATA_DIR/profiles/rick" && pwd)"
+	[[ "$command_line" == *"compose -f $HERMES_COMPOSE_FILE run --rm --no-deps --volume $profile_home/mcp-tokens:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp login gmail"* ]]
 	[[ "$command_line" != *"client-id-marker"* ]]
 	[[ "$command_line" != *"client-secret-marker"* ]]
 	[ "$(stat -f '%Lp' "$HERMES_DATA_DIR/profiles/rick/mcp-tokens/gmail.json" 2>/dev/null || stat -c '%a' "$HERMES_DATA_DIR/profiles/rick/mcp-tokens/gmail.json")" = 600 ]
@@ -94,5 +95,6 @@ EOF
 
 	run "$SUT" test rick
 	[ "$status" -eq 0 ]
-	[[ "$(<"$DOCKER_LOG")" == *"compose -f $HERMES_COMPOSE_FILE run --rm --no-deps -T -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail"* ]]
+	profile_home="$(cd -P "$HERMES_DATA_DIR/profiles/rick" && pwd)"
+	[[ "$(<"$DOCKER_LOG")" == *"compose -f $HERMES_COMPOSE_FILE run --rm --no-deps -T --volume $profile_home/mcp-tokens:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail"* ]]
 }

@@ -88,7 +88,7 @@ Describe 'Hermes Gmail command adapter' {
         $LASTEXITCODE | Should -Be 0
 
         $arguments = Get-Content -LiteralPath $script:dockerLog -Raw
-        $arguments | Should -Match ([regex]::Escape("compose -f $script:composeFile run --rm --no-deps -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp login gmail"))
+        $arguments | Should -Match ([regex]::Escape("compose -f $script:composeFile run --rm --no-deps --volume ${tokenDir}:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp login gmail"))
         $arguments | Should -Not -Match 'client-id-marker|client-secret-marker'
     }
 
@@ -149,5 +149,16 @@ Describe 'Hermes Gmail command adapter' {
         & $script:adapterPath -Action test -Profile rick
         $LASTEXITCODE | Should -Be 1
         Test-Path -LiteralPath $script:dockerLog | Should -BeFalse
+
+        $tokenDir = Join-Path $script:dataDir 'profiles/rick/mcp-tokens'
+        $null = New-Item -ItemType Directory -Path $tokenDir -Force
+        $tokenPath = Join-Path $tokenDir 'gmail.json'
+        Set-Content -LiteralPath $tokenPath -Value '{}' -NoNewline
+        if (-not $IsWindows) { & chmod 600 $tokenPath }
+
+        & $script:adapterPath -Action test -Profile rick
+        $LASTEXITCODE | Should -Be 0
+        $arguments = Get-Content -LiteralPath $script:dockerLog -Raw
+        $arguments | Should -Match ([regex]::Escape("compose -f $script:composeFile run --rm --no-deps -T --volume ${tokenDir}:/opt/data/profiles/rick/mcp-tokens:rw -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test gmail"))
     }
 }

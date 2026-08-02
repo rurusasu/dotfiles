@@ -220,8 +220,10 @@ try {
     if ($Action -eq 'test') {
         $dockerArguments += '-T'
     }
+    $tokenCacheVolume = "$($tokenCacheContext.Parent):$($context.ContainerHome)/mcp-tokens:rw"
     $hermesAction = if ($Action -eq 'auth') { 'login' } else { 'test' }
     $dockerArguments += @(
+        '--volume', $tokenCacheVolume,
         '-e', "HERMES_HOME=$($context.ContainerHome)",
         'hermes', 'hermes', 'mcp', $hermesAction, 'gmail'
     )

@@ -46,6 +46,7 @@ validate_token_cache_parent() {
   expected_parent="$host_profile_home/mcp-tokens"
   [[ $cache_parent == "$expected_parent" && $cache_parent == "$host_profile_home"/* ]] ||
     die "Gmail token cache parent is invalid for profile: $profile"
+  validated_token_cache_parent="$cache_parent"
   token_cache="$cache_parent/gmail.json"
 }
 
@@ -74,6 +75,7 @@ case "$action" in
 auth)
   validate_token_cache_parent
   docker compose -f "$compose_file" run --rm --no-deps \
+    --volume "$validated_token_cache_parent:$container_profile_home/mcp-tokens:rw" \
     -e "HERMES_HOME=$container_profile_home" \
     hermes hermes mcp login gmail
   require_private_token_cache
@@ -81,6 +83,7 @@ auth)
 test)
   require_private_token_cache
   docker compose -f "$compose_file" run --rm --no-deps -T \
+    --volume "$validated_token_cache_parent:$container_profile_home/mcp-tokens:rw" \
     -e "HERMES_HOME=$container_profile_home" \
     hermes hermes mcp test gmail
   ;;
