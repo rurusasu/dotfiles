@@ -31,7 +31,7 @@ EOF
 	run "$SUT" auth
 	[ "$status" -eq 0 ]
 	[[ "$(<"$COMMAND_LOG")" == *"npx --yes @artymclabin/gmail-mcp@1.2.3 auth --scopes=gmail.readonly,gmail.compose"* ]]
-	[ "$(stat -f '%Lp' "$HERMES_DATA_DIR/google-gmail-mcp/credentials.json" 2>/dev/null || stat -c '%a' "$HERMES_DATA_DIR/google-gmail-mcp/credentials.json")" = 600 ]
+	[ "$(stat -c '%a' "$HERMES_DATA_DIR/google-gmail-mcp/credentials.json" 2>/dev/null || stat -f '%Lp' "$HERMES_DATA_DIR/google-gmail-mcp/credentials.json")" = 600 ]
 }
 
 @test "auth rejects profile-specific invocation" {

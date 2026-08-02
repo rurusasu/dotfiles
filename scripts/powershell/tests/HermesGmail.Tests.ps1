@@ -58,7 +58,7 @@ Describe 'Hermes Gmail shared command adapter' {
         Remove-Item -LiteralPath (Join-Path $script:gmailDir 'credentials.json') -Force -ErrorAction SilentlyContinue
     }
 
-    It 'runs one shared host OAuth flow' -Skip:$script:runningOnWindows {
+    It 'runs one shared host OAuth flow' -Skip:([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
         & $script:adapterPath -Action auth
         $LASTEXITCODE | Should -Be 0
         (Get-Content -LiteralPath $script:commandLog -Raw) | Should -Match 'npx --yes @artymclabin/gmail-mcp@1.2.3 auth --scopes=gmail.readonly,gmail.compose'
@@ -70,7 +70,7 @@ Describe 'Hermes Gmail shared command adapter' {
         Test-Path -LiteralPath $script:commandLog | Should -BeFalse
     }
 
-    It 'uses shared credentials to test a selected profile' -Skip:$script:runningOnWindows {
+    It 'uses shared credentials to test a selected profile' -Skip:([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
         $credentials = Join-Path $script:gmailDir 'credentials.json'
         Set-Content -LiteralPath $credentials -Value '{}' -NoNewline
         & chmod 600 $credentials

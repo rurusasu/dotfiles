@@ -79,8 +79,8 @@ function Test-HermesGmailPrivateFile {
         }
         return $true
     }
-    $mode = & stat -f '%Lp' $Path 2>$null
-    if ($LASTEXITCODE -ne 0) { $mode = & stat -c '%a' $Path 2>$null }
+    $mode = & stat -c '%a' $Path 2>$null
+    if ($LASTEXITCODE -ne 0) { $mode = & stat -f '%Lp' $Path 2>$null }
     return $LASTEXITCODE -eq 0 -and $mode -eq '600'
 }
 
