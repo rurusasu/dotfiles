@@ -254,6 +254,37 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 xapi-mcp
 
+  hermes:gmail:auth:
+    desc: Authenticate Gmail MCP for one Hermes profile
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+      - sh: test -n "{{.PROFILE}}"
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh auth "{{.PROFILE}}"
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action auth -Profile "{{.PROFILE}}" -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
+
+  hermes:gmail:test:
+    desc: Test Gmail MCP for one authenticated Hermes profile
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+      - sh: test -n "{{.PROFILE}}"
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh test "{{.PROFILE}}"
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action test -Profile "{{.PROFILE}}" -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
+
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
     preconditions:
