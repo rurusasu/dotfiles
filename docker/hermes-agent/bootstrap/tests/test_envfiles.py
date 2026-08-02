@@ -32,6 +32,7 @@ from hermes_bootstrap.envfiles import (
     DASHBOARD_KEYS,
     GITHUB_KEYS,
     DISCORD_KEYS,
+    GMAIL_MCP_KEYS,
     build_dashboard_environment,
     build_profile_environment,
     merge_env_file,
@@ -120,9 +121,13 @@ class EnvFileTests(unittest.TestCase):
             DISCORD_KEYS,
             frozenset({"DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"}),
         )
+        self.assertEqual(
+            GMAIL_MCP_KEYS,
+            frozenset({"GMAIL_MCP_CLIENT_ID", "GMAIL_MCP_CLIENT_SECRET"}),
+        )
         self.assertEqual(API_SERVER_KEYS, frozenset({"API_SERVER_KEY"}))
 
-    def test_profile_environment_uses_discord_credentials_only(self) -> None:
+    def test_profile_environment_includes_private_gmail_oauth_client_values(self) -> None:
         environment = build_profile_environment(
             "rick",
             secret_bundle(),
@@ -136,6 +141,13 @@ class EnvFileTests(unittest.TestCase):
 
         self.assertEqual(environment["DISCORD_BOT_TOKEN"], "rick-bot")
         self.assertEqual(environment["DISCORD_ALLOWED_USERS"], "rick-users")
+        self.assertEqual(environment["GMAIL_MCP_CLIENT_ID"], "id")
+        self.assertEqual(environment["GMAIL_MCP_CLIENT_SECRET"], "secret")
+        self.assertIsInstance(environment, MappingProxyType)
+        self.assertNotIn("id", repr(environment))
+        self.assertNotIn("secret", repr(environment))
+        with self.assertRaises(TypeError):
+            environment["GMAIL_MCP_CLIENT_ID"] = "changed"
         self.assertNotIn("SLACK_BOT_TOKEN", environment)
         self.assertNotIn("SLACK_APP_TOKEN", environment)
 
