@@ -28,6 +28,7 @@ from .envfiles import (
     DASHBOARD_KEYS,
     GITHUB_KEYS,
     DISCORD_KEYS,
+    GMAIL_MCP_KEYS,
     LEGACY_SLACK_KEYS,
     build_dashboard_environment,
     build_profile_environment,
@@ -54,6 +55,10 @@ from .google_calendar import (
     install_google_calendar_credentials,
     validate_google_calendar_installation,
 )
+from .google_gmail import (
+    install_google_gmail_configurations,
+    validate_google_gmail_installation,
+)
 from .configfiles import reconcile_onepassword_configurations
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
@@ -78,7 +83,9 @@ from .transaction import Transaction
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _DISCORD_BOT_TOKEN = re.compile(r"[A-Za-z0-9_\-.]{20,}\Z")
-_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS
+_MANAGED_ENV_KEYS = (
+    GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS | GMAIL_MCP_KEYS
+)
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
 
@@ -269,6 +276,10 @@ def _apply_sensitive(
             _failpoint(f"shared-apply:{repo.name}")
 
         install_google_calendar_configurations(
+            [target for _profile, target in _environment_targets(manifest)],
+            tx,
+        )
+        install_google_gmail_configurations(
             [target for _profile, target in _environment_targets(manifest)],
             tx,
         )
@@ -605,6 +616,10 @@ def _validate_installed_layout(
         _validate_profiles(manifest)
         _validate_repositories(manifest)
         validate_google_calendar_installation(
+            manifest.data_root,
+            [target for _profile, target in _environment_targets(manifest)],
+        )
+        validate_google_gmail_installation(
             manifest.data_root,
             [target for _profile, target in _environment_targets(manifest)],
         )

@@ -130,6 +130,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_calendar_configurations = calendar_config_patcher.start()
         self.addCleanup(calendar_config_patcher.stop)
+        gmail_config_patcher = mock.patch.object(
+            app,
+            "install_google_gmail_configurations",
+            create=True,
+        )
+        self.install_google_gmail_configurations = gmail_config_patcher.start()
+        self.addCleanup(gmail_config_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -202,6 +209,24 @@ class AppTests(unittest.TestCase):
             "    env:\n"
             "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
             "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
+            "  gmail:\n"
+            "    url: https://gmailmcp.googleapis.com/mcp/v1\n"
+            "    auth: oauth\n"
+            "    connect_timeout: 315\n"
+            "    oauth:\n"
+            "      client_id: ${GMAIL_MCP_CLIENT_ID}\n"
+            "      client_secret: ${GMAIL_MCP_CLIENT_SECRET}\n"
+            "      scope: https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose\n"
+            "    tools:\n"
+            "      include:\n"
+            "        - search_threads\n"
+            "        - get_thread\n"
+            "        - get_message\n"
+            "        - list_labels\n"
+            "        - list_drafts\n"
+            "        - create_draft\n"
+            "      resources: false\n"
+            "      prompts: false\n"
         )
         for config in (self.root / "config.yaml", target / "config.yaml"):
             config.write_text(calendar_config, encoding="utf-8")
@@ -628,6 +653,20 @@ class AppTests(unittest.TestCase):
         self.revalidate_profile_snapshots.side_effect = (
             lambda _manifest, _baseline, _scratch: events.append("revalidate")
         )
+        self.install_google_calendar_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "calendar-config:"
+                + ",".join(target.name for target in targets)
+                + f":{transaction is tx}"
+            )
+        )
+        self.install_google_gmail_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "gmail-config:"
+                + ",".join(target.name for target in targets)
+                + f":{transaction is tx}"
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -685,6 +724,8 @@ class AppTests(unittest.TestCase):
                 "profile:risarisa",
                 "profile:nancy",
                 "shared:lifelog",
+                "calendar-config:data,rick,hoffman,risarisa,nancy:True",
+                "gmail-config:data,rick,hoffman,risarisa,nancy:True",
                 "env:data",
                 "env:rick",
                 "env:hoffman",
