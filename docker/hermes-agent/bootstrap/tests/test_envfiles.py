@@ -144,6 +144,16 @@ class EnvFileTests(unittest.TestCase):
         self.assertEqual(environment["GMAIL_MCP_CLIENT_ID"], "id")
         self.assertEqual(environment["GMAIL_MCP_CLIENT_SECRET"], "secret")
         self.assertIsInstance(environment, MappingProxyType)
+        self.assertIsInstance(
+            environment["GMAIL_MCP_CLIENT_ID"],
+            envfiles_module._SecretEnvironmentValue,
+        )
+        self.assertIsInstance(
+            environment["GMAIL_MCP_CLIENT_SECRET"],
+            envfiles_module._SecretEnvironmentValue,
+        )
+        self.assertEqual(repr(environment["GMAIL_MCP_CLIENT_ID"]), "'[REDACTED]'")
+        self.assertEqual(repr(environment["GMAIL_MCP_CLIENT_SECRET"]), "'[REDACTED]'")
         self.assertNotIn("id", repr(environment))
         self.assertNotIn("secret", repr(environment))
         with self.assertRaises(TypeError):

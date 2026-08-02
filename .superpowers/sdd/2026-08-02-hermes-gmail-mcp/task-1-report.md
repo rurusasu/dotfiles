@@ -79,3 +79,55 @@ No production code was added or modified.
 - The direct host focused command remains blocked by missing host Python
   dependencies; the dependency-complete runtime execution provides the
   authoritative RED result.
+
+## Fix round 1
+
+### Review findings addressed
+
+- `test_validation_rejects_a_missing_or_altered_gmail_entry` now has separate
+  `missing` and `altered` subcases. The altered case changes the Gmail MCP URL
+  to a non-contract path and asserts `ValidationError`.
+- The OAuth environment assertions now verify the existing implementation
+  contract directly: both values are present under the expected keys, each is
+  an `_SecretEnvironmentValue`, each individual value renders as
+  `'[REDACTED]'`, the full mapping representation omits both plaintext values,
+  and the `MappingProxyType` remains immutable.
+- The grep brittleness observation remains a minor ledger item; no unrelated
+  source-path or production change was needed for this fix.
+
+### Changed files
+
+- `docker/hermes-agent/bootstrap/tests/test_google_gmail.py`
+- `docker/hermes-agent/bootstrap/tests/test_envfiles.py`
+- `.superpowers/sdd/2026-08-02-hermes-gmail-mcp/task-1-report.md`
+
+### Verification commands and results
+
+```text
+git diff --check
+```
+
+Passed.
+
+```text
+bats tests/bash/hermes_gmail_mcp.bats
+```
+
+Failed as expected: 2/2 tests remain RED because the Gmail source module is
+not implemented yet.
+
+```text
+docker run --rm -v "$PWD:/workspace" -w /workspace \
+  local/hermes-bootstrap-runtime-current \
+  /opt/hermes/.venv/bin/python -m unittest \
+  docker.hermes-agent.bootstrap.tests.test_google_gmail \
+  docker.hermes-agent.bootstrap.tests.test_envfiles -v
+```
+
+Failed as expected during import, with 2 errors and 0 tests run:
+
+- `ModuleNotFoundError: No module named 'hermes_bootstrap.google_gmail'`
+- `ImportError: cannot import name 'GMAIL_MCP_KEYS' from hermes_bootstrap.envfiles`
+
+The dependency-complete runtime was used because the host Python environment
+lacks `yaml` and `dotenv`. No production code was added or modified.

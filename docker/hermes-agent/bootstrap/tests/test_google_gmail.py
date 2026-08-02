@@ -105,16 +105,24 @@ class GoogleGmailConfigurationTests(unittest.TestCase):
         for target in targets:
             config_path = target / "config.yaml"
             original = config_path.read_text(encoding="utf-8")
-            with self.subTest(target=target, case="missing"):
-                config = yaml.safe_load(original)
-                del config["mcp_servers"]["gmail"]
-                config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-                with self.assertRaisesRegex(
-                    ValidationError,
-                    "installed Google Gmail configuration is invalid",
-                ):
-                    validate_google_gmail_installation(self.root, targets)
-            config_path.write_text(original, encoding="utf-8")
+            for case in ("missing", "altered"):
+                with self.subTest(target=target, case=case):
+                    config = yaml.safe_load(original)
+                    if case == "missing":
+                        del config["mcp_servers"]["gmail"]
+                    else:
+                        config["mcp_servers"]["gmail"]["url"] = (
+                            "https://gmailmcp.googleapis.com/mcp/altered"
+                        )
+                    config_path.write_text(
+                        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+                    )
+                    with self.assertRaisesRegex(
+                        ValidationError,
+                        "installed Google Gmail configuration is invalid",
+                    ):
+                        validate_google_gmail_installation(self.root, targets)
+                    config_path.write_text(original, encoding="utf-8")
 
     def test_validation_rejects_missing_scope_and_forbidden_tool(self) -> None:
         targets = self.install_valid_layout()
