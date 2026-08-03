@@ -82,6 +82,7 @@ Describe '標準キーバインド方針' {
         $docs | Should -Match 'Command\+Shift\+D' -Because "macOS WezTerm should provide the second standard split shortcut"
         $docs | Should -Match 'Leader.*WezTerm' -Because "macOS WezTerm navigation should keep the leader"
         $docs | Should -Match 'Ctrl\+Space' -Because "macOS WezTerm leader should be Ctrl+Space"
+        $docs | Should -Match 'Ctrl\+Command\+矢印' -Because "macOS WezTerm resize should use a repeatable modifier chord"
         $docs | Should -Match 'Leader.*pane' -Because "macOS WezTerm leader should control panes"
         $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
@@ -123,10 +124,11 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "RightArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Right"\) \}'
         $content | Should -Match '\{ key = "DownArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Down"\) \}'
 
-        $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Left", 5 \}\) \}'
-        $content | Should -Match '\{ key = "UpArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
-        $content | Should -Match '\{ key = "RightArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
-        $content | Should -Match '\{ key = "DownArrow", mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
+        $content | Should -Match '\{ key = "LeftArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Left", 1 \}\) \}'
+        $content | Should -Match '\{ key = "UpArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Up", 1 \}\) \}'
+        $content | Should -Match '\{ key = "RightArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Right", 1 \}\) \}'
+        $content | Should -Match '\{ key = "DownArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Down", 1 \}\) \}'
+        $content | Should -Not -Match 'mods = "LEADER\|SHIFT", action = act\.AdjustPaneSize'
 
         $content | Should -Match '\{ key = "LeftArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Left", 5 \}\) \}'
         $content | Should -Match '\{ key = "UpArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Up", 5 \}\) \}'
