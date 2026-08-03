@@ -10,17 +10,18 @@
 
 ## 統一ルール
 
-| グループ                  | 役割                  | 例                                  |
-| ------------------------- | --------------------- | ----------------------------------- |
-| `Command` (WezTerm macOS) | GUI pane split        | `Command+D` / `Command+Shift+D`     |
-| `Leader` (WezTerm macOS)  | GUI pane/window 操作  | `Ctrl+Space` + key                  |
-| `Alt` (Windows GUI)       | GUI pane/window focus | `Alt+矢印`                          |
-| `Alt+Shift` (Windows GUI) | GUI pane split/resize | `Alt+Shift+=/-`、`Alt+Shift+矢印`   |
-| `Ctrl+Shift`              | GUI pane close        | `Ctrl+Shift+W`                      |
-| `Ctrl`                    | Unix/Vim/tmux focus   | `Ctrl+H/J/K/L`                      |
-| `Shift+Enter`             | 複数行入力            | AI CLI / terminal prompt 改行       |
-| `Space` (`Leader`)        | ツール機能呼び出し    | 検索、エクスプローラ、タブ操作      |
-| `Alt` (Shell)             | CLI 補助操作          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
+| グループ                       | 役割                  | 例                                  |
+| ------------------------------ | --------------------- | ----------------------------------- |
+| `Command` (WezTerm macOS)      | GUI pane split        | `Command+D` / `Command+Shift+D`     |
+| `Ctrl+Command` (WezTerm macOS) | GUI pane resize       | `Ctrl+Command+矢印`                 |
+| `Leader` (WezTerm macOS)       | GUI pane/window 操作  | `Ctrl+Space` + key                  |
+| `Alt` (Windows GUI)            | GUI pane/window focus | `Alt+矢印`                          |
+| `Alt+Shift` (Windows GUI)      | GUI pane split/resize | `Alt+Shift+=/-`、`Alt+Shift+矢印`   |
+| `Ctrl+Shift`                   | GUI pane close        | `Ctrl+Shift+W`                      |
+| `Ctrl`                         | Unix/Vim/tmux focus   | `Ctrl+H/J/K/L`                      |
+| `Shift+Enter`                  | 複数行入力            | AI CLI / terminal prompt 改行       |
+| `Space` (`Leader`)             | ツール機能呼び出し    | 検索、エクスプローラ、タブ操作      |
+| `Alt` (Shell)                  | CLI 補助操作          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
 
 ## 現在の適用状況
 
@@ -31,7 +32,7 @@
   - `Command+D`: 右分割
   - `Command+Shift+D`: 下分割
   - `Leader` (`Ctrl+Space`) + 矢印: ペイン移動
-  - `Leader` (`Ctrl+Space`) + `Shift+矢印`: ペイン resize
+  - `Ctrl+Command+矢印`: ペイン resize（1セル、連打・長押し対応）
   - `Ctrl+Shift+W`: ペイン close
   - `Leader` (`Ctrl+Space`) + `h/l`: WezTerm window focus
   - `Ctrl+Alt+W`: ペイン zoom
@@ -105,6 +106,6 @@
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
 - GUI アプリの pane split は、WezTerm macOSでは`Command+D` / `Command+Shift+D`、Windows Terminalでは`Alt+Shift`を優先する
-- WezTerm macOS の pane 移動・window focus は`Leader`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
+- WezTerm macOS の pane 移動・window focus は`Leader`、pane resize は`Ctrl+Command+矢印`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
 - tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない
