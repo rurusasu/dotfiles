@@ -188,10 +188,11 @@ if is_macos then
         { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
         { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
         { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
-        { key = "LeftArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
-        { key = "UpArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
-        { key = "RightArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
-        { key = "DownArrow", mods = "LEADER|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
+        -- iTerm2-style pane resize: hold Ctrl+Command and repeat Arrow
+        { key = "LeftArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Left", 1 }) },
+        { key = "UpArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Up", 1 }) },
+        { key = "RightArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Right", 1 }) },
+        { key = "DownArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Down", 1 }) },
     }
 else
     pane_control_bindings = {
