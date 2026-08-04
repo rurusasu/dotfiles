@@ -56,6 +56,12 @@ class ComposeContractTests(unittest.TestCase):
     def test_gateway_uses_the_canonical_shared_lifelog_path(self) -> None:
         self.assertEqual(self.hermes["environment"]["LIFELOG_ROOT"], "/opt/data/shared/lifelog")
 
+    def test_gateway_reconnects_on_the_first_failed_discord_liveness_sample(self) -> None:
+        self.assertEqual(
+            self.hermes["environment"]["HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD"],
+            "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}",
+        )
+
     def test_hermes_services_load_the_private_service_account_environment_file(self) -> None:
         expected = [
             {

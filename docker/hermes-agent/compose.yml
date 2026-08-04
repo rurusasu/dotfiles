@@ -33,6 +33,10 @@ services:
       API_SERVER_HOST: "0.0.0.0"
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
+      # Rebuild a Discord Gateway on the first failed WebSocket liveness
+      # sample. This prevents a closed secondary profile socket from staying
+      # live while silently dropping inbound mentions.
+      HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD: "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}"
       LIFELOG_ROOT: /opt/data/shared/lifelog
     networks:
       - hermes-browser
