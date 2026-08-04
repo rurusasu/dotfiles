@@ -85,9 +85,9 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bash, Bats, and GNU coreutils
+      - name: Install Bash, Bats, GNU coreutils, and Task
         run: |
-          brew install bash bats-core coreutils
+          brew install bash bats-core coreutils go-task
           {
             echo "$(brew --prefix bash)/bin"
             echo "$(brew --prefix coreutils)/libexec/gnubin"
