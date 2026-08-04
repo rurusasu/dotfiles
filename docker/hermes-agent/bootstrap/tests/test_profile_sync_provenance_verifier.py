@@ -99,6 +99,36 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
         )
         self.assertEqual(result.stderr, "")
 
+    def test_ignores_an_inherited_git_directory_from_a_parent_hook(self) -> None:
+        environment = os.environ.copy()
+        environment["GIT_DIR"] = str(self.dotfiles / ".git")
+
+        result = subprocess.run(
+            (
+                sys.executable,
+                str(VERIFIER),
+                "verify",
+                "--dotfiles-repository",
+                str(self.dotfiles),
+                "--source-repository",
+                str(self.source),
+            ),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "profile sync provenance verified\n",
+        )
+        self.assertEqual(result.stderr, "")
+
     def test_emits_only_the_validated_source_commit(self) -> None:
         result = self._run_verifier(
             "source-commit",

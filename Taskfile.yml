@@ -110,6 +110,11 @@ tasks:
   # Testing
   # ===========================================
   test:
+    desc: Run platform-appropriate tests
+    cmds:
+      - task: '{{if eq OS "windows"}}test:powershell{{else}}test:bash{{end}}'
+
+  test:powershell:
     desc: Run PowerShell tests
     cmds:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration"

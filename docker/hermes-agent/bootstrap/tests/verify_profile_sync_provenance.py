@@ -72,6 +72,7 @@ def _git(
     *arguments: str,
 ) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
+    environment.pop("GIT_DIR", None)
     environment.pop("GIT_INDEX_FILE", None)
     environment.update(
         {
