@@ -37,6 +37,8 @@ setup() {
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+	export DOTFILES_HOMEBREW_CASK_UPDATER="$STUB_BIN/update-homebrew-casks"
+	export HOMEBREW_CASK_UPDATE_STATUS=0
 
 	write_stub uname '
 case "${1:-}" in
@@ -68,6 +70,10 @@ printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 exec "$@"
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub update-homebrew-casks '
+printf "update-homebrew-casks %s\n" "$*" >>"$COMMAND_LOG"
+exit "$HOMEBREW_CASK_UPDATE_STATUS"
+'
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
@@ -195,6 +201,8 @@ assert_log_order() {
 	grep -q "^sudo /usr/bin/env .*DOTFILES_USER=test-user .* $STUB_BIN/nix run .#darwin-rebuild -- switch --flake .#macos --impure$" "$COMMAND_LOG"
 	assert_log_order \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"update-homebrew-casks " \
+		"docker info" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
@@ -210,6 +218,18 @@ assert_log_order() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "cask update failure stops macOS before Docker runtime and chezmoi" {
+	write_installed_stubs
+	export HOMEBREW_CASK_UPDATE_STATUS=47
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 47 ]
+	grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
+	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
 @test "Hermes bootstrap failure stops macOS before service recreation and acceptance" {

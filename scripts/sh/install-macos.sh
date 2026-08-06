@@ -14,6 +14,7 @@ DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
+HOMEBREW_CASK_UPDATER="${DOTFILES_HOMEBREW_CASK_UPDATER:-$ROOT/scripts/sh/update-homebrew-casks.sh}"
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
@@ -34,6 +35,7 @@ preflight() {
     "$ROOT/flake.nix" \
     "$ROOT/chezmoi" \
     "$COMPOSE_FILE" \
+    "$HOMEBREW_CASK_UPDATER" \
     "$VERIFY_ENVIRONMENT"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -148,6 +150,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   apply_darwin_system
+  "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime
   apply_chezmoi
   dotfiles_hermes_start_stack docker "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
