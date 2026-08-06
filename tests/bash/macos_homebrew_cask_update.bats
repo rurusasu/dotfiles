@@ -54,6 +54,7 @@ case "$command_name" in
     [[ ${BREW_KEEP_OUTDATED:-0} == 1 ]] || rm -f "$BREW_STATE/outdated-$safe_cask"
     ;;
   info)
+    [[ ${BREW_INFO_FAIL:-0} != 1 ]] || exit 66
     cask="${2:-}"
     if [[ $cask == claude ]]; then
       printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.anthropic.claudefordesktop"]}]},{"app":["Claude.app"],"target":"/Applications/Claude.app"}]}]}'
@@ -145,6 +146,12 @@ mark_outdated() {
 
   [ "$status" -eq 0 ]
   grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
+  pgrep_line="$(grep -n -m1 '^pgrep ' "$COMMAND_LOG" | cut -d: -f1)"
+  fetch_line="$(grep -n -m1 '^brew fetch ' "$COMMAND_LOG" | cut -d: -f1)"
+  upgrade_line="$(grep -n -m1 '^brew upgrade ' "$COMMAND_LOG" | cut -d: -f1)"
+  open_line="$(grep -n -m1 '^open ' "$COMMAND_LOG" | cut -d: -f1)"
+  [ "$pgrep_line" -lt "$fetch_line" ]
+  [ "$upgrade_line" -lt "$open_line" ]
 }
 
 @test "reopens a running application after upgrade retries are exhausted" {
@@ -166,6 +173,34 @@ mark_outdated() {
 
   [ "$status" -eq 0 ]
   run ! grep -q '^open ' "$COMMAND_LOG"
+}
+
+@test "fails without upgrading when brew info cannot describe app artifacts" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_INFO_FAIL=1 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+}
+
+@test "fails without upgrading when jq cannot parse app artifacts" {
+  install_cask claude
+  mark_outdated claude
+  jq_failure="$TEST_BIN/jq-failure"
+  cat >"$jq_failure" <<'EOF'
+#!/usr/bin/env bash
+exit 67
+EOF
+  chmod +x "$jq_failure"
+
+  run env DOTFILES_HOMEBREW_CASKS=claude JQ_COMMAND="$jq_failure" "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
 }
 
 @test "fails when a successful upgrade leaves a cask outdated" {

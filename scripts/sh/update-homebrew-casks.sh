@@ -92,20 +92,28 @@ retry_command() {
 }
 
 record_running_apps() {
-  local cask="$1" app_path
+  local cask="$1" app_path status app_file
+  app_file="$temporary_directory/app-paths"
+  if "$BREW_COMMAND" info --cask "$cask" --json=v2 |
+    "$JQ_COMMAND" -r '
+      .casks[0].artifacts[]?
+      | select(has("app"))
+      | if has("target") then .target else .app[] | "/Applications/" + . end
+    ' >"$app_file"; then
+    :
+  else
+    status=$?
+    printf '[macos-cask-update] failed to inspect application artifacts for %s (status %d)\n' \
+      "$cask" "$status" >&2
+    return "$status"
+  fi
+
   while IFS= read -r app_path || [[ -n $app_path ]]; do
     [[ -n $app_path ]] || continue
     if "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
       grep -Fxq "$app_path" "$restart_file" || printf '%s\n' "$app_path" >>"$restart_file"
     fi
-  done < <(
-    "$BREW_COMMAND" info --cask "$cask" --json=v2 |
-      "$JQ_COMMAND" -r '
-        .casks[0].artifacts[]?
-        | select(has("app"))
-        | if has("target") then .target else .app[] | "/Applications/" + . end
-      '
-  )
+  done <"$app_file"
 }
 
 reopen_apps() {
@@ -136,7 +144,10 @@ while IFS= read -r cask || [[ -n $cask ]]; do
     continue
   fi
   [[ -n $OUTDATED_OUTPUT ]] || continue
-  record_running_apps "$cask"
+  if ! record_running_apps "$cask"; then
+    printf '%s\n' "$cask" >>"$failure_file"
+    continue
+  fi
   if ! retry_command "fetch $cask" "$BREW_COMMAND" fetch --cask "$cask"; then
     printf '%s\n' "$cask" >>"$failure_file"
     continue
