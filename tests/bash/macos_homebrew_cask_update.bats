@@ -38,6 +38,7 @@ case "$command_name" in
     [[ -f "$BREW_STATE/installed-$safe_cask" ]]
     ;;
   outdated)
+    [[ ${BREW_OUTDATED_FAIL:-0} != 1 ]] || exit 65
     [[ ! -f "$BREW_STATE/outdated-$safe_cask" ]] || printf '%s\n' "$cask"
     ;;
   fetch)
@@ -83,7 +84,9 @@ mark_outdated() {
 @test "updates only declared casks that are outdated under greedy semantics" {
   install_cask claude
   install_cask google-chrome
+  install_cask undeclared-cask
   mark_outdated claude
+  mark_outdated undeclared-cask
 
   run env DOTFILES_HOMEBREW_CASKS=$'claude\ngoogle-chrome' "$UPDATER"
 
@@ -92,6 +95,8 @@ mark_outdated() {
   grep -q '^brew upgrade --cask --greedy claude$' "$COMMAND_LOG"
   ! grep -q '^brew fetch --cask google-chrome$' "$COMMAND_LOG"
   ! grep -q '^brew upgrade --cask --greedy google-chrome$' "$COMMAND_LOG"
+  [ "$(grep '^brew outdated ' "$COMMAND_LOG")" = $'brew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome\nbrew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome' ]
+  ! grep -q '^brew .* undeclared-cask$' "$COMMAND_LOG"
 }
 
 @test "retries a failed fetch twice before the third attempt succeeds" {
@@ -137,5 +142,39 @@ EOF
   run env -u DOTFILES_HOMEBREW_CASKS "$UPDATER"
 
   [ "$status" -ne 0 ]
+  ! grep -q '^brew ' "$COMMAND_LOG"
+}
+
+@test "fails when brew cannot determine whether a declared cask is outdated" {
+  install_cask claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_FAIL=1 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to check outdated status for claude (status 65)"* ]]
+  ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+}
+
+@test "rejects more than three update attempts before invoking brew" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude \
+    DOTFILES_CASK_UPDATE_ATTEMPTS=4 BREW_UPGRADE_SUCCEED_ON=4 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"DOTFILES_CASK_UPDATE_ATTEMPTS must be an integer between 1 and 3: 4"* ]]
+  ! grep -q '^brew ' "$COMMAND_LOG"
+}
+
+@test "rejects a backoff other than two seconds before invoking brew" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude DOTFILES_CASK_UPDATE_BACKOFF_SECONDS=3 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"DOTFILES_CASK_UPDATE_BACKOFF_SECONDS must be 2: 3"* ]]
   ! grep -q '^brew ' "$COMMAND_LOG"
 }

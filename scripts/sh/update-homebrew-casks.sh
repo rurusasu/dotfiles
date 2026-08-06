@@ -9,6 +9,21 @@ ATTEMPTS="${DOTFILES_CASK_UPDATE_ATTEMPTS:-3}"
 BACKOFF_SECONDS="${DOTFILES_CASK_UPDATE_BACKOFF_SECONDS:-2}"
 export HOMEBREW_NO_AUTO_UPDATE=1
 
+case "$ATTEMPTS" in
+1 | 2 | 3) ;;
+*)
+  printf '[macos-cask-update] DOTFILES_CASK_UPDATE_ATTEMPTS must be an integer between 1 and 3: %s\n' \
+    "$ATTEMPTS" >&2
+  exit 2
+  ;;
+esac
+
+if [[ $BACKOFF_SECONDS != 2 ]]; then
+  printf '[macos-cask-update] DOTFILES_CASK_UPDATE_BACKOFF_SECONDS must be 2: %s\n' \
+    "$BACKOFF_SECONDS" >&2
+  exit 2
+fi
+
 temporary_directory="$(mktemp -d)"
 cask_file="$temporary_directory/casks"
 failure_file="$temporary_directory/failures"
@@ -34,8 +49,18 @@ is_installed() {
   "$BREW_COMMAND" list --cask --versions "$1" >/dev/null 2>&1
 }
 
-is_outdated() {
-  [[ -n $("$BREW_COMMAND" outdated --cask --greedy "$1") ]]
+OUTDATED_OUTPUT=""
+OUTDATED_STATUS=0
+
+check_outdated() {
+  local cask="$1"
+  if OUTDATED_OUTPUT=$("$BREW_COMMAND" outdated --cask --greedy "$cask"); then
+    OUTDATED_STATUS=0
+  else
+    OUTDATED_STATUS=$?
+    printf '[macos-cask-update] failed to check outdated status for %s (status %d)\n' \
+      "$cask" "$OUTDATED_STATUS" >&2
+  fi
 }
 
 retry_command() {
@@ -70,7 +95,12 @@ while IFS= read -r cask || [[ -n $cask ]]; do
     printf '%s\n' "$cask" >>"$failure_file"
     continue
   fi
-  is_outdated "$cask" || continue
+  check_outdated "$cask"
+  if ((OUTDATED_STATUS != 0)); then
+    printf '%s\n' "$cask" >>"$failure_file"
+    continue
+  fi
+  [[ -n $OUTDATED_OUTPUT ]] || continue
   if ! retry_command "fetch $cask" "$BREW_COMMAND" fetch --cask "$cask"; then
     printf '%s\n' "$cask" >>"$failure_file"
     continue
@@ -82,7 +112,13 @@ done <"$cask_file"
 
 while IFS= read -r cask || [[ -n $cask ]]; do
   [[ -n $cask ]] || continue
-  if ! is_installed "$cask" || is_outdated "$cask"; then
+  if is_installed "$cask"; then
+    check_outdated "$cask"
+  else
+    OUTDATED_STATUS=0
+    OUTDATED_OUTPUT="$cask"
+  fi
+  if ((OUTDATED_STATUS != 0)) || [[ -n $OUTDATED_OUTPUT ]]; then
     printf '[macos-cask-update] cask did not converge: %s\n' "$cask" >&2
     grep -Fxq "$cask" "$failure_file" || printf '%s\n' "$cask" >>"$failure_file"
   fi
