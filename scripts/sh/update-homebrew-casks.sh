@@ -62,14 +62,27 @@ OUTDATED_OUTPUT=""
 OUTDATED_STATUS=0
 
 check_outdated() {
-  local cask="$1"
+  local cask="$1" command_status
+  OUTDATED_OUTPUT=""
+  OUTDATED_STATUS=0
+
   if OUTDATED_OUTPUT=$("$BREW_COMMAND" outdated --cask --greedy "$cask"); then
-    OUTDATED_STATUS=0
+    command_status=0
   else
-    OUTDATED_STATUS=$?
-    printf '[macos-cask-update] failed to check outdated status for %s (status %d)\n' \
-      "$cask" "$OUTDATED_STATUS" >&2
+    command_status=$?
   fi
+
+  if ((command_status == 0)) && [[ -z $OUTDATED_OUTPUT ]]; then
+    return
+  fi
+  if ((command_status <= 1)) && [[ $OUTDATED_OUTPUT == "$cask" ]]; then
+    return
+  fi
+
+  OUTDATED_STATUS=$command_status
+  ((OUTDATED_STATUS != 0)) || OUTDATED_STATUS=1
+  printf '[macos-cask-update] failed to check outdated status for %s (status %d)\n' \
+    "$cask" "$command_status" >&2
 }
 
 retry_command() {
