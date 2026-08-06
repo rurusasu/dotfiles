@@ -29,7 +29,8 @@ command_name="${1:-}"
 shift || true
 cask=""
 for argument in "$@"; do cask="$argument"; done
-safe_cask="${cask//\//_}"
+cask_token="${cask##*/}"
+safe_cask="${cask_token//\//_}"
 counter_file="$BREW_STATE/${command_name}-${safe_cask}.count"
 count=0
 [[ ! -f $counter_file ]] || count="$(cat "$counter_file")"
@@ -42,7 +43,11 @@ case "$command_name" in
     ;;
   outdated)
     [[ ${BREW_OUTDATED_FAIL:-0} != 1 ]] || exit 65
-    [[ ! -f "$BREW_STATE/outdated-$safe_cask" ]] || printf '%s\n' "$cask"
+    [[ ${BREW_OUTDATED_EMPTY_STATUS_ONE:-0} != 1 ]] || exit 1
+    if [[ -f "$BREW_STATE/outdated-$safe_cask" ]]; then
+      printf '%s\n' "${BREW_OUTDATED_OUTPUT_OVERRIDE:-$cask_token}"
+      exit "${BREW_OUTDATED_EXIT_STATUS:-1}"
+    fi
     ;;
   fetch)
     succeed_on="${BREW_FETCH_SUCCEED_ON:-1}"
@@ -113,6 +118,28 @@ mark_outdated() {
   run ! grep -q '^brew upgrade --cask --greedy google-chrome$' "$COMMAND_LOG"
   [ "$(grep '^brew outdated ' "$COMMAND_LOG")" = $'brew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome\nbrew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome' ]
   run ! grep -q '^brew .* undeclared-cask$' "$COMMAND_LOG"
+}
+
+@test "updates a tap-qualified cask using its short installed token" {
+  install_cask orca
+  mark_outdated orca
+  run env DOTFILES_HOMEBREW_CASKS=stablyai/orca/orca "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^brew list --cask --versions orca$' "$COMMAND_LOG"
+  grep -q '^brew outdated --cask --greedy stablyai/orca/orca$' "$COMMAND_LOG"
+  grep -q '^brew info --cask stablyai/orca/orca --json=v2$' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask stablyai/orca/orca$' "$COMMAND_LOG"
+  grep -q '^brew upgrade --cask --greedy stablyai/orca/orca$' "$COMMAND_LOG"
+}
+
+@test "rejects a declared cask without a short token" {
+  run env DOTFILES_HOMEBREW_CASKS=stablyai/orca/ "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"declared cask is not installed: stablyai/orca/"* ]]
+  run ! grep -q '^brew list ' "$COMMAND_LOG"
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
 }
 
 @test "retries a failed fetch twice before the third attempt succeeds" {
@@ -231,6 +258,52 @@ EOF
 
   run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_FAIL=1 "$UPDATER"
 
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to check outdated status for claude (status 65)"* ]]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+}
+
+@test "accepts exit status zero with a matching outdated token for compatibility" {
+  install_cask claude
+  mark_outdated claude
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_EXIT_STATUS=0 "$UPDATER"
+  [ "$status" -eq 0 ]
+  grep -q '^brew upgrade --cask --greedy claude$' "$COMMAND_LOG"
+}
+
+@test "rejects exit status one without an outdated token" {
+  install_cask claude
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_EMPTY_STATUS_ONE=1 "$UPDATER"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to check outdated status for claude (status 1)"* ]]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+}
+
+@test "rejects exit status one with an unexpected outdated token" {
+  install_cask claude
+  mark_outdated claude
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_OUTPUT_OVERRIDE=other-cask "$UPDATER"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to check outdated status for claude (status 1)"* ]]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+}
+
+@test "rejects exit status zero with an unexpected outdated token" {
+  install_cask claude
+  mark_outdated claude
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_EXIT_STATUS=0 \
+    BREW_OUTDATED_OUTPUT_OVERRIDE=other-cask "$UPDATER"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to check outdated status for claude (status 0)"* ]]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+}
+
+@test "rejects exit status greater than one with a matching outdated token" {
+  install_cask claude
+  mark_outdated claude
+  run env DOTFILES_HOMEBREW_CASKS=claude BREW_OUTDATED_EXIT_STATUS=65 "$UPDATER"
   [ "$status" -ne 0 ]
   [[ "$output" == *"failed to check outdated status for claude (status 65)"* ]]
   run ! grep -q '^brew fetch ' "$COMMAND_LOG"

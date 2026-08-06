@@ -54,22 +54,42 @@ load_casks() {
     --apply 'casks: builtins.concatStringsSep "\n" (builtins.map (cask: if builtins.isString cask then cask else cask.name) casks)'
 }
 
+cask_token() {
+  printf '%s\n' "${1##*/}"
+}
+
 is_installed() {
-  "$BREW_COMMAND" list --cask --versions "$1" >/dev/null 2>&1
+  local token
+  token="$(cask_token "$1")"
+  [[ -n $token ]] && "$BREW_COMMAND" list --cask --versions "$token" >/dev/null 2>&1
 }
 
 OUTDATED_OUTPUT=""
 OUTDATED_STATUS=0
 
 check_outdated() {
-  local cask="$1"
+  local cask="$1" token command_status
+  token="$(cask_token "$cask")"
+  OUTDATED_OUTPUT=""
+  OUTDATED_STATUS=0
+
   if OUTDATED_OUTPUT=$("$BREW_COMMAND" outdated --cask --greedy "$cask"); then
-    OUTDATED_STATUS=0
+    command_status=0
   else
-    OUTDATED_STATUS=$?
-    printf '[macos-cask-update] failed to check outdated status for %s (status %d)\n' \
-      "$cask" "$OUTDATED_STATUS" >&2
+    command_status=$?
   fi
+
+  if ((command_status == 0)) && [[ -z $OUTDATED_OUTPUT ]]; then
+    return
+  fi
+  if ((command_status <= 1)) && [[ -n $token && $OUTDATED_OUTPUT == "$token" ]]; then
+    return
+  fi
+
+  OUTDATED_STATUS=$command_status
+  ((OUTDATED_STATUS != 0)) || OUTDATED_STATUS=1
+  printf '[macos-cask-update] failed to check outdated status for %s (status %d)\n' \
+    "$cask" "$command_status" >&2
 }
 
 retry_command() {
