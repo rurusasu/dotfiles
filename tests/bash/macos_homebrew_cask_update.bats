@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   UPDATER="$REPO_ROOT/scripts/sh/update-homebrew-casks.sh"
@@ -13,7 +15,8 @@ setup() {
   export BREW_COMMAND="$TEST_BIN/brew"
   export NIX_COMMAND="$TEST_BIN/nix"
   export SLEEP_COMMAND="$TEST_BIN/sleep"
-  export JQ_COMMAND="$(command -v jq)"
+  JQ_COMMAND="$(command -v jq)"
+  export JQ_COMMAND
   export PGREP_COMMAND="$TEST_BIN/pgrep"
   export OPEN_COMMAND="$TEST_BIN/open"
   export DOTFILES_CASK_UPDATE_BACKOFF_SECONDS=2
@@ -51,7 +54,12 @@ case "$command_name" in
     [[ ${BREW_KEEP_OUTDATED:-0} == 1 ]] || rm -f "$BREW_STATE/outdated-$safe_cask"
     ;;
   info)
-    printf '%s\n' '{"casks":[{"artifacts":[]}]}'
+    cask="${2:-}"
+    if [[ $cask == claude ]]; then
+      printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.anthropic.claudefordesktop"]}]},{"app":["Claude.app"],"target":"/Applications/Claude.app"}]}]}'
+    else
+      printf '%s\n' '{"casks":[{"artifacts":[]}]}'
+    fi
     ;;
   *) exit 64 ;;
 esac
@@ -66,8 +74,15 @@ EOF
 #!/usr/bin/env bash
 printf 'sleep %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-  printf '#!/usr/bin/env bash\nexit 1\n' >"$PGREP_COMMAND"
-  printf '#!/usr/bin/env bash\nprintf "open %%s\\n" "$*" >>"$COMMAND_LOG"\n' >"$OPEN_COMMAND"
+  cat >"$PGREP_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+printf 'pgrep %s\n' "$*" >>"$COMMAND_LOG"
+[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]]
+EOF
+  cat >"$OPEN_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+printf 'open %s\n' "$*" >>"$COMMAND_LOG"
+EOF
   chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$OPEN_COMMAND"
 }
 
@@ -93,10 +108,10 @@ mark_outdated() {
   [ "$status" -eq 0 ]
   grep -q '^brew fetch --cask claude$' "$COMMAND_LOG"
   grep -q '^brew upgrade --cask --greedy claude$' "$COMMAND_LOG"
-  ! grep -q '^brew fetch --cask google-chrome$' "$COMMAND_LOG"
-  ! grep -q '^brew upgrade --cask --greedy google-chrome$' "$COMMAND_LOG"
+  run ! grep -q '^brew fetch --cask google-chrome$' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade --cask --greedy google-chrome$' "$COMMAND_LOG"
   [ "$(grep '^brew outdated ' "$COMMAND_LOG")" = $'brew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome\nbrew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome' ]
-  ! grep -q '^brew .* undeclared-cask$' "$COMMAND_LOG"
+  run ! grep -q '^brew .* undeclared-cask$' "$COMMAND_LOG"
 }
 
 @test "retries a failed fetch twice before the third attempt succeeds" {
@@ -122,6 +137,37 @@ mark_outdated() {
   [[ "$output" == *"upgrade claude failed after 3 attempts"* ]]
 }
 
+@test "reopens an application that was running before a successful upgrade" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
+}
+
+@test "reopens a running application after upgrade retries are exhausted" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app \
+    BREW_UPGRADE_SUCCEED_ON=4 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
+}
+
+@test "does not open an application that was not running" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  run ! grep -q '^open ' "$COMMAND_LOG"
+}
+
 @test "fails when a successful upgrade leaves a cask outdated" {
   install_cask visual-studio-code
   mark_outdated visual-studio-code
@@ -142,7 +188,7 @@ EOF
   run env -u DOTFILES_HOMEBREW_CASKS "$UPDATER"
 
   [ "$status" -ne 0 ]
-  ! grep -q '^brew ' "$COMMAND_LOG"
+  run ! grep -q '^brew ' "$COMMAND_LOG"
 }
 
 @test "fails when brew cannot determine whether a declared cask is outdated" {
@@ -152,8 +198,8 @@ EOF
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"failed to check outdated status for claude (status 65)"* ]]
-  ! grep -q '^brew fetch ' "$COMMAND_LOG"
-  ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
 }
 
 @test "rejects more than three update attempts before invoking brew" {
@@ -165,7 +211,7 @@ EOF
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"DOTFILES_CASK_UPDATE_ATTEMPTS must be an integer between 1 and 3: 4"* ]]
-  ! grep -q '^brew ' "$COMMAND_LOG"
+  run ! grep -q '^brew ' "$COMMAND_LOG"
 }
 
 @test "rejects a backoff other than two seconds before invoking brew" {
@@ -176,5 +222,5 @@ EOF
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"DOTFILES_CASK_UPDATE_BACKOFF_SECONDS must be 2: 3"* ]]
-  ! grep -q '^brew ' "$COMMAND_LOG"
+  run ! grep -q '^brew ' "$COMMAND_LOG"
 }
