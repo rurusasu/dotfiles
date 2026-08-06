@@ -35,7 +35,7 @@ setup() {
 @test "Darwin separates missing-cask installation from explicit greedy upgrades" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
-	run env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
 		nix eval --impure --json --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
 			in {
@@ -45,7 +45,12 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
-	[ "$output" = '{"autoUpdate":true,"greedyCasks":true,"upgrade":false}' ]
+	run jq -e '
+		.autoUpdate == true and
+		.greedyCasks == true and
+		.upgrade == false
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {
