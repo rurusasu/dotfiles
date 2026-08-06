@@ -188,7 +188,13 @@ EOF
 #!/usr/bin/env bash
 printf 'verify-environment %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-	chmod +x "$MOCK_REPO/install.sh" "$MOCK_REPO/scripts/sh/verify-environment.sh"
+	cat >"$MOCK_REPO/scripts/sh/update-homebrew-casks.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'update-homebrew-casks %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_REPO/install.sh" \
+		"$MOCK_REPO/scripts/sh/update-homebrew-casks.sh" \
+		"$MOCK_REPO/scripts/sh/verify-environment.sh"
 
 	write_fixture_stub uname '
 case "${1:-}" in

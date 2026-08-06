@@ -32,11 +32,25 @@ setup() {
 	grep -q 'postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
-@test "Darwin activation updates cask metadata without forcing latest cask upgrades" {
-	grep -q 'greedyCasks = false' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'autoUpdate = true' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'upgrade = true' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'cleanup = "none"' "$REPO_ROOT/nix/darwin/default.nix"
+@test "Darwin separates missing-cask installation from explicit greedy upgrades" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in {
+				inherit (config.homebrew) greedyCasks;
+				inherit (config.homebrew.onActivation) autoUpdate upgrade;
+			}
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.autoUpdate == true and
+		.greedyCasks == true and
+		.upgrade == false
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {

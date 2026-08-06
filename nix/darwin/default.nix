@@ -109,13 +109,12 @@ in
     # source_glob preflight. Install it from the archive in an activation
     # script while retaining the catalog entry for provider reporting.
     casks = builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks;
-    # Nightly casks use version = :latest. Do not force an upgrade on every
-    # activation while the upstream archive layout is not stable; regular
-    # versioned casks still upgrade through onActivation.upgrade.
-    greedyCasks = false;
+    # nix-darwin installs missing casks. Explicit greedy upgrades, retries,
+    # and verification are handled by update-homebrew-casks.sh.
+    greedyCasks = true;
     onActivation = {
       autoUpdate = true;
-      upgrade = true;
+      upgrade = false;
       cleanup = "none";
     };
   };

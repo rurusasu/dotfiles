@@ -1,5 +1,9 @@
 # Homebrew cask のトラブルシューティング
 
+## download の再試行
+
+`Fetching ...` で失敗した場合は `~/Library/Caches/Homebrew/downloads/*.incomplete` を手動削除せず、そのまま `nrs` を再実行します。専用 updater が Homebrew の cache を使って最大3回再試行し、最後に宣言済み cask の収束を検証します。
+
 ## WezTerm nightly の `source_glob` エラー
 
 ### 対象
