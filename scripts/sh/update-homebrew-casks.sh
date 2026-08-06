@@ -54,15 +54,22 @@ load_casks() {
     --apply 'casks: builtins.concatStringsSep "\n" (builtins.map (cask: if builtins.isString cask then cask else cask.name) casks)'
 }
 
+cask_token() {
+  printf '%s\n' "${1##*/}"
+}
+
 is_installed() {
-  "$BREW_COMMAND" list --cask --versions "$1" >/dev/null 2>&1
+  local token
+  token="$(cask_token "$1")"
+  [[ -n $token ]] && "$BREW_COMMAND" list --cask --versions "$token" >/dev/null 2>&1
 }
 
 OUTDATED_OUTPUT=""
 OUTDATED_STATUS=0
 
 check_outdated() {
-  local cask="$1" command_status
+  local cask="$1" token command_status
+  token="$(cask_token "$cask")"
   OUTDATED_OUTPUT=""
   OUTDATED_STATUS=0
 
@@ -75,7 +82,7 @@ check_outdated() {
   if ((command_status == 0)) && [[ -z $OUTDATED_OUTPUT ]]; then
     return
   fi
-  if ((command_status <= 1)) && [[ $OUTDATED_OUTPUT == "$cask" ]]; then
+  if ((command_status <= 1)) && [[ -n $token && $OUTDATED_OUTPUT == "$token" ]]; then
     return
   fi
 

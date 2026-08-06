@@ -29,7 +29,8 @@ command_name="${1:-}"
 shift || true
 cask=""
 for argument in "$@"; do cask="$argument"; done
-safe_cask="${cask//\//_}"
+cask_token="${cask##*/}"
+safe_cask="${cask_token//\//_}"
 counter_file="$BREW_STATE/${command_name}-${safe_cask}.count"
 count=0
 [[ ! -f $counter_file ]] || count="$(cat "$counter_file")"
@@ -44,7 +45,7 @@ case "$command_name" in
     [[ ${BREW_OUTDATED_FAIL:-0} != 1 ]] || exit 65
     [[ ${BREW_OUTDATED_EMPTY_STATUS_ONE:-0} != 1 ]] || exit 1
     if [[ -f "$BREW_STATE/outdated-$safe_cask" ]]; then
-      printf '%s\n' "${BREW_OUTDATED_OUTPUT_OVERRIDE:-$cask}"
+      printf '%s\n' "${BREW_OUTDATED_OUTPUT_OVERRIDE:-$cask_token}"
       exit "${BREW_OUTDATED_EXIT_STATUS:-1}"
     fi
     ;;
@@ -117,6 +118,28 @@ mark_outdated() {
   run ! grep -q '^brew upgrade --cask --greedy google-chrome$' "$COMMAND_LOG"
   [ "$(grep '^brew outdated ' "$COMMAND_LOG")" = $'brew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome\nbrew outdated --cask --greedy claude\nbrew outdated --cask --greedy google-chrome' ]
   run ! grep -q '^brew .* undeclared-cask$' "$COMMAND_LOG"
+}
+
+@test "updates a tap-qualified cask using its short installed token" {
+  install_cask orca
+  mark_outdated orca
+  run env DOTFILES_HOMEBREW_CASKS=stablyai/orca/orca "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^brew list --cask --versions orca$' "$COMMAND_LOG"
+  grep -q '^brew outdated --cask --greedy stablyai/orca/orca$' "$COMMAND_LOG"
+  grep -q '^brew info --cask stablyai/orca/orca --json=v2$' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask stablyai/orca/orca$' "$COMMAND_LOG"
+  grep -q '^brew upgrade --cask --greedy stablyai/orca/orca$' "$COMMAND_LOG"
+}
+
+@test "rejects a declared cask without a short token" {
+  run env DOTFILES_HOMEBREW_CASKS=stablyai/orca/ "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"declared cask is not installed: stablyai/orca/"* ]]
+  run ! grep -q '^brew list ' "$COMMAND_LOG"
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
 }
 
 @test "retries a failed fetch twice before the third attempt succeeds" {
