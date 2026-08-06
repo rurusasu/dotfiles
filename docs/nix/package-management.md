@@ -48,6 +48,8 @@ Ubuntu / Debian:  ./install.sh
 - Ubuntu/Debian は System Manager が Home Manager と system package/service を適用します。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
 
+`nrs` は nix-darwin で不足 cask を導入した後、宣言済み cask を `--greedy` で更新します。各 download/upgrade は最大3回再試行され、更新前に起動していたアプリは更新後に再起動されます。未更新の cask が残る場合、`nrs` は非ゼロで終了します。
+
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
 macOS で Homebrew cask の適用に失敗する場合は、
