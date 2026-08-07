@@ -38,6 +38,8 @@ setup() {
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 	export DOTFILES_HOMEBREW_CASK_UPDATER="$STUB_BIN/update-homebrew-casks"
+	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/usr/local/bin"
+	export DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$BATS_TEST_TMPDIR/usr/local/cli-plugins"
 	export HOMEBREW_CASK_UPDATE_STATUS=0
 
 	write_stub uname '
@@ -67,6 +69,9 @@ exit 0
 	write_stub date 'echo 20260717010203'
 	write_stub sudo '
 printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
+case "${1:-}" in
+	/bin/mkdir | /usr/sbin/chown | /bin/chmod) exit 0 ;;
+esac
 exec "$@"
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
@@ -218,6 +223,49 @@ assert_log_order() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "Homebrew cask link directories converge before cask updates" {
+	write_installed_stubs
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"sudo /bin/mkdir -p -- $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /usr/sbin/chown test-user:admin $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /bin/chmod 0775 $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /bin/mkdir -p -- $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"sudo /usr/sbin/chown test-user:admin $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"sudo /bin/chmod 0775 $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"update-homebrew-casks "
+}
+
+@test "symbolic Homebrew cask link directory stops before mutation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$DOTFILES_HOMEBREW_CASK_BIN_DIR")" "$BATS_TEST_TMPDIR/link-target"
+	ln -s "$BATS_TEST_TMPDIR/link-target" "$DOTFILES_HOMEBREW_CASK_BIN_DIR"
+
+	run "$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Refusing symbolic Homebrew cask link directory: $DOTFILES_HOMEBREW_CASK_BIN_DIR"* ]]
+	! grep -q '^sudo /bin/mkdir ' "$COMMAND_LOG"
+	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
+}
+
+@test "non-directory Homebrew cask link target stops before mutation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$DOTFILES_HOMEBREW_CASK_BIN_DIR")"
+	touch "$DOTFILES_HOMEBREW_CASK_BIN_DIR"
+
+	run "$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Homebrew cask link path is not a directory: $DOTFILES_HOMEBREW_CASK_BIN_DIR"* ]]
+	! grep -q '^sudo /bin/mkdir ' "$COMMAND_LOG"
+	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 }
 
 @test "cask update failure stops macOS before Docker runtime and chezmoi" {

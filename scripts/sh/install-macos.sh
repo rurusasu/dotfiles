@@ -15,6 +15,8 @@ DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/dock
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 HOMEBREW_CASK_UPDATER="${DOTFILES_HOMEBREW_CASK_UPDATER:-$ROOT/scripts/sh/update-homebrew-casks.sh}"
+HOMEBREW_CASK_BIN_DIR="${DOTFILES_HOMEBREW_CASK_BIN_DIR:-/usr/local/bin}"
+HOMEBREW_CASK_CLI_PLUGIN_DIR="${DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR:-/usr/local/cli-plugins}"
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
@@ -114,6 +116,25 @@ apply_darwin_system() {
   hash -r
 }
 
+ensure_homebrew_cask_link_directory() {
+  local directory="$1"
+
+  [[ ! -L $directory ]] ||
+    dotfiles_die "Refusing symbolic Homebrew cask link directory: $directory"
+  [[ ! -e $directory || -d $directory ]] ||
+    dotfiles_die "Homebrew cask link path is not a directory: $directory"
+
+  sudo /bin/mkdir -p -- "$directory"
+  sudo /usr/sbin/chown "$DOTFILES_USER:admin" "$directory"
+  sudo /bin/chmod 0775 "$directory"
+}
+
+ensure_homebrew_cask_link_directories() {
+  dotfiles_log "Converging Homebrew cask link directory permissions..."
+  ensure_homebrew_cask_link_directory "$HOMEBREW_CASK_BIN_DIR"
+  ensure_homebrew_cask_link_directory "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
+}
+
 setup_docker_runtime() {
   [[ -d $DOCKER_APP ]] ||
     dotfiles_die "Docker Desktop was not installed by nix-darwin: $DOCKER_APP"
@@ -150,6 +171,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   apply_darwin_system
+  ensure_homebrew_cask_link_directories
   "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime
   apply_chezmoi

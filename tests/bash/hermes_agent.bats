@@ -227,7 +227,13 @@ if [[ $* == *"builtins.currentSystem"* ]]; then
 fi
 '
 	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
-	write_fixture_stub sudo 'printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"; exec "$@"'
+	write_fixture_stub sudo '
+printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"
+case "${1:-}" in
+  /bin/mkdir | /usr/sbin/chown | /bin/chmod) exit 0 ;;
+esac
+exec "$@"
+'
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 
@@ -297,6 +303,8 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
+		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/usr/local/bin" \
+		DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$fixture_root/usr/local/cli-plugins" \
 		DOTFILES_BASHRC_PATH="$fixture_root/etc/bashrc" \
 		DOTFILES_ZSHRC_PATH="$fixture_root/etc/zshrc" \
 		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
