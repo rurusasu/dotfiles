@@ -18,6 +18,8 @@ HOMEBREW_CASK_UPDATER="${DOTFILES_HOMEBREW_CASK_UPDATER:-$ROOT/scripts/sh/update
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
+HOMEBREW_BIN_DIR="${DOTFILES_HOMEBREW_BIN_DIR:-/usr/local/bin}"
+HOMEBREW_CLI_PLUGINS_DIR="${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-/usr/local/cli-plugins}"
 
 preflight() {
   local os arch version major required
@@ -93,6 +95,23 @@ stop_existing_docker_desktop() {
   "$docker_cli" desktop stop --timeout 120
 }
 
+repair_homebrew_cask_link_directories() {
+  local directory user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+  local directories=("$HOMEBREW_BIN_DIR" "$HOMEBREW_CLI_PLUGINS_DIR")
+  [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
+
+  for directory in "${directories[@]}"; do
+    if [[ -L $directory || ! -d $directory ]]; then
+      dotfiles_die "Homebrew cask link directory must be a real directory: $directory"
+    fi
+  done
+
+  for directory in "${directories[@]}"; do
+    sudo /usr/sbin/chown "${user}:admin" "$directory"
+    sudo /bin/chmod 0775 "$directory"
+  done
+}
+
 apply_darwin_system() {
   export DOTFILES_USER="${SUDO_USER:-$USER}"
   export DOTFILES_HOME="$HOME"
@@ -149,6 +168,7 @@ main() {
   dotfiles_link_checkout "$ROOT"
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
+  repair_homebrew_cask_link_directories
   apply_darwin_system
   "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime

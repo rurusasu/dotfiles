@@ -14,8 +14,10 @@ setup() {
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
 	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
 	FAKE_USER_PROFILE_ROOT="$BATS_TEST_TMPDIR/etc/profiles/per-user"
+	FAKE_HOMEBREW_BIN_DIR="$BATS_TEST_TMPDIR/usr/local/bin"
+	FAKE_HOMEBREW_CLI_PLUGINS_DIR="$BATS_TEST_TMPDIR/usr/local/cli-plugins"
 	REAL_JQ="$(command -v jq)"
-	mkdir -p "$TEST_HOME" "$STUB_BIN"
+	mkdir -p "$TEST_HOME" "$STUB_BIN" "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
 	: >"$FAKE_NIX_PROFILE"
@@ -34,6 +36,8 @@ setup() {
 	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
 	export DOTFILES_ZSHRC_PATH="$FAKE_ZSHRC"
 	export DOTFILES_USER_PROFILE_ROOT="$FAKE_USER_PROFILE_ROOT"
+	export DOTFILES_HOMEBREW_BIN_DIR="$FAKE_HOMEBREW_BIN_DIR"
+	export DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
@@ -67,6 +71,9 @@ exit 0
 	write_stub date 'echo 20260717010203'
 	write_stub sudo '
 printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
+case "${1:-}" in
+	*/chown) exit 0 ;;
+esac
 exec "$@"
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
@@ -230,6 +237,38 @@ assert_log_order() {
 	grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 	! grep -q '^chezmoi ' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
+}
+
+@test "repairs Homebrew cask link directories before cask updates" {
+	write_installed_stubs
+	chmod 0700 "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q "^sudo /usr/sbin/chown test-user:admin $FAKE_HOMEBREW_BIN_DIR$" "$COMMAND_LOG"
+	grep -q "^sudo /bin/chmod 0775 $FAKE_HOMEBREW_BIN_DIR$" "$COMMAND_LOG"
+	grep -q "^sudo /usr/sbin/chown test-user:admin $FAKE_HOMEBREW_CLI_PLUGINS_DIR$" "$COMMAND_LOG"
+	grep -q "^sudo /bin/chmod 0775 $FAKE_HOMEBREW_CLI_PLUGINS_DIR$" "$COMMAND_LOG"
+	assert_log_order \
+		"sudo /usr/sbin/chown test-user:admin $FAKE_HOMEBREW_BIN_DIR" \
+		"sudo /bin/chmod 0775 $FAKE_HOMEBREW_BIN_DIR" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"update-homebrew-casks "
+}
+
+@test "rejects an unsafe Homebrew cask link directory before privileged changes" {
+	write_installed_stubs
+	rmdir "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	ln -s "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+
+	run "$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Homebrew cask link directory must be a real directory"* ]]
+	! grep -q "^sudo chown" "$COMMAND_LOG"
+	! grep -q "^sudo chmod" "$COMMAND_LOG"
+	! grep -q "^update-homebrew-casks " "$COMMAND_LOG"
 }
 
 @test "Hermes bootstrap failure stops macOS before service recreation and acceptance" {

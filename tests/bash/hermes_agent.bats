@@ -227,7 +227,13 @@ if [[ $* == *"builtins.currentSystem"* ]]; then
 fi
 '
 	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
-	write_fixture_stub sudo 'printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"; exec "$@"'
+	write_fixture_stub sudo '
+printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"
+case "${1:-}" in
+  */chown) exit 0 ;;
+esac
+exec "$@"
+'
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 
@@ -246,6 +252,7 @@ EOF
 run_mocked_installer() {
 	local platform="$1"
 	local test_root fixture_root marker hardware prebuilt systemd_dir os_release user_profile_root
+	local homebrew_bin_dir homebrew_cli_plugins_dir
 	test_root="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
 	fixture_root="$test_root/installer-$platform"
 	marker="$fixture_root/NIXOS"
@@ -254,10 +261,13 @@ run_mocked_installer() {
 	systemd_dir="$fixture_root/systemd"
 	os_release="$fixture_root/os-release"
 	user_profile_root="$fixture_root/profiles"
+	homebrew_bin_dir="$fixture_root/usr/local/bin"
+	homebrew_cli_plugins_dir="$fixture_root/usr/local/cli-plugins"
 
 	create_mocked_installer_fixture "$fixture_root"
 	printf '{ ... }: { }\n' >"$hardware"
-	mkdir -p "$prebuilt/bin" "$systemd_dir" "$user_profile_root/test-user"
+	mkdir -p "$prebuilt/bin" "$systemd_dir" "$user_profile_root/test-user" \
+		"$homebrew_bin_dir" "$homebrew_cli_plugins_dir"
 	ln -s "$MOCK_BIN" "$user_profile_root/test-user/bin"
 	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
 #!/usr/bin/env bash
@@ -300,6 +310,8 @@ EOF
 		DOTFILES_BASHRC_PATH="$fixture_root/etc/bashrc" \
 		DOTFILES_ZSHRC_PATH="$fixture_root/etc/zshrc" \
 		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
+		DOTFILES_HOMEBREW_BIN_DIR="$homebrew_bin_dir" \
+		DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$homebrew_cli_plugins_dir" \
 		DOTFILES_SYSTEMD_DIR="$systemd_dir" \
 		DOTFILES_OS_RELEASE_FILE="$os_release" \
 		DOTFILES_NIXOS_MARKER="$marker" \
