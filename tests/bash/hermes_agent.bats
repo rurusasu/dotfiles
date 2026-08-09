@@ -10,7 +10,7 @@ setup() {
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	SECRET_MARKER="adapter-secret-marker"
-	mkdir -p "$TEST_HOME" "$STUB_BIN"
+	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
@@ -24,6 +24,8 @@ setup() {
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
 	export OP_DELAY_SECONDS=0
+	export OP_READ_TOKEN='service-account-token'
+	export OP_READ_DELAY_SECONDS=0
 	export BOOTSTRAP_EXIT_EARLY=0
 	export API_READY_AFTER=1
 	export HERMES_API_READY_ATTEMPTS=3
@@ -37,17 +39,26 @@ exec "$REAL_JQ" "$@"
 printf "op" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
-if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
-	exit 17
-fi
-if [[ $OP_DELAY_SECONDS != 0 ]]; then
-	/bin/sleep "$OP_DELAY_SECONDS"
-fi
-if [ "${3:-}" = "Hermes X API MCP" ]; then
-	printf "%s\n" "$XAPI_OP_ITEM_JSON"
-else
-	printf "%s\n" "$OP_ITEM_JSON"
-fi
+case "${3:-}" in
+	read)
+		/bin/sleep "$OP_READ_DELAY_SECONDS"
+		printf "%s\n" "$OP_READ_TOKEN"
+		;;
+	*)
+		[ "${2:-}" = get ] || exit 2
+		if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
+			exit 17
+		fi
+		if [[ $OP_DELAY_SECONDS != 0 ]]; then
+			/bin/sleep "$OP_DELAY_SECONDS"
+		fi
+		if [ "${3:-}" = "Hermes X API MCP" ]; then
+			printf "%s\n" "$XAPI_OP_ITEM_JSON"
+		else
+			printf "%s\n" "$OP_ITEM_JSON"
+		fi
+		;;
+esac
 '
 	write_stub docker '
 printf "docker" >>"$COMMAND_LOG"
@@ -524,6 +535,35 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
 	grep -q '^op <item> <get> <Hermes X API MCP> <--account> <my.1password.com> <--vault> <openclaw> <--format> <json>$' "$COMMAND_LOG"
 	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
+}
+
+@test "uses a mode-0600 cached service account after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"using existing Hermes service-account environment"* ]]
+}
+
+@test "rejects a writable cached service account after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 644 "$HOME/.hermes/.op.env"
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -ne 0 ]
+	! grep -q '<compose>' "$COMMAND_LOG"
+}
+
+@test "atomically replaces an old service account cache after a successful op read" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_TOKEN='fresh-token'
+	run_start_stack
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
+	[ "$(stat -c '%a' "$HOME/.hermes/.op.env" 2>/dev/null || stat -f '%Lp' "$HOME/.hermes/.op.env")" = 600 ]
+	! compgen -G "$HOME/.hermes/.op.env.*" >/dev/null
 }
 
 @test "fails preflight before Compose when op is unavailable" {
