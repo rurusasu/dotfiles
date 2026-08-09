@@ -150,6 +150,10 @@ service_account_cache_mode() {
 		stat -f '%Lp' "$HOME/.hermes/.op.env"
 }
 
+service_account_cache_inode() {
+	stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"
+}
+
 assert_service_account_cache_rejected_after_timeout() {
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
 	run_start_stack
@@ -563,7 +567,10 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[[ "$output" == *"using existing Hermes service-account environment"* ]]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
+	/bin/sleep 2
 	[ ! -e "$OP_READ_COMPLETION_FILE" ]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
 }
 
 @test "rejects a writable cached service account after an op read timeout" {
@@ -617,7 +624,23 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
 	[ "$(cat "$HOME/.hermes/.op.env.previous")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
-	! compgen -G "$HOME/.hermes/.op.env.*" >/dev/null
+	[ "$(service_account_cache_inode "$HOME/.hermes/.op.env")" != "$(service_account_cache_inode "$HOME/.hermes/.op.env.previous")" ]
+	[ -z "$(find "$HOME/.hermes" -maxdepth 1 -name '.op.env.*' ! -name '.op.env.previous' -print -quit)" ]
+}
+
+@test "preserves the old service account cache when fresh replacement cannot be staged" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	chmod 500 "$HOME/.hermes"
+	export OP_READ_TOKEN='fresh-token'
+	run_start_stack
+	status=$status
+	output=$output
+	chmod 700 "$HOME/.hermes"
+	[ "$status" -ne 0 ]
+	! grep -q '<compose>' "$COMMAND_LOG"
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
 }
 
 @test "fails preflight before Compose when op is unavailable" {
