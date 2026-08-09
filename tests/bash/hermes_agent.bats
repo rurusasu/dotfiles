@@ -26,6 +26,7 @@ setup() {
 	export OP_DELAY_SECONDS=0
 	export OP_READ_TOKEN='service-account-token'
 	export OP_READ_DELAY_SECONDS=0
+	export OP_READ_COMPLETION_FILE=""
 	export BOOTSTRAP_EXIT_EARLY=0
 	export API_READY_AFTER=1
 	export HERMES_API_READY_ATTEMPTS=3
@@ -42,6 +43,9 @@ printf "\n" >>"$COMMAND_LOG"
 case "${3:-}" in
 	read)
 		/bin/sleep "$OP_READ_DELAY_SECONDS"
+		if [[ -n ${OP_READ_COMPLETION_FILE:-} ]]; then
+			printf "completed\n" >"$OP_READ_COMPLETION_FILE"
+		fi
 		printf "%s\n" "$OP_READ_TOKEN"
 		;;
 	*)
@@ -139,6 +143,18 @@ docker_command() {
 }
 dotfiles_hermes_start_stack docker_command "$COMPOSE_FILE"
 '
+}
+
+service_account_cache_mode() {
+	stat -c '%a' "$HOME/.hermes/.op.env" 2>/dev/null ||
+		stat -f '%Lp' "$HOME/.hermes/.op.env"
+}
+
+assert_service_account_cache_rejected_after_timeout() {
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -ne 0 ]
+	! grep -q '<compose>' "$COMMAND_LOG"
 }
 
 assert_log_order() {
@@ -540,29 +556,67 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 @test "uses a mode-0600 cached service account after an op read timeout" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_COMPLETION_FILE="$BATS_TEST_TMPDIR/op-read-completed"
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
 	run_start_stack
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"using existing Hermes service-account environment"* ]]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+	[ ! -e "$OP_READ_COMPLETION_FILE" ]
 }
 
 @test "rejects a writable cached service account after an op read timeout" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 644 "$HOME/.hermes/.op.env"
-	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
-	run_start_stack
-	[ "$status" -ne 0 ]
-	! grep -q '<compose>' "$COMMAND_LOG"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects a symlinked cached service account before Compose" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/cache-target"
+	chmod 600 "$HOME/.hermes/cache-target"
+	ln -s "$HOME/.hermes/cache-target" "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects a directory cached service account before Compose" {
+	mkdir "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects an empty cached service account token after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects an extra cached service account line after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\nOP_SERVICE_ACCOUNT_TOKEN=extra-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects a malformed cached service account line after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\nnot-an-environment-assignment\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "defaults invalid service-account read timeouts to twenty seconds" {
+	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
 }
 
 @test "atomically replaces an old service account cache after a successful op read" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
+	ln "$HOME/.hermes/.op.env" "$HOME/.hermes/.op.env.previous"
 	export OP_READ_TOKEN='fresh-token'
 	run_start_stack
 	[ "$status" -eq 0 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
-	[ "$(stat -c '%a' "$HOME/.hermes/.op.env" 2>/dev/null || stat -f '%Lp' "$HOME/.hermes/.op.env")" = 600 ]
+	[ "$(service_account_cache_mode)" = 600 ]
+	[ "$(cat "$HOME/.hermes/.op.env.previous")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
 	! compgen -G "$HOME/.hermes/.op.env.*" >/dev/null
 }
 
