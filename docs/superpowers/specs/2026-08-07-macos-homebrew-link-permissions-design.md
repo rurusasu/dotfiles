@@ -73,6 +73,14 @@ Tests will prove:
 
 The focused macOS installer suite, full Bash suite, ShellCheck, formatting hooks, and the existing macOS CI contract will be run before publishing.
 
+## Final safety decision
+
+This decision supersedes the injectable production paths and sequential validation example above. Production convergence is allowlisted to literal `/usr/local/bin` and `/usr/local/cli-plugins`; environment variables cannot redirect privileged mutations. Tests source the installer behind a main guard and exercise the same under-parent helper with temporary paths, while the production wrapper passes only the two literals.
+
+Before any target mutation, the installer verifies that `/usr/local` is a real directory, is owned by root, and is not writable by group or other. It then preflights both final components before the first mutation and repeats the parent and target checks immediately before each target sequence. Because `/usr` and the validated `/usr/local` parent are immutable to the invoking user, the user cannot replace either final directory entry between validation, `chown`, and `chmod`. Missing targets are created with non-recursive `mkdir --`; `mkdir -p` is not used.
+
+The test sudo boundaries are complete fail-closed allowlists. They log every argument as a separate delimited field, allow only the exact cask operations and pre-existing scenario-specific privileged vectors, reject unknown vectors with status 97, and inject failures for `mkdir`, `chown`, and `chmod` to prove later mutations and cask updates stop.
+
 ## Acceptance criteria
 
 - The automated tests fail before the implementation and pass afterward.

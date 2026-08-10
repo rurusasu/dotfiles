@@ -228,26 +228,51 @@ fi
 '
 	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
 	write_fixture_stub sudo '
-printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"
+printf "sudo" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\\n" >>"$COMMAND_LOG"
 case "${1:-}" in
   /bin/mkdir)
-    [[ $# -eq 4 && ${2:-} == -p && ${3:-} == -- ]] &&
-      [[ ${4:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${4:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+    if [[ $# -eq 3 && ${2:-} == -- &&
+      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
       exit 0
+    fi
     ;;
   /usr/sbin/chown)
-    [[ $# -eq 3 && ${2:-} == test-user:admin ]] &&
-      [[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+    if [[ $# -eq 3 && ${2:-} == test-user:admin &&
+      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
       exit 0
+    fi
     ;;
   /bin/chmod)
-    [[ $# -eq 3 && ${2:-} == 0775 ]] &&
-      [[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+    if [[ $# -eq 3 && ${2:-} == 0775 &&
+      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
       exit 0
+    fi
     ;;
-  *) exec "$@" ;;
+  /usr/bin/env)
+    if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
+      ${3:-} == DOTFILES_USER=test-user && ${4:-} == "DOTFILES_HOME=$HOME" &&
+      ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "${PATH%%:*}/nix" &&
+      ${7:-} == run && ${8:-} == .#darwin-rebuild && ${9:-} == -- &&
+      ${10:-} == switch && ${11:-} == --flake && ${12:-} == .#macos && ${13:-} == --impure ]]; then
+      exec "$@"
+    fi
+    ;;
+  "${DOTFILES_DOCKER_APP_PATH:-}/Contents/MacOS/install")
+    if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == --user=test-user ]]; then
+      exec "$@"
+    fi
+    ;;
+  "${DOTFILES_NIXOS_PREBUILT_SYSTEM:-}/bin/switch-to-configuration")
+    if [[ $# -eq 2 && ${2:-} == switch ]]; then
+      exec "$@"
+    fi
+    ;;
 esac
-printf "Unexpected privileged filesystem command: %s\\n" "$*" >&2
+printf "Unexpected sudo argv:" >&2
+printf " <%s>" "$@" >&2
+printf "\\n" >&2
 exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -273,6 +298,7 @@ run_mocked_installer() {
 	marker="$fixture_root/NIXOS"
 	hardware="$fixture_root/hardware-configuration.nix"
 	prebuilt="$fixture_root/prebuilt-system"
+	MOCK_NIXOS_PREBUILT_SYSTEM="$prebuilt"
 	systemd_dir="$fixture_root/systemd"
 	os_release="$fixture_root/os-release"
 	user_profile_root="$fixture_root/profiles"
@@ -319,8 +345,8 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
-		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/usr/local/bin" \
-		DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$fixture_root/usr/local/cli-plugins" \
+		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/untrusted/bin" \
+		DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$fixture_root/untrusted/cli-plugins" \
 		DOTFILES_BASHRC_PATH="$fixture_root/etc/bashrc" \
 		DOTFILES_ZSHRC_PATH="$fixture_root/etc/zshrc" \
 		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
@@ -328,7 +354,7 @@ EOF
 		DOTFILES_OS_RELEASE_FILE="$os_release" \
 		DOTFILES_NIXOS_MARKER="$marker" \
 		DOTFILES_NIXOS_HARDWARE_CONFIG="$hardware" \
-		DOTFILES_NIXOS_PREBUILT_SYSTEM="$prebuilt" \
+		DOTFILES_NIXOS_PREBUILT_SYSTEM="$MOCK_NIXOS_PREBUILT_SYSTEM" \
 		"$MOCK_REPO/install.sh"
 }
 
@@ -358,7 +384,7 @@ EOF
 }
 
 @test "install.sh routes each Unix installer through the shared adapter after chezmoi" {
-	local platform expected_runner adapter_line apply_line
+	local platform expected_runner adapter_line apply_line expected_sudo_count target
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
 		run_mocked_installer "$platform"
@@ -382,13 +408,45 @@ EOF
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
+			grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$MOCK_REPO> <$MOCK_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
+			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/bin>' "$COMMAND_LOG"
+			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"
+			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/cli-plugins>' "$COMMAND_LOG"
+			grep -Fqx "sudo <$MOCK_DOCKER_APP/Contents/MacOS/install> <--accept-license> <--user=test-user>" "$COMMAND_LOG"
+			expected_sudo_count=6
+			for target in /usr/local/bin /usr/local/cli-plugins; do
+				if [[ ! -e $target ]]; then
+					grep -Fqx "sudo </bin/mkdir> <--> <$target>" "$COMMAND_LOG"
+					expected_sudo_count=$((expected_sudo_count + 1))
+				fi
+			done
+			[ "$(grep -c '^sudo ' "$COMMAND_LOG")" -eq "$expected_sudo_count" ]
+			! grep -Fq "$BATS_TEST_TMPDIR/installer-macos/untrusted" "$COMMAND_LOG"
+		fi
+		if [[ $platform == linux ]]; then
+			[ "$(grep -c '^sudo ' "$COMMAND_LOG" || true)" -eq 0 ]
 		fi
 		if [[ $platform == nixos ]]; then
 			[ -e "$MOCK_NIXOS_MARKER" ]
+			grep -Fqx "sudo <$MOCK_NIXOS_PREBUILT_SYSTEM/bin/switch-to-configuration> <switch>" "$COMMAND_LOG"
+			[ "$(grep -c '^sudo ' "$COMMAND_LOG")" -eq 1 ]
 		else
 			[ ! -e "$MOCK_NIXOS_MARKER" ]
 		fi
 	done
+}
+
+@test "mocked installer sudo boundary rejects unknown argv" {
+	local fixture_root="$BATS_TEST_TMPDIR/unknown-sudo"
+	local unexpected="$fixture_root/unexpected-touch"
+	create_mocked_installer_fixture "$fixture_root"
+
+	run env COMMAND_LOG="$COMMAND_LOG" "$MOCK_BIN/sudo" /usr/bin/touch "$unexpected"
+
+	[ "$status" -eq 97 ]
+	[[ "$output" == *"Unexpected sudo argv: </usr/bin/touch> <$unexpected>"* ]]
+	[ ! -e "$unexpected" ]
 }
 
 @test "preserves Hermes data and browser directory helpers" {

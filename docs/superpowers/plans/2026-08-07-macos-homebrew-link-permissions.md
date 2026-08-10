@@ -17,6 +17,12 @@
 - Directory convergence must run after `apply_darwin_system` and before `HOMEBREW_CASK_UPDATER`.
 - Existing cask updater retry and convergence behavior must remain unchanged.
 
+### Final implementation decision
+
+This decision supersedes Task 1's injectable production-path and sequential helper examples. The production wrapper passes only literal `/usr/local/bin` and `/usr/local/cli-plugins`. Before any mutation it validates both targets and the immutable parent invariant: `/usr/local` must be a real root-owned directory with no group/other write bits. The parent and current target are revalidated immediately before each target sequence, and missing final components use non-`-p` `mkdir --`.
+
+Test isolation uses the installer's source guard and under-parent function boundary rather than production environment overrides. Both Bats sudo fixtures use complete scenario-specific exact-argv allowlists, delimited per-argument logs, status 97 for unknown vectors, exact total-count assertions, and injected `mkdir`/`chown`/`chmod` failures.
+
 ---
 
 ### Task 1: Converge Homebrew cask link directories
