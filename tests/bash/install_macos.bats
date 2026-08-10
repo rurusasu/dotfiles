@@ -70,9 +70,25 @@ exit 0
 	write_stub sudo '
 printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 case "${1:-}" in
-	/bin/mkdir | /usr/sbin/chown | /bin/chmod) exit 0 ;;
+	/bin/mkdir)
+		[[ $# -eq 4 && ${2:-} == -p && ${3:-} == -- ]] &&
+			[[ ${4:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${4:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+			exit 0
+		;;
+	/usr/sbin/chown)
+		[[ $# -eq 3 && ${2:-} == test-user:admin ]] &&
+			[[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+			exit 0
+		;;
+	/bin/chmod)
+		[[ $# -eq 3 && ${2:-} == 0775 ]] &&
+			[[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+			exit 0
+		;;
+	*) exec "$@" ;;
 esac
-exec "$@"
+printf "Unexpected privileged filesystem command: %s\n" "$*" >&2
+exit 97
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub update-homebrew-casks '
@@ -197,6 +213,10 @@ assert_log_order() {
 	done
 }
 
+assert_no_homebrew_cask_link_mutations() {
+	[ "$(grep -Ec '^sudo (/bin/mkdir|/usr/sbin/chown|/bin/chmod)( |$)' "$COMMAND_LOG")" -eq 0 ]
+}
+
 @test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
 	write_installed_stubs
 
@@ -227,10 +247,21 @@ assert_log_order() {
 
 @test "Homebrew cask link directories converge before cask updates" {
 	write_installed_stubs
+	local command
 
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
+	for command in \
+		"sudo /bin/mkdir -p -- $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /usr/sbin/chown test-user:admin $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /bin/chmod 0775 $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"sudo /bin/mkdir -p -- $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"sudo /usr/sbin/chown test-user:admin $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"sudo /bin/chmod 0775 $DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR"; do
+		[ "$(grep -Fxc "$command" "$COMMAND_LOG")" -eq 1 ]
+	done
+	[ "$(grep -Ec '^sudo (/bin/mkdir|/usr/sbin/chown|/bin/chmod)( |$)' "$COMMAND_LOG")" -eq 6 ]
 	assert_log_order \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"sudo /bin/mkdir -p -- $DOTFILES_HOMEBREW_CASK_BIN_DIR" \
@@ -242,30 +273,39 @@ assert_log_order() {
 		"update-homebrew-casks "
 }
 
-@test "symbolic Homebrew cask link directory stops before mutation" {
+@test "unsafe Homebrew cask link targets stop all privileged mutations" {
 	write_installed_stubs
-	mkdir -p "$(dirname "$DOTFILES_HOMEBREW_CASK_BIN_DIR")" "$BATS_TEST_TMPDIR/link-target"
-	ln -s "$BATS_TEST_TMPDIR/link-target" "$DOTFILES_HOMEBREW_CASK_BIN_DIR"
+	local scenario kind target expected
+	mkdir -p "$BATS_TEST_TMPDIR/link-target"
 
-	run "$INSTALLER"
+	for scenario in \
+		"symlink:$DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"file:$DOTFILES_HOMEBREW_CASK_BIN_DIR" \
+		"symlink:$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" \
+		"file:$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR"; do
+		kind="${scenario%%:*}"
+		target="${scenario#*:}"
+		: >"$COMMAND_LOG"
+		rm -f "$DOTFILES_HOMEBREW_CASK_BIN_DIR" "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR"
+		mkdir -p "$(dirname "$target")"
+		case "$kind" in
+		symlink)
+			ln -s "$BATS_TEST_TMPDIR/link-target" "$target"
+			expected="Refusing symbolic Homebrew cask link directory: $target"
+			;;
+		file)
+			touch "$target"
+			expected="Homebrew cask link path is not a directory: $target"
+			;;
+		esac
 
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"Refusing symbolic Homebrew cask link directory: $DOTFILES_HOMEBREW_CASK_BIN_DIR"* ]]
-	! grep -q '^sudo /bin/mkdir ' "$COMMAND_LOG"
-	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
-}
+		run "$INSTALLER"
 
-@test "non-directory Homebrew cask link target stops before mutation" {
-	write_installed_stubs
-	mkdir -p "$(dirname "$DOTFILES_HOMEBREW_CASK_BIN_DIR")"
-	touch "$DOTFILES_HOMEBREW_CASK_BIN_DIR"
-
-	run "$INSTALLER"
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"Homebrew cask link path is not a directory: $DOTFILES_HOMEBREW_CASK_BIN_DIR"* ]]
-	! grep -q '^sudo /bin/mkdir ' "$COMMAND_LOG"
-	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
+		[ "$status" -ne 0 ]
+		[[ "$output" == *"$expected"* ]]
+		assert_no_homebrew_cask_link_mutations
+		! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
+	done
 }
 
 @test "cask update failure stops macOS before Docker runtime and chezmoi" {

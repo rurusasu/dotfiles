@@ -230,9 +230,25 @@ fi
 	write_fixture_stub sudo '
 printf "sudo %s\\n" "$*" >>"$COMMAND_LOG"
 case "${1:-}" in
-  /bin/mkdir | /usr/sbin/chown | /bin/chmod) exit 0 ;;
+  /bin/mkdir)
+    [[ $# -eq 4 && ${2:-} == -p && ${3:-} == -- ]] &&
+      [[ ${4:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${4:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+      exit 0
+    ;;
+  /usr/sbin/chown)
+    [[ $# -eq 3 && ${2:-} == test-user:admin ]] &&
+      [[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+      exit 0
+    ;;
+  /bin/chmod)
+    [[ $# -eq 3 && ${2:-} == 0775 ]] &&
+      [[ ${3:-} == "$DOTFILES_HOMEBREW_CASK_BIN_DIR" || ${3:-} == "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]] &&
+      exit 0
+    ;;
+  *) exec "$@" ;;
 esac
-exec "$@"
+printf "Unexpected privileged filesystem command: %s\\n" "$*" >&2
+exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'

@@ -116,13 +116,19 @@ apply_darwin_system() {
   hash -r
 }
 
-ensure_homebrew_cask_link_directory() {
+validate_homebrew_cask_link_directory() {
   local directory="$1"
 
   [[ ! -L $directory ]] ||
     dotfiles_die "Refusing symbolic Homebrew cask link directory: $directory"
   [[ ! -e $directory || -d $directory ]] ||
     dotfiles_die "Homebrew cask link path is not a directory: $directory"
+}
+
+ensure_homebrew_cask_link_directory() {
+  local directory="$1"
+
+  validate_homebrew_cask_link_directory "$directory"
 
   sudo /bin/mkdir -p -- "$directory"
   sudo /usr/sbin/chown "$DOTFILES_USER:admin" "$directory"
@@ -131,6 +137,8 @@ ensure_homebrew_cask_link_directory() {
 
 ensure_homebrew_cask_link_directories() {
   dotfiles_log "Converging Homebrew cask link directory permissions..."
+  validate_homebrew_cask_link_directory "$HOMEBREW_CASK_BIN_DIR"
+  validate_homebrew_cask_link_directory "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
   ensure_homebrew_cask_link_directory "$HOMEBREW_CASK_BIN_DIR"
   ensure_homebrew_cask_link_directory "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
 }
