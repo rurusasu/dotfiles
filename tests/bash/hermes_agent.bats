@@ -175,10 +175,29 @@ create_mocked_installer_fixture() {
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done
+	mv "$MOCK_REPO/scripts/sh/install-macos.sh" \
+		"$MOCK_REPO/scripts/sh/install-macos-under-test.sh"
+	cat >"$MOCK_REPO/scripts/sh/install-macos.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DOTFILES_TEST_SELECTED_INSTALLER="$0"
+. "$(dirname "$0")/install-macos-under-test.sh"
+homebrew_cask_link_parent_metadata() {
+  printf '0 755\n'
+}
+homebrew_cask_link_parent_acl_state() {
+  printf 'absent\n'
+}
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  return 0
+}
+main "$@"
+EOF
 	touch "$MOCK_REPO/flake.nix" "$MOCK_REPO/docker/hermes-agent/compose.yml"
 
 	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
-printf 'selected-installer=%s\n' "${BASH_SOURCE[1]}" >>"$COMMAND_LOG"
+printf 'selected-installer=%s\n' "${DOTFILES_TEST_SELECTED_INSTALLER:-${BASH_SOURCE[1]}}" >>"$COMMAND_LOG"
 dotfiles_hermes_start_stack() {
   printf 'adapter runner=%s compose=%s\n' "$1" "$2" >>"$COMMAND_LOG"
   "$1" compose -f "$2" config --quiet
@@ -193,6 +212,7 @@ EOF
 printf 'update-homebrew-casks %s\n' "$*" >>"$COMMAND_LOG"
 EOF
 	chmod +x "$MOCK_REPO/install.sh" \
+		"$MOCK_REPO/scripts/sh/install-macos.sh" \
 		"$MOCK_REPO/scripts/sh/update-homebrew-casks.sh" \
 		"$MOCK_REPO/scripts/sh/verify-environment.sh"
 
