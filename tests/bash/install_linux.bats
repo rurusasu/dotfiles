@@ -171,7 +171,7 @@ assert_log_order() {
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 
-@test "Hermes bootstrap failure stops Linux before service recreation and acceptance" {
+@test "Hermes bootstrap failure recovers Linux runtime before returning failure" {
 	write_nix_stub
 	export HERMES_BOOTSTRAP_STATUS=45
 
@@ -180,6 +180,7 @@ assert_log_order() {
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	grep -q ' up -d --no-build' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 

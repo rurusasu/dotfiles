@@ -736,7 +736,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	! grep -q "^update-homebrew-casks " "$COMMAND_LOG"
 }
 
-@test "Hermes bootstrap failure stops macOS before service recreation and acceptance" {
+@test "Hermes bootstrap failure recovers macOS runtime before returning failure" {
 	write_installed_stubs
 	export HERMES_BOOTSTRAP_STATUS=45
 
@@ -745,6 +745,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	grep -q ' up -d --no-build' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 

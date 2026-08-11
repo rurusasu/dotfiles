@@ -768,15 +768,16 @@ trailing-garbage"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
-@test "propagates bootstrap migration exit five without recreating services" {
+@test "recovers the existing Hermes runtime while preserving bootstrap migration exit five" {
 	export BOOTSTRAP_STATUS=5
 
 	run_start_stack
 
 	[ "$status" -eq 5 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	! grep -q '<up>' "$COMMAND_LOG"
-	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	assert_log_order '<apply>' '<Hermes X API MCP>' '<up> <-d> <--no-build>' '^curl '
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
+	! grep -q '<ps> <--all>' "$COMMAND_LOG"
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
@@ -790,8 +791,9 @@ trailing-garbage"
 
 	[ "$status" -eq 3 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	! grep -q '<up>' "$COMMAND_LOG"
-	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	assert_log_order '<apply>' '<Hermes X API MCP>' '<up> <-d> <--no-build>' '^curl '
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
+	! grep -q '<ps> <--all>' "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 

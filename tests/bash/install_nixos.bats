@@ -133,7 +133,7 @@ line_of() {
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 
-@test "Hermes bootstrap failure stops NixOS before service recreation and acceptance" {
+@test "Hermes bootstrap failure recovers NixOS runtime before returning failure" {
 	export HERMES_BOOTSTRAP_STATUS=45
 
 	run "$INSTALLER"
@@ -141,6 +141,7 @@ line_of() {
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	grep -q ' up -d --no-build' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 

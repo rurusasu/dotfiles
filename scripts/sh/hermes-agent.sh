@@ -402,6 +402,17 @@ dotfiles_hermes_show_compose_diagnostics() {
   "$docker_runner" compose -f "$compose_file" ps --all >&2 || true
 }
 
+dotfiles_hermes_recover_stack_after_bootstrap_failure() {
+  local docker_runner="$1"
+  local compose_file="$2"
+
+  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --no-build; then
+    dotfiles_hermes_wait_for_api
+  else
+    return 1
+  fi
+}
+
 dotfiles_hermes_start_stack() {
   local docker_runner="$1"
   local compose_file="$2"
@@ -437,7 +448,9 @@ dotfiles_hermes_start_stack() {
     :
   else
     status=$?
-    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    if ! dotfiles_hermes_recover_stack_after_bootstrap_failure "$docker_runner" "$compose_file"; then
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    fi
     return "$status"
   fi
   if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --force-recreate; then
