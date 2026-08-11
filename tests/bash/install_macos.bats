@@ -30,6 +30,7 @@ setup() {
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export SUDO_USER="test-user"
+	export DOTFILES_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
@@ -419,6 +420,7 @@ run_macos_installer() {
 	write_installed_stubs
 
 	export SUDO_USER="$runner_user"
+	export DOTFILES_USER="$runner_user"
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
