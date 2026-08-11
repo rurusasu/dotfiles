@@ -827,7 +827,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
 	[ "$(grep -c '^curl ' "$COMMAND_LOG")" -eq 3 ]
 	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
-	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	assert_log_order '<up> <-d> <--force-recreate>' '^curl '
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
@@ -843,7 +843,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -ne 0 ]
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
