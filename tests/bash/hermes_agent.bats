@@ -623,6 +623,13 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$status" -eq 0 ]
 }
 
+@test "defaults service-account read timeouts above 300 seconds to twenty seconds" {
+	grep -Fq '((timeout_seconds <= 300)) || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=301
+	run_start_stack
+	[ "$status" -eq 0 ]
+}
+
 @test "atomically replaces an old service account cache after a successful op read" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"

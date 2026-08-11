@@ -59,6 +59,7 @@ dotfiles_hermes_read_service_account_token() {
   data_dir="$(dotfiles_hermes_data_dir)"
   timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"
   [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20
+  ((timeout_seconds <= 300)) || timeout_seconds=20
   temporary="$(mktemp "$data_dir/.op.read.XXXXXX")" || return 1
   chmod 600 "$temporary" || {
     rm -f -- "$temporary"
