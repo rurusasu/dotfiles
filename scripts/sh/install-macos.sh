@@ -121,8 +121,25 @@ homebrew_cask_link_parent_metadata() {
   /usr/bin/stat -f '%u %Lp' "$1"
 }
 
+homebrew_cask_link_parent_acl_state() {
+  local parent="$1" matches
+
+  matches="$(/usr/bin/find "$parent" -maxdepth 0 -acl -print)" || return
+  if [[ -n $matches ]]; then
+    printf 'present\n'
+  else
+    printf 'absent\n'
+  fi
+}
+
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  local parent="$1"
+
+  [[ ! -w $parent ]]
+}
+
 validate_homebrew_cask_link_parent_directory() {
-  local parent="$1" metadata owner mode
+  local parent="$1" metadata owner mode acl_state
 
   [[ ! -L $parent ]] ||
     dotfiles_die "Refusing symbolic Homebrew cask link parent: $parent"
@@ -138,6 +155,17 @@ validate_homebrew_cask_link_parent_directory() {
     dotfiles_die "Unable to parse Homebrew cask link parent mode: $parent ($mode)"
   (((8#$mode & 0022) == 0)) ||
     dotfiles_die "Homebrew cask link parent must not be group/other writable: $parent"
+
+  acl_state="$(homebrew_cask_link_parent_acl_state "$parent")" ||
+    dotfiles_die "Unable to inspect Homebrew cask link parent ACL: $parent"
+  case "$acl_state" in
+  absent) ;;
+  present) dotfiles_die "Homebrew cask link parent must not have an extended ACL: $parent" ;;
+  *) dotfiles_die "Unable to determine Homebrew cask link parent ACL state: $parent" ;;
+  esac
+
+  homebrew_cask_link_parent_is_immutable_to_caller "$parent" ||
+    dotfiles_die "Homebrew cask link parent must not be writable by the current caller: $parent"
 }
 
 validate_homebrew_cask_link_directory() {

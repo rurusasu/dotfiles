@@ -50,6 +50,8 @@ setup() {
 	export DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$BATS_TEST_TMPDIR/untrusted/cli-plugins"
 	export HOMEBREW_CASK_UPDATE_STATUS=0
 	export TEST_HOMEBREW_PARENT_METADATA='0 755'
+	export TEST_HOMEBREW_PARENT_ACL_STATE=absent
+	export TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER=1
 	export SUDO_FAIL_OPERATION=''
 	export SUDO_FAILURE_STATUS=47
 	export SUDO_SWAP_CLI_PLUGIN_TARGET=0
@@ -315,6 +317,12 @@ set -euo pipefail
 homebrew_cask_link_parent_metadata() {
   printf "%s\n" "$TEST_HOMEBREW_PARENT_METADATA"
 }
+homebrew_cask_link_parent_acl_state() {
+  printf "%s\n" "$TEST_HOMEBREW_PARENT_ACL_STATE"
+}
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  [[ $TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER == 1 ]]
+}
 export DOTFILES_USER=test-user
 ensure_homebrew_cask_link_directories_under_parent \
   "$TEST_HOMEBREW_CASK_PARENT_DIR" \
@@ -322,6 +330,28 @@ ensure_homebrew_cask_link_directories_under_parent \
   "$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"
 "$DOTFILES_HOMEBREW_CASK_UPDATER"
 '
+}
+
+@test "extended ACL grant on Homebrew cask link parent stops before privileged mutation" {
+	export TEST_HOMEBREW_PARENT_ACL_STATE=present
+
+	run_test_homebrew_cask_link_convergence
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Homebrew cask link parent must not have an extended ACL: $TEST_HOMEBREW_CASK_PARENT_DIR"* ]]
+	assert_no_homebrew_cask_link_mutations
+	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
+}
+
+@test "caller-writable Homebrew cask link parent stops before privileged mutation" {
+	export TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER=0
+
+	run_test_homebrew_cask_link_convergence
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Homebrew cask link parent must not be writable by the current caller: $TEST_HOMEBREW_CASK_PARENT_DIR"* ]]
+	assert_no_homebrew_cask_link_mutations
+	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 }
 
 @test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
