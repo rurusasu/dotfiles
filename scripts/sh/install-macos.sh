@@ -15,6 +15,9 @@ DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/dock
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 HOMEBREW_CASK_UPDATER="${DOTFILES_HOMEBREW_CASK_UPDATER:-$ROOT/scripts/sh/update-homebrew-casks.sh}"
+readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
+readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
+readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
@@ -114,6 +117,102 @@ apply_darwin_system() {
   hash -r
 }
 
+homebrew_cask_link_parent_metadata() {
+  /usr/bin/stat -f '%u %Lp' "$1"
+}
+
+homebrew_cask_link_parent_acl_state() {
+  local parent="$1" matches
+
+  matches="$(/usr/bin/find "$parent" -maxdepth 0 -acl -print)" || return
+  if [[ -n $matches ]]; then
+    printf 'present\n'
+  else
+    printf 'absent\n'
+  fi
+}
+
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  local parent="$1"
+
+  [[ ! -w $parent ]]
+}
+
+validate_homebrew_cask_link_parent_directory() {
+  local parent="$1" metadata owner mode acl_state
+
+  [[ ! -L $parent ]] ||
+    dotfiles_die "Refusing symbolic Homebrew cask link parent: $parent"
+  [[ -d $parent ]] ||
+    dotfiles_die "Homebrew cask link parent is not a directory: $parent"
+
+  metadata="$(homebrew_cask_link_parent_metadata "$parent")" ||
+    dotfiles_die "Unable to inspect Homebrew cask link parent: $parent"
+  read -r owner mode <<<"$metadata"
+  [[ $owner == 0 ]] ||
+    dotfiles_die "Homebrew cask link parent must be owned by root: $parent"
+  [[ $mode =~ ^[0-7]{3,4}$ ]] ||
+    dotfiles_die "Unable to parse Homebrew cask link parent mode: $parent ($mode)"
+  (((8#$mode & 0022) == 0)) ||
+    dotfiles_die "Homebrew cask link parent must not be group/other writable: $parent"
+
+  acl_state="$(homebrew_cask_link_parent_acl_state "$parent")" ||
+    dotfiles_die "Unable to inspect Homebrew cask link parent ACL: $parent"
+  case "$acl_state" in
+  absent) ;;
+  present) dotfiles_die "Homebrew cask link parent must not have an extended ACL: $parent" ;;
+  *) dotfiles_die "Unable to determine Homebrew cask link parent ACL state: $parent" ;;
+  esac
+
+  homebrew_cask_link_parent_is_immutable_to_caller "$parent" ||
+    dotfiles_die "Homebrew cask link parent must not be writable by the current caller: $parent"
+}
+
+validate_homebrew_cask_link_directory() {
+  local parent="$1" directory="$2"
+
+  [[ ${directory%/*} == "$parent" ]] ||
+    dotfiles_die "Homebrew cask link directory is outside its fixed parent: $directory"
+  [[ ! -L $directory ]] ||
+    dotfiles_die "Refusing symbolic Homebrew cask link directory: $directory"
+  [[ ! -e $directory || -d $directory ]] ||
+    dotfiles_die "Homebrew cask link path is not a directory: $directory"
+}
+
+ensure_homebrew_cask_link_directory() {
+  local parent="$1" directory="$2"
+
+  validate_homebrew_cask_link_parent_directory "$parent"
+  validate_homebrew_cask_link_directory "$parent" "$directory"
+
+  if [[ ! -e $directory ]]; then
+    sudo /bin/mkdir -- "$directory"
+  fi
+  sudo /usr/sbin/chown "$DOTFILES_USER:admin" "$directory"
+  sudo /bin/chmod 0775 "$directory"
+}
+
+ensure_homebrew_cask_link_directories_under_parent() {
+  local parent="$1" bin_directory="$2" cli_plugin_directory="$3"
+
+  [[ $bin_directory == "$parent/bin" && $cli_plugin_directory == "$parent/cli-plugins" ]] ||
+    dotfiles_die "Unexpected Homebrew cask link directory allowlist."
+
+  dotfiles_log "Converging Homebrew cask link directory permissions..."
+  validate_homebrew_cask_link_parent_directory "$parent"
+  validate_homebrew_cask_link_directory "$parent" "$bin_directory"
+  validate_homebrew_cask_link_directory "$parent" "$cli_plugin_directory"
+  ensure_homebrew_cask_link_directory "$parent" "$bin_directory"
+  ensure_homebrew_cask_link_directory "$parent" "$cli_plugin_directory"
+}
+
+ensure_homebrew_cask_link_directories() {
+  ensure_homebrew_cask_link_directories_under_parent \
+    "$HOMEBREW_CASK_PARENT_DIR" \
+    "$HOMEBREW_CASK_BIN_DIR" \
+    "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
+}
+
 setup_docker_runtime() {
   [[ -d $DOCKER_APP ]] ||
     dotfiles_die "Docker Desktop was not installed by nix-darwin: $DOCKER_APP"
@@ -150,6 +249,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   apply_darwin_system
+  ensure_homebrew_cask_link_directories
   "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime
   apply_chezmoi
@@ -158,4 +258,6 @@ main() {
   dotfiles_log "macOS setup complete."
 }
 
-main "$@"
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
