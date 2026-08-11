@@ -332,6 +332,35 @@ ensure_homebrew_cask_link_directories_under_parent \
 '
 }
 
+run_macos_installer_for_host() {
+	local host_os="$1"
+	shift
+
+	if [[ $host_os == Darwin ]]; then
+		run "$INSTALLER" "$@"
+		return
+	fi
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+homebrew_cask_link_parent_metadata() {
+  printf "%s\n" "$TEST_HOMEBREW_PARENT_METADATA"
+}
+homebrew_cask_link_parent_acl_state() {
+  printf "%s\n" "$TEST_HOMEBREW_PARENT_ACL_STATE"
+}
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  [[ $TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER == 1 ]]
+}
+main "$@"
+' bash "$@"
+}
+
+run_macos_installer() {
+	run_macos_installer_for_host "$(/usr/bin/uname -s)" "$@"
+}
+
 @test "extended ACL grant on Homebrew cask link parent stops before privileged mutation" {
 	export TEST_HOMEBREW_PARENT_ACL_STATE=present
 
@@ -357,7 +386,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 @test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
 	write_installed_stubs
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$REPO_ROOT> <$STUB_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
@@ -386,7 +415,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 	write_installed_stubs
 	local expected_sudo_count=5 target
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$REPO_ROOT> <$STUB_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
@@ -411,6 +440,16 @@ ensure_homebrew_cask_link_directories_under_parent \
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>" \
 		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>" \
 		"update-homebrew-casks "
+}
+
+@test "Linux harness stubs macOS-only parent inspection" {
+	write_installed_stubs
+
+	run_macos_installer_for_host Linux
+
+	[ "$status" -eq 0 ]
+	grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
+	grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"
 }
 
 @test "test boundary converges only six exact sudo argv vectors" {
@@ -518,7 +557,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 	write_installed_stubs
 	export HOMEBREW_CASK_UPDATE_STATUS=47
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 47 ]
 	grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
@@ -530,7 +569,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 	write_installed_stubs
 	export HERMES_BOOTSTRAP_STATUS=45
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
@@ -544,7 +583,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 	printf 'existing bashrc\n' >"$FAKE_BASHRC"
 	printf 'existing zshrc\n' >"$FAKE_ZSHRC"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ ! -e "$FAKE_BASHRC" ]
@@ -572,7 +611,7 @@ esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
@@ -591,7 +630,7 @@ printf 'profile-chezmoi %s\n' "$*" >>"$COMMAND_LOG"
 EOF
 	chmod +x "$FAKE_USER_PROFILE_ROOT/test-user/bin/chezmoi"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -q "^profile-chezmoi init --source $REPO_ROOT/chezmoi$" "$COMMAND_LOG"
@@ -605,7 +644,7 @@ printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "run" ]; then exit 42; fi
 '
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 42 ]
 	! grep -q '^chezmoi ' "$COMMAND_LOG"
@@ -615,7 +654,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 @test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
 	write_fresh_install_stubs
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
@@ -651,7 +690,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
 	INSTALLER="$HOME/.dotfiles/scripts/sh/install-macos.sh"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ -d "$HOME/.dotfiles" ]
@@ -666,7 +705,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	mkdir -p "$HOME/.dotfiles"
 	echo keep >"$HOME/.dotfiles/existing.txt"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ -L "$HOME/.dotfiles" ]
@@ -685,7 +724,7 @@ exit 0
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]
