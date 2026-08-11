@@ -402,11 +402,27 @@ dotfiles_hermes_show_compose_diagnostics() {
   "$docker_runner" compose -f "$compose_file" ps --all >&2 || true
 }
 
+dotfiles_hermes_runtime_exists() {
+  local docker_runner="$1"
+  local compose_file="$2"
+  local services
+  local service
+
+  if services="$("$docker_runner" compose -f "$compose_file" ps --all --services hermes)"; then
+    while IFS= read -r service; do
+      [[ $service == hermes ]] && return 0
+    done <<<"$services"
+    return 1
+  fi
+
+  return 2
+}
+
 dotfiles_hermes_recover_stack_after_bootstrap_failure() {
   local docker_runner="$1"
   local compose_file="$2"
 
-  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --no-build; then
+  if "$docker_runner" compose -f "$compose_file" start; then
     dotfiles_hermes_wait_for_api
   else
     return 1
@@ -417,6 +433,7 @@ dotfiles_hermes_start_stack() {
   local docker_runner="$1"
   local compose_file="$2"
   local status
+  local runtime_existed=0
 
   dotfiles_hermes_require_secret_tools
   dotfiles_hermes_prepare_runtime_home
@@ -437,6 +454,18 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
+  if dotfiles_hermes_runtime_exists "$docker_runner" "$compose_file"; then
+    runtime_existed=1
+  else
+    status=$?
+    case "$status" in
+    1) ;;
+    *)
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+      return "$status"
+      ;;
+    esac
+  fi
   if "$docker_runner" compose -f "$compose_file" stop hermes; then
     :
   else
@@ -448,7 +477,9 @@ dotfiles_hermes_start_stack() {
     :
   else
     status=$?
-    if ! dotfiles_hermes_recover_stack_after_bootstrap_failure "$docker_runner" "$compose_file"; then
+    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_bootstrap_failure "$docker_runner" "$compose_file"; then
+      :
+    else
       dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     fi
     return "$status"

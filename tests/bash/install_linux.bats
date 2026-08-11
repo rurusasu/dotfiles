@@ -75,6 +75,7 @@ fi
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
@@ -180,7 +181,8 @@ assert_log_order() {
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
-	grep -q ' up -d --no-build' "$COMMAND_LOG"
+	grep -q ' start' "$COMMAND_LOG"
+	! grep -q ' up ' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
