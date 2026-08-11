@@ -75,6 +75,7 @@ fi
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
@@ -133,7 +134,7 @@ line_of() {
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 
-@test "Hermes bootstrap failure stops NixOS before service recreation and acceptance" {
+@test "Hermes bootstrap failure recovers NixOS runtime before returning failure" {
 	export HERMES_BOOTSTRAP_STATUS=45
 
 	run "$INSTALLER"
@@ -141,6 +142,8 @@ line_of() {
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	grep -q ' start' "$COMMAND_LOG"
+	! grep -q ' up ' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 

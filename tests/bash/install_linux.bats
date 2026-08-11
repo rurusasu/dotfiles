@@ -75,6 +75,7 @@ fi
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
@@ -171,7 +172,7 @@ assert_log_order() {
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 
-@test "Hermes bootstrap failure stops Linux before service recreation and acceptance" {
+@test "Hermes bootstrap failure recovers Linux runtime before returning failure" {
 	write_nix_stub
 	export HERMES_BOOTSTRAP_STATUS=45
 
@@ -180,6 +181,8 @@ assert_log_order() {
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
 	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
+	grep -q ' start' "$COMMAND_LOG"
+	! grep -q ' up ' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 

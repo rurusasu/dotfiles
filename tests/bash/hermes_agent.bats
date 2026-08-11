@@ -29,6 +29,7 @@ setup() {
 	export OP_READ_DELAY_SECONDS=0
 	export OP_READ_COMPLETION_FILE=""
 	export BOOTSTRAP_EXIT_EARLY=0
+	export HERMES_RUNTIME_EXISTS=1
 	export API_READY_AFTER=1
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
@@ -75,6 +76,11 @@ if [ "${1:-}" != "compose" ]; then
 	exit 1
 fi
 case " $* " in
+  *" ps --all --services hermes "*)
+    if [[ $HERMES_RUNTIME_EXISTS == 1 ]]; then
+      printf "hermes\n"
+    fi
+    ;;
   *" secret-plan "*) printf "%s\n" "$PLAN_JSON" ;;
   *" apply "*)
     if [[ $BOOTSTRAP_EXIT_EARLY == 1 ]]; then
@@ -768,15 +774,18 @@ trailing-garbage"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
-@test "propagates bootstrap migration exit five without recreating services" {
+@test "recovers the existing Hermes runtime while preserving bootstrap migration exit five" {
 	export BOOTSTRAP_STATUS=5
 
 	run_start_stack
 
 	[ "$status" -eq 5 ]
 	grep -q '<apply>' "$COMMAND_LOG"
+	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '^curl '
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
 	! grep -q '<up>' "$COMMAND_LOG"
-	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
+	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
@@ -790,9 +799,26 @@ trailing-garbage"
 
 	[ "$status" -eq 3 ]
 	grep -q '<apply>' "$COMMAND_LOG"
+	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '^curl '
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
 	! grep -q '<up>' "$COMMAND_LOG"
-	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
+	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "does not create a Hermes runtime after bootstrap failure when none existed" {
+	export BOOTSTRAP_STATUS=5
+	export HERMES_RUNTIME_EXISTS=0
+
+	run_start_stack
+
+	[ "$status" -eq 5 ]
+	grep -q '<ps> <--all> <--services> <hermes>' "$COMMAND_LOG"
+	grep -q '<ps> <--all>$' "$COMMAND_LOG"
+	! grep -q '<start>' "$COMMAND_LOG"
+	! grep -q '<up>' "$COMMAND_LOG"
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 0 ]
 }
 
 @test "does not expose secret payload records when the caller enables xtrace" {
