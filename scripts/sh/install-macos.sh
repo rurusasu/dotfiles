@@ -246,13 +246,17 @@ docker_desktop_md5_link_state() {
   fi
 }
 
+docker_desktop_md5_binary_is_executable() {
+  [[ -x /sbin/md5 ]]
+}
+
 ensure_docker_desktop_md5_compatibility() {
   local md5_binary=/sbin/md5 md5_link=/usr/local/bin/md5 state
-  [[ -x $md5_binary ]] || dotfiles_die "macOS md5 executable is unavailable: $md5_binary"
+  docker_desktop_md5_binary_is_executable || dotfiles_die "macOS md5 executable is unavailable: $md5_binary"
   state="$(docker_desktop_md5_link_state "$md5_binary" "$md5_link")"
   case "$state" in
   expected-link) return 0 ;;
-  missing) sudo /bin/ln -s "$md5_binary" "$md5_link" ;;
+  missing) sudo /bin/ln -s /sbin/md5 /usr/local/bin/md5 ;;
   conflict) dotfiles_die "Docker Desktop md5 compatibility path conflicts with existing entry: $md5_link" ;;
   *) dotfiles_die "Unable to determine Docker Desktop md5 compatibility path state: $md5_link" ;;
   esac
