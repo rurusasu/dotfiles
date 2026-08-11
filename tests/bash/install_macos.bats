@@ -29,6 +29,7 @@ setup() {
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
+	export SUDO_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
@@ -94,6 +95,7 @@ is_allowed_cask_target() {
 	[[ $1 == /usr/local/bin || $1 == /usr/local/cli-plugins ||
 		$1 == "$TEST_HOMEBREW_CASK_BIN_DIR" || $1 == "$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]]
 }
+fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
 fail_operation() {
 	[[ ${SUDO_FAIL_OPERATION:-} != "$1" ]] || exit "$SUDO_FAILURE_STATUS"
 }
@@ -108,7 +110,7 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/sbin/chown)
-		if [[ $# -eq 3 && ${2:-} == test-user:admin ]] && is_allowed_cask_target "${3:-}"; then
+		if [[ $# -eq 3 && ${2:-} == "$fixture_user:admin" ]] && is_allowed_cask_target "${3:-}"; then
 			fail_operation chown
 			exit 0
 		fi
@@ -121,7 +123,7 @@ case "${1:-}" in
 		;;
 	/usr/bin/env)
 		if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
-			${3:-} == "DOTFILES_USER=test-user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
+			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
 			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "$STUB_BIN/nix" &&
 			${7:-} == run && ${8:-} == ".#darwin-rebuild" && ${9:-} == -- &&
 			${10:-} == switch && ${11:-} == --flake && ${12:-} == ".#macos" && ${13:-} == --impure ]]; then
@@ -136,7 +138,7 @@ case "${1:-}" in
 		fi
 		;;
 	"$FAKE_DOCKER_APP/Contents/MacOS/install")
-		if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == --user=test-user ]]; then
+		if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == "--user=$fixture_user" ]]; then
 			exec "$@"
 		fi
 		;;
@@ -410,6 +412,18 @@ run_macos_installer() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "macOS installer accepts the sudo user for cask directory repair" {
+	local runner_user="runner"
+	write_installed_stubs
+
+	export SUDO_USER="$runner_user"
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
 }
 
 @test "production Homebrew cask link directories are fixed before cask updates" {
