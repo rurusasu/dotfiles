@@ -235,12 +235,37 @@ ensure_homebrew_cask_link_directories() {
     "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
 }
 
+docker_desktop_md5_link_state() {
+  local md5_binary="$1" md5_link="$2"
+  if [[ -L $md5_link && $(/usr/bin/readlink "$md5_link") == "$md5_binary" ]]; then
+    printf 'expected-link\n'
+  elif [[ -e $md5_link || -L $md5_link ]]; then
+    printf 'conflict\n'
+  else
+    printf 'missing\n'
+  fi
+}
+
+ensure_docker_desktop_md5_compatibility() {
+  local md5_binary=/sbin/md5 md5_link=/usr/local/bin/md5 state
+  [[ -x $md5_binary ]] || dotfiles_die "macOS md5 executable is unavailable: $md5_binary"
+  state="$(docker_desktop_md5_link_state "$md5_binary" "$md5_link")"
+  case "$state" in
+  expected-link) return 0 ;;
+  missing) sudo /bin/ln -s "$md5_binary" "$md5_link" ;;
+  conflict) dotfiles_die "Docker Desktop md5 compatibility path conflicts with existing entry: $md5_link" ;;
+  *) dotfiles_die "Unable to determine Docker Desktop md5 compatibility path state: $md5_link" ;;
+  esac
+}
+
 setup_docker_runtime() {
   [[ -d $DOCKER_APP ]] ||
     dotfiles_die "Docker Desktop was not installed by nix-darwin: $DOCKER_APP"
 
   local installer="$DOCKER_APP/Contents/MacOS/install"
   [[ -x $installer ]] || dotfiles_die "Docker Desktop installer not found: $installer"
+
+  ensure_docker_desktop_md5_compatibility
 
   if [[ ! -f $DOCKER_SETUP_MARKER ]]; then
     dotfiles_log "Accepting the Docker Desktop license for personal use..."

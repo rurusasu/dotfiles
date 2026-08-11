@@ -122,6 +122,11 @@ case "${1:-}" in
 			exit 0
 		fi
 		;;
+	/bin/ln)
+		if [[ $# -eq 4 && ${2:-} == -s && ${3:-} == /sbin/md5 && ${4:-} == /usr/local/bin/md5 ]]; then
+			exit 0
+		fi
+		;;
 	/usr/bin/env)
 		if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
 			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
@@ -410,9 +415,86 @@ run_macos_installer() {
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 11 ]
 	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
+	[ "$(grep -Fxc 'sudo </bin/ln> <-s> </sbin/md5> </usr/local/bin/md5>' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "Docker Desktop md5 compatibility link state accepts the expected link" {
+	local path="$BATS_TEST_TMPDIR/md5"
+	ln -s /sbin/md5 "$path"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state /sbin/md5 "$1"
+' bash "$path"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = expected-link ]
+}
+
+@test "Docker Desktop md5 compatibility path rejects a regular file" {
+	local path="$BATS_TEST_TMPDIR/md5"
+	touch "$path"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state /sbin/md5 "$1"
+' bash "$path"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = conflict ]
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state() { printf "conflict\n"; }
+ensure_docker_desktop_md5_compatibility
+' bash
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Docker Desktop md5 compatibility path conflicts with existing entry:"* ]]
+}
+
+@test "Docker Desktop md5 compatibility path rejects a link to another target" {
+	local path="$BATS_TEST_TMPDIR/md5" target="$BATS_TEST_TMPDIR/other-md5"
+	ln -s "$target" "$path"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state /sbin/md5 "$1"
+' bash "$path"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = conflict ]
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state() { printf "conflict\n"; }
+ensure_docker_desktop_md5_compatibility
+' bash
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Docker Desktop md5 compatibility path conflicts with existing entry:"* ]]
+}
+
+@test "Docker Desktop md5 compatibility conflict stops before Docker startup" {
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+docker_desktop_md5_link_state() { printf "conflict\n"; }
+ensure_docker_desktop_md5_compatibility
+docker desktop start --timeout 120
+' bash
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Docker Desktop md5 compatibility path conflicts with existing entry:"* ]]
+	! grep -q '^docker desktop start' "$COMMAND_LOG"
 }
 
 @test "macOS installer accepts the sudo user for cask directory repair" {
@@ -430,7 +512,7 @@ run_macos_installer() {
 
 @test "production Homebrew cask link directories are fixed before cask updates" {
 	write_installed_stubs
-	local expected_sudo_count=9 target
+	local expected_sudo_count=10 target
 
 	run_macos_installer
 
@@ -456,7 +538,9 @@ run_macos_installer() {
 		"sudo </bin/chmod> <0775> </usr/local/bin>" \
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>" \
 		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>" \
-		"update-homebrew-casks "
+		"update-homebrew-casks " \
+		"sudo </bin/ln> <-s> </sbin/md5> </usr/local/bin/md5>" \
+		"docker info"
 }
 
 @test "Linux harness stubs macOS-only parent inspection" {
