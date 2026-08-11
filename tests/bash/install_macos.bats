@@ -704,10 +704,13 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 
 @test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
 	write_fresh_install_stubs
+	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
+	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_CLI_PLUGINS_DIR>" "$COMMAND_LOG"
 	assert_log_order \
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \

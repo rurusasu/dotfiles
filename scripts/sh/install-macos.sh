@@ -104,12 +104,15 @@ repair_homebrew_cask_link_directories() {
   [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
 
   for directory in "${directories[@]}"; do
-    if [[ -L $directory || ! -d $directory ]]; then
+    if [[ -L $directory || (-e $directory && ! -d $directory) ]]; then
       dotfiles_die "Homebrew cask link directory must be a real directory: $directory"
     fi
   done
 
   for directory in "${directories[@]}"; do
+    if [[ ! -e $directory ]]; then
+      sudo /bin/mkdir -- "$directory"
+    fi
     sudo /usr/sbin/chown "${user}:admin" "$directory"
     sudo /bin/chmod 0775 "$directory"
   done

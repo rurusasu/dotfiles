@@ -76,7 +76,7 @@ dotfiles_hermes_read_service_account_token() {
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     for ((poll = 0; poll < 10; poll++)); do
-      /bin/sleep 0.1
+      sleep 0.1
       kill -0 "$pid" 2>/dev/null || break
     done
     if kill -0 "$pid" 2>/dev/null; then
