@@ -19,6 +19,7 @@ BROWSER_AUTOMATION_TOOLS = {
     "browser_console",
     "browser_cdp",
     "browser_dialog",
+    "browser_exec",
 }
 
 
