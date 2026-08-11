@@ -587,7 +587,7 @@ run_macos_installer() {
 	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	chmod 0700 "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
-	run "$INSTALLER"
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </usr/sbin/chown> <test-user:admin> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
