@@ -115,14 +115,11 @@ retry_command() {
 }
 
 record_running_apps() {
-  local cask="$1" app_path status app_file
+  local cask="$1" app_path status app_file cask_info_file quit_identifier_file
   app_file="$temporary_directory/app-paths"
-  if "$BREW_COMMAND" info --cask "$cask" --json=v2 |
-    "$JQ_COMMAND" -r '
-      .casks[0].artifacts[]?
-      | select(has("app"))
-      | if has("target") then .target else .app[] | "/Applications/" + . end
-    ' >"$app_file"; then
+  cask_info_file="$temporary_directory/cask-info"
+  quit_identifier_file="$temporary_directory/quit-identifiers"
+  if "$BREW_COMMAND" info --cask "$cask" --json=v2 >"$cask_info_file"; then
     :
   else
     status=$?
@@ -131,11 +128,43 @@ record_running_apps() {
     return "$status"
   fi
 
+  if "$JQ_COMMAND" -r '
+      .casks[0].artifacts[]?
+      | select(has("app"))
+      | if has("target") then .target else .app[] | "/Applications/" + . end
+    ' "$cask_info_file" >"$app_file"; then
+    :
+  else
+    status=$?
+    printf '[macos-cask-update] failed to inspect application artifacts for %s (status %d)\n' \
+      "$cask" "$status" >&2
+    return "$status"
+  fi
+
+  if "$JQ_COMMAND" -r '
+      [
+        .casks[0].artifacts[]?
+        | select(has("uninstall"))
+        | .uninstall[]?
+        | select(has("quit"))
+        | .quit
+        | if type == "array" then .[] else . end
+      ]
+      | unique[]
+    ' "$cask_info_file" >"$quit_identifier_file"; then
+    :
+  else
+    status=$?
+    printf '[macos-cask-update] failed to inspect application quit identifiers for %s (status %d)\n' \
+      "$cask" "$status" >&2
+    return "$status"
+  fi
+
   while IFS= read -r app_path || [[ -n $app_path ]]; do
     [[ -n $app_path ]] || continue
     if "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
       grep -Fxq "$app_path" "$restart_file" || printf '%s\n' "$app_path" >>"$restart_file"
-      quit_running_app "$app_path" || return 1
+      quit_running_app "$app_path" "$quit_identifier_file" || return 1
     fi
   done <"$app_file"
 }
@@ -174,12 +203,28 @@ wait_for_app_exit() {
 }
 
 quit_running_app() {
-  local app_path="$1" bundle_identifier
+  local app_path="$1" quit_identifier_file="$2" bundle_identifier quit_identifier
+
+  while IFS= read -r quit_identifier || [[ -n $quit_identifier ]]; do
+    [[ -n $quit_identifier ]] || continue
+    case "$quit_identifier" in
+    *[!A-Za-z0-9.-]* | '')
+      printf '[macos-cask-update] invalid application quit identifier: %s\n' "$app_path" >&2
+      return 1
+      ;;
+    esac
+    if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$quit_identifier\" to quit"; then
+      printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
+      return 1
+    fi
+  done <"$quit_identifier_file"
 
   bundle_identifier="$(application_bundle_identifier "$app_path")" || return 1
-  if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$bundle_identifier\" to quit"; then
-    printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
-    return 1
+  if ! grep -Fxq "$bundle_identifier" "$quit_identifier_file"; then
+    if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$bundle_identifier\" to quit"; then
+      printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
+      return 1
+    fi
   fi
   wait_for_app_exit "$app_path"
 }
