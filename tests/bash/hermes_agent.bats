@@ -34,6 +34,7 @@ setup() {
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
+	export IMAGE_PRUNE_STATUS=0
 
 	write_stub jq '
 exec "$REAL_JQ" "$@"
@@ -73,7 +74,7 @@ printf "docker" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
 if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
-	exit 0
+	exit "$IMAGE_PRUNE_STATUS"
 fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
@@ -864,6 +865,16 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 		false
 	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "keeps successful Hermes activation when dangling image cleanup fails" {
+	export IMAGE_PRUNE_STATUS=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
+	[[ "$output" == *"Warning: unable to remove dangling Docker images."* ]]
 }
 
 @test "fails after bounded Hermes API readiness attempts with redacted diagnostics" {

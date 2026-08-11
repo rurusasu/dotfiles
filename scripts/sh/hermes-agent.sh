@@ -498,7 +498,9 @@ dotfiles_hermes_start_stack() {
     return "$status"
   fi
   if dotfiles_hermes_wait_for_api; then
-    dotfiles_hermes_prune_dangling_images "$docker_runner"
+    if ! dotfiles_hermes_prune_dangling_images "$docker_runner"; then
+      printf '%s\n' 'Warning: unable to remove dangling Docker images.' >&2
+    fi
   else
     status=$?
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
