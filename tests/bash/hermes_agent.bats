@@ -217,6 +217,9 @@ set -euo pipefail
 
 export DOTFILES_TEST_SELECTED_INSTALLER="$0"
 . "$(dirname "$0")/install-macos-under-test.sh"
+ensure_docker_desktop_md5_compatibility() {
+  :
+}
 homebrew_cask_link_parent_metadata() {
   printf '0 755\n'
 }
