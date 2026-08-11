@@ -1,4 +1,4 @@
-FROM docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731 AS hermes-bootstrap-runtime
+FROM docker.io/nousresearch/hermes-agent:latest AS hermes-bootstrap-runtime
 
 USER root
 

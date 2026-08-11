@@ -175,12 +175,9 @@ class ComposeContractTests(unittest.TestCase):
 
     def test_dockerfile_builds_runtime_test_and_final_stages(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
-        pinned_base = (
-            "docker.io/nousresearch/hermes-agent@sha256:"
-            "dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731"
-        )
+        latest_base = "docker.io/nousresearch/hermes-agent:latest"
 
-        self.assertIn(f"FROM {pinned_base} AS hermes-bootstrap-runtime", dockerfile)
+        self.assertIn(f"FROM {latest_base} AS hermes-bootstrap-runtime", dockerfile)
         self.assertIn("COPY bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap", dockerfile)
         self.assertIn(
             "COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml",

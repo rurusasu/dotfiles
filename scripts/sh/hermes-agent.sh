@@ -402,6 +402,12 @@ dotfiles_hermes_show_compose_diagnostics() {
   "$docker_runner" compose -f "$compose_file" ps --all >&2 || true
 }
 
+dotfiles_hermes_prune_dangling_images() {
+  local docker_runner="$1"
+
+  "$docker_runner" image prune --force
+}
+
 dotfiles_hermes_runtime_exists() {
   local docker_runner="$1"
   local compose_file="$2"
@@ -447,7 +453,7 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
-  if "$docker_runner" compose -f "$compose_file" build hermes hermes-bootstrap xapi-mcp; then
+  if "$docker_runner" compose -f "$compose_file" build --pull hermes hermes-bootstrap xapi-mcp; then
     :
   else
     status=$?
@@ -492,7 +498,7 @@ dotfiles_hermes_start_stack() {
     return "$status"
   fi
   if dotfiles_hermes_wait_for_api; then
-    return 0
+    dotfiles_hermes_prune_dangling_images "$docker_runner"
   else
     status=$?
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
