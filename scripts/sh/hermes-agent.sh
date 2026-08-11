@@ -19,7 +19,7 @@ dotfiles_hermes_browser_data_dir() {
 }
 
 dotfiles_hermes_prepare_runtime_home() {
-  local data_dir browser_data_dir op_env_path
+  local data_dir browser_data_dir mode op_env_path
   data_dir="$(dotfiles_hermes_data_dir)"
   browser_data_dir="$(dotfiles_hermes_browser_data_dir)"
   op_env_path="$data_dir/.op.env"
@@ -34,9 +34,14 @@ dotfiles_hermes_prepare_runtime_home() {
   if [[ ! -e $op_env_path ]]; then
     (umask 077 && : >"$op_env_path") ||
       dotfiles_die "Could not create Hermes service-account environment file."
+    chmod 600 "$op_env_path" ||
+      dotfiles_die "Could not protect Hermes service-account environment file."
+  else
+    mode="$(stat -c '%a' "$op_env_path" 2>/dev/null || stat -f '%Lp' "$op_env_path")" ||
+      dotfiles_die "Could not inspect Hermes service-account environment file permissions."
+    [[ $mode == 600 ]] ||
+      dotfiles_die "Hermes service-account environment file must have mode 0600."
   fi
-  chmod 600 "$op_env_path" ||
-    dotfiles_die "Could not protect Hermes service-account environment file."
 }
 
 dotfiles_hermes_service_account_ref() {
@@ -45,6 +50,62 @@ dotfiles_hermes_service_account_ref() {
 
 dotfiles_hermes_service_account_account() {
   printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT:-my.1password.com}"
+}
+
+dotfiles_hermes_read_service_account_token() {
+  local op_command="$1" account="$2" reference="$3" result_variable="$4"
+  local data_dir temporary pid timeout_seconds elapsed_seconds=0 poll read_token status=1 timed_out=0
+
+  data_dir="$(dotfiles_hermes_data_dir)"
+  timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"
+  [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20
+  temporary="$(mktemp "$data_dir/.op.read.XXXXXX")" || return 1
+  chmod 600 "$temporary" || {
+    rm -f -- "$temporary"
+    return 1
+  }
+
+  "$op_command" --account "$account" read "$reference" >"$temporary" 2>/dev/null &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    for ((poll = 0; poll < 10; poll++)); do
+      /bin/sleep 0.1
+      kill -0 "$pid" 2>/dev/null || break
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      ((elapsed_seconds += 1))
+      if ((elapsed_seconds >= timeout_seconds)); then
+        timed_out=1
+        kill -TERM "$pid" 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
+        break
+      fi
+    fi
+  done
+  if ((timed_out != 0)); then
+    wait "$pid" 2>/dev/null || true
+  elif wait "$pid" 2>/dev/null; then
+    read_token="$(<"$temporary")"
+    printf -v "$result_variable" '%s' "$read_token"
+    status=0
+  fi
+  rm -f -- "$temporary"
+  unset read_token temporary
+  return "$status"
+}
+
+dotfiles_hermes_validate_service_account_environment_cache() {
+  local op_env_path="$1" mode cache_line cache_line_count cache_token
+
+  [[ ! -L $op_env_path && -f $op_env_path ]] || return 1
+  mode="$(stat -c '%a' "$op_env_path" 2>/dev/null || stat -f '%Lp' "$op_env_path")" || return 1
+  [[ $mode == 600 ]] || return 1
+  cache_line_count="$(awk 'END { print NR }' "$op_env_path")" || return 1
+  [[ $cache_line_count == 1 ]] || return 1
+  IFS= read -r cache_line <"$op_env_path" || [[ -n $cache_line ]] || return 1
+  [[ $cache_line == OP_SERVICE_ACCOUNT_TOKEN=* ]] || return 1
+  cache_token="${cache_line#OP_SERVICE_ACCOUNT_TOKEN=}"
+  [[ -n $cache_token && $cache_token != *$'\r'* && $cache_token != *$'\n'* ]]
 }
 
 dotfiles_hermes_prepare_service_account_environment() {
@@ -60,7 +121,7 @@ dotfiles_hermes_prepare_service_account_environment() {
     xtrace_enabled=1
     set +x
   fi
-  if token="$("$op_command" --account "$account" read "$reference" 2>/dev/null)" &&
+  if dotfiles_hermes_read_service_account_token "$op_command" "$account" "$reference" token &&
     [[ -n $token && $token != *$'\n'* && $token != *$'\r'* ]]; then
     temporary="$(mktemp "$data_dir/.op.env.XXXXXX")" || status=1
     if ((status == 0)); then
@@ -72,6 +133,8 @@ dotfiles_hermes_prepare_service_account_environment() {
         status=1
       fi
     fi
+  elif dotfiles_hermes_validate_service_account_environment_cache "$op_env_path"; then
+    printf 'Hermes 1Password Service Account could not be loaded; using existing Hermes service-account environment.\n' >&2
   else
     status=1
   fi

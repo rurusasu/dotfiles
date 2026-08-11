@@ -40,9 +40,11 @@ exec "$REAL_JQ" "$@"
 printf "op" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
-case "${3:-}" in
+	case "${3:-}" in
 	read)
-		/bin/sleep "$OP_READ_DELAY_SECONDS"
+		if [[ ${OP_READ_DELAY_SECONDS:-0} != 0 ]]; then
+			/bin/sleep "$OP_READ_DELAY_SECONDS"
+		fi
 		if [[ -n ${OP_READ_COMPLETION_FILE:-} ]]; then
 			printf "completed\n" >"$OP_READ_COMPLETION_FILE"
 		fi
@@ -576,7 +578,11 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 @test "rejects a writable cached service account after an op read timeout" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 644 "$HOME/.hermes/.op.env"
-	assert_service_account_cache_rejected_after_timeout
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -ne 0 ]
+	! grep -q '^op' "$COMMAND_LOG"
+	! grep -q '<compose>' "$COMMAND_LOG"
 }
 
 @test "rejects a symlinked cached service account before Compose" {
@@ -612,6 +618,9 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 @test "defaults invalid service-account read timeouts to twenty seconds" {
 	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
 	grep -Fq '[[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=invalid
+	run_start_stack
+	[ "$status" -eq 0 ]
 }
 
 @test "atomically replaces an old service account cache after a successful op read" {
