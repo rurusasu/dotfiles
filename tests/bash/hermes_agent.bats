@@ -617,17 +617,29 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 
 @test "defaults invalid service-account read timeouts to twenty seconds" {
 	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-	grep -Fq '[[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
 	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=invalid
 	run_start_stack
 	[ "$status" -eq 0 ]
 }
 
 @test "defaults service-account read timeouts above 300 seconds to twenty seconds" {
-	grep -Fq '((timeout_seconds <= 300)) || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
 	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=301
 	run_start_stack
 	[ "$status" -eq 0 ]
+}
+
+@test "defaults arbitrarily large service-account read timeouts to twenty seconds" {
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=999999999999999999999999999999999999
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_service_account_read_timeout_seconds
+'
+	[ "$status" -eq 0 ]
+	[ "$output" = 20 ]
 }
 
 @test "atomically replaces an old service account cache after a successful op read" {

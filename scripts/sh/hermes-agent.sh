@@ -52,14 +52,20 @@ dotfiles_hermes_service_account_account() {
   printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT:-my.1password.com}"
 }
 
+dotfiles_hermes_service_account_read_timeout_seconds() {
+  local timeout_seconds
+
+  timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"
+  [[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20
+  printf '%s\n' "$timeout_seconds"
+}
+
 dotfiles_hermes_read_service_account_token() {
   local op_command="$1" account="$2" reference="$3" result_variable="$4"
   local data_dir temporary pid timeout_seconds elapsed_seconds=0 poll read_token status=1 timed_out=0
 
   data_dir="$(dotfiles_hermes_data_dir)"
-  timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"
-  [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=20
-  ((timeout_seconds <= 300)) || timeout_seconds=20
+  timeout_seconds="$(dotfiles_hermes_service_account_read_timeout_seconds)"
   temporary="$(mktemp "$data_dir/.op.read.XXXXXX")" || return 1
   chmod 600 "$temporary" || {
     rm -f -- "$temporary"
