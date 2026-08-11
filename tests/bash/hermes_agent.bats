@@ -34,6 +34,7 @@ setup() {
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
+	export IMAGE_PRUNE_STATUS=0
 
 	write_stub jq '
 exec "$REAL_JQ" "$@"
@@ -72,6 +73,9 @@ esac
 printf "docker" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
+	exit "$IMAGE_PRUNE_STATUS"
+fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
 fi
@@ -838,7 +842,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
+	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>' '^curl ' '<image> <prune> <--force>'
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
@@ -856,11 +860,21 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$(grep -c '^curl ' "$COMMAND_LOG")" -eq 3 ]
 	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
 	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
-	assert_log_order '<up> <-d> <--force-recreate>' '^curl '
+	assert_log_order '<up> <-d> <--force-recreate>' '^curl ' '<image> <prune> <--force>'
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
 	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "keeps successful Hermes activation when dangling image cleanup fails" {
+	export IMAGE_PRUNE_STATUS=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
+	[[ "$output" == *"Warning: unable to remove dangling Docker images."* ]]
 }
 
 @test "fails after bounded Hermes API readiness attempts with redacted diagnostics" {
@@ -873,6 +887,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
 	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
 	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false

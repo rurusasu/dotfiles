@@ -1,4 +1,4 @@
-FROM docker.io/nousresearch/hermes-agent@sha256:dbd5484b4e822307e78bb68d5bf17a57eece7c5e278ca38b8670df9499f14731 AS hermes-bootstrap-runtime
+FROM docker.io/nousresearch/hermes-agent:latest AS hermes-bootstrap-runtime
 
 USER root
 
@@ -13,6 +13,7 @@ COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifes
 COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap
 
 RUN python3 - <<'PY'
+import re
 from pathlib import Path
 
 def replace_once(path: Path, old: str, new: str) -> None:
@@ -22,38 +23,23 @@ def replace_once(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
+def replace_pattern_once(path: Path, pattern: str, replacement: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    updated, count = re.subn(pattern, replacement, text, count=1)
+    if count != 1:
+        raise SystemExit(f"expected exactly one pinned source match in {path}")
+    path.write_text(updated, encoding="utf-8")
+
+
 replace_once(
     Path("/opt/hermes/gateway/channel_directory.py"),
     'types="public_channel,private_channel",',
     'types="public_channel",',
 )
-replace_once(
+replace_pattern_once(
     Path("/opt/hermes/toolsets.py"),
-    '"browser_dialog", "web_search"',
-    '"browser_dialog"',
-)
-replace_once(
-    Path("/opt/hermes/hermes_cli/profile_distribution.py"),
-    """\
-    target.mkdir(parents=True, exist_ok=True)
-
-    for entry in staged.iterdir():
-        name = entry.name
-""",
-    """\
-    target.mkdir(parents=True, exist_ok=True)
-
-    owned_roots = {
-        Path(path).parts[0]
-        for path in manifest.owned_paths()
-        if Path(path).parts
-    }
-    for entry in staged.iterdir():
-        name = entry.name
-
-        if name not in owned_roots and name != ENV_TEMPLATE_FILENAME:
-            continue
-""",
+    r'("browser_dialog"(?:,\s*"browser_exec")?),\s*"web_search"',
+    r'\1',
 )
 replace_once(
     Path("/opt/hermes/plugins/platforms/discord/adapter.py"),
