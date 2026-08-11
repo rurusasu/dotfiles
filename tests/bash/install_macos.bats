@@ -18,6 +18,8 @@ setup() {
 	TEST_HOMEBREW_CASK_BIN_DIR="$TEST_HOMEBREW_CASK_PARENT_DIR/bin"
 	TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR="$TEST_HOMEBREW_CASK_PARENT_DIR/cli-plugins"
 	TEST_HOMEBREW_LINK_TARGET="$BATS_TEST_TMPDIR/link-target"
+	FAKE_HOMEBREW_BIN_DIR="$TEST_HOMEBREW_CASK_BIN_DIR"
+	FAKE_HOMEBREW_CLI_PLUGINS_DIR="$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"
 	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
@@ -27,9 +29,12 @@ setup() {
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
+	export SUDO_USER="test-user"
+	export DOTFILES_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
+	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
@@ -42,6 +47,8 @@ setup() {
 	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
 	export DOTFILES_ZSHRC_PATH="$FAKE_ZSHRC"
 	export DOTFILES_USER_PROFILE_ROOT="$FAKE_USER_PROFILE_ROOT"
+	export DOTFILES_HOMEBREW_BIN_DIR="$FAKE_HOMEBREW_BIN_DIR"
+	export DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
@@ -89,6 +96,7 @@ is_allowed_cask_target() {
 	[[ $1 == /usr/local/bin || $1 == /usr/local/cli-plugins ||
 		$1 == "$TEST_HOMEBREW_CASK_BIN_DIR" || $1 == "$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]]
 }
+fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
 fail_operation() {
 	[[ ${SUDO_FAIL_OPERATION:-} != "$1" ]] || exit "$SUDO_FAILURE_STATUS"
 }
@@ -103,7 +111,7 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/sbin/chown)
-		if [[ $# -eq 3 && ${2:-} == test-user:admin ]] && is_allowed_cask_target "${3:-}"; then
+		if [[ $# -eq 3 && ${2:-} == "$fixture_user:admin" ]] && is_allowed_cask_target "${3:-}"; then
 			fail_operation chown
 			exit 0
 		fi
@@ -116,7 +124,7 @@ case "${1:-}" in
 		;;
 	/usr/bin/env)
 		if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
-			${3:-} == "DOTFILES_USER=test-user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
+			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
 			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "$STUB_BIN/nix" &&
 			${7:-} == run && ${8:-} == ".#darwin-rebuild" && ${9:-} == -- &&
 			${10:-} == switch && ${11:-} == --flake && ${12:-} == ".#macos" && ${13:-} == --impure ]]; then
@@ -131,7 +139,7 @@ case "${1:-}" in
 		fi
 		;;
 	"$FAKE_DOCKER_APP/Contents/MacOS/install")
-		if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == --user=test-user ]]; then
+		if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == "--user=$fixture_user" ]]; then
 			exec "$@"
 		fi
 		;;
@@ -195,6 +203,7 @@ EOF
 
 write_installed_stubs() {
 	write_docker_app
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	mkdir -p "$(dirname "$DOTFILES_DOCKER_SETUP_MARKER")"
 	touch "$DOTFILES_DOCKER_SETUP_MARKER"
 
@@ -211,6 +220,7 @@ esac
 }
 
 write_fresh_install_stubs() {
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
@@ -333,13 +343,7 @@ ensure_homebrew_cask_link_directories_under_parent \
 }
 
 run_macos_installer_for_host() {
-	local host_os="$1"
 	shift
-
-	if [[ $host_os == Darwin ]]; then
-		run "$INSTALLER" "$@"
-		return
-	fi
 
 	run bash -c '
 set -euo pipefail
@@ -411,9 +415,22 @@ run_macos_installer() {
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
+@test "macOS installer accepts the sudo user for cask directory repair" {
+	local runner_user="runner"
+	write_installed_stubs
+
+	export SUDO_USER="$runner_user"
+	export DOTFILES_USER="$runner_user"
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
+}
+
 @test "production Homebrew cask link directories are fixed before cask updates" {
 	write_installed_stubs
-	local expected_sudo_count=5 target
+	local expected_sudo_count=9 target
 
 	run_macos_installer
 
@@ -565,6 +582,40 @@ run_macos_installer() {
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
+@test "repairs Homebrew cask link directories before cask updates" {
+	write_installed_stubs
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	chmod 0700 "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </usr/sbin/chown> <test-user:admin> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
+	grep -Fqx "sudo </bin/chmod> <0775> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
+	grep -Fqx "sudo </usr/sbin/chown> <test-user:admin> <$FAKE_HOMEBREW_CLI_PLUGINS_DIR>" "$COMMAND_LOG"
+	grep -Fqx "sudo </bin/chmod> <0775> <$FAKE_HOMEBREW_CLI_PLUGINS_DIR>" "$COMMAND_LOG"
+	assert_log_order \
+		"sudo </usr/sbin/chown> <test-user:admin> <$FAKE_HOMEBREW_BIN_DIR>" \
+		"sudo </bin/chmod> <0775> <$FAKE_HOMEBREW_BIN_DIR>" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"update-homebrew-casks "
+}
+
+@test "rejects an unsafe Homebrew cask link directory before privileged changes" {
+	write_installed_stubs
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	rmdir "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	ln -s "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+
+	run "$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Homebrew cask link directory must be a real directory"* ]]
+	! grep -Fq 'sudo </usr/sbin/chown>' "$COMMAND_LOG"
+	! grep -Fq 'sudo </bin/chmod>' "$COMMAND_LOG"
+	! grep -q "^update-homebrew-casks " "$COMMAND_LOG"
+}
+
 @test "Hermes bootstrap failure stops macOS before service recreation and acceptance" {
 	write_installed_stubs
 	export HERMES_BOOTSTRAP_STATUS=45
@@ -653,10 +704,13 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 
 @test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
 	write_fresh_install_stubs
+	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
+	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_CLI_PLUGINS_DIR>" "$COMMAND_LOG"
 	assert_log_order \
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \

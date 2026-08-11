@@ -10,13 +10,14 @@ setup() {
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	SECRET_MARKER="adapter-secret-marker"
-	mkdir -p "$TEST_HOME" "$STUB_BIN"
+	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	: >"$COMPOSE_FILE"
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
+	unset DOTFILES_USER SUDO_USER
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -24,6 +25,9 @@ setup() {
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
 	export OP_DELAY_SECONDS=0
+	export OP_READ_TOKEN='service-account-token'
+	export OP_READ_DELAY_SECONDS=0
+	export OP_READ_COMPLETION_FILE=""
 	export BOOTSTRAP_EXIT_EARLY=0
 	export API_READY_AFTER=1
 	export HERMES_API_READY_ATTEMPTS=3
@@ -37,17 +41,31 @@ exec "$REAL_JQ" "$@"
 printf "op" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
-if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
-	exit 17
-fi
-if [[ $OP_DELAY_SECONDS != 0 ]]; then
-	/bin/sleep "$OP_DELAY_SECONDS"
-fi
-if [ "${3:-}" = "Hermes X API MCP" ]; then
-	printf "%s\n" "$XAPI_OP_ITEM_JSON"
-else
-	printf "%s\n" "$OP_ITEM_JSON"
-fi
+	case "${3:-}" in
+	read)
+		if [[ ${OP_READ_DELAY_SECONDS:-0} != 0 ]]; then
+			/bin/sleep "$OP_READ_DELAY_SECONDS"
+		fi
+		if [[ -n ${OP_READ_COMPLETION_FILE:-} ]]; then
+			printf "completed\n" >"$OP_READ_COMPLETION_FILE"
+		fi
+		printf "%s\n" "$OP_READ_TOKEN"
+		;;
+	*)
+		[ "${2:-}" = get ] || exit 2
+		if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
+			exit 17
+		fi
+		if [[ $OP_DELAY_SECONDS != 0 ]]; then
+			/bin/sleep "$OP_DELAY_SECONDS"
+		fi
+		if [ "${3:-}" = "Hermes X API MCP" ]; then
+			printf "%s\n" "$XAPI_OP_ITEM_JSON"
+		else
+			printf "%s\n" "$OP_ITEM_JSON"
+		fi
+		;;
+esac
 '
 	write_stub docker '
 printf "docker" >>"$COMMAND_LOG"
@@ -128,6 +146,22 @@ docker_command() {
 }
 dotfiles_hermes_start_stack docker_command "$COMPOSE_FILE"
 '
+}
+
+service_account_cache_mode() {
+	stat -c '%a' "$HOME/.hermes/.op.env" 2>/dev/null ||
+		stat -f '%Lp' "$HOME/.hermes/.op.env"
+}
+
+service_account_cache_inode() {
+	stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"
+}
+
+assert_service_account_cache_rejected_after_timeout() {
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -ne 0 ]
+	! grep -q '<compose>' "$COMMAND_LOG"
 }
 
 assert_log_order() {
@@ -247,32 +281,35 @@ if [[ $* == *"builtins.currentSystem"* ]]; then
 fi
 '
 	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
-	write_fixture_stub sudo '
+write_fixture_stub sudo '
 printf "sudo" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\\n" >>"$COMMAND_LOG"
+is_allowed_cask_target() {
+  [[ $1 == /usr/local/bin || $1 == /usr/local/cli-plugins ||
+    $1 == "${DOTFILES_HOMEBREW_BIN_DIR:-}" ||
+    $1 == "${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-}" ]]
+}
+fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
 case "${1:-}" in
   /bin/mkdir)
-    if [[ $# -eq 3 && ${2:-} == -- &&
-      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
+    if [[ $# -eq 3 && ${2:-} == -- ]] && is_allowed_cask_target "${3:-}"; then
       exit 0
     fi
     ;;
   /usr/sbin/chown)
-    if [[ $# -eq 3 && ${2:-} == test-user:admin &&
-      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
+    if [[ $# -eq 3 && ${2:-} == "$fixture_user:admin" ]] && is_allowed_cask_target "${3:-}"; then
       exit 0
     fi
     ;;
   /bin/chmod)
-    if [[ $# -eq 3 && ${2:-} == 0775 &&
-      ( ${3:-} == /usr/local/bin || ${3:-} == /usr/local/cli-plugins ) ]]; then
+    if [[ $# -eq 3 && ${2:-} == 0775 ]] && is_allowed_cask_target "${3:-}"; then
       exit 0
     fi
     ;;
   /usr/bin/env)
     if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
-      ${3:-} == DOTFILES_USER=test-user && ${4:-} == "DOTFILES_HOME=$HOME" &&
+      ${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
       ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "${PATH%%:*}/nix" &&
       ${7:-} == run && ${8:-} == .#darwin-rebuild && ${9:-} == -- &&
       ${10:-} == switch && ${11:-} == --flake && ${12:-} == .#macos && ${13:-} == --impure ]]; then
@@ -280,7 +317,7 @@ case "${1:-}" in
     fi
     ;;
   "${DOTFILES_DOCKER_APP_PATH:-}/Contents/MacOS/install")
-    if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == --user=test-user ]]; then
+    if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == "--user=$fixture_user" ]]; then
       exec "$@"
     fi
     ;;
@@ -313,6 +350,7 @@ EOF
 run_mocked_installer() {
 	local platform="$1"
 	local test_root fixture_root marker hardware prebuilt systemd_dir os_release user_profile_root
+	local homebrew_bin_dir homebrew_cli_plugins_dir
 	test_root="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
 	fixture_root="$test_root/installer-$platform"
 	marker="$fixture_root/NIXOS"
@@ -322,10 +360,13 @@ run_mocked_installer() {
 	systemd_dir="$fixture_root/systemd"
 	os_release="$fixture_root/os-release"
 	user_profile_root="$fixture_root/profiles"
+	homebrew_bin_dir="$fixture_root/usr/local/bin"
+	homebrew_cli_plugins_dir="$fixture_root/usr/local/cli-plugins"
 
 	create_mocked_installer_fixture "$fixture_root"
 	printf '{ ... }: { }\n' >"$hardware"
-	mkdir -p "$prebuilt/bin" "$systemd_dir" "$user_profile_root/test-user"
+	mkdir -p "$prebuilt/bin" "$systemd_dir" "$user_profile_root/test-user" \
+		"$homebrew_bin_dir" "$homebrew_cli_plugins_dir"
 	ln -s "$MOCK_BIN" "$user_profile_root/test-user/bin"
 	cat >"$prebuilt/bin/switch-to-configuration" <<'EOF'
 #!/usr/bin/env bash
@@ -370,6 +411,8 @@ EOF
 		DOTFILES_BASHRC_PATH="$fixture_root/etc/bashrc" \
 		DOTFILES_ZSHRC_PATH="$fixture_root/etc/zshrc" \
 		DOTFILES_USER_PROFILE_ROOT="$user_profile_root" \
+		DOTFILES_HOMEBREW_BIN_DIR="$homebrew_bin_dir" \
+		DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$homebrew_cli_plugins_dir" \
 		DOTFILES_SYSTEMD_DIR="$systemd_dir" \
 		DOTFILES_OS_RELEASE_FILE="$os_release" \
 		DOTFILES_NIXOS_MARKER="$marker" \
@@ -434,7 +477,7 @@ EOF
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/cli-plugins>' "$COMMAND_LOG"
 			grep -Fqx "sudo <$MOCK_DOCKER_APP/Contents/MacOS/install> <--accept-license> <--user=test-user>" "$COMMAND_LOG"
-			expected_sudo_count=6
+				expected_sudo_count=10
 			for target in /usr/local/bin /usr/local/cli-plugins; do
 				if [[ ! -e $target ]]; then
 					grep -Fqx "sudo </bin/mkdir> <--> <$target>" "$COMMAND_LOG"
@@ -457,12 +500,28 @@ EOF
 	done
 }
 
+@test "mocked macOS installer accepts the sudo user for cask directory repair" {
+	local runner_user="runner"
+
+	export SUDO_USER="$runner_user"
+	run_mocked_installer macos
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
+}
+
 @test "mocked installer sudo boundary rejects unknown argv" {
 	local fixture_root="$BATS_TEST_TMPDIR/unknown-sudo"
 	local unexpected="$fixture_root/unexpected-touch"
 	create_mocked_installer_fixture "$fixture_root"
 
-	run env COMMAND_LOG="$COMMAND_LOG" "$MOCK_BIN/sudo" /usr/bin/touch "$unexpected"
+	run env -i \
+		PATH="$PATH" \
+		HOME="$HOME" \
+		USER=test-user \
+		COMMAND_LOG="$COMMAND_LOG" \
+		"$MOCK_BIN/sudo" /usr/bin/touch "$unexpected"
 
 	[ "$status" -eq 97 ]
 	[[ "$output" == *"Unexpected sudo argv: </usr/bin/touch> <$unexpected>"* ]]
@@ -516,6 +575,122 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
 	grep -q '^op <item> <get> <Hermes X API MCP> <--account> <my.1password.com> <--vault> <openclaw> <--format> <json>$' "$COMMAND_LOG"
 	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
+}
+
+@test "uses a mode-0600 cached service account after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_COMPLETION_FILE="$BATS_TEST_TMPDIR/op-read-completed"
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"using existing Hermes service-account environment"* ]]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+	/bin/sleep 2
+	[ ! -e "$OP_READ_COMPLETION_FILE" ]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+}
+
+@test "rejects a writable cached service account after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 644 "$HOME/.hermes/.op.env"
+	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
+	run_start_stack
+	[ "$status" -ne 0 ]
+	! grep -q '^op' "$COMMAND_LOG"
+	! grep -q '<compose>' "$COMMAND_LOG"
+}
+
+@test "rejects a symlinked cached service account before Compose" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/cache-target"
+	chmod 600 "$HOME/.hermes/cache-target"
+	ln -s "$HOME/.hermes/cache-target" "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects a directory cached service account before Compose" {
+	mkdir "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects an empty cached service account token after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects an extra cached service account line after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\nOP_SERVICE_ACCOUNT_TOKEN=extra-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "rejects a malformed cached service account line after an op read timeout" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\nnot-an-environment-assignment\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	assert_service_account_cache_rejected_after_timeout
+}
+
+@test "defaults invalid service-account read timeouts to twenty seconds" {
+	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=invalid
+	run_start_stack
+	[ "$status" -eq 0 ]
+}
+
+@test "defaults service-account read timeouts above 300 seconds to twenty seconds" {
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=301
+	run_start_stack
+	[ "$status" -eq 0 ]
+}
+
+@test "defaults arbitrarily large service-account read timeouts to twenty seconds" {
+	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=999999999999999999999999999999999999
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_service_account_read_timeout_seconds
+'
+	[ "$status" -eq 0 ]
+	[ "$output" = 20 ]
+}
+
+@test "atomically replaces an old service account cache after a successful op read" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	ln "$HOME/.hermes/.op.env" "$HOME/.hermes/.op.env.previous"
+	export OP_READ_TOKEN='fresh-token'
+	run_start_stack
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+	[ "$(cat "$HOME/.hermes/.op.env.previous")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
+	[ "$(service_account_cache_inode "$HOME/.hermes/.op.env")" != "$(service_account_cache_inode "$HOME/.hermes/.op.env.previous")" ]
+	[ -z "$(find "$HOME/.hermes" -maxdepth 1 -name '.op.env.*' ! -name '.op.env.previous' -print -quit)" ]
+}
+
+@test "preserves the old service account cache when fresh replacement cannot be staged" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	write_stub mktemp '
+case "${1:-}" in
+  *.op.read.XXXXXX) exec /usr/bin/mktemp "$@" ;;
+  *) exit 1 ;;
+esac
+'
+	export OP_READ_TOKEN='fresh-token'
+	run_start_stack
+	status=$status
+	output=$output
+	[ "$status" -ne 0 ]
+	! grep -q '<compose>' "$COMMAND_LOG"
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
 }
 
 @test "fails preflight before Compose when op is unavailable" {
@@ -635,7 +810,6 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -eq 0 ]
 	assert_log_order '<config> <--quiet>' '<build> <hermes> <hermes-bootstrap> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>'
-	[ "$(grep -c '^op ' "$COMMAND_LOG")" -eq 13 ]
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
@@ -652,7 +826,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
 	[ "$(grep -c '^curl ' "$COMMAND_LOG")" -eq 3 ]
 	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
-	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	assert_log_order '<up> <-d> <--force-recreate>' '^curl '
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
@@ -668,7 +842,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -ne 0 ]
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '^sleep ' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
