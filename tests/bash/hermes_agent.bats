@@ -289,6 +289,7 @@ is_allowed_cask_target() {
     $1 == "${DOTFILES_HOMEBREW_BIN_DIR:-}" ||
     $1 == "${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-}" ]]
 }
+fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
 case "${1:-}" in
   /bin/mkdir)
     if [[ $# -eq 3 && ${2:-} == -- ]] && is_allowed_cask_target "${3:-}"; then
@@ -296,7 +297,7 @@ case "${1:-}" in
     fi
     ;;
   /usr/sbin/chown)
-    if [[ $# -eq 3 && ${2:-} == test-user:admin ]] && is_allowed_cask_target "${3:-}"; then
+    if [[ $# -eq 3 && ${2:-} == "$fixture_user:admin" ]] && is_allowed_cask_target "${3:-}"; then
       exit 0
     fi
     ;;
@@ -307,7 +308,7 @@ case "${1:-}" in
     ;;
   /usr/bin/env)
     if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
-      ${3:-} == DOTFILES_USER=test-user && ${4:-} == "DOTFILES_HOME=$HOME" &&
+      ${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
       ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "${PATH%%:*}/nix" &&
       ${7:-} == run && ${8:-} == .#darwin-rebuild && ${9:-} == -- &&
       ${10:-} == switch && ${11:-} == --flake && ${12:-} == .#macos && ${13:-} == --impure ]]; then
@@ -315,7 +316,7 @@ case "${1:-}" in
     fi
     ;;
   "${DOTFILES_DOCKER_APP_PATH:-}/Contents/MacOS/install")
-    if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == --user=test-user ]]; then
+    if [[ $# -eq 3 && ${2:-} == --accept-license && ${3:-} == "--user=$fixture_user" ]]; then
       exec "$@"
     fi
     ;;
@@ -496,6 +497,17 @@ EOF
 			[ ! -e "$MOCK_NIXOS_MARKER" ]
 		fi
 	done
+}
+
+@test "mocked macOS installer accepts the sudo user for cask directory repair" {
+	local runner_user="runner"
+
+	export SUDO_USER="$runner_user"
+	run_mocked_installer macos
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
+	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
 }
 
 @test "mocked installer sudo boundary rejects unknown argv" {
