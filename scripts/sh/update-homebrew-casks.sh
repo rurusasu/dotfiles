@@ -8,8 +8,11 @@ SLEEP_COMMAND="${SLEEP_COMMAND:-sleep}"
 JQ_COMMAND="${JQ_COMMAND:-jq}"
 PGREP_COMMAND="${PGREP_COMMAND:-pgrep}"
 OPEN_COMMAND="${OPEN_COMMAND:-open}"
+PLIST_BUDDY_COMMAND="${PLIST_BUDDY_COMMAND:-/usr/libexec/PlistBuddy}"
+OSASCRIPT_COMMAND="${OSASCRIPT_COMMAND:-osascript}"
 ATTEMPTS="${DOTFILES_CASK_UPDATE_ATTEMPTS:-3}"
 BACKOFF_SECONDS="${DOTFILES_CASK_UPDATE_BACKOFF_SECONDS:-2}"
+APP_EXIT_ATTEMPTS=30
 export HOMEBREW_NO_AUTO_UPDATE=1
 
 case "$ATTEMPTS" in
@@ -132,8 +135,53 @@ record_running_apps() {
     [[ -n $app_path ]] || continue
     if "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
       grep -Fxq "$app_path" "$restart_file" || printf '%s\n' "$app_path" >>"$restart_file"
+      quit_running_app "$app_path" || return 1
     fi
   done <"$app_file"
+}
+
+application_bundle_identifier() {
+  local app_path="$1" bundle_identifier
+
+  if bundle_identifier=$("$PLIST_BUDDY_COMMAND" -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist"); then
+    :
+  else
+    printf '[macos-cask-update] failed to inspect application bundle identifier: %s\n' "$app_path" >&2
+    return 1
+  fi
+
+  case "$bundle_identifier" in
+  *[!A-Za-z0-9.-]* | '')
+    printf '[macos-cask-update] invalid application bundle identifier: %s\n' "$app_path" >&2
+    return 1
+    ;;
+  esac
+  printf '%s\n' "$bundle_identifier"
+}
+
+wait_for_app_exit() {
+  local app_path="$1" attempt
+
+  for ((attempt = 1; attempt <= APP_EXIT_ATTEMPTS; attempt++)); do
+    if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+      return 0
+    fi
+    ((attempt < APP_EXIT_ATTEMPTS)) && "$SLEEP_COMMAND" 1
+  done
+
+  printf '[macos-cask-update] application did not exit: %s\n' "$app_path" >&2
+  return 1
+}
+
+quit_running_app() {
+  local app_path="$1" bundle_identifier
+
+  bundle_identifier="$(application_bundle_identifier "$app_path")" || return 1
+  if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$bundle_identifier\" to quit"; then
+    printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
+    return 1
+  fi
+  wait_for_app_exit "$app_path"
 }
 
 reopen_apps() {
