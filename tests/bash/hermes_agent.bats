@@ -17,6 +17,7 @@ setup() {
 	: >"$COMPOSE_FILE"
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
+	unset DOTFILES_USER SUDO_USER
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -671,12 +672,16 @@ dotfiles_hermes_service_account_read_timeout_seconds
 @test "preserves the old service account cache when fresh replacement cannot be staged" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
-	chmod 500 "$HOME/.hermes"
+	write_stub mktemp '
+case "${1:-}" in
+  *.op.read.XXXXXX) exec /usr/bin/mktemp "$@" ;;
+  *) exit 1 ;;
+esac
+'
 	export OP_READ_TOKEN='fresh-token'
 	run_start_stack
 	status=$status
 	output=$output
-	chmod 700 "$HOME/.hermes"
 	[ "$status" -ne 0 ]
 	! grep -q '<compose>' "$COMMAND_LOG"
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
