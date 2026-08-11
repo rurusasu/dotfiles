@@ -516,7 +516,12 @@ EOF
 	local unexpected="$fixture_root/unexpected-touch"
 	create_mocked_installer_fixture "$fixture_root"
 
-	run env COMMAND_LOG="$COMMAND_LOG" "$MOCK_BIN/sudo" /usr/bin/touch "$unexpected"
+	run env -i \
+		PATH="$PATH" \
+		HOME="$HOME" \
+		USER=test-user \
+		COMMAND_LOG="$COMMAND_LOG" \
+		"$MOCK_BIN/sudo" /usr/bin/touch "$unexpected"
 
 	[ "$status" -eq 97 ]
 	[[ "$output" == *"Unexpected sudo argv: </usr/bin/touch> <$unexpected>"* ]]
