@@ -19,6 +19,12 @@ setup() {
   export JQ_COMMAND
   export PGREP_COMMAND="$TEST_BIN/pgrep"
   export OPEN_COMMAND="$TEST_BIN/open"
+  export PLIST_BUDDY_COMMAND="$TEST_BIN/PlistBuddy"
+  export OSASCRIPT_COMMAND="$TEST_BIN/osascript"
+  APP_QUIT_STATE="$BATS_TEST_TMPDIR/app-quit-state"
+  APP_QUIT_IDENTIFIERS="$BATS_TEST_TMPDIR/app-quit-identifiers"
+  export APP_QUIT_STATE
+  export APP_QUIT_IDENTIFIERS
   export DOTFILES_CASK_UPDATE_BACKOFF_SECONDS=2
 
   cat >"$BREW_COMMAND" <<'EOF'
@@ -63,6 +69,8 @@ case "$command_name" in
     cask="${2:-}"
     if [[ $cask == claude ]]; then
       printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.anthropic.claudefordesktop"]}]},{"app":["Claude.app"],"target":"/Applications/Claude.app"}]}]}'
+    elif [[ $cask == 1password ]]; then
+      printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.1password.1password","com.1password.1password-launcher"]}]},{"app":["1Password.app"],"target":"/Applications/1Password.app"}]}]}'
     else
       printf '%s\n' '{"casks":[{"artifacts":[]}]}'
     fi
@@ -83,13 +91,36 @@ EOF
   cat >"$PGREP_COMMAND" <<'EOF'
 #!/usr/bin/env bash
 printf 'pgrep %s\n' "$*" >>"$COMMAND_LOG"
-[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]]
+[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] && [[ ! -f $APP_QUIT_STATE ]]
 EOF
   cat >"$OPEN_COMMAND" <<'EOF'
 #!/usr/bin/env bash
 printf 'open %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$OPEN_COMMAND"
+  cat >"$PLIST_BUDDY_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+printf 'PlistBuddy %s\n' "$*" >>"$COMMAND_LOG"
+printf '%s\n' 'com.anthropic.claudefordesktop'
+EOF
+cat >"$OSASCRIPT_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+printf 'osascript %s\n' "$*" >>"$COMMAND_LOG"
+printf '%s\n' "$*" >>"$APP_QUIT_IDENTIFIERS"
+if [[ ${FAKE_APP_IGNORES_QUIT:-0} != 1 ]]; then
+  if [[ -z ${FAKE_REQUIRED_QUIT_IDENTIFIERS:-} ]]; then
+    : >"$APP_QUIT_STATE"
+  else
+    all_identifiers_seen=1
+    for required_identifier in $FAKE_REQUIRED_QUIT_IDENTIFIERS; do
+      grep -Fq "$required_identifier" "$APP_QUIT_IDENTIFIERS" || all_identifiers_seen=0
+    done
+    ((all_identifiers_seen)) && : >"$APP_QUIT_STATE"
+  fi
+fi
+exit 0
+EOF
+  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$OPEN_COMMAND" \
+    "$PLIST_BUDDY_COMMAND" "$OSASCRIPT_COMMAND"
 }
 
 install_cask() {
@@ -179,6 +210,53 @@ mark_outdated() {
   open_line="$(grep -n -m1 '^open ' "$COMMAND_LOG" | cut -d: -f1)"
   [ "$pgrep_line" -lt "$fetch_line" ]
   [ "$upgrade_line" -lt "$open_line" ]
+}
+
+@test "quits a running application before upgrading and reopens it after the update" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -Fq 'osascript -e tell application id "com.anthropic.claudefordesktop" to quit' "$COMMAND_LOG"
+  grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
+  initial_pgrep_line="$(grep -n -m1 '^pgrep ' "$COMMAND_LOG" | cut -d: -f1)"
+  quit_line="$(grep -n -m1 '^osascript ' "$COMMAND_LOG" | cut -d: -f1)"
+  exit_check_line="$(grep -n '^pgrep ' "$COMMAND_LOG" | sed -n '2p' | cut -d: -f1)"
+  fetch_line="$(grep -n -m1 '^brew fetch ' "$COMMAND_LOG" | cut -d: -f1)"
+  upgrade_line="$(grep -n -m1 '^brew upgrade ' "$COMMAND_LOG" | cut -d: -f1)"
+  open_line="$(grep -n -m1 '^open ' "$COMMAND_LOG" | cut -d: -f1)"
+  [ "$initial_pgrep_line" -lt "$quit_line" ]
+  [ "$quit_line" -lt "$exit_check_line" ]
+  [ "$exit_check_line" -lt "$fetch_line" ]
+  [ "$upgrade_line" -lt "$open_line" ]
+}
+
+@test "quits every identifier supplied by cask metadata before upgrading" {
+  install_cask 1password
+  mark_outdated 1password
+
+  run env DOTFILES_HOMEBREW_CASKS=1password FAKE_RUNNING_APP=/Applications/1Password.app \
+    FAKE_REQUIRED_QUIT_IDENTIFIERS='com.1password.1password com.1password.1password-launcher' "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -Fq 'tell application id "com.1password.1password" to quit' "$COMMAND_LOG"
+  grep -Fq 'tell application id "com.1password.1password-launcher" to quit' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
+}
+
+@test "does not upgrade when a running application does not exit" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app \
+    FAKE_APP_IGNORES_QUIT=1 "$UPDATER"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"application did not exit: /Applications/Claude.app"* ]]
+  run ! grep -q '^brew fetch ' "$COMMAND_LOG"
+  run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
 }
 
 @test "reopens a running application after upgrade retries are exhausted" {
