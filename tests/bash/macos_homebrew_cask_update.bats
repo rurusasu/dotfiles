@@ -91,7 +91,12 @@ EOF
   cat >"$PGREP_COMMAND" <<'EOF'
 #!/usr/bin/env bash
 printf 'pgrep %s\n' "$*" >>"$COMMAND_LOG"
-[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] && [[ ! -f $APP_QUIT_STATE ]]
+[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] || exit 1
+[[ ! -f $APP_QUIT_STATE ]] && exit 0
+[[ ${FAKE_APP_HELPER_REMAINS_AFTER_QUIT:-0} == 1 ]] &&
+  [[ "$*" == *'/Contents/'* ]] &&
+  [[ "$*" != *'/Contents/MacOS/'* ]] && exit 0
+exit 1
 EOF
   cat >"$OPEN_COMMAND" <<'EOF'
 #!/usr/bin/env bash
@@ -244,6 +249,19 @@ mark_outdated() {
   grep -Fq 'tell application id "com.1password.1password" to quit' "$COMMAND_LOG"
   grep -Fq 'tell application id "com.1password.1password-launcher" to quit' "$COMMAND_LOG"
   grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
+}
+
+@test "upgrades when an Electron helper remains after the application exits" {
+  install_cask 1password
+  mark_outdated 1password
+
+  run env DOTFILES_HOMEBREW_CASKS=1password FAKE_RUNNING_APP=/Applications/1Password.app \
+    FAKE_APP_HELPER_REMAINS_AFTER_QUIT=1 "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
+  grep -q '^brew upgrade --cask --greedy 1password$' "$COMMAND_LOG"
+  grep -q '^open -gj /Applications/1Password.app$' "$COMMAND_LOG"
 }
 
 @test "does not upgrade when a running application does not exit" {
