@@ -192,7 +192,7 @@ wait_for_app_exit() {
   local app_path="$1" attempt
 
   for ((attempt = 1; attempt <= APP_EXIT_ATTEMPTS; attempt++)); do
-    if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+    if ! "$PGREP_COMMAND" -f "$app_path/Contents/MacOS/" >/dev/null 2>&1; then
       return 0
     fi
     ((attempt < APP_EXIT_ATTEMPTS)) && "$SLEEP_COMMAND" 1
