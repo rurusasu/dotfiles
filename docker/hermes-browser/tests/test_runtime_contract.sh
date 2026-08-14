@@ -17,6 +17,15 @@ if grep -Fq -- "--disable-gpu" "$entrypoint"; then
   exit 1
 fi
 
+for expression in \
+  'command -v /usr/bin/google-chrome-stable' \
+  'command -v /usr/bin/chromium'; do
+  if ! grep -Fq -- "$expression" "$entrypoint"; then
+    echo "Browser entrypoint must select an installed browser binary: $expression" >&2
+    exit 1
+  fi
+done
+
 python3 - "$repo_root/docker/hermes-browser-mcp/package.json" "$repo_root/docker/hermes-browser-mcp/package-lock.json" <<'PY'
 import json
 import sys
