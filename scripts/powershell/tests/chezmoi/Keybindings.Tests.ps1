@@ -215,7 +215,7 @@ Describe '標準キーバインド方針' {
             $unbindings = @($settings.keybindings | Where-Object keys -EQ $legacyKey)
             $unbindings.Count | Should -Be 1 -Because "$legacyKey must explicitly override inherited Windows Terminal defaults"
             $unbindings[0].PSObject.Properties.Name | Should -Contain 'id'
-            $unbindings[0].id | Should -BeNullOrEmpty -Because "$legacyKey must be effectively unbound"
+            ($null -eq $unbindings[0].id) | Should -BeTrue -Because "$legacyKey must use the Windows Terminal id:null unbind contract"
         }
 
         $preserved = [ordered]@{

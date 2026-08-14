@@ -227,6 +227,8 @@ local default_window_manager_bindings = {
     { key = "T", mods = "CTRL" },
     { key = "T", mods = "SHIFT|CTRL" },
     { key = "W", mods = "CTRL" },
+    { key = "Z", mods = "CTRL" },
+    { key = "Z", mods = "SHIFT|CTRL" },
     { key = "[", mods = "SHIFT|SUPER" },
     { key = "]", mods = "SHIFT|SUPER" },
     { key = "^", mods = "CTRL" },
@@ -235,6 +237,7 @@ local default_window_manager_bindings = {
     { key = "t", mods = "SUPER" },
     { key = "w", mods = "CTRL|SHIFT" },
     { key = "w", mods = "SUPER" },
+    { key = "z", mods = "SHIFT|CTRL" },
     { key = "{", mods = "SUPER" },
     { key = "{", mods = "SHIFT|SUPER" },
     { key = "}", mods = "SUPER" },
@@ -244,9 +247,13 @@ local default_window_manager_bindings = {
     { key = "PageDown", mods = "CTRL" },
     { key = "PageDown", mods = "SHIFT|CTRL" },
     { key = "LeftArrow", mods = "SHIFT|CTRL" },
+    { key = "LeftArrow", mods = "SHIFT|ALT|CTRL" },
     { key = "RightArrow", mods = "SHIFT|CTRL" },
+    { key = "RightArrow", mods = "SHIFT|ALT|CTRL" },
     { key = "UpArrow", mods = "SHIFT|CTRL" },
+    { key = "UpArrow", mods = "SHIFT|ALT|CTRL" },
     { key = "DownArrow", mods = "SHIFT|CTRL" },
+    { key = "DownArrow", mods = "SHIFT|ALT|CTRL" },
 }
 
 for _, binding in ipairs(default_window_manager_bindings) do

@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           brew install bash bats-core coreutils go-task lua
-          brew install --cask wezterm@nightly
+          bash scripts/sh/install-wezterm-nightly.sh
           command -v lua
           command -v luac
           command -v wezterm
@@ -129,6 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           bats tests/bash
+          bats tests/wezterm
           luac -p chezmoi/terminals/hammerspoon/init.lua
           lua tests/lua/hammerspoon_terminal_prefix_test.lua
 

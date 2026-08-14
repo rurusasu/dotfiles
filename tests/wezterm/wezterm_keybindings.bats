@@ -18,7 +18,7 @@ setup() {
 	[[ "$workspace_binding" != *"FUZZY"* ]]
 }
 
-@test "WezTerm effective window-manager actions exist only behind the leader" {
+@test "WezTerm effective window-manager actions use only approved bindings" {
 	command -v wezterm >/dev/null
 
 	run wezterm --config-file "$WEZTERM_CONFIG" show-keys --lua
@@ -29,6 +29,14 @@ setup() {
 		$0 !~ /mods = '\''[^'\'']*LEADER/ { print }
 	')"
 	[ -z "$contract_external_bindings" ]
+
+	zoom_bindings="$(printf '%s\n' "$output" | grep 'action = act.TogglePaneZoomState')"
+	[ "$(printf '%s\n' "$zoom_bindings" | wc -l | tr -d ' ')" -eq 1 ]
+	[[ "$zoom_bindings" == *"key = 'w', mods = 'ALT|CTRL'"* ]]
+
+	resize_bindings="$(printf '%s\n' "$output" | grep 'action = act.AdjustPaneSize')"
+	[ "$(printf '%s\n' "$resize_bindings" | wc -l | tr -d ' ')" -eq 4 ]
+	[ -z "$(printf '%s\n' "$resize_bindings" | grep -v "mods = 'CTRL|SUPER'")" ]
 
 	[[ "$output" == *"mods = 'SUPER', action = act.CopyTo 'Clipboard'"* ]]
 	[[ "$output" == *"mods = 'SUPER', action = act.PasteFrom 'Clipboard'"* ]]

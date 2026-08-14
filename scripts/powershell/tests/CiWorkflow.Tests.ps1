@@ -331,18 +331,20 @@ Describe 'CI workflow configuration' {
 
         $macosJob | Should -Not -BeNullOrEmpty
         $macosJob | Should -Match 'brew install bash bats-core coreutils go-task lua'
-        $macosJob | Should -Match 'brew install --cask wezterm@nightly'
+        $macosJob | Should -Match 'bash scripts/sh/install-wezterm-nightly\.sh'
+        $macosJob | Should -Not -Match 'brew install --cask wezterm@nightly'
         $macosJob | Should -Match 'command -v lua'
         $macosJob | Should -Match 'command -v luac'
         $macosJob | Should -Match 'command -v wezterm'
+        $macosJob | Should -Match 'bats tests/wezterm'
         $macosJob | Should -Match 'luac -p chezmoi/terminals/hammerspoon/init\.lua'
         $macosJob | Should -Match 'lua tests/lua/hammerspoon_terminal_prefix_test\.lua'
         $macosJob | Should -Not -Match 'continue-on-error:\s*true'
         $macosJob | Should -Not -Match '(?:command -v (?:lua|luac).*(?:\|\| true)|if\s+command -v (?:lua|luac))'
         $macosJob.IndexOf('brew install bash bats-core coreutils go-task lua') |
             Should -BeLessThan $macosJob.IndexOf('luac -p chezmoi/terminals/hammerspoon/init.lua')
-        $macosJob.IndexOf('brew install --cask wezterm@nightly') |
-            Should -BeLessThan $macosJob.IndexOf('bats tests/bash')
+        $macosJob.IndexOf('bash scripts/sh/install-wezterm-nightly.sh') |
+            Should -BeLessThan $macosJob.IndexOf('bats tests/wezterm')
     }
 
     It 'should use directory discovery when excluding Windows integration tests' {
