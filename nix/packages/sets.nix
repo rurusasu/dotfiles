@@ -314,6 +314,17 @@ let
     };
 
     # ── desktop applications ──────────────────────────────
+    discord = {
+      pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;
+      winget = "Discord.Discord";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "discord";
+        };
+      };
+    };
     _1password-gui = {
       pkg = pkgs._1password-gui;
       winget = "AgileBits.1Password";
