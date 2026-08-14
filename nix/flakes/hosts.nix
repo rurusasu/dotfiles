@@ -59,6 +59,9 @@ in
             hostPath = ../hosts/linux;
             homeModulePath = ../home/linux/users.nix;
             overlays = [ workmuxOverlay ];
+            homeExtraSpecialArgs = {
+              isWSL = false;
+            };
             extraModules = [ (/. + hardwareConfig) ];
           }
         );
