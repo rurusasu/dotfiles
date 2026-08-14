@@ -182,6 +182,29 @@ Describe '標準キーバインド方針' {
         $tmux = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw
         $nvim = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/nvim/lua/config/keymaps.lua") -Raw
 
+        $tmux | Should -Match '(?m)^set -g prefix C-Space$'
+        $tmux | Should -Match '(?m)^bind C-Space send-prefix$'
+        foreach ($binding in @(
+                @{ Key = 'w'; Command = 'choose-tree -s' },
+                @{ Key = 'a'; Command = 'command-prompt' },
+                @{ Key = 'n'; Command = 'new-window' },
+                @{ Key = 'q'; Command = 'kill-window' },
+                @{ Key = 'Tab'; Command = 'next-window' },
+                @{ Key = 'BTab'; Command = 'previous-window' },
+                @{ Key = 'h'; Command = 'select-pane -L' },
+                @{ Key = 'j'; Command = 'select-pane -D' },
+                @{ Key = 'k'; Command = 'select-pane -U' },
+                @{ Key = 'l'; Command = 'select-pane -R' },
+                @{ Key = 'v'; Command = 'split-window -h' },
+                @{ Key = '-'; Command = 'split-window -v' },
+                @{ Key = 'x'; Command = 'kill-pane' },
+                @{ Key = 'g'; Command = 'choose-tree -Zw' },
+                @{ Key = 'd'; Command = 'detach-client' }
+            )) {
+            $tmux | Should -Match "(?m)^bind $([regex]::Escape($binding.Key)) $([regex]::Escape($binding.Command))"
+        }
+        $tmux | Should -Not -Match '(?m)^set -g prefix C-a$'
+
         foreach ($key in @("h", "j", "k", "l")) {
             $tmux | Should -Match "bind-key -n C-$key"
             $nvim | Should -Match "map\(`"n`", `"<C-$key>`""

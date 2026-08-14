@@ -26,4 +26,32 @@ Describe 'Herdr configuration' {
         $content | Should -Match '(?m)^new_cwd\s*=\s*"follow"\s*$'
         $content | Should -Not -Match '(?m)^channel\s*=\s*"stable"\s*$'
     }
+
+    It 'should define the unified native key contract' {
+        $content = Get-Content -LiteralPath $script:unixConfig -Raw
+        $expected = [ordered]@{
+            prefix                  = 'ctrl+space'
+            workspace_picker        = 'prefix+w'
+            new_workspace           = 'prefix+a'
+            navigate_workspace_down = 'j'
+            navigate_workspace_up   = 'k'
+            new_tab                 = 'prefix+n'
+            close_tab               = 'prefix+q'
+            next_tab                = 'prefix+tab'
+            previous_tab            = 'prefix+shift+tab'
+            focus_pane_left         = 'prefix+h'
+            focus_pane_down         = 'prefix+j'
+            focus_pane_up           = 'prefix+k'
+            focus_pane_right        = 'prefix+l'
+            split_vertical          = 'prefix+v'
+            split_horizontal        = 'prefix+minus'
+            close_pane              = 'prefix+x'
+            goto                    = 'prefix+g'
+            detach                  = 'prefix+d'
+        }
+
+        foreach ($entry in $expected.GetEnumerator()) {
+            $content | Should -Match "(?m)^$($entry.Key)\s*=\s*\`"$([regex]::Escape($entry.Value))\`"\s*$"
+        }
+    }
 }
