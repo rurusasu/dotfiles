@@ -57,6 +57,15 @@ HandleTerminalSuffix(input, vk, sc) {
     if IsTerminalModifierKey(key)
         return
 
+    if !WinActive("ahk_exe WindowsTerminal.exe") {
+        TerminalPrefixPending := false
+        input.Stop()
+        if TerminalInputHook == input
+            TerminalInputHook := ""
+        SendEvent(Format("{{Blind}}{{vk{:x}sc{:x}}}", vk, sc))
+        return
+    }
+
     action := ResolveTerminalSuffix(key)
     TerminalPrefixPending := false
     input.Stop()

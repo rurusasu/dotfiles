@@ -92,10 +92,10 @@ Describe '標準キーバインド方針' {
             f23 = 'User.closePane'
         }
         foreach ($entry in $transport.GetEnumerator()) {
-            $bindings = @($settings.keybindings | Where-Object keys -eq $entry.Key)
+            $bindings = @($settings.keybindings | Where-Object keys -EQ $entry.Key)
             $bindings.Count | Should -Be 1 -Because "$($entry.Key) should have exactly one transport binding"
             $bindings[0].id | Should -Be $entry.Value
-            $actionBindings = @($settings.keybindings | Where-Object id -eq $entry.Value)
+            $actionBindings = @($settings.keybindings | Where-Object id -EQ $entry.Value)
             $actionBindings.Count | Should -Be 1 -Because "$($entry.Value) should not retain a direct legacy binding"
             $actionBindings[0].keys | Should -Be $entry.Key
         }
@@ -107,22 +107,22 @@ Describe '標準キーバインド方針' {
             'alt+shift+h', 'alt+shift+j', 'alt+shift+k', 'alt+shift+l',
             'alt+shift+left', 'alt+shift+down', 'alt+shift+up', 'alt+shift+right'
         )
-        @($settings.keybindings | Where-Object keys -in $legacyKeys) | Should -BeNullOrEmpty
+        @($settings.keybindings | Where-Object keys -In $legacyKeys) | Should -BeNullOrEmpty
 
         $preserved = [ordered]@{
-            'ctrl+c' = 'User.copy'
-            'ctrl+v' = 'User.paste'
-            'ctrl+shift+f' = 'User.find'
-            'shift+enter' = 'User.sendInput.ShiftEnter'
-            'ctrl+enter' = 'User.sendInput.CtrlEnter'
-            'ctrl+alt+w' = 'User.togglePaneZoom'
-            'f11' = 'User.toggleFullscreen'
-            'ctrl+shift+0' = 'User.resetFontSize'
-            'ctrl+shift+plus' = 'User.increaseFontSize'
+            'ctrl+c'           = 'User.copy'
+            'ctrl+v'           = 'User.paste'
+            'ctrl+shift+f'     = 'User.find'
+            'shift+enter'      = 'User.sendInput.ShiftEnter'
+            'ctrl+enter'       = 'User.sendInput.CtrlEnter'
+            'ctrl+alt+w'       = 'User.togglePaneZoom'
+            'f11'              = 'User.toggleFullscreen'
+            'ctrl+shift+0'     = 'User.resetFontSize'
+            'ctrl+shift+plus'  = 'User.increaseFontSize'
             'ctrl+shift+minus' = 'User.decreaseFontSize'
         }
         foreach ($entry in $preserved.GetEnumerator()) {
-            @($settings.keybindings | Where-Object keys -eq $entry.Key).id | Should -Be $entry.Value
+            @($settings.keybindings | Where-Object keys -EQ $entry.Key).id | Should -Be $entry.Value
         }
     }
 
@@ -172,6 +172,8 @@ Describe '標準キーバインド方針' {
         $ahk | Should -Match '(?s)IsExactTerminalPrefix\(\).*?GetKeyState\("Shift", "P"\).*?GetKeyState\("Alt", "P"\).*?GetKeyState\("LWin", "P"\).*?GetKeyState\("RWin", "P"\)'
         $ahk | Should -Match '(?s)ResolveTerminalSuffix\(key\).*?GetKeyState\("Ctrl", "P"\).*?GetKeyState\("Alt", "P"\).*?GetKeyState\("LWin", "P"\).*?GetKeyState\("RWin", "P"\)'
         $ahk | Should -Match '(?s)IsTerminalModifierKey\(key\).*?return'
+        $ahk | Should -Match '(?s)HandleTerminalSuffix\(input, vk, sc\).*?if !WinActive\("ahk_exe WindowsTerminal\.exe"\).*?input\.Stop\(\).*?SendEvent\(Format.*?return.*?ResolveTerminalSuffix\(key\)'
+        $ahk | Should -Match ([regex]::Escape('SendEvent(Format("{{Blind}}{{vk{:x}sc{:x}}}", vk, sc))'))
         $ahk | Should -Not -Match '(?i)Stop-Process|taskkill|ProcessClose'
 
         if ($IsWindows) {
@@ -183,6 +185,28 @@ Describe '標準キーバインド方針' {
 
             & $autoHotkey '/ErrorStdOut' $path '--check'
             $LASTEXITCODE | Should -Be 0
+        }
+    }
+
+    It 'should provision AutoHotkey v2 in every Windows CI job that runs chezmoi Pester' {
+        $ciJobs = @(
+            @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; PesterStep = '- name: Install Pester' },
+            @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; PesterStep = '- name: Install Pester' },
+            @{ Workflow = '.github/workflows/ci-powershell.yml'; Job = 'test'; PesterStep = '- name: Install PowerShell modules' },
+            @{ Workflow = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; PesterStep = '- name: Install pinned Pester' }
+        )
+        foreach ($case in $ciJobs) {
+            $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot $case.Workflow) -Raw
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($case.Job)`:\s*.*?(?=^  [a-zA-Z0-9_-]+`:\s*$|\z)"
+            ).Value
+            $job | Should -Not -BeNullOrEmpty
+            $job | Should -Match 'winget install --id AutoHotkey\.AutoHotkey --exact'
+            $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64\.exe'
+            $job | Should -Match "'/ErrorStdOut'.*'--check'"
+            $job.IndexOf('winget install --id AutoHotkey.AutoHotkey') |
+                Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"
         }
     }
 

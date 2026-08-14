@@ -26,6 +26,25 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
+      - name: Install and validate AutoHotkey v2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id AutoHotkey.AutoHotkey --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
+          }
+          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
+          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
+            throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
+          }
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
+          & $autoHotkey '/ErrorStdOut' $scriptPath '--check'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 syntax validation failed (exit $LASTEXITCODE)"
+          }
+
       - name: Install pinned Pester
         shell: pwsh
         run: |
