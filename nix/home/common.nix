@@ -9,7 +9,7 @@
   pkgs,
   lib,
   inputs ? null,
-  isWSL ? false,
+  isWSL,
   ...
 }:
 let
