@@ -297,6 +297,7 @@ main() {
   ensure_command_line_tools
   ensure_nix
   dotfiles_link_checkout "$ROOT"
+  dotfiles_update_flake "$ROOT"
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   repair_homebrew_cask_link_directories

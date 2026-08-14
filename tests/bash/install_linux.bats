@@ -157,6 +157,7 @@ assert_log_order() {
 	[ "$status" -eq 0 ]
 	grep -q 'user=test-user home=.* uid=1000 gid=1000 group=users system=x86_64-linux args=run .#system-manager -- --nix-option pure-eval false switch --flake .#ubuntu --sudo' "$COMMAND_LOG"
 	assert_log_order \
+		"args=flake update --flake $REPO_ROOT" \
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
@@ -171,6 +172,35 @@ assert_log_order() {
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 11 ]
 	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
+}
+
+@test "flake update failure stops Linux activation" {
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == flake\ update\ --flake\ * ]]; then
+  exit 42
+fi
+if [[ $* == "eval --impure --raw --expr builtins.currentSystem" ]]; then
+  printf x86_64-linux
+fi
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 42 ]
+	! grep -q 'switch --flake' "$COMMAND_LOG"
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
+}
+
+@test "flake update can be skipped for offline test environments" {
+	export DOTFILES_SKIP_FLAKE_UPDATE=1
+	write_nix_stub
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	! grep -q 'args=flake update --flake' "$COMMAND_LOG"
+	grep -q 'switch --flake .#ubuntu --sudo' "$COMMAND_LOG"
 }
 
 @test "Hermes bootstrap failure recovers Linux runtime before returning failure" {
@@ -330,6 +360,7 @@ fi
 	[ "$status" -eq 0 ]
 	grep -q 'build --impure --no-link --print-out-paths .*homeConfigurations.*x86_64-linux.*activationPackage' "$COMMAND_LOG"
 	assert_log_order \
+		"nix flake update --flake $REPO_ROOT" \
 		"homeConfigurations" \
 		"home-manager-activate" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \

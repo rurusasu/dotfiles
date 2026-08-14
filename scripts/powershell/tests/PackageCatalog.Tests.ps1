@@ -96,10 +96,12 @@ Describe 'Package catalog consistency' {
             $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "Taskfile.yml") -Raw
             $updateScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/update.sh") -Raw
             $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+            $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
             $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
             $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
-            $postInstallScript | Should -Match 'nix flake update --flake "\$TARGET_DIR"'
+            $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_root"'
+            $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR"'
         }
 
         It 'should use nixpkgs gwq and keep it out of Windows package providers' {
