@@ -95,7 +95,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("cp -r ${dotfilesSource} /home/nixos/dotfiles")
     machine.succeed("chmod -R u+w /home/nixos/dotfiles && chown -R nixos:users /home/nixos/dotfiles")
 
-    install = "su - nixos -c 'env DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
+    # The VM intentionally has no external DNS. Herdr's official installer is
+    # covered by the platform adapter tests; keep this bootstrap fixture offline.
+    install = "su - nixos -c 'env DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
     machine.succeed(install)
     machine.succeed(install)
     machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd /home/nixos/dotfiles; DOTFILES_VERIFY_SYSTEM_LAYER=nixos ./scripts/sh/verify-environment.sh --runtime'")

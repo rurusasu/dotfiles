@@ -70,6 +70,7 @@ main() {
   [[ $(uname -s) == "Linux" ]] || dotfiles_die "Linux is required."
   ensure_nix
   dotfiles_link_checkout "$ROOT"
+  dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_user_identity
   activate_home_manager

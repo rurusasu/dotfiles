@@ -1,0 +1,10 @@
+# Managed by chezmoi. Keep this file portable across Unix and Windows.
+onboarding = false
+
+[terminal]
+shell_mode = "auto"
+new_cwd = "follow"
+
+[update]
+version_check = true
+manifest_check = true

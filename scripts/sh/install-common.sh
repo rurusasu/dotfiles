@@ -17,6 +17,59 @@ dotfiles_have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+dotfiles_herdr_command() {
+  local candidate
+
+  if dotfiles_have herdr; then
+    command -v herdr
+    return 0
+  fi
+
+  for candidate in \
+    "${DOTFILES_HERDR_BIN:-}" \
+    "$HOME/.local/bin/herdr" \
+    "$HOME/.herdr/bin/herdr"; do
+    if [[ -n $candidate && -x $candidate ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+dotfiles_install_herdr() {
+  if [[ ${DOTFILES_SKIP_HERDR_INSTALL:-0} == 1 ]]; then
+    dotfiles_log "Skipping Herdr installation."
+    return 0
+  fi
+
+  case "$(uname -s)" in
+  Darwin)
+    dotfiles_have brew || dotfiles_die "Homebrew is required to install Herdr on macOS."
+    if brew list --formula herdr >/dev/null 2>&1; then
+      brew upgrade herdr
+    else
+      brew install herdr
+    fi
+    ;;
+  Linux)
+    dotfiles_have curl || dotfiles_die "curl is required to install Herdr on Linux."
+    curl -fsSL https://herdr.dev/install.sh | sh
+    ;;
+  *)
+    dotfiles_die "Herdr installation is supported only on macOS and Linux in the Unix adapter."
+    ;;
+  esac
+
+  hash -r
+  local herdr_command
+  herdr_command="$(dotfiles_herdr_command)" ||
+    dotfiles_die "Herdr installation completed but herdr is not on PATH."
+  "$herdr_command" --version >/dev/null ||
+    dotfiles_die "Herdr installation completed but version verification failed."
+}
+
 dotfiles_wait_for() {
   local attempts="$1"
   local label="$2"

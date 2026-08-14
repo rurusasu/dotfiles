@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import NoReturn
+from typing import Mapping, NoReturn
 
 
 FIXTURE_PATH = Path(
@@ -20,6 +22,7 @@ FIXTURE_PATH = Path(
 )
 PROVENANCE_PATH = FIXTURE_PATH.with_name("profile_sync.provenance.json")
 SOURCE_REPOSITORY = "rurusasu/hermes-home"
+SOURCE_URL = "https://github.com/rurusasu/hermes-home.git"
 PROVENANCE_KEYS = frozenset(
     {
         "source_repository",
@@ -70,17 +73,10 @@ def _same_path(left: Path, right: Path) -> bool:
 def _git(
     repository: Path,
     *arguments: str,
+    extra_environment: Mapping[str, str] | None = None,
+    timeout: int = 10,
 ) -> subprocess.CompletedProcess[str]:
-    environment = os.environ.copy()
-    environment.pop("GIT_DIR", None)
-    environment.pop("GIT_INDEX_FILE", None)
-    environment.update(
-        {
-            "GIT_OPTIONAL_LOCKS": "0",
-            "LANG": "C",
-            "LC_ALL": "C",
-        }
-    )
+    environment = _git_environment(extra_environment)
     try:
         return subprocess.run(
             ("git", "-C", str(repository), *arguments),
@@ -90,10 +86,29 @@ def _git(
             stderr=subprocess.DEVNULL,
             text=True,
             check=False,
-            timeout=10,
+            timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError):
         _fail("Git command could not be executed")
+
+
+def _git_environment(
+    extra_environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.pop("GIT_DIR", None)
+    environment.pop("GIT_INDEX_FILE", None)
+    environment.update(
+        {
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+            "LANG": "C",
+            "LC_ALL": "C",
+        }
+    )
+    if extra_environment is not None:
+        environment.update(extra_environment)
+    return environment
 
 
 def _require_git_root(repository: Path, label: str) -> Path:
@@ -120,6 +135,7 @@ def _tree_entry(
     repository: Path,
     path: Path,
     label: str,
+    revision: str = "HEAD",
 ) -> TreeEntry:
     result = _git(
         repository,
@@ -127,7 +143,7 @@ def _tree_entry(
         "core.quotepath=false",
         "ls-tree",
         "-z",
-        "HEAD",
+        revision,
         "--",
         path.as_posix(),
     )
@@ -150,6 +166,29 @@ def _tree_entry(
         object_type=object_type,
         object_id=object_id,
     )
+
+
+def _read_git_blob(
+    repository: Path,
+    object_id: str,
+    label: str,
+    extra_environment: Mapping[str, str] | None = None,
+) -> bytes:
+    try:
+        result = subprocess.run(
+            ("git", "-C", str(repository), "cat-file", "blob", object_id),
+            env=_git_environment(extra_environment),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        _fail("Git command could not be executed")
+    if result.returncode != 0:
+        _fail(f"{label} Git blob could not be read")
+    return result.stdout
 
 
 def _require_clean(
@@ -300,9 +339,88 @@ def _git_blob_sha1(contents: bytes) -> str:
     ).hexdigest()
 
 
+def _gh_auth_token() -> str | None:
+    environment = os.environ.copy()
+    environment.pop("GH_TOKEN", None)
+    environment.pop("GITHUB_TOKEN", None)
+    try:
+        result = subprocess.run(
+            ("gh", "auth", "token", "--hostname", "github.com"),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    token = result.stdout.strip()
+    return token if result.returncode == 0 and token else None
+
+
+def _source_auth_environment(source_url: str) -> dict[str, str]:
+    if source_url != SOURCE_URL:
+        return {}
+    token = os.environ.get("HERMES_HOME_READ_TOKEN")
+    if not token:
+        token = _gh_auth_token()
+    if not token:
+        return {}
+    credentials = base64.b64encode(
+        f"x-access-token:{token}".encode("utf-8")
+    ).decode("ascii")
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": f"http.{source_url}.extraheader",
+        "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {credentials}",
+    }
+
+
+def _fetch_source(
+    source_url: str,
+    provenance: Provenance,
+) -> tuple[TreeEntry, bytes]:
+    source_path = Path(*PurePosixPath(provenance.source_path).parts)
+    with tempfile.TemporaryDirectory(prefix="hermes-provenance-") as temporary:
+        repository = Path(temporary)
+        initialized = _git(repository, "init", "--bare", "--initial-branch=main")
+        if initialized.returncode != 0:
+            _fail("source Git repository could not be initialized")
+        auth_environment = _source_auth_environment(source_url)
+        fetched = _git(
+            repository,
+            "fetch",
+            "--depth=1",
+            "--filter=blob:none",
+            "--no-tags",
+            source_url,
+            provenance.source_commit,
+            extra_environment=auth_environment,
+            timeout=60,
+        )
+        if fetched.returncode != 0:
+            _fail("source commit could not be fetched")
+        source_entry = _tree_entry(
+            repository,
+            source_path,
+            "source path",
+            revision="FETCH_HEAD",
+        )
+        source_bytes = _read_git_blob(
+            repository,
+            source_entry.object_id,
+            "source path",
+            extra_environment=auth_environment,
+        )
+    return source_entry, source_bytes
+
+
 def verify(
     dotfiles_repository: Path,
-    source_repository: Path,
+    source_repository: Path | None,
+    source_url: str | None,
 ) -> None:
     dotfiles, provenance, _ = _load_dotfiles_provenance(dotfiles_repository)
     fixture_entry = _tree_entry(
@@ -312,22 +430,27 @@ def verify(
     )
     _require_clean(dotfiles, FIXTURE_PATH, "dotfiles fixture")
 
-    source = _require_git_root(source_repository, "source")
-    if _head_commit(source, "source") != provenance.source_commit:
-        _fail("source HEAD does not match provenance source_commit")
-    source_path = Path(*PurePosixPath(provenance.source_path).parts)
-    source_entry = _tree_entry(source, source_path, "source path")
-    _require_clean(source, source_path, "source path")
+    if source_url is not None:
+        source_entry, source_bytes = _fetch_source(source_url, provenance)
+    else:
+        if source_repository is None:
+            _fail("source location is missing")
+        source = _require_git_root(source_repository, "source")
+        if _head_commit(source, "source") != provenance.source_commit:
+            _fail("source HEAD does not match provenance source_commit")
+        source_path = Path(*PurePosixPath(provenance.source_path).parts)
+        source_entry = _tree_entry(source, source_path, "source path")
+        _require_clean(source, source_path, "source path")
+        source_bytes = _read_regular_file(
+            source / source_path,
+            "source path",
+        )
 
     if source_entry.mode != "100755":
         _fail("source path committed mode is not 100755")
     if fixture_entry.mode != "100755":
         _fail("dotfiles fixture committed mode is not 100755")
 
-    source_bytes = _read_regular_file(
-        source / source_path,
-        "source path",
-    )
     fixture_bytes = _read_regular_file(
         dotfiles / FIXTURE_PATH,
         "dotfiles fixture",
@@ -376,10 +499,13 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
     )
-    verify_parser.add_argument(
+    source = verify_parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--source-repository",
         type=Path,
-        required=True,
+    )
+    source.add_argument(
+        "--source-url",
     )
     return parser
 
@@ -393,6 +519,7 @@ def main(arguments: list[str] | None = None) -> int:
             verify(
                 parsed.dotfiles_repository,
                 parsed.source_repository,
+                parsed.source_url,
             )
             print("profile sync provenance verified")
     except VerificationError as error:

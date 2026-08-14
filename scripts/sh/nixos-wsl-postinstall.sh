@@ -309,6 +309,34 @@ else
   echo "Skipping (exists): $HOST_HW_PATH"
 fi
 
+install_herdr_for_user() {
+  local user_home
+  user_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"
+  [[ -n $user_home && -d $user_home ]] || {
+    echo "Unable to resolve the home directory for $USER_NAME." >&2
+    return 1
+  }
+
+  if [[ $USER_NAME == root ]]; then
+    dotfiles_install_herdr
+    return
+  fi
+
+  command -v runuser >/dev/null 2>&1 || {
+    echo "runuser is required to install Herdr for $USER_NAME." >&2
+    return 1
+  }
+
+  runuser -u "$USER_NAME" -- env \
+    HOME="$user_home" \
+    USER="$USER_NAME" \
+    PATH="$PATH:$user_home/.local/bin" \
+    bash -c 'source "$1"; dotfiles_install_herdr' \
+    _ "$SCRIPT_ROOT/install-common.sh"
+}
+
+install_herdr_for_user
+
 if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
   # Update flake inputs so first install uses the latest Nix sources.
   dotfiles_update_flake "$TARGET_DIR"
