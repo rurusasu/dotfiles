@@ -9,6 +9,15 @@ BeforeAll {
 }
 
 Describe 'Package catalog consistency' {
+    It 'keeps Herdr out of the Winget manifest because Windows uses the official preview installer' {
+        $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+        $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+
+        $sets | Should -Not -Match 'Herdr\.Herdr'
+        @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -match '(?i)herdr' }).Count | Should -Be 0
+    }
+
     Context 'Latest package policy' {
         It 'should not pin winget package versions in generated packages.json' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
