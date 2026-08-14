@@ -157,6 +157,7 @@ assert_log_order() {
 	[ "$status" -eq 0 ]
 	grep -q 'user=test-user home=.* uid=1000 gid=1000 group=users system=x86_64-linux args=run .#system-manager -- --nix-option pure-eval false switch --flake .#ubuntu --sudo' "$COMMAND_LOG"
 	assert_log_order \
+		"args=flake update" \
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
@@ -260,6 +261,18 @@ EOF
 	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
+@test "Linux stops before System Manager when flake update fails" {
+	write_nix_stub
+	cat >>"$STUB_BIN/nix" <<'EOF'
+if [[ $* == "flake update" ]]; then exit 41; fi
+EOF
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 41 ]
+	! grep -q 'switch --flake' "$COMMAND_LOG"
+}
+
 @test "invalid existing user identity is rejected before System Manager" {
 	write_nix_stub
 	write_stub id '
@@ -330,6 +343,7 @@ fi
 	[ "$status" -eq 0 ]
 	grep -q 'build --impure --no-link --print-out-paths .*homeConfigurations.*x86_64-linux.*activationPackage' "$COMMAND_LOG"
 	assert_log_order \
+		"nix flake update" \
 		"homeConfigurations" \
 		"home-manager-activate" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
@@ -337,4 +351,21 @@ fi
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 	[[ "$output" == *"User-only setup complete; Docker/systemd were not configured."* ]]
+}
+
+@test "Home Manager fallback stops before activation when flake update fails" {
+	export DOTFILES_ALLOW_USER_ONLY=1
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == "eval --impure --raw --expr builtins.currentSystem" ]]; then
+	printf x86_64-linux
+elif [[ $* == "flake update" ]]; then
+	exit 41
+fi
+'
+
+	run "$FALLBACK_INSTALLER"
+
+	[ "$status" -eq 41 ]
+	! grep -q 'homeConfigurations' "$COMMAND_LOG"
 }

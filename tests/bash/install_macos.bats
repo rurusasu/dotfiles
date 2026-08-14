@@ -405,6 +405,7 @@ run_macos_installer() {
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$REPO_ROOT> <$STUB_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
 	assert_log_order \
+		"nix flake update" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"update-homebrew-casks " \
 		"docker info" \
@@ -424,6 +425,19 @@ run_macos_installer() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "macOS stops before nix-darwin when flake update fails" {
+	write_installed_stubs
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == "flake update" ]]; then exit 41; fi
+'
+
+	run_macos_installer
+
+	[ "$status" -eq 41 ]
+	! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
 }
 
 @test "Docker Desktop md5 compatibility ensure uses fixed paths for all states" {

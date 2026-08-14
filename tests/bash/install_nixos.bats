@@ -120,6 +120,7 @@ line_of() {
 	[ "$status" -eq 0 ]
 	grep -q "nixos-rebuild user=test-user home=$HOME uid=1000 gid=1000 group=users args=switch --flake $REPO_ROOT#linux --impure" "$COMMAND_LOG"
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
+	[ "$(line_of 'nix flake update')" -lt "$(line_of nixos-rebuild)" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap xapi-mcp")" ]
@@ -186,6 +187,22 @@ exit 42
 	[ "$status" -eq 42 ]
 	! grep -q '^chezmoi ' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
+}
+
+@test "NixOS stops before rebuild when flake update fails" {
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ $* == "eval --impure --raw --expr builtins.currentSystem" ]]; then
+	printf x86_64-linux
+elif [[ $* == "flake update" ]]; then
+	exit 41
+fi
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 41 ]
+	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
 }
 
 @test "NixOS Compose failure stops before acceptance" {
