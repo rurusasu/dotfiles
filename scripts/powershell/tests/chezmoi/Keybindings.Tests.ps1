@@ -113,7 +113,7 @@ Describe '標準キーバインド方針' {
         $content | Should -Match 'key = "Space", mods = "CTRL", timeout_milliseconds = 1000'
         $content | Should -Match 'key = "Space", mods = "LEADER", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
         $content | Should -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "FUZZY\|WORKSPACES" \}\)'
-        $content | Should -Match 'key = "a", mods = "LEADER", action = act\.PromptInputLine'
+        $content | Should -Match '(?s)key = "a",\s*mods = "LEADER",\s*action = act\.PromptInputLine'
         $content | Should -Match 'key = "n", mods = "LEADER", action = act\.SpawnTab\("CurrentPaneDomain"\)'
         $content | Should -Match 'key = "q", mods = "LEADER", action = act\.CloseCurrentTab'
         $content | Should -Match 'key = "Tab", mods = "LEADER", action = act\.ActivateTabRelative\(1\)'
