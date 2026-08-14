@@ -155,6 +155,30 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
 
+    It 'should provide the Terminal.app prefix adapter contract' {
+        $path = Join-Path $script:chezmoiRoot 'terminals/hammerspoon/init.lua'
+
+        Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
+        $content = Get-Content -LiteralPath $path -Raw
+
+        $content | Should -Match 'com\.apple\.Terminal'
+        $content | Should -Match 'hs\.timer\.doAfter\(1'
+        $content | Should -Match 'send\(\{ "cmd" \}, "t"'
+        $content | Should -Match 'send\(\{ "cmd" \}, "w"'
+        $content | Should -Match 'send\(\{ "ctrl" \}, "tab"'
+        $content | Should -Match 'send\(\{ "ctrl", "shift" \}, "tab"'
+        $content | Should -Match 'send\(\{ "cmd" \}, "d"'
+        $content | Should -Match 'send\(\{ "cmd", "shift" \}, "d"'
+        $content | Should -Match 'hs\.eventtap\.keyStroke\(mods, key, 0\)'
+        $content | Should -Match 'hs\.eventtap\.keyStroke\(\{ "ctrl" \}, "space"'
+        $content | Should -Match '(?s)if forwardingPrefix then return false end.*?hs\.eventtap\.keyStroke\(\{ "ctrl" \}, "space", 0\).*?hs\.timer\.doAfter\(0'
+        $content | Should -Match '(?s)frontmostApplication\(\).*?bundleID\(\) ~= terminalBundleId.*?resetPrefix\(\).*?return false'
+        $content | Should -Match '(?s)local action = .*?suffixActions\[key\]\s*resetPrefix\(\)\s*if action then action\(\) end\s*return true'
+        $content | Should -Match 'hs\.accessibilityState\(\)'
+        $content | Should -Match '(?s)if hs\.accessibilityState\(\) then\s*terminalPrefixTap:start\(\)\s*else\s*hs\.alert\.show'
+        $content | Should -Match 'hs\.autoLaunch\(true\)'
+    }
+
     It 'Warp keybindings are no longer managed' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse
     }

@@ -29,6 +29,30 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Terminal config deployment' {
+        It 'should render Hammerspoon deployment only for Darwin and include its source hash' {
+            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl'
+            $template = Get-Content -LiteralPath $templatePath -Raw
+
+            $template | Should -Match 'include "terminals/hammerspoon/init\.lua" \| sha256sum'
+
+            $darwinRender = $template |
+                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
+            $LASTEXITCODE | Should -Be 0
+            $darwinContent = $darwinRender -join [Environment]::NewLine
+            $darwinContent | Should -Match '(?m)^# hash: [0-9a-f]{128}$'
+            $darwinContent |
+                Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
+
+            $linuxRender = $template |
+                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
+            $LASTEXITCODE | Should -Be 0
+            $linuxContent = $linuxRender -join [Environment]::NewLine
+            $linuxContent | Should -Match '(?m)^# hash: [0-9a-f]{64}$'
+            $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
+        }
+    }
+
     Context 'onepasswordRead はテンプレート展開中に呼ばない' {
         It 'すべての .tmpl ファイルで onepasswordRead を呼ばないこと' {
             $violations = @()
