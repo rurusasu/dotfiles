@@ -128,13 +128,12 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane close/zoom
-    { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
+    -- Pane zoom remains outside the window-manager contract.
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
     -- Common terminal window-manager contract.
     { key = "Space", mods = "LEADER", action = act.SendKey({ key = "Space", mods = "CTRL" }) },
-    { key = "w", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES" }) },
+    { key = "w", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "WORKSPACES" }) },
     {
         key = "a",
         mods = "LEADER",
@@ -179,6 +178,84 @@ config.keys = {
     { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
     { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
 }
+
+-- Remove inherited tab/pane window-manager shortcuts. The shared Leader table
+-- above is the only effective path for these actions; non-WM defaults remain.
+local default_window_manager_bindings = {
+    { key = "Tab", mods = "CTRL" },
+    { key = "Tab", mods = "SHIFT|CTRL" },
+    { key = "!", mods = "CTRL" },
+    { key = "!", mods = "SHIFT|CTRL" },
+    { key = '"', mods = "ALT|CTRL" },
+    { key = '"', mods = "SHIFT|ALT|CTRL" },
+    { key = "#", mods = "CTRL" },
+    { key = "#", mods = "SHIFT|CTRL" },
+    { key = "$", mods = "CTRL" },
+    { key = "$", mods = "SHIFT|CTRL" },
+    { key = "%", mods = "CTRL" },
+    { key = "%", mods = "SHIFT|CTRL" },
+    { key = "%", mods = "ALT|CTRL" },
+    { key = "%", mods = "SHIFT|ALT|CTRL" },
+    { key = "&", mods = "CTRL" },
+    { key = "&", mods = "SHIFT|CTRL" },
+    { key = "'", mods = "SHIFT|ALT|CTRL" },
+    { key = "(", mods = "CTRL" },
+    { key = "(", mods = "SHIFT|CTRL" },
+    { key = "*", mods = "CTRL" },
+    { key = "*", mods = "SHIFT|CTRL" },
+    { key = "1", mods = "SHIFT|CTRL" },
+    { key = "1", mods = "SUPER" },
+    { key = "2", mods = "SHIFT|CTRL" },
+    { key = "2", mods = "SUPER" },
+    { key = "3", mods = "SHIFT|CTRL" },
+    { key = "3", mods = "SUPER" },
+    { key = "4", mods = "SHIFT|CTRL" },
+    { key = "4", mods = "SUPER" },
+    { key = "5", mods = "SHIFT|CTRL" },
+    { key = "5", mods = "SHIFT|ALT|CTRL" },
+    { key = "5", mods = "SUPER" },
+    { key = "6", mods = "SHIFT|CTRL" },
+    { key = "6", mods = "SUPER" },
+    { key = "7", mods = "SHIFT|CTRL" },
+    { key = "7", mods = "SUPER" },
+    { key = "8", mods = "SHIFT|CTRL" },
+    { key = "8", mods = "SUPER" },
+    { key = "9", mods = "SHIFT|CTRL" },
+    { key = "9", mods = "SUPER" },
+    { key = "@", mods = "CTRL" },
+    { key = "@", mods = "SHIFT|CTRL" },
+    { key = "T", mods = "CTRL" },
+    { key = "T", mods = "SHIFT|CTRL" },
+    { key = "W", mods = "CTRL" },
+    { key = "[", mods = "SHIFT|SUPER" },
+    { key = "]", mods = "SHIFT|SUPER" },
+    { key = "^", mods = "CTRL" },
+    { key = "^", mods = "SHIFT|CTRL" },
+    { key = "t", mods = "SHIFT|CTRL" },
+    { key = "t", mods = "SUPER" },
+    { key = "w", mods = "CTRL|SHIFT" },
+    { key = "w", mods = "SUPER" },
+    { key = "{", mods = "SUPER" },
+    { key = "{", mods = "SHIFT|SUPER" },
+    { key = "}", mods = "SUPER" },
+    { key = "}", mods = "SHIFT|SUPER" },
+    { key = "PageUp", mods = "CTRL" },
+    { key = "PageUp", mods = "SHIFT|CTRL" },
+    { key = "PageDown", mods = "CTRL" },
+    { key = "PageDown", mods = "SHIFT|CTRL" },
+    { key = "LeftArrow", mods = "SHIFT|CTRL" },
+    { key = "RightArrow", mods = "SHIFT|CTRL" },
+    { key = "UpArrow", mods = "SHIFT|CTRL" },
+    { key = "DownArrow", mods = "SHIFT|CTRL" },
+}
+
+for _, binding in ipairs(default_window_manager_bindings) do
+    table.insert(config.keys, {
+        key = binding.key,
+        mods = binding.mods,
+        action = act.DisableDefaultAssignment,
+    })
+end
 
 -- GUI window focus stays direct and does not conflict with Leader+h/l.
 -- Existing direct resize chords remain available on each platform.

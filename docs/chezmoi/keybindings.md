@@ -58,6 +58,13 @@ target ごとの capability は次のとおり。非対応 suffix は別のキ�
 - tmux と Herdr は各アプリの native prefix/key table を使う。tmux では Workspace=Session、Tab=Window として扱う。
 - nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の tmux/Herdr を操作できる。
 
+Hammerspoon の初回設定は次の順で行う。
+
+1. `open -a Hammerspoon` で Hammerspoon を一度起動する。
+2. macOS の「システム設定」→「プライバシーとセキュリティ」→「アクセシビリティ」で Hammerspoon を許可する。
+3. 許可後、Hammerspoon のメニューバーアイコンから `Reload Config` を実行する。
+4. Terminal.app を前面にして `Ctrl+Space n` で新規 tab が開くこと、Terminal.app 以外では同じ入力が捕捉されないことを確認する。
+
 Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
 
 ### Editors

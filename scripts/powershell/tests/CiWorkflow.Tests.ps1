@@ -321,6 +321,30 @@ Describe 'CI workflow configuration' {
         ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
     }
 
+    It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-e2e-hosted.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $macosJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  macos:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+
+        $macosJob | Should -Not -BeNullOrEmpty
+        $macosJob | Should -Match 'brew install bash bats-core coreutils go-task lua'
+        $macosJob | Should -Match 'brew install --cask wezterm@nightly'
+        $macosJob | Should -Match 'command -v lua'
+        $macosJob | Should -Match 'command -v luac'
+        $macosJob | Should -Match 'command -v wezterm'
+        $macosJob | Should -Match 'luac -p chezmoi/terminals/hammerspoon/init\.lua'
+        $macosJob | Should -Match 'lua tests/lua/hammerspoon_terminal_prefix_test\.lua'
+        $macosJob | Should -Not -Match 'continue-on-error:\s*true'
+        $macosJob | Should -Not -Match '(?:command -v (?:lua|luac).*(?:\|\| true)|if\s+command -v (?:lua|luac))'
+        $macosJob.IndexOf('brew install bash bats-core coreutils go-task lua') |
+            Should -BeLessThan $macosJob.IndexOf('luac -p chezmoi/terminals/hammerspoon/init.lua')
+        $macosJob.IndexOf('brew install --cask wezterm@nightly') |
+            Should -BeLessThan $macosJob.IndexOf('bats tests/bash')
+    }
+
     It 'should use directory discovery when excluding Windows integration tests' {
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $runner = Get-Content -LiteralPath $runnerPath -Raw

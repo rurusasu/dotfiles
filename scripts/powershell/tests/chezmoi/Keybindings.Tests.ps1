@@ -195,9 +195,19 @@ Describe '標準キーバインド方針' {
         }
 
         $legacyKeys = @(
-            'ctrl+tab', 'ctrl+shift+tab', 'ctrl+alt+t', 'ctrl+shift+w',
+            'ctrl+shift+t',
+            'ctrl+shift+1', 'ctrl+shift+2', 'ctrl+shift+3',
+            'ctrl+shift+4', 'ctrl+shift+5', 'ctrl+shift+6',
+            'ctrl+shift+7', 'ctrl+shift+8', 'ctrl+shift+9',
+            'ctrl+shift+d',
+            'ctrl+tab', 'ctrl+shift+tab',
+            'ctrl+alt+1', 'ctrl+alt+2', 'ctrl+alt+3',
+            'ctrl+alt+4', 'ctrl+alt+5', 'ctrl+alt+6',
+            'ctrl+alt+7', 'ctrl+alt+8', 'ctrl+alt+9',
+            'ctrl+alt+t', 'ctrl+shift+w',
             'alt+left', 'alt+down', 'alt+up', 'alt+right',
-            'alt+shift+plus', 'alt+shift+minus',
+            'ctrl+alt+left',
+            'alt+shift+d', 'alt+shift+plus', 'alt+shift+minus',
             'alt+shift+h', 'alt+shift+j', 'alt+shift+k', 'alt+shift+l',
             'alt+shift+left', 'alt+shift+down', 'alt+shift+up', 'alt+shift+right'
         )
@@ -251,20 +261,20 @@ Describe '標準キーバインド方針' {
         $ahk | Should -Not -Match '(?i)Stop-Process|taskkill|ProcessClose'
 
         if ($IsWindows) {
-            $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
-            Test-Path -LiteralPath $autoHotkey -PathType Leaf |
-                Should -BeTrue -Because 'Windows CI must machine-install AutoHotkey v2'
+            $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+            Test-Path -LiteralPath $uiAccess -PathType Leaf |
+                Should -BeTrue -Because 'Windows CI must machine-install the production UIAccess interpreter'
 
-            & $autoHotkey '/ErrorStdOut' $path '--check'
+            & $uiAccess '/ErrorStdOut' $path '--check'
             $LASTEXITCODE | Should -Be 0
 
-            $selfTestOutput = & $autoHotkey '/ErrorStdOut' $path '--self-test' 2>&1
+            $selfTestOutput = & $uiAccess '/ErrorStdOut' $path '--self-test' 2>&1
             $LASTEXITCODE | Should -Be 0
             $selfTestOutput -join [Environment]::NewLine | Should -Match 'Terminal self-tests: PASS'
         }
     }
 
-    It 'should provision AutoHotkey v2 in every Windows CI job that runs chezmoi Pester' {
+    It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
         $ciJobs = @(
             @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; PesterStep = '- name: Install Pester' },
             @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; PesterStep = '- name: Install Pester' },
@@ -279,10 +289,10 @@ Describe '標準キーバインド方針' {
             ).Value
             $job | Should -Not -BeNullOrEmpty
             $job | Should -Match 'winget install --id AutoHotkey\.AutoHotkey --exact --scope machine'
-            $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64\.exe'
             $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
-            $job | Should -Match "'/ErrorStdOut'.*'--check'"
-            $job | Should -Match "'/ErrorStdOut'.*'--self-test'"
+            $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--check'"))
+            $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--self-test'"))
+            $job | Should -Not -Match ([regex]::Escape("& `$autoHotkey '/ErrorStdOut'"))
             $job.IndexOf('winget install --id AutoHotkey.AutoHotkey') |
                 Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"
         }
@@ -293,7 +303,8 @@ Describe '標準キーバインド方針' {
 
         $content | Should -Match 'key = "Space", mods = "CTRL", timeout_milliseconds = 1000'
         $content | Should -Match 'key = "Space", mods = "LEADER", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
-        $content | Should -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "FUZZY\|WORKSPACES" \}\)'
+        $content | Should -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "WORKSPACES" \}\)'
+        $content | Should -Not -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "FUZZY\|WORKSPACES" \}\)'
         $content | Should -Match '(?s)key = "a",\s*mods = "LEADER",\s*action = act\.PromptInputLine'
         $content | Should -Match 'key = "n", mods = "LEADER", action = act\.SpawnTab\("CurrentPaneDomain"\)'
         $content | Should -Match 'key = "q", mods = "LEADER", action = act\.CloseCurrentTab'

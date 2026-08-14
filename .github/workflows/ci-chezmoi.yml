@@ -49,13 +49,13 @@ jobs:
             throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
           }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
-          & $autoHotkey '/ErrorStdOut' $scriptPath '--check'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
           if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 syntax validation failed (exit $LASTEXITCODE)"
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
           }
-          & $autoHotkey '/ErrorStdOut' $scriptPath '--self-test'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
           if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 behavioral self-tests failed (exit $LASTEXITCODE)"
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
           }
 
       - name: Cache PowerShell modules
@@ -188,13 +188,13 @@ jobs:
             throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
           }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
-          & $autoHotkey '/ErrorStdOut' $scriptPath '--check'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
           if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 syntax validation failed (exit $LASTEXITCODE)"
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
           }
-          & $autoHotkey '/ErrorStdOut' $scriptPath '--self-test'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
           if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 behavioral self-tests failed (exit $LASTEXITCODE)"
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
           }
 
       - name: Cache PowerShell modules
