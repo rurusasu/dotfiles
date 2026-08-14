@@ -292,7 +292,7 @@ Describe '標準キーバインド方針' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
         $content | Should -Match 'key = "Space", mods = "CTRL", timeout_milliseconds = 1000'
-        $content | Should -Match 'key = "Space", mods = "LEADER", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
+        $content | Should -Match 'key = "Space", mods = "LEADER\|CTRL", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
         $content | Should -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "WORKSPACES" \}\)'
         $content | Should -Not -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "FUZZY\|WORKSPACES" \}\)'
         $content | Should -Match '(?s)key = "a",\s*mods = "LEADER",\s*action = act\.PromptInputLine'
