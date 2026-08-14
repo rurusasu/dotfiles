@@ -138,7 +138,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             'info',
             'compose version',
             "compose -f $script:composeFile config --quiet",
-            "compose -f $script:composeFile build hermes hermes-bootstrap xapi-mcp",
+            "compose -f $script:composeFile build hermes hermes-bootstrap hermes-browser xapi-mcp",
             "compose -f $script:composeFile stop hermes",
             "compose -f $script:composeFile up -d --force-recreate"
         )
