@@ -31,6 +31,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install chezmoi
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
+          }
+          Get-Command chezmoi -ErrorAction Stop | Out-Null
+
       - name: Install and validate AutoHotkey v2
         shell: pwsh
         run: |
@@ -169,6 +180,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install chezmoi
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
+          }
+          Get-Command chezmoi -ErrorAction Stop | Out-Null
 
       - name: Install and validate AutoHotkey v2
         shell: pwsh

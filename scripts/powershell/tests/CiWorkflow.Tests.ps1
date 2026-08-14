@@ -347,6 +347,29 @@ Describe 'CI workflow configuration' {
             Should -BeLessThan $macosJob.IndexOf('bats tests/wezterm')
     }
 
+    It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
+        $workflowCases = @(
+            @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
+            @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; TestMarker = '$pesterConfig.Run.Path' },
+            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Pester -Configuration' },
+            @{ Path = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
+        )
+
+        foreach ($case in $workflowCases) {
+            $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot $case.Path) -Raw
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($case.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+
+            $job | Should -Not -BeNullOrEmpty
+            $job | Should -Match 'winget install --id twpayne\.chezmoi --exact'
+            $job | Should -Match 'Get-Command chezmoi -ErrorAction Stop'
+            $job.IndexOf('winget install --id twpayne.chezmoi --exact') |
+                Should -BeLessThan $job.IndexOf($case.TestMarker)
+        }
+    }
+
     It 'should use directory discovery when excluding Windows integration tests' {
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $runner = Get-Content -LiteralPath $runnerPath -Raw

@@ -36,6 +36,44 @@ BeforeAll {
         return $workspace.bindings
     }
 
+    function Invoke-AutoHotkeyUiAccess {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Executable,
+            [Parameter(Mandatory)]
+            [string]$ScriptPath,
+            [Parameter(Mandatory)]
+            [string]$Mode
+        )
+
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $Executable
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.ArgumentList.Add('/ErrorStdOut')
+        $startInfo.ArgumentList.Add($ScriptPath)
+        $startInfo.ArgumentList.Add($Mode)
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        try {
+            $process.Start() | Out-Null
+            $standardOutput = $process.StandardOutput.ReadToEnd()
+            $standardError = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+
+            return [pscustomobject]@{
+                ExitCode = $process.ExitCode
+                Output   = @($standardOutput, $standardError) -join [Environment]::NewLine
+            }
+        }
+        finally {
+            $process.Dispose()
+        }
+    }
+
 }
 
 Describe '標準キーバインド方針' {
@@ -265,12 +303,12 @@ Describe '標準キーバインド方針' {
             Test-Path -LiteralPath $uiAccess -PathType Leaf |
                 Should -BeTrue -Because 'Windows CI must machine-install the production UIAccess interpreter'
 
-            & $uiAccess '/ErrorStdOut' $path '--check'
-            $LASTEXITCODE | Should -Be 0
+            $checkResult = Invoke-AutoHotkeyUiAccess -Executable $uiAccess -ScriptPath $path -Mode '--check'
+            $checkResult.ExitCode | Should -Be 0
 
-            $selfTestOutput = & $uiAccess '/ErrorStdOut' $path '--self-test' 2>&1
-            $LASTEXITCODE | Should -Be 0
-            $selfTestOutput -join [Environment]::NewLine | Should -Match 'Terminal self-tests: PASS'
+            $selfTestResult = Invoke-AutoHotkeyUiAccess -Executable $uiAccess -ScriptPath $path -Mode '--self-test'
+            $selfTestResult.ExitCode | Should -Be 0
+            $selfTestResult.Output | Should -Match 'Terminal self-tests: PASS'
         }
     }
 
@@ -411,7 +449,7 @@ Describe '標準キーバインド方針' {
     }
 
     It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {
-        $tmux = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw
+        $tmux = (Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw) -replace "\r\n?", "`n"
         $nvim = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/nvim/lua/config/keymaps.lua") -Raw
 
         $tmux | Should -Match '(?m)^set -g prefix C-Space$'
