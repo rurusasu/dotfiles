@@ -3,6 +3,12 @@
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
+    $script:keybindingsDocsPath = if ($env:DOTFILES_KEYBINDINGS_DOCS_PATH) {
+        $env:DOTFILES_KEYBINDINGS_DOCS_PATH
+    }
+    else {
+        Join-Path $script:repoRoot "docs/chezmoi/keybindings.md"
+    }
 
     function Get-JsonContent {
         param([string]$Path)
@@ -34,25 +40,16 @@ BeforeAll {
 
 Describe '標準キーバインド方針' {
     It 'docs は editor と Unix/Vim 系の標準レイヤーを明示すること' {
-        $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
+        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
 
         $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
-    It 'docs は共通 terminal window-manager 契約と capability boundary を明示すること' {
-        $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
+    It 'docs は共通 terminal window-manager metadata を明示すること' {
+        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
         $expectations = [ordered]@{
             'Ctrl\+Space Ctrl\+Space'               = 'nested prefix should be documented'
-            'Terminal\.app.*no-op'                  = 'Terminal.app unsupported suffixes should be documented as no-op'
-            'Windows Terminal.*Workspace.*非対応'      = 'Windows Terminal workspace boundary should be explicit'
-            'Workspace.*`w`.*picker'                = 'workspace picker suffix should be documented'
-            'Workspace.*`a`.*新規'                    = 'new workspace suffix should be documented'
-            'Tab.*`n`.*新規'                          = 'new tab suffix should be documented'
-            'Tab.*`q`.*閉じる'                         = 'close tab suffix should be documented'
-            'Pane.*`h` / `j` / `k` / `l`'           = 'pane focus suffixes should be documented'
-            'Session.*`g`.*navigator'               = 'session navigator suffix should be documented'
-            'Session.*`d`.*detach'                  = 'session detach suffix should be documented'
             'Hammerspoon.*com\.apple\.Terminal.*1秒' = 'Terminal.app adapter scope and timeout should be explicit'
             'AutoHotkey.*WindowsTerminal\.exe.*1秒'  = 'Windows Terminal adapter scope and timeout should be explicit'
             'tmux.*Workspace=Session.*Tab=Window'   = 'tmux capability aliases should be explicit'
@@ -63,8 +60,87 @@ Describe '標準キーバインド方針' {
         }
     }
 
+    It 'docs は共通 terminal window-manager suffix table の全行を exactly once で定義すること' {
+        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $expectedRows = @(
+            @{ Target = 'Workspace'; Suffix = '`w`'; Operation = 'picker を開く' },
+            @{ Target = 'Workspace'; Suffix = '`a`'; Operation = '新規作成' },
+            @{ Target = 'Workspace'; Suffix = '`j` / `k`'; Operation = 'picker 内で次 / 前' },
+            @{ Target = 'Tab'; Suffix = '`n`'; Operation = '新規作成' },
+            @{ Target = 'Tab'; Suffix = '`q`'; Operation = '閉じる' },
+            @{ Target = 'Tab'; Suffix = '`Tab` / `Shift+Tab`'; Operation = '次 / 前' },
+            @{ Target = 'Pane'; Suffix = '`h` / `j` / `k` / `l`'; Operation = '左 / 下 / 上 / 右へ移動' },
+            @{ Target = 'Pane'; Suffix = '`v` / `-`'; Operation = '左右 / 上下分割' },
+            @{ Target = 'Pane'; Suffix = '`x`'; Operation = '閉じる' },
+            @{ Target = 'Session'; Suffix = '`g`'; Operation = 'navigator を開く' },
+            @{ Target = 'Session'; Suffix = '`d`'; Operation = 'detach' }
+        )
+
+        foreach ($expected in $expectedRows) {
+            $cells = @($expected.Target, $expected.Suffix, $expected.Operation) |
+                ForEach-Object { [regex]::Escape($_) }
+            $rowPattern = '(?m)^\|[ \t]*' + ($cells -join '[ \t]*\|[ \t]*') + '[ \t]*\|[ \t]*$'
+
+            [regex]::Matches($docs, $rowPattern).Count |
+                Should -Be 1 -Because "$($expected.Target) $($expected.Suffix) should have one exact common-contract row"
+        }
+    }
+
+    It 'docs は全 target の全 capability cell を定義すること' {
+        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $expectedTargets = @(
+            @{
+                Target       = 'WezTerm'
+                Capabilities = [ordered]@{ Workspace = '対応'; Tab = '対応'; Pane = '対応'; Session = '対応' }
+            },
+            @{
+                Target       = 'Terminal.app'
+                Capabilities = [ordered]@{
+                    Workspace = '非対応 (no-op)'
+                    Tab       = '対応'
+                    Pane      = '`v` / `x` のみ対応、ほかは no-op'
+                    Session   = '非対応 (no-op)'
+                }
+            },
+            @{
+                Target       = 'Windows Terminal'
+                Capabilities = [ordered]@{
+                    Workspace = 'Workspace 非対応 (no-op)'
+                    Tab       = '対応'
+                    Pane      = '対応'
+                    Session   = '非対応 (no-op)'
+                }
+            },
+            @{
+                Target       = 'tmux'
+                Capabilities = [ordered]@{
+                    Workspace = '対応 (Workspace=Session)'
+                    Tab       = '対応 (Tab=Window)'
+                    Pane      = '対応'
+                    Session   = '対応'
+                }
+            },
+            @{
+                Target       = 'Herdr'
+                Capabilities = [ordered]@{ Workspace = '対応'; Tab = '対応'; Pane = '対応'; Session = '対応' }
+            }
+        )
+
+        foreach ($expected in $expectedTargets) {
+            $target = [regex]::Escape($expected.Target)
+            $rowPattern = "(?m)^\|[ \t]*$target[ \t]*\|[ \t]*(?<Workspace>[^|\r\n]+?)[ \t]*\|[ \t]*(?<Tab>[^|\r\n]+?)[ \t]*\|[ \t]*(?<Pane>[^|\r\n]+?)[ \t]*\|[ \t]*(?<Session>[^|\r\n]+?)[ \t]*\|[ \t]*$"
+            $rows = [regex]::Matches($docs, $rowPattern)
+            $rows.Count | Should -Be 1 -Because "$($expected.Target) should have one capability row"
+
+            foreach ($capability in $expected.Capabilities.GetEnumerator()) {
+                $rows[0].Groups[$capability.Key].Value.Trim() |
+                    Should -Be $capability.Value -Because "$($expected.Target) $($capability.Key) capability should remain explicit"
+            }
+        }
+    }
+
     It 'docs と source は代表的な旧 terminal window-manager bindings を再導入しないこと' {
-        $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
+        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
         $legacyBindings = @(
             @{
                 Name          = 'WezTerm Command split'
