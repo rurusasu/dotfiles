@@ -176,6 +176,45 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install chezmoi
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
+          }
+          $chezmoiDirectory = Split-Path -Parent (Get-Command chezmoi -ErrorAction Stop).Source
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $chezmoiDirectory -Encoding utf8
+
+      - name: Install and validate AutoHotkey v2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
+          }
+          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
+          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
+            throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
+          }
+          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
+            throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
+          }
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
+          }
+          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
+          }
+
       - name: Cache PowerShell modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:

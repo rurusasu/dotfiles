@@ -3,10 +3,6 @@
   "$schema": "https://aka.ms/terminal-profiles-schema",
   "actions": [
     {
-      "command": { "action": "resizePane", "direction": "left" },
-      "id": "User.resizePane.left"
-    },
-    {
       "command": "find",
       "id": "User.find"
     },
@@ -35,10 +31,6 @@
       "id": "User.decreaseFontSize"
     },
     {
-      "command": { "action": "resizePane", "direction": "down" },
-      "id": "User.resizePane.down"
-    },
-    {
       "command": { "action": "splitPane", "split": "down", "splitMode": "duplicate" },
       "id": "User.splitPane.vertical"
     },
@@ -49,6 +41,10 @@
     {
       "command": { "action": "nextTab" },
       "id": "User.nextTab"
+    },
+    {
+      "command": "closeTab",
+      "id": "User.closeTab"
     },
     {
       "command": { "action": "prevTab" },
@@ -83,32 +79,8 @@
       "id": "User.moveFocus.up"
     },
     {
-      "command": { "action": "resizePane", "direction": "right" },
-      "id": "User.resizePane.right"
-    },
-    {
       "command": { "action": "moveFocus", "direction": "down" },
       "id": "User.moveFocus.down"
-    },
-    {
-      "command": { "action": "swapPane", "direction": "left" },
-      "id": "User.swapPane.left"
-    },
-    {
-      "command": { "action": "swapPane", "direction": "down" },
-      "id": "User.swapPane.down"
-    },
-    {
-      "command": { "action": "swapPane", "direction": "up" },
-      "id": "User.swapPane.up"
-    },
-    {
-      "command": { "action": "swapPane", "direction": "right" },
-      "id": "User.swapPane.right"
-    },
-    {
-      "command": { "action": "resizePane", "direction": "up" },
-      "id": "User.resizePane.up"
     },
     {
       "command": { "action": "adjustFontSize", "delta": 1 },
@@ -121,7 +93,6 @@
   "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
   "keybindings": [
     { "id": null, "keys": "alt+c" },
-    { "id": "User.prevTab", "keys": "ctrl+shift+tab" },
     { "id": "User.copy", "keys": "ctrl+c" },
     { "id": null, "keys": "alt+z" },
     { "id": "User.sendInput.ShiftEnter", "keys": "shift+enter" },
@@ -131,25 +102,59 @@
     { "id": null, "keys": "ctrl+0" },
     { "id": "User.find", "keys": "ctrl+shift+f" },
     { "id": "User.paste", "keys": "ctrl+v" },
-    { "id": "User.splitPane.horizontal", "keys": "alt+shift+plus" },
-    { "id": "User.splitPane.vertical", "keys": "alt+shift+minus" },
-    { "id": "User.closePane", "keys": "ctrl+shift+w" },
     { "id": "User.togglePaneZoom", "keys": "ctrl+alt+w" },
-    { "id": "User.moveFocus.left", "keys": "alt+left" },
-    { "id": "User.moveFocus.up", "keys": "alt+up" },
-    { "id": "User.moveFocus.right", "keys": "alt+right" },
-    { "id": "User.moveFocus.down", "keys": "alt+down" },
-    { "id": "User.swapPane.left", "keys": "alt+shift+h" },
-    { "id": "User.swapPane.up", "keys": "alt+shift+k" },
-    { "id": "User.swapPane.right", "keys": "alt+shift+l" },
-    { "id": "User.swapPane.down", "keys": "alt+shift+j" },
-    { "id": "User.resizePane.left", "keys": "alt+shift+left" },
-    { "id": "User.resizePane.up", "keys": "alt+shift+up" },
-    { "id": "User.resizePane.right", "keys": "alt+shift+right" },
-    { "id": "User.resizePane.down", "keys": "alt+shift+down" },
-    { "id": "User.nextTab", "keys": "ctrl+tab" },
+    { "id": null, "keys": "ctrl+shift+t" },
+    { "id": null, "keys": "ctrl+shift+1" },
+    { "id": null, "keys": "ctrl+shift+2" },
+    { "id": null, "keys": "ctrl+shift+3" },
+    { "id": null, "keys": "ctrl+shift+4" },
+    { "id": null, "keys": "ctrl+shift+5" },
+    { "id": null, "keys": "ctrl+shift+6" },
+    { "id": null, "keys": "ctrl+shift+7" },
+    { "id": null, "keys": "ctrl+shift+8" },
+    { "id": null, "keys": "ctrl+shift+9" },
+    { "id": null, "keys": "ctrl+shift+d" },
+    { "id": null, "keys": "ctrl+tab" },
+    { "id": null, "keys": "ctrl+shift+tab" },
+    { "id": null, "keys": "ctrl+alt+1" },
+    { "id": null, "keys": "ctrl+alt+2" },
+    { "id": null, "keys": "ctrl+alt+3" },
+    { "id": null, "keys": "ctrl+alt+4" },
+    { "id": null, "keys": "ctrl+alt+5" },
+    { "id": null, "keys": "ctrl+alt+6" },
+    { "id": null, "keys": "ctrl+alt+7" },
+    { "id": null, "keys": "ctrl+alt+8" },
+    { "id": null, "keys": "ctrl+alt+9" },
+    { "id": null, "keys": "ctrl+alt+t" },
+    { "id": null, "keys": "ctrl+shift+w" },
+    { "id": null, "keys": "alt+left" },
+    { "id": null, "keys": "alt+down" },
+    { "id": null, "keys": "alt+up" },
+    { "id": null, "keys": "alt+right" },
+    { "id": null, "keys": "ctrl+alt+left" },
+    { "id": null, "keys": "alt+shift+d" },
+    { "id": null, "keys": "alt+shift+plus" },
+    { "id": null, "keys": "alt+shift+minus" },
+    { "id": null, "keys": "alt+shift+h" },
+    { "id": null, "keys": "alt+shift+j" },
+    { "id": null, "keys": "alt+shift+k" },
+    { "id": null, "keys": "alt+shift+l" },
+    { "id": null, "keys": "alt+shift+left" },
+    { "id": null, "keys": "alt+shift+down" },
+    { "id": null, "keys": "alt+shift+up" },
+    { "id": null, "keys": "alt+shift+right" },
     { "id": "User.toggleFullscreen", "keys": "f11" },
-    { "id": "User.newTab", "keys": "ctrl+alt+t" },
+    { "id": "User.newTab", "keys": "f13" },
+    { "id": "User.closeTab", "keys": "f14" },
+    { "id": "User.nextTab", "keys": "f15" },
+    { "id": "User.prevTab", "keys": "f16" },
+    { "id": "User.moveFocus.left", "keys": "f17" },
+    { "id": "User.moveFocus.down", "keys": "f18" },
+    { "id": "User.moveFocus.up", "keys": "f19" },
+    { "id": "User.moveFocus.right", "keys": "f20" },
+    { "id": "User.splitPane.horizontal", "keys": "f21" },
+    { "id": "User.splitPane.vertical", "keys": "f22" },
+    { "id": "User.closePane", "keys": "f23" },
     { "id": "User.resetFontSize", "keys": "ctrl+shift+0" },
     { "id": "User.increaseFontSize", "keys": "ctrl+shift+plus" },
     { "id": "User.decreaseFontSize", "keys": "ctrl+shift+minus" }

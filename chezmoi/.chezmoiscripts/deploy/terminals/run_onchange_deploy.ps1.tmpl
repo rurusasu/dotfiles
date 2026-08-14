@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy terminal configurations for Windows
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}{{ include "terminals/windows-terminal/terminal-keybindings.ahk" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -28,6 +28,7 @@ function Deploy-File {
 Write-Host "Deploying terminal configurations..."
 
 Deploy-File "$ChezmoiSource\terminals\wezterm\wezterm.lua" "$HomeDir\.config\wezterm\wezterm.lua"
+Deploy-File "$ChezmoiSource\terminals\windows-terminal\terminal-keybindings.ahk" "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
 
 # Windows Terminal
 $WTSettingsDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"

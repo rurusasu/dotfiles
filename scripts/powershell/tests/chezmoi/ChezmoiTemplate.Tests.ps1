@@ -29,6 +29,157 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Terminal config deployment' {
+        It 'should render Hammerspoon deployment only for Darwin and include its source hash' {
+            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl'
+            $template = Get-Content -LiteralPath $templatePath -Raw
+
+            $template | Should -Match 'include "terminals/hammerspoon/init\.lua" \| sha256sum'
+
+            $darwinRender = $template |
+                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
+            $LASTEXITCODE | Should -Be 0
+            $darwinContent = ($darwinRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $darwinContent | Should -Match '(?m)^# hash: [0-9a-f]{128}$'
+            $darwinContent |
+                Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
+
+            $linuxRender = $template |
+                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
+            $LASTEXITCODE | Should -Be 0
+            $linuxContent = ($linuxRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $linuxContent | Should -Match '(?m)^# hash: [0-9a-f]{64}$'
+            $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
+        }
+
+        It 'should deploy the managed AutoHotkey source on Windows and include its source hash' {
+            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl'
+            $template = Get-Content -LiteralPath $templatePath -Raw
+
+            $template | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
+            $windowsRender = $template |
+                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
+            $LASTEXITCODE | Should -Be 0
+            $windowsContent = ($windowsRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $windowsContent | Should -Match '(?m)^# hash: [0-9a-f]{192}$'
+            $windowsContent |
+                Should -Match 'Deploy-File "\$ChezmoiSource\\terminals\\windows-terminal\\terminal-keybindings\.ahk" "\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk"'
+        }
+
+        Context 'Windows Terminal AutoHotkey startup lifecycle' {
+            BeforeEach {
+                $script:originalProgramFiles = $env:ProgramFiles
+                $script:originalLocalAppData = $env:LOCALAPPDATA
+                $script:originalAppData = $env:APPDATA
+                $env:ProgramFiles = Join-Path $TestDrive 'ProgramFiles'
+                $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+                $env:APPDATA = Join-Path $TestDrive 'AppData/Roaming'
+
+                $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_onchange_start-terminal-keybindings_windows.ps1.tmpl'
+                Test-Path -LiteralPath $templatePath -PathType Leaf | Should -BeTrue
+                $script:startupTemplate = Get-Content -LiteralPath $templatePath -Raw
+                $render = $script:startupTemplate |
+                    & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
+                $LASTEXITCODE | Should -Be 0
+                $script:startupContent = $render -join [Environment]::NewLine
+                $script:startupScriptBlock = [scriptblock]::Create($script:startupContent)
+
+                $managedDirectory = Join-Path $env:APPDATA 'dotfiles'
+                New-Item -ItemType Directory -Path $managedDirectory -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $managedDirectory 'terminal-keybindings.ahk') -Value '#Requires AutoHotkey v2.0'
+            }
+
+            AfterEach {
+                $env:ProgramFiles = $script:originalProgramFiles
+                $env:LOCALAPPDATA = $script:originalLocalAppData
+                $env:APPDATA = $script:originalAppData
+            }
+
+            It 'should render valid PowerShell with the v2 discovery and single Startup shortcut contract' {
+                $tokens = $null
+                $parseErrors = $null
+                [System.Management.Automation.Language.Parser]::ParseInput(
+                    $script:startupContent,
+                    [ref]$tokens,
+                    [ref]$parseErrors
+                ) | Out-Null
+
+                $parseErrors | Should -BeNullOrEmpty
+                $script:startupTemplate | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
+                $script:startupContent | Should -Match '\$env:ProgramFiles\\AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
+                $script:startupContent | Should -Not -Match '\$env:LOCALAPPDATA\\Programs\\AutoHotkey'
+                $script:startupContent | Should -Match '\$StartupDirectory = "\$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"'
+                $script:startupContent | Should -Match '\$ShortcutPath = "\$StartupDirectory\\Dotfiles Terminal Keybindings\.lnk"'
+                $script:startupContent | Should -Match '\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk'
+                $script:startupContent | Should -Match 'New-Object -ComObject WScript\.Shell'
+                $script:startupContent | Should -Not -Match '(?i)Stop-Process|taskkill'
+            }
+
+            It 'should fail explicitly without the trusted AutoHotkey v2 UIAccess executable and launch nothing' {
+                Mock Start-Process
+
+                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
+                Should -Invoke Start-Process -Times 0
+            }
+
+            It 'should reject an ordinary v2 executable that cannot cross the elevated profile boundary' {
+                $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
+                New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
+                Set-Content -LiteralPath "$autoHotkeyDirectory\AutoHotkey64.exe" -Value 'stub'
+                Mock Start-Process
+
+                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
+                Should -Invoke Start-Process -Times 0
+            }
+
+            It 'should idempotently save and launch one current-user Startup shortcut' {
+                $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
+                New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
+                $autoHotkey = "$autoHotkeyDirectory\AutoHotkey64_UIA.exe"
+                Set-Content -LiteralPath $autoHotkey -Value 'stub'
+
+                $script:createdShortcutPaths = [System.Collections.Generic.List[string]]::new()
+                $script:shortcutSaveCount = 0
+                $script:fakeShortcut = [pscustomobject]@{
+                    TargetPath       = $null
+                    Arguments        = $null
+                    WorkingDirectory = $null
+                }
+                $script:fakeShortcut | Add-Member -MemberType ScriptMethod -Name Save -Value {
+                    $script:shortcutSaveCount++
+                }
+                $script:fakeShell = [pscustomobject]@{}
+                $script:fakeShell | Add-Member -MemberType ScriptMethod -Name CreateShortcut -Value {
+                    param([string]$Path)
+                    $script:createdShortcutPaths.Add($Path)
+                    return $script:fakeShortcut
+                }
+                Mock Start-Process
+
+                $testableContent = $script:startupContent.Replace(
+                    '$Shell = New-Object -ComObject WScript.Shell',
+                    '$Shell = $script:fakeShell'
+                )
+                $testableScriptBlock = [scriptblock]::Create($testableContent)
+
+                & $testableScriptBlock
+                & $testableScriptBlock
+
+                $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Dotfiles Terminal Keybindings.lnk"
+                @($script:createdShortcutPaths) | Should -HaveCount 2
+                $script:createdShortcutPaths[0] | Should -Be $startupPath
+                $script:createdShortcutPaths[1] | Should -Be $startupPath
+                $script:shortcutSaveCount | Should -Be 2
+                $script:fakeShortcut.TargetPath | Should -Be $autoHotkey
+                $managedScript = "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
+                $script:fakeShortcut.Arguments | Should -Be ('"{0}"' -f $managedScript)
+                Should -Invoke Start-Process -Times 2 -Exactly -ParameterFilter {
+                    $FilePath -eq $startupPath
+                }
+            }
+        }
+    }
+
     Context 'onepasswordRead はテンプレート展開中に呼ばない' {
         It 'すべての .tmpl ファイルで onepasswordRead を呼ばないこと' {
             $violations = @()

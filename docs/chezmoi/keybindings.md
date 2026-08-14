@@ -10,43 +10,62 @@
 
 ## 統一ルール
 
-| グループ                       | 役割                  | 例                                  |
-| ------------------------------ | --------------------- | ----------------------------------- |
-| `Command` (WezTerm macOS)      | GUI pane split        | `Command+D` / `Command+Shift+D`     |
-| `Ctrl+Command` (WezTerm macOS) | GUI pane resize       | `Ctrl+Command+矢印`                 |
-| `Leader` (WezTerm macOS)       | GUI pane/window 操作  | `Ctrl+Space` + key                  |
-| `Alt` (Windows GUI)            | GUI pane/window focus | `Alt+矢印`                          |
-| `Alt+Shift` (Windows GUI)      | GUI pane split/resize | `Alt+Shift+=/-`、`Alt+Shift+矢印`   |
-| `Ctrl+Shift`                   | GUI pane close        | `Ctrl+Shift+W`                      |
-| `Ctrl`                         | Unix/Vim/tmux focus   | `Ctrl+H/J/K/L`                      |
-| `Shift+Enter`                  | 複数行入力            | AI CLI / terminal prompt 改行       |
-| `Space` (`Leader`)             | ツール機能呼び出し    | 検索、エクスプローラ、タブ操作      |
-| `Alt` (Shell)                  | CLI 補助操作          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
+| グループ                            | 役割                                  | 例                                  |
+| ----------------------------------- | ------------------------------------- | ----------------------------------- |
+| `Ctrl+Space`                        | terminal Window Manager prefix        | `Ctrl+Space` + suffix               |
+| `Ctrl+Space Ctrl+Space`             | nested terminal へ prefix を1回転送   | `Ctrl+Space Ctrl+Space` + suffix    |
+| `Ctrl+Command` (WezTerm macOS)      | 契約外の GUI pane resize              | `Ctrl+Command+矢印`                 |
+| `Command+Alt` (WezTerm macOS)       | 契約外の GUI window focus             | `Command+Alt+H/L`                   |
+| `Alt+Shift` (WezTerm Windows/Linux) | 契約外の GUI window focus/pane resize | `Alt+Shift+H/L` / `Alt+Shift+矢印`  |
+| `Ctrl`                              | Unix/Vim/tmux focus                   | `Ctrl+H/J/K/L`                      |
+| `Shift+Enter`                       | 複数行入力                            | AI CLI / terminal prompt 改行       |
+| `Space` (`Leader`)                  | editor 機能呼び出し                   | 検索、エクスプローラ、タブ操作      |
+| `Alt` (Shell)                       | CLI 補助操作                          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
 
 ## 現在の適用状況
 
 ### Terminals
 
-- WezTerm
-  - `Shift+Enter`: AI CLI / terminal prompt の複数行入力
-  - `Command+D`: 右分割
-  - `Command+Shift+D`: 下分割
-  - `Leader` (`Ctrl+Space`) + 矢印: ペイン移動
-  - `Ctrl+Command+矢印`: ペイン resize（1セル、連打・長押し対応）
-  - `Ctrl+Shift+W`: ペイン close
-  - `Leader` (`Ctrl+Space`) + `h/l`: WezTerm window focus
-  - `Ctrl+Alt+W`: ペイン zoom
-  - `Leader` (`Ctrl+Space`) + `t/x/1-9`: タブ操作
-  - `Leader` (`Ctrl+Space`) + `c/v`: コピー/ペースト
-  - Windows/Linux: `Alt+Shift+=/-` で分割、`Alt+矢印` で pane 移動、`Alt+Shift+矢印` で resize、`Alt+Shift+H/L` で window focus
-- Windows Terminal
-  - `Shift+Enter`: AI CLI / terminal prompt の複数行入力 (`CSI u`)
-  - `Ctrl+Enter`: Windows Terminal 用 fallback (`CSI u`)
-  - `Alt+矢印`: ペイン移動
-  - `Alt+Shift+=/-`: 右/下分割
-  - `Alt+Shift+矢印`: ペイン resize
-  - `Ctrl+Shift+W`: ペイン close
-  - `Alt+Shift+H/J/K/L`: ペイン swap
+terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて、次の共通 suffix を入力する。
+
+| 対象      | suffix                | 操作                    |
+| --------- | --------------------- | ----------------------- |
+| Workspace | `w`                   | picker を開く           |
+| Workspace | `a`                   | 新規作成                |
+| Workspace | `j` / `k`             | picker 内で次 / 前      |
+| Tab       | `n`                   | 新規作成                |
+| Tab       | `q`                   | 閉じる                  |
+| Tab       | `Tab` / `Shift+Tab`   | 次 / 前                 |
+| Pane      | `h` / `j` / `k` / `l` | 左 / 下 / 上 / 右へ移動 |
+| Pane      | `v` / `-`             | 左右 / 上下分割         |
+| Pane      | `x`                   | 閉じる                  |
+| Session   | `g`                   | navigator を開く        |
+| Session   | `d`                   | detach                  |
+
+target ごとの capability は次のとおり。非対応 suffix は別のキーへフォールバックせず no-op として消費する。
+
+| target           | Workspace                | Tab               | Pane                             | Session        |
+| ---------------- | ------------------------ | ----------------- | -------------------------------- | -------------- |
+| WezTerm          | 対応                     | 対応              | 対応                             | 対応           |
+| Terminal.app     | 非対応 (no-op)           | 対応              | `v` / `x` のみ対応、ほかは no-op | 非対応 (no-op) |
+| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応                             | 非対応 (no-op) |
+| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応                             | 対応           |
+| Herdr            | 対応                     | 対応              | 対応                             | 対応           |
+
+- WezTerm は組み込み leader を使い、prefix timeout は1秒。
+- Terminal.app は Hammerspoon adapter が前面の `com.apple.Terminal` だけを対象にし、prefix timeout は1秒。Workspace、Session、上下分割 (`-`)、方向 pane focus (`h/j/k/l`) は no-op。
+- Windows Terminal は AutoHotkey v2 adapter が前面の `WindowsTerminal.exe` だけを対象にし、prefix timeout は1秒。Workspace / Session は非対応で no-op。
+- tmux と Herdr は各アプリの native prefix/key table を使う。tmux では Workspace=Session、Tab=Window として扱う。
+- nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の tmux/Herdr を操作できる。
+
+Hammerspoon の初回設定は次の順で行う。
+
+1. `open -a Hammerspoon` で Hammerspoon を一度起動する。
+2. macOS の「システム設定」→「プライバシーとセキュリティ」→「アクセシビリティ」で Hammerspoon を許可する。
+3. 許可後、Hammerspoon のメニューバーアイコンから `Reload Config` を実行する。
+4. Terminal.app を前面にして `Ctrl+Space n` で新規 tab が開くこと、Terminal.app 以外では同じ入力が捕捉されないことを確認する。
+
+Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
 
 ### Editors
 
@@ -76,8 +95,7 @@
 
 - tmux (Unix/Linux/WSL)
   - `Ctrl+H/J/K/L`: pane 移動（vim-tmux-navigator と共有）
-  - `Prefix` (`Ctrl+A`) + `\` / `-`: pane 分割
-  - `Prefix` (`Ctrl+A`) + `h/l`: window 前後移動
+  - terminal Window Manager 操作は上記の `Ctrl+Space` 共通契約を使う
 - zsh
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Alt+D/T/R`: fzf ウィジェット
@@ -105,7 +123,9 @@
 ## 運用ルール
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
-- GUI アプリの pane split は、WezTerm macOSでは`Command+D` / `Command+Shift+D`、Windows Terminalでは`Alt+Shift`を優先する
-- WezTerm macOS の pane 移動・window focus は`Leader`、pane resize は`Ctrl+Command+矢印`、Windows Terminalでは`Alt` / `Alt+Shift`を優先する
+- terminal の Workspace/Tab/Pane/Session 操作は `Ctrl+Space` と共通 suffix を優先する
+- target が持たない capability は no-op とし、target 固有の代替キーを共通契約へ混ぜない
+- nested terminal の prefix 転送は `Ctrl+Space Ctrl+Space` に統一する
+- WezTerm の直接 window focus / pane resize は共通契約外の補助操作として維持する
 - tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

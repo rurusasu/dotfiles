@@ -1,7 +1,7 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Deploy terminal configurations for Linux/macOS
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ if eq .chezmoi.os "darwin" }}{{ include "terminals/hammerspoon/init.lua" | sha256sum }}{{ end }}
 
 set -euo pipefail
 
@@ -22,6 +22,9 @@ deploy_file() {
 echo "Deploying terminal configurations..."
 
 deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
+{{ if eq .chezmoi.os "darwin" -}}
+deploy_file "$CHEZMOI_SOURCE/terminals/hammerspoon/init.lua" "$HOME_DIR/.hammerspoon/init.lua"
+{{ end -}}
 
 echo "Terminal configurations deployed."
 {{ end -}}
