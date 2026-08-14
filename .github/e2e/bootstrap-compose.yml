@@ -5,6 +5,9 @@ services:
   xapi-mcp:
     image: nginx:1.29-alpine
 
+  chromium:
+    image: nginx:1.29-alpine
+
   acceptance:
     image: nginx:1.29-alpine
     command:
