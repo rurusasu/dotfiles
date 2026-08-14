@@ -7,7 +7,8 @@ NIX_COMMAND="${NIX_COMMAND:-nix}"
 SLEEP_COMMAND="${SLEEP_COMMAND:-sleep}"
 JQ_COMMAND="${JQ_COMMAND:-jq}"
 PGREP_COMMAND="${PGREP_COMMAND:-pgrep}"
-PKILL_COMMAND="${PKILL_COMMAND:-pkill}"
+PS_COMMAND="${PS_COMMAND:-ps}"
+KILL_COMMAND="${KILL_COMMAND:-/bin/kill}"
 OPEN_COMMAND="${OPEN_COMMAND:-open}"
 ATTEMPTS="${DOTFILES_CASK_UPDATE_ATTEMPTS:-3}"
 BACKOFF_SECONDS="${DOTFILES_CASK_UPDATE_BACKOFF_SECONDS:-2}"
@@ -142,18 +143,34 @@ record_running_apps() {
 
   while IFS= read -r app_path || [[ -n $app_path ]]; do
     [[ -n $app_path ]] || continue
-    if "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+    if app_is_running "$app_path"; then
       grep -Fxq "$app_path" "$restart_file" || printf '%s\n' "$app_path" >>"$restart_file"
       force_quit_running_app "$cask" "$app_path" || return 1
     fi
   done <"$app_file"
 }
 
+app_process_ids() {
+  local app_path="$1" process_id executable
+
+  while IFS= read -r process_id || [[ -n $process_id ]]; do
+    [[ $process_id =~ ^[0-9]+$ ]] || continue
+    executable="$("$PS_COMMAND" -p "$process_id" -o comm= 2>/dev/null)" || continue
+    [[ $executable == "$app_path/Contents/"* ]] && printf '%s\n' "$process_id"
+  done < <("$PGREP_COMMAND" -f "$app_path/Contents/" 2>/dev/null || true)
+}
+
+app_is_running() {
+  local app_path="$1" process_ids
+  process_ids="$(app_process_ids "$app_path")"
+  [[ -n $process_ids ]]
+}
+
 wait_for_app_exit() {
   local app_path="$1" max_attempts="$2" attempt
 
   for ((attempt = 1; attempt <= max_attempts; attempt++)); do
-    if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+    if ! app_is_running "$app_path"; then
       return 0
     fi
     ((attempt < max_attempts)) && "$SLEEP_COMMAND" 1
@@ -162,13 +179,19 @@ wait_for_app_exit() {
 }
 
 send_app_signal() {
-  local cask="$1" app_path="$2" signal="$3"
+  local cask="$1" app_path="$2" signal="$3" process_id
+  local -a process_ids=()
 
-  if "$PKILL_COMMAND" "-$signal" -f "$app_path/Contents/"; then
+  while IFS= read -r process_id || [[ -n $process_id ]]; do
+    [[ -n $process_id ]] && process_ids+=("$process_id")
+  done < <(app_process_ids "$app_path")
+
+  ((${#process_ids[@]} > 0)) || return 0
+  if "$KILL_COMMAND" "-$signal" "${process_ids[@]}"; then
     return 0
   fi
 
-  if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+  if ! app_is_running "$app_path"; then
     return 0
   fi
 

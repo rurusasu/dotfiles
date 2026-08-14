@@ -19,6 +19,8 @@ setup() {
   export JQ_COMMAND
   export PGREP_COMMAND="$TEST_BIN/pgrep"
   export PKILL_COMMAND="$TEST_BIN/pkill"
+  export PS_COMMAND="$TEST_BIN/ps"
+  export KILL_COMMAND="$TEST_BIN/kill"
   export OPEN_COMMAND="$TEST_BIN/open"
   APP_PROCESS_EXITED_STATE="$BATS_TEST_TMPDIR/app-process-exited"
   export APP_PROCESS_EXITED_STATE
@@ -91,7 +93,8 @@ EOF
 #!/usr/bin/env bash
 printf 'pgrep %s\n' "$*" >>"$COMMAND_LOG"
 [[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] || exit 1
-[[ ! -f $APP_PROCESS_EXITED_STATE ]]
+[[ ! -f $APP_PROCESS_EXITED_STATE ]] || exit 1
+printf '%s\n' "${FAKE_PROCESS_ID:-4242}"
 EOF
   cat >"$PKILL_COMMAND" <<'EOF'
 #!/usr/bin/env bash
@@ -114,11 +117,38 @@ case "$*" in
 *) exit 64 ;;
 esac
 EOF
+  cat >"$PS_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+printf 'ps %s\n' "$*" >>"$COMMAND_LOG"
+[[ ! -f $APP_PROCESS_EXITED_STATE ]] || exit 1
+printf '%s\n' "${FAKE_PROCESS_EXECUTABLE:-${FAKE_RUNNING_APP:-}/Contents/MacOS/app}"
+EOF
+  cat >"$KILL_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'kill %s\n' "$*" >>"$COMMAND_LOG"
+[[ ! -f $APP_PROCESS_EXITED_STATE ]] || exit 1
+
+case "$*" in
+*-TERM*)
+  if [[ ${FAKE_APP_EXITS_DURING_TERM:-0} == 1 ]]; then
+    : >"$APP_PROCESS_EXITED_STATE"
+    exit 1
+  fi
+  [[ ${FAKE_APP_IGNORES_TERM:-0} == 1 ]] || : >"$APP_PROCESS_EXITED_STATE"
+  ;;
+*-KILL*)
+  [[ ${FAKE_APP_IGNORES_KILL:-0} == 1 ]] || : >"$APP_PROCESS_EXITED_STATE"
+  ;;
+*) exit 64 ;;
+esac
+EOF
   cat >"$OPEN_COMMAND" <<'EOF'
 #!/usr/bin/env bash
 printf 'open %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$PKILL_COMMAND" "$OPEN_COMMAND"
+  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$PKILL_COMMAND" \
+    "$PS_COMMAND" "$KILL_COMMAND" "$OPEN_COMMAND"
 }
 
 install_cask() {
@@ -217,17 +247,15 @@ mark_outdated() {
   run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -TERM 4242$' "$COMMAND_LOG"
   grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
   initial_pgrep_line="$(grep -n -m1 '^pgrep ' "$COMMAND_LOG" | cut -d: -f1)"
-  terminate_line="$(grep -n -m1 '^pkill -TERM ' "$COMMAND_LOG" | cut -d: -f1)"
-  exit_check_line="$(grep -n '^pgrep ' "$COMMAND_LOG" | sed -n '2p' | cut -d: -f1)"
+  terminate_line="$(grep -n -m1 '^kill -TERM ' "$COMMAND_LOG" | cut -d: -f1)"
   fetch_line="$(grep -n -m1 '^brew fetch ' "$COMMAND_LOG" | cut -d: -f1)"
   upgrade_line="$(grep -n -m1 '^brew upgrade ' "$COMMAND_LOG" | cut -d: -f1)"
   open_line="$(grep -n -m1 '^open ' "$COMMAND_LOG" | cut -d: -f1)"
   [ "$initial_pgrep_line" -lt "$terminate_line" ]
-  [ "$terminate_line" -lt "$exit_check_line" ]
-  [ "$exit_check_line" -lt "$fetch_line" ]
+  [ "$terminate_line" -lt "$fetch_line" ]
   [ "$upgrade_line" -lt "$open_line" ]
 }
 
@@ -239,7 +267,7 @@ mark_outdated() {
     FAKE_APP_IGNORES_TERM=1 "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -q '^pkill -KILL -f /Applications/1Password.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -KILL 4242$' "$COMMAND_LOG"
   grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
   grep -q '^brew upgrade --cask --greedy 1password$' "$COMMAND_LOG"
   grep -q '^open -gj /Applications/1Password.app$' "$COMMAND_LOG"
@@ -254,7 +282,7 @@ mark_outdated() {
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"application did not exit: /Applications/Claude.app"* ]]
-  grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -KILL 4242$' "$COMMAND_LOG"
   run ! grep -q '^brew fetch ' "$COMMAND_LOG"
   run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
 }
@@ -267,8 +295,8 @@ mark_outdated() {
     FAKE_RUNNING_APP=/Applications/Dia.app FAKE_APP_IGNORES_TERM=1 "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -q '^pkill -TERM -f /Applications/Dia.app/Contents/$' "$COMMAND_LOG"
-  grep -q '^pkill -KILL -f /Applications/Dia.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -TERM 4242$' "$COMMAND_LOG"
+  grep -q '^kill -KILL 4242$' "$COMMAND_LOG"
   grep -q '^brew fetch --cask thebrowsercompany-dia$' "$COMMAND_LOG"
   grep -q '^brew upgrade --cask --greedy thebrowsercompany-dia$' "$COMMAND_LOG"
   grep -q '^open -gj /Applications/Dia.app$' "$COMMAND_LOG"
@@ -281,8 +309,24 @@ mark_outdated() {
   run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
-  run ! grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -TERM 4242$' "$COMMAND_LOG"
+  run ! grep -q '^kill -KILL ' "$COMMAND_LOG"
+}
+
+@test "does not signal a process that only has an app bundle path in its arguments" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app \
+    FAKE_PROCESS_EXECUTABLE=/usr/bin/codesign "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^ps -p ' "$COMMAND_LOG"
+  run ! grep -q '^pkill ' "$COMMAND_LOG"
+  run ! grep -q '^kill ' "$COMMAND_LOG"
+  run ! grep -q '^open ' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask claude$' "$COMMAND_LOG"
+  grep -q '^brew upgrade --cask --greedy claude$' "$COMMAND_LOG"
 }
 
 @test "continues when an app exits while TERM is being sent" {
@@ -293,9 +337,9 @@ mark_outdated() {
     FAKE_APP_EXITS_DURING_TERM=1 "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^kill -TERM 4242$' "$COMMAND_LOG"
   grep -q '^brew fetch --cask claude$' "$COMMAND_LOG"
-  run ! grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  run ! grep -q '^kill -KILL ' "$COMMAND_LOG"
 }
 
 @test "reopens a running application after upgrade retries are exhausted" {
