@@ -95,6 +95,12 @@ setup() {
 	[[ "$output" == *'cask = "discord"'* ]]
 }
 
+@test "WSL excludes the native Discord package" {
+	run grep -n -A3 'homeExtraSpecialArgs' "$REPO_ROOT/nix/flakes/hosts.nix"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'isWSL = true;'* ]]
+}
+
 @test "generated Windows manifest contains Discord" {
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 	run jq -e '

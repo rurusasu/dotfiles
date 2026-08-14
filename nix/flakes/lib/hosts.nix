@@ -8,6 +8,7 @@
       homeModulePath ? null,
       extraModules ? [ ],
       overlays ? [ ],
+      homeExtraSpecialArgs ? { },
     }:
     inputs.nixpkgs.lib.nixosSystem {
       specialArgs = { inherit inputs siteLib system; };
@@ -25,7 +26,11 @@
               home-manager = {
                 useGlobalPkgs = true;
                 useUserPackages = true;
-                extraSpecialArgs = { inherit inputs; };
+                extraSpecialArgs = {
+                  inherit inputs;
+                  isWSL = false;
+                }
+                // homeExtraSpecialArgs;
                 users = import homeModulePath;
               };
             }

@@ -814,6 +814,9 @@ lib.mapAttrs (_: resolve) grouped
 // {
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
+  allWithout =
+    excludedNames:
+    resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
 
   # Windows: nix attr name → winget PackageIdentifier
   inherit wingetMap npmMap;
