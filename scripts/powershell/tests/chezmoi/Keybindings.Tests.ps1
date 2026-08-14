@@ -36,44 +36,6 @@ BeforeAll {
         return $workspace.bindings
     }
 
-    function Invoke-AutoHotkeyUiAccess {
-        param(
-            [Parameter(Mandatory)]
-            [string]$Executable,
-            [Parameter(Mandatory)]
-            [string]$ScriptPath,
-            [Parameter(Mandatory)]
-            [string]$Mode
-        )
-
-        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $Executable
-        $startInfo.UseShellExecute = $false
-        $startInfo.CreateNoWindow = $true
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
-        $startInfo.ArgumentList.Add('/ErrorStdOut')
-        $startInfo.ArgumentList.Add($ScriptPath)
-        $startInfo.ArgumentList.Add($Mode)
-
-        $process = [System.Diagnostics.Process]::new()
-        $process.StartInfo = $startInfo
-        try {
-            $process.Start() | Out-Null
-            $standardOutput = $process.StandardOutput.ReadToEnd()
-            $standardError = $process.StandardError.ReadToEnd()
-            $process.WaitForExit()
-
-            return [pscustomobject]@{
-                ExitCode = $process.ExitCode
-                Output   = @($standardOutput, $standardError) -join [Environment]::NewLine
-            }
-        }
-        finally {
-            $process.Dispose()
-        }
-    }
-
 }
 
 Describe '標準キーバインド方針' {
@@ -298,18 +260,6 @@ Describe '標準キーバインド方針' {
         $ahk | Should -Match 'RunTerminalStateSelfTests\(\)'
         $ahk | Should -Not -Match '(?i)Stop-Process|taskkill|ProcessClose'
 
-        if ($IsWindows) {
-            $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
-            Test-Path -LiteralPath $uiAccess -PathType Leaf |
-                Should -BeTrue -Because 'Windows CI must machine-install the production UIAccess interpreter'
-
-            $checkResult = Invoke-AutoHotkeyUiAccess -Executable $uiAccess -ScriptPath $path -Mode '--check'
-            $checkResult.ExitCode | Should -Be 0
-
-            $selfTestResult = Invoke-AutoHotkeyUiAccess -Executable $uiAccess -ScriptPath $path -Mode '--self-test'
-            $selfTestResult.ExitCode | Should -Be 0
-            $selfTestResult.Output | Should -Match 'Terminal self-tests: PASS'
-        }
     }
 
     It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
@@ -330,6 +280,8 @@ Describe '標準キーバインド方針' {
             $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--check'"))
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--self-test'"))
+            $job | Should -Match 'AutoHotkey v2 UIAccess syntax validation failed'
+            $job | Should -Match 'AutoHotkey v2 UIAccess behavioral self-tests failed'
             $job | Should -Not -Match ([regex]::Escape("& `$autoHotkey '/ErrorStdOut'"))
             $job.IndexOf('winget install --id AutoHotkey.AutoHotkey') |
                 Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"

@@ -35,7 +35,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
           }
-          Get-Command chezmoi -ErrorAction Stop | Out-Null
+          $chezmoiDirectory = Split-Path -Parent (Get-Command chezmoi -ErrorAction Stop).Source
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $chezmoiDirectory -Encoding utf8
 
       - name: Install and validate AutoHotkey v2
         shell: pwsh
