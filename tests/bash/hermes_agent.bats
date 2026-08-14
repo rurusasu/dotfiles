@@ -216,6 +216,7 @@ create_mocked_installer_fixture() {
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/update-flake.sh" "$MOCK_REPO/scripts/sh/update-flake.sh"
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done

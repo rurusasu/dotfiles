@@ -202,9 +202,28 @@ class WingetHandler : SetupHandlerBase {
             # 正規表現で検出できないパッケージ（ARP エントリ等）は個別チェックにフォールバック
             $installedIds = $this.GetInstalledPackageIds()
 
-            # 通常実行ではインストール済みも含めて winget install を流し、
-            # winget 側の install-or-upgrade 動作で latest を選ばせる。
+            # 通常実行ではインストール済みも含めて更新する。
+            # Codex だけは明示的な upgrade を先に行い、他のパッケージは
+            # 既存の winget install-or-upgrade 動作を維持する。
             $verifyCommandOnly = $ctx.GetOption("WingetVerifyCommandOnly", $false)
+            $explicitlyUpdatedIds = @()
+            $updated = 0
+            if (-not $verifyCommandOnly) {
+                $codex = @($packages | Where-Object { $_.Id -eq "OpenAI.Codex" }) | Select-Object -First 1
+                if ($null -ne $codex) {
+                    $codexInstalled = $codex.Id -in $installedIds
+                    if (-not $codexInstalled) {
+                        $codexInstalled = $this.IsPackageInstalled($codex.Id)
+                    }
+                    if ($codexInstalled) {
+                        if (-not $this.UpgradeInstalledCodex($codex)) {
+                            return $this.CreateFailureResult("$($codex.Id) のアップグレードに失敗しました")
+                        }
+                        $explicitlyUpdatedIds += $codex.Id
+                        $updated++
+                    }
+                }
+            }
             $toInstall = @()
             $skipped = 0
             $verified = 0
@@ -253,6 +272,9 @@ class WingetHandler : SetupHandlerBase {
                 }
 
                 if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
+                    if ($pkg.Id -in $explicitlyUpdatedIds -and (-not $pkg.VerifyCommand -or $verificationPassed)) {
+                        continue
+                    }
                     if ($pkg.VerifyCommand -and $verificationPassed) {
                         $toInstall += [PSCustomObject]@{
                             Id                    = $pkg.Id
@@ -340,6 +362,7 @@ class WingetHandler : SetupHandlerBase {
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
                 if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
                 if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
+                if ($updated -gt 0) { $parts += "$updated 個更新済み" }
                 $parts += "$skipped 個スキップ"
                 if ($verifyFailed -gt 0) {
                     return $this.CreateFailureResult($parts -join ", ")
@@ -437,6 +460,7 @@ class WingetHandler : SetupHandlerBase {
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
+            if ($updated -gt 0) { $parts += "$updated 個更新済み" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
             if ($failed -gt 0 -or $verifyFailed -gt 0) {
@@ -462,6 +486,35 @@ class WingetHandler : SetupHandlerBase {
         $text -match '新しいパッケージ バージョンはありません' -or
         $text -match 'バージョン番号を特定できません' -or
         $text -match '別のバージョンが既にインストールされています'
+    }
+
+    hidden [bool] UpgradeInstalledCodex([object]$pkg) {
+        $upgradeArgs = @(
+            "upgrade", "--id", $pkg.Id, "--exact",
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity"
+        )
+        $this.Log("Codex CLI を更新しています: $($pkg.Id)")
+        $upgradeOutput = @(Invoke-Winget -Arguments $upgradeArgs)
+        $exitCode = $LASTEXITCODE
+        foreach ($line in $upgradeOutput) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                $this.Log("  $line", "Gray")
+            }
+        }
+
+        if ($exitCode -eq 0) {
+            return $true
+        }
+        if ($this.IsAlreadyInstalledInstallFailure($upgradeOutput)) {
+            $this.Log("✓ $($pkg.Id) は最新版です (winget upgrade は no-op)", "Green")
+            return $true
+        }
+
+        $this.LogWarning("✗ $($pkg.Id) のアップグレードに失敗しました")
+        return $false
     }
 
     hidden [void] LogSkippedInstall([object]$pkg) {

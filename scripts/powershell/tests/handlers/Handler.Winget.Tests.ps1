@@ -306,6 +306,147 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'Apply - import mode: Codex upgrade' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = "OpenAI.Codex" }
+                            )
+                        }
+                    )
+                }
+            }
+            $script:upgradeArgs = $null
+            $script:installCalled = $false
+        }
+
+        It 'should explicitly upgrade an installed Codex package without calling install' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name       Id           Version Source"
+                        "---------------------------------------"
+                        "Codex      OpenAI.Codex 0.144.4 winget"
+                    )
+                }
+                if ($Arguments -contains "upgrade") {
+                    $script:upgradeArgs = $Arguments
+                    $global:LASTEXITCODE = 0
+                    return @("Successfully upgraded")
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:upgradeArgs | Should -Contain "upgrade"
+            $script:upgradeArgs | Should -Contain "--id"
+            $script:upgradeArgs | Should -Contain "OpenAI.Codex"
+            $script:upgradeArgs | Should -Contain "--exact"
+            $script:upgradeArgs | Should -Contain "--silent"
+            $script:upgradeArgs | Should -Contain "--accept-package-agreements"
+            $script:upgradeArgs | Should -Contain "--accept-source-agreements"
+            $script:installCalled | Should -Be $false
+        }
+
+        It 'should treat an already-latest Codex upgrade as success' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name       Id           Version Source"
+                        "---------------------------------------"
+                        "Codex      OpenAI.Codex 0.144.4 winget"
+                    )
+                }
+                if ($Arguments -contains "upgrade") {
+                    $script:upgradeArgs = $Arguments
+                    $global:LASTEXITCODE = 1
+                    return @("No available upgrade found")
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:upgradeArgs | Should -Contain "upgrade"
+            $script:installCalled | Should -Be $false
+        }
+
+        It 'should return failure when the Codex upgrade fails' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        "Name       Id           Version Source"
+                        "---------------------------------------"
+                        "Codex      OpenAI.Codex 0.144.4 winget"
+                    )
+                }
+                if ($Arguments -contains "upgrade") {
+                    $script:upgradeArgs = $Arguments
+                    $global:LASTEXITCODE = 17
+                    return @("Network failure")
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "OpenAI.Codex"
+            $script:installCalled | Should -Be $false
+        }
+
+        It 'should use the existing install path when Codex is not installed' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                    return @()
+                }
+                if ($Arguments -contains "upgrade") {
+                    $script:upgradeArgs = $Arguments
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalled = $true
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $script:upgradeArgs | Should -BeNullOrEmpty
+            $script:installCalled | Should -Be $true
+        }
+    }
+
     Context 'Apply - import mode: installed package verification fails' {
         BeforeEach {
             $script:verifyCalls = 0
