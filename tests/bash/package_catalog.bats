@@ -95,6 +95,15 @@ setup() {
 	[[ "$output" == *'cask = "discord"'* ]]
 }
 
+@test "generated Windows manifest contains Discord" {
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+	run jq -e '
+		[.Sources[] | select(.SourceDetails.Name == "winget") | .Packages[]
+		 | select(.PackageIdentifier == "Discord.Discord")] | length == 1
+	' "$REPO_ROOT/windows/winget/packages.json"
+	[ "$status" -eq 0 ]
+}
+
 @test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
 	run awk '
 		/wezterm = \{/ { in_entry=1 }

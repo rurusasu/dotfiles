@@ -323,6 +323,9 @@ let
           provider = "homebrew-cask";
           cask = "discord";
         };
+        linux = {
+          provider = "nix";
+        };
       };
     };
     _1password-gui = {
