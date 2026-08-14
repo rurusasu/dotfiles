@@ -7,12 +7,12 @@ NIX_COMMAND="${NIX_COMMAND:-nix}"
 SLEEP_COMMAND="${SLEEP_COMMAND:-sleep}"
 JQ_COMMAND="${JQ_COMMAND:-jq}"
 PGREP_COMMAND="${PGREP_COMMAND:-pgrep}"
+PKILL_COMMAND="${PKILL_COMMAND:-pkill}"
 OPEN_COMMAND="${OPEN_COMMAND:-open}"
-PLIST_BUDDY_COMMAND="${PLIST_BUDDY_COMMAND:-/usr/libexec/PlistBuddy}"
-OSASCRIPT_COMMAND="${OSASCRIPT_COMMAND:-osascript}"
 ATTEMPTS="${DOTFILES_CASK_UPDATE_ATTEMPTS:-3}"
 BACKOFF_SECONDS="${DOTFILES_CASK_UPDATE_BACKOFF_SECONDS:-2}"
 APP_EXIT_ATTEMPTS=30
+FORCE_TERMINATE_WAIT_ATTEMPTS=10
 export HOMEBREW_NO_AUTO_UPDATE=1
 
 case "$ATTEMPTS" in
@@ -115,10 +115,9 @@ retry_command() {
 }
 
 record_running_apps() {
-  local cask="$1" app_path status app_file cask_info_file quit_identifier_file
+  local cask="$1" app_path status app_file cask_info_file
   app_file="$temporary_directory/app-paths"
   cask_info_file="$temporary_directory/cask-info"
-  quit_identifier_file="$temporary_directory/quit-identifiers"
   if "$BREW_COMMAND" info --cask "$cask" --json=v2 >"$cask_info_file"; then
     :
   else
@@ -141,92 +140,58 @@ record_running_apps() {
     return "$status"
   fi
 
-  if "$JQ_COMMAND" -r '
-      [
-        .casks[0].artifacts[]?
-        | select(has("uninstall"))
-        | .uninstall[]?
-        | select(has("quit"))
-        | .quit
-        | if type == "array" then .[] else . end
-      ]
-      | unique[]
-    ' "$cask_info_file" >"$quit_identifier_file"; then
-    :
-  else
-    status=$?
-    printf '[macos-cask-update] failed to inspect application quit identifiers for %s (status %d)\n' \
-      "$cask" "$status" >&2
-    return "$status"
-  fi
-
   while IFS= read -r app_path || [[ -n $app_path ]]; do
     [[ -n $app_path ]] || continue
     if "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
       grep -Fxq "$app_path" "$restart_file" || printf '%s\n' "$app_path" >>"$restart_file"
-      quit_running_app "$app_path" "$quit_identifier_file" || return 1
+      force_quit_running_app "$cask" "$app_path" || return 1
     fi
   done <"$app_file"
 }
 
-application_bundle_identifier() {
-  local app_path="$1" bundle_identifier
-
-  if bundle_identifier=$("$PLIST_BUDDY_COMMAND" -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist"); then
-    :
-  else
-    printf '[macos-cask-update] failed to inspect application bundle identifier: %s\n' "$app_path" >&2
-    return 1
-  fi
-
-  case "$bundle_identifier" in
-  *[!A-Za-z0-9.-]* | '')
-    printf '[macos-cask-update] invalid application bundle identifier: %s\n' "$app_path" >&2
-    return 1
-    ;;
-  esac
-  printf '%s\n' "$bundle_identifier"
-}
-
 wait_for_app_exit() {
-  local app_path="$1" attempt
+  local app_path="$1" max_attempts="$2" attempt
 
-  for ((attempt = 1; attempt <= APP_EXIT_ATTEMPTS; attempt++)); do
-    if ! "$PGREP_COMMAND" -f "$app_path/Contents/MacOS/" >/dev/null 2>&1; then
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
       return 0
     fi
-    ((attempt < APP_EXIT_ATTEMPTS)) && "$SLEEP_COMMAND" 1
+    ((attempt < max_attempts)) && "$SLEEP_COMMAND" 1
   done
-
-  printf '[macos-cask-update] application did not exit: %s\n' "$app_path" >&2
   return 1
 }
 
-quit_running_app() {
-  local app_path="$1" quit_identifier_file="$2" bundle_identifier quit_identifier
+send_app_signal() {
+  local cask="$1" app_path="$2" signal="$3"
 
-  while IFS= read -r quit_identifier || [[ -n $quit_identifier ]]; do
-    [[ -n $quit_identifier ]] || continue
-    case "$quit_identifier" in
-    *[!A-Za-z0-9.-]* | '')
-      printf '[macos-cask-update] invalid application quit identifier: %s\n' "$app_path" >&2
-      return 1
-      ;;
-    esac
-    if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$quit_identifier\" to quit"; then
-      printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
-      return 1
-    fi
-  done <"$quit_identifier_file"
-
-  bundle_identifier="$(application_bundle_identifier "$app_path")" || return 1
-  if ! grep -Fxq "$bundle_identifier" "$quit_identifier_file"; then
-    if ! "$OSASCRIPT_COMMAND" -e "tell application id \"$bundle_identifier\" to quit"; then
-      printf '[macos-cask-update] failed to request application exit: %s\n' "$app_path" >&2
-      return 1
-    fi
+  if "$PKILL_COMMAND" "-$signal" -f "$app_path/Contents/"; then
+    return 0
   fi
-  wait_for_app_exit "$app_path"
+
+  if ! "$PGREP_COMMAND" -f "$app_path/Contents/" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf '[macos-cask-update] failed to send %s to cask %s application: %s\n' \
+    "$signal" "$cask" "$app_path" >&2
+  return 1
+}
+
+force_quit_running_app() {
+  local cask="$1" app_path="$2"
+
+  send_app_signal "$cask" "$app_path" TERM || return 1
+  if wait_for_app_exit "$app_path" "$FORCE_TERMINATE_WAIT_ATTEMPTS"; then
+    return 0
+  fi
+
+  send_app_signal "$cask" "$app_path" KILL || return 1
+  if wait_for_app_exit "$app_path" "$APP_EXIT_ATTEMPTS"; then
+    return 0
+  fi
+
+  printf '[macos-cask-update] application did not exit: %s\n' "$app_path" >&2
+  return 1
 }
 
 reopen_apps() {

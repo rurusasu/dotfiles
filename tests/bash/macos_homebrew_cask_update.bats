@@ -18,13 +18,10 @@ setup() {
   JQ_COMMAND="$(command -v jq)"
   export JQ_COMMAND
   export PGREP_COMMAND="$TEST_BIN/pgrep"
+  export PKILL_COMMAND="$TEST_BIN/pkill"
   export OPEN_COMMAND="$TEST_BIN/open"
-  export PLIST_BUDDY_COMMAND="$TEST_BIN/PlistBuddy"
-  export OSASCRIPT_COMMAND="$TEST_BIN/osascript"
-  APP_QUIT_STATE="$BATS_TEST_TMPDIR/app-quit-state"
-  APP_QUIT_IDENTIFIERS="$BATS_TEST_TMPDIR/app-quit-identifiers"
-  export APP_QUIT_STATE
-  export APP_QUIT_IDENTIFIERS
+  APP_PROCESS_EXITED_STATE="$BATS_TEST_TMPDIR/app-process-exited"
+  export APP_PROCESS_EXITED_STATE
   export DOTFILES_CASK_UPDATE_BACKOFF_SECONDS=2
 
   cat >"$BREW_COMMAND" <<'EOF'
@@ -68,9 +65,11 @@ case "$command_name" in
     [[ ${BREW_INFO_FAIL:-0} != 1 ]] || exit 66
     cask="${2:-}"
     if [[ $cask == claude ]]; then
-      printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.anthropic.claudefordesktop"]}]},{"app":["Claude.app"],"target":"/Applications/Claude.app"}]}]}'
+      printf '%s\n' '{"casks":[{"artifacts":[{"app":["Claude.app"],"target":"/Applications/Claude.app"}]}]}'
     elif [[ $cask == 1password ]]; then
-      printf '%s\n' '{"casks":[{"artifacts":[{"uninstall":[{"quit":["com.1password.1password","com.1password.1password-launcher"]}]},{"app":["1Password.app"],"target":"/Applications/1Password.app"}]}]}'
+      printf '%s\n' '{"casks":[{"artifacts":[{"app":["1Password.app"],"target":"/Applications/1Password.app"}]}]}'
+    elif [[ $cask == thebrowsercompany-dia ]]; then
+      printf '%s\n' '{"casks":[{"artifacts":[{"app":["Dia.app"],"target":"/Applications/Dia.app"}]}]}'
     else
       printf '%s\n' '{"casks":[{"artifacts":[]}]}'
     fi
@@ -92,40 +91,34 @@ EOF
 #!/usr/bin/env bash
 printf 'pgrep %s\n' "$*" >>"$COMMAND_LOG"
 [[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] || exit 1
-[[ ! -f $APP_QUIT_STATE ]] && exit 0
-[[ ${FAKE_APP_HELPER_REMAINS_AFTER_QUIT:-0} == 1 ]] &&
-  [[ "$*" == *'/Contents/'* ]] &&
-  [[ "$*" != *'/Contents/MacOS/'* ]] && exit 0
-exit 1
+[[ ! -f $APP_PROCESS_EXITED_STATE ]]
+EOF
+  cat >"$PKILL_COMMAND" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'pkill %s\n' "$*" >>"$COMMAND_LOG"
+[[ "$*" == *"${FAKE_RUNNING_APP:-never}"* ]] || exit 1
+[[ ! -f $APP_PROCESS_EXITED_STATE ]] || exit 1
+
+case "$*" in
+*-TERM*)
+  if [[ ${FAKE_APP_EXITS_DURING_TERM:-0} == 1 ]]; then
+    : >"$APP_PROCESS_EXITED_STATE"
+    exit 1
+  fi
+  [[ ${FAKE_APP_IGNORES_TERM:-0} == 1 ]] || : >"$APP_PROCESS_EXITED_STATE"
+  ;;
+*-KILL*)
+  [[ ${FAKE_APP_IGNORES_KILL:-0} == 1 ]] || : >"$APP_PROCESS_EXITED_STATE"
+  ;;
+*) exit 64 ;;
+esac
 EOF
   cat >"$OPEN_COMMAND" <<'EOF'
 #!/usr/bin/env bash
 printf 'open %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-  cat >"$PLIST_BUDDY_COMMAND" <<'EOF'
-#!/usr/bin/env bash
-printf 'PlistBuddy %s\n' "$*" >>"$COMMAND_LOG"
-printf '%s\n' 'com.anthropic.claudefordesktop'
-EOF
-cat >"$OSASCRIPT_COMMAND" <<'EOF'
-#!/usr/bin/env bash
-printf 'osascript %s\n' "$*" >>"$COMMAND_LOG"
-printf '%s\n' "$*" >>"$APP_QUIT_IDENTIFIERS"
-if [[ ${FAKE_APP_IGNORES_QUIT:-0} != 1 ]]; then
-  if [[ -z ${FAKE_REQUIRED_QUIT_IDENTIFIERS:-} ]]; then
-    : >"$APP_QUIT_STATE"
-  else
-    all_identifiers_seen=1
-    for required_identifier in $FAKE_REQUIRED_QUIT_IDENTIFIERS; do
-      grep -Fq "$required_identifier" "$APP_QUIT_IDENTIFIERS" || all_identifiers_seen=0
-    done
-    ((all_identifiers_seen)) && : >"$APP_QUIT_STATE"
-  fi
-fi
-exit 0
-EOF
-  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$OPEN_COMMAND" \
-    "$PLIST_BUDDY_COMMAND" "$OSASCRIPT_COMMAND"
+  chmod +x "$BREW_COMMAND" "$NIX_COMMAND" "$SLEEP_COMMAND" "$PGREP_COMMAND" "$PKILL_COMMAND" "$OPEN_COMMAND"
 }
 
 install_cask() {
@@ -217,64 +210,92 @@ mark_outdated() {
   [ "$upgrade_line" -lt "$open_line" ]
 }
 
-@test "quits a running application before upgrading and reopens it after the update" {
+@test "sends TERM to a running application before upgrading and reopens it after the update" {
   install_cask claude
   mark_outdated claude
 
   run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -Fq 'osascript -e tell application id "com.anthropic.claudefordesktop" to quit' "$COMMAND_LOG"
+  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
   grep -q '^open -gj /Applications/Claude.app$' "$COMMAND_LOG"
   initial_pgrep_line="$(grep -n -m1 '^pgrep ' "$COMMAND_LOG" | cut -d: -f1)"
-  quit_line="$(grep -n -m1 '^osascript ' "$COMMAND_LOG" | cut -d: -f1)"
+  terminate_line="$(grep -n -m1 '^pkill -TERM ' "$COMMAND_LOG" | cut -d: -f1)"
   exit_check_line="$(grep -n '^pgrep ' "$COMMAND_LOG" | sed -n '2p' | cut -d: -f1)"
   fetch_line="$(grep -n -m1 '^brew fetch ' "$COMMAND_LOG" | cut -d: -f1)"
   upgrade_line="$(grep -n -m1 '^brew upgrade ' "$COMMAND_LOG" | cut -d: -f1)"
   open_line="$(grep -n -m1 '^open ' "$COMMAND_LOG" | cut -d: -f1)"
-  [ "$initial_pgrep_line" -lt "$quit_line" ]
-  [ "$quit_line" -lt "$exit_check_line" ]
+  [ "$initial_pgrep_line" -lt "$terminate_line" ]
+  [ "$terminate_line" -lt "$exit_check_line" ]
   [ "$exit_check_line" -lt "$fetch_line" ]
   [ "$upgrade_line" -lt "$open_line" ]
 }
 
-@test "quits every identifier supplied by cask metadata before upgrading" {
+@test "force kills an application helper that remains after TERM" {
   install_cask 1password
   mark_outdated 1password
 
   run env DOTFILES_HOMEBREW_CASKS=1password FAKE_RUNNING_APP=/Applications/1Password.app \
-    FAKE_REQUIRED_QUIT_IDENTIFIERS='com.1password.1password com.1password.1password-launcher' "$UPDATER"
+    FAKE_APP_IGNORES_TERM=1 "$UPDATER"
 
   [ "$status" -eq 0 ]
-  grep -Fq 'tell application id "com.1password.1password" to quit' "$COMMAND_LOG"
-  grep -Fq 'tell application id "com.1password.1password-launcher" to quit' "$COMMAND_LOG"
-  grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
-}
-
-@test "upgrades when an Electron helper remains after the application exits" {
-  install_cask 1password
-  mark_outdated 1password
-
-  run env DOTFILES_HOMEBREW_CASKS=1password FAKE_RUNNING_APP=/Applications/1Password.app \
-    FAKE_APP_HELPER_REMAINS_AFTER_QUIT=1 "$UPDATER"
-
-  [ "$status" -eq 0 ]
+  grep -q '^pkill -KILL -f /Applications/1Password.app/Contents/$' "$COMMAND_LOG"
   grep -q '^brew fetch --cask 1password$' "$COMMAND_LOG"
   grep -q '^brew upgrade --cask --greedy 1password$' "$COMMAND_LOG"
   grep -q '^open -gj /Applications/1Password.app$' "$COMMAND_LOG"
 }
 
-@test "does not upgrade when a running application does not exit" {
+@test "does not upgrade when an application survives KILL" {
   install_cask claude
   mark_outdated claude
 
   run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app \
-    FAKE_APP_IGNORES_QUIT=1 "$UPDATER"
+    FAKE_APP_IGNORES_TERM=1 FAKE_APP_IGNORES_KILL=1 "$UPDATER"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"application did not exit: /Applications/Claude.app"* ]]
+  grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
   run ! grep -q '^brew fetch ' "$COMMAND_LOG"
   run ! grep -q '^brew upgrade ' "$COMMAND_LOG"
+}
+
+@test "force kills an app that ignores TERM before upgrading and reopening it" {
+  install_cask thebrowsercompany-dia
+  mark_outdated thebrowsercompany-dia
+
+  run env DOTFILES_HOMEBREW_CASKS=thebrowsercompany-dia \
+    FAKE_RUNNING_APP=/Applications/Dia.app FAKE_APP_IGNORES_TERM=1 "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^pkill -TERM -f /Applications/Dia.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^pkill -KILL -f /Applications/Dia.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask thebrowsercompany-dia$' "$COMMAND_LOG"
+  grep -q '^brew upgrade --cask --greedy thebrowsercompany-dia$' "$COMMAND_LOG"
+  grep -q '^open -gj /Applications/Dia.app$' "$COMMAND_LOG"
+}
+
+@test "does not KILL an app that exits after TERM" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  run ! grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+}
+
+@test "continues when an app exits while TERM is being sent" {
+  install_cask claude
+  mark_outdated claude
+
+  run env DOTFILES_HOMEBREW_CASKS=claude FAKE_RUNNING_APP=/Applications/Claude.app \
+    FAKE_APP_EXITS_DURING_TERM=1 "$UPDATER"
+
+  [ "$status" -eq 0 ]
+  grep -q '^pkill -TERM -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
+  grep -q '^brew fetch --cask claude$' "$COMMAND_LOG"
+  run ! grep -q '^pkill -KILL -f /Applications/Claude.app/Contents/$' "$COMMAND_LOG"
 }
 
 @test "reopens a running application after upgrade retries are exhausted" {
