@@ -6,6 +6,7 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="nixos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+. "$ROOT/scripts/sh/update-flake.sh"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/hermes-agent.sh"
 
@@ -103,6 +104,7 @@ main() {
   preflight
   dotfiles_link_checkout "$ROOT"
   capture_host_identity
+  dotfiles_update_flake "$ROOT"
   apply_nixos_system
   apply_chezmoi
   dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"

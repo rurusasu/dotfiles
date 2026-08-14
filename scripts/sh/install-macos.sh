@@ -6,6 +6,7 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+. "$ROOT/scripts/sh/update-flake.sh"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/hermes-agent.sh"
 
@@ -297,6 +298,7 @@ main() {
   ensure_command_line_tools
   ensure_nix
   dotfiles_link_checkout "$ROOT"
+  dotfiles_update_flake "$ROOT"
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   repair_homebrew_cask_link_directories
