@@ -28,7 +28,6 @@
                 useUserPackages = true;
                 extraSpecialArgs = {
                   inherit inputs;
-                  isWSL = false;
                 }
                 // homeExtraSpecialArgs;
                 users = import homeModulePath;
