@@ -1,14 +1,44 @@
 local terminalBundleId = "com.apple.Terminal"
+local backTabCharacter = string.char(0x19)
+local noModifiers = {}
+local ctrlOnly = { ctrl = true }
+local shiftOnly = { shift = true }
 local prefixPending = false
 local prefixTimer = nil
-local forwardingPrefix = false
+local prefixGeneration = 0
 
 local function resetPrefix()
     prefixPending = false
+    prefixGeneration = prefixGeneration + 1
     if prefixTimer then
         prefixTimer:stop()
         prefixTimer = nil
     end
+end
+
+local function startPrefix()
+    resetPrefix()
+    prefixPending = true
+    local generation = prefixGeneration
+    prefixTimer = hs.timer.doAfter(1, function()
+        if prefixGeneration == generation then
+            resetPrefix()
+        end
+    end)
+end
+
+local function hasExactModifiers(flags, expected)
+    for modifier, enabled in pairs(flags) do
+        if enabled and not expected[modifier] then
+            return false
+        end
+    end
+    for modifier, enabled in pairs(expected) do
+        if enabled and not flags[modifier] then
+            return false
+        end
+    end
+    return true
 end
 
 local function send(mods, key)
@@ -38,10 +68,6 @@ local suffixActions = {
 }
 
 terminalPrefixTap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, function(event)
-    if forwardingPrefix then
-        return false
-    end
-
     local app = hs.application.frontmostApplication()
     if not app or app:bundleID() ~= terminalBundleId then
         resetPrefix()
@@ -51,25 +77,24 @@ terminalPrefixTap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, functio
     local key = event:getCharacters(true):lower()
     local flags = event:getFlags()
     if not prefixPending then
-        if key == " " and flags.ctrl then
-            prefixPending = true
-            prefixTimer = hs.timer.doAfter(1, resetPrefix)
+        if key == " " and hasExactModifiers(flags, ctrlOnly) then
+            startPrefix()
             return true
         end
         return false
     end
 
-    if key == " " and flags.ctrl then
+    if key == " " and hasExactModifiers(flags, ctrlOnly) then
         resetPrefix()
-        forwardingPrefix = true
-        hs.eventtap.keyStroke({ "ctrl" }, "space", 0)
-        hs.timer.doAfter(0, function()
-            forwardingPrefix = false
-        end)
-        return true
+        return true, hs.eventtap.event.newKeyEventSequence({ "ctrl" }, "space")
     end
 
-    local action = key == "\t" and (flags.shift and suffixActions.shift_tab or suffixActions.tab) or suffixActions[key]
+    local action = nil
+    if hasExactModifiers(flags, noModifiers) then
+        action = key == "\t" and suffixActions.tab or suffixActions[key]
+    elseif key == backTabCharacter and hasExactModifiers(flags, shiftOnly) then
+        action = suffixActions.shift_tab
+    end
     resetPrefix()
     if action then
         action()
