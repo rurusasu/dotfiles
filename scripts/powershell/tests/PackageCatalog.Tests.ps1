@@ -399,6 +399,20 @@ Describe 'Package catalog consistency' {
     }
 
     Context 'Cross-platform package providers' {
+
+        It 'should generate AutoHotkey for the Windows terminal keybinding adapter' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'AutoHotkey.AutoHotkey')
+            $package.Count | Should -Be 1
+        }
+
+        It 'should keep Hammerspoon out of the Windows manifest' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            @($wingetSource.Packages | Where-Object PackageIdentifier -Match 'Hammerspoon').Count | Should -Be 0
+        }
+
         It 'should expose provider coverage outputs from the package SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 

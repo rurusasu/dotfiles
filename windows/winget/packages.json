@@ -18,6 +18,9 @@
           "PackageIdentifier": "TheBrowserCompany.Arc"
         },
         {
+          "PackageIdentifier": "AutoHotkey.AutoHotkey"
+        },
+        {
           "PackageIdentifier": "Oven-sh.Bun",
           "verifyCommand": {
             "args": ["--version"],

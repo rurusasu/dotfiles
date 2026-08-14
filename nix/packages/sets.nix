@@ -225,6 +225,37 @@ let
         };
       };
     };
+    hammerspoon = {
+      winget = null;
+      category = "terminal";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "hammerspoon";
+        };
+        linux = {
+          unsupported = "Hammerspoon is only available on macOS";
+        };
+        windows = {
+          unsupported = "Hammerspoon is only available on macOS";
+        };
+      };
+    };
+    autohotkey = {
+      winget = "AutoHotkey.AutoHotkey";
+      category = "terminal";
+      support = {
+        darwin = {
+          unsupported = "AutoHotkey is only available on Windows";
+        };
+        linux = {
+          unsupported = "AutoHotkey is only available on Windows";
+        };
+        windows = {
+          provider = "winget";
+        };
+      };
+    };
     tmux = {
       pkg = pkgs.tmux;
       winget = null;
