@@ -39,7 +39,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $darwinRender = $template |
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
             $LASTEXITCODE | Should -Be 0
-            $darwinContent = $darwinRender -join [Environment]::NewLine
+            $darwinContent = ($darwinRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
             $darwinContent | Should -Match '(?m)^# hash: [0-9a-f]{128}$'
             $darwinContent |
                 Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
@@ -47,7 +47,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $linuxRender = $template |
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
             $LASTEXITCODE | Should -Be 0
-            $linuxContent = $linuxRender -join [Environment]::NewLine
+            $linuxContent = ($linuxRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
             $linuxContent | Should -Match '(?m)^# hash: [0-9a-f]{64}$'
             $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
         }
@@ -60,7 +60,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $windowsRender = $template |
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
             $LASTEXITCODE | Should -Be 0
-            $windowsContent = $windowsRender -join [Environment]::NewLine
+            $windowsContent = ($windowsRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
             $windowsContent | Should -Match '(?m)^# hash: [0-9a-f]{192}$'
             $windowsContent |
                 Should -Match 'Deploy-File "\$ChezmoiSource\\terminals\\windows-terminal\\terminal-keybindings\.ahk" "\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk"'
