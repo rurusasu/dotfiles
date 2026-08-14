@@ -107,22 +107,35 @@ Describe '標準キーバインド方針' {
         Assert-WindowsTerminalDirectionalAction $settings "alt+shift+right" "resizePane" "right"
     }
 
-    It 'WezTerm は macOS だけ Command、他 OS は従来の Alt で pane 操作を行うこと' {
+    It 'WezTerm は共通 terminal window-manager 契約と nested prefix を提供すること' {
         $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
-        $content | Should -Match '\{ key = "d", mods = "SUPER", action = act\.SplitHorizontal'
-        $content | Should -Match '\{ key = "d", mods = "SUPER\|SHIFT", action = act\.SplitVertical'
-        $content | Should -Match '\{ key = "\+", mods = "ALT\|SHIFT", action = act\.SplitHorizontal'
-        $content | Should -Match '\{ key = "-", mods = "ALT\|SHIFT", action = act\.SplitVertical'
-        $content | Should -Match '\{ key = "LeftArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Left"\) \}'
-        $content | Should -Match '\{ key = "UpArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Up"\) \}'
-        $content | Should -Match '\{ key = "RightArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Right"\) \}'
-        $content | Should -Match '\{ key = "DownArrow", mods = "LEADER", action = act\.ActivatePaneDirection\("Down"\) \}'
+        $content | Should -Match 'key = "Space", mods = "CTRL", timeout_milliseconds = 1000'
+        $content | Should -Match 'key = "Space", mods = "LEADER", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
+        $content | Should -Match 'key = "w", mods = "LEADER", action = act\.ShowLauncherArgs\(\{ flags = "FUZZY\|WORKSPACES" \}\)'
+        $content | Should -Match 'key = "a", mods = "LEADER", action = act\.PromptInputLine'
+        $content | Should -Match 'key = "n", mods = "LEADER", action = act\.SpawnTab\("CurrentPaneDomain"\)'
+        $content | Should -Match 'key = "q", mods = "LEADER", action = act\.CloseCurrentTab'
+        $content | Should -Match 'key = "Tab", mods = "LEADER", action = act\.ActivateTabRelative\(1\)'
+        $content | Should -Match 'key = "Tab", mods = "LEADER\|SHIFT", action = act\.ActivateTabRelative\(-1\)'
+        $content | Should -Match 'key = "h", mods = "LEADER", action = act\.ActivatePaneDirection\("Left"\)'
+        $content | Should -Match 'key = "j", mods = "LEADER", action = act\.ActivatePaneDirection\("Down"\)'
+        $content | Should -Match 'key = "k", mods = "LEADER", action = act\.ActivatePaneDirection\("Up"\)'
+        $content | Should -Match 'key = "l", mods = "LEADER", action = act\.ActivatePaneDirection\("Right"\)'
+        $content | Should -Match 'key = "v", mods = "LEADER", action = act\.SplitHorizontal'
+        $content | Should -Match 'key = "-", mods = "LEADER", action = act\.SplitVertical'
+        $content | Should -Match 'key = "x", mods = "LEADER", action = act\.CloseCurrentPane'
+        $content | Should -Match 'flags = "FUZZY\|WORKSPACES\|TABS\|DOMAINS"'
+        $content | Should -Match 'key = "d", mods = "LEADER", action = act\.DetachDomain\("CurrentPaneDomain"\)'
+        $content | Should -Not -Match 'mods = "LEADER", action = act\.ActivateTab\([0-8]\)'
 
-        $content | Should -Match '\{ key = "LeftArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Left"\) \}'
-        $content | Should -Match '\{ key = "UpArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Up"\) \}'
-        $content | Should -Match '\{ key = "RightArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Right"\) \}'
-        $content | Should -Match '\{ key = "DownArrow", mods = "ALT", action = act\.ActivatePaneDirection\("Down"\) \}'
+        $content | Should -Not -Match 'key = "t", mods = "LEADER", action = act\.SpawnTab'
+        $content | Should -Not -Match 'key = "x", mods = "LEADER", action = act\.CloseCurrentTab'
+        $content | Should -Not -Match 'key = "(?:h|l)", mods = "LEADER", action = focus_adjacent_window'
+        $content | Should -Not -Match 'key = "(?:LeftArrow|UpArrow|RightArrow|DownArrow)", mods = "LEADER", action = act\.ActivatePaneDirection'
+        $content | Should -Not -Match 'key = "d", mods = "SUPER(?:\|SHIFT)?", action = act\.Split'
+        $content | Should -Not -Match 'key = "(?:\+|-)", mods = "ALT\|SHIFT", action = act\.Split'
+        $content | Should -Not -Match 'key = "(?:LeftArrow|UpArrow|RightArrow|DownArrow)", mods = "ALT", action = act\.ActivatePaneDirection'
 
         $content | Should -Match '\{ key = "LeftArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Left", 1 \}\) \}'
         $content | Should -Match '\{ key = "UpArrow", mods = "SUPER\|CTRL", action = act\.AdjustPaneSize\(\{ "Up", 1 \}\) \}'
@@ -135,8 +148,8 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "RightArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Right", 5 \}\) \}'
         $content | Should -Match '\{ key = "DownArrow", mods = "ALT\|SHIFT", action = act\.AdjustPaneSize\(\{ "Down", 5 \}\) \}'
 
-        $content | Should -Match '\{ key = "h", mods = "LEADER", action = focus_adjacent_window\("left"\) \}'
-        $content | Should -Match '\{ key = "l", mods = "LEADER", action = focus_adjacent_window\("right"\) \}'
+        $content | Should -Match '\{ key = "h", mods = "SUPER\|ALT", action = focus_adjacent_window\("left"\) \}'
+        $content | Should -Match '\{ key = "l", mods = "SUPER\|ALT", action = focus_adjacent_window\("right"\) \}'
         $content | Should -Match '\{ key = "h", mods = "ALT\|SHIFT", action = focus_adjacent_window\("left"\) \}'
         $content | Should -Match '\{ key = "l", mods = "ALT\|SHIFT", action = focus_adjacent_window\("right"\) \}'
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
