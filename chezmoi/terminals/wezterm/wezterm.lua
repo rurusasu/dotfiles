@@ -86,11 +86,7 @@ config.tab_bar_at_bottom = false
 config.show_new_tab_button_in_tab_bar = true
 
 -- Leader key (CTRL+Space)
-config.leader = {
-    key = "Space",
-    mods = "CTRL",
-    timeout_milliseconds = 2000,
-}
+config.leader = { key = "Space", mods = "CTRL", timeout_milliseconds = 1000 }
 
 -- Force snacks.nvim to recognise WezTerm's Kitty graphics protocol support.
 -- Auto-detection can fail on Windows where TERM_PROGRAM may not propagate.
@@ -132,22 +128,41 @@ config.keys = {
     { key = "t", mods = "ALT", action = act.SendString("\x1bt") },
     { key = "r", mods = "ALT", action = act.SendString("\x1br") },
 
-    -- Pane close/zoom
-    { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
+    -- Pane zoom remains outside the window-manager contract.
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
-    -- Tab management (Ctrl+Alt+T or Leader+t=new, Leader+x=close, Ctrl+Tab=nav)
-    { key = "t", mods = "CTRL|ALT", action = act.SpawnTab("CurrentPaneDomain") },
-    { key = "t", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
-    { key = "x", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
-    { key = "Tab", mods = "CTRL", action = act.ActivateTabRelative(1) },
-    { key = "Tab", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(-1) },
+    -- Common terminal window-manager contract.
+    { key = "Space", mods = "LEADER|CTRL", action = act.SendKey({ key = "Space", mods = "CTRL" }) },
+    { key = "w", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "WORKSPACES" }) },
+    {
+        key = "a",
+        mods = "LEADER",
+        action = act.PromptInputLine({
+            description = "Enter name for new workspace",
+            action = wezterm.action_callback(function(window, pane, line)
+                if line and line ~= "" then
+                    window:perform_action(act.SwitchToWorkspace({ name = line }), pane)
+                end
+            end),
+        }),
+    },
+    { key = "n", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
+    { key = "q", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
+    { key = "Tab", mods = "LEADER", action = act.ActivateTabRelative(1) },
+    { key = "Tab", mods = "LEADER|SHIFT", action = act.ActivateTabRelative(-1) },
+    { key = "h", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
+    { key = "j", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
+    { key = "k", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
+    { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
+    { key = "v", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = true }) },
+    { key = "g", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES|TABS|DOMAINS" }) },
+    { key = "d", mods = "LEADER", action = act.DetachDomain("CurrentPaneDomain") },
 
     -- Misc
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
     { key = "c", mods = "LEADER", action = act.CopyTo("Clipboard") },
-    { key = "v", mods = "LEADER", action = act.PasteFrom("Clipboard") },
-    { key = "Space", mods = "LEADER", action = act.QuickSelect },
     { key = "F11", action = act.ToggleFullScreen },
 
     -- Disable default font size bindings except Ctrl+Shift+{+/-/0}
@@ -162,32 +177,100 @@ config.keys = {
     { key = "+", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
     { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
     { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
-
-    -- Tab numbers
-    { key = "1", mods = "LEADER", action = act.ActivateTab(0) },
-    { key = "2", mods = "LEADER", action = act.ActivateTab(1) },
-    { key = "3", mods = "LEADER", action = act.ActivateTab(2) },
-    { key = "4", mods = "LEADER", action = act.ActivateTab(3) },
-    { key = "5", mods = "LEADER", action = act.ActivateTab(4) },
-    { key = "6", mods = "LEADER", action = act.ActivateTab(5) },
-    { key = "7", mods = "LEADER", action = act.ActivateTab(6) },
-    { key = "8", mods = "LEADER", action = act.ActivateTab(7) },
-    { key = "9", mods = "LEADER", action = act.ActivateTab(8) },
 }
 
--- macOS uses Terminal/iTerm2 conventions. Other platforms retain the
--- existing Alt-based pane controls.
-local pane_control_bindings
+-- Remove inherited tab/pane window-manager shortcuts. The shared Leader table
+-- above is the only effective path for these actions; non-WM defaults remain.
+local default_window_manager_bindings = {
+    { key = "Tab", mods = "CTRL" },
+    { key = "Tab", mods = "SHIFT|CTRL" },
+    { key = "!", mods = "CTRL" },
+    { key = "!", mods = "SHIFT|CTRL" },
+    { key = '"', mods = "ALT|CTRL" },
+    { key = '"', mods = "SHIFT|ALT|CTRL" },
+    { key = "#", mods = "CTRL" },
+    { key = "#", mods = "SHIFT|CTRL" },
+    { key = "$", mods = "CTRL" },
+    { key = "$", mods = "SHIFT|CTRL" },
+    { key = "%", mods = "CTRL" },
+    { key = "%", mods = "SHIFT|CTRL" },
+    { key = "%", mods = "ALT|CTRL" },
+    { key = "%", mods = "SHIFT|ALT|CTRL" },
+    { key = "&", mods = "CTRL" },
+    { key = "&", mods = "SHIFT|CTRL" },
+    { key = "'", mods = "SHIFT|ALT|CTRL" },
+    { key = "(", mods = "CTRL" },
+    { key = "(", mods = "SHIFT|CTRL" },
+    { key = "*", mods = "CTRL" },
+    { key = "*", mods = "SHIFT|CTRL" },
+    { key = "1", mods = "SHIFT|CTRL" },
+    { key = "1", mods = "SUPER" },
+    { key = "2", mods = "SHIFT|CTRL" },
+    { key = "2", mods = "SUPER" },
+    { key = "3", mods = "SHIFT|CTRL" },
+    { key = "3", mods = "SUPER" },
+    { key = "4", mods = "SHIFT|CTRL" },
+    { key = "4", mods = "SUPER" },
+    { key = "5", mods = "SHIFT|CTRL" },
+    { key = "5", mods = "SHIFT|ALT|CTRL" },
+    { key = "5", mods = "SUPER" },
+    { key = "6", mods = "SHIFT|CTRL" },
+    { key = "6", mods = "SUPER" },
+    { key = "7", mods = "SHIFT|CTRL" },
+    { key = "7", mods = "SUPER" },
+    { key = "8", mods = "SHIFT|CTRL" },
+    { key = "8", mods = "SUPER" },
+    { key = "9", mods = "SHIFT|CTRL" },
+    { key = "9", mods = "SUPER" },
+    { key = "@", mods = "CTRL" },
+    { key = "@", mods = "SHIFT|CTRL" },
+    { key = "T", mods = "CTRL" },
+    { key = "T", mods = "SHIFT|CTRL" },
+    { key = "W", mods = "CTRL" },
+    { key = "Z", mods = "CTRL" },
+    { key = "Z", mods = "SHIFT|CTRL" },
+    { key = "[", mods = "SHIFT|SUPER" },
+    { key = "]", mods = "SHIFT|SUPER" },
+    { key = "^", mods = "CTRL" },
+    { key = "^", mods = "SHIFT|CTRL" },
+    { key = "t", mods = "SHIFT|CTRL" },
+    { key = "t", mods = "SUPER" },
+    { key = "w", mods = "CTRL|SHIFT" },
+    { key = "w", mods = "SUPER" },
+    { key = "z", mods = "SHIFT|CTRL" },
+    { key = "{", mods = "SUPER" },
+    { key = "{", mods = "SHIFT|SUPER" },
+    { key = "}", mods = "SUPER" },
+    { key = "}", mods = "SHIFT|SUPER" },
+    { key = "PageUp", mods = "CTRL" },
+    { key = "PageUp", mods = "SHIFT|CTRL" },
+    { key = "PageDown", mods = "CTRL" },
+    { key = "PageDown", mods = "SHIFT|CTRL" },
+    { key = "LeftArrow", mods = "SHIFT|CTRL" },
+    { key = "LeftArrow", mods = "SHIFT|ALT|CTRL" },
+    { key = "RightArrow", mods = "SHIFT|CTRL" },
+    { key = "RightArrow", mods = "SHIFT|ALT|CTRL" },
+    { key = "UpArrow", mods = "SHIFT|CTRL" },
+    { key = "UpArrow", mods = "SHIFT|ALT|CTRL" },
+    { key = "DownArrow", mods = "SHIFT|CTRL" },
+    { key = "DownArrow", mods = "SHIFT|ALT|CTRL" },
+}
+
+for _, binding in ipairs(default_window_manager_bindings) do
+    table.insert(config.keys, {
+        key = binding.key,
+        mods = binding.mods,
+        action = act.DisableDefaultAssignment,
+    })
+end
+
+-- GUI window focus stays direct and does not conflict with Leader+h/l.
+-- Existing direct resize chords remain available on each platform.
+local direct_window_bindings
 if is_macos then
-    pane_control_bindings = {
-        { key = "d", mods = "SUPER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-        { key = "d", mods = "SUPER|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
-        { key = "LeftArrow", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
-        { key = "UpArrow", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
-        { key = "RightArrow", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
-        { key = "DownArrow", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
-        { key = "h", mods = "LEADER", action = focus_adjacent_window("left") },
-        { key = "l", mods = "LEADER", action = focus_adjacent_window("right") },
+    direct_window_bindings = {
+        { key = "h", mods = "SUPER|ALT", action = focus_adjacent_window("left") },
+        { key = "l", mods = "SUPER|ALT", action = focus_adjacent_window("right") },
         -- iTerm2-style pane resize: hold Ctrl+Command and repeat Arrow
         { key = "LeftArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Left", 1 }) },
         { key = "UpArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Up", 1 }) },
@@ -195,13 +278,7 @@ if is_macos then
         { key = "DownArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Down", 1 }) },
     }
 else
-    pane_control_bindings = {
-        { key = "+", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-        { key = "-", mods = "ALT|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
-        { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
-        { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
-        { key = "RightArrow", mods = "ALT", action = act.ActivatePaneDirection("Right") },
-        { key = "DownArrow", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+    direct_window_bindings = {
         { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
         { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
         { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
@@ -211,7 +288,7 @@ else
     }
 end
 
-for _, binding in ipairs(pane_control_bindings) do
+for _, binding in ipairs(direct_window_bindings) do
     table.insert(config.keys, binding)
 end
 

@@ -1,0 +1,31 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Start the managed Windows Terminal AutoHotkey adapter.
+# hash: {{ include "terminals/windows-terminal/terminal-keybindings.ahk" | sha256sum }}
+
+$ErrorActionPreference = "Stop"
+
+$ManagedScript = "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
+$AutoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+
+if (-not (Test-Path -LiteralPath $AutoHotkey -PathType Leaf)) {
+    throw "AutoHotkey v2 UIAccess executable was not found: $AutoHotkey"
+}
+if (-not (Test-Path -LiteralPath $ManagedScript -PathType Leaf)) {
+    throw "Managed terminal keybindings script was not found: $ManagedScript"
+}
+
+$StartupDirectory = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+$ShortcutPath = "$StartupDirectory\Dotfiles Terminal Keybindings.lnk"
+if (-not (Test-Path -LiteralPath $StartupDirectory -PathType Container)) {
+    New-Item -ItemType Directory -Path $StartupDirectory -Force | Out-Null
+}
+
+$Shell = New-Object -ComObject WScript.Shell
+$Shortcut = $Shell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = $AutoHotkey
+$Shortcut.Arguments = '"{0}"' -f $ManagedScript
+$Shortcut.WorkingDirectory = Split-Path -Parent $AutoHotkey
+$Shortcut.Save()
+
+Start-Process -FilePath $ShortcutPath
+{{ end -}}

@@ -150,3 +150,25 @@ setup() {
 	! grep -q 'Warp.Warp' "$SETS"
 	! grep -q 'warpInnoLatest' "$SETS"
 }
+
+@test "terminal keybinding helpers have platform-scoped providers" {
+	run awk '
+		/^    hammerspoon = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'category = "terminal"'* ]]
+	[[ "$output" == *'provider = "homebrew-cask"'* ]]
+	[[ "$output" == *'cask = "hammerspoon"'* ]]
+
+	run awk '
+		/^    autohotkey = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'winget = "AutoHotkey.AutoHotkey"'* ]]
+	[[ "$output" == *'category = "terminal"'* ]]
+	[[ "$output" == *'provider = "winget"'* ]]
+}
