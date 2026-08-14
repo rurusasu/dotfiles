@@ -31,7 +31,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          winget install --id AutoHotkey.AutoHotkey --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
           }
@@ -39,10 +39,18 @@ jobs:
           if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
             throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
           }
+          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
+            throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
+          }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
           & $autoHotkey '/ErrorStdOut' $scriptPath '--check'
           if ($LASTEXITCODE -ne 0) {
             throw "AutoHotkey v2 syntax validation failed (exit $LASTEXITCODE)"
+          }
+          & $autoHotkey '/ErrorStdOut' $scriptPath '--self-test'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 behavioral self-tests failed (exit $LASTEXITCODE)"
           }
 
       - name: Install pinned Pester

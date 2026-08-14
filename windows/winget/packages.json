@@ -18,7 +18,8 @@
           "PackageIdentifier": "TheBrowserCompany.Arc"
         },
         {
-          "PackageIdentifier": "AutoHotkey.AutoHotkey"
+          "PackageIdentifier": "AutoHotkey.AutoHotkey",
+          "installArgs": ["--scope", "machine"]
         },
         {
           "PackageIdentifier": "Oven-sh.Bun",

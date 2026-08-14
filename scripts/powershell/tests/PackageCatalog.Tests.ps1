@@ -405,6 +405,8 @@ Describe 'Package catalog consistency' {
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'AutoHotkey.AutoHotkey')
             $package.Count | Should -Be 1
+            @($package[0].installArgs) | Should -Contain '--scope'
+            @($package[0].installArgs) | Should -Contain 'machine'
         }
 
         It 'should keep Hammerspoon out of the Windows manifest' {

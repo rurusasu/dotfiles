@@ -5,16 +5,10 @@
 $ErrorActionPreference = "Stop"
 
 $ManagedScript = "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
-$Candidates = @(
-    "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe",
-    "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe"
-)
-$AutoHotkey = $Candidates |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
+$AutoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
 
-if (-not $AutoHotkey) {
-    throw "AutoHotkey v2 executable was not found"
+if (-not (Test-Path -LiteralPath $AutoHotkey -PathType Leaf)) {
+    throw "AutoHotkey v2 UIAccess executable was not found: $AutoHotkey"
 }
 if (-not (Test-Path -LiteralPath $ManagedScript -PathType Leaf)) {
     throw "Managed terminal keybindings script was not found: $ManagedScript"
@@ -33,5 +27,5 @@ $Shortcut.Arguments = '"{0}"' -f $ManagedScript
 $Shortcut.WorkingDirectory = Split-Path -Parent $AutoHotkey
 $Shortcut.Save()
 
-Start-Process -FilePath $AutoHotkey -ArgumentList @($Shortcut.Arguments)
+Start-Process -FilePath $ShortcutPath
 {{ end -}}

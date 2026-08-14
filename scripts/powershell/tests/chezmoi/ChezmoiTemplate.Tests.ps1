@@ -106,8 +106,8 @@ Describe 'chezmoi テンプレート バリデーション' {
 
                 $parseErrors | Should -BeNullOrEmpty
                 $script:startupTemplate | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
-                $script:startupContent | Should -Match '\$env:ProgramFiles\\AutoHotkey\\v2\\AutoHotkey64\.exe'
-                $script:startupContent | Should -Match '\$env:LOCALAPPDATA\\Programs\\AutoHotkey\\v2\\AutoHotkey64\.exe'
+                $script:startupContent | Should -Match '\$env:ProgramFiles\\AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
+                $script:startupContent | Should -Not -Match '\$env:LOCALAPPDATA\\Programs\\AutoHotkey'
                 $script:startupContent | Should -Match '\$StartupDirectory = "\$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"'
                 $script:startupContent | Should -Match '\$ShortcutPath = "\$StartupDirectory\\Dotfiles Terminal Keybindings\.lnk"'
                 $script:startupContent | Should -Match '\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk'
@@ -115,17 +115,27 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $script:startupContent | Should -Not -Match '(?i)Stop-Process|taskkill'
             }
 
-            It 'should fail explicitly without AutoHotkey v2 and launch nothing' {
+            It 'should fail explicitly without the trusted AutoHotkey v2 UIAccess executable and launch nothing' {
                 Mock Start-Process
 
-                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 executable was not found*'
+                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
+                Should -Invoke Start-Process -Times 0
+            }
+
+            It 'should reject an ordinary v2 executable that cannot cross the elevated profile boundary' {
+                $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
+                New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
+                Set-Content -LiteralPath "$autoHotkeyDirectory\AutoHotkey64.exe" -Value 'stub'
+                Mock Start-Process
+
+                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
                 Should -Invoke Start-Process -Times 0
             }
 
             It 'should idempotently save and launch one current-user Startup shortcut' {
                 $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
                 New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
-                $autoHotkey = "$autoHotkeyDirectory\AutoHotkey64.exe"
+                $autoHotkey = "$autoHotkeyDirectory\AutoHotkey64_UIA.exe"
                 Set-Content -LiteralPath $autoHotkey -Value 'stub'
 
                 $script:createdShortcutPaths = [System.Collections.Generic.List[string]]::new()
@@ -164,9 +174,7 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $managedScript = "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
                 $script:fakeShortcut.Arguments | Should -Be ('"{0}"' -f $managedScript)
                 Should -Invoke Start-Process -Times 2 -Exactly -ParameterFilter {
-                    $FilePath -eq $autoHotkey -and
-                    $ArgumentList.Count -eq 1 -and
-                    $ArgumentList[0] -eq ('"{0}"' -f $managedScript)
+                    $FilePath -eq $startupPath
                 }
             }
         }

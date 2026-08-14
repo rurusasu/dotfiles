@@ -1083,6 +1083,10 @@ lib.mapAttrs (_: resolve) grouped
 
   # Extra winget install arguments for packages that need a specific installer.
   wingetInstallArgs = {
+    autohotkey = [
+      "--scope"
+      "machine"
+    ];
     "Microsoft.VisualStudio.2022.BuildTools" = [
       "--override"
       "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
