@@ -33,17 +33,64 @@ BeforeAll {
 }
 
 Describe '標準キーバインド方針' {
-    It 'docs は GUI と Unix/Vim 系の標準レイヤーを明示すること' {
+    It 'docs は editor と Unix/Vim 系の標準レイヤーを明示すること' {
         $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
 
-        $docs | Should -Match 'Command\+D' -Because "macOS WezTerm should use the standard split shortcut"
-        $docs | Should -Match 'Command\+Shift\+D' -Because "macOS WezTerm should provide the second standard split shortcut"
-        $docs | Should -Match 'Leader.*WezTerm' -Because "macOS WezTerm navigation should keep the leader"
-        $docs | Should -Match 'Ctrl\+Space' -Because "macOS WezTerm leader should be Ctrl+Space"
-        $docs | Should -Match 'Ctrl\+Command\+矢印' -Because "macOS WezTerm resize should use a repeatable modifier chord"
-        $docs | Should -Match 'Leader.*pane' -Because "macOS WezTerm leader should control panes"
         $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
+    }
+
+    It 'docs は共通 terminal window-manager 契約と capability boundary を明示すること' {
+        $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
+        $expectations = [ordered]@{
+            'Ctrl\+Space Ctrl\+Space'               = 'nested prefix should be documented'
+            'Terminal\.app.*no-op'                  = 'Terminal.app unsupported suffixes should be documented as no-op'
+            'Windows Terminal.*Workspace.*非対応'      = 'Windows Terminal workspace boundary should be explicit'
+            'Workspace.*`w`.*picker'                = 'workspace picker suffix should be documented'
+            'Workspace.*`a`.*新規'                    = 'new workspace suffix should be documented'
+            'Tab.*`n`.*新規'                          = 'new tab suffix should be documented'
+            'Tab.*`q`.*閉じる'                         = 'close tab suffix should be documented'
+            'Pane.*`h` / `j` / `k` / `l`'           = 'pane focus suffixes should be documented'
+            'Session.*`g`.*navigator'               = 'session navigator suffix should be documented'
+            'Session.*`d`.*detach'                  = 'session detach suffix should be documented'
+            'Hammerspoon.*com\.apple\.Terminal.*1秒' = 'Terminal.app adapter scope and timeout should be explicit'
+            'AutoHotkey.*WindowsTerminal\.exe.*1秒'  = 'Windows Terminal adapter scope and timeout should be explicit'
+            'tmux.*Workspace=Session.*Tab=Window'   = 'tmux capability aliases should be explicit'
+        }
+
+        foreach ($expectation in $expectations.GetEnumerator()) {
+            $docs | Should -Match $expectation.Key -Because $expectation.Value
+        }
+    }
+
+    It 'docs と source は代表的な旧 terminal window-manager bindings を再導入しないこと' {
+        $docs = Get-Content -LiteralPath (Join-Path $script:repoRoot "docs/chezmoi/keybindings.md") -Raw
+        $legacyBindings = @(
+            @{
+                Name          = 'WezTerm Command split'
+                Path          = 'chezmoi/terminals/wezterm/wezterm.lua'
+                SourcePattern = 'key = "d", mods = "SUPER(?:\|SHIFT)?", action = act\.Split'
+                DocsPattern   = 'Command\+(?:Shift\+)?D.*(?:分割|split)'
+            },
+            @{
+                Name          = 'WezTerm legacy leader tab table'
+                Path          = 'chezmoi/terminals/wezterm/wezterm.lua'
+                SourcePattern = 'key = "t", mods = "LEADER", action = act\.SpawnTab|mods = "LEADER", action = act\.ActivateTab\([0-8]\)'
+                DocsPattern   = 'Leader.*`t/x/1-9`.*タブ操作'
+            },
+            @{
+                Name          = 'tmux Ctrl+A window-manager table'
+                Path          = 'chezmoi/dot_tmux.conf'
+                SourcePattern = '(?m)^set -g prefix C-a$|^bind t new-window$|^bind (?:h|l) (?:previous|next)-window$'
+                DocsPattern   = 'Prefix.*Ctrl\+A.*(?:pane|window|ペイン|ウィンドウ)'
+            }
+        )
+
+        foreach ($legacy in $legacyBindings) {
+            $source = Get-Content -LiteralPath (Join-Path $script:repoRoot $legacy.Path) -Raw
+            $source | Should -Not -Match $legacy.SourcePattern -Because "$($legacy.Name) must remain absent from source"
+            $docs | Should -Not -Match $legacy.DocsPattern -Because "$($legacy.Name) must remain absent from docs"
+        }
     }
 
     It 'should expose only F13-F23 for Windows Terminal window-manager actions' {
@@ -220,7 +267,7 @@ Describe '標準キーバインド方針' {
         $content = Get-Content -LiteralPath $path -Raw
 
         $content | Should -Match 'com\.apple\.Terminal'
-        $content | Should -Match 'hs\.timer\.doAfter\(1'
+        $content | Should -Match 'hs\.timer\.doAfter\(1\s*,'
         $content | Should -Match 'send\(\{ "cmd" \}, "t"'
         $content | Should -Match 'send\(\{ "cmd" \}, "w"'
         $content | Should -Match 'send\(\{ "ctrl" \}, "tab"'
