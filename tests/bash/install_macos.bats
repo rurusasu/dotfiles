@@ -877,6 +877,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 		"$HOME/.dotfiles/docker/hermes-agent"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/update-flake.sh" "$HOME/.dotfiles/scripts/sh/update-flake.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
