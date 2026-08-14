@@ -41,12 +41,12 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertLess(gh_index, contract_index)
         self.assertLess(contract_index, verifier_index)
         self.assertIn(
-            "{{.HERMES_HOME_PROVENANCE_REPOSITORY "
-            '| default "../hermes-home-profile-sync"}}',
+            "{{.HERMES_HOME_PROVENANCE_URL "
+            '| default "https://github.com/rurusasu/hermes-home.git"}}',
             section,
         )
         self.assertIn(
-            '--source-repository "{{.PROVENANCE_REPOSITORY}}"',
+            '--source-url "{{.PROVENANCE_URL}}"',
             section,
         )
 
@@ -76,7 +76,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
                 self.assertIsNotNone(re.fullmatch(trigger, changed_path))
         self.assertIsNone(re.fullmatch(trigger, "docs/hermes-agent/bootstrap.md"))
 
-    def test_workflow_checks_out_the_validated_commit_and_runs_host_gate(
+    def test_workflow_fetches_only_the_validated_blob_and_runs_host_gate(
         self,
     ) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -86,46 +86,25 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         )
         provenance = json.loads(PROVENANCE.read_text(encoding="ascii"))
 
-        self.assertEqual(len(checkout_pins), 2)
+        self.assertEqual(len(checkout_pins), 1)
         self.assertEqual(len(set(checkout_pins)), 1)
-        self.assertEqual(workflow.count("persist-credentials: false"), 2)
-        provenance_checkout = workflow.split(
-            "      - name: Checkout provenance-pinned hermes-home\n",
-            maxsplit=1,
-        )[1]
-        provenance_checkout = provenance_checkout.split(
-            "\n      - name:",
-            maxsplit=1,
-        )[0]
-        self.assertIn(
-            'repository: "rurusasu/hermes-home"',
-            provenance_checkout,
-        )
-        self.assertIn(
-            "ref: ${{ steps.provenance.outputs.source_commit }}",
-            provenance_checkout,
-        )
-        self.assertIn("path: hermes-home-provenance", provenance_checkout)
-        self.assertEqual(
-            provenance_checkout.count(
-                "token: ${{ secrets.HERMES_HOME_READ_TOKEN }}"
-            ),
-            1,
-        )
+        self.assertEqual(workflow.count("persist-credentials: false"), 1)
+        self.assertNotIn("Checkout provenance-pinned hermes-home", workflow)
+        self.assertNotIn("hermes-home-provenance", workflow)
         self.assertEqual(workflow.count("secrets.HERMES_HOME_READ_TOKEN"), 1)
         self.assertNotIn(provenance["source_commit"], workflow)
-        self.assertIn("id: provenance", workflow)
-        self.assertIn(
-            f"{VERIFIER_COMMAND} source-commit --dotfiles-repository .",
-            workflow,
-        )
+        self.assertNotIn("id: provenance", workflow)
         self.assertIn(
             f"{VERIFIER_COMMAND} verify --dotfiles-repository .",
             workflow,
         )
         self.assertIn(
-            "HERMES_HOME_PROVENANCE_REPOSITORY: "
-            "${{ github.workspace }}/hermes-home-provenance",
+            "HERMES_HOME_READ_TOKEN: "
+            "${{ secrets.HERMES_HOME_READ_TOKEN }}",
+            workflow,
+        )
+        self.assertIn(
+            '--source-url "https://github.com/rurusasu/hermes-home.git"',
             workflow,
         )
         self.assertIn('"Taskfile.yml"', workflow)

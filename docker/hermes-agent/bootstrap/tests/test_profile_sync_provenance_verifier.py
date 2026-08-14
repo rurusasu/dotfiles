@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -17,6 +19,15 @@ FIXTURE_PATH = Path(
 PROVENANCE_PATH = FIXTURE_PATH.with_name("profile_sync.provenance.json")
 SOURCE_PATH = Path("scripts/profile_sync.sh")
 SOURCE_REPOSITORY = "rurusasu/hermes-home"
+
+VERIFIER_SPEC = importlib.util.spec_from_file_location(
+    "profile_sync_provenance_verifier_under_test",
+    VERIFIER,
+)
+assert VERIFIER_SPEC is not None and VERIFIER_SPEC.loader is not None
+VERIFIER_MODULE = importlib.util.module_from_spec(VERIFIER_SPEC)
+sys.modules[VERIFIER_SPEC.name] = VERIFIER_MODULE
+VERIFIER_SPEC.loader.exec_module(VERIFIER_MODULE)
 
 
 class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
@@ -68,6 +79,27 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
             "profile sync provenance verified\n",
         )
         self.assertEqual(result.stderr, "")
+
+    def test_accepts_matching_source_from_git_url_without_a_worktree(self) -> None:
+        result = self._verify(source_url=self.source.resolve().as_uri())
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "profile sync provenance verified\n",
+        )
+        self.assertEqual(result.stderr, "")
+
+    def test_does_not_send_private_token_to_an_override_url(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"HERMES_HOME_READ_TOKEN": "secret-marker"},
+        ):
+            environment = VERIFIER_MODULE._source_auth_environment(
+                "https://example.invalid/hermes-home.git"
+            )
+
+        self.assertEqual(environment, {})
 
     def test_ignores_an_inherited_git_index_file_from_a_parent_hook(self) -> None:
         environment = os.environ.copy()
@@ -485,13 +517,18 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
         *,
         dotfiles: Path | None = None,
         source: Path | None = None,
+        source_url: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        source_arguments = (
+            ("--source-url", source_url)
+            if source_url is not None
+            else ("--source-repository", str(source or self.source))
+        )
         return self._run_verifier(
             "verify",
             "--dotfiles-repository",
             str(dotfiles or self.dotfiles),
-            "--source-repository",
-            str(source or self.source),
+            *source_arguments,
         )
 
     def _assert_failure(

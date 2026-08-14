@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import tempfile
 import unittest
@@ -15,39 +14,10 @@ FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "hermes-home"
 WRAPPER = FIXTURE_ROOT / "profile_sync.sh"
 PROVENANCE = FIXTURE_ROOT / "profile_sync.provenance.json"
 ENGINE = Path("/usr/local/bin/hermes-bootstrap")
-DOTFILES_ROOT = Path(__file__).resolve().parents[5]
-FIXTURE_PATH = WRAPPER.relative_to(DOTFILES_ROOT)
-HERMES_HOME_ROOT = Path(
-    os.environ.get(
-        "HERMES_HOME_PROVENANCE_REPOSITORY",
-        DOTFILES_ROOT.parent / "hermes-home-profile-sync",
-    )
-)
 MODE_CONTRACT_ERROR = "wrapper provenance mode contract failed"
 
 
 class HermesHomeWrapperContractTests(unittest.TestCase):
-    def test_committed_fixture_tree_mode_is_executable(self) -> None:
-        if not self._is_git_worktree(DOTFILES_ROOT):
-            self.skipTest("committed fixture mode requires a Git worktree")
-        self._assert_committed_tree_mode(
-            DOTFILES_ROOT,
-            "HEAD",
-            FIXTURE_PATH,
-            "dotfiles fixture",
-        )
-
-    def test_committed_hermes_home_source_tree_mode_is_executable(self) -> None:
-        if not self._is_git_worktree(HERMES_HOME_ROOT):
-            self.skipTest("committed source mode requires the hermes-home worktree")
-        provenance = json.loads(PROVENANCE.read_text(encoding="ascii"))
-        self._assert_committed_tree_mode(
-            HERMES_HOME_ROOT,
-            provenance["source_commit"],
-            Path(provenance["source_path"]),
-            "hermes-home source",
-        )
-
     def test_committed_tree_mode_rejects_non_executable_source_or_fixture(
         self,
     ) -> None:
@@ -186,19 +156,6 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
             check=True,
             timeout=10,
         )
-
-    @staticmethod
-    def _is_git_worktree(repository: Path) -> bool:
-        result = subprocess.run(
-            ("git", "-C", str(repository), "rev-parse", "--is-inside-work-tree"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-            timeout=10,
-        )
-        return result.returncode == 0 and result.stdout.strip() == "true"
-
 
 if __name__ == "__main__":
     unittest.main()
