@@ -120,6 +120,7 @@ line_of() {
 	[ "$status" -eq 0 ]
 	grep -q "nixos-rebuild user=test-user home=$HOME uid=1000 gid=1000 group=users args=switch --flake $REPO_ROOT#linux --impure" "$COMMAND_LOG"
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
+	[ "$(line_of 'nix flake update --flake')" -lt "$(line_of nixos-rebuild)" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" ]

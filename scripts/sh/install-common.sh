@@ -42,6 +42,24 @@ dotfiles_load_nix() {
   fi
 }
 
+dotfiles_update_flake() {
+  local flake_root="${1:-${DOTFILES_ROOT:-}}"
+  if [[ ${DOTFILES_SKIP_FLAKE_UPDATE:-0} == 1 ]]; then
+    dotfiles_log "Skipping flake input update."
+    return 0
+  fi
+  [[ -n $flake_root ]] || dotfiles_die "A flake root is required for input updates."
+  [[ -f $flake_root/flake.nix ]] || dotfiles_die "Flake configuration is missing: $flake_root/flake.nix"
+  dotfiles_have nix || dotfiles_die "Nix is required to update flake inputs."
+
+  dotfiles_log "Updating flake inputs..."
+  (
+    cd "$flake_root" || exit 1
+    NIX_CONFIG="experimental-features = nix-command flakes" \
+      nix flake update --flake "$flake_root"
+  )
+}
+
 dotfiles_canonical_directory() {
   (
     cd "$1" || exit 1

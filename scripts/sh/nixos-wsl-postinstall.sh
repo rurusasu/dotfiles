@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=/dev/null
+. "$SCRIPT_ROOT/install-common.sh"
+
 usage() {
   cat <<'USAGE'
 Usage: nixos-wsl-postinstall.sh [options]
@@ -307,8 +311,7 @@ fi
 
 if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
   # Update flake inputs so first install uses the latest Nix sources.
-  NIX_CONFIG="experimental-features = nix-command flakes" \
-    nix flake update --flake "$TARGET_DIR"
+  dotfiles_update_flake "$TARGET_DIR"
 else
   echo "Skipping flake update."
 fi

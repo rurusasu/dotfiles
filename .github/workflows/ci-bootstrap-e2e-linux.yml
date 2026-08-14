@@ -31,6 +31,9 @@ concurrency:
 
 env:
   TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # Bootstrap E2E must remain reproducible. Production installs update all
+  # flake inputs by default; these tests exercise the committed lock file.
+  DOTFILES_SKIP_FLAKE_UPDATE: "1"
 
 jobs:
   ubuntu:
@@ -162,7 +165,7 @@ jobs:
 
           # The variables below must expand inside the Debian machine.
           # shellcheck disable=SC2016
-          bootstrap='cd /workspace; ./.github/e2e/run-bootstrap-acceptance.sh'
+          bootstrap='export DOTFILES_SKIP_FLAKE_UPDATE=1; cd /workspace; ./.github/e2e/run-bootstrap-acceptance.sh'
           # shellcheck disable=SC2016
           verify='export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
           run_inside "$bootstrap"
