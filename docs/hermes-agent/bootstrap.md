@@ -584,13 +584,15 @@ Changes under `docker/hermes-agent/`, or to `Taskfile.yml`,
 `task hermes:bootstrap:test` through the local `hermes-bootstrap-tests`
 pre-commit hook. Pull requests run the same pinned Docker stage and the `gh`
 wrapper security suite in the `Hermes Bootstrap Tests` workflow. Both paths
-also run the same host-side profile-sync provenance verifier. Locally it reads
-the sibling `hermes-home-profile-sync` worktree; GitHub Actions checks out
-`rurusasu/hermes-home` at the validated provenance commit first. That private
-checkout requires the `HERMES_HOME_READ_TOKEN` repository secret with read-only
-Contents access, and the provenance commit must already exist on the remote.
-The verifier requires clean tracked source and fixture paths, exact bytes, Git
-blob IDs, SHA-256, and committed tree mode `100755`. Task 5 integration
+also run the same host-side profile-sync provenance verifier. The verifier
+fetches the validated `rurusasu/hermes-home` commit into a temporary bare Git
+repository with blob filtering, then reads only the recorded source blob. It
+does not create a source worktree. GitHub Actions supplies the private
+repository's `HERMES_HOME_READ_TOKEN` secret with read-only Contents access;
+local runs use the authenticated GitHub CLI keyring. The provenance commit
+must already exist on the remote. The verifier requires a clean tracked
+fixture, exact bytes, Git blob IDs, SHA-256, and committed tree mode `100755`.
+Task 5 integration
 coverage is the publication gate for aggregate preflight, exact-tree deletion,
 local immutability, missing-only bootstrap install, continuation, retry, and
 result serialization.
