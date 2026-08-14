@@ -9,49 +9,6 @@ BeforeAll {
         Get-Content -LiteralPath (Join-Path $script:repoRoot $Path) -Raw | ConvertFrom-Json
     }
 
-    function Get-WindowsTerminalCommandForKey {
-        param(
-            [Parameter(Mandatory)]
-            $Settings,
-            [Parameter(Mandatory)]
-            [string]$Keys
-        )
-
-        $binding = @($Settings.keybindings | Where-Object { $_.keys -eq $Keys }) | Select-Object -First 1
-        if (-not $binding) { return $null }
-
-        $inlineCommand = $binding.PSObject.Properties["command"]
-        if ($inlineCommand) { return $inlineCommand.Value }
-
-        $idProperty = $binding.PSObject.Properties["id"]
-        if (-not $idProperty) { return $null }
-        $id = $idProperty.Value
-        if (-not $id) { return $null }
-
-        $action = @($Settings.actions | Where-Object { $_.id -eq $id }) | Select-Object -First 1
-        if (-not $action) { return $null }
-
-        return $action.command
-    }
-
-    function Assert-WindowsTerminalDirectionalAction {
-        param(
-            [Parameter(Mandatory)]
-            $Settings,
-            [Parameter(Mandatory)]
-            [string]$Keys,
-            [Parameter(Mandatory)]
-            [string]$Action,
-            [Parameter(Mandatory)]
-            [string]$Direction
-        )
-
-        $command = Get-WindowsTerminalCommandForKey -Settings $Settings -Keys $Keys
-        $command | Should -Not -BeNullOrEmpty -Because "$Keys should be bound"
-        $command.action | Should -Be $Action -Because "$Keys should use $Action"
-        $command.direction | Should -Be $Direction -Because "$Keys should point $Direction"
-    }
-
     function Assert-KeyCommand {
         param(
             [Parameter(Mandatory)]
@@ -72,6 +29,36 @@ BeforeAll {
         $workspace | Should -Not -BeNullOrEmpty
         return $workspace.bindings
     }
+
+    function Get-AutoHotkeyTerminalSuffixMap {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Content
+        )
+
+        $mapping = @{}
+        foreach ($match in [regex]::Matches($Content, '"([^"]+\|(?:shift)?)"\s*,\s*"\{(F(?:1[3-9]|2[0-3]))\}"')) {
+            $mapping[$match.Groups[1].Value] = $match.Groups[2].Value.ToLowerInvariant()
+        }
+        return $mapping
+    }
+
+    function Resolve-AutoHotkeyTerminalSuffix {
+        param(
+            [Parameter(Mandatory)]
+            [hashtable]$Mapping,
+            [Parameter(Mandatory)]
+            [string]$Key,
+            [string[]]$Modifiers = @()
+        )
+
+        $normalizedModifiers = @($Modifiers | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
+        if (@($normalizedModifiers | Where-Object { $_ -ne 'shift' }).Count -gt 0) { return $null }
+        if ($normalizedModifiers.Count -eq 1 -and $normalizedModifiers[0] -eq 'shift' -and $Key -ne 'tab') { return $null }
+
+        $signature = if ($normalizedModifiers.Count -eq 1) { 'shift' } else { '' }
+        return $Mapping["$($Key.ToLowerInvariant())|$signature"]
+    }
 }
 
 Describe '標準キーバインド方針' {
@@ -88,23 +75,115 @@ Describe '標準キーバインド方針' {
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
-    It 'Windows Terminal は Alt 矢印 focus, Alt+Shift swap/resize に揃えること' {
+    It 'should expose only F13-F23 for Windows Terminal window-manager actions' {
         $settings = Get-JsonContent "chezmoi/terminals/windows-terminal/settings.json"
 
-        Assert-WindowsTerminalDirectionalAction $settings "alt+left" "moveFocus" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+down" "moveFocus" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+up" "moveFocus" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+right" "moveFocus" "right"
+        $transport = [ordered]@{
+            f13 = 'User.newTab'
+            f14 = 'User.closeTab'
+            f15 = 'User.nextTab'
+            f16 = 'User.prevTab'
+            f17 = 'User.moveFocus.left'
+            f18 = 'User.moveFocus.down'
+            f19 = 'User.moveFocus.up'
+            f20 = 'User.moveFocus.right'
+            f21 = 'User.splitPane.horizontal'
+            f22 = 'User.splitPane.vertical'
+            f23 = 'User.closePane'
+        }
+        foreach ($entry in $transport.GetEnumerator()) {
+            $bindings = @($settings.keybindings | Where-Object keys -eq $entry.Key)
+            $bindings.Count | Should -Be 1 -Because "$($entry.Key) should have exactly one transport binding"
+            $bindings[0].id | Should -Be $entry.Value
+            $actionBindings = @($settings.keybindings | Where-Object id -eq $entry.Value)
+            $actionBindings.Count | Should -Be 1 -Because "$($entry.Value) should not retain a direct legacy binding"
+            $actionBindings[0].keys | Should -Be $entry.Key
+        }
 
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+h" "swapPane" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+j" "swapPane" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+k" "swapPane" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+l" "swapPane" "right"
+        $legacyKeys = @(
+            'ctrl+tab', 'ctrl+shift+tab', 'ctrl+alt+t', 'ctrl+shift+w',
+            'alt+left', 'alt+down', 'alt+up', 'alt+right',
+            'alt+shift+plus', 'alt+shift+minus',
+            'alt+shift+h', 'alt+shift+j', 'alt+shift+k', 'alt+shift+l',
+            'alt+shift+left', 'alt+shift+down', 'alt+shift+up', 'alt+shift+right'
+        )
+        @($settings.keybindings | Where-Object keys -in $legacyKeys) | Should -BeNullOrEmpty
 
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+left" "resizePane" "left"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+down" "resizePane" "down"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+up" "resizePane" "up"
-        Assert-WindowsTerminalDirectionalAction $settings "alt+shift+right" "resizePane" "right"
+        $preserved = [ordered]@{
+            'ctrl+c' = 'User.copy'
+            'ctrl+v' = 'User.paste'
+            'ctrl+shift+f' = 'User.find'
+            'shift+enter' = 'User.sendInput.ShiftEnter'
+            'ctrl+enter' = 'User.sendInput.CtrlEnter'
+            'ctrl+alt+w' = 'User.togglePaneZoom'
+            'f11' = 'User.toggleFullscreen'
+            'ctrl+shift+0' = 'User.resetFontSize'
+            'ctrl+shift+plus' = 'User.increaseFontSize'
+            'ctrl+shift+minus' = 'User.decreaseFontSize'
+        }
+        foreach ($entry in $preserved.GetEnumerator()) {
+            @($settings.keybindings | Where-Object keys -eq $entry.Key).id | Should -Be $entry.Value
+        }
+    }
+
+    It 'should implement the Windows Terminal AutoHotkey prefix state and mapping contract' {
+        $path = Join-Path $script:chezmoiRoot 'terminals/windows-terminal/terminal-keybindings.ahk'
+        Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
+        $ahk = Get-Content -LiteralPath $path -Raw
+        $mapping = Get-AutoHotkeyTerminalSuffixMap -Content $ahk
+
+        $cases = @(
+            @{ Key = 'n'; Modifiers = @(); Expected = 'f13' },
+            @{ Key = 'q'; Modifiers = @(); Expected = 'f14' },
+            @{ Key = 'tab'; Modifiers = @(); Expected = 'f15' },
+            @{ Key = 'tab'; Modifiers = @('shift'); Expected = 'f16' },
+            @{ Key = 'h'; Modifiers = @(); Expected = 'f17' },
+            @{ Key = 'j'; Modifiers = @(); Expected = 'f18' },
+            @{ Key = 'k'; Modifiers = @(); Expected = 'f19' },
+            @{ Key = 'l'; Modifiers = @(); Expected = 'f20' },
+            @{ Key = 'v'; Modifiers = @(); Expected = 'f21' },
+            @{ Key = '-'; Modifiers = @(); Expected = 'f22' },
+            @{ Key = 'x'; Modifiers = @(); Expected = 'f23' },
+            @{ Key = 'w'; Modifiers = @(); Expected = $null },
+            @{ Key = 'a'; Modifiers = @(); Expected = $null },
+            @{ Key = 'g'; Modifiers = @(); Expected = $null },
+            @{ Key = 'd'; Modifiers = @(); Expected = $null },
+            @{ Key = 'escape'; Modifiers = @(); Expected = $null },
+            @{ Key = 'n'; Modifiers = @('shift'); Expected = $null },
+            @{ Key = 'n'; Modifiers = @('ctrl'); Expected = $null },
+            @{ Key = 'tab'; Modifiers = @('ctrl'); Expected = $null },
+            @{ Key = 'tab'; Modifiers = @('shift', 'alt'); Expected = $null }
+        )
+        foreach ($case in $cases) {
+            Resolve-AutoHotkeyTerminalSuffix -Mapping $mapping -Key $case.Key -Modifiers $case.Modifiers |
+                Should -Be $case.Expected -Because "$($case.Key) with [$($case.Modifiers -join ',')] should resolve exactly"
+        }
+        $mapping.Count | Should -Be 11
+
+        $ahk | Should -Match '#Requires AutoHotkey v2\.0'
+        $ahk | Should -Match '#HotIf WinActive\("ahk_exe WindowsTerminal\.exe"\).*IsExactTerminalPrefix\(\)'
+        $ahk | Should -Match '\$\^Space::StartTerminalPrefix\(\)'
+        $ahk | Should -Match 'InputHook\("T1"\)'
+        $ahk | Should -Match 'KeyOpt\("\{All\}", "NS"\)'
+        $ahk | Should -Match 'KeyOpt\("\{LCtrl\}\{RCtrl\}\{LAlt\}\{RAlt\}\{LShift\}\{RShift\}\{LWin\}\{RWin\}", "-S"\)'
+        $ahk | Should -Match 'A_Args\[1\] = "--check"'
+        $ahk | Should -Match 'SendEvent "\{Ctrl down\}\{Space\}\{Ctrl up\}"'
+        $ahk | Should -Match '(?s)if TerminalPrefixPending.*?TerminalInputHook\.Stop\(\).*?TerminalPrefixPending := false.*?SendEvent "\{Ctrl down\}\{Space\}\{Ctrl up\}".*?return'
+        $ahk | Should -Match '(?s)IsExactTerminalPrefix\(\).*?GetKeyState\("Shift", "P"\).*?GetKeyState\("Alt", "P"\).*?GetKeyState\("LWin", "P"\).*?GetKeyState\("RWin", "P"\)'
+        $ahk | Should -Match '(?s)ResolveTerminalSuffix\(key\).*?GetKeyState\("Ctrl", "P"\).*?GetKeyState\("Alt", "P"\).*?GetKeyState\("LWin", "P"\).*?GetKeyState\("RWin", "P"\)'
+        $ahk | Should -Match '(?s)IsTerminalModifierKey\(key\).*?return'
+        $ahk | Should -Not -Match '(?i)Stop-Process|taskkill|ProcessClose'
+
+        if ($IsWindows) {
+            $autoHotkey = @(
+                "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe",
+                "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe"
+            ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            $autoHotkey | Should -Not -BeNullOrEmpty -Because 'Windows CI must install AutoHotkey v2 for syntax validation'
+
+            & $autoHotkey '/ErrorStdOut' $path '--check'
+            $LASTEXITCODE | Should -Be 0
+        }
     }
 
     It 'WezTerm は共通 terminal window-manager 契約と nested prefix を提供すること' {
