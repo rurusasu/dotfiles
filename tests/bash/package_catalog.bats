@@ -152,9 +152,23 @@ setup() {
 }
 
 @test "terminal keybinding helpers have platform-scoped providers" {
-	run rg -U '(?s)hammerspoon = \{.*?category = "terminal";.*?darwin = \{.*?provider = "homebrew-cask";.*?cask = "hammerspoon";' "$REPO_ROOT/nix/packages/sets.nix"
+	run awk '
+		/^    hammerspoon = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
 	[ "$status" -eq 0 ]
+	[[ "$output" == *'category = "terminal"'* ]]
+	[[ "$output" == *'provider = "homebrew-cask"'* ]]
+	[[ "$output" == *'cask = "hammerspoon"'* ]]
 
-	run rg -U '(?s)autohotkey = \{.*?winget = "AutoHotkey\.AutoHotkey";.*?category = "terminal";.*?windows = \{.*?provider = "winget";' "$REPO_ROOT/nix/packages/sets.nix"
+	run awk '
+		/^    autohotkey = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
 	[ "$status" -eq 0 ]
+	[[ "$output" == *'winget = "AutoHotkey.AutoHotkey"'* ]]
+	[[ "$output" == *'category = "terminal"'* ]]
+	[[ "$output" == *'provider = "winget"'* ]]
 }
