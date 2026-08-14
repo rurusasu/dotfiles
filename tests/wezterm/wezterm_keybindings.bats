@@ -7,6 +7,16 @@ setup() {
 	WEZTERM_CONFIG="$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua"
 }
 
+@test "WezTerm nested leader forwards Ctrl+Space while Ctrl remains held" {
+	command -v wezterm >/dev/null
+
+	run wezterm --config-file "$WEZTERM_CONFIG" show-keys --lua
+	[ "$status" -eq 0 ]
+
+	nested_leader_binding="$(printf '%s\n' "$output" | grep "key = 'phys:Space'.*mods = 'CTRL|LEADER'.*SendKey.*key =  'Space'.*mods =  'CTRL'")"
+	[ -n "$nested_leader_binding" ]
+}
+
 @test "WezTerm workspace picker resolves without fuzzy filtering" {
 	command -v wezterm >/dev/null
 

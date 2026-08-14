@@ -132,7 +132,7 @@ config.keys = {
     { key = "w", mods = "CTRL|ALT", action = act.TogglePaneZoomState },
 
     -- Common terminal window-manager contract.
-    { key = "Space", mods = "LEADER", action = act.SendKey({ key = "Space", mods = "CTRL" }) },
+    { key = "Space", mods = "LEADER|CTRL", action = act.SendKey({ key = "Space", mods = "CTRL" }) },
     { key = "w", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "WORKSPACES" }) },
     {
         key = "a",
