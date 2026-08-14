@@ -85,6 +85,16 @@ setup() {
 	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
 }
 
+@test "Discord is a cross-platform desktop package" {
+	run grep -n -A12 '^    discord = {' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;'* ]]
+	[[ "$output" == *'winget = "Discord.Discord";'* ]]
+	[[ "$output" == *'category = "desktop";'* ]]
+	[[ "$output" == *'provider = "homebrew-cask";'* ]]
+	[[ "$output" == *'cask = "discord"'* ]]
+}
+
 @test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
 	run awk '
 		/wezterm = \{/ { in_entry=1 }
