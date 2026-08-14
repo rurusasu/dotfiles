@@ -85,6 +85,31 @@ setup() {
 	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
 }
 
+@test "Discord is a cross-platform desktop package" {
+	run grep -n -A12 '^    discord = {' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;'* ]]
+	[[ "$output" == *'winget = "Discord.Discord";'* ]]
+	[[ "$output" == *'category = "desktop";'* ]]
+	[[ "$output" == *'provider = "homebrew-cask";'* ]]
+	[[ "$output" == *'cask = "discord"'* ]]
+}
+
+@test "WSL excludes the native Discord package" {
+	run grep -n -A3 'homeExtraSpecialArgs' "$REPO_ROOT/nix/flakes/hosts.nix"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'isWSL = true;'* ]]
+}
+
+@test "generated Windows manifest contains Discord" {
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+	run jq -e '
+		[.Sources[] | select(.SourceDetails.Name == "winget") | .Packages[]
+		 | select(.PackageIdentifier == "Discord.Discord")] | length == 1
+	' "$REPO_ROOT/windows/winget/packages.json"
+	[ "$status" -eq 0 ]
+}
+
 @test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
 	run awk '
 		/wezterm = \{/ { in_entry=1 }

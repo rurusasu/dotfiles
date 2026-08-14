@@ -53,6 +53,9 @@
           }
         },
         {
+          "PackageIdentifier": "Discord.Discord"
+        },
+        {
           "PackageIdentifier": "Docker.DockerDesktop"
         },
         {

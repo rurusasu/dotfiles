@@ -31,6 +31,9 @@ in
             hostPath = ../hosts/wsl;
             homeModulePath = ../home/wsl/users.nix;
             overlays = [ workmuxOverlay ];
+            homeExtraSpecialArgs = {
+              isWSL = true;
+            };
             extraModules = [
               inputs.nixos-wsl.nixosModules.wsl
             ];
@@ -56,6 +59,9 @@ in
             hostPath = ../hosts/linux;
             homeModulePath = ../home/linux/users.nix;
             overlays = [ workmuxOverlay ];
+            homeExtraSpecialArgs = {
+              isWSL = false;
+            };
             extraModules = [ (/. + hardwareConfig) ];
           }
         );

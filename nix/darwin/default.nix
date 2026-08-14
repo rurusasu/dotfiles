@@ -134,6 +134,9 @@ in
           nrs = "~/.dotfiles/install.sh";
         };
       };
-    extraSpecialArgs = { inherit inputs; };
+    extraSpecialArgs = {
+      inherit inputs;
+      isWSL = false;
+    };
   };
 }

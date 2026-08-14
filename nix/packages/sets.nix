@@ -314,6 +314,20 @@ let
     };
 
     # ── desktop applications ──────────────────────────────
+    discord = {
+      pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;
+      winget = "Discord.Discord";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "discord";
+        };
+        linux = {
+          provider = "nix";
+        };
+      };
+    };
     _1password-gui = {
       pkg = pkgs._1password-gui;
       winget = "AgileBits.1Password";
@@ -800,6 +814,9 @@ lib.mapAttrs (_: resolve) grouped
 // {
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
+  allWithout =
+    excludedNames:
+    resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
 
   # Windows: nix attr name → winget PackageIdentifier
   inherit wingetMap npmMap;

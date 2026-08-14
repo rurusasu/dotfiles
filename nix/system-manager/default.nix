@@ -60,6 +60,9 @@ in
     useUserPackages = true;
     backupFileExtension = "hm-backup";
     users.${user} = import ../home/common.nix;
-    extraSpecialArgs = { inherit inputs; };
+    extraSpecialArgs = {
+      inherit inputs;
+      isWSL = false;
+    };
   };
 }
