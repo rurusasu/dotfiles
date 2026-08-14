@@ -19,6 +19,7 @@ setup() {
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'

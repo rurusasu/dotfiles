@@ -102,6 +102,7 @@ docker_command() {
 main() {
   preflight
   dotfiles_link_checkout "$ROOT"
+  dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
   apply_nixos_system

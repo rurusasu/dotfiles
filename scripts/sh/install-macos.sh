@@ -302,6 +302,7 @@ main() {
   stop_existing_docker_desktop
   repair_homebrew_cask_link_directories
   apply_darwin_system
+  dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime
