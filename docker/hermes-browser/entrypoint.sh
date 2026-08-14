@@ -4,13 +4,22 @@ set -eu
 mkdir -p /data
 
 if ! touch /data/.hermes-browser-write-test 2>/dev/null; then
-  echo "The Google Chrome profile bind mount at /data must be writable by hermes-browser without disabling the sandbox." >&2
+  echo "The browser profile bind mount at /data must be writable by hermes-browser without disabling the sandbox." >&2
   exit 1
 fi
 
 rm -f /data/.hermes-browser-write-test
 # Remove only stale browser singleton markers from the dedicated /data profile.
 rm -f /data/SingletonLock /data/SingletonSocket /data/SingletonCookie
+
+if command -v /usr/bin/google-chrome-stable >/dev/null 2>&1; then
+  browser_binary=/usr/bin/google-chrome-stable
+elif command -v /usr/bin/chromium >/dev/null 2>&1; then
+  browser_binary=/usr/bin/chromium
+else
+  echo "No supported browser binary was found in the Hermes browser image" >&2
+  exit 1
+fi
 
 export DISPLAY="${DISPLAY:-:99}"
 display_number="${DISPLAY#*:}"
@@ -194,7 +203,7 @@ PY
 socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 EXEC:"python3 /tmp/hermes-cdp-forwarder.py",nofork &
 cdp_pid=$!
 
-/usr/bin/google-chrome-stable \
+"$browser_binary" \
   --lang=ja \
   --disable-background-timer-throttling \
   --disable-renderer-backgrounding \

@@ -80,6 +80,7 @@ class ComposeContractTests(unittest.TestCase):
     def test_browser_mcp_and_novnc_share_the_compose_chromium_process(self) -> None:
         chromium = self.services["chromium"]
         browser_mcp = self.services["browser-mcp"]
+        self.assertNotIn("platform", chromium)
         self.assertEqual(
             browser_mcp["depends_on"],
             {"chromium": {"condition": "service_healthy"}},
@@ -128,6 +129,22 @@ class ComposeContractTests(unittest.TestCase):
         self.assertNotIn(
             "--disable-gpu", entrypoint_path.read_text(encoding="utf-8")
         )
+
+    def test_browser_image_selects_a_native_browser_for_each_supported_architecture(self) -> None:
+        dockerfile_path = REPOSITORY_ROOT / "docker/hermes-browser/Dockerfile"
+        entrypoint_path = REPOSITORY_ROOT / "docker/hermes-browser/entrypoint.sh"
+        if not dockerfile_path.is_file() or not entrypoint_path.is_file():
+            self.skipTest("hermes-browser source is outside the bootstrap test context")
+
+        dockerfile = dockerfile_path.read_text(encoding="utf-8")
+        entrypoint = entrypoint_path.read_text(encoding="utf-8")
+
+        self.assertIn("ARG TARGETARCH", dockerfile)
+        self.assertIn('amd64)', dockerfile)
+        self.assertIn('arm64)', dockerfile)
+        self.assertIn("apt-get install -y --no-install-recommends chromium", dockerfile)
+        self.assertIn("command -v /usr/bin/google-chrome-stable", entrypoint)
+        self.assertIn("command -v /usr/bin/chromium", entrypoint)
 
     def test_xapi_mcp_is_an_internal_shared_service(self) -> None:
         xapi = self.services.get("xapi-mcp")

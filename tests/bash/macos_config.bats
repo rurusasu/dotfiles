@@ -113,13 +113,17 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Chromium Compose service is pinned to linux amd64" {
+@test "Chromium Compose service follows the host platform" {
 	run awk '
 		/^  chromium:/ { in_chromium=1; next }
 		in_chromium && /^  [A-Za-z0-9_-]+:/ { exit }
-		in_chromium && /platform: linux\/amd64/ { found=1 }
-		END { exit(found ? 0 : 1) }
+		in_chromium && /platform:/ { found=1 }
+		END { exit(found ? 1 : 0) }
 	' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+	[ "$status" -eq 0 ]
+	run grep -F 'ARG TARGETARCH' "$REPO_ROOT/docker/hermes-browser/Dockerfile"
+	[ "$status" -eq 0 ]
+	run grep -F 'arm64)' "$REPO_ROOT/docker/hermes-browser/Dockerfile"
 	[ "$status" -eq 0 ]
 }
 
