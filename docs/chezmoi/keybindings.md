@@ -15,6 +15,7 @@
 | `Ctrl+Space`                        | terminal Window Manager prefix        | `Ctrl+Space` + suffix               |
 | `Ctrl+Space Ctrl+Space`             | nested terminal へ prefix を1回転送   | `Ctrl+Space Ctrl+Space` + suffix    |
 | `Ctrl+Command` (WezTerm macOS)      | 契約外の GUI pane resize              | `Ctrl+Command+矢印`                 |
+| `Ctrl+Command+M` (macOS)            | GUI window zoom / restore             | `Ctrl+Command+M`                    |
 | `Command+Alt` (WezTerm macOS)       | 契約外の GUI window focus             | `Command+Alt+H/L`                   |
 | `Alt+Shift` (WezTerm Windows/Linux) | 契約外の GUI window focus/pane resize | `Alt+Shift+H/L` / `Alt+Shift+矢印`  |
 | `Ctrl`                              | Unix/Vim/tmux focus                   | `Ctrl+H/J/K/L`                      |
@@ -66,6 +67,9 @@ Hammerspoon の初回設定は次の順で行う。
 4. Terminal.app を前面にして `Ctrl+Space n` で新規 tab が開くこと、Terminal.app 以外では同じ入力が捕捉されないことを確認する。
 
 Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
+
+- macOS の全アプリに `Ctrl+Command+M` を割り当て、標準メニューの `Zoom` または `拡大／縮小` を実行する。
+- 設定反映後は対象アプリを再起動する。対象メニューを持たないアプリや、一部のElectronアプリでは動作しない場合がある。
 
 ### Editors
 

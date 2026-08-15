@@ -72,6 +72,15 @@ in
       runAsUser /usr/bin/killall SystemUIServer 2>/dev/null || true
       runAsUser /usr/bin/open -gj -a Raycast 2>/dev/null || true
     '';
+    activationScripts.globalZoomShortcut.text = ''
+      uid="$(id -u -- ${lib.escapeShellArg user})"
+      runAsUser() {
+        launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
+      }
+
+      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
+      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
+    '';
   };
 
   nix.settings.experimental-features = [
