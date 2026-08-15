@@ -12,6 +12,8 @@ COPY gh-wrapper.sh /usr/local/bin/gh
 COPY bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap
 COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap
+COPY hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
+RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
 
 RUN python3 - <<'PY'
 import re
@@ -140,6 +142,7 @@ COPY Dockerfile /workspace/docker/hermes-agent/Dockerfile
 COPY compose.yml /workspace/docker/hermes-agent/compose.yml
 COPY hindsight.env /workspace/docker/hermes-agent/hindsight.env
 COPY bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
+COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
 COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
