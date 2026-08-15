@@ -604,7 +604,10 @@ def run_seed(
                 providers[profile],
                 "hindsight_retain",
                 {
-                    "content": sentinels[profile],
+                    "content": (
+                        "For Hermes acceptance, the durable memory token assigned to "
+                        f"profile {profile} is {sentinels[profile]}."
+                    ),
                     "context": "Hermes acceptance sentinel",
                 },
                 clock=clock,

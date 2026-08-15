@@ -343,6 +343,41 @@ class HindsightAcceptanceTests(unittest.TestCase):
         for profile in PROFILES:
             self.assertIn((profile, state["sentinels"][profile]), recall_calls)
 
+    def test_seed_retains_each_sentinel_as_a_durable_fact_payload(self) -> None:
+        world = ProviderWorld()
+
+        acceptance.run_seed(
+            api_url="http://hindsight:8888",
+            profiles=PROFILES,
+            timeout=300,
+            state_path=self.state,
+            provider_factory=world.factory,
+            clock=StepClock(),
+            sleeper=lambda _: None,
+            token_hex=TokenSource(),
+        )
+
+        state = json.loads(self.state.read_text(encoding="utf-8"))
+        retain_calls = {
+            provider.profile: args
+            for provider in world.instances
+            for tool, args in provider.calls
+            if tool == "hindsight_retain"
+        }
+        self.assertEqual(set(retain_calls), set(PROFILES))
+        for profile in PROFILES:
+            sentinel = state["sentinels"][profile]
+            self.assertEqual(
+                retain_calls[profile],
+                {
+                    "content": (
+                        "For Hermes acceptance, the durable memory token assigned to "
+                        f"profile {profile} is {sentinel}."
+                    ),
+                    "context": "Hermes acceptance sentinel",
+                },
+            )
+
     def test_seed_rejects_cross_profile_sentinel_and_preserves_state(self) -> None:
         world = ProviderWorld()
         world.leak_cross_profile = True
