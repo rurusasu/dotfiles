@@ -8,6 +8,7 @@ setup() {
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
+	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	SECRET_MARKER="adapter-secret-marker"
@@ -16,6 +17,7 @@ setup() {
 	: >"$PAYLOAD_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
+	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
 	: >"$COMPOSE_FILE"
 	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
 HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
@@ -24,7 +26,7 @@ EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
-	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -40,6 +42,7 @@ EOF
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
+	export HINDSIGHT_API_READY_AFTER=1
 	export OLLAMA_PULL_FAILURE=""
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
@@ -126,9 +129,13 @@ case " $* " in
     exit 0
     ;;
   *"127.0.0.1:8888/health "*)
+		attempt="$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")"
+		attempt=$((attempt + 1))
+		printf "%s\n" "$attempt" >"$HINDSIGHT_READY_ATTEMPT_FILE"
     printf "curl" >>"$COMMAND_LOG"
     printf " <%s>" "$@" >>"$COMMAND_LOG"
     printf "\n" >>"$COMMAND_LOG"
+		if ((attempt < HINDSIGHT_API_READY_AFTER)); then exit 22; fi
     printf "{\"status\":\"healthy\",\"database\":\"%s\"}\n" "$HINDSIGHT_API_DATABASE"
     exit 0
     ;;
@@ -952,6 +959,22 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[[ "$output" == *"Hindsight API did not become ready after 1 attempts."* ]]
 	grep -q '<up> <-d> <hindsight>' "$COMMAND_LOG"
 	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "default Hindsight readiness covers a 172-second cold start" {
+	unset HINDSIGHT_API_READY_ATTEMPTS HINDSIGHT_API_READY_DELAY_SECONDS
+	export HINDSIGHT_API_READY_AFTER=87
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_hindsight_wait_for_api
+'
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")" -eq 87 ]
+	[ "$(grep -c '^sleep <2>$' "$COMMAND_LOG")" -eq 86 ]
 }
 
 @test "parses only one nonempty exact Hindsight environment assignment without evaluation" {

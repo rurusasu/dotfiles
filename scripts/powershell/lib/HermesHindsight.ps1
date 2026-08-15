@@ -139,7 +139,7 @@ function Wait-HermesHindsightApi {
         throw [System.InvalidOperationException]::new('Hindsight API port must be a positive integer between 1 and 65535.')
     }
 
-    $attempts = Get-HermesHindsightPositiveInteger -Name 'HINDSIGHT_API_READY_ATTEMPTS' -DefaultValue 30
+    $attempts = Get-HermesHindsightPositiveInteger -Name 'HINDSIGHT_API_READY_ATTEMPTS' -DefaultValue 150
     $delaySeconds = Get-HermesHindsightNonNegativeInteger -Name 'HINDSIGHT_API_READY_DELAY_SECONDS' -DefaultValue 2
     $timeoutSeconds = Get-HermesHindsightPositiveInteger -Name 'HINDSIGHT_API_PROBE_TIMEOUT_SECONDS' -DefaultValue 2
     $url = "http://127.0.0.1:$Port/health"

@@ -99,6 +99,44 @@ Describe 'HermesHindsight adapter' {
         { Wait-HermesHindsightApi } | Should -Throw '*Hindsight API did not become ready after 1 attempts*'
     }
 
+    It 'waits through a 172-second cold start with the default Hindsight readiness budget' {
+        $oldAttempts = $env:HINDSIGHT_API_READY_ATTEMPTS
+        $oldDelay = $env:HINDSIGHT_API_READY_DELAY_SECONDS
+        $script:hindsightColdStartAttempt = 0
+        try {
+            Remove-Item Env:\HINDSIGHT_API_READY_ATTEMPTS -ErrorAction SilentlyContinue
+            Remove-Item Env:\HINDSIGHT_API_READY_DELAY_SECONDS -ErrorAction SilentlyContinue
+            Mock Invoke-HermesHindsightCommand {
+                $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
+                $script:hindsightColdStartAttempt++
+                if ($script:hindsightColdStartAttempt -lt 87) {
+                    throw [System.InvalidOperationException]::new('curl failed: exit code 52')
+                }
+                '{"status":"healthy","database":"connected"}'
+            }
+            Mock Start-Sleep
+
+            Wait-HermesHindsightApi
+
+            $script:hindsightColdStartAttempt | Should -Be 87
+            Should -Invoke Start-Sleep -Times 86 -Exactly -ParameterFilter { $Seconds -eq 2 }
+        }
+        finally {
+            if ($null -eq $oldAttempts) {
+                Remove-Item Env:\HINDSIGHT_API_READY_ATTEMPTS -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:HINDSIGHT_API_READY_ATTEMPTS = $oldAttempts
+            }
+            if ($null -eq $oldDelay) {
+                Remove-Item Env:\HINDSIGHT_API_READY_DELAY_SECONDS -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:HINDSIGHT_API_READY_DELAY_SECONDS = $oldDelay
+            }
+        }
+    }
+
     It 'probes the default Hindsight API port through the production readiness helper' {
         Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
         Mock Invoke-HermesHindsightCommand {

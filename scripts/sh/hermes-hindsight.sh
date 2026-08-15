@@ -113,7 +113,7 @@ dotfiles_hermes_hindsight_prepare_host() {
 dotfiles_hermes_hindsight_wait_for_api() {
   local attempts delay_seconds timeout_seconds port attempt health
 
-  attempts="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_API_READY_ATTEMPTS:-30}" 30)"
+  attempts="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_API_READY_ATTEMPTS:-150}" 150)"
   delay_seconds="$(dotfiles_hermes_hindsight_nonnegative_integer "${HINDSIGHT_API_READY_DELAY_SECONDS:-2}" 2)"
   timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_API_PROBE_TIMEOUT_SECONDS:-2}" 2)"
   port="${HINDSIGHT_API_PORT:-8888}"
