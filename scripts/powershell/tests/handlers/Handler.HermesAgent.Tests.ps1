@@ -14,6 +14,7 @@ BeforeAll {
 
 Describe 'HermesHindsight adapter' {
     BeforeEach {
+        $script:oldHindsightApiPort = $env:HINDSIGHT_API_PORT
         $script:hindsightComposeDir = Join-Path $TestDrive 'hindsight-compose'
         $script:hindsightComposeFile = Join-Path $script:hindsightComposeDir 'compose.yml'
         $script:hindsightDataDir = Join-Path $TestDrive 'hindsight-data'
@@ -24,6 +25,15 @@ Describe 'HermesHindsight adapter' {
             'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b',
             'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
         ) -Encoding utf8
+    }
+
+    AfterEach {
+        if ($null -eq $script:oldHindsightApiPort) {
+            Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HINDSIGHT_API_PORT = $script:oldHindsightApiPort
+        }
     }
 
     It 'provisions exactly two configured models through the timeout wrapper and creates persistent directories' {
@@ -87,6 +97,38 @@ Describe 'HermesHindsight adapter' {
         Mock Invoke-HermesHindsightCommand { '{"status":"healthy","database":"disconnected"}' }
 
         { Wait-HermesHindsightApi } | Should -Throw '*Hindsight API did not become ready after 1 attempts*'
+    }
+
+    It 'probes the default Hindsight API port through the production readiness helper' {
+        Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
+        Mock Invoke-HermesHindsightCommand {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
+            '{"status":"healthy","database":"connected"}'
+        }
+
+        Wait-HermesHindsightApi
+
+        $script:hindsightCalls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health'
+    }
+
+    It 'probes the configured positive Hindsight API port through the production readiness helper' {
+        $env:HINDSIGHT_API_PORT = '9876'
+        Mock Invoke-HermesHindsightCommand {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
+            '{"status":"healthy","database":"connected"}'
+        }
+
+        Wait-HermesHindsightApi
+
+        $script:hindsightCalls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:9876/health'
+    }
+
+    It 'rejects an invalid Hindsight API port clearly' {
+        $env:HINDSIGHT_API_PORT = 'not-a-port'
+
+        { Wait-HermesHindsightApi } | Should -Throw '*HINDSIGHT_API_PORT*'
     }
 }
 
@@ -361,6 +403,56 @@ Describe 'HermesAgentHandler' {
             $result.Message | Should -Not -Match ([regex]::Escape($secret))
             $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
             $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
+        }
+
+        It 'retains bootstrap and recovery start failures in the component failure result' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                if ($Arguments -contains 'start') {
+                    $global:LASTEXITCODE = 71
+                    return 'runtime recovery start failure'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-HermesBootstrap {
+                [PSCustomObject]@{ Success = $false; Changed = $false; Message = 'bootstrap failure' }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.HandlerName | Should -Be 'HermesAgent'
+            $result.Message | Should -Match 'Hermes bootstrap failed: bootstrap failure'
+            $result.Message | Should -Match 'Hermes runtime recovery start failed: runtime recovery start failure'
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'retains bootstrap and recovery readiness timeout failures in the component failure result' {
+            $env:HERMES_API_READY_ATTEMPTS = '1'
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-HermesBootstrap {
+                [PSCustomObject]@{ Success = $false; Changed = $false; Message = 'bootstrap failure' }
+            }
+            Mock Invoke-WebRequest { throw 'not ready' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.HandlerName | Should -Be 'HermesAgent'
+            $result.Message | Should -Match 'Hermes bootstrap failed: bootstrap failure'
+            $result.Message | Should -Match 'Hermes runtime recovery readiness failed: Hermes API did not become ready after 1 attempts.'
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
         }
 
         It 'reports compose startup failure after the existing gateway was stopped' {

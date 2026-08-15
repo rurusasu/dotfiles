@@ -109,12 +109,24 @@ class HermesAgentHandler : SetupHandlerBase {
                 $bootstrap = Invoke-HermesBootstrap -ComposeFile $composeFile -DataDir $dataDir
             }
             catch {
-                if ($runtimeExisted) { $this.RecoverRuntimeAfterBootstrapFailure($composeFile) }
-                return $this.CreateFailureResult('Hermes bootstrap failed.')
+                $bootstrapFailure = 'Hermes bootstrap failed.'
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($bootstrapFailure)
             }
             if (-not $bootstrap.Success) {
-                if ($runtimeExisted) { $this.RecoverRuntimeAfterBootstrapFailure($composeFile) }
-                return $this.CreateFailureResult("Hermes bootstrap failed: $($bootstrap.Message)")
+                $bootstrapFailure = "Hermes bootstrap failed: $($bootstrap.Message)"
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($bootstrapFailure)
             }
 
             try {
@@ -293,10 +305,25 @@ class HermesAgentHandler : SetupHandlerBase {
         return [PSCustomObject]@{ Success = $true; Exists = $exists; Message = '' }
     }
 
-    hidden [void] RecoverRuntimeAfterBootstrapFailure([string]$composeFile) {
+    hidden [pscustomobject] RecoverRuntimeAfterBootstrapFailure([string]$composeFile) {
         $recovery = $this.InvokeCompose($composeFile, @('start', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
-        if ($recovery.Success) {
-            $null = $this.WaitForApi()
+        if (-not $recovery.Success) {
+            return [PSCustomObject]@{
+                Success   = $false
+                Component = 'Hermes runtime recovery start'
+                Message   = $recovery.Message
+            }
         }
+
+        if (-not $this.WaitForApi()) {
+            $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
+            return [PSCustomObject]@{
+                Success   = $false
+                Component = 'Hermes runtime recovery readiness'
+                Message   = "Hermes API did not become ready after $attempts attempts."
+            }
+        }
+
+        return [PSCustomObject]@{ Success = $true; Component = ''; Message = '' }
     }
 }
