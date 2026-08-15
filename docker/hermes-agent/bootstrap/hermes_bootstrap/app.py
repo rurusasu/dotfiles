@@ -60,6 +60,10 @@ from .google_gmail import (
     install_google_gmail_credentials,
     validate_google_gmail_installation,
 )
+from .hindsight import (
+    install_hindsight_configurations,
+    validate_hindsight_installation,
+)
 from .configfiles import reconcile_onepassword_configurations
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
@@ -283,6 +287,7 @@ def _apply_sensitive(
             [target for _profile, target in _environment_targets(manifest)],
             tx,
         )
+        install_hindsight_configurations(_environment_targets(manifest), tx)
         install_google_calendar_credentials(
             manifest.data_root,
             secrets.google_calendar,
@@ -628,6 +633,7 @@ def _validate_installed_layout(
             manifest.data_root,
             [target for _profile, target in _environment_targets(manifest)],
         )
+        validate_hindsight_installation(_environment_targets(manifest))
         for profile, target in _environment_targets(manifest):
             required = (
                 _MANAGED_ENV_KEYS

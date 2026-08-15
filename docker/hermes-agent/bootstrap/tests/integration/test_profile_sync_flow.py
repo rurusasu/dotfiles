@@ -1409,7 +1409,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
         )
         self.flow._assert_no_temporary_resources()
 
-    def test_post_publish_replacement_survives_env_merge_and_validation(
+    def test_post_publish_replacement_survives_hindsight_reconciliation(
         self,
     ) -> None:
         self.assertEqual(self.flow._apply()["status"], "applied")
@@ -1450,7 +1450,10 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 "apply_profile_distribution",
                 side_effect=apply_then_replace,
             ),
-            self.assertRaises(ValidationError),
+            self.assertRaisesRegex(
+                ApplyError,
+                "could not reconcile Hermes Hindsight configuration",
+            ),
         ):
             self.flow._apply()
 
