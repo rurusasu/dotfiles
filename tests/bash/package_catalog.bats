@@ -125,6 +125,31 @@ setup() {
 	[[ "$output" == *'provider = "nix"'* ]]
 }
 
+@test "Ollama has native Nix, Homebrew cask, and Winget catalog providers with verification" {
+	run awk '
+		/^    ollama = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.ollama;'* ]]
+	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
+	[[ "$output" == *'category = "llm";'* ]]
+	[[ "$output" == *'provider = "homebrew-cask";'* ]]
+	[[ "$output" == *'cask = "ollama";'* ]]
+	[[ "$output" == *'provider = "nix";'* ]]
+
+	run awk '
+		/^  wingetVerify = \{/ { in_section=1 }
+		in_section && /^    ollama = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'command = "ollama";'* ]]
+	[[ "$output" == *'args = [ "--version" ];'* ]]
+}
+
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

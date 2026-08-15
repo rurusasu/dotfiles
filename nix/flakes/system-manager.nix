@@ -19,6 +19,7 @@ let
         }
         ../system-manager/default.nix
         ../system-manager/docker.nix
+        ../system-manager/ollama.nix
       ];
     };
 in

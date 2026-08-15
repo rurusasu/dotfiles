@@ -178,6 +178,18 @@ Describe 'Package catalog consistency' {
         }
     }
 
+    Context 'Ollama package' {
+        It 'should generate Ollama.Ollama with ollama --version verification' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Ollama.Ollama' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'ollama'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
     Context 'Google Cloud SDK package' {
         It 'should define a longer winget install timeout and gcloud PATH entry in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw

@@ -331,6 +331,20 @@ let
       winget = "OpenAI.Codex";
       category = "llm";
     };
+    ollama = {
+      pkg = if pkgs.stdenv.isDarwin then null else pkgs.ollama;
+      winget = "Ollama.Ollama";
+      category = "llm";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "ollama";
+        };
+        linux = {
+          provider = "nix";
+        };
+      };
+    };
     workmux = {
       pkg = pkgs.workmux;
       winget = null;
@@ -1069,6 +1083,10 @@ lib.mapAttrs (_: resolve) grouped
     };
     opencode = {
       command = "opencode";
+      args = [ "--version" ];
+    };
+    ollama = {
+      command = "ollama";
       args = [ "--version" ];
     };
     oxlint = {

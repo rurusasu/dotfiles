@@ -30,7 +30,14 @@ in
     stateVersion = "25.05";
     # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
     # output separately for shells and tools that resolve TERM=wezterm.
-    packages = sets.allWithout (lib.optional isWSL "discord") ++ darwinTerminfoPackages;
+    packages =
+      sets.allWithout (
+        lib.optionals isWSL [
+          "discord"
+          "ollama"
+        ]
+      )
+      ++ darwinTerminfoPackages;
 
     sessionVariables = {
       # qmd (markdown search engine)
