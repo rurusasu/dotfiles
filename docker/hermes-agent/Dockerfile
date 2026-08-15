@@ -148,6 +148,10 @@ COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests
 
+RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
+  -s /workspace/docker/hermes-agent/bootstrap/tests \
+  -p 'hindsight_real_provider_gate.py' -v
+
 FROM hermes-bootstrap-runtime
 
 WORKDIR /

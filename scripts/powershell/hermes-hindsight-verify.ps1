@@ -150,7 +150,7 @@ function Invoke-HermesHindsightVerify {
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     )
     $finalResponse = if ($nonEmptyLines.Count -gt 0) {
-        $nonEmptyLines[-1].Trim()
+        $nonEmptyLines[-1]
     }
     else {
         ''

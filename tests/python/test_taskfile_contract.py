@@ -18,6 +18,14 @@ HERMES_DOCKERFILE = REPOSITORY_ROOT / "docker" / "hermes-agent" / "Dockerfile"
 HINDSIGHT_ACCEPTANCE = (
     REPOSITORY_ROOT / "docker" / "hermes-agent" / "hindsight_acceptance.py"
 )
+HINDSIGHT_REAL_PROVIDER_GATE = (
+    REPOSITORY_ROOT
+    / "docker"
+    / "hermes-agent"
+    / "bootstrap"
+    / "tests"
+    / "hindsight_real_provider_gate.py"
+)
 
 
 class TaskfileContractTests(unittest.TestCase):
@@ -171,6 +179,28 @@ class TaskfileContractTests(unittest.TestCase):
             "COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
             dockerfile,
         )
+
+    def test_hindsight_test_stage_must_run_the_real_bundled_provider_gate(
+        self,
+    ) -> None:
+        dockerfile = HERMES_DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertTrue(
+            HINDSIGHT_REAL_PROVIDER_GATE.is_file(),
+            "real bundled Hindsight provider gate is missing",
+        )
+        gate = HINDSIGHT_REAL_PROVIDER_GATE.read_text(encoding="utf-8")
+        test_stage = dockerfile.split(
+            "FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", maxsplit=1
+        )[1].split("FROM hermes-bootstrap-runtime", maxsplit=1)[0]
+
+        self.assertIn("COPY bootstrap/tests", test_stage)
+        self.assertIn("-p 'hindsight_real_provider_gate.py'", test_stage)
+        self.assertIn("provider_factory=None", gate)
+        self.assertIn("acceptance._resolved_provider", gate)
+        self.assertIn("provider.system_prompt_block()", gate)
+        self.assertNotIn("FakeProvider", gate)
+        self.assertNotIn("skip", gate.lower())
 
     def _task_block(self, task_name: str) -> str:
         marker = f"  {task_name}:\n"

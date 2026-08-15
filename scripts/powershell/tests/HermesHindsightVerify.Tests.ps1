@@ -131,6 +131,27 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
         (Get-Content -LiteralPath $script:stateFile -Raw) | Should -BeExactly $script:stateBefore
     }
 
+    It 'should reject a one-shot response with leading whitespace' {
+        $script:aliveResponse = ' HERMES_ALIVE'
+
+        { Invoke-HermesHindsightVerify -ComposeFile $script:composeFile -DataDir $script:dataDir } |
+            Should -Throw '*exact HERMES_ALIVE*'
+    }
+
+    It 'should reject a one-shot response with trailing whitespace' {
+        $script:aliveResponse = 'HERMES_ALIVE '
+
+        { Invoke-HermesHindsightVerify -ComposeFile $script:composeFile -DataDir $script:dataDir } |
+            Should -Throw '*exact HERMES_ALIVE*'
+    }
+
+    It 'should reject a one-shot response with surrounding whitespace' {
+        $script:aliveResponse = ' HERMES_ALIVE '
+
+        { Invoke-HermesHindsightVerify -ComposeFile $script:composeFile -DataDir $script:dataDir } |
+            Should -Throw '*exact HERMES_ALIVE*'
+    }
+
     It 'should stop at the first failed phase and preserve exact failed-run bank state' {
         $script:dockerFailureMatch = 'hermes-hindsight-acceptance verify'
 
