@@ -67,6 +67,15 @@ setup() {
 	grep -q 'activateSettings -u' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
+@test "Darwin configures global Zoom shortcuts for English and Japanese menus" {
+	local config="$REPO_ROOT/nix/darwin/default.nix"
+
+	grep -qF 'activationScripts.globalZoomShortcut.text' "$config"
+	grep -qF 'uid="$(id -u -- ${lib.escapeShellArg user})"' "$config"
+	grep -qF 'runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"' "$config"
+	grep -qF 'runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"' "$config"
+}
+
 @test "Darwin omits the incompatible generated documentation" {
 	grep -q 'documentation.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'tools.darwin-uninstaller.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
