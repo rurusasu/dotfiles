@@ -961,9 +961,9 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	! grep -q '<build>' "$COMMAND_LOG"
 }
 
-@test "default Hindsight readiness covers a 172-second cold start" {
+@test "default Hindsight readiness succeeds on the 150th attempt" {
 	unset HINDSIGHT_API_READY_ATTEMPTS HINDSIGHT_API_READY_DELAY_SECONDS
-	export HINDSIGHT_API_READY_AFTER=87
+	export HINDSIGHT_API_READY_AFTER=150
 
 	run bash -c '
 set -euo pipefail
@@ -973,8 +973,8 @@ dotfiles_hermes_hindsight_wait_for_api
 '
 
 	[ "$status" -eq 0 ]
-	[ "$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")" -eq 87 ]
-	[ "$(grep -c '^sleep <2>$' "$COMMAND_LOG")" -eq 86 ]
+	[ "$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")" -eq 150 ]
+	[ "$(grep -c '^sleep <2>$' "$COMMAND_LOG")" -eq 149 ]
 }
 
 @test "parses only one nonempty exact Hindsight environment assignment without evaluation" {

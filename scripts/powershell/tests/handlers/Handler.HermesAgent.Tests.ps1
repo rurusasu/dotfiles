@@ -99,7 +99,7 @@ Describe 'HermesHindsight adapter' {
         { Wait-HermesHindsightApi } | Should -Throw '*Hindsight API did not become ready after 1 attempts*'
     }
 
-    It 'waits through a 172-second cold start with the default Hindsight readiness budget' {
+    It 'succeeds on the 150th attempt with the default Hindsight readiness budget' {
         $oldAttempts = $env:HINDSIGHT_API_READY_ATTEMPTS
         $oldDelay = $env:HINDSIGHT_API_READY_DELAY_SECONDS
         $script:hindsightColdStartAttempt = 0
@@ -109,7 +109,7 @@ Describe 'HermesHindsight adapter' {
             Mock Invoke-HermesHindsightCommand {
                 $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
                 $script:hindsightColdStartAttempt++
-                if ($script:hindsightColdStartAttempt -lt 87) {
+                if ($script:hindsightColdStartAttempt -lt 150) {
                     throw [System.InvalidOperationException]::new('curl failed: exit code 52')
                 }
                 '{"status":"healthy","database":"connected"}'
@@ -118,8 +118,8 @@ Describe 'HermesHindsight adapter' {
 
             Wait-HermesHindsightApi
 
-            $script:hindsightColdStartAttempt | Should -Be 87
-            Should -Invoke Start-Sleep -Times 86 -Exactly -ParameterFilter { $Seconds -eq 2 }
+            $script:hindsightColdStartAttempt | Should -Be 150
+            Should -Invoke Start-Sleep -Times 149 -Exactly -ParameterFilter { $Seconds -eq 2 }
         }
         finally {
             if ($null -eq $oldAttempts) {
@@ -630,10 +630,10 @@ Describe 'HermesAgentHandler' {
             Mock Invoke-HermesBootstrap {
                 $script:eventLog.Add('bootstrap')
                 [PSCustomObject]@{
-                    Success = $false
-                    Changed = $false
+                    Success  = $false
+                    Changed  = $false
                     ExitCode = 5
-                    Message = 'Hermes bootstrap failed (exit code 5). Migration conflict.'
+                    Message  = 'Hermes bootstrap failed (exit code 5). Migration conflict.'
                 }
             }
 
