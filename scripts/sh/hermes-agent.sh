@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+dotfiles_hermes_agent_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+. "$dotfiles_hermes_agent_script_dir/hermes-hindsight.sh"
+unset dotfiles_hermes_agent_script_dir
+
 dotfiles_hermes_data_dir() {
   if [[ -n ${HERMES_DATA_DIR:-} ]]; then
     printf '%s\n' "$HERMES_DATA_DIR"
@@ -453,6 +457,18 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
+  if dotfiles_hermes_hindsight_prepare_host "$compose_file"; then
+    :
+  else
+    return $?
+  fi
+  if dotfiles_hermes_hindsight_start "$docker_runner" "$compose_file"; then
+    :
+  else
+    status=$?
+    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    return "$status"
+  fi
   if "$docker_runner" compose -f "$compose_file" build --pull hermes hermes-bootstrap chromium xapi-mcp; then
     :
   else
@@ -490,7 +506,8 @@ dotfiles_hermes_start_stack() {
     fi
     return "$status"
   fi
-  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --force-recreate; then
+  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --force-recreate \
+    hermes chromium browser-mcp xapi-mcp; then
     :
   else
     status=$?
