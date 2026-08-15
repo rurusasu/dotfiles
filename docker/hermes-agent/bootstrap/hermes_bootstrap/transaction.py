@@ -470,16 +470,26 @@ class Transaction:
         )
 
     def _covered_by_directory_reservation(self, relative: str) -> bool:
-        return any(
-            entry["kind"] == "directory_reservation"
-            and entry["state"] != "restored"
-            and entry["remove_tree"]
-            and (
-                entry["path"] == relative
-                or _is_descendant(relative, entry["path"])
-            )
-            for entry in self._journal["entries"]
-        )
+        for entry in self._journal["entries"]:
+            if not (
+                entry["kind"] == "directory_reservation"
+                and entry["state"] != "restored"
+                and entry["remove_tree"]
+                and (
+                    entry["path"] == relative
+                    or _is_descendant(relative, entry["path"])
+                )
+            ):
+                continue
+            path = self._data_root.joinpath(*entry["path"].split("/"))
+            if not _directory_reservation_matches(
+                path,
+                entry["identity"],
+                entry["marker"],
+            ):
+                raise ApplyError("managed directory reservation was replaced")
+            return True
+        return False
 
     def _overlaps_snapshot(self, relative: str) -> bool:
         return any(

@@ -1065,6 +1065,63 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=lifelog), lifelog_head)
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=lifelog), lifelog_commits)
 
+    def test_second_apply_preserves_root_and_profile_configs_with_legacy_source_providers(
+        self,
+    ) -> None:
+        root_config = (
+            source_config("root", "initial")
+            + "memory:\n"
+            + "  provider: legacy-root\n"
+            + "  source_policy: preserve-root\n"
+        )
+        profile_config = (
+            source_config("profile", "rick-initial")
+            + "memory:\n"
+            + "  provider: legacy-profile\n"
+            + "  source_policy: preserve-profile\n"
+        )
+        self._commit(
+            "root",
+            {"config.yaml": root_config},
+            "declare legacy root memory provider",
+        )
+        self._commit(
+            "rick",
+            {"config.yaml": profile_config},
+            "declare legacy profile memory provider",
+        )
+        (self.data_root / "profiles" / "rick" / "config.yaml").write_text(
+            profile_config,
+            encoding="utf-8",
+        )
+        self._initial_apply()
+        paths = {
+            "root": self.data_root / "config.yaml",
+            "profile": self.data_root / "profiles" / "rick" / "config.yaml",
+        }
+        before = {
+            name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
+            for name, path in paths.items()
+        }
+        for name, path in paths.items():
+            with self.subTest(name=name):
+                config = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertEqual(config["memory"]["provider"], "hindsight")
+                self.assertEqual(
+                    config["memory"]["source_policy"],
+                    f"preserve-{name}",
+                )
+
+        self._initial_apply()
+
+        self.assertEqual(
+            {
+                name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
+                for name, path in paths.items()
+            },
+            before,
+        )
+
     def test_local_profile_update_publishes_and_preserves_runtime_content(self) -> None:
         self._initial_apply()
         target = self.data_root / "profiles" / "rick"

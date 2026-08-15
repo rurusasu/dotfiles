@@ -848,9 +848,9 @@ def without_bootstrap_managed_config(
                 result.pop("mcp_servers", None)
 
     memory = result.get("memory")
-    if isinstance(memory, dict) and memory.get("provider") == "hindsight":
+    if isinstance(memory, dict):
         retained_memory = dict(memory)
-        retained_memory.pop("provider")
+        retained_memory.pop("provider", None)
         if retained_memory:
             result["memory"] = retained_memory
         else:

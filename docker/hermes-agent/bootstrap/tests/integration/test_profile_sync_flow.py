@@ -1432,7 +1432,10 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 missing_ok=True
             )
             (replacement / "config.yaml").write_bytes(
-                b"external config after publication\n"
+                b"external: true\n"
+                b"memory:\n"
+                b"  provider: external\n"
+                b"  keep: original\n"
             )
             (replacement / "config.yaml").chmod(0o600)
             (replacement / ".env").write_bytes(
@@ -1450,10 +1453,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
                 "apply_profile_distribution",
                 side_effect=apply_then_replace,
             ),
-            self.assertRaisesRegex(
-                ApplyError,
-                "could not reconcile Hermes Hindsight configuration",
-            ),
+            self.assertRaises((ApplyError, ValidationError)) as raised,
         ):
             self.flow._apply()
 
@@ -1461,6 +1461,11 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.assertEqual(
             self._snapshot_bytes_modes(missing.target),
             external_before,
+        )
+        self.assertIsInstance(raised.exception, ApplyError)
+        self.assertEqual(
+            str(raised.exception),
+            "could not reconcile Hermes Hindsight configuration",
         )
         self.flow._assert_no_temporary_resources()
 
