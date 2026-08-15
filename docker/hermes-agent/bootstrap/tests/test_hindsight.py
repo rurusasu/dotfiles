@@ -7,6 +7,8 @@ import stat
 import sys
 import tempfile
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from unittest import mock
@@ -58,6 +60,14 @@ class RecordingTransaction:
 
     def snapshot(self, path: Path) -> None:
         self.snapshots.append(path)
+
+    @contextmanager
+    def bind_reserved_directory(
+        self,
+        path: Path,
+    ) -> Iterator[int | None]:
+        del path
+        yield None
 
     def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool:
         del remove_tree
@@ -307,6 +317,76 @@ class HindsightConfigurationTests(unittest.TestCase):
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), mode)
                 if path.is_file():
                     self.assertEqual(path.read_bytes(), content)
+
+    def test_profile_swap_after_snapshot_cannot_redirect_the_atomic_write(
+        self,
+    ) -> None:
+        module = hindsight_module()
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "nancy"
+        tx = Transaction.begin(self.root)
+        self.assertTrue(tx.reserve_directory(target))
+        config_path = target / "config.yaml"
+        config_path.write_bytes(
+            b"model:\n"
+            b"  name: reserved\n"
+            b"memory:\n"
+            b"  provider: legacy\n"
+        )
+        config_path.chmod(0o600)
+        replacement = profiles / ".external-nancy"
+        replacement.mkdir(mode=0o700)
+        external_config = (
+            b"model:\n"
+            b"  name: external\n"
+            b"memory:\n"
+            b"  provider: external\n"
+            b"  keep: untouched\n"
+        )
+        (replacement / "config.yaml").write_bytes(external_config)
+        (replacement / "config.yaml").chmod(0o600)
+        retired = profiles / ".retired-reservation"
+        original_atomic_write = module._atomic_write
+        swapped = False
+
+        def swap_profile_before_atomic_write(
+            path: Path | tuple[int, str],
+            content: bytes,
+            mode: int,
+        ) -> None:
+            nonlocal swapped
+            destination = path[1] if isinstance(path, tuple) else path
+            if not swapped and Path(destination).name == "config.yaml":
+                target.rename(retired)
+                replacement.rename(target)
+                swapped = True
+            original_atomic_write(path, content, mode)
+
+        try:
+            with mock.patch.object(
+                module,
+                "_atomic_write",
+                side_effect=swap_profile_before_atomic_write,
+            ):
+                try:
+                    module.install_hindsight_configurations(
+                        (("nancy", target),),
+                        tx,
+                    )
+                except ApplyError as error:
+                    self.assertEqual(
+                        str(error),
+                        "could not reconcile Hermes Hindsight configuration",
+                    )
+        finally:
+            tx.rollback()
+
+        external_target = target if swapped else replacement
+        self.assertEqual(
+            (external_target / "config.yaml").read_bytes(),
+            external_config,
+        )
 
     def test_validation_requires_canonical_private_state_for_every_target(self) -> None:
         module = hindsight_module()
