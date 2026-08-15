@@ -286,4 +286,8 @@ pkgs.runCommand "winget-export" { } ''
   echo '${wingetJson}' | ${pkgs.jq}/bin/jq . > $out/winget/packages.json
   echo '${npmJson}' | ${pkgs.jq}/bin/jq . > $out/npm/packages.json
   echo '${pnpmJson}' | ${pkgs.jq}/bin/jq . > $out/pnpm/packages.json
+  ${pkgs.oxfmt}/bin/oxfmt \
+    $out/winget/packages.json \
+    $out/npm/packages.json \
+    $out/pnpm/packages.json
 ''

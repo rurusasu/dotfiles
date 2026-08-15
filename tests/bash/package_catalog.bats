@@ -53,6 +53,16 @@ setup() {
 	grep -q 'Verify package provider coverage' "$REPO_ROOT/.github/workflows/ci-consistency.yml"
 }
 
+@test "winget export reproduces committed Windows manifests byte-for-byte" {
+	run --separate-stderr nix build .#winget-export --no-link --print-out-paths
+	[ "$status" -eq 0 ]
+	[ -d "$output" ]
+
+	cmp "$output/winget/packages.json" "$REPO_ROOT/windows/winget/packages.json"
+	cmp "$output/npm/packages.json" "$REPO_ROOT/windows/npm/packages.json"
+	cmp "$output/pnpm/packages.json" "$REPO_ROOT/windows/pnpm/packages.json"
+}
+
 @test "missing providers require an explicitly reviewed unsupported reason" {
 	grep -q 'reviewedUnsupported' "$SETS"
 	grep -q 'missing.*provider or reviewed unsupported reason' "$SETS"
