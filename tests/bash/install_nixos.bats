@@ -84,8 +84,13 @@ esac
 	write_stub nc 'exit 0'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+case "$*" in
+  *"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}" ;;
+  *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}" ;;
+esac
 exit 0
 '
+	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub verify-environment '

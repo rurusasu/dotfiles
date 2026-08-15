@@ -81,8 +81,13 @@ exit 2
 	write_stub nc 'exit 0'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+case "$*" in
+  *"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}" ;;
+  *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}" ;;
+esac
 exit 0
 '
+	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
 exit 0
@@ -232,6 +237,9 @@ write_fresh_install_stubs() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
+	*"/api/version"*) exit 0 ;;
+	*"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}"; exit 0 ;;
+	*"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}"; exit 0 ;;
 	*/health*) exit 0 ;;
 	*nixos.org/nix/install*)
 		cat <<'"'"'SCRIPT'"'"'
@@ -866,6 +874,8 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
+	cp "$REPO_ROOT/scripts/sh/hermes-hindsight.sh" "$HOME/.dotfiles/scripts/sh/hermes-hindsight.sh"
+	cp "$REPO_ROOT/docker/hermes-agent/hindsight.env" "$HOME/.dotfiles/docker/hermes-agent/hindsight.env"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
