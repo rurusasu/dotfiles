@@ -13,9 +13,15 @@ host ~/.hermes/                    container /opt/data/
 │   ├── rick/                      Hermes distribution target; local-authoritative when present
 │   ├── hoffman/
 │   ├── risarisa/
-│   └── nancy/
+│   ├── nancy/
+│   ├── kuroda/
+│   └── shiraishi/
 ├── shared/
 │   └── lifelog/                   the one writable shared Git checkout
+├── hindsight/
+│   ├── config.json                 root/default managed Hindsight provider config
+│   ├── pg0/                        Hindsight embedded PostgreSQL data
+│   └── cache/                      local reranker cache
 ├── memories/                      runtime state
 ├── sessions/
 └── logs/
@@ -26,7 +32,7 @@ host ~/.hermes/                    container /opt/data/
 - Root declarative content remains remote-authoritative from
   `rurusasu/hermes-home` at `main`; `root-distribution.yaml` declares the only
   root paths bootstrap may replace.
-- The bootstrap manifest currently declares four named distribution targets:
+- The bootstrap manifest currently declares six named distribution targets:
   `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`, each with a matching
   `rurusasu/hermes-profile-<name>` remote.
 - An existing valid named home is local-authoritative. Bootstrap snapshots only
@@ -51,6 +57,14 @@ host ~/.hermes/                    container /opt/data/
   distribution as `mcp_servers.xapi.url: http://xapi-mcp:8080/mcp` with
   `connect_timeout: 300`. The endpoint is served by the separate Compose
   `xapi-mcp` container and uses the shared root `.xurl` OAuth cache.
+- Bootstrap transactionally manages `hindsight/config.json` in the root and in
+  every named profile. The directory is mode `0700` and `config.json` is mode
+  `0600`; it configures the profile-specific Hindsight bank but is not a profile
+  distribution-owned Git path.
+- Root Hindsight database data is `${HERMES_DATA_DIR}/hindsight/pg0` and its
+  reranker cache is `${HERMES_DATA_DIR}/hindsight/cache`. These are runtime data,
+  not profile Git repository content. Named profile configuration files likewise
+  do not place retained memory data in their profile repositories.
 
 Remote named-profile repositories are exact local projections: canonical
 `.gitignore`, canonical `distribution.yaml`, and declared owned paths only.
@@ -64,4 +78,5 @@ committed.
 
 See [Hermes Bootstrap Operations](bootstrap.md) for commands and recovery, and
 [Local-Authoritative Sync Design](profile-local-authoritative-sync-design.md)
-for the full sync contract.
+for the full sync contract. See [Hermes Hindsight ローカルメモリ運用](hindsight-memory.md)
+for memory bank mapping, backup/restore, and privacy limits.

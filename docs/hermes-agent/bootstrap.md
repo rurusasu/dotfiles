@@ -10,13 +10,16 @@ Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes
 
 ## Run Bootstrap
 
-Prerequisites are a running Docker daemon, Docker Compose, an authenticated
-1Password CLI (`op`), access to the ten configured items, and access to the
-declared private GitHub repositories. Unix requires native `bash`, `jq`,
-`curl`, `docker`, and `op`. The Unix adapter uses `curl` for bounded gateway
-readiness checks. Windows requires `pwsh`, Docker Desktop native `docker` and
-Compose plugin, and authenticated native `op.exe`; the focused adapter does
-not route these commands through WSL.
+Prerequisites are a running Docker daemon, Docker Compose, native Ollama, an
+authenticated 1Password CLI (`op`), access to the ten configured items, and
+access to the declared private GitHub repositories. The adapter pulls the
+configured models after it confirms the Ollama API. Unix
+requires native `bash`, `jq`, `curl`, `docker`, and `op`. The Unix adapter uses
+`curl` for bounded gateway readiness checks. Windows requires `pwsh`, Docker
+Desktop native `docker` and Compose plugin, and authenticated native `op.exe`;
+the focused adapter does not route these commands through WSL. Under WSL,
+Ollama runs on Windows and Docker reaches it through `host.docker.internal`; do
+not enable a second WSL Ollama service.
 
 For a focused full bootstrap on any supported host, run:
 
@@ -28,8 +31,11 @@ On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
 adapter with the canonical Compose file. On Windows, it runs
 `pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
 Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
-rebuild. Both adapters validate Compose, build `hermes`, `hermes-bootstrap`,
-and `xapi-mcp`, run the container bootstrap, and recreate the stack only after
+rebuild. Before building/bootstrap, both adapters validate Compose, verify the
+native Ollama API, pull the configured LLM and embedding models, create the
+Hindsight `pg0` and `cache` directories, start Hindsight, and require a healthy
+connected database. They then build `hermes`, `hermes-bootstrap`, and
+`xapi-mcp`, run the container bootstrap, and recreate the stack only after
 success. The final recreate is wrapped with the host X API credential adapter
 on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
 configured 1Password item instead of being exported or stored locally. The full
@@ -46,6 +52,9 @@ can use 1Password desktop integration.
 
 `task hermes:bootstrap` returns the selected focused adapter status; it neither
 runs the full-machine installer nor hides a nonzero result.
+
+Hindsight の運用、バックアップ、復元、受入検証、privacy boundary は
+[Hermes Hindsight ローカルメモリ運用](./hindsight-memory.md)を参照してください。
 
 ## Data Flow
 
