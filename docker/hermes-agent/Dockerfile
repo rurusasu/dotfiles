@@ -5,6 +5,7 @@ USER root
 ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
 ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
+ARG HINDSIGHT_CLIENT_VERSION=0.6.1
 
 COPY xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
 COPY gh-wrapper.sh /usr/local/bin/gh
@@ -122,6 +123,10 @@ RUN apt-get update \
   && google-calendar-mcp --version \
   && npm list --global --depth=0 "@artymclabin/gmail-mcp@${GOOGLE_GMAIL_MCP_VERSION}" \
   && article-collector --help \
+  && uv pip install --python /opt/hermes/.venv/bin/python \
+      "hindsight-client==${HINDSIGHT_CLIENT_VERSION}" \
+  && /opt/hermes/.venv/bin/python -c \
+      "from importlib.metadata import version; assert version('hindsight-client') == '${HINDSIGHT_CLIENT_VERSION}'" \
   && chmod 0755 /usr/local/bin/gh \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \
   && chmod 0755 /usr/local/bin/hermes-bootstrap \
@@ -133,6 +138,7 @@ WORKDIR /workspace
 
 COPY Dockerfile /workspace/docker/hermes-agent/Dockerfile
 COPY compose.yml /workspace/docker/hermes-agent/compose.yml
+COPY hindsight.env /workspace/docker/hermes-agent/hindsight.env
 COPY bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
 COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
