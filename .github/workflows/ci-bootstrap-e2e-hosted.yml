@@ -140,7 +140,7 @@ jobs:
       - name: Run POSIX and Hammerspoon adapter contracts
         run: |
           set -euo pipefail
-          bats tests/bash
+          env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats tests/bash
           bats tests/wezterm
           luac -p chezmoi/terminals/hammerspoon/init.lua
           lua tests/lua/hammerspoon_terminal_prefix_test.lua
