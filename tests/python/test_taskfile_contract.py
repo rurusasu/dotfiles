@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
+HERMES_TASKFILE = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
 XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
@@ -30,7 +31,10 @@ HINDSIGHT_REAL_PROVIDER_GATE = (
 
 class TaskfileContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.taskfile = TASKFILE.read_text(encoding="utf-8")
+        self.taskfile = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (TASKFILE, HERMES_TASKFILE)
+        )
 
     def test_xapi_tasks_are_present_in_the_hermes_lifecycle(self) -> None:
         self.assertIn("xapi-mcp", self._command_text("hermes:pull"))
@@ -61,6 +65,12 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn(
             "logs -f --tail=100 xapi-mcp",
             self._command_text("hermes:xapi:logs"),
+        )
+
+    def test_task_contracts_read_tasks_from_the_hermes_feature_taskfile(self) -> None:
+        self.assertIn(
+            'dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"',
+            self._command_text("hermes:bootstrap"),
         )
 
     def test_bootstrap_uses_the_same_container_startup_guardrails(self) -> None:

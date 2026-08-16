@@ -210,6 +210,82 @@ dotfiles_hermes_extract_xapi_credentials() {
   '
 }
 
+dotfiles_hermes_xapi_oauth_item() {
+  printf '%s\n' "${DOTFILES_HERMES_XAPI_OAUTH_ITEM:-${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-Hermes X API MCP}}"
+}
+
+dotfiles_hermes_extract_xapi_refresh_token() {
+  jq -e -r '
+    .fields
+    | map(select((.label // "") as $label |
+        ["X_API_REFRESH_TOKEN", "refresh_token", "Refresh Token"] | index($label)))
+    | if length == 1 and (.[0].value | type == "string" and length > 0)
+      then .[0].value
+      else error("missing required X API OAuth refresh token")
+      end
+  '
+}
+
+dotfiles_hermes_read_xapi_refresh_token() {
+  local op_command account vault item
+  op_command="$(dotfiles_hermes_op_command)" || return 1
+  account="$(dotfiles_hermes_xapi_secret_account)"
+  vault="$(dotfiles_hermes_xapi_secret_vault)"
+  item="$(dotfiles_hermes_xapi_oauth_item)"
+
+  "$op_command" signin --account "$account" >/dev/null
+  "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+    dotfiles_hermes_extract_xapi_refresh_token
+}
+
+dotfiles_hermes_sync_xapi_auth_cache() {
+  local data_dir="$1"
+  local client_id="$2"
+  local client_secret="$3"
+  local refresh_token="$4"
+  local token_key="${DOTFILES_HERMES_XAPI_OAUTH_TOKEN_KEY:-default}"
+  local xurl_dir auth_path temporary
+  local client_id_yaml client_secret_yaml refresh_token_yaml token_key_yaml
+
+  xurl_dir="$data_dir/.xurl"
+  auth_path="$xurl_dir/auth.yml"
+  [[ -d $xurl_dir && ! -L $xurl_dir ]] || return 1
+  if [[ ${DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC:-0} != 1 &&
+    -f $auth_path && ! -L $auth_path ]] && grep -q '^ *refresh_token:' "$auth_path"; then
+    return 0
+  fi
+  [[ -n $client_id && $client_id != *$'\n'* && $client_id != *$'\r'* ]] || return 1
+  [[ -n $client_secret && $client_secret != *$'\n'* && $client_secret != *$'\r'* ]] || return 1
+  [[ -n $refresh_token && $refresh_token != *$'\n'* && $refresh_token != *$'\r'* ]] || return 1
+  [[ $token_key =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+
+  client_id_yaml="$(printf '%s' "$client_id" | jq -Rsa .)" || return 1
+  client_secret_yaml="$(printf '%s' "$client_secret" | jq -Rsa .)" || return 1
+  refresh_token_yaml="$(printf '%s' "$refresh_token" | jq -Rsa .)" || return 1
+  token_key_yaml="$(printf '%s' "$token_key" | jq -Rsa .)" || return 1
+  temporary="$(mktemp "$xurl_dir/auth.yml.XXXXXX")" || return 1
+
+  if (umask 077 && {
+    printf 'apps:\n'
+    printf '  default:\n'
+    printf '    client_id: %s\n' "$client_id_yaml"
+    printf '    client_secret: %s\n' "$client_secret_yaml"
+    printf '    oauth2_tokens:\n'
+    printf '      %s:\n' "$token_key_yaml"
+    printf '        type: oauth2\n'
+    printf '        oauth2:\n'
+    printf '          refresh_token: %s\n' "$refresh_token_yaml"
+    printf 'default_app: default\n'
+  } >"$temporary") &&
+    chmod 600 "$temporary" &&
+    mv -f -- "$temporary" "$auth_path"; then
+    :
+  else
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
 dotfiles_hermes_read_xapi_credentials() {
   local op_command account vault item
   op_command="$(dotfiles_hermes_op_command)" || return 1
@@ -241,6 +317,34 @@ dotfiles_hermes_with_xapi_credentials() {
     status=1
   fi
   unset credentials client_id client_secret
+  if ((xtrace_enabled)); then
+    set -x
+  fi
+  return "$status"
+}
+
+dotfiles_hermes_with_xapi_credentials_and_cache() {
+  local credentials client_id client_secret refresh_token status=0 xtrace_enabled=0
+
+  dotfiles_hermes_op_command >/dev/null ||
+    dotfiles_die "1Password CLI (op) is required for Hermes X API credentials."
+  dotfiles_have jq || dotfiles_die "jq is required for Hermes X API credentials."
+
+  if [[ $- == *x* ]]; then
+    xtrace_enabled=1
+    set +x
+  fi
+  if credentials="$(dotfiles_hermes_read_xapi_credentials)" &&
+    client_id="$(printf '%s\n' "$credentials" | jq -r '.client_id')" &&
+    client_secret="$(printf '%s\n' "$credentials" | jq -r '.client_secret')" &&
+    refresh_token="$(dotfiles_hermes_read_xapi_refresh_token)" &&
+    dotfiles_hermes_sync_xapi_auth_cache "$(dotfiles_hermes_data_dir)" \
+      "$client_id" "$client_secret" "$refresh_token"; then
+    X_API_CLIENT_ID="$client_id" X_API_CLIENT_SECRET="$client_secret" "$@" || status=$?
+  else
+    status=1
+  fi
+  unset credentials client_id client_secret refresh_token
   if ((xtrace_enabled)); then
     set -x
   fi
@@ -428,7 +532,7 @@ dotfiles_hermes_runtime_exists() {
   return 2
 }
 
-dotfiles_hermes_recover_stack_after_bootstrap_failure() {
+dotfiles_hermes_recover_stack_after_failure() {
   local docker_runner="$1"
   local compose_file="$2"
 
@@ -504,19 +608,23 @@ dotfiles_hermes_start_stack() {
     :
   else
     status=$?
-    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_bootstrap_failure "$docker_runner" "$compose_file"; then
+    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_failure "$docker_runner" "$compose_file"; then
       :
     else
       dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     fi
     return "$status"
   fi
-  if dotfiles_hermes_with_xapi_credentials "$docker_runner" compose -f "$compose_file" up -d --force-recreate \
+  if dotfiles_hermes_with_xapi_credentials_and_cache "$docker_runner" compose -f "$compose_file" up -d --force-recreate \
     hermes chromium browser-mcp xapi-mcp; then
     :
   else
     status=$?
-    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_failure "$docker_runner" "$compose_file"; then
+      :
+    else
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    fi
     return "$status"
   fi
   if dotfiles_hermes_wait_for_api; then

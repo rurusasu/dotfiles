@@ -8,6 +8,7 @@ from pathlib import Path
 
 DOTFILES_ROOT = Path(__file__).resolve().parents[4]
 TASKFILE = DOTFILES_ROOT / "Taskfile.yml"
+HERMES_TASKFILE = DOTFILES_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-bootstrap.yml"
 PRE_COMMIT = DOTFILES_ROOT / ".pre-commit-config.yaml"
 PROVENANCE = (
@@ -26,7 +27,10 @@ PRE_COMMIT_TRIGGER = (
 
 class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
     def test_task_runs_the_host_gate_after_existing_suites(self) -> None:
-        taskfile = TASKFILE.read_text(encoding="utf-8")
+        taskfile = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (TASKFILE, HERMES_TASKFILE)
+        )
         section = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
         section = section.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
 

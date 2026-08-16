@@ -20,9 +20,10 @@ setup() {
 	for installer in install-linux.sh install-nixos.sh; do
 		file="$REPO_ROOT/scripts/sh/$installer"
 		grep -Fq 'COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"' "$file"
-		grep -Fq 'dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"' "$file"
+		grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$file"
 		! grep -q 'DOTFILES_COMPOSE_FILE' "$file"
 	done
+	grep -Fq 'docker/hermes-agent/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 
 @test "acceptance runner installs only fixture plumbing before invoking install.sh" {
@@ -193,6 +194,6 @@ EOF
 @test "Hermes bootstrap gates include the gh wrapper security suite" {
 	wrapper='docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh'
 
-	grep -Fq "$wrapper" "$REPO_ROOT/Taskfile.yml"
+	grep -Fq "$wrapper" "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 	grep -Fq "$wrapper" "$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
 }

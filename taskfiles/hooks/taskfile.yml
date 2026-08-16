@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  hooks:install:
+    desc: Install pre-commit git hooks
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit install --install-hooks"'
+    sources:
+      - .pre-commit-config.yaml
+
+  hooks:uninstall:
+    desc: Uninstall pre-commit git hooks
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit uninstall"'
+
+  hooks:check:
+    desc: Run all pre-commit hooks manually on all files
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'

@@ -53,7 +53,7 @@
 
       programs.zsh.shellAliases = {
         # NixOS rebuild shortcuts
-        nrs = "nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure && nix profile upgrade '.*' || nix profile install ~/.dotfiles#default";
+        nrs = "task --dir ~/.dotfiles nrs";
         nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
         nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
       };

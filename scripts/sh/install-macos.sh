@@ -6,8 +6,6 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/hermes-agent.sh"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
@@ -307,7 +305,7 @@ main() {
   "$HOMEBREW_CASK_UPDATER"
   setup_docker_runtime
   apply_chezmoi
-  dotfiles_hermes_start_stack docker "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+  dotfiles_run_task hermes:bootstrap
   "$VERIFY_ENVIRONMENT" --runtime
   dotfiles_log "macOS setup complete."
 }

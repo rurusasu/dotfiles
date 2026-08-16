@@ -6,7 +6,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('auth', 'restart', 'up')]
+    [ValidateSet('auth', 'sync-token', 'restart', 'up')]
     [string]$Action,
     [string]$ComposeFile = ''
 )
@@ -80,7 +80,13 @@ try {
     $commandName = $Action
     Initialize-HermesXApiRuntimeHome
 
-    $exitCode = Invoke-HermesXApiCredentialScope -Action {
+    $dataDir = Get-HermesXApiDataDir
+    if ($Action -eq 'sync-token') {
+        Sync-HermesXApiRefreshTokenToOnePassword -DataDir $dataDir
+        exit 0
+    }
+
+    $exitCode = Invoke-HermesXApiCredentialScope -DataDir $(if ($Action -eq 'auth') { '' } else { $dataDir }) -Action {
         switch ($commandName) {
             'auth' {
                 Invoke-HermesXApiDocker -Arguments @(

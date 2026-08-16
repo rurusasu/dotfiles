@@ -158,3 +158,24 @@ dotfiles_run_in_group() {
   printf -v command_string '%q ' "$@"
   sg "$group" -c "$command_string"
 }
+
+dotfiles_run_task() {
+  local task_name="$1"
+  shift
+
+  dotfiles_have task || dotfiles_die "go-task is required to run $task_name."
+  [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
+
+  task --dir "$DOTFILES_ROOT" "$task_name" "$@"
+}
+
+dotfiles_run_task_in_group() {
+  local group="$1"
+  local task_name="$2"
+  shift 2
+
+  dotfiles_have task || dotfiles_die "go-task is required to run $task_name."
+  [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
+
+  dotfiles_run_in_group "$group" task --dir "$DOTFILES_ROOT" "$task_name" "$@"
+}

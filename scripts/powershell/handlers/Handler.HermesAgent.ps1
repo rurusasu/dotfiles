@@ -131,7 +131,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
             try {
                 $handler = $this
-                $start = Invoke-HermesXApiCredentialScope -Action {
+                $start = Invoke-HermesXApiCredentialScope -DataDir $dataDir -Action {
                     $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
                 }
             }

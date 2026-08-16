@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  test:
+    desc: Run platform-appropriate tests
+    cmds:
+      - task: '{{if eq OS "windows"}}test:powershell{{else}}test:bash{{end}}'
+
+  test:powershell:
+    desc: Run PowerShell tests
+    cmds:
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0 -IncludeIntegration"
+
+  test:coverage:
+    desc: Run PowerShell tests with coverage
+    cmds:
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration"
+
+  test:bash:
+    desc: Run bats unit tests for shell helpers
+    cmds:
+      - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'

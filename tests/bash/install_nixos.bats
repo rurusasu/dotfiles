@@ -20,11 +20,12 @@ setup() {
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
+	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
 	export DOTFILES_CURRENT_SYSTEM_PATH="$CURRENT_SYSTEM"
@@ -65,10 +66,22 @@ exec "$@"
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub jq 'exec "$REAL_JQ" "$@"'
+	write_stub task '
+printf "task %s\n" "$*" >>"$COMMAND_LOG"
+case " $* " in
+  *" hermes:bootstrap "*)
+    source "$REPO_ROOT/scripts/sh/install-common.sh"
+    source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-agent/compose.yml"
+    ;;
+esac
+'
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${3:-}" = "Hermes X API MCP" ]; then
 	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
+elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
+	printf "%s\n" "$HERMES_XAPI_OAUTH_ITEM_JSON"
 else
 	printf "%s\n" "$HERMES_ITEM_JSON"
 fi
@@ -148,8 +161,8 @@ line_of() {
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" -lt "$(line_of 'docker image prune --force')" ]
 	[ "$(line_of 'docker image prune --force')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 11 ]
-	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
+	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 2 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 

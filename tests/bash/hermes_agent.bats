@@ -5,12 +5,14 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
+	REAL_PYTHON3="$(command -v python3)"
 	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
@@ -28,11 +30,12 @@ EOF
 	unset DOTFILES_USER SUDO_USER
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
-	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
+	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
 	export OP_DELAY_SECONDS=0
@@ -51,10 +54,12 @@ EOF
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 	export IMAGE_PRUNE_STATUS=0
+	export UP_STATUS=0
 
 	write_stub jq '
 exec "$REAL_JQ" "$@"
 '
+	write_stub python3 'exec "$REAL_PYTHON3" "$@"'
 	write_stub op '
 printf "op" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
@@ -70,6 +75,10 @@ printf "\n" >>"$COMMAND_LOG"
 		printf "%s\n" "$OP_READ_TOKEN"
 		;;
 	*)
+		if [ "${1:-}" = item ] && [ "${2:-}" = edit ]; then
+			cat >"$EDIT_CAPTURE"
+			exit 0
+		fi
 		[ "${2:-}" = get ] || exit 2
 		if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
 			exit 17
@@ -79,6 +88,8 @@ printf "\n" >>"$COMMAND_LOG"
 		fi
 		if [ "${3:-}" = "Hermes X API MCP" ]; then
 			printf "%s\n" "$XAPI_OP_ITEM_JSON"
+		elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
+			printf "%s\n" "$XAPI_OAUTH_ITEM_JSON"
 		else
 			printf "%s\n" "$OP_ITEM_JSON"
 		fi
@@ -96,6 +107,9 @@ if [ "${1:-}" != "compose" ]; then
 	exit 1
 fi
 case " $* " in
+  *" up -d --force-recreate "*)
+    exit "$UP_STATUS"
+    ;;
   *" ps --all --services hermes "*)
     if [[ $HERMES_RUNTIME_EXISTS == 1 ]]; then
       printf "hermes\n"
@@ -416,6 +430,7 @@ exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
 
 	cat >"$MOCK_DOCKER_APP/Contents/MacOS/install" <<'EOF'
 #!/usr/bin/env bash
@@ -503,33 +518,18 @@ EOF
 		"$MOCK_REPO/install.sh"
 }
 
-@test "Unix installers source the shared adapter and use one canonical handoff" {
-	local installer expected_runner expected_call contents
+@test "Unix installers use the Taskfile as the canonical Hermes handoff" {
+	local installer contents
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		contents="$REPO_ROOT/scripts/sh/$installer"
-		grep -Fq '. "$ROOT/scripts/sh/hermes-agent.sh"' "$contents"
-		! grep -Eq '^start_hermes_stack[[:space:]]*\(\)' "$contents"
-		! grep -Eq 'dotfiles_hermes_(ensure|write)_' "$contents"
-		[ "$(grep -c 'dotfiles_hermes_start_stack' "$contents")" -eq 1 ]
-
-		case "$installer" in
-		install-macos.sh)
-			expected_runner=docker
-			grep -Fq 'setup_docker_runtime()' "$contents"
-			grep -Fq 'docker compose version >/dev/null' "$contents"
-			;;
-		*)
-			expected_runner=docker_command
-			grep -Fq 'dotfiles_run_in_group docker docker "$@"' "$contents"
-			;;
-		esac
-		expected_call="dotfiles_hermes_start_stack $expected_runner \"\$DOTFILES_ROOT/docker/hermes-agent/compose.yml\""
-		grep -Fq "$expected_call" "$contents"
+		! grep -Fq 'hermes-agent.sh' "$contents"
+			grep -Fq 'dotfiles_run_task hermes:bootstrap' "$contents" ||
+				grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$contents"
 	done
 }
 
-@test "install.sh routes each Unix installer through the shared adapter after chezmoi" {
-	local platform expected_runner adapter_line apply_line expected_sudo_count target
+@test "install.sh routes each Unix installer through the Taskfile after chezmoi" {
+	local platform task_line apply_line task_line_number expected_sudo_count target
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
 		run_mocked_installer "$platform"
@@ -538,17 +538,12 @@ EOF
 			printf '%s installer failed:\n%s\n' "$platform" "$output" >&3
 			false
 		fi
-		case "$platform" in
-		macos) expected_runner=docker ;;
-		*) expected_runner=docker_command ;;
-		esac
-		adapter_line="adapter runner=$expected_runner compose=$MOCK_REPO/docker/hermes-agent/compose.yml"
-		grep -Fxq "selected-installer=$MOCK_REPO/scripts/sh/$MOCK_SELECTED_INSTALLER" "$COMMAND_LOG"
-		grep -Fxq "$adapter_line" "$COMMAND_LOG"
-		grep -Fq "docker compose -f $MOCK_REPO/docker/hermes-agent/compose.yml config --quiet" "$COMMAND_LOG"
+		task_line="task --dir $MOCK_REPO hermes:bootstrap"
+		grep -Fxq "$task_line" "$COMMAND_LOG"
 		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
 		[ -n "$apply_line" ]
-		[ "$(grep -n -m 1 -F "$adapter_line" "$COMMAND_LOG" | cut -d: -f1)" -gt "$apply_line" ]
+		task_line_number="$(grep -n -m 1 -F "$task_line" "$COMMAND_LOG" | cut -d: -f1)"
+		[ "$task_line_number" -gt "$apply_line" ]
 		! grep -q '^unexpected nixos-rebuild$' "$COMMAND_LOG"
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
@@ -657,6 +652,44 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
 	grep -q '^op <item> <get> <Hermes X API MCP> <--account> <my.1password.com> <--vault> <openclaw> <--format> <json>$' "$COMMAND_LOG"
 	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
+}
+
+@test "syncs the X API refresh token into the local xurl cache before startup" {
+	local xapi_lookup_count last_xapi_lookup up_line
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(stat -c '%a' "$HOME/.hermes/.xurl/auth.yml" 2>/dev/null || stat -f '%Lp' "$HOME/.hermes/.xurl/auth.yml")" = 600 ]
+	grep -q 'client_id: "xapi-client-id-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	grep -q 'client_secret: "xapi-client-secret-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	grep -q 'refresh_token: "xapi-refresh-token-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	xapi_lookup_count="$(grep -c '<Hermes X API MCP>' "$COMMAND_LOG")"
+	[ "$xapi_lookup_count" -ge 2 ]
+	last_xapi_lookup="$(grep -n '<Hermes X API MCP>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
+	up_line="$(grep -n '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
+	[ "$last_xapi_lookup" -lt "$up_line" ]
+	! grep -q 'xapi-refresh-token-marker' "$COMMAND_LOG"
+}
+
+@test "sync-token writes the local refresh token through the 1Password template" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+    default:
+        oauth2_tokens:
+            app-user:
+                oauth2:
+                    refresh_token: local-refresh-token-marker
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
+
+	[ "$status" -eq 0 ]
+	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "local-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
+	! grep -q 'local-refresh-token-marker' "$COMMAND_LOG"
 }
 
 @test "uses a mode-0600 cached service account after an op read timeout" {
@@ -892,6 +925,15 @@ trailing-garbage"
 	! grep -q '<start>' "$COMMAND_LOG"
 	! grep -q '<up>' "$COMMAND_LOG"
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 0 ]
+}
+
+@test "recovers the existing Hermes runtime when recreated stack startup fails" {
+	export UP_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	assert_log_order '<stop> <hermes>' '<apply>' '<up> <-d> <--force-recreate>' '<start>' '<http://127.0.0.1:8642/health>'
 }
 
 @test "does not expose secret payload records when the caller enables xtrace" {
