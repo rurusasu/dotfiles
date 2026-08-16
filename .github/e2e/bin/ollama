@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 2 ] && [ "$1" = pull ]; then
+  case "$2" in
+  qwen3.6:35b | qwen3-embedding:0.6b)
+    exit 0
+    ;;
+  esac
+fi
+
+printf 'unsupported acceptance Ollama command:' >&2
+printf ' %s' "$@" >&2
+printf '\n' >&2
+exit 2

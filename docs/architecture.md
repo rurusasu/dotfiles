@@ -98,6 +98,25 @@ sessions, logs, and browser state remain local runtime data.
 profile homes are never Git repositories. The default profile owns
 shared-lifelog synchronization through the common bootstrap command.
 
+## Hermes Hindsight ローカルメモリ
+
+Hindsight は host-native Ollama と Compose の `hindsight` service で構成する
+local-only memory provider です。API と UI はそれぞれ host loopback の
+`127.0.0.1:8888` と `127.0.0.1:9999` にだけ公開し、埋め込み PostgreSQL は
+公開しません。Hermes と Hindsight は `hermes-memory` bridge network で接続しますが、
+Hindsight は Hermes の起動依存ではありません。Hindsight 障害時は memory recall/retain
+が使えなくても Hermes gateway は稼働を継続します。
+
+| 所有者                                               | 永続化対象                           | Git との境界                                                          |
+| ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
+| `${HERMES_DATA_DIR}/hindsight/pg0`                   | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
+| `${HERMES_DATA_DIR}/hindsight/cache`                 | local reranker cache                 | profile repository には含めない                                       |
+| `$HERMES_HOME/hindsight/config.json`                 | root/default provider configuration  | bootstrap が transactionally 管理し、profile Git content には含めない |
+| `$HERMES_HOME/profiles/<name>/hindsight/config.json` | named-profile provider configuration | bootstrap が transactionally 管理し、profile Git content には含めない |
+
+モデル、固定 version/digest、WSL 境界、運用・復元・upgrade gate は
+[Hermes Hindsight ローカルメモリ運用](./hermes-agent/hindsight-memory.md)を参照してください。
+
 ## パッケージ管理フロー
 
 ```
@@ -305,3 +324,4 @@ Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2
 - [Hermes installer integration plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-integration.md)
 - [Hermes distribution repositories plan](./hermes-agent/plans/2026-07-21-hermes-distributions.md)
 - [Hermes bootstrap operations](./hermes-agent/bootstrap.md)
+- [Hermes Hindsight ローカルメモリ運用](./hermes-agent/hindsight-memory.md)

@@ -219,6 +219,20 @@ tasks:
     cmds:
       - docker compose -f docker/hermes-agent/compose.yml config --quiet
 
+  hermes:memory:verify:
+    desc: Run the complete Hermes Hindsight live acceptance lifecycle
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+    cmds:
+      - cmd: scripts/sh/hermes-hindsight-verify.sh
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-hindsight-verify.ps1
+        platforms: [windows]
+
   hermes:pull:
     desc: Rebuild the Hermes Agent Docker images with the latest base images
     preconditions:

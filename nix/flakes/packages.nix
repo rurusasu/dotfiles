@@ -88,7 +88,7 @@
       checks = {
         package-provider-coverage = packageSupportReport;
       }
-      // lib.optionalAttrs pkgs.stdenv.isLinux {
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         bootstrap-nixos-vm = import ../tests/bootstrap-nixos.nix {
           inherit inputs pkgs;
         };

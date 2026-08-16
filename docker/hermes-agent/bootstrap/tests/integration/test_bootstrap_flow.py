@@ -39,6 +39,7 @@ from hermes_bootstrap.errors import (
 from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 from hermes_bootstrap.github import GitHubClient
+from hermes_bootstrap.hindsight import build_hindsight_config
 from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource, SharedRepository
 from hermes_bootstrap.onepassword import build_onepassword_config
@@ -143,6 +144,7 @@ def managed_source_config(
     mcp_servers = config["mcp_servers"]
     assert isinstance(mcp_servers, dict)
     mcp_servers["gmail"] = GMAIL_CONFIGURATION
+    config["memory"] = {"provider": "hindsight"}
     managed = build_onepassword_config(manifest, profile)
     return (
         yaml.safe_dump(config, sort_keys=False)
@@ -817,6 +819,7 @@ class BootstrapFlowTests(unittest.TestCase):
                     self.data_root / "profiles" / profile
                 ).items()
                 if path not in {".env", "config.yaml"}
+                and not path.startswith("hindsight")
             }
             for profile in PROFILE_NAMES
         }
@@ -840,12 +843,35 @@ class BootstrapFlowTests(unittest.TestCase):
                     path: (entry.kind, entry.mode, entry.payload)
                     for path, entry in self._snapshot_tree(target).items()
                     if path not in {".env", "config.yaml"}
+                    and not path.startswith("hindsight")
                 },
                 profiles_before[profile],
             )
+            self.assertEqual(
+                json.loads(
+                    (target / "hindsight" / "config.json").read_text(
+                        encoding="utf-8"
+                    )
+                ),
+                build_hindsight_config(),
+            )
+            self.assertEqual(self._mode(target / "hindsight"), 0o700)
+            self.assertEqual(self._mode(target / "hindsight" / "config.json"), 0o600)
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
         self.assertEqual((self.data_root / "memories" / "root.txt").read_text(encoding="utf-8"), "root memory\n")
+        self.assertEqual(
+            json.loads(
+                (self.data_root / "hindsight" / "config.json").read_text(
+                    encoding="utf-8"
+                )
+            ),
+            build_hindsight_config(),
+        )
+        self.assertEqual(self._mode(self.data_root / "hindsight"), 0o700)
+        self.assertEqual(
+            self._mode(self.data_root / "hindsight" / "config.json"), 0o600
+        )
         self.assertEqual(self._mode(self.data_root / ".env"), 0o600)
         lifelog = self.data_root / "shared" / "lifelog"
         legacy = self.data_root / "core" / "lifelog"
@@ -1038,6 +1064,63 @@ class BootstrapFlowTests(unittest.TestCase):
         )
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=lifelog), lifelog_head)
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=lifelog), lifelog_commits)
+
+    def test_second_apply_preserves_root_and_profile_configs_with_legacy_source_providers(
+        self,
+    ) -> None:
+        root_config = (
+            source_config("root", "initial")
+            + "memory:\n"
+            + "  provider: legacy-root\n"
+            + "  source_policy: preserve-root\n"
+        )
+        profile_config = (
+            source_config("profile", "rick-initial")
+            + "memory:\n"
+            + "  provider: legacy-profile\n"
+            + "  source_policy: preserve-profile\n"
+        )
+        self._commit(
+            "root",
+            {"config.yaml": root_config},
+            "declare legacy root memory provider",
+        )
+        self._commit(
+            "rick",
+            {"config.yaml": profile_config},
+            "declare legacy profile memory provider",
+        )
+        (self.data_root / "profiles" / "rick" / "config.yaml").write_text(
+            profile_config,
+            encoding="utf-8",
+        )
+        self._initial_apply()
+        paths = {
+            "root": self.data_root / "config.yaml",
+            "profile": self.data_root / "profiles" / "rick" / "config.yaml",
+        }
+        before = {
+            name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
+            for name, path in paths.items()
+        }
+        for name, path in paths.items():
+            with self.subTest(name=name):
+                config = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertEqual(config["memory"]["provider"], "hindsight")
+                self.assertEqual(
+                    config["memory"]["source_policy"],
+                    f"preserve-{name}",
+                )
+
+        self._initial_apply()
+
+        self.assertEqual(
+            {
+                name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
+                for name, path in paths.items()
+            },
+            before,
+        )
 
     def test_local_profile_update_publishes_and_preserves_runtime_content(self) -> None:
         self._initial_apply()

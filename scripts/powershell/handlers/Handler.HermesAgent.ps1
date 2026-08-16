@@ -7,6 +7,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\Invoke-ExternalCommand.ps1')
 . (Join-Path $libPath 'lib\HermesBootstrap.ps1')
 . (Join-Path $libPath 'lib\HermesXApi.ps1')
+. (Join-Path $libPath 'lib\HermesHindsight.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
     [int]$DockerCheckTimeoutSeconds = 15
@@ -47,6 +48,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
+            $runtimeExisted = $false
             $composeFile = $this.GetComposeFilePath($ctx)
             if (-not (Test-Path -LiteralPath $composeFile)) {
                 return $this.CreateFailureResult("Hermes compose file was not found: $composeFile")
@@ -69,25 +71,68 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
             }
 
+            try {
+                $null = Initialize-HermesHindsightHost -ComposeFile $composeFile -DataDir $dataDir
+            }
+            catch {
+                return $this.CreateFailureResult("Hindsight host preparation failed: $($_.Exception.Message)")
+            }
+
+            $hindsightStart = $this.InvokeCompose($composeFile, @('up', '-d', 'hindsight'))
+            if (-not $hindsightStart.Success) {
+                return $this.CreateFailureResult("Hindsight startup failed: $($hindsightStart.Message)")
+            }
+            try {
+                Wait-HermesHindsightApi
+            }
+            catch {
+                return $this.CreateFailureResult("Hindsight readiness failed: $($_.Exception.Message)")
+            }
+
             $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap', 'chromium', 'xapi-mcp'))
             if (-not $build.Success) {
                 return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
             }
+
+            $runtime = $this.GetRuntimeState($composeFile)
+            if (-not $runtime.Success) {
+                return $this.CreateFailureResult("Hermes runtime inspection failed: $($runtime.Message)")
+            }
+            $runtimeExisted = $runtime.Exists
 
             $stop = $this.InvokeCompose($composeFile, @('stop', 'hermes'))
             if (-not $stop.Success) {
                 return $this.CreateFailureResult("Hermes Agent stop failed: $($stop.Message)")
             }
 
-            $bootstrap = Invoke-HermesBootstrap -ComposeFile $composeFile -DataDir $dataDir
+            try {
+                $bootstrap = Invoke-HermesBootstrap -ComposeFile $composeFile -DataDir $dataDir
+            }
+            catch {
+                $bootstrapFailure = 'Hermes bootstrap failed.'
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($bootstrapFailure)
+            }
             if (-not $bootstrap.Success) {
-                return $this.CreateFailureResult("Hermes bootstrap failed: $($bootstrap.Message)")
+                $bootstrapFailure = "Hermes bootstrap failed: $($bootstrap.Message)"
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($bootstrapFailure)
             }
 
             try {
                 $handler = $this
                 $start = Invoke-HermesXApiCredentialScope -Action {
-                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate'))
+                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
                 }
             }
             catch {
@@ -245,5 +290,40 @@ class HermesAgentHandler : SetupHandlerBase {
             $message = "$($message.Substring(0, 4096))..."
         }
         return [PSCustomObject]@{ Success = $false; Message = $message }
+    }
+
+    hidden [pscustomobject] GetRuntimeState([string]$composeFile) {
+        $arguments = @('compose', '-f', $composeFile, 'ps', '--all', '--services', 'hermes')
+        $output = @(Invoke-Docker -Arguments $arguments -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            $message = ($output -join "`n").Trim()
+            if ([string]::IsNullOrWhiteSpace($message)) { $message = "exit code $exitCode" }
+            return [PSCustomObject]@{ Success = $false; Exists = $false; Message = $message }
+        }
+        $exists = @($output | Where-Object { ([string]$_).Trim() -eq 'hermes' }).Count -eq 1
+        return [PSCustomObject]@{ Success = $true; Exists = $exists; Message = '' }
+    }
+
+    hidden [pscustomobject] RecoverRuntimeAfterBootstrapFailure([string]$composeFile) {
+        $recovery = $this.InvokeCompose($composeFile, @('start', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
+        if (-not $recovery.Success) {
+            return [PSCustomObject]@{
+                Success   = $false
+                Component = 'Hermes runtime recovery start'
+                Message   = $recovery.Message
+            }
+        }
+
+        if (-not $this.WaitForApi()) {
+            $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
+            return [PSCustomObject]@{
+                Success   = $false
+                Component = 'Hermes runtime recovery readiness'
+                Message   = "Hermes API did not become ready after $attempts attempts."
+            }
+        }
+
+        return [PSCustomObject]@{ Success = $true; Component = ''; Message = '' }
     }
 }

@@ -21,7 +21,10 @@ let
   user = if bootstrapUser != "" then bootstrapUser else builtins.getEnv "USER";
   home = if bootstrapHome != "" then bootstrapHome else builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
-  darwinTerminfoPackages = lib.optionals pkgs.stdenv.isDarwin [ pkgs.wezterm.terminfo ];
+  darwinAdditionalPackages = lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
+    pkgs.coreutils
+    pkgs.wezterm.terminfo
+  ];
 in
 {
   home = {
@@ -30,7 +33,14 @@ in
     stateVersion = "25.05";
     # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
     # output separately for shells and tools that resolve TERM=wezterm.
-    packages = sets.allWithout (lib.optional isWSL "discord") ++ darwinTerminfoPackages;
+    packages =
+      sets.allWithout (
+        lib.optionals isWSL [
+          "discord"
+          "ollama"
+        ]
+      )
+      ++ darwinAdditionalPackages;
 
     sessionVariables = {
       # qmd (markdown search engine)
@@ -51,7 +61,7 @@ in
       "$HOME/.local/share/pnpm/bin"
       "$HOME/.local/share/pnpm"
     ]
-    ++ lib.optionals pkgs.stdenv.isDarwin [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
       "/opt/homebrew/bin"
       "/opt/homebrew/sbin"
       "/Applications/Docker.app/Contents/Resources/bin"
@@ -69,7 +79,7 @@ in
       # without retaining the variables that were set alongside it. Restore
       # WezTerm's Darwin terminfo path in .zshenv so interactive shells can
       # initialize zsh/terminfo even in that state.
-      envExtra = lib.optionalString pkgs.stdenv.isDarwin ''
+      envExtra = lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
         if [[ "''${TERM-}" == wezterm && -d "/etc/profiles/per-user/''${USER}/share/terminfo" ]]; then
           export TERMINFO_DIRS="/etc/profiles/per-user/''${USER}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}:/usr/share/terminfo"
         fi

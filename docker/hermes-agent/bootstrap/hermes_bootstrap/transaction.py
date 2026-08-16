@@ -12,6 +12,8 @@ import shutil
 import stat
 import tempfile
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -163,6 +165,56 @@ class Transaction:
         except Exception:
             self._abandon()
             raise ApplyError("could not snapshot managed path") from None
+
+    @contextmanager
+    def bind_reserved_directory(self, path: Path) -> Iterator[int | None]:
+        """Pin an exact recursive reservation for descriptor-relative access."""
+
+        self._require_active()
+        if path == self._data_root:
+            yield None
+            return
+        relative = _managed_relative(self._data_root, self._store, path)
+        entry = next(
+            (
+                candidate
+                for candidate in self._journal["entries"]
+                if candidate["kind"] == "directory_reservation"
+                and candidate["state"] != "restored"
+                and candidate["remove_tree"]
+                and candidate["path"] == relative
+            ),
+            None,
+        )
+        if entry is None:
+            yield None
+            return
+
+        parent = _open_managed_parent(self._data_root, path)
+        descriptor: int | None = None
+        try:
+            descriptor = _open_directory_at(
+                parent,
+                path.name,
+                entry["identity"],
+            )
+        finally:
+            _safe_close(parent)
+        try:
+            if not _directory_reservation_marker_matches(
+                descriptor,
+                entry["marker"],
+            ):
+                raise ApplyError("managed directory reservation was replaced")
+            yield descriptor
+            if not _directory_reservation_matches(
+                path,
+                entry["identity"],
+                entry["marker"],
+            ):
+                raise ApplyError("managed directory reservation was replaced")
+        finally:
+            _safe_close(descriptor)
 
     def reserve_directory(self, path: Path, *, remove_tree: bool = True) -> bool:
         """Atomically publish and journal a directory owned by this transaction."""
@@ -470,16 +522,26 @@ class Transaction:
         )
 
     def _covered_by_directory_reservation(self, relative: str) -> bool:
-        return any(
-            entry["kind"] == "directory_reservation"
-            and entry["state"] != "restored"
-            and entry["remove_tree"]
-            and (
-                entry["path"] == relative
-                or _is_descendant(relative, entry["path"])
-            )
-            for entry in self._journal["entries"]
-        )
+        for entry in self._journal["entries"]:
+            if not (
+                entry["kind"] == "directory_reservation"
+                and entry["state"] != "restored"
+                and entry["remove_tree"]
+                and (
+                    entry["path"] == relative
+                    or _is_descendant(relative, entry["path"])
+                )
+            ):
+                continue
+            path = self._data_root.joinpath(*entry["path"].split("/"))
+            if not _directory_reservation_matches(
+                path,
+                entry["identity"],
+                entry["marker"],
+            ):
+                raise ApplyError("managed directory reservation was replaced")
+            return True
+        return False
 
     def _overlaps_snapshot(self, relative: str) -> bool:
         return any(
@@ -1267,6 +1329,16 @@ def _directory_reservation_matches_at(
         directory = _open_directory_at(parent, name, identity)
     except ApplyError:
         return False
+    try:
+        return _directory_reservation_marker_matches(directory, marker)
+    finally:
+        _safe_close(directory)
+
+
+def _directory_reservation_marker_matches(
+    directory: int,
+    marker: str,
+) -> bool:
     marker_descriptor: int | None = None
     try:
         marker_descriptor = os.open(
@@ -1284,7 +1356,6 @@ def _directory_reservation_matches_at(
     finally:
         if marker_descriptor is not None:
             _safe_close(marker_descriptor)
-        _safe_close(directory)
 
 
 def _valid_directory_identity(value: object) -> bool:

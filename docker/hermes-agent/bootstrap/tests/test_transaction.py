@@ -139,6 +139,31 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual((target / "external.txt").read_bytes(), b"external\n")
         self.assertEqual(self.journal_paths(), [])
 
+    def test_snapshot_rejects_a_descendant_of_a_replaced_directory_reservation(
+        self,
+    ) -> None:
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "rick"
+        tx = Transaction.begin(self.root)
+        self.assertTrue(tx.reserve_directory(target))
+        shutil.rmtree(target)
+        target.mkdir()
+        config = target / "config.yaml"
+        config.write_bytes(b"external: true\n")
+
+        try:
+            with self.assertRaisesRegex(
+                ApplyError,
+                "managed directory reservation was replaced",
+            ):
+                tx.snapshot(config)
+        finally:
+            tx.rollback()
+
+        self.assertEqual(config.read_bytes(), b"external: true\n")
+        self.assertEqual(self.journal_paths(), [])
+
     def test_directory_reservation_recovery_preserves_a_replacement_identity(
         self,
     ) -> None:

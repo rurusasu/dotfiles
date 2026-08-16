@@ -44,11 +44,19 @@ export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/compose.yml"
 test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hermes-bootstrap-fixture.sh"
+cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hindsight-health.json"
+test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
+test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
+	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
+test "$DOTFILES_HERMES_CURL_EXECUTABLE" = \
+	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/curl"
 EOF
 	chmod +x "$test_root/install.sh"
 	mkdir -p "$test_root/scripts/sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$test_root/scripts/sh/install-common.sh"
 	cp "$REPO_ROOT/scripts/sh/hermes-agent.sh" "$test_root/scripts/sh/hermes-agent.sh"
+	cp "$REPO_ROOT/scripts/sh/hermes-hindsight.sh" "$test_root/scripts/sh/hermes-hindsight.sh"
 
 	run env \
 		DOTFILES_ACCEPTANCE_REPO_ROOT="$test_root" \
@@ -125,11 +133,61 @@ EOF
 @test "acceptance compose serves health from nginx and BusyBox document roots" {
 	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
 
-	grep -Fq 'exec /bin/httpd -f -p 80 -h /www' "$compose"
-	grep -Fq "exec nginx -g 'daemon off;'" "$compose"
+	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 2 ]
+	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
 	grep -Fq 'xapi-mcp:' "$compose"
+	grep -Fq 'browser-mcp:' "$compose"
+	grep -Fq 'condition: service_started' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
+}
+
+@test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {
+	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
+	ollama="$FIXTURE_ROOT/bin/ollama"
+	curl="$FIXTURE_ROOT/bin/curl"
+
+	grep -Fq 'hindsight:' "$compose"
+	grep -Fq '127.0.0.1:8888:80' "$compose"
+	grep -Fq './hindsight-health.json:/usr/share/nginx/html/health:ro' "$compose"
+	grep -Fq './hindsight-health.json:/www/health:ro' "$compose"
+	test -x "$ollama"
+	test -x "$curl"
+
+	run "$ollama" pull qwen3.6:35b
+	[ "$status" -eq 0 ]
+	run "$ollama" pull qwen3-embedding:0.6b
+	[ "$status" -eq 0 ]
+	run "$ollama" pull unsupported-model
+	[ "$status" -ne 0 ]
+
+	run env DOTFILES_ACCEPTANCE_REAL_CURL=/usr/bin/false \
+		"$curl" --fail --silent http://127.0.0.1:11434/api/tags
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | jq -e '
+		.models | map(.name) == ["qwen3.6:35b", "qwen3-embedding:0.6b"]
+	' >/dev/null
+}
+
+@test "CI devcontainer pins Nix for the unskipped POSIX suite" {
+	config="$REPO_ROOT/.devcontainer/ci/devcontainer.json"
+	lock="$REPO_ROOT/.devcontainer/ci/devcontainer-lock.json"
+	workflow="$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
+	feature='ghcr.io/devcontainers/features/nix:1.3.1'
+
+	jq -e --arg feature "$feature" '
+		.features[$feature]
+		| .version == "2.34.8"
+		  and .multiUser == true
+		  and .extraNixConfig == "experimental-features = nix-command flakes"
+	' "$config" >/dev/null
+	jq -e --arg feature "$feature" '
+		.features[$feature]
+		| .version == "1.3.1"
+		  and (.resolved | startswith("ghcr.io/devcontainers/features/nix@sha256:"))
+		  and (.integrity | startswith("sha256:"))
+	' "$lock" >/dev/null
+	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -ge 2 ]
 }
 
 @test "Hermes bootstrap gates include the gh wrapper security suite" {

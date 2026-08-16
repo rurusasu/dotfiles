@@ -66,6 +66,7 @@ jobs:
       - name: Start devcontainer
         run: |
           devcontainer up \
+            --frozen-lockfile \
             --config .devcontainer/ci/devcontainer.json \
             --workspace-folder .
 
@@ -93,7 +94,7 @@ jobs:
   macos:
     name: E2E (macOS)
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -111,6 +112,7 @@ jobs:
       - name: Start devcontainer
         run: |
           devcontainer up \
+            --frozen-lockfile \
             --config .devcontainer/ci/devcontainer.json \
             --workspace-folder .
 

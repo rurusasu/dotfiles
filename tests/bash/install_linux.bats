@@ -59,7 +59,22 @@ esac
 	write_stub nc 'exit 0'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+case "$*" in
+  *"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}"; exit 0 ;;
+  *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}"; exit 0 ;;
+esac
 exit 0
+'
+	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub timeout '
+if [[ ${1:-} == --version ]]; then
+	printf "timeout (GNU coreutils) 9.0\n"
+	exit 0
+fi
+[[ ${1:-} == --foreground ]] && shift
+[[ ${1:-} == --kill-after=30 ]] && shift
+shift
+exec "$@"
 '
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
@@ -76,6 +91,7 @@ fi
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
@@ -120,9 +136,11 @@ fi
 write_fresh_nix_installer_stub() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
-if [[ $* == *"/health"* ]]; then
-	exit 0
-fi
+case "$*" in
+  *"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}"; exit 0 ;;
+  *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}"; exit 0 ;;
+  *"/health"*) exit 0 ;;
+esac
 cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
 cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'

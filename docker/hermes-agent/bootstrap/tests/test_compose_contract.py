@@ -13,6 +13,7 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-agent/compose.yml"
+HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hermes-agent/hindsight.env"
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
 RESOLVED_CONFIG_ENV = "HERMES_BOOTSTRAP_COMPOSE_CONFIG_JSON"
 DATA_BIND = {
@@ -25,6 +26,49 @@ XURL_BIND = {
     "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl",
     "target": "/root/.xurl",
 }
+HINDSIGHT_IMAGE = (
+    "ghcr.io/vectorize-io/hindsight:0.9.1@"
+    "sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d"
+)
+HINDSIGHT_ENVIRONMENT = {
+    "HINDSIGHT_API_LLM_PROVIDER": "ollama",
+    "HINDSIGHT_API_LLM_BASE_URL": "http://host.docker.internal:11434/v1",
+    "HINDSIGHT_API_LLM_MODEL": "qwen3.6:35b",
+    "HINDSIGHT_API_LLM_REASONING_EFFORT": "none",
+    "HINDSIGHT_API_LLM_OLLAMA_NUM_CTX": "32768",
+    "HINDSIGHT_API_LLM_STRICT_SCHEMA": "true",
+    "HINDSIGHT_API_LLM_STRICT_SCHEMA_RETAIN": "true",
+    "HINDSIGHT_API_LLM_STRICT_SCHEMA_REFLECT": "true",
+    "HINDSIGHT_API_LLM_STRICT_SCHEMA_CONSOLIDATION": "true",
+    "HINDSIGHT_API_LLM_MAX_CONCURRENT": "1",
+    "HINDSIGHT_API_LLM_TIMEOUT": "300",
+    "HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS": "true",
+    "HINDSIGHT_API_RETAIN_WALL_TIMEOUT": "300",
+    "HINDSIGHT_API_ENABLE_DRY_RUN_EXTRACT": "true",
+    "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
+    "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": "http://host.docker.internal:11434/v1",
+    "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": "ollama",
+    "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": "qwen3-embedding:0.6b",
+    "HINDSIGHT_API_RERANKER_PROVIDER": "local",
+    "HINDSIGHT_API_RERANKER_LOCAL_MODEL": "BAAI/bge-reranker-v2-m3",
+    "HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU": "true",
+    "HINDSIGHT_API_ENABLE_RERANKING": "true",
+}
+HINDSIGHT_PG_BIND = {
+    "type": "bind",
+    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/pg0",
+    "target": "/home/hindsight/.pg0",
+}
+HINDSIGHT_CACHE_BIND = {
+    "type": "bind",
+    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/cache",
+    "target": "/home/hindsight/.cache",
+}
+HINDSIGHT_HEALTHCHECK = (
+    "python -c \"import json,urllib.request; d=json.load(urllib.request.urlopen("
+    "'http://127.0.0.1:8888/health', timeout=5)); raise SystemExit(0 if "
+    "d.get('status') == 'healthy' and d.get('database') == 'connected' else 1)\""
+)
 EXPECTED_TCP_HEALTHCHECK = (
     "node -e \"const net=require('node:net');const s=net.connect("
     "{host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});"
@@ -61,6 +105,71 @@ class ComposeContractTests(unittest.TestCase):
             self.hermes["environment"]["HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD"],
             "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}",
         )
+
+    def test_hindsight_is_a_pinned_multi_arch_private_memory_runtime(self) -> None:
+        hindsight = self.services.get("hindsight")
+        self.assertIsNotNone(hindsight)
+        assert hindsight is not None
+
+        self.assertEqual(hindsight["image"], HINDSIGHT_IMAGE)
+        self.assertNotIn("platform", hindsight)
+        self.assertEqual(hindsight["container_name"], "hermes-hindsight")
+        self.assertEqual(hindsight["restart"], "unless-stopped")
+        self.assertEqual(
+            hindsight["env_file"], [{"path": "./hindsight.env", "required": True}],
+        )
+        self.assertEqual(
+            hindsight["extra_hosts"], ["host.docker.internal:host-gateway"],
+        )
+        self.assertEqual(
+            hindsight["ports"],
+            [
+                "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888",
+                "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999",
+            ],
+        )
+        self.assertFalse(any("5432" in port for port in hindsight["ports"]))
+        self.assertEqual(
+            hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
+        )
+        self.assertEqual(hindsight["shm_size"], "1g")
+        self.assertEqual(hindsight["networks"], ["hermes-memory"])
+
+    def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
+        hindsight = self.services.get("hindsight")
+        self.assertIsNotNone(hindsight)
+        assert hindsight is not None
+
+        self.assertEqual(
+            hindsight["healthcheck"],
+            {
+                "test": ["CMD-SHELL", HINDSIGHT_HEALTHCHECK],
+                "interval": "10s",
+                "timeout": "10s",
+                "retries": 30,
+                "start_period": "60s",
+            },
+        )
+
+    def test_hermes_can_reach_memory_without_waiting_for_its_runtime(self) -> None:
+        self.assertEqual(self.hermes["networks"], ["hermes-browser", "hermes-memory"])
+        self.assertEqual(
+            self.hermes["extra_hosts"], ["host.docker.internal:host-gateway"]
+        )
+        self.assertNotIn("hindsight", self.hermes["depends_on"])
+        self.assertEqual(
+            self.compose["networks"]["hermes-memory"],
+            {"name": "hermes-memory", "driver": "bridge"},
+        )
+
+    def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
+        environment = {}
+        for line in HINDSIGHT_ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if line:
+                key, value = line.split("=", 1)
+                environment[key] = value
+
+        self.assertEqual(environment, HINDSIGHT_ENVIRONMENT)
 
     def test_hermes_services_load_the_private_service_account_environment_file(self) -> None:
         expected = [

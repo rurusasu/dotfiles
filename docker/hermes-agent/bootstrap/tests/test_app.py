@@ -25,6 +25,7 @@ from hermes_bootstrap.errors import (
     ValidationError,
 )
 from hermes_bootstrap.github import GitAuth
+from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.models import (
     BootstrapManifest,
     DistributionSource,
@@ -38,6 +39,29 @@ from hermes_bootstrap.profile_sync import (
     ProfileSyncResult,
 )
 from hermes_bootstrap.repositories import RemoteSyncResult
+
+
+MANIFEST = Path(__file__).parents[2] / "bootstrap-manifest.yaml"
+EXPECTED_HINDSIGHT = {
+    "mode": "local_external",
+    "api_url": "http://hindsight:8888",
+    "bank_id": "hermes",
+    "bank_id_template": "hermes-{profile}",
+    "bank_retain_mission": (
+        "Retain durable preferences, decisions, corrections, entities, relationships, "
+        "and temporal facts. Never extract credentials, tokens, private keys, "
+        "authentication material, or transient logs as memories."
+    ),
+    "memory_mode": "hybrid",
+    "auto_recall": True,
+    "recall_sync": False,
+    "recall_types": "observation",
+    "recall_budget": "mid",
+    "auto_retain": True,
+    "retain_async": True,
+    "retain_every_n_turns": 1,
+    "retain_source": "hermes",
+}
 
 
 def manifest(
@@ -144,6 +168,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_gmail_credentials = gmail_credentials_patcher.start()
         self.addCleanup(gmail_credentials_patcher.stop)
+        hindsight_patcher = mock.patch.object(
+            app,
+            "install_hindsight_configurations",
+            create=True,
+        )
+        self.install_hindsight_configurations = hindsight_patcher.start()
+        self.addCleanup(hindsight_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -209,6 +240,8 @@ class AppTests(unittest.TestCase):
         self.write_root_state()
         target = self.write_installed_profile()
         calendar_config = (
+            "memory:\n"
+            "  provider: hindsight\n"
             "mcp_servers:\n"
             "  calendar:\n"
             "    command: google-calendar-mcp\n"
@@ -236,6 +269,16 @@ class AppTests(unittest.TestCase):
         )
         for config in (self.root / "config.yaml", target / "config.yaml"):
             config.write_text(calendar_config, encoding="utf-8")
+            config.chmod(0o600)
+            hindsight = config.parent / "hindsight"
+            hindsight.mkdir(mode=0o700)
+            hindsight_config = hindsight / "config.json"
+            hindsight_config.write_text(
+                json.dumps(EXPECTED_HINDSIGHT, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            hindsight_config.chmod(0o600)
         credentials = self.root / "google-calendar-mcp"
         credentials.mkdir(mode=0o700)
         oauth = credentials / "gcp-oauth.keys.json"
@@ -688,6 +731,13 @@ class AppTests(unittest.TestCase):
                 + f":{transaction is tx}"
             )
         )
+        self.install_hindsight_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "hindsight-config:"
+                + ",".join(profile for profile, _target in targets)
+                + f":{transaction is tx}"
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -714,6 +764,11 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "apply_shared_working_tree", side_effect=lambda *_: events.append("shared:lifelog")),
             mock.patch.object(app, "build_dashboard_environment", return_value={"DASH": "value"}),
             mock.patch.object(app, "build_profile_environment", side_effect=lambda name, *_: {"PROFILE": name, "GH_TOKEN": "token"}),
+            mock.patch.object(
+                app,
+                "reconcile_onepassword_configurations",
+                side_effect=lambda *_: events.append("onepassword-config"),
+            ),
             mock.patch.object(app, "merge_env_file", side_effect=lambda path, *_: events.append(f"env:{path.parent.name}")),
             mock.patch.object(app, "_validate_installed_layout", side_effect=validate_installed),
         ):
@@ -747,6 +802,8 @@ class AppTests(unittest.TestCase):
                 "shared:lifelog",
                 "calendar-config:data,rick,hoffman,risarisa,nancy:True",
                 "gmail-config:data,rick,hoffman,risarisa,nancy:True",
+                "hindsight-config:default,rick,hoffman,risarisa,nancy:True",
+                "onepassword-config",
                 "env:data",
                 "env:rick",
                 "env:hoffman",
@@ -2298,6 +2355,58 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(result, {"profiles": ["rick"], "repositories": ["lifelog"]})
         github.assert_not_called()
+
+    def test_environment_targets_follow_the_manifest_inventory(self) -> None:
+        from hermes_bootstrap import app
+
+        configured = load_manifest(MANIFEST)
+
+        targets = app._environment_targets(configured)
+
+        self.assertEqual(
+            [profile for profile, _target in targets],
+            ["default", "rick", "hoffman", "risarisa", "nancy", "kuroda", "shiraishi"],
+        )
+        self.assertEqual(
+            targets,
+            (("default", configured.data_root),)
+            + tuple((profile.name, profile.target) for profile in configured.profiles),
+        )
+
+    def test_installed_layout_validates_hindsight_before_environment_files(self) -> None:
+        from hermes_bootstrap import app
+
+        events: list[str] = []
+        with (
+            mock.patch.object(app, "_require_safe_directory"),
+            mock.patch.object(app, "_require_no_git"),
+            mock.patch.object(app, "_validate_root_state"),
+            mock.patch.object(app, "_validate_profiles"),
+            mock.patch.object(app, "_validate_repositories"),
+            mock.patch.object(app, "validate_google_calendar_installation"),
+            mock.patch.object(app, "validate_google_gmail_installation"),
+            mock.patch.object(
+                app,
+                "validate_hindsight_installation",
+                create=True,
+                side_effect=lambda targets: events.append(
+                    "hindsight:" + ",".join(profile for profile, _target in targets)
+                ),
+            ) as validate_hindsight,
+            mock.patch.object(
+                app,
+                "_validate_env_file",
+                side_effect=lambda path, _required: events.append(f"env:{path.parent.name}"),
+            ),
+        ):
+            app._validate_installed_layout(
+                self.manifest, allow_active_transaction=True
+            )
+
+        validate_hindsight.assert_called_once_with(
+            app._environment_targets(self.manifest)
+        )
+        self.assertEqual(events, ["hindsight:default,rick", "env:data", "env:rick"])
 
     def test_installed_layout_validation_preserves_unmanaged_profile_entries(self) -> None:
         from hermes_bootstrap import app

@@ -212,7 +212,7 @@ let
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
-      pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;
       winget = "wez.wezterm.nightly";
       category = "terminal";
       support = {
@@ -288,7 +288,7 @@ let
       # binary, so use the separately packaged ripgrep instead.
       pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
         old:
-        if pkgs.stdenv.isDarwin then
+        if pkgs.stdenv.hostPlatform.isDarwin then
           {
             postPatch =
               lib.replaceStrings
@@ -331,6 +331,20 @@ let
       winget = "OpenAI.Codex";
       category = "llm";
     };
+    ollama = {
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
+      winget = "Ollama.Ollama";
+      category = "llm";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "ollama";
+        };
+        linux = {
+          provider = "nix";
+        };
+      };
+    };
     workmux = {
       pkg = pkgs.workmux;
       winget = null;
@@ -346,7 +360,7 @@ let
 
     # ── desktop applications ──────────────────────────────
     discord = {
-      pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;
       winget = "Discord.Discord";
       category = "desktop";
       support = {
@@ -1069,6 +1083,10 @@ lib.mapAttrs (_: resolve) grouped
     };
     opencode = {
       command = "opencode";
+      args = [ "--version" ];
+    };
+    ollama = {
+      command = "ollama";
       args = [ "--version" ];
     };
     oxlint = {

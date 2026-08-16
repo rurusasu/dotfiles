@@ -7,6 +7,8 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
+	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
+	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	SECRET_MARKER="adapter-secret-marker"
@@ -14,11 +16,19 @@ setup() {
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
+	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
+	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
 	: >"$COMPOSE_FILE"
+	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
+HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
+HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b
+EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
-	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
+	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
+	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
+	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -32,6 +42,11 @@ setup() {
 	export BOOTSTRAP_EXIT_EARLY=0
 	export HERMES_RUNTIME_EXISTS=1
 	export API_READY_AFTER=1
+	export OLLAMA_READY_AFTER=1
+	export HINDSIGHT_API_DATABASE=connected
+	export HINDSIGHT_API_READY_AFTER=1
+	export OLLAMA_PULL_FAILURE=""
+	export OLLAMA_PULL_TIMEOUT_STATUS=0
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
@@ -97,6 +112,37 @@ case " $* " in
 esac
 '
 	write_stub curl '
+case " $* " in
+  *"/api/version "*)
+    attempt="$(cat "$OLLAMA_READY_ATTEMPT_FILE")"
+    attempt=$((attempt + 1))
+    printf "%s\n" "$attempt" >"$OLLAMA_READY_ATTEMPT_FILE"
+    printf "curl" >>"$COMMAND_LOG"
+    printf " <%s>" "$@" >>"$COMMAND_LOG"
+    printf "\n" >>"$COMMAND_LOG"
+    if ((attempt < OLLAMA_READY_AFTER)); then exit 22; fi
+    printf "{\"version\":\"0.1\"}\n"
+    exit 0
+    ;;
+  *"/api/tags "*)
+    printf "curl" >>"$COMMAND_LOG"
+    printf " <%s>" "$@" >>"$COMMAND_LOG"
+    printf "\n" >>"$COMMAND_LOG"
+    printf "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}\n"
+    exit 0
+    ;;
+  *"127.0.0.1:8888/health "*)
+		attempt="$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")"
+		attempt=$((attempt + 1))
+		printf "%s\n" "$attempt" >"$HINDSIGHT_READY_ATTEMPT_FILE"
+    printf "curl" >>"$COMMAND_LOG"
+    printf " <%s>" "$@" >>"$COMMAND_LOG"
+    printf "\n" >>"$COMMAND_LOG"
+		if ((attempt < HINDSIGHT_API_READY_AFTER)); then exit 22; fi
+    printf "{\"status\":\"healthy\",\"database\":\"%s\"}\n" "$HINDSIGHT_API_DATABASE"
+    exit 0
+    ;;
+esac
 attempt="$(cat "$READY_ATTEMPT_FILE")"
 attempt=$((attempt + 1))
 printf "%s\n" "$attempt" >"$READY_ATTEMPT_FILE"
@@ -106,6 +152,28 @@ printf "\n" >>"$COMMAND_LOG"
 if ((attempt < API_READY_AFTER)); then
 	exit 22
 fi
+'
+	write_stub ollama '
+printf "ollama" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if [[ ${1:-} == pull && ${2:-} == "$OLLAMA_PULL_FAILURE" ]]; then exit 42; fi
+'
+	write_stub timeout '
+if [[ ${1:-} == --version ]]; then
+	printf "timeout (GNU coreutils) 9.0\n"
+	exit 0
+fi
+printf "timeout" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if [[ ${OLLAMA_PULL_TIMEOUT_STATUS:-0} != 0 ]]; then
+	exit "$OLLAMA_PULL_TIMEOUT_STATUS"
+fi
+[[ ${1:-} == --foreground ]] && shift
+[[ ${1:-} == --kill-after=30 ]] && shift
+shift
+"$@"
 '
 	write_stub sleep '
 printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
@@ -771,7 +839,7 @@ trailing-garbage"
 	[ "$status" -eq 1 ]
 	grep -q '<Rick>' "$COMMAND_LOG"
 	grep -q '<apply>' "$COMMAND_LOG"
-	! grep -q '<up>' "$COMMAND_LOG"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 	! grep -q '"type":"end"' "$PAYLOAD_CAPTURE"
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
@@ -786,9 +854,9 @@ trailing-garbage"
 
 	[ "$status" -eq 5 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '^curl '
+	assert_log_order '<up> <-d> <hindsight>' '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:8642/health>'
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
-	! grep -q '<up>' "$COMMAND_LOG"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
 	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
@@ -804,9 +872,9 @@ trailing-garbage"
 
 	[ "$status" -eq 3 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '^curl '
+	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:8642/health>'
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
-	! grep -q '<up>' "$COMMAND_LOG"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
 	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
@@ -843,12 +911,192 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate>' '^curl ' '<image> <prune> <--force>'
+	assert_log_order '<config> <--quiet>' '<http://127.0.0.1:11434/api/version>' '^ollama <pull> <qwen3.6:35b>' '^ollama <pull> <qwen3-embedding:0.6b>' '<http://127.0.0.1:11434/api/tags>' '<up> <-d> <hindsight>' '<http://127.0.0.1:8888/health>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:8642/health>' '<image> <prune> <--force>'
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "fails clearly when native Ollama is unavailable before building Hermes" {
+	run_start_stack ollama
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"ollama is required"* ]]
+	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "Linux resolves the native Ollama endpoint from the Docker bridge" {
+	unset HINDSIGHT_OLLAMA_URL
+	write_stub uname 'printf "Linux\n"'
+	docker_gateway() {
+		[ "$*" = "network inspect bridge --format {{(index .IPAM.Config 0).Gateway}}" ]
+		printf '172.19.0.1\n'
+	}
+	. "$REPO_ROOT/scripts/sh/install-common.sh"
+	. "$REPO_ROOT/scripts/sh/hermes-hindsight.sh"
+
+	dotfiles_hermes_hindsight_configure_ollama_url docker_gateway
+
+	[ "$HINDSIGHT_OLLAMA_URL" = "http://172.19.0.1:11434" ]
+}
+
+@test "configured Ollama URL is propagated to native model pulls" {
+	export HINDSIGHT_OLLAMA_URL=http://172.19.0.1:11434
+	OLLAMA_HOST_CAPTURE="$BATS_TEST_TMPDIR/ollama-hosts"
+	export OLLAMA_HOST_CAPTURE
+	write_stub ollama '
+printf "%s\n" "${OLLAMA_HOST:-}" >>"$OLLAMA_HOST_CAPTURE"
+'
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(sort -u "$OLLAMA_HOST_CAPTURE")" = "172.19.0.1:11434" ]
+}
+
+@test "fails clearly when native Ollama is unreachable before pulling models" {
+	export OLLAMA_READY_AFTER=99 HINDSIGHT_OLLAMA_READY_ATTEMPTS=3
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Ollama API did not become ready after 3 attempts."* ]]
+	[ "$(cat "$OLLAMA_READY_ATTEMPT_FILE")" -eq 3 ]
+	! grep -q '^ollama ' "$COMMAND_LOG"
+	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "provisions exactly the two configured Ollama models and persistent Hindsight data before bootstrap" {
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^ollama <pull>' "$COMMAND_LOG")" -eq 2 ]
+	grep -Fxq 'ollama <pull> <qwen3.6:35b>' "$COMMAND_LOG"
+	grep -Fxq 'ollama <pull> <qwen3-embedding:0.6b>' "$COMMAND_LOG"
+	[ -d "$HOME/.hermes/hindsight/pg0" ]
+	[ -d "$HOME/.hermes/hindsight/cache" ]
+	! grep -q '^ollama <serve>' "$COMMAND_LOG"
+	! grep -q '^ollama <start>' "$COMMAND_LOG"
+	! grep -q '<build>.*<hindsight>' "$COMMAND_LOG"
+	full_stack_start="$(grep '<up> <-d> <--force-recreate>' "$COMMAND_LOG")"
+	[[ "$full_stack_start" == *'<hermes> <chromium> <browser-mcp> <xapi-mcp>'* ]]
+	[[ "$full_stack_start" != *'<hindsight>'* ]]
+	[[ "$full_stack_start" != *'<--wait>'* ]]
+}
+
+@test "explicit Hindsight executables override PATH lookup" {
+	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
+	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -Fq "timeout <--foreground> <--kill-after=30> <3600> <$STUB_BIN/ollama> <pull> <qwen3.6:35b>" \
+		"$COMMAND_LOG"
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; . "$REPO_ROOT/scripts/sh/hermes-hindsight.sh"; dotfiles_hermes_hindsight_curl_command'
+	[ "$status" -eq 0 ]
+	[ "$output" = "$STUB_BIN/curl" ]
+}
+
+@test "bounds Ollama model pulls with the default 3600 second GNU timeout" {
+	unset HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^timeout <--foreground> <--kill-after=30> <3600> <ollama> <pull>' "$COMMAND_LOG")" -eq 2 ]
+}
+
+@test "honors the Ollama model pull timeout override" {
+	export HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS=7200
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^timeout <--foreground> <--kill-after=30> <7200> <ollama> <pull>' "$COMMAND_LOG")" -eq 2 ]
+}
+
+@test "propagates an Ollama model pull timeout without starting Hindsight" {
+	export OLLAMA_PULL_TIMEOUT_STATUS=124
+
+	run_start_stack
+
+	[ "$status" -eq 124 ]
+	! grep -q '<up> <-d> <hindsight>' "$COMMAND_LOG"
+}
+
+@test "fails clearly when GNU timeout is unavailable" {
+	run_start_stack timeout
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"GNU timeout is required for Hermes Hindsight model pulls."* ]]
+	! grep -q '^ollama <pull>' "$COMMAND_LOG"
+}
+
+@test "propagates a configured Ollama model pull failure without starting Hindsight or Hermes" {
+	export OLLAMA_PULL_FAILURE='qwen3-embedding:0.6b'
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	grep -Fxq 'ollama <pull> <qwen3.6:35b>' "$COMMAND_LOG"
+	grep -Fxq 'ollama <pull> <qwen3-embedding:0.6b>' "$COMMAND_LOG"
+	! grep -q '<up> <-d> <hindsight>' "$COMMAND_LOG"
+	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "requires Hindsight database connectivity before the Hermes bootstrap" {
+	export HINDSIGHT_API_DATABASE=disconnected HINDSIGHT_API_READY_ATTEMPTS=1
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Hindsight API did not become ready after 1 attempts."* ]]
+	grep -q '<up> <-d> <hindsight>' "$COMMAND_LOG"
+	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "default Hindsight readiness succeeds on the 150th attempt" {
+	unset HINDSIGHT_API_READY_ATTEMPTS HINDSIGHT_API_READY_DELAY_SECONDS
+	export HINDSIGHT_API_READY_AFTER=150
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_hindsight_wait_for_api
+'
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")" -eq 150 ]
+	[ "$(grep -c '^sleep <2>$' "$COMMAND_LOG")" -eq 149 ]
+}
+
+@test "parses only one nonempty exact Hindsight environment assignment without evaluation" {
+	printf '%s\n' \
+		'HINDSIGHT_API_LLM_MODEL=$(touch should-not-exist)' \
+		'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b' >"$BATS_TEST_TMPDIR/hindsight.env"
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = '$(touch should-not-exist)' ]
+	[ ! -e "$BATS_TEST_TMPDIR/should-not-exist" ]
+	printf '%s\n' \
+		'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b' \
+		'HINDSIGHT_API_LLM_MODEL=duplicate' >"$BATS_TEST_TMPDIR/hindsight.env"
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; . "$REPO_ROOT/scripts/sh/hermes-agent.sh"; dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL'
+	[ "$status" -ne 0 ]
+	printf '%s\n' 'HINDSIGHT_API_LLM_MODEL=' >"$BATS_TEST_TMPDIR/hindsight.env"
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; . "$REPO_ROOT/scripts/sh/hermes-agent.sh"; dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL'
+	[ "$status" -ne 0 ]
 }
 
 @test "waits for the Hermes API to become ready before reporting success" {
@@ -858,10 +1106,10 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '^curl ' "$COMMAND_LOG")" -eq 3 ]
+	[ "$(grep -c '<http://127.0.0.1:8642/health>' "$COMMAND_LOG")" -eq 3 ]
 	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
 	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
-	assert_log_order '<up> <-d> <--force-recreate>' '^curl ' '<image> <prune> <--force>'
+	assert_log_order '<up> <-d> <--force-recreate>' '<http://127.0.0.1:8642/health>' '<image> <prune> <--force>'
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
 	fi

@@ -5,12 +5,15 @@ USER root
 ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
 ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
+ARG HINDSIGHT_CLIENT_VERSION=0.6.1
 
 COPY xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
 COPY gh-wrapper.sh /usr/local/bin/gh
 COPY bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap
 COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap
+COPY hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
+RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
 
 RUN python3 - <<'PY'
 import re
@@ -122,6 +125,10 @@ RUN apt-get update \
   && google-calendar-mcp --version \
   && npm list --global --depth=0 "@artymclabin/gmail-mcp@${GOOGLE_GMAIL_MCP_VERSION}" \
   && article-collector --help \
+  && uv pip install --python /opt/hermes/.venv/bin/python \
+      "hindsight-client==${HINDSIGHT_CLIENT_VERSION}" \
+  && /opt/hermes/.venv/bin/python -c \
+      "from importlib.metadata import version; assert version('hindsight-client') == '${HINDSIGHT_CLIENT_VERSION}'" \
   && chmod 0755 /usr/local/bin/gh \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \
   && chmod 0755 /usr/local/bin/hermes-bootstrap \
@@ -133,11 +140,17 @@ WORKDIR /workspace
 
 COPY Dockerfile /workspace/docker/hermes-agent/Dockerfile
 COPY compose.yml /workspace/docker/hermes-agent/compose.yml
+COPY hindsight.env /workspace/docker/hermes-agent/hindsight.env
 COPY bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
+COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
 COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests
+
+RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
+  -s /workspace/docker/hermes-agent/bootstrap/tests \
+  -p 'hindsight_real_provider_gate.py' -v
 
 FROM hermes-bootstrap-runtime
 

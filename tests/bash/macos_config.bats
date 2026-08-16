@@ -8,7 +8,7 @@ setup() {
 
 @test "latest nixpkgs flake evaluation excludes unsupported Intel macOS" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
-	run nix flake show "$REPO_ROOT" --all-systems --json --no-write-lock-file
+	run nix flake show "path:$REPO_ROOT" --all-systems --json --no-write-lock-file
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"x86_64-darwin"* ]]
 }
@@ -98,6 +98,11 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin provisions GNU timeout and launches native Ollama" {
+	grep -Fq 'pkgs.coreutils' "$REPO_ROOT/nix/home/common.nix"
+	grep -Fq '/usr/bin/open -gj -a Ollama' "$REPO_ROOT/nix/darwin/default.nix"
+}
+
 @test "Darwin zsh restores WezTerm terminfo after inherited Home Manager sentinels" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
@@ -147,5 +152,14 @@ setup() {
 	run grep -F '"install.sh"' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
 	[ "$status" -eq 0 ]
 	run grep -F '"scripts/sh/install-macos.sh"' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
+	[ "$status" -eq 0 ]
+}
+
+@test "macOS devcontainer CI allows the cold start and full test suite to finish" {
+	run awk '
+		/name: E2E \(macOS\)/ { in_job = 1 }
+		in_job && /timeout-minutes:/ { exit !($2 >= 60) }
+		END { if (!in_job) exit 1 }
+	' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
 	[ "$status" -eq 0 ]
 }

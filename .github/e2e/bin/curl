@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+for argument in "$@"; do
+  case "$argument" in
+	http://*:11434/api/version)
+    printf '{"version":"acceptance"}\n'
+    exit 0
+    ;;
+	http://*:11434/api/tags)
+    printf '{"models":[{"name":"qwen3.6:35b"},{"name":"qwen3-embedding:0.6b"}]}\n'
+    exit 0
+    ;;
+  esac
+done
+
+if [ -z "${DOTFILES_ACCEPTANCE_REAL_CURL:-}" ] || \
+  [ ! -x "$DOTFILES_ACCEPTANCE_REAL_CURL" ]; then
+  printf 'DOTFILES_ACCEPTANCE_REAL_CURL must name the real curl executable.\n' >&2
+  exit 2
+fi
+
+exec "$DOTFILES_ACCEPTANCE_REAL_CURL" "$@"

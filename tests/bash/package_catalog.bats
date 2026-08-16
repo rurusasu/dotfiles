@@ -53,6 +53,16 @@ setup() {
 	grep -q 'Verify package provider coverage' "$REPO_ROOT/.github/workflows/ci-consistency.yml"
 }
 
+@test "winget export reproduces committed Windows manifests byte-for-byte" {
+	run --separate-stderr nix build "path:$REPO_ROOT#winget-export" --no-link --print-out-paths
+	[ "$status" -eq 0 ]
+	[ -d "$output" ]
+
+	cmp "$output/winget/packages.json" "$REPO_ROOT/windows/winget/packages.json"
+	cmp "$output/npm/packages.json" "$REPO_ROOT/windows/npm/packages.json"
+	cmp "$output/pnpm/packages.json" "$REPO_ROOT/windows/pnpm/packages.json"
+}
+
 @test "missing providers require an explicitly reviewed unsupported reason" {
 	grep -q 'reviewedUnsupported' "$SETS"
 	grep -q 'missing.*provider or reviewed unsupported reason' "$SETS"
@@ -88,7 +98,7 @@ setup() {
 @test "Discord is a cross-platform desktop package" {
 	run grep -n -A12 '^    discord = {' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;'* ]]
 	[[ "$output" == *'winget = "Discord.Discord";'* ]]
 	[[ "$output" == *'category = "desktop";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]
@@ -117,12 +127,37 @@ setup() {
 		in_entry && /^    };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;'* ]]
 	[[ "$output" == *'cask = "wezterm@nightly"'* ]]
 	[[ "$output" == *'darwin = {'* ]]
 	[[ "$output" == *'linux = {'* ]]
 	[[ "$output" == *'provider = "homebrew-cask"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
+}
+
+@test "Ollama has native Nix, Homebrew cask, and Winget catalog providers with verification" {
+	run awk '
+		/^    ollama = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;'* ]]
+	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
+	[[ "$output" == *'category = "llm";'* ]]
+	[[ "$output" == *'provider = "homebrew-cask";'* ]]
+	[[ "$output" == *'cask = "ollama";'* ]]
+	[[ "$output" == *'provider = "nix";'* ]]
+
+	run awk '
+		/^  wingetVerify = \{/ { in_section=1 }
+		in_section && /^    ollama = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'command = "ollama";'* ]]
+	[[ "$output" == *'args = [ "--version" ];'* ]]
 }
 
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {

@@ -14,9 +14,14 @@ CANONICAL_DIR="$REPO_ROOT/docker/hermes-agent"
 install -m 0644 "$FIXTURE_ROOT/bootstrap-compose.yml" "$CANONICAL_DIR/compose.yml"
 install -m 0755 "$FIXTURE_ROOT/hermes-bootstrap-fixture.sh" \
   "$CANONICAL_DIR/hermes-bootstrap-fixture.sh"
+install -m 0644 "$FIXTURE_ROOT/hindsight-health.json" \
+  "$CANONICAL_DIR/hindsight-health.json"
 
 export DOTFILES_ACCEPTANCE_REPO_ROOT="$REPO_ROOT"
 export DOTFILES_ACCEPTANCE_FIXTURE_ROOT="$FIXTURE_ROOT"
+export DOTFILES_ACCEPTANCE_REAL_CURL="${DOTFILES_ACCEPTANCE_REAL_CURL:-$(command -v curl)}"
+export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$FIXTURE_ROOT/bin/ollama"
+export DOTFILES_HERMES_CURL_EXECUTABLE="$FIXTURE_ROOT/bin/curl"
 export DOTFILES_HERMES_OP_EXECUTABLE="$FIXTURE_ROOT/bin/op"
 export PATH="$FIXTURE_ROOT/bin:$PATH"
 

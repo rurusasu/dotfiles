@@ -837,17 +837,24 @@ def without_bootstrap_managed_config(
 
     result = _without_bootstrap_onepassword(config)
     mcp_servers = result.get("mcp_servers")
-    if not isinstance(mcp_servers, dict):
-        return result
-    gmail = mcp_servers.get("gmail")
-    if not is_google_gmail_configuration(gmail):
-        return result
-    retained_servers = dict(mcp_servers)
-    retained_servers.pop("gmail")
-    if retained_servers:
-        result["mcp_servers"] = retained_servers
-    else:
-        result.pop("mcp_servers", None)
+    if isinstance(mcp_servers, dict):
+        gmail = mcp_servers.get("gmail")
+        if is_google_gmail_configuration(gmail):
+            retained_servers = dict(mcp_servers)
+            retained_servers.pop("gmail")
+            if retained_servers:
+                result["mcp_servers"] = retained_servers
+            else:
+                result.pop("mcp_servers", None)
+
+    memory = result.get("memory")
+    if isinstance(memory, dict):
+        retained_memory = dict(memory)
+        retained_memory.pop("provider", None)
+        if retained_memory:
+            result["memory"] = retained_memory
+        else:
+            result.pop("memory", None)
     return result
 
 
