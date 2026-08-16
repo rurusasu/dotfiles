@@ -418,6 +418,13 @@ def _timed_tool_call(
     return result, elapsed
 
 
+def _require_operation_budget(operation: str, elapsed: float, timeout: float) -> None:
+    if elapsed >= timeout:
+        raise AcceptanceError(
+            f"{operation} exceeded the {timeout:g} second acceptance budget"
+        )
+
+
 def _recall_own_sentinel(
     provider: Any,
     *,
@@ -437,13 +444,15 @@ def _recall_own_sentinel(
             clock=clock,
         )
         timings.append(elapsed)
+        _require_operation_budget("recall", elapsed, timeout)
         result = _require_tool_success(raw, "recall", profile)
-        if sentinel in result:
-            return
         if clock() >= deadline:
             raise AcceptanceError(
-                f"Own sentinel recall timed out for profile {profile}"
+                f"recall exceeded the {timeout:g} second acceptance budget "
+                f"for profile {profile}"
             )
+        if sentinel in result:
+            return
         sleeper(min(1.0, timeout))
 
 
@@ -451,6 +460,7 @@ def _assert_cross_profile_isolation(
     providers: dict[str, Any],
     sentinels: dict[str, str],
     *,
+    timeout: float,
     clock: Clock,
     timings: list[float],
 ) -> int:
@@ -468,6 +478,7 @@ def _assert_cross_profile_isolation(
                 clock=clock,
             )
             timings.append(elapsed)
+            _require_operation_budget("recall", elapsed, timeout)
             result = _require_tool_success(raw, "recall", profile)
             if sentinel in result:
                 raise AcceptanceError(
@@ -570,6 +581,10 @@ def run_seed(
         raise AcceptanceError(
             "Seed requires all seven managed profiles in canonical order"
         )
+    if state_path.exists():
+        raise AcceptanceError(
+            f"Acceptance state already exists; preserve or clean it before retry: {state_path}"
+        )
     run_id = token_hex(16)
     sentinels = {
         profile: f"hermes-memory-sentinel-{profile}-{token_hex(16)}"
@@ -613,6 +628,7 @@ def run_seed(
                 clock=clock,
             )
             state["timings"]["retain"].append(elapsed)
+            _require_operation_budget("retain", elapsed, timeout)
             result = _require_tool_success(raw, "retain", profile)
             if "stored successfully" not in result.lower():
                 raise AcceptanceError(f"Provider retain failed for profile {profile}")
@@ -632,6 +648,7 @@ def run_seed(
         _assert_cross_profile_isolation(
             providers,
             sentinels,
+            timeout=timeout,
             clock=clock,
             timings=state["timings"]["recall"],
         )
@@ -681,6 +698,7 @@ def run_verify(
         negative_checks = _assert_cross_profile_isolation(
             providers,
             state["sentinels"],
+            timeout=timeout,
             clock=clock,
             timings=state["timings"]["recall"],
         )
@@ -693,7 +711,7 @@ def run_verify(
     )
     evidence.update(
         {
-            "status": "passed",
+            "status": "verified",
             "run_id": state["run_id"],
             "banks": state["banks"],
             "isolation": {
@@ -765,6 +783,7 @@ def run_cleanup(
     *,
     api_url: str,
     state_path: Path,
+    evidence_path: Path | None = None,
     timeout: float = 300,
     http_factory: HttpFactory = HttpClient,
 ) -> None:
@@ -779,6 +798,14 @@ def run_cleanup(
     if len(set(state["banks"].values())) != len(PROFILES):
         raise AcceptanceError("Refusing cleanup because test bank IDs are not unique")
 
+    evidence: dict[str, Any] | None = None
+    if evidence_path is not None:
+        evidence = _read_json(evidence_path, "acceptance evidence")
+        if evidence.get("status") != "verified":
+            raise AcceptanceError(
+                "Refusing cleanup before acceptance evidence is verified"
+            )
+
     api = http_factory(api_url, timeout)
     for profile in PROFILES:
         bank_id = state["banks"][profile]
@@ -786,6 +813,9 @@ def run_cleanup(
         if status not in {200, 202, 204, 404}:
             raise AcceptanceError(f"Bank cleanup failed for {bank_id}: HTTP {status}")
     state_path.unlink()
+    if evidence_path is not None and evidence is not None:
+        evidence["status"] = "passed"
+        _write_json(evidence_path, evidence)
 
 
 def _profiles(value: str) -> tuple[str, ...]:
@@ -835,6 +865,9 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup.add_argument(
         "--state", type=Path, default=Path("/opt/data/hindsight/acceptance-state.json")
     )
+    cleanup.add_argument(
+        "--evidence", type=Path, default=Path("/opt/data/hindsight/acceptance.json")
+    )
     return parser
 
 
@@ -870,7 +903,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 state_path=args.state,
             )
         elif args.command == "cleanup":
-            run_cleanup(api_url=args.api_url, state_path=args.state)
+            run_cleanup(
+                api_url=args.api_url,
+                state_path=args.state,
+                evidence_path=args.evidence,
+            )
         else:
             raise AcceptanceError(f"Unsupported acceptance command: {args.command}")
     except (AcceptanceError, ValueError) as exc:

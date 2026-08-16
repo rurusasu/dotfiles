@@ -113,10 +113,10 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
             'curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8642/health'
             "docker compose -f $script:composeFile start hindsight"
             'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health'
-            "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json"
+            "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json"
         )
         $recovery = $script:calls.IndexOf("docker compose -f $script:composeFile start hindsight")
-        $cleanup = $script:calls.IndexOf("docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json")
+        $cleanup = $script:calls.IndexOf("docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json")
         $cleanup | Should -BeGreaterThan $recovery
     }
 

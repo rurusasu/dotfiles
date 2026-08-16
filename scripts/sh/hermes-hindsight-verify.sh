@@ -73,4 +73,5 @@ dotfiles_hermes_hindsight_wait_for_api
 docker compose -f "$compose_file" exec -T hermes \
   hermes-hindsight-acceptance cleanup \
   --api-url "$api_url" \
-  --state "$state_file"
+  --state "$state_file" \
+  --evidence "$evidence_file"

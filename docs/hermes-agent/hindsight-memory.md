@@ -21,10 +21,12 @@ PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes 
 Ollama は各ホストで一つだけ動かします。macOS は Homebrew cask、Windows は
 winget、Ubuntu/Debian は System Manager、NixOS は NixOS サービスが提供します。
 
-Linux の native Ollama は Docker bridge の `host-gateway` から到達できるよう
-`0.0.0.0:11434` で listen します。NixOS 構成は firewall で `11434` を開放しません。
-Ubuntu/Debian の System Manager 構成でも host firewall で外部 interface からの
-`11434` を許可しないことが前提です。macOS と Windows の bind 設定は変更しません。
+Linux の native Ollama は Docker bridge の `host-gateway` から到達できるように
+します。NixOS は `0.0.0.0:11434` でlistenしますが、firewallでは`11434`を開放
+しません。Ubuntu/Debian の System Manager は `docker0` のgateway addressだけに
+bindし、外部interfaceへOllama APIを公開しません。macOSとWindowsのbind設定は
+変更しません。Composeの`hermes`と`hindsight`は、どちらもLinuxで
+`host.docker.internal`を解決できるよう`host-gateway`を設定します。
 
 WSL では Ollama を Linux 側へ追加・常駐させません。Windows 側で Ollama を
 インストールして実行し、Docker の `host.docker.internal` 別名から Windows
@@ -145,7 +147,11 @@ task hermes:memory:verify
 永続性確認、degraded mode、復旧、テスト用 bank の cleanup を順に実行します。
 成功時の evidence は `/opt/data/hindsight/acceptance.json`、実行中の state は
 `/opt/data/hindsight/acceptance-state.json` です。失敗時は診断のため failed-run
-bank を保存し、cleanup しません。
+bank と state を保存し、cleanup しません。保存済み state がある間は新しい seedを
+開始せず、前回runのbank IDを上書きしません。verify完了時のevidenceは`verified`
+であり、degraded mode、Hermes health、復旧、全bank cleanupが成功した後にだけ
+`passed`になります。retain/recallの各operationとown-sentinel recall全体は300秒
+未満でなければ失敗します。
 
 ## Backup
 

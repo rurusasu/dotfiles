@@ -153,6 +153,9 @@ class ComposeContractTests(unittest.TestCase):
 
     def test_hermes_can_reach_memory_without_waiting_for_its_runtime(self) -> None:
         self.assertEqual(self.hermes["networks"], ["hermes-browser", "hermes-memory"])
+        self.assertEqual(
+            self.hermes["extra_hosts"], ["host.docker.internal:host-gateway"]
+        )
         self.assertNotIn("hindsight", self.hermes["depends_on"])
         self.assertEqual(
             self.compose["networks"]["hermes-memory"],

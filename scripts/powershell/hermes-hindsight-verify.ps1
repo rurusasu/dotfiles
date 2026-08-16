@@ -189,7 +189,8 @@ function Invoke-HermesHindsightVerify {
             'exec', '-T', 'hermes',
             'hermes-hindsight-acceptance', 'cleanup',
             '--api-url', $apiUrl,
-            '--state', $stateFile
+            '--state', $stateFile,
+            '--evidence', $evidenceFile
         ))
 }
 

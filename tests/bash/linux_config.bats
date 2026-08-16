@@ -32,8 +32,10 @@ setup() {
   grep -q 'SocketGroup = "docker"' "$REPO_ROOT/nix/system-manager/docker.nix"
 }
 
-@test "System Manager Ollama is reachable through the Compose host gateway" {
-  grep -q 'environment.OLLAMA_HOST = "0.0.0.0:11434"' "$REPO_ROOT/nix/system-manager/ollama.nix"
+@test "System Manager Ollama binds only to the Docker bridge gateway" {
+  grep -q 'ip -4 -o addr show dev docker0' "$REPO_ROOT/nix/system-manager/ollama.nix"
+  grep -q 'OLLAMA_HOST="$docker_gateway:11434"' "$REPO_ROOT/nix/system-manager/ollama.nix"
+  ! grep -q '0.0.0.0:11434' "$REPO_ROOT/nix/system-manager/ollama.nix"
   grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
 }
 

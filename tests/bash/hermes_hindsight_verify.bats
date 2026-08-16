@@ -93,7 +93,7 @@ docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes chat --quiet -q Rep
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8642/health
 docker compose -f $HERMES_COMPOSE_FILE start hindsight
 curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health
-docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json
+docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json
 EOF
 }
 

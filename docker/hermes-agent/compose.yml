@@ -38,6 +38,8 @@ services:
       # live while silently dropping inbound mentions.
       HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD: "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}"
       LIFELOG_ROOT: /opt/data/shared/lifelog
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - hermes-browser
       - hermes-memory
