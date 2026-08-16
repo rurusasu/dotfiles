@@ -44,6 +44,9 @@ export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/compose.yml"
 test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hermes-bootstrap-fixture.sh"
+cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hindsight-health.json"
+test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
 EOF
 	chmod +x "$test_root/install.sh"
 	mkdir -p "$test_root/scripts/sh"
@@ -131,6 +134,32 @@ EOF
 	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
+}
+
+@test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {
+	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
+	ollama="$FIXTURE_ROOT/bin/ollama"
+	curl="$FIXTURE_ROOT/bin/curl"
+
+	grep -Fq 'hindsight:' "$compose"
+	grep -Fq '127.0.0.1:8888:80' "$compose"
+	grep -Fq './hindsight-health.json:/usr/share/nginx/html/health:ro' "$compose"
+	test -x "$ollama"
+	test -x "$curl"
+
+	run "$ollama" pull qwen3.6:35b
+	[ "$status" -eq 0 ]
+	run "$ollama" pull qwen3-embedding:0.6b
+	[ "$status" -eq 0 ]
+	run "$ollama" pull unsupported-model
+	[ "$status" -ne 0 ]
+
+	run env DOTFILES_ACCEPTANCE_REAL_CURL=/usr/bin/false \
+		"$curl" --fail --silent http://127.0.0.1:11434/api/tags
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | jq -e '
+		.models | map(.name) == ["qwen3.6:35b", "qwen3-embedding:0.6b"]
+	' >/dev/null
 }
 
 @test "Hermes bootstrap gates include the gh wrapper security suite" {

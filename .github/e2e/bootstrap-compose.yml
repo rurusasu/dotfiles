@@ -8,6 +8,13 @@ services:
   chromium:
     image: nginx:1.29-alpine
 
+  hindsight:
+    image: nginx:1.29-alpine
+    ports:
+      - "127.0.0.1:8888:80"
+    volumes:
+      - ./hindsight-health.json:/usr/share/nginx/html/health:ro
+
   acceptance:
     image: nginx:1.29-alpine
     command:
