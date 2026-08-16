@@ -26,6 +26,12 @@ setup() {
 	grep -Fq 'docker/hermes-agent/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 
+@test "NixOS bootstrap VM provides task before Hermes bootstrap" {
+	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+
+	grep -Eq '^[[:space:]]+go-task([[:space:]]|$)' "$nixos_test"
+}
+
 @test "acceptance runner installs only fixture plumbing before invoking install.sh" {
 	test_root="$BATS_TEST_TMPDIR/repo"
 	mkdir -p "$test_root/docker/hermes-agent" "$test_root/activated/bin"

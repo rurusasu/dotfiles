@@ -63,6 +63,7 @@ pkgs.testers.runNixOSTest {
         ripgrep
         fd
         jq
+        go-task
         neovim
         nodejs_24
         python3
