@@ -184,6 +184,7 @@ Describe 'HermesHindsight adapter' {
         $env:HINDSIGHT_API_PORT = '9876'
         Mock Invoke-HermesHindsightCommand {
             param($Command, $Arguments, $TimeoutSeconds)
+            $null = $TimeoutSeconds
             $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
             '{"status":"healthy","database":"connected"}'
         }
