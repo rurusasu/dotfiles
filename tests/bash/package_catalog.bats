@@ -54,7 +54,7 @@ setup() {
 }
 
 @test "winget export reproduces committed Windows manifests byte-for-byte" {
-	run --separate-stderr nix build .#winget-export --no-link --print-out-paths
+	run --separate-stderr nix build "path:$REPO_ROOT#winget-export" --no-link --print-out-paths
 	[ "$status" -eq 0 ]
 	[ -d "$output" ]
 
@@ -98,7 +98,7 @@ setup() {
 @test "Discord is a cross-platform desktop package" {
 	run grep -n -A12 '^    discord = {' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;'* ]]
 	[[ "$output" == *'winget = "Discord.Discord";'* ]]
 	[[ "$output" == *'category = "desktop";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]
@@ -127,7 +127,7 @@ setup() {
 		in_entry && /^    };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;'* ]]
 	[[ "$output" == *'cask = "wezterm@nightly"'* ]]
 	[[ "$output" == *'darwin = {'* ]]
 	[[ "$output" == *'linux = {'* ]]
@@ -142,7 +142,7 @@ setup() {
 		in_entry && /^    };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.isDarwin then null else pkgs.ollama;'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;'* ]]
 	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
 	[[ "$output" == *'category = "llm";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]

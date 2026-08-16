@@ -26,8 +26,17 @@ setup() {
 }
 
 @test "runner apps are guarded by their target platforms" {
-	grep -Fq 'lib.optionalAttrs pkgs.stdenv.isDarwin' "$REPO_ROOT/nix/flakes/apps.nix"
-	grep -Fq 'lib.optionalAttrs pkgs.stdenv.isLinux' "$REPO_ROOT/nix/flakes/apps.nix"
+	grep -Fq 'lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin' "$REPO_ROOT/nix/flakes/apps.nix"
+	grep -Fq 'lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux' "$REPO_ROOT/nix/flakes/apps.nix"
+}
+
+@test "treefmt check keeps formatting enforcement without deprecated platform aliases" {
+	treefmt="$REPO_ROOT/nix/flakes/treefmt.nix"
+
+	grep -Fq 'build.check =' "$treefmt"
+	grep -Fq 'treefmt --no-cache' "$treefmt"
+	grep -Fq 'pkgs.stdenv.hostPlatform.isDarwin' "$treefmt"
+	! grep -Fq 'pkgs.stdenv.isDarwin' "$treefmt"
 }
 
 @test "native NixOS output is unavailable without an explicit hardware profile" {

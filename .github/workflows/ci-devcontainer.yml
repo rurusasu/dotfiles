@@ -66,6 +66,7 @@ jobs:
       - name: Start devcontainer
         run: |
           devcontainer up \
+            --frozen-lockfile \
             --config .devcontainer/ci/devcontainer.json \
             --workspace-folder .
 
@@ -111,6 +112,7 @@ jobs:
       - name: Start devcontainer
         run: |
           devcontainer up \
+            --frozen-lockfile \
             --config .devcontainer/ci/devcontainer.json \
             --workspace-folder .
 

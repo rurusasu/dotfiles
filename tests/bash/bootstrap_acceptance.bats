@@ -133,9 +133,11 @@ EOF
 @test "acceptance compose serves health from nginx and BusyBox document roots" {
 	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
 
-	grep -Fq 'exec /bin/httpd -f -p 80 -h /www' "$compose"
-	grep -Fq "exec nginx -g 'daemon off;'" "$compose"
+	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 2 ]
+	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
 	grep -Fq 'xapi-mcp:' "$compose"
+	grep -Fq 'browser-mcp:' "$compose"
+	grep -Fq 'condition: service_started' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
 }
@@ -148,6 +150,7 @@ EOF
 	grep -Fq 'hindsight:' "$compose"
 	grep -Fq '127.0.0.1:8888:80' "$compose"
 	grep -Fq './hindsight-health.json:/usr/share/nginx/html/health:ro' "$compose"
+	grep -Fq './hindsight-health.json:/www/health:ro' "$compose"
 	test -x "$ollama"
 	test -x "$curl"
 
@@ -164,6 +167,27 @@ EOF
 	printf '%s\n' "$output" | jq -e '
 		.models | map(.name) == ["qwen3.6:35b", "qwen3-embedding:0.6b"]
 	' >/dev/null
+}
+
+@test "CI devcontainer pins Nix for the unskipped POSIX suite" {
+	config="$REPO_ROOT/.devcontainer/ci/devcontainer.json"
+	lock="$REPO_ROOT/.devcontainer/ci/devcontainer-lock.json"
+	workflow="$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
+	feature='ghcr.io/devcontainers/features/nix:1.3.1'
+
+	jq -e --arg feature "$feature" '
+		.features[$feature]
+		| .version == "2.34.8"
+		  and .multiUser == true
+		  and .extraNixConfig == "experimental-features = nix-command flakes"
+	' "$config" >/dev/null
+	jq -e --arg feature "$feature" '
+		.features[$feature]
+		| .version == "1.3.1"
+		  and (.resolved | startswith("ghcr.io/devcontainers/features/nix@sha256:"))
+		  and (.integrity | startswith("sha256:"))
+	' "$lock" >/dev/null
+	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -ge 2 ]
 }
 
 @test "Hermes bootstrap gates include the gh wrapper security suite" {

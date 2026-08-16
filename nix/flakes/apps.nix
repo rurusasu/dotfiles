@@ -9,10 +9,10 @@
     }:
     {
       apps =
-        lib.optionalAttrs pkgs.stdenv.isDarwin {
+        lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
           darwin-rebuild.program = lib.getExe inputs.nix-darwin.packages.${system}.darwin-rebuild;
         }
-        // lib.optionalAttrs pkgs.stdenv.isLinux {
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           system-manager.program =
             lib.getExe' inputs.system-manager.packages.${system}.default
               "system-manager";

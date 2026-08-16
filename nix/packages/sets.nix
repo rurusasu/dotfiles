@@ -212,7 +212,7 @@ let
 
     # ── terminal ──────────────────────────────────────────
     wezterm = {
-      pkg = if pkgs.stdenv.isDarwin then null else pkgs.wezterm;
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;
       winget = "wez.wezterm.nightly";
       category = "terminal";
       support = {
@@ -288,7 +288,7 @@ let
       # binary, so use the separately packaged ripgrep instead.
       pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
         old:
-        if pkgs.stdenv.isDarwin then
+        if pkgs.stdenv.hostPlatform.isDarwin then
           {
             postPatch =
               lib.replaceStrings
@@ -332,7 +332,7 @@ let
       category = "llm";
     };
     ollama = {
-      pkg = if pkgs.stdenv.isDarwin then null else pkgs.ollama;
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
       winget = "Ollama.Ollama";
       category = "llm";
       support = {
@@ -360,7 +360,7 @@ let
 
     # ── desktop applications ──────────────────────────────
     discord = {
-      pkg = if pkgs.stdenv.isDarwin then null else pkgs.discord;
+      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;
       winget = "Discord.Discord";
       category = "desktop";
       support = {

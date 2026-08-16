@@ -23,6 +23,46 @@
       treefmt = {
         projectRootFile = "flake.nix";
 
+        # treefmt-nix still uses the deprecated stdenv.isDarwin alias in its
+        # default check. Keep the same check semantics while nixpkgs enforces
+        # the hostPlatform API through the warning-free CI gate.
+        build.check =
+          projectRoot:
+          pkgs.runCommandLocal "treefmt-check"
+            {
+              buildInputs = [
+                pkgs.git
+                pkgs.git-lfs
+                config.treefmt.build.wrapper
+              ];
+              meta.description = "Check that the project tree is formatted";
+            }
+            ''
+              set -e
+              PRJ=$TMP/project
+              cp -r ${projectRoot} $PRJ
+              chmod -R a+w $PRJ
+              cd $PRJ
+              export HOME=$TMPDIR
+              cat > $HOME/.gitconfig <<EOF
+              [user]
+                name = Nix
+                email = nix@localhost
+              [init]
+                defaultBranch = main
+              EOF
+              git init --quiet
+              git add .
+              git commit -m init --quiet
+              export LANG=${if pkgs.stdenv.hostPlatform.isDarwin then "en_US.UTF-8" else "C.UTF-8"}
+              export LC_ALL=${if pkgs.stdenv.hostPlatform.isDarwin then "en_US.UTF-8" else "C.UTF-8"}
+              treefmt --version
+              treefmt --no-cache
+              git status --short
+              git --no-pager diff --exit-code
+              touch $out
+            '';
+
         # Install formatters (settings come from .treefmt.toml)
         programs = {
           nixfmt.enable = true; # *.nix
