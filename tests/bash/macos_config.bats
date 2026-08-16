@@ -154,3 +154,12 @@ setup() {
 	run grep -F '"scripts/sh/install-macos.sh"' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
 	[ "$status" -eq 0 ]
 }
+
+@test "macOS devcontainer CI allows the cold start and full test suite to finish" {
+	run awk '
+		/name: E2E \(macOS\)/ { in_job = 1 }
+		in_job && /timeout-minutes:/ { exit !($2 >= 60) }
+		END { if (!in_job) exit 1 }
+	' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
+	[ "$status" -eq 0 ]
+}
