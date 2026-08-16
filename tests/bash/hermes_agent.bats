@@ -26,6 +26,7 @@ EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
+	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
@@ -953,6 +954,20 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[[ "$full_stack_start" == *'<hermes> <chromium> <browser-mcp> <xapi-mcp>'* ]]
 	[[ "$full_stack_start" != *'<hindsight>'* ]]
 	[[ "$full_stack_start" != *'<--wait>'* ]]
+}
+
+@test "explicit Hindsight executables override PATH lookup" {
+	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
+	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -Fq "timeout <--foreground> <--kill-after=30> <3600> <$STUB_BIN/ollama> <pull> <qwen3.6:35b>" \
+		"$COMMAND_LOG"
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; . "$REPO_ROOT/scripts/sh/hermes-hindsight.sh"; dotfiles_hermes_hindsight_curl_command'
+	[ "$status" -eq 0 ]
+	[ "$output" = "$STUB_BIN/curl" ]
 }
 
 @test "bounds Ollama model pulls with the default 3600 second GNU timeout" {

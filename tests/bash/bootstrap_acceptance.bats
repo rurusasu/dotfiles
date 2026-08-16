@@ -47,6 +47,10 @@ test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hermes-bootstrap-fix
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hindsight-health.json"
 test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
+test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
+	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
+test "$DOTFILES_HERMES_CURL_EXECUTABLE" = \
+	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/curl"
 EOF
 	chmod +x "$test_root/install.sh"
 	mkdir -p "$test_root/scripts/sh"

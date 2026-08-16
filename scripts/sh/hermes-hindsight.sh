@@ -51,6 +51,44 @@ dotfiles_hermes_hindsight_nonnegative_integer() {
   printf '%s\n' "$value"
 }
 
+dotfiles_hermes_hindsight_ollama_command() {
+  local configured="${DOTFILES_HERMES_OLLAMA_EXECUTABLE:-}"
+
+  if [[ -n $configured ]]; then
+    if [[ $configured != /* || ! -x $configured ]]; then
+      printf 'DOTFILES_HERMES_OLLAMA_EXECUTABLE must be an absolute executable path.\n' >&2
+      return 1
+    fi
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  dotfiles_have ollama || {
+    printf 'ollama is required for Hermes Hindsight.\n' >&2
+    return 1
+  }
+  printf 'ollama\n'
+}
+
+dotfiles_hermes_hindsight_curl_command() {
+  local configured="${DOTFILES_HERMES_CURL_EXECUTABLE:-}"
+
+  if [[ -n $configured ]]; then
+    if [[ $configured != /* || ! -x $configured ]]; then
+      printf 'DOTFILES_HERMES_CURL_EXECUTABLE must be an absolute executable path.\n' >&2
+      return 1
+    fi
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  dotfiles_have curl || {
+    printf 'curl is required for Hermes Hindsight.\n' >&2
+    return 1
+  }
+  printf 'curl\n'
+}
+
 dotfiles_hermes_hindsight_gnu_timeout() {
   local candidate version
 
@@ -68,14 +106,15 @@ dotfiles_hermes_hindsight_gnu_timeout() {
 }
 
 dotfiles_hermes_hindsight_wait_for_ollama() {
-  local attempts delay_seconds timeout_seconds attempt
+  local attempts delay_seconds timeout_seconds attempt curl_command
 
   attempts="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_OLLAMA_READY_ATTEMPTS:-30}" 30)"
   delay_seconds="$(dotfiles_hermes_hindsight_nonnegative_integer "${HINDSIGHT_OLLAMA_READY_DELAY_SECONDS:-2}" 2)"
   timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_OLLAMA_PROBE_TIMEOUT_SECONDS:-2}" 2)"
+  curl_command="$(dotfiles_hermes_hindsight_curl_command)" || return 1
 
   for ((attempt = 1; attempt <= attempts; attempt++)); do
-    if curl --fail --silent --show-error --max-time "$timeout_seconds" \
+    if "$curl_command" --fail --silent --show-error --max-time "$timeout_seconds" \
       http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
       return 0
     fi
@@ -89,9 +128,10 @@ dotfiles_hermes_hindsight_wait_for_ollama() {
 }
 
 dotfiles_hermes_hindsight_verify_model() {
-  local model="$1" timeout_seconds="$2" tags
+  local model="$1" timeout_seconds="$2" tags curl_command
 
-  tags="$(curl --fail --silent --show-error --max-time "$timeout_seconds" \
+  curl_command="$(dotfiles_hermes_hindsight_curl_command)" || return 1
+  tags="$("$curl_command" --fail --silent --show-error --max-time "$timeout_seconds" \
     http://127.0.0.1:11434/api/tags)" || return 1
   printf '%s\n' "$tags" | jq -e --arg model "$model" \
     '.models | any(.name == $model)' >/dev/null
@@ -99,16 +139,10 @@ dotfiles_hermes_hindsight_verify_model() {
 
 dotfiles_hermes_hindsight_prepare_host() {
   local compose_file="$1" llm_model embedding_model timeout_seconds pull_timeout_seconds
-  local timeout_command data_dir
+  local timeout_command data_dir ollama_command
 
-  dotfiles_have ollama || {
-    printf 'ollama is required for Hermes Hindsight.\n' >&2
-    return 1
-  }
-  dotfiles_have curl || {
-    printf 'curl is required for Hermes Hindsight.\n' >&2
-    return 1
-  }
+  ollama_command="$(dotfiles_hermes_hindsight_ollama_command)" || return 1
+  dotfiles_hermes_hindsight_curl_command >/dev/null || return 1
   dotfiles_have jq || {
     printf 'jq is required for Hermes Hindsight.\n' >&2
     return 1
@@ -121,9 +155,9 @@ dotfiles_hermes_hindsight_prepare_host() {
   pull_timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS:-3600}" 3600)"
 
   "$timeout_command" --foreground --kill-after=30 "$pull_timeout_seconds" \
-    ollama pull "$llm_model" || return $?
+    "$ollama_command" pull "$llm_model" || return $?
   "$timeout_command" --foreground --kill-after=30 "$pull_timeout_seconds" \
-    ollama pull "$embedding_model" || return $?
+    "$ollama_command" pull "$embedding_model" || return $?
   dotfiles_hermes_hindsight_verify_model "$llm_model" "$timeout_seconds" || return 1
   dotfiles_hermes_hindsight_verify_model "$embedding_model" "$timeout_seconds" || return 1
 
@@ -132,15 +166,16 @@ dotfiles_hermes_hindsight_prepare_host() {
 }
 
 dotfiles_hermes_hindsight_wait_for_api() {
-  local attempts delay_seconds timeout_seconds port attempt health
+  local attempts delay_seconds timeout_seconds port attempt health curl_command
 
   attempts="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_API_READY_ATTEMPTS:-150}" 150)"
   delay_seconds="$(dotfiles_hermes_hindsight_nonnegative_integer "${HINDSIGHT_API_READY_DELAY_SECONDS:-2}" 2)"
   timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_API_PROBE_TIMEOUT_SECONDS:-2}" 2)"
   port="${HINDSIGHT_API_PORT:-8888}"
+  curl_command="$(dotfiles_hermes_hindsight_curl_command)" || return 1
 
   for ((attempt = 1; attempt <= attempts; attempt++)); do
-    health="$(curl --fail --silent --show-error --max-time "$timeout_seconds" \
+    health="$("$curl_command" --fail --silent --show-error --max-time "$timeout_seconds" \
       "http://127.0.0.1:${port}/health")" || health=""
     if [[ -n $health ]] && printf '%s\n' "$health" |
       jq -e '.status == "healthy" and .database == "connected"' >/dev/null; then
