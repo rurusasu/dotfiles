@@ -51,6 +51,22 @@ dotfiles_hermes_hindsight_nonnegative_integer() {
   printf '%s\n' "$value"
 }
 
+dotfiles_hermes_hindsight_gnu_timeout() {
+  local candidate version
+
+  for candidate in timeout gtimeout; do
+    dotfiles_have "$candidate" || continue
+    version="$("$candidate" --version 2>/dev/null)" || continue
+    if [[ $version == *"GNU coreutils"* ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf 'GNU timeout is required for Hermes Hindsight model pulls.\n' >&2
+  return 1
+}
+
 dotfiles_hermes_hindsight_wait_for_ollama() {
   local attempts delay_seconds timeout_seconds attempt
 
@@ -82,7 +98,8 @@ dotfiles_hermes_hindsight_verify_model() {
 }
 
 dotfiles_hermes_hindsight_prepare_host() {
-  local compose_file="$1" llm_model embedding_model timeout_seconds data_dir
+  local compose_file="$1" llm_model embedding_model timeout_seconds pull_timeout_seconds
+  local timeout_command data_dir
 
   dotfiles_have ollama || {
     printf 'ollama is required for Hermes Hindsight.\n' >&2
@@ -96,13 +113,17 @@ dotfiles_hermes_hindsight_prepare_host() {
     printf 'jq is required for Hermes Hindsight.\n' >&2
     return 1
   }
+  timeout_command="$(dotfiles_hermes_hindsight_gnu_timeout)" || return 1
   dotfiles_hermes_hindsight_wait_for_ollama || return $?
   llm_model="$(dotfiles_hermes_hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL)" || return 1
   embedding_model="$(dotfiles_hermes_hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)" || return 1
   timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_OLLAMA_PROBE_TIMEOUT_SECONDS:-2}" 2)"
+  pull_timeout_seconds="$(dotfiles_hermes_hindsight_positive_integer "${HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS:-3600}" 3600)"
 
-  ollama pull "$llm_model" || return $?
-  ollama pull "$embedding_model" || return $?
+  "$timeout_command" --foreground --kill-after=30 "$pull_timeout_seconds" \
+    ollama pull "$llm_model" || return $?
+  "$timeout_command" --foreground --kill-after=30 "$pull_timeout_seconds" \
+    ollama pull "$embedding_model" || return $?
   dotfiles_hermes_hindsight_verify_model "$llm_model" "$timeout_seconds" || return 1
   dotfiles_hermes_hindsight_verify_model "$embedding_model" "$timeout_seconds" || return 1
 

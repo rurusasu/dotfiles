@@ -32,6 +32,11 @@ setup() {
   grep -q 'SocketGroup = "docker"' "$REPO_ROOT/nix/system-manager/docker.nix"
 }
 
+@test "System Manager Ollama is reachable through the Compose host gateway" {
+  grep -q 'environment.OLLAMA_HOST = "0.0.0.0:11434"' "$REPO_ROOT/nix/system-manager/ollama.nix"
+  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+}
+
 @test "native NixOS rebuild alias keeps the hardware-safe installer path" {
 	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/home/linux/users.nix"
 }

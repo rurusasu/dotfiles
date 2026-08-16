@@ -58,7 +58,9 @@ in
 
   services.ollama = {
     enable = true;
-    host = "127.0.0.1";
+    # Docker reaches the host through its bridge gateway. The NixOS firewall
+    # remains enabled and 11434 is intentionally not opened externally.
+    host = "0.0.0.0";
     port = 11434;
   };
 }

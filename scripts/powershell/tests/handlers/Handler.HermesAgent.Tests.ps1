@@ -15,16 +15,19 @@ BeforeAll {
 Describe 'HermesHindsight adapter' {
     BeforeEach {
         $script:oldHindsightApiPort = $env:HINDSIGHT_API_PORT
+        $script:oldHindsightOllamaPullTimeoutSeconds = $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS
         $script:hindsightComposeDir = Join-Path $TestDrive 'hindsight-compose'
         $script:hindsightComposeFile = Join-Path $script:hindsightComposeDir 'compose.yml'
         $script:hindsightDataDir = Join-Path $TestDrive 'hindsight-data'
         $script:hindsightCalls = [System.Collections.Generic.List[string]]::new()
+        $script:hindsightPullTimeouts = [System.Collections.Generic.List[int]]::new()
         New-Item -ItemType Directory -Path $script:hindsightComposeDir -Force | Out-Null
         Set-Content -LiteralPath $script:hindsightComposeFile -Value 'services: {}' -Encoding utf8
         Set-Content -LiteralPath (Join-Path $script:hindsightComposeDir 'hindsight.env') -Value @(
             'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b',
             'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
         ) -Encoding utf8
+        Remove-Item Env:\HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
     }
 
     AfterEach {
@@ -34,6 +37,12 @@ Describe 'HermesHindsight adapter' {
         else {
             $env:HINDSIGHT_API_PORT = $script:oldHindsightApiPort
         }
+        if ($null -eq $script:oldHindsightOllamaPullTimeoutSeconds) {
+            Remove-Item Env:\HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS = $script:oldHindsightOllamaPullTimeoutSeconds
+        }
     }
 
     It 'provisions exactly two configured models through the timeout wrapper and creates persistent directories' {
@@ -41,6 +50,7 @@ Describe 'HermesHindsight adapter' {
         Mock Invoke-HermesHindsightCommand {
             param($Command, $Arguments, $TimeoutSeconds)
             $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
+            if ($Command -eq 'ollama') { $script:hindsightPullTimeouts.Add($TimeoutSeconds) }
             if ($Arguments[-1] -eq 'http://127.0.0.1:11434/api/tags') {
                 return '{"models":[{"name":"qwen3.6:35b"},{"name":"qwen3-embedding:0.6b"}]}'
             }
@@ -57,6 +67,7 @@ Describe 'HermesHindsight adapter' {
             'ollama pull qwen3-embedding:0.6b',
             'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags'
         )
+        $script:hindsightPullTimeouts | Should -Be @(3600, 3600)
         (Join-Path $script:hindsightDataDir 'hindsight/pg0') | Should -Exist
         (Join-Path $script:hindsightDataDir 'hindsight/cache') | Should -Exist
     }
@@ -78,18 +89,35 @@ Describe 'HermesHindsight adapter' {
         Remove-Item Env:\HINDSIGHT_OLLAMA_READY_ATTEMPTS -ErrorAction SilentlyContinue
     }
 
-    It 'propagates an Ollama pull failure through the command wrapper' {
+    It 'passes the configured Ollama pull timeout to the command wrapper' {
+        $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS = '7200'
+        Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
+        Mock Invoke-HermesHindsightCommand {
+            param($Command, $Arguments, $TimeoutSeconds)
+            if ($Command -eq 'ollama') { $script:hindsightPullTimeouts.Add($TimeoutSeconds) }
+            if ($Arguments[-1] -eq 'http://127.0.0.1:11434/api/tags') {
+                return '{"models":[{"name":"qwen3.6:35b"},{"name":"qwen3-embedding:0.6b"}]}'
+            }
+            return '{"version":"0.1"}'
+        }
+
+        $null = Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir
+
+        $script:hindsightPullTimeouts | Should -Be @(7200, 7200)
+    }
+
+    It 'propagates an Ollama pull timeout through the command wrapper' {
         Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
         Mock Invoke-HermesHindsightCommand {
             param($Command, $Arguments, $TimeoutSeconds)
             if ($Command -eq 'ollama' -and $Arguments[1] -eq 'qwen3-embedding:0.6b') {
-                throw [System.InvalidOperationException]::new('ollama failed: exit code 42')
+                throw [System.InvalidOperationException]::new("ollama timed out after $TimeoutSeconds seconds")
             }
             return '{"version":"0.1"}'
         }
 
         { Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir } |
-            Should -Throw '*exit code 42*'
+            Should -Throw '*timed out after 3600 seconds*'
     }
 
     It 'rejects a Hindsight health response without database connectivity' {

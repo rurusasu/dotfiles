@@ -21,6 +21,11 @@ PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes 
 Ollama は各ホストで一つだけ動かします。macOS は Homebrew cask、Windows は
 winget、Ubuntu/Debian は System Manager、NixOS は NixOS サービスが提供します。
 
+Linux の native Ollama は Docker bridge の `host-gateway` から到達できるよう
+`0.0.0.0:11434` で listen します。NixOS 構成は firewall で `11434` を開放しません。
+Ubuntu/Debian の System Manager 構成でも host firewall で外部 interface からの
+`11434` を許可しないことが前提です。macOS と Windows の bind 設定は変更しません。
+
 WSL では Ollama を Linux 側へ追加・常駐させません。Windows 側で Ollama を
 インストールして実行し、Docker の `host.docker.internal` 別名から Windows
 ホストの `11434` へ到達させます。WSL の Ollama サービスを有効化して二重起動
@@ -57,6 +62,12 @@ task hermes:bootstrap
 ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を取得し、Ollama の
 `/api/tags` で両方の正確な名前を確認します。Hindsight は Ollama OpenAI 互換
 エンドポイント `http://host.docker.internal:11434/v1` を使います。
+
+モデル取得は Bash と PowerShell の両方で既定 3600 秒に制限されます。変更する
+場合は共通の `HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS` に正の整数を設定します。
+初回の約 23 GB の取得は 1800 秒を超えることがあるため、acceptance operation の
+300 秒上限をモデル download に適用しません。Bash 経路には GNU coreutils の
+`timeout`（macOS では `gtimeout` も可）が必要です。
 
 ## Startup
 

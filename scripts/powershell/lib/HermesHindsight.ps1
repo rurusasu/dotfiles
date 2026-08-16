@@ -3,7 +3,7 @@
     Prepares native Ollama and the Hindsight memory API for Hermes.
 #>
 
-$script:HermesHindsightCommandTimeoutSeconds = 1800
+$script:HermesHindsightOllamaPullTimeoutSeconds = 3600
 
 function Get-HermesHindsightPositiveInteger {
     param([string]$Name, [int]$DefaultValue)
@@ -114,8 +114,9 @@ function Initialize-HermesHindsightHost {
     }
     Wait-HermesHindsightOllama
     $environment = Get-HermesHindsightEnvironment -ComposeFile $ComposeFile
+    $pullTimeoutSeconds = Get-HermesHindsightPositiveInteger -Name 'HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS' -DefaultValue $script:HermesHindsightOllamaPullTimeoutSeconds
     foreach ($model in @($environment.LlmModel, $environment.EmbeddingModel)) {
-        $null = Invoke-HermesHindsightCommand -Command 'ollama' -Arguments @('pull', $model) -TimeoutSeconds $script:HermesHindsightCommandTimeoutSeconds
+        $null = Invoke-HermesHindsightCommand -Command 'ollama' -Arguments @('pull', $model) -TimeoutSeconds $pullTimeoutSeconds
     }
     $timeoutSeconds = Get-HermesHindsightPositiveInteger -Name 'HINDSIGHT_OLLAMA_PROBE_TIMEOUT_SECONDS' -DefaultValue 2
     $tags = (Invoke-HermesHindsightCommand -Command 'curl' -Arguments @('--fail', '--silent', '--show-error', '--max-time', "$timeoutSeconds", 'http://127.0.0.1:11434/api/tags') -TimeoutSeconds $timeoutSeconds) -join "`n" | ConvertFrom-Json -ErrorAction Stop

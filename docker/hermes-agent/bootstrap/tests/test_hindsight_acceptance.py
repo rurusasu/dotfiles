@@ -48,6 +48,7 @@ class FakeHttpClient:
         models: tuple[str, ...] = acceptance.REQUIRED_MODELS,
         extract_response: dict[str, Any] | None = None,
         delete_status: int = 204,
+        delete_statuses: dict[str, int] | None = None,
         calls: list[tuple[str, str, Any, float]] | None = None,
     ) -> None:
         self.base_url = base_url
@@ -56,6 +57,7 @@ class FakeHttpClient:
         self.models = models
         self.extract_response = extract_response or valid_extract_response()
         self.delete_status = delete_status
+        self.delete_statuses = delete_statuses or {}
         self.calls = calls if calls is not None else []
 
     def request(
@@ -69,7 +71,7 @@ class FakeHttpClient:
         if method == "POST" and path.endswith("/memories/dry-run-extract"):
             return 200, self.extract_response
         if method == "DELETE" and path.startswith("/v1/default/banks/"):
-            return self.delete_status, {}
+            return self.delete_statuses.get(path, self.delete_status), {}
         raise AssertionError(f"Unexpected HTTP request: {method} {path}")
 
 
@@ -600,6 +602,53 @@ class HindsightAcceptanceTests(unittest.TestCase):
         self.assertEqual(
             [call[1] for call in deletes],
             [f"/v1/default/banks/{state['banks'][profile]}" for profile in PROFILES],
+        )
+        self.assertFalse(self.state.exists())
+
+    def test_cleanup_retries_after_partial_delete_and_accepts_owned_bank_404(
+        self,
+    ) -> None:
+        run_id = "c" * 32
+        state = {
+            "run_id": run_id,
+            "banks": {
+                profile: f"test-hermes-{profile}-{run_id}" for profile in PROFILES
+            },
+            "sentinels": {profile: f"sentinel-{profile}" for profile in PROFILES},
+            "timings": {"retain": [1.0], "recall": [2.0]},
+        }
+        self.state.write_text(json.dumps(state), encoding="utf-8")
+        paths = {
+            profile: f"/v1/default/banks/{state['banks'][profile]}"
+            for profile in PROFILES
+        }
+        partial = FakeHttpFactory(delete_statuses={paths["rick"]: 500})
+
+        with self.assertRaisesRegex(acceptance.AcceptanceError, "HTTP 500"):
+            acceptance.run_cleanup(
+                api_url="http://hindsight:8888",
+                state_path=self.state,
+                timeout=300,
+                http_factory=partial,
+            )
+
+        self.assertEqual(
+            [call[1] for call in partial.calls if call[0] == "DELETE"],
+            [paths["default"], paths["rick"]],
+        )
+        self.assertTrue(self.state.exists())
+
+        retry = FakeHttpFactory(delete_statuses={paths["default"]: 404})
+        acceptance.run_cleanup(
+            api_url="http://hindsight:8888",
+            state_path=self.state,
+            timeout=300,
+            http_factory=retry,
+        )
+
+        self.assertEqual(
+            [call[1] for call in retry.calls if call[0] == "DELETE"],
+            [paths[profile] for profile in PROFILES],
         )
         self.assertFalse(self.state.exists())
 

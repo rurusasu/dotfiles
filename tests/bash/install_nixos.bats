@@ -91,6 +91,16 @@ esac
 exit 0
 '
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub timeout '
+if [[ ${1:-} == --version ]]; then
+	printf "timeout (GNU coreutils) 9.0\n"
+	exit 0
+fi
+[[ ${1:-} == --foreground ]] && shift
+[[ ${1:-} == --kill-after=30 ]] && shift
+shift
+"$@"
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub verify-environment '
@@ -233,4 +243,11 @@ exit 44
 	! grep -q 'rootless' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	! grep -q '/dev/sda' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	! grep -q 'fileSystems\."/"' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
+}
+
+@test "NixOS Ollama is bridge reachable without opening its firewall port" {
+	grep -q 'host = "0.0.0.0"' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
+	grep -q 'port = 11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
+	! grep -Eq 'allowedTCPPorts.*11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
+	grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
 }

@@ -783,7 +783,7 @@ def run_cleanup(
     for profile in PROFILES:
         bank_id = state["banks"][profile]
         status, _ = api.request("DELETE", f"/v1/default/banks/{bank_id}")
-        if status not in {200, 202, 204}:
+        if status not in {200, 202, 204, 404}:
             raise AcceptanceError(f"Bank cleanup failed for {bank_id}: HTTP {status}")
     state_path.unlink()
 

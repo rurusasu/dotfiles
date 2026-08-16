@@ -44,6 +44,7 @@ EOF
 	export HINDSIGHT_API_DATABASE=connected
 	export HINDSIGHT_API_READY_AFTER=1
 	export OLLAMA_PULL_FAILURE=""
+	export OLLAMA_PULL_TIMEOUT_STATUS=0
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
@@ -155,6 +156,22 @@ printf "ollama" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
 if [[ ${1:-} == pull && ${2:-} == "$OLLAMA_PULL_FAILURE" ]]; then exit 42; fi
+'
+	write_stub timeout '
+if [[ ${1:-} == --version ]]; then
+	printf "timeout (GNU coreutils) 9.0\n"
+	exit 0
+fi
+printf "timeout" >>"$COMMAND_LOG"
+printf " <%s>" "$@" >>"$COMMAND_LOG"
+printf "\n" >>"$COMMAND_LOG"
+if [[ ${OLLAMA_PULL_TIMEOUT_STATUS:-0} != 0 ]]; then
+	exit "$OLLAMA_PULL_TIMEOUT_STATUS"
+fi
+[[ ${1:-} == --foreground ]] && shift
+[[ ${1:-} == --kill-after=30 ]] && shift
+shift
+"$@"
 '
 	write_stub sleep '
 printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
@@ -936,6 +953,41 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[[ "$full_stack_start" == *'<hermes> <chromium> <browser-mcp> <xapi-mcp>'* ]]
 	[[ "$full_stack_start" != *'<hindsight>'* ]]
 	[[ "$full_stack_start" != *'<--wait>'* ]]
+}
+
+@test "bounds Ollama model pulls with the default 3600 second GNU timeout" {
+	unset HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^timeout <--foreground> <--kill-after=30> <3600> <ollama> <pull>' "$COMMAND_LOG")" -eq 2 ]
+}
+
+@test "honors the Ollama model pull timeout override" {
+	export HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS=7200
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(grep -c '^timeout <--foreground> <--kill-after=30> <7200> <ollama> <pull>' "$COMMAND_LOG")" -eq 2 ]
+}
+
+@test "propagates an Ollama model pull timeout without starting Hindsight" {
+	export OLLAMA_PULL_TIMEOUT_STATUS=124
+
+	run_start_stack
+
+	[ "$status" -eq 124 ]
+	! grep -q '<up> <-d> <hindsight>' "$COMMAND_LOG"
+}
+
+@test "fails clearly when GNU timeout is unavailable" {
+	run_start_stack timeout
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"GNU timeout is required for Hermes Hindsight model pulls."* ]]
+	! grep -q '^ollama <pull>' "$COMMAND_LOG"
 }
 
 @test "propagates a configured Ollama model pull failure without starting Hindsight or Hermes" {
