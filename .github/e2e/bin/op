@@ -55,7 +55,7 @@ JSON
 		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
 		exit 2
 	fi
-	printf '{"id":"acceptance-Hermes X API MCP","fields":[{"label":"X_API_CLIENT_ID","value":"acceptance-x-api-client-id"},{"label":"X_API_CLIENT_SECRET","value":"acceptance-x-api-client-secret"}]}\n'
+	printf '{"id":"acceptance-Hermes X API MCP","fields":[{"label":"X_API_CLIENT_ID","value":"acceptance-x-api-client-id"},{"label":"X_API_CLIENT_SECRET","value":"acceptance-x-api-client-secret"},{"label":"X_API_REFRESH_TOKEN","value":"acceptance-x-api-refresh-token"}]}\n'
 	exit 0
 	;;
 *)

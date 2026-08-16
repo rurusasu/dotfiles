@@ -127,6 +127,7 @@ EOF
 	[[ "$output" == *'"id":"acceptance-Hermes X API MCP"'* ]]
 	[[ "$output" == *'"label":"X_API_CLIENT_ID"'* ]]
 	[[ "$output" == *'"label":"X_API_CLIENT_SECRET"'* ]]
+	[[ "$output" == *'"label":"X_API_REFRESH_TOKEN"'* ]]
 
 	run "$op" item get "Unapproved Item" \
 		--account my.1password.com --vault openclaw --format json
