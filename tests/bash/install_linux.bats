@@ -91,6 +91,7 @@ fi
 	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;

@@ -49,6 +49,7 @@ Describe 'HermesHindsight adapter' {
         Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
         Mock Invoke-HermesHindsightCommand {
             param($Command, $Arguments, $TimeoutSeconds)
+            $null = $TimeoutSeconds
             $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
             if ($Command -eq 'ollama') { $script:hindsightPullTimeouts.Add($TimeoutSeconds) }
             if ($Arguments[-1] -eq 'http://127.0.0.1:11434/api/tags') {
@@ -169,6 +170,7 @@ Describe 'HermesHindsight adapter' {
         Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
         Mock Invoke-HermesHindsightCommand {
             param($Command, $Arguments, $TimeoutSeconds)
+            $null = $TimeoutSeconds
             $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
             '{"status":"healthy","database":"connected"}'
         }

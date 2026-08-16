@@ -21,7 +21,10 @@ let
   user = if bootstrapUser != "" then bootstrapUser else builtins.getEnv "USER";
   home = if bootstrapHome != "" then bootstrapHome else builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
-  darwinTerminfoPackages = lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.wezterm.terminfo ];
+  darwinAdditionalPackages = lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
+    pkgs.coreutils
+    pkgs.wezterm.terminfo
+  ];
 in
 {
   home = {
@@ -37,7 +40,7 @@ in
           "ollama"
         ]
       )
-      ++ darwinTerminfoPackages;
+      ++ darwinAdditionalPackages;
 
     sessionVariables = {
       # qmd (markdown search engine)

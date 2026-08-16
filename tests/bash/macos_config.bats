@@ -98,6 +98,11 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin provisions GNU timeout and launches native Ollama" {
+	grep -Fq 'pkgs.coreutils' "$REPO_ROOT/nix/home/common.nix"
+	grep -Fq '/usr/bin/open -gj -a Ollama' "$REPO_ROOT/nix/darwin/default.nix"
+}
+
 @test "Darwin zsh restores WezTerm terminfo after inherited Home Manager sentinels" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

@@ -457,6 +457,11 @@ dotfiles_hermes_start_stack() {
     dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
     return "$status"
   fi
+  if dotfiles_hermes_hindsight_configure_ollama_url "$docker_runner"; then
+    :
+  else
+    return $?
+  fi
   if dotfiles_hermes_hindsight_prepare_host "$compose_file"; then
     :
   else

@@ -26,7 +26,8 @@ EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
-	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE
+	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
+	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
 	export COMMAND_LOG PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
@@ -924,6 +925,35 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"ollama is required"* ]]
 	! grep -q '<build>' "$COMMAND_LOG"
+}
+
+@test "Linux resolves the native Ollama endpoint from the Docker bridge" {
+	unset HINDSIGHT_OLLAMA_URL
+	write_stub uname 'printf "Linux\n"'
+	docker_gateway() {
+		[ "$*" = "network inspect bridge --format {{(index .IPAM.Config 0).Gateway}}" ]
+		printf '172.19.0.1\n'
+	}
+	. "$REPO_ROOT/scripts/sh/install-common.sh"
+	. "$REPO_ROOT/scripts/sh/hermes-hindsight.sh"
+
+	dotfiles_hermes_hindsight_configure_ollama_url docker_gateway
+
+	[ "$HINDSIGHT_OLLAMA_URL" = "http://172.19.0.1:11434" ]
+}
+
+@test "configured Ollama URL is propagated to native model pulls" {
+	export HINDSIGHT_OLLAMA_URL=http://172.19.0.1:11434
+	OLLAMA_HOST_CAPTURE="$BATS_TEST_TMPDIR/ollama-hosts"
+	export OLLAMA_HOST_CAPTURE
+	write_stub ollama '
+printf "%s\n" "${OLLAMA_HOST:-}" >>"$OLLAMA_HOST_CAPTURE"
+'
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(sort -u "$OLLAMA_HOST_CAPTURE")" = "172.19.0.1:11434" ]
 }
 
 @test "fails clearly when native Ollama is unreachable before pulling models" {
