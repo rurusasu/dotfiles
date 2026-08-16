@@ -17,6 +17,12 @@ setup() {
   grep -q 'docker-buildx' "$REPO_ROOT/nix/system-manager/docker.nix"
 }
 
+@test "System Manager shares the root nixpkgs input" {
+  block="$(sed -n '/system-manager = {/,/^[[:space:]]*};/p' "$REPO_ROOT/flake.nix")"
+  [[ "$block" == *'url = "github:numtide/system-manager"'* ]]
+  [[ "$block" == *'inputs.nixpkgs.follows = "nixpkgs"'* ]]
+}
+
 @test "System Manager preserves the requested existing user identity" {
   grep -q 'mutableUsers = true' "$REPO_ROOT/nix/system-manager/default.nix"
   grep -q 'DOTFILES_UID' "$REPO_ROOT/nix/system-manager/default.nix"
