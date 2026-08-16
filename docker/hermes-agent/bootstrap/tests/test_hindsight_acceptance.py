@@ -8,7 +8,9 @@ import os
 import stat
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +187,17 @@ class SequenceClock:
 
     def __call__(self) -> float:
         return next(self.values)
+
+
+class ManualClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.value += seconds
 
 
 class TokenSource:
@@ -476,10 +489,63 @@ class HindsightAcceptanceTests(unittest.TestCase):
                 profile="default",
                 sentinel="sentinel",
                 timeout=300,
-                clock=SequenceClock([0.0, 299.0, 301.0, 302.0]),
+                clock=SequenceClock([0.0, 299.0, 299.0, 301.0, 302.0]),
                 sleeper=lambda _: None,
                 timings=[],
             )
+
+    def test_recall_does_not_start_another_call_without_remaining_budget(self) -> None:
+        clock = ManualClock()
+
+        class SlowMissProvider:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def handle_tool_call(
+                self, tool_name: str, arguments: dict[str, Any]
+            ) -> str:
+                del tool_name, arguments
+                self.calls += 1
+                if self.calls > 1:
+                    raise AssertionError("second recall must not start")
+                clock.value += 299
+                return json.dumps({"result": "No relevant memories found."})
+
+        provider = SlowMissProvider()
+        with self.assertRaisesRegex(acceptance.AcceptanceError, "recall.*300"):
+            acceptance._recall_own_sentinel(
+                provider,
+                profile="default",
+                sentinel="sentinel",
+                timeout=300,
+                clock=clock,
+                sleeper=clock.sleep,
+                timings=[],
+            )
+
+        self.assertEqual(provider.calls, 1)
+
+    def test_acceptance_state_reservation_is_atomic_between_concurrent_runs(
+        self,
+    ) -> None:
+        barrier = threading.Barrier(2)
+
+        def reserve(run_id: str) -> str:
+            barrier.wait()
+            try:
+                acceptance._create_json_exclusive(self.state, {"run_id": run_id})
+            except acceptance.AcceptanceError:
+                return "exists"
+            return "created"
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(reserve, ("first", "second")))
+
+        self.assertCountEqual(results, ["created", "exists"])
+        self.assertIn(
+            json.loads(self.state.read_text(encoding="utf-8"))["run_id"],
+            {"first", "second"},
+        )
 
     def test_verify_reopens_resolved_banks_after_restart_and_records_percentiles(
         self,
@@ -524,6 +590,22 @@ class HindsightAcceptanceTests(unittest.TestCase):
             set(json.loads(self.state.read_text(encoding="utf-8"))["banks"].values()),
         )
 
+        world.degraded = True
+        acceptance.run_degraded(
+            api_url="http://hindsight:8888",
+            timeout=5,
+            state_path=self.state,
+            evidence_path=self.evidence,
+            provider_factory=world.factory,
+            clock=clock,
+        )
+        acceptance.run_recovery(
+            api_url="http://hindsight:8888",
+            state_path=self.state,
+            evidence_path=self.evidence,
+            timeout=300,
+            http_factory=FakeHttpFactory(),
+        )
         acceptance.run_cleanup(
             api_url="http://hindsight:8888",
             state_path=self.state,
@@ -601,12 +683,24 @@ class HindsightAcceptanceTests(unittest.TestCase):
             sleeper=clock.sleep,
             token_hex=TokenSource(),
         )
+        state = json.loads(self.state.read_text(encoding="utf-8"))
+        self.evidence.write_text(
+            json.dumps(
+                {
+                    "status": "verified",
+                    "run_id": state["run_id"],
+                    "banks": state["banks"],
+                }
+            ),
+            encoding="utf-8",
+        )
         world.degraded = True
 
         acceptance.run_degraded(
             api_url="http://hindsight:8888",
             timeout=5,
             state_path=self.state,
+            evidence_path=self.evidence,
             provider_factory=world.factory,
             clock=clock,
         )
@@ -620,6 +714,45 @@ class HindsightAcceptanceTests(unittest.TestCase):
             ["hindsight_retain", "hindsight_recall"],
         )
         self.assertTrue(self.state.exists())
+        self.assertEqual(
+            json.loads(self.evidence.read_text(encoding="utf-8"))["status"],
+            "degraded",
+        )
+
+    def test_recovery_requires_degraded_evidence_and_connected_hindsight(self) -> None:
+        run_id = "e" * 32
+        state = {
+            "run_id": run_id,
+            "banks": {
+                profile: f"test-hermes-{profile}-{run_id}" for profile in PROFILES
+            },
+            "sentinels": {profile: f"sentinel-{profile}" for profile in PROFILES},
+            "timings": {"retain": [1.0], "recall": [2.0]},
+        }
+        self.state.write_text(json.dumps(state), encoding="utf-8")
+        self.evidence.write_text(
+            json.dumps(
+                {
+                    "status": "degraded",
+                    "run_id": run_id,
+                    "banks": state["banks"],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        acceptance.run_recovery(
+            api_url="http://hindsight:8888",
+            state_path=self.state,
+            evidence_path=self.evidence,
+            timeout=300,
+            http_factory=FakeHttpFactory(),
+        )
+
+        self.assertEqual(
+            json.loads(self.evidence.read_text(encoding="utf-8"))["status"],
+            "recovered",
+        )
 
     def test_cleanup_refuses_any_nonexact_or_nonowned_bank_before_delete(self) -> None:
         run_id = "a" * 32
@@ -639,6 +772,7 @@ class HindsightAcceptanceTests(unittest.TestCase):
             acceptance.run_cleanup(
                 api_url="http://hindsight:8888",
                 state_path=self.state,
+                evidence_path=self.evidence,
                 timeout=300,
                 http_factory=http,
             )
@@ -659,7 +793,12 @@ class HindsightAcceptanceTests(unittest.TestCase):
             "timings": {"retain": [1.0], "recall": [2.0]},
         }
         self.state.write_text(json.dumps(state), encoding="utf-8")
-        self.evidence.write_text('{"status":"verified"}\n', encoding="utf-8")
+        self.evidence.write_text(
+            json.dumps(
+                {"status": "recovered", "run_id": run_id, "banks": state["banks"]}
+            ),
+            encoding="utf-8",
+        )
         http = FakeHttpFactory()
 
         acceptance.run_cleanup(
@@ -681,7 +820,7 @@ class HindsightAcceptanceTests(unittest.TestCase):
             "passed",
         )
 
-    def test_cleanup_refuses_to_delete_before_verification_is_complete(self) -> None:
+    def test_cleanup_refuses_to_delete_before_recovery_is_complete(self) -> None:
         run_id = "d" * 32
         state = {
             "run_id": run_id,
@@ -692,10 +831,15 @@ class HindsightAcceptanceTests(unittest.TestCase):
             "timings": {"retain": [1.0], "recall": [2.0]},
         }
         self.state.write_text(json.dumps(state), encoding="utf-8")
-        self.evidence.write_text('{"status":"probe-complete"}\n', encoding="utf-8")
+        self.evidence.write_text(
+            json.dumps(
+                {"status": "verified", "run_id": run_id, "banks": state["banks"]}
+            ),
+            encoding="utf-8",
+        )
         http = FakeHttpFactory()
 
-        with self.assertRaisesRegex(acceptance.AcceptanceError, "verified"):
+        with self.assertRaisesRegex(acceptance.AcceptanceError, "recovered"):
             acceptance.run_cleanup(
                 api_url="http://hindsight:8888",
                 state_path=self.state,
@@ -708,7 +852,7 @@ class HindsightAcceptanceTests(unittest.TestCase):
         self.assertTrue(self.state.exists())
         self.assertEqual(
             json.loads(self.evidence.read_text(encoding="utf-8"))["status"],
-            "probe-complete",
+            "verified",
         )
 
     def test_cleanup_retries_after_partial_delete_and_accepts_owned_bank_404(
@@ -724,7 +868,12 @@ class HindsightAcceptanceTests(unittest.TestCase):
             "timings": {"retain": [1.0], "recall": [2.0]},
         }
         self.state.write_text(json.dumps(state), encoding="utf-8")
-        self.evidence.write_text('{"status":"verified"}\n', encoding="utf-8")
+        self.evidence.write_text(
+            json.dumps(
+                {"status": "recovered", "run_id": run_id, "banks": state["banks"]}
+            ),
+            encoding="utf-8",
+        )
         paths = {
             profile: f"/v1/default/banks/{state['banks'][profile]}"
             for profile in PROFILES
@@ -747,7 +896,7 @@ class HindsightAcceptanceTests(unittest.TestCase):
         self.assertTrue(self.state.exists())
         self.assertEqual(
             json.loads(self.evidence.read_text(encoding="utf-8"))["status"],
-            "verified",
+            "recovered",
         )
 
         retry = FakeHttpFactory(delete_statuses={paths["default"]: 404})

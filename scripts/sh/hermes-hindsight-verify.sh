@@ -45,13 +45,31 @@ docker compose -f "$compose_file" exec -T hermes \
   --state "$state_file" \
   --evidence "$evidence_file"
 
+restore_hindsight_on_exit() {
+  local original_status=$?
+  if [[ $hindsight_stopped == true ]]; then
+    if docker compose -f "$compose_file" start hindsight; then
+      if ! dotfiles_hermes_hindsight_wait_for_api; then
+        printf 'Warning: Hindsight restart did not become healthy during failure recovery.\n' >&2
+      fi
+    else
+      printf 'Warning: Hindsight restart failed during failure recovery.\n' >&2
+    fi
+  fi
+  return "$original_status"
+}
+
+hindsight_stopped=false
+trap restore_hindsight_on_exit EXIT
 docker compose -f "$compose_file" stop hindsight
+hindsight_stopped=true
 
 docker compose -f "$compose_file" exec -T hermes \
   hermes-hindsight-acceptance degraded \
   --api-url "$api_url" \
   --timeout 5 \
-  --state "$state_file"
+  --state "$state_file" \
+  --evidence "$evidence_file"
 
 alive_response="$(
   docker compose -f "$compose_file" exec -T hermes \
@@ -69,9 +87,18 @@ curl --fail --silent --show-error --max-time 5 \
 
 docker compose -f "$compose_file" start hindsight
 dotfiles_hermes_hindsight_wait_for_api
+hindsight_stopped=false
+
+docker compose -f "$compose_file" exec -T hermes \
+  hermes-hindsight-acceptance recovery \
+  --api-url "$api_url" \
+  --timeout 300 \
+  --state "$state_file" \
+  --evidence "$evidence_file"
 
 docker compose -f "$compose_file" exec -T hermes \
   hermes-hindsight-acceptance cleanup \
   --api-url "$api_url" \
   --state "$state_file" \
   --evidence "$evidence_file"
+trap - EXIT

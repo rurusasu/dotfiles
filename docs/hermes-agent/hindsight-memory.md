@@ -149,9 +149,10 @@ task hermes:memory:verify
 `/opt/data/hindsight/acceptance-state.json` です。失敗時は診断のため failed-run
 bank と state を保存し、cleanup しません。保存済み state がある間は新しい seedを
 開始せず、前回runのbank IDを上書きしません。verify完了時のevidenceは`verified`
-であり、degraded mode、Hermes health、復旧、全bank cleanupが成功した後にだけ
-`passed`になります。retain/recallの各operationとown-sentinel recall全体は300秒
-未満でなければ失敗します。
+であり、degraded mode完了時に`degraded`、Hermes healthとHindsight復旧確認後に
+`recovered`へ進み、全bank cleanupが成功した後にだけ`passed`になります。
+Hindsight停止後に検証が失敗した場合も再起動を試みます。retain/recallの各operationと
+own-sentinel recall全体は300秒未満でなければ失敗します。
 
 ## Backup
 

@@ -297,6 +297,27 @@ def _write_json(path: Path, payload: dict[str, Any], *, mode: int = 0o600) -> No
         raise
 
 
+def _create_json_exclusive(
+    path: Path, payload: dict[str, Any], *, mode: int = 0o600
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    except FileExistsError as exc:
+        raise AcceptanceError(
+            f"Acceptance state already exists; preserve or clean it before retry: {path}"
+        ) from exc
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def _read_json(path: Path, label: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -437,12 +458,26 @@ def _recall_own_sentinel(
 ) -> None:
     deadline = clock() + timeout
     while True:
-        raw, elapsed = _timed_tool_call(
-            provider,
-            "hindsight_recall",
-            {"query": sentinel},
-            clock=clock,
-        )
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise AcceptanceError(
+                f"recall exceeded the {timeout:g} second acceptance budget "
+                f"for profile {profile}"
+            )
+        has_provider_timeout = hasattr(provider, "_timeout")
+        provider_timeout = getattr(provider, "_timeout", None)
+        if has_provider_timeout and isinstance(provider_timeout, (int, float)):
+            provider._timeout = min(float(provider_timeout), remaining)
+        try:
+            raw, elapsed = _timed_tool_call(
+                provider,
+                "hindsight_recall",
+                {"query": sentinel},
+                clock=clock,
+            )
+        finally:
+            if has_provider_timeout:
+                provider._timeout = provider_timeout
         timings.append(elapsed)
         _require_operation_budget("recall", elapsed, timeout)
         result = _require_tool_success(raw, "recall", profile)
@@ -581,10 +616,6 @@ def run_seed(
         raise AcceptanceError(
             "Seed requires all seven managed profiles in canonical order"
         )
-    if state_path.exists():
-        raise AcceptanceError(
-            f"Acceptance state already exists; preserve or clean it before retry: {state_path}"
-        )
     run_id = token_hex(16)
     sentinels = {
         profile: f"hermes-memory-sentinel-{profile}-{token_hex(16)}"
@@ -596,7 +627,7 @@ def run_seed(
         "sentinels": sentinels,
         "timings": {"retain": [], "recall": []},
     }
-    _write_json(state_path, state)
+    _create_json_exclusive(state_path, state)
 
     with ExitStack() as stack:
         providers: dict[str, Any] = {}
@@ -738,11 +769,13 @@ def run_degraded(
     api_url: str,
     timeout: float,
     state_path: Path,
+    evidence_path: Path,
     provider_factory: ProviderFactory | None = None,
     clock: Clock = time.monotonic,
 ) -> None:
     state = _read_json(state_path, "acceptance state")
     _validate_state(state)
+    evidence = _require_evidence_phase(evidence_path, state, "verified")
     with _resolved_provider(
         profile="default",
         run_id=state["run_id"],
@@ -777,13 +810,53 @@ def run_degraded(
         )
         _require_tool_failure(retain, "retain")
         _require_tool_failure(recall, "recall")
+    evidence["status"] = "degraded"
+    _write_json(evidence_path, evidence)
+
+
+def _require_evidence_phase(
+    evidence_path: Path, state: dict[str, Any], expected_status: str
+) -> dict[str, Any]:
+    evidence = _read_json(evidence_path, "acceptance evidence")
+    if evidence.get("status") != expected_status:
+        raise AcceptanceError(
+            f"Acceptance evidence must be {expected_status} before this phase"
+        )
+    if (
+        evidence.get("run_id") != state["run_id"]
+        or evidence.get("banks") != state["banks"]
+    ):
+        raise AcceptanceError("Acceptance evidence does not match the preserved run")
+    return evidence
+
+
+def run_recovery(
+    *,
+    api_url: str,
+    state_path: Path,
+    evidence_path: Path,
+    timeout: float = 300,
+    http_factory: HttpFactory = HttpClient,
+) -> None:
+    state = _read_json(state_path, "acceptance state")
+    _validate_state(state)
+    evidence = _require_evidence_phase(evidence_path, state, "degraded")
+    api = http_factory(api_url, timeout)
+    status, health = api.request("GET", "/health")
+    _require_status(status, 200, "Hindsight recovery health")
+    if health.get("status") != "healthy" or health.get("database") != "connected":
+        raise AcceptanceError(
+            "Hindsight recovery must report healthy with a connected database"
+        )
+    evidence["status"] = "recovered"
+    _write_json(evidence_path, evidence)
 
 
 def run_cleanup(
     *,
     api_url: str,
     state_path: Path,
-    evidence_path: Path | None = None,
+    evidence_path: Path,
     timeout: float = 300,
     http_factory: HttpFactory = HttpClient,
 ) -> None:
@@ -798,13 +871,7 @@ def run_cleanup(
     if len(set(state["banks"].values())) != len(PROFILES):
         raise AcceptanceError("Refusing cleanup because test bank IDs are not unique")
 
-    evidence: dict[str, Any] | None = None
-    if evidence_path is not None:
-        evidence = _read_json(evidence_path, "acceptance evidence")
-        if evidence.get("status") != "verified":
-            raise AcceptanceError(
-                "Refusing cleanup before acceptance evidence is verified"
-            )
+    evidence = _require_evidence_phase(evidence_path, state, "recovered")
 
     api = http_factory(api_url, timeout)
     for profile in PROFILES:
@@ -813,9 +880,8 @@ def run_cleanup(
         if status not in {200, 202, 204, 404}:
             raise AcceptanceError(f"Bank cleanup failed for {bank_id}: HTTP {status}")
     state_path.unlink()
-    if evidence_path is not None and evidence is not None:
-        evidence["status"] = "passed"
-        _write_json(evidence_path, evidence)
+    evidence["status"] = "passed"
+    _write_json(evidence_path, evidence)
 
 
 def _profiles(value: str) -> tuple[str, ...]:
@@ -859,6 +925,19 @@ def build_parser() -> argparse.ArgumentParser:
     degraded.add_argument(
         "--state", type=Path, default=Path("/opt/data/hindsight/acceptance-state.json")
     )
+    degraded.add_argument(
+        "--evidence", type=Path, default=Path("/opt/data/hindsight/acceptance.json")
+    )
+
+    recovery = subparsers.add_parser("recovery")
+    recovery.add_argument("--api-url", default="http://hindsight:8888")
+    recovery.add_argument("--timeout", type=float, default=300)
+    recovery.add_argument(
+        "--state", type=Path, default=Path("/opt/data/hindsight/acceptance-state.json")
+    )
+    recovery.add_argument(
+        "--evidence", type=Path, default=Path("/opt/data/hindsight/acceptance.json")
+    )
 
     cleanup = subparsers.add_parser("cleanup")
     cleanup.add_argument("--api-url", default="http://hindsight:8888")
@@ -901,6 +980,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 api_url=args.api_url,
                 timeout=args.timeout,
                 state_path=args.state,
+                evidence_path=args.evidence,
+            )
+        elif args.command == "recovery":
+            run_recovery(
+                api_url=args.api_url,
+                timeout=args.timeout,
+                state_path=args.state,
+                evidence_path=args.evidence,
             )
         elif args.command == "cleanup":
             run_cleanup(

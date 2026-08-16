@@ -108,11 +108,12 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
             'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health'
             "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance verify --api-url http://hindsight:8888 --timeout 300 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json"
             "docker compose -f $script:composeFile stop hindsight"
-            "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance degraded --api-url http://hindsight:8888 --timeout 5 --state /opt/data/hindsight/acceptance-state.json"
+            "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance degraded --api-url http://hindsight:8888 --timeout 5 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json"
             'docker compose -f ' + $script:composeFile + ' exec -T hermes hermes chat --quiet -q Reply with exactly HERMES_ALIVE and nothing else.'
             'curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8642/health'
             "docker compose -f $script:composeFile start hindsight"
             'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health'
+            "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance recovery --api-url http://hindsight:8888 --timeout 300 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json"
             "docker compose -f $script:composeFile exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json"
         )
         $recovery = $script:calls.IndexOf("docker compose -f $script:composeFile start hindsight")
@@ -120,13 +121,13 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
         $cleanup | Should -BeGreaterThan $recovery
     }
 
-    It 'should reject a nonexact one-shot response before health recovery or cleanup' {
+    It 'should reject a nonexact one-shot response, restart Hindsight, and skip cleanup' {
         $script:aliveResponse = 'HERMES_ALIVE extra'
 
         { Invoke-HermesHindsightVerify -ComposeFile $script:composeFile -DataDir $script:dataDir } |
             Should -Throw '*exact HERMES_ALIVE*'
 
-        $script:calls | Should -Not -Contain "docker compose -f $script:composeFile start hindsight"
+        $script:calls | Should -Contain "docker compose -f $script:composeFile start hindsight"
         ($script:calls -join "`n") | Should -Not -Match 'acceptance cleanup'
         (Get-Content -LiteralPath $script:stateFile -Raw) | Should -BeExactly $script:stateBefore
     }
@@ -162,5 +163,16 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
         ($script:calls -join "`n") | Should -Not -Match 'stop hindsight|acceptance cleanup'
         (Get-Content -LiteralPath $script:stateFile -Raw) | Should -BeExactly $script:stateBefore
         $script:stateBefore | Should -Match 'test-hermes-shiraishi-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    }
+
+    It 'should restart Hindsight when degraded verification fails after stop' {
+        $script:dockerFailureMatch = 'hermes-hindsight-acceptance degraded'
+
+        { Invoke-HermesHindsightVerify -ComposeFile $script:composeFile -DataDir $script:dataDir } |
+            Should -Throw '*exit code 42*'
+
+        $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
+        $script:calls | Should -Contain "docker compose -f $script:composeFile start hindsight"
+        ($script:calls -join "`n") | Should -Not -Match 'acceptance cleanup'
     }
 }

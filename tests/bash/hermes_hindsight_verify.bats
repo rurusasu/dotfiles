@@ -88,11 +88,12 @@ docker compose -f $HERMES_COMPOSE_FILE restart hindsight
 curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health
 docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance verify --api-url http://hindsight:8888 --timeout 300 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json
 docker compose -f $HERMES_COMPOSE_FILE stop hindsight
-docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance degraded --api-url http://hindsight:8888 --timeout 5 --state /opt/data/hindsight/acceptance-state.json
+docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance degraded --api-url http://hindsight:8888 --timeout 5 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json
 docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes chat --quiet -q Reply with exactly HERMES_ALIVE and nothing else.
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8642/health
 docker compose -f $HERMES_COMPOSE_FILE start hindsight
 curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health
+docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance recovery --api-url http://hindsight:8888 --timeout 300 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json
 docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance cleanup --api-url http://hindsight:8888 --state /opt/data/hindsight/acceptance-state.json --evidence /opt/data/hindsight/acceptance.json
 EOF
 }
@@ -107,7 +108,7 @@ EOF
   [ "$cleanup_line" -gt "$recovery_line" ]
 }
 
-@test "rejects a nonexact one-shot response before health recovery or cleanup" {
+@test "rejects a nonexact one-shot response, restarts Hindsight, and skips cleanup" {
   export HERMES_ALIVE_RESPONSE="HERMES_ALIVE extra"
   before="$(cat "$HERMES_DATA_DIR/hindsight/acceptance-state.json")"
 
@@ -116,7 +117,7 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"exact HERMES_ALIVE"* ]]
   run grep -q "docker compose -f $HERMES_COMPOSE_FILE start hindsight" "$TEST_LOG"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 0 ]
   run grep -q 'acceptance cleanup' "$TEST_LOG"
   [ "$status" -eq 1 ]
   [ "$(cat "$HERMES_DATA_DIR/hindsight/acceptance-state.json")" = "$before" ]
@@ -136,4 +137,16 @@ EOF
   [ "$status" -eq 1 ]
   [ "$(cat "$HERMES_DATA_DIR/hindsight/acceptance-state.json")" = "$before" ]
   [[ "$before" == *"test-hermes-shiraishi-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"* ]]
+}
+
+@test "restarts Hindsight when degraded verification fails after stop" {
+  export FAIL_MATCH="hermes-hindsight-acceptance degraded"
+
+  run "$REPO_ROOT/scripts/sh/hermes-hindsight-verify.sh"
+
+  [ "$status" -eq 42 ]
+  grep -q "docker compose -f $HERMES_COMPOSE_FILE stop hindsight" "$TEST_LOG"
+  grep -q "docker compose -f $HERMES_COMPOSE_FILE start hindsight" "$TEST_LOG"
+  run grep -q 'acceptance cleanup' "$TEST_LOG"
+  [ "$status" -eq 1 ]
 }

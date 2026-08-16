@@ -66,6 +66,16 @@ esac
 exit 0
 '
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub timeout '
+if [[ ${1:-} == --version ]]; then
+	printf "timeout (GNU coreutils) 9.0\n"
+	exit 0
+fi
+[[ ${1:-} == --foreground ]] && shift
+[[ ${1:-} == --kill-after=30 ]] && shift
+shift
+exec "$@"
+'
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
