@@ -165,21 +165,31 @@ dotfiles_run_in_group() {
 
 dotfiles_run_task() {
   local task_name="$1"
+  local task_command="${DOTFILES_TASK_COMMAND:-task}"
   shift
 
-  dotfiles_have task || dotfiles_die "go-task is required to run $task_name."
+  if [[ $task_command == */* ]]; then
+    [[ -x $task_command ]] || dotfiles_die "go-task is required to run $task_name."
+  else
+    dotfiles_have "$task_command" || dotfiles_die "go-task is required to run $task_name."
+  fi
   [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
 
-  task --dir "$DOTFILES_ROOT" "$task_name" "$@"
+  "$task_command" --dir "$DOTFILES_ROOT" "$task_name" "$@"
 }
 
 dotfiles_run_task_in_group() {
   local group="$1"
   local task_name="$2"
+  local task_command="${DOTFILES_TASK_COMMAND:-task}"
   shift 2
 
-  dotfiles_have task || dotfiles_die "go-task is required to run $task_name."
+  if [[ $task_command == */* ]]; then
+    [[ -x $task_command ]] || dotfiles_die "go-task is required to run $task_name."
+  else
+    dotfiles_have "$task_command" || dotfiles_die "go-task is required to run $task_name."
+  fi
   [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
 
-  dotfiles_run_in_group "$group" task --dir "$DOTFILES_ROOT" "$task_name" "$@"
+  dotfiles_run_in_group "$group" "$task_command" --dir "$DOTFILES_ROOT" "$task_name" "$@"
 }
