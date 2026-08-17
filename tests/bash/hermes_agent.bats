@@ -502,6 +502,7 @@ EOF
 		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_TASK_COMMAND="$MOCK_BIN/task" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
 		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/untrusted/bin" \
 		DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$fixture_root/untrusted/cli-plugins" \
