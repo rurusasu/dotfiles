@@ -38,6 +38,7 @@ DASHBOARD_KEYS = frozenset(
 API_SERVER_KEYS = frozenset({"API_SERVER_KEY"})
 DISCORD_KEYS = frozenset(
     {
+        "DISCORD_ALLOW_BOTS",
         "DISCORD_BOT_TOKEN",
         "DISCORD_ALLOWED_USERS",
     }
@@ -277,6 +278,7 @@ def _build_profile_environment(
         environment.update({key: dashboard[key] for key in API_SERVER_KEYS})
     environment.update(
         {
+            "DISCORD_ALLOW_BOTS": "mentions",
             "DISCORD_BOT_TOKEN": discord.bot_token,
             "DISCORD_ALLOWED_USERS": discord.allowed_users,
         }
