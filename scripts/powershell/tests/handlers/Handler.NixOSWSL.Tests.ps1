@@ -257,6 +257,33 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'GetRelease' {
+        It 'should use the GitHub token when available' {
+            $previousToken = $env:GITHUB_TOKEN
+            $env:GITHUB_TOKEN = 'test-token'
+
+            try {
+                Mock Invoke-RestMethodSafe {
+                    return @{ tag_name = "v24.5.1"; assets = @() }
+                }
+                Mock Write-Host { }
+
+                $null = $handler.GetRelease("")
+
+                Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer test-token' -and
+                    $Headers['User-Agent'] -eq 'nixos-wsl-installer'
+                }
+            }
+            finally {
+                if ($null -eq $previousToken) {
+                    Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:GITHUB_TOKEN = $previousToken
+                }
+            }
+        }
+
         It 'should fetch latest release from GitHub API' {
             Mock Invoke-RestMethodSafe {
                 return @{
