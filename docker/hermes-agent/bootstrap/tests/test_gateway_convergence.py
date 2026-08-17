@@ -310,6 +310,50 @@ class GatewayConvergenceTests(unittest.TestCase):
         self.assertEqual((first, second), (0, 0))
         self.assertEqual(manager.started, ["gateway-default", "gateway-default"])
 
+    def test_converge_rejects_non_finite_or_out_of_range_inputs_before_dispatch(
+        self,
+    ) -> None:
+        class DispatchForbiddenManager:
+            def __init__(self) -> None:
+                self.discovery_called = False
+                self.started: list[str] = []
+
+            def list_profile_gateways(self) -> list[str]:
+                self.discovery_called = True
+                raise AssertionError("discovery must not run")
+
+            def start(self, service_name: str) -> None:
+                self.started.append(service_name)
+
+            def is_running(self, service_name: str) -> bool:
+                return False
+
+        for timeout_seconds, poll_seconds in (
+            (float("nan"), 0.0),
+            (float("inf"), 0.0),
+            (0.0, 0.0),
+            (-1.0, 0.0),
+            (1.0, float("nan")),
+            (1.0, float("inf")),
+            (1.0, -1.0),
+        ):
+            with self.subTest(
+                timeout_seconds=timeout_seconds,
+                poll_seconds=poll_seconds,
+            ):
+                manager = DispatchForbiddenManager()
+
+                with self.assertRaises(ValueError):
+                    gateway_convergence.converge(
+                        manager,
+                        self.root,
+                        timeout_seconds=timeout_seconds,
+                        poll_seconds=poll_seconds,
+                    )
+
+                self.assertFalse(manager.discovery_called)
+                self.assertEqual(manager.started, [])
+
     def test_main_rejects_non_finite_timeout_and_poll_values(self) -> None:
         for option, value in (
             ("--timeout-seconds", "nan"),

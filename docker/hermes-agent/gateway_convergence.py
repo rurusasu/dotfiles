@@ -143,10 +143,10 @@ def converge(
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """Start each Gateway and wait until every registered profile is ready."""
-    if timeout_seconds < 0:
-        raise ValueError("timeout_seconds must not be negative")
-    if poll_seconds < 0:
-        raise ValueError("poll_seconds must not be negative")
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be a finite positive number")
+    if not math.isfinite(poll_seconds) or poll_seconds < 0:
+        raise ValueError("poll_seconds must be a finite non-negative number")
 
     try:
         targets = discover_targets(manager, root)
