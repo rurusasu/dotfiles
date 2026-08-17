@@ -45,7 +45,7 @@ setup() {
 @test "xapi setup runs auth, token sync, and restart in order" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
-	run task --dir "$REPO_ROOT" --dry hermes:xapi:setup
+	run task --dir "$REPO_ROOT" --dry --force hermes:xapi:setup
 
 	[ "$status" -eq 0 ]
 	auth_line="$(grep -n 'task: \[hermes:xapi:auth\]' <<<"$output" | cut -d: -f1)"
@@ -61,7 +61,7 @@ setup() {
 @test "nrs orders rebuild, profile activation, and Hermes bootstrap" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
-	run task --dir "$REPO_ROOT" --dry nrs
+	run task --dir "$REPO_ROOT" --dry --force nrs
 
 	[ "$status" -eq 0 ]
 	rebuild_line="$(grep -n 'nix flake update && sudo nixos-rebuild switch' <<<"$output" | cut -d: -f1)"
@@ -77,7 +77,7 @@ setup() {
 @test "Hermes restart reuses the xapi-aware up task" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
-	run task --dir "$REPO_ROOT" --dry hermes:restart
+	run task --dir "$REPO_ROOT" --dry --force hermes:restart
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"task: [hermes:up]"* ]]
