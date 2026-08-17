@@ -310,7 +310,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'brew --prefix bash\)/bin'
         $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
         $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
-        $workflow | Should -Match 'bats tests/bash'
+        $workflow | Should -Match 'bats(?: --print-output-on-failure)? tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
         $workflow | Should -Match 'needs:\s*\[windows, macos\]'
