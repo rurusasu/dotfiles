@@ -54,6 +54,7 @@ EOF
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 	export IMAGE_PRUNE_STATUS=0
+	export HERMES_GATEWAY_CONVERGENCE_STATUS=0
 	export UP_STATUS=0
 
 	write_stub jq '
@@ -111,6 +112,9 @@ if [ "${1:-}" != "compose" ]; then
 	exit 1
 fi
 case " $* " in
+	 *" exec -T hermes /usr/local/bin/hermes-gateway-converge "*)
+		exit "$HERMES_GATEWAY_CONVERGENCE_STATUS"
+		;;
   *" up -d --force-recreate "*)
     exit "$UP_STATUS"
     ;;
@@ -1185,6 +1189,27 @@ dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL
 		false
 	fi
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+}
+
+@test "converges Hermes gateways after API readiness before pruning images" {
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		'<http://127.0.0.1:8642/health>' \
+		'<exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>' \
+		'<image> <prune> <--force>'
+}
+
+@test "returns the gateway convergence status with diagnostics without pruning images" {
+	export HERMES_GATEWAY_CONVERGENCE_STATUS=47
+
+	run_start_stack
+
+	[ "$status" -eq 47 ]
+	grep -q '<exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>' "$COMMAND_LOG"
+	grep -q '<ps> <--all>' "$COMMAND_LOG"
+	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
 }
 
 @test "keeps successful Hermes activation when dangling image cleanup fails" {

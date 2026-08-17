@@ -503,6 +503,14 @@ dotfiles_hermes_wait_for_api() {
   return 1
 }
 
+dotfiles_hermes_converge_gateways() {
+  local docker_runner="$1"
+  local compose_file="$2"
+
+  "$docker_runner" compose -f "$compose_file" exec -T hermes \
+    /usr/local/bin/hermes-gateway-converge
+}
+
 dotfiles_hermes_show_compose_diagnostics() {
   local docker_runner="$1"
   local compose_file="$2"
@@ -628,8 +636,14 @@ dotfiles_hermes_start_stack() {
     return "$status"
   fi
   if dotfiles_hermes_wait_for_api; then
-    if ! dotfiles_hermes_prune_dangling_images "$docker_runner"; then
-      printf '%s\n' 'Warning: unable to remove dangling Docker images.' >&2
+    if dotfiles_hermes_converge_gateways "$docker_runner" "$compose_file"; then
+      if ! dotfiles_hermes_prune_dangling_images "$docker_runner"; then
+        printf '%s\n' 'Warning: unable to remove dangling Docker images.' >&2
+      fi
+    else
+      status=$?
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+      return "$status"
     fi
   else
     status=$?
