@@ -12,6 +12,15 @@ HINDSIGHT_CLIENT_VERSION = "0.6.1"
 
 
 class DockerfileContractTests(unittest.TestCase):
+    def test_runtime_installs_the_gateway_convergence_command(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "COPY gateway_convergence.py /usr/local/bin/hermes-gateway-converge",
+            dockerfile,
+        )
+        self.assertIn("chmod 0755 /usr/local/bin/hermes-gateway-converge", dockerfile)
+
     def test_runtime_installs_and_verifies_the_supported_hindsight_client(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
