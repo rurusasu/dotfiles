@@ -177,6 +177,7 @@ case " $* " in
     ;;
 esac
 '
+	export DOTFILES_TASK_COMMAND="$STUB_BIN/task"
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${3:-}" = "Hermes X API MCP" ]; then
