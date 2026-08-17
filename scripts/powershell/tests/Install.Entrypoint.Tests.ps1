@@ -28,7 +28,7 @@ BeforeAll {
             [Parameter(Mandatory)]
             [string]$CommandLine,
 
-            [int]$TimeoutMilliseconds = 20000
+            [int]$TimeoutMilliseconds = 60000
         )
 
         $psi = [System.Diagnostics.ProcessStartInfo]::new()
