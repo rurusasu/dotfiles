@@ -1,0 +1,15 @@
+version: "3"
+
+tasks:
+  shell:
+    desc: Enter NixOS shell
+    cmds:
+      - cmd: wsl -d {{.DISTRO}}
+        platforms: [windows]
+      - cmd: echo "Already in NixOS shell"
+        platforms: [linux, darwin]
+
+  dev:
+    desc: Enter nix develop shell
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop"'

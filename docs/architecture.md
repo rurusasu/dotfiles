@@ -47,6 +47,7 @@ dotfiles/
 │   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
+├── taskfiles/              # Feature-scoped Taskfiles
 ├── install.cmd             # Windows one-command entrypoint
 ├── install.sh              # macOS/Linux one-command dispatcher
 ├── flake.nix               # Nix flake entry point

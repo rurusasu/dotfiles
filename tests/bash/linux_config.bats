@@ -32,6 +32,12 @@ setup() {
   grep -q 'group = primaryGroup' "$REPO_ROOT/nix/system-manager/default.nix"
 }
 
+@test "WSL rebuild alias delegates the full sequence to Taskfile" {
+	grep -q 'nrs = "task --dir ~/.dotfiles nrs"' "$REPO_ROOT/nix/home/wsl/users.nix"
+	grep -q '^  nrs:' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
+	grep -q 'task: hermes:bootstrap' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
+}
+
 @test "Docker is activated by System Manager with a restricted group socket" {
   grep -q 'wantedBy = \[ "system-manager.target" \]' "$REPO_ROOT/nix/system-manager/docker.nix"
   grep -q 'SocketMode = "0660"' "$REPO_ROOT/nix/system-manager/docker.nix"

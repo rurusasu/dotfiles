@@ -60,6 +60,9 @@ jobs:
 
       - name: Run isolated NixOS-WSL switch
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WSLENV: GITHUB_TOKEN/u
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"

@@ -1,0 +1,16 @@
+version: "3"
+
+tasks:
+  install:
+    desc: Run Windows installer
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
+
+  chezmoi:
+    desc: Apply chezmoi dotfiles (NixOS + Windows)
+    cmds:
+      - cmd: wsl -d {{.DISTRO}} -- chezmoi apply --force
+        platforms: [windows]
+      - chezmoi apply --force
+      - cmd: cmd.exe /c "chezmoi apply --force"
+        platforms: [linux, darwin]

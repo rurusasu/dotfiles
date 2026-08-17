@@ -1,0 +1,9 @@
+version: "3"
+
+tasks:
+  skills:sync:
+    desc: Sync Claude Code skills from deployed ~/.claude/skills/ back to chezmoi source
+    cmds:
+      - chezmoi re-add ~/.claude/skills/
+    status:
+      - chezmoi diff ~/.claude/skills/ | grep -qv .

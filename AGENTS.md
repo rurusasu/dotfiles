@@ -13,6 +13,8 @@
 - Windows npm globals: `windows/npm/packages.json`
 - ユーザー設定: `chezmoi/` 以下
 - Windows 実行ロジック: `scripts/powershell/`
+- CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
+- Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。
 
 ## 実行コマンド
 

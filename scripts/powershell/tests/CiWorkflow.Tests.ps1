@@ -116,6 +116,8 @@ Describe 'CI workflow configuration' {
         $script | Should -Not -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
+        $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
+        $workflow | Should -Match 'WSLENV:\s+GITHUB_TOKEN/u'
         $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
         $script | Should -Match ([regex]::Escape('rg "\"\^\[q\" __zoxide_zi_widget"'))
         $script | Should -Not -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
@@ -306,11 +308,11 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
         $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
-        $workflow | Should -Match 'brew install bash bats-core coreutils'
+        $workflow | Should -Match 'brew install bash coreutils go-task lua'
         $workflow | Should -Match 'brew --prefix bash\)/bin'
         $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
         $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
-        $workflow | Should -Match 'bats tests/bash'
+        $workflow | Should -Match 'bats(?: --print-output-on-failure)? tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
         $workflow | Should -Match 'needs:\s*\[windows, macos\]'
@@ -330,7 +332,7 @@ Describe 'CI workflow configuration' {
         ).Value
 
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Match 'brew install bash bats-core coreutils go-task lua'
+        $macosJob | Should -Match 'brew install bash coreutils go-task lua'
         $macosJob | Should -Match 'bash scripts/sh/install-wezterm-nightly\.sh'
         $macosJob | Should -Not -Match 'brew install --cask wezterm@nightly'
         $macosJob | Should -Match 'command -v lua'

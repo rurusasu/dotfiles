@@ -6,8 +6,6 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="linux-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/hermes-agent.sh"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
@@ -130,7 +128,7 @@ main() {
   capture_host_identity
   apply_linux_system
   apply_chezmoi
-  dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+  dotfiles_run_task_in_group docker hermes:bootstrap
   dotfiles_run_in_group docker "$VERIFY_ENVIRONMENT" --runtime
   dotfiles_log "Linux setup complete."
 }

@@ -108,7 +108,11 @@ dotfiles_update_flake() {
   dotfiles_log "Updating flake inputs..."
   (
     cd "$flake_root" || exit 1
-    NIX_CONFIG="experimental-features = nix-command flakes" \
+    local nix_config="experimental-features = nix-command flakes"
+    if [[ -n ${GITHUB_TOKEN:-} ]]; then
+      nix_config+=$'\naccess-tokens = github.com='"$GITHUB_TOKEN"
+    fi
+    NIX_CONFIG="$nix_config" \
       nix flake update --flake "$flake_root"
   )
 }
@@ -157,4 +161,35 @@ dotfiles_run_in_group() {
   local command_string
   printf -v command_string '%q ' "$@"
   sg "$group" -c "$command_string"
+}
+
+dotfiles_run_task() {
+  local task_name="$1"
+  local task_command="${DOTFILES_TASK_COMMAND:-task}"
+  shift
+
+  if [[ $task_command == */* ]]; then
+    [[ -x $task_command ]] || dotfiles_die "go-task is required to run $task_name."
+  else
+    dotfiles_have "$task_command" || dotfiles_die "go-task is required to run $task_name."
+  fi
+  [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
+
+  "$task_command" --dir "$DOTFILES_ROOT" "$task_name" "$@"
+}
+
+dotfiles_run_task_in_group() {
+  local group="$1"
+  local task_name="$2"
+  local task_command="${DOTFILES_TASK_COMMAND:-task}"
+  shift 2
+
+  if [[ $task_command == */* ]]; then
+    [[ -x $task_command ]] || dotfiles_die "go-task is required to run $task_name."
+  else
+    dotfiles_have "$task_command" || dotfiles_die "go-task is required to run $task_name."
+  fi
+  [[ -n ${DOTFILES_ROOT:-} ]] || dotfiles_die "DOTFILES_ROOT is required to run $task_name."
+
+  dotfiles_run_in_group "$group" "$task_command" --dir "$DOTFILES_ROOT" "$task_name" "$@"
 }

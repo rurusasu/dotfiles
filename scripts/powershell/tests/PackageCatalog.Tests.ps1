@@ -96,13 +96,13 @@ Describe 'Package catalog consistency' {
             $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl/users.nix") -Raw
             $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux/users.nix") -Raw
 
-            $wslUsers | Should -Match 'nrs\s*=\s*"nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles --impure'
+            $wslUsers | Should -Match 'nrs\s*=\s*"task --dir ~/.dotfiles nrs"'
             $linuxUsers | Should -Match 'nrs\s*=\s*"~/.dotfiles/install\.sh"'
             $linuxUsers | Should -Not -Match 'nrs\s*=.*nixos-rebuild'
         }
 
         It 'should update flake inputs before every scripted NixOS rebuild entry point' {
-            $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "Taskfile.yml") -Raw
+            $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "taskfiles/nix/taskfile.yml") -Raw
             $updateScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/update.sh") -Raw
             $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
             $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw

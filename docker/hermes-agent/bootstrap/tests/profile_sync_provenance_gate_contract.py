@@ -8,6 +8,7 @@ from pathlib import Path
 
 DOTFILES_ROOT = Path(__file__).resolve().parents[4]
 TASKFILE = DOTFILES_ROOT / "Taskfile.yml"
+HERMES_TASKFILE = DOTFILES_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-bootstrap.yml"
 PRE_COMMIT = DOTFILES_ROOT / ".pre-commit-config.yaml"
 PROVENANCE = (
@@ -19,14 +20,18 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|Taskfile\.yml|\.pre-commit-config\.yaml|"
+    r"^(docker/hermes-agent/.*|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
+    r"\.pre-commit-config\.yaml|"
     r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
 )
 
 
 class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
     def test_task_runs_the_host_gate_after_existing_suites(self) -> None:
-        taskfile = TASKFILE.read_text(encoding="utf-8")
+        taskfile = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (TASKFILE, HERMES_TASKFILE)
+        )
         section = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
         section = section.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
 
@@ -68,6 +73,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(trigger, PRE_COMMIT_TRIGGER)
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
+            "taskfiles/hermes/taskfile.yml",
             "Taskfile.yml",
             ".pre-commit-config.yaml",
             ".github/workflows/ci-hermes-bootstrap.yml",
@@ -108,6 +114,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn('"Taskfile.yml"', workflow)
+        self.assertIn('"taskfiles/hermes/taskfile.yml"', workflow)
         self.assertIn('".pre-commit-config.yaml"', workflow)
 
 

@@ -6,8 +6,6 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="nixos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/hermes-agent.sh"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
@@ -107,7 +105,7 @@ main() {
   capture_host_identity
   apply_nixos_system
   apply_chezmoi
-  dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+  dotfiles_run_task_in_group docker hermes:bootstrap
   export DOTFILES_VERIFY_SYSTEM_LAYER=nixos
   dotfiles_run_in_group docker "$VERIFY_ENVIRONMENT" --runtime
   dotfiles_log "NixOS setup complete."

@@ -106,6 +106,7 @@ dotfiles/
 ├── windows/                # Windows-side config files
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner
+├── taskfiles/              # Feature-scoped Taskfiles
 ├── install.sh              # macOS / NixOS / Ubuntu / Debian launcher
 ├── install.cmd             # Windows launcher for install.ps1
 ├── scripts/powershell/install.ps1 # NixOS WSL installer entrypoint
@@ -122,8 +123,8 @@ WSL 内で実行:
 # 方法1: update.sh を使う（NixOS rebuild + winget 適用を一括実行）
 ~/.dotfiles/scripts/sh/update.sh
 
-# 方法2: エイリアスを使う（NixOS rebuildのみ）
-nrs  # alias for: sudo nixos-rebuild switch --flake ~/.dotfiles --impure
+# 方法2: エイリアスを使う（NixOS rebuild + profile 更新 + Hermes bootstrap）
+nrs  # alias for: task --dir ~/.dotfiles nrs
 ```
 
 Windows 側のファイルを編集すると、`~/.dotfiles` シンボリックリンク経由で即座に WSL から参照可能。

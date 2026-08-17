@@ -1,0 +1,17 @@
+version: "3"
+
+tasks:
+  fmt:
+    desc: Run nix fmt
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt"'
+
+  fmt:check:
+    desc: Check formatting without changes
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"'
+
+  lint:
+    desc: Run pre-commit on all files
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'

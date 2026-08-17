@@ -1,7 +1,7 @@
 BeforeAll {
     $script:repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $script:entrypointPath = Join-Path $script:repositoryRoot 'scripts/powershell/hermes-bootstrap.ps1'
-    $script:taskfilePath = Join-Path $script:repositoryRoot 'Taskfile.yml'
+    $script:taskfilePath = Join-Path $script:repositoryRoot 'taskfiles/hermes/taskfile.yml'
 
     . $script:entrypointPath
 

@@ -32,7 +32,7 @@ setup() {
 	export SUDO_USER="test-user"
 	export DOTFILES_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
@@ -40,7 +40,8 @@ setup() {
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
+	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
@@ -166,10 +167,23 @@ printf "update-homebrew-casks %s\n" "$*" >>"$COMMAND_LOG"
 exit "$HOMEBREW_CASK_UPDATE_STATUS"
 '
 	write_stub jq 'exec "$REAL_JQ" "$@"'
+	write_stub task '
+printf "task %s\n" "$*" >>"$COMMAND_LOG"
+case " $* " in
+  *" hermes:bootstrap "*)
+    source "$REPO_ROOT/scripts/sh/install-common.sh"
+    source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-agent/compose.yml"
+    ;;
+esac
+'
+	export DOTFILES_TASK_COMMAND="$STUB_BIN/task"
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${3:-}" = "Hermes X API MCP" ]; then
 	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
+elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
+	printf "%s\n" "$HERMES_XAPI_OAUTH_ITEM_JSON"
 else
 	printf "%s\n" "$HERMES_ITEM_JSON"
 fi
@@ -428,8 +442,8 @@ run_macos_installer() {
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
 		"verify-environment --runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 11 ]
-	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 1 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
+	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 2 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
