@@ -119,7 +119,13 @@ class EnvFileTests(unittest.TestCase):
         )
         self.assertEqual(
             DISCORD_KEYS,
-            frozenset({"DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"}),
+            frozenset(
+                {
+                    "DISCORD_ALLOW_BOTS",
+                    "DISCORD_BOT_TOKEN",
+                    "DISCORD_ALLOWED_USERS",
+                }
+            ),
         )
         self.assertEqual(
             GMAIL_MCP_KEYS,
@@ -141,6 +147,7 @@ class EnvFileTests(unittest.TestCase):
 
         self.assertEqual(environment["DISCORD_BOT_TOKEN"], "rick-bot")
         self.assertEqual(environment["DISCORD_ALLOWED_USERS"], "rick-users")
+        self.assertEqual(environment["DISCORD_ALLOW_BOTS"], "mentions")
         self.assertIsInstance(environment, MappingProxyType)
         self.assertNotIn("GMAIL_MCP_CLIENT_ID", environment)
         self.assertNotIn("GMAIL_MCP_CLIENT_SECRET", environment)

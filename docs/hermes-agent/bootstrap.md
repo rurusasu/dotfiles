@@ -101,8 +101,10 @@ access after crash-journal recovery and before it begins new staging or
 transaction writes. Recovery may restore or delete previously journaled managed
 paths before secrets and credentials are validated. Managed `.env` keys include
 the three GitHub aliases, dashboard username/hash/signing secret, and profile
-Discord credentials; root also owns `API_SERVER_KEY`, which is removed from named
-profile `.env` files.
+Discord credentials plus `DISCORD_ALLOW_BOTS=mentions`; root also owns
+`API_SERVER_KEY`, which is removed from named profile `.env` files. The bot
+message gate is written to every profile `.env` so bot mentions can reach the
+intended profile Gateway.
 
 The seven profile-named items keep service credentials in separate sections.
 Discord uses `Discord/bot_token` and `Discord/allowed_users`; additional
