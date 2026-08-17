@@ -8,6 +8,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\HermesBootstrap.ps1')
 . (Join-Path $libPath 'lib\HermesXApi.ps1')
 . (Join-Path $libPath 'lib\HermesHindsight.ps1')
+. (Join-Path $libPath 'lib\HermesGateway.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
     [int]$DockerCheckTimeoutSeconds = 15
@@ -154,6 +155,13 @@ class HermesAgentHandler : SetupHandlerBase {
                 }
                 $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
                 return $this.CreateFailureResult("Hermes API did not become ready after $attempts attempts.")
+            }
+
+            try {
+                Invoke-HermesGatewayConvergence -ComposeFile $composeFile
+            }
+            catch [System.InvalidOperationException] {
+                return $this.CreateFailureResult($_.Exception.Message)
             }
 
             return $this.CreateSuccessResult("Hermes Agent started: http://127.0.0.1:9119 / browser: $($this.GetBrowserViewUrl())")

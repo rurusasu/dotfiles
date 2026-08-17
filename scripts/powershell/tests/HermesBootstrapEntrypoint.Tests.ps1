@@ -3,6 +3,7 @@ BeforeAll {
     $script:entrypointPath = Join-Path $script:repositoryRoot 'scripts/powershell/hermes-bootstrap.ps1'
     $script:taskfilePath = Join-Path $script:repositoryRoot 'taskfiles/hermes/taskfile.yml'
 
+    . (Join-Path $script:repositoryRoot 'scripts/powershell/lib/HermesGateway.ps1')
     . $script:entrypointPath
 
     function Get-HermesTestEnvironmentVariableState {
@@ -106,6 +107,8 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             [PSCustomObject]@{ StatusCode = 200 }
         }
 
+        Mock Invoke-HermesGatewayConvergence { }
+
         Mock Start-Sleep
     }
 
@@ -203,6 +206,52 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         }
         Should -Invoke Start-Sleep -Times 2 -Exactly -ParameterFilter { $Seconds -eq 0 }
         ($script:dockerCalls -join "`n") | Should -Not -Match 'ps --all'
+    }
+
+    It 'should converge gateways after API readiness and before reporting success' {
+        Mock Invoke-WebRequest {
+            $script:eventLog.Add('health')
+            [PSCustomObject]@{ StatusCode = 200 }
+        }
+        Mock Invoke-HermesGatewayConvergence {
+            $script:eventLog.Add('gateway-convergence')
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+        $script:eventLog.Add('success')
+
+        $result.ExitCode | Should -Be 0
+        $script:eventLog | Should -Be @(
+            'config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up',
+            'health', 'gateway-convergence', 'success'
+        )
+        Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly -ParameterFilter {
+            $ComposeFile -eq $script:composeFile
+        }
+    }
+
+    It 'should return a sanitized failure when gateway convergence fails' {
+        $secret = 'gateway-secret-output'
+        Mock Invoke-HermesGatewayConvergence {
+            $inner = [System.InvalidOperationException]::new($secret)
+            throw [System.InvalidOperationException]::new(
+                'Hermes profile Gateway convergence failed with exit code 42.',
+                $inner
+            )
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Match 'Hermes profile Gateway convergence failed'
+        $result.Message | Should -Not -Match ([regex]::Escape($secret))
+        Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly
     }
 
     It 'should stop after bounded readiness attempts and print Compose diagnostics' {
