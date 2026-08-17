@@ -235,6 +235,22 @@ fi
 	grep -q 'switch --flake .#ubuntu --sudo' "$COMMAND_LOG"
 }
 
+@test "flake update passes the GitHub token to Nix when available" {
+	export GITHUB_TOKEN="test-github-token"
+	write_stub nix '
+printf "nix_config=%s args=%s\\n" "${NIX_CONFIG:-}" "$*" >>"$COMMAND_LOG"
+if [[ $* == "eval --impure --raw --expr builtins.currentSystem" ]]; then
+	printf x86_64-linux
+fi
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q '^nix_config=experimental-features = nix-command flakes$' "$COMMAND_LOG"
+	grep -q '^access-tokens = github.com=test-github-token args=flake update --flake' "$COMMAND_LOG"
+}
+
 @test "Hermes bootstrap failure recovers Linux runtime before returning failure" {
 	write_nix_stub
 	export HERMES_BOOTSTRAP_STATUS=45
