@@ -216,7 +216,11 @@ class NixOSWSLHandler : SetupHandlerBase {
         else {
             "$base/tags/$tag"
         }
-        return Invoke-RestMethodSafe -Uri $uri -Headers @{ "User-Agent" = "nixos-wsl-installer" }
+        $headers = @{ "User-Agent" = "nixos-wsl-installer" }
+        if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+            $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+        }
+        return Invoke-RestMethodSafe -Uri $uri -Headers $headers
     }
 
     <#
