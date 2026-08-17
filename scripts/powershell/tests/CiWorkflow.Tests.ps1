@@ -306,7 +306,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
         $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
-        $workflow | Should -Match 'brew install bash bats-core coreutils'
+        $workflow | Should -Match 'brew install bash coreutils go-task lua'
         $workflow | Should -Match 'brew --prefix bash\)/bin'
         $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
         $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'

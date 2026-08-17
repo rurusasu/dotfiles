@@ -127,7 +127,15 @@ jobs:
       - name: Install Bash, Bats, GNU coreutils, Lua, Task, and WezTerm
         run: |
           set -euo pipefail
-          brew install bash bats-core coreutils go-task lua
+          brew install bash coreutils go-task lua
+          bats_version='1.13.0'
+          bats_root="$RUNNER_TEMP/bats-core-$bats_version"
+          bats_prefix="$RUNNER_TEMP/bats-prefix"
+          curl -fsSL "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP"
+          "$bats_root/install.sh" "$bats_prefix"
+          echo "$bats_prefix/bin" >>"$GITHUB_PATH"
+          "$bats_prefix/bin/bats" --version
           bash scripts/sh/install-wezterm-nightly.sh
           command -v lua
           command -v luac
