@@ -108,7 +108,11 @@ dotfiles_update_flake() {
   dotfiles_log "Updating flake inputs..."
   (
     cd "$flake_root" || exit 1
-    NIX_CONFIG="experimental-features = nix-command flakes" \
+    local nix_config="experimental-features = nix-command flakes"
+    if [[ -n ${GITHUB_TOKEN:-} ]]; then
+      nix_config+=$'\naccess-tokens = github.com='"$GITHUB_TOKEN"
+    fi
+    NIX_CONFIG="$nix_config" \
       nix flake update --flake "$flake_root"
   )
 }
