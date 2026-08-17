@@ -76,7 +76,11 @@ printf "\n" >>"$COMMAND_LOG"
 		;;
 	*)
 		if [ "${1:-}" = item ] && [ "${2:-}" = edit ]; then
-			cat >"$EDIT_CAPTURE"
+			if [ "${8:-}" = --template ]; then
+				cat "${9:?}" >"$EDIT_CAPTURE"
+			else
+				cat >"$EDIT_CAPTURE"
+			fi
 			exit 0
 		fi
 		[ "${2:-}" = get ] || exit 2
@@ -691,6 +695,30 @@ EOF
 	[ "$status" -eq 0 ]
 	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "local-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
 	! grep -q 'local-refresh-token-marker' "$COMMAND_LOG"
+}
+
+@test "sync-token updates the configured OAuth item" {
+	export DOTFILES_HERMES_XAPI_OAUTH_ITEM='Hermes X API MCP OAuth'
+	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+    default:
+        oauth2_tokens:
+            app-user:
+                oauth2:
+                    refresh_token: configured-item-refresh-token-marker
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
+
+	[ "$status" -eq 0 ]
+	grep -q '<item> <get> <Hermes X API MCP OAuth>' "$COMMAND_LOG"
+	grep -q '<item> <edit> <Hermes X API MCP OAuth>' "$COMMAND_LOG"
+	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "configured-item-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
 }
 
 @test "uses a mode-0600 cached service account after an op read timeout" {
