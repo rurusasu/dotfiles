@@ -11,7 +11,7 @@ compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-agent/compose.yml}
 command_name="${1:-}"
 
 dotfiles_hermes_sync_xapi_token_to_1password() {
-  local data_dir cache_path item_file account vault item op_command
+  local data_dir cache_path item_file template_file account vault item op_command
 
   data_dir="$(dotfiles_hermes_data_dir)"
   cache_path="$data_dir/.xurl/auth.yml"
@@ -25,15 +25,18 @@ dotfiles_hermes_sync_xapi_token_to_1password() {
     dotfiles_die "1Password CLI (op) is required to sync the xurl refresh token."
   account="$(dotfiles_hermes_xapi_secret_account)"
   vault="$(dotfiles_hermes_xapi_secret_vault)"
-  item="$(dotfiles_hermes_xapi_secret_item)"
+  item="$(dotfiles_hermes_xapi_oauth_item)"
   item_file="$(mktemp "$data_dir/.xapi-item.XXXXXX")" ||
     dotfiles_die "Could not create a temporary 1Password item file."
+  template_file="$(mktemp "$data_dir/.xapi-template.XXXXXX")" ||
+    dotfiles_die "Could not create a temporary 1Password template file."
   chmod 600 "$item_file"
-  trap 'rm -f -- "$item_file"' RETURN
+  chmod 600 "$template_file"
+  trap 'rm -f -- "$item_file" "$template_file"' RETURN
 
   "$op_command" signin --account "$account" >/dev/null || true
   "$op_command" item get "$item" --account "$account" --vault "$vault" --format json >"$item_file"
-  python3 - "$item_file" "$cache_path" <<'PY' | "$op_command" item edit "$item" --account "$account" --vault "$vault" >/dev/null
+  python3 - "$item_file" "$cache_path" >"$template_file" <<'PY'
 import json
 import re
 import sys
@@ -55,6 +58,7 @@ if len(fields) != 1:
 fields[0]["value"] = refresh_token
 sys.stdout.write(json.dumps(item, separators=(",", ":")))
 PY
+  "$op_command" item edit "$item" --account "$account" --vault "$vault" --template "$template_file" >/dev/null
 }
 
 case "$command_name" in
