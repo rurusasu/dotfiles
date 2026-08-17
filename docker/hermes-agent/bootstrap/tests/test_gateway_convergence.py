@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
+import types
 import unittest
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).parents[2] / "gateway_convergence.py"
@@ -146,10 +150,10 @@ class GatewayConvergenceTests(unittest.TestCase):
 
         self.assertEqual(manager.started, [])
 
-    def test_converge_rejects_invalid_profile_before_lifecycle_dispatch(self) -> None:
+    def test_converge_sanitizes_invalid_profile_before_lifecycle_dispatch(self) -> None:
         manager = FakeManager(("invalid/profile",))
 
-        with self.assertRaisesRegex(ValueError, "invalid profile"):
+        with self.assertRaisesRegex(RuntimeError, "gateway discovery failed"):
             gateway_convergence.converge(
                 manager,
                 self.root,
@@ -305,6 +309,49 @@ class GatewayConvergenceTests(unittest.TestCase):
 
         self.assertEqual((first, second), (0, 0))
         self.assertEqual(manager.started, ["gateway-default", "gateway-default"])
+
+    def test_main_rejects_non_finite_timeout_and_poll_values(self) -> None:
+        for option, value in (
+            ("--timeout-seconds", "nan"),
+            ("--timeout-seconds", "inf"),
+            ("--poll-seconds", "nan"),
+            ("--poll-seconds", "inf"),
+        ):
+            with self.subTest(option=option, value=value):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as raised:
+                        gateway_convergence.main([option, value])
+
+                self.assertEqual(raised.exception.code, 2)
+
+    def test_main_sanitizes_discovery_exception_output(self) -> None:
+        sentinel = "DISCORD_BOT_TOKEN=sentinel-token-value"
+
+        class DiscoveryFailingManager(FakeManager):
+            kind = "s6"
+
+            def list_profile_gateways(self) -> list[str]:
+                raise RuntimeError(sentinel)
+
+        manager = DiscoveryFailingManager(())
+        service_manager = types.ModuleType("hermes_cli.service_manager")
+        service_manager.get_service_manager = lambda: manager
+        hermes_cli = types.ModuleType("hermes_cli")
+        hermes_cli.service_manager = service_manager
+
+        with patch.dict(
+            sys.modules,
+            {
+                "hermes_cli": hermes_cli,
+                "hermes_cli.service_manager": service_manager,
+            },
+        ):
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                result = gateway_convergence.main([])
+
+        self.assertEqual(result, 1)
+        self.assertIn("gateway discovery failed", stderr.getvalue())
+        self.assertNotIn(sentinel, stderr.getvalue())
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -23,6 +24,10 @@ class GatewayManager(Protocol):
     def start(self, service_name: str) -> None: ...
 
     def is_running(self, service_name: str) -> bool: ...
+
+
+class NoRegisteredGatewaysError(ValueError):
+    """Raised when s6 has no registered Gateway services."""
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,7 @@ def discord_is_configured(home: Path) -> bool:
 def discover_targets(manager: GatewayManager, root: Path) -> tuple[GatewayTarget, ...]:
     profiles = tuple(manager.list_profile_gateways())
     if not profiles:
-        raise ValueError("no registered gateways")
+        raise NoRegisteredGatewaysError("no registered gateways")
     for profile in profiles:
         validate_profile_name(profile)
     return tuple(
@@ -143,7 +148,12 @@ def converge(
     if poll_seconds < 0:
         raise ValueError("poll_seconds must not be negative")
 
-    targets = discover_targets(manager, root)
+    try:
+        targets = discover_targets(manager, root)
+    except NoRegisteredGatewaysError:
+        raise
+    except Exception as error:
+        raise RuntimeError("gateway discovery failed") from error
     lifecycle_failures: dict[str, str] = {}
     for target in targets:
         try:
@@ -175,7 +185,7 @@ def _positive_float(value: str) -> float:
         parsed = float(value)
     except ValueError as error:
         raise argparse.ArgumentTypeError("must be a positive number") from error
-    if parsed <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive number")
     return parsed
 
