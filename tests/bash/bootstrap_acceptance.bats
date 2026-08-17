@@ -204,3 +204,11 @@ EOF
 	grep -Fq "$wrapper" "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 	grep -Fq "$wrapper" "$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
 }
+
+@test "Hermes bootstrap CI watches the feature Taskfile" {
+	workflow="$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
+	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
+
+	[ "$(grep -c -- '- \"taskfiles/hermes/taskfile.yml\"' "$workflow")" -eq 2 ]
+	grep -Eq 'taskfiles/hermes/taskfile\\.yml' "$pre_commit"
+}
