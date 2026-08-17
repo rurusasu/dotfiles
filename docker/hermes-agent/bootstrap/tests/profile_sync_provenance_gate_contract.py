@@ -20,7 +20,8 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|Taskfile\.yml|\.pre-commit-config\.yaml|"
+    r"^(docker/hermes-agent/.*|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
+    r"\.pre-commit-config\.yaml|"
     r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
 )
 
@@ -72,6 +73,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(trigger, PRE_COMMIT_TRIGGER)
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
+            "taskfiles/hermes/taskfile.yml",
             "Taskfile.yml",
             ".pre-commit-config.yaml",
             ".github/workflows/ci-hermes-bootstrap.yml",
@@ -112,6 +114,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn('"Taskfile.yml"', workflow)
+        self.assertIn('"taskfiles/hermes/taskfile.yml"', workflow)
         self.assertIn('".pre-commit-config.yaml"', workflow)
 
 
