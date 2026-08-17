@@ -330,7 +330,7 @@ Describe 'CI workflow configuration' {
         ).Value
 
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Match 'brew install bash bats-core coreutils go-task lua'
+        $macosJob | Should -Match 'brew install bash coreutils go-task lua'
         $macosJob | Should -Match 'bash scripts/sh/install-wezterm-nightly\.sh'
         $macosJob | Should -Not -Match 'brew install --cask wezterm@nightly'
         $macosJob | Should -Match 'command -v lua'
