@@ -10,6 +10,7 @@ services:
       - |
         printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/hermes-gateway-converge
         chmod 0755 /usr/local/bin/hermes-gateway-converge
+        mkdir -p /www
         if [ -x /bin/httpd ]; then
           exec /bin/httpd -f -p 80 -h /www
         fi
