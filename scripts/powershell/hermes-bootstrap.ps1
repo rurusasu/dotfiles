@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/Invoke-ExternalCommand.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesBootstrap.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesXApi.ps1')
+. (Join-Path $PSScriptRoot 'lib/HermesGateway.ps1')
 
 function New-HermesBootstrapEntrypointResult {
     [CmdletBinding()]
@@ -322,6 +323,15 @@ function Invoke-HermesBootstrapEntrypoint {
                 return New-HermesBootstrapEntrypointResult `
                     -ExitCode 1 `
                     -Message "Hermes API did not become ready after $attempts attempts."
+            }
+
+            try {
+                Invoke-HermesGatewayConvergence -ComposeFile $paths.ComposeFile
+            }
+            catch [System.InvalidOperationException] {
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode 1 `
+                    -Message $_.Exception.Message
             }
 
             return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message 'Hermes bootstrap completed.'

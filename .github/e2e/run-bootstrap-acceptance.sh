@@ -14,6 +14,8 @@ CANONICAL_DIR="$REPO_ROOT/docker/hermes-agent"
 install -m 0644 "$FIXTURE_ROOT/bootstrap-compose.yml" "$CANONICAL_DIR/compose.yml"
 install -m 0755 "$FIXTURE_ROOT/hermes-bootstrap-fixture.sh" \
   "$CANONICAL_DIR/hermes-bootstrap-fixture.sh"
+install -m 0755 "$FIXTURE_ROOT/hermes-gateway-converge.sh" \
+  "$CANONICAL_DIR/hermes-gateway-converge.sh"
 install -m 0644 "$FIXTURE_ROOT/hindsight-health.json" \
   "$CANONICAL_DIR/hindsight-health.json"
 

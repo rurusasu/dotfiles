@@ -5,6 +5,7 @@ BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../lib/HermesBootstrap.ps1
     . $PSScriptRoot/../../lib/HermesXApi.ps1
+    . $PSScriptRoot/../../lib/HermesGateway.ps1
     function Initialize-HermesHindsightHost { }
     function Wait-HermesHindsightApi { }
     . $PSScriptRoot/../../handlers/Handler.NixOSWSL.ps1
@@ -270,6 +271,7 @@ Describe 'HermesAgentHandler' {
             $script:eventLog.Add('health')
             [PSCustomObject]@{ StatusCode = 200 }
         }
+        Mock Invoke-HermesGatewayConvergence { }
         Mock Start-Sleep { }
     }
 
@@ -572,6 +574,43 @@ Describe 'HermesAgentHandler' {
             Should -Invoke Invoke-WebRequest -Times 3 -Exactly
             Should -Invoke Start-Sleep -Times 2 -Exactly
             $script:eventLog[-1] | Should -Be 'health'
+        }
+
+        It 'converges gateways after API readiness and before reporting success' {
+            Mock Invoke-HermesGatewayConvergence {
+                $script:eventLog.Add('gateway-convergence')
+            }
+
+            $result = $handler.Apply($ctx)
+            $script:eventLog.Add('success')
+
+            $result.Success | Should -BeTrue
+            $script:eventLog | Should -Be @(
+                'config', 'hindsight-host', 'up', 'hindsight-health', 'build',
+                'stop', 'bootstrap', 'xapi-credentials', 'up', 'health',
+                'gateway-convergence', 'success'
+            )
+            Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly -ParameterFilter {
+                $ComposeFile -eq $script:composeFile
+            }
+        }
+
+        It 'returns a sanitized component failure when gateway convergence fails' {
+            $secret = 'gateway-secret-output'
+            Mock Invoke-HermesGatewayConvergence {
+                $inner = [System.InvalidOperationException]::new($secret)
+                throw [System.InvalidOperationException]::new(
+                    'Hermes profile Gateway convergence failed with exit code 42.',
+                    $inner
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'Hermes profile Gateway convergence failed'
+            $result.Message | Should -Not -Match ([regex]::Escape($secret))
+            Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly
         }
 
         It 'fails after bounded API readiness attempts without exposing probe errors' {

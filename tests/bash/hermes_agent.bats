@@ -54,6 +54,7 @@ EOF
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 	export IMAGE_PRUNE_STATUS=0
+	export HERMES_GATEWAY_CONVERGENCE_STATUS=0
 	export UP_STATUS=0
 
 	write_stub jq '
@@ -109,6 +110,9 @@ if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
 fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
+fi
+if [[ ${1:-} == compose && ${2:-} == -f && ${3:-} == "$COMPOSE_FILE" && ${4:-} == exec && ${5:-} == -T && ${6:-} == hermes && ${7:-} == /usr/local/bin/hermes-gateway-converge && $# -eq 7 ]]; then
+	exit "$HERMES_GATEWAY_CONVERGENCE_STATUS"
 fi
 case " $* " in
   *" up -d --force-recreate "*)
@@ -266,6 +270,17 @@ assert_log_order() {
 	local pattern line
 	for pattern in "$@"; do
 		line="$(grep -n -m 1 -- "$pattern" "$COMMAND_LOG" | cut -d: -f1)"
+		[ -n "$line" ]
+		[ "$line" -gt "$previous" ]
+		previous="$line"
+	done
+}
+
+assert_log_order_fixed() {
+	local previous=0
+	local record line
+	for record in "$@"; do
+		line="$(grep -Fxn -m 1 -- "$record" "$COMMAND_LOG" | cut -d: -f1)"
 		[ -n "$line" ]
 		[ "$line" -gt "$previous" ]
 		previous="$line"
@@ -1187,6 +1202,32 @@ dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL
 	[[ "$output" != *"$SECRET_MARKER"* ]]
 }
 
+@test "converges Hermes gateways after API readiness before pruning images" {
+	local api_ready convergence image_prune
+	api_ready='curl <--fail> <--silent> <--show-error> <--max-time> <1> <http://127.0.0.1:8642/health>'
+	convergence="docker <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
+	image_prune='docker <image> <prune> <--force>'
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -Fxq "$convergence" "$COMMAND_LOG"
+	assert_log_order_fixed "$api_ready" "$convergence" "$image_prune"
+}
+
+@test "returns the gateway convergence status with diagnostics without pruning images" {
+	local convergence diagnostics
+	convergence="docker <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
+	diagnostics="docker <compose> <-f> <$COMPOSE_FILE> <ps> <--all>"
+	export HERMES_GATEWAY_CONVERGENCE_STATUS=47
+
+	run_start_stack
+
+	[ "$status" -eq 47 ]
+	assert_log_order_fixed "$convergence" "$diagnostics"
+	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
+}
+
 @test "keeps successful Hermes activation when dangling image cleanup fails" {
 	export IMAGE_PRUNE_STATUS=1
 
@@ -1216,10 +1257,14 @@ dotfiles_hermes_hindsight_env_value "$COMPOSE_FILE" HINDSIGHT_API_LLM_MODEL
 }
 
 @test "forwards Docker calls through a function runner and retains host runtime paths" {
+	local convergence
+	convergence="runner <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
+
 	run_start_stack_with_function_runner
 
 	[ "$status" -eq 0 ]
 	grep -q '^runner <compose> <-f> <' "$COMMAND_LOG"
+	grep -Fxq "$convergence" "$COMMAND_LOG"
 	[ -d "$TEST_HOME/.hermes/.xurl" ]
 	[ -d "$TEST_HOME/.hermes/.browser" ]
 }
