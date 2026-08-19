@@ -8,13 +8,13 @@ services:
       - /bin/sh
       - -c
       - |
-        printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/hermes-gateway-converge
-        chmod 0755 /usr/local/bin/hermes-gateway-converge
         mkdir -p /www
         if [ -x /bin/httpd ]; then
           exec /bin/httpd -f -p 80 -h /www
         fi
         exec nginx -g 'daemon off;'
+    volumes:
+      - ./hermes-gateway-converge.sh:/usr/local/bin/hermes-gateway-converge:ro
 
   xapi-mcp:
     image: nginx:1.29-alpine
