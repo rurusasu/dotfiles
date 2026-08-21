@@ -1,0 +1,61 @@
+name: CI Contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "ci/path-routing.json"
+      - "scripts/python/detect_ci_changes.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/**"
+      - "tests/bash/**"
+      - "tests/python/**"
+
+permissions:
+  contents: read
+
+jobs:
+  ci-contract:
+    name: CI Contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Install Bats
+        shell: bash
+        run: |
+          set -euo pipefail
+          bats_version='1.13.0'
+          bats_root="$RUNNER_TEMP/bats-core-$bats_version"
+          bats_prefix="$RUNNER_TEMP/bats-prefix"
+          curl -fsSL "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP"
+          "$bats_root/install.sh" "$bats_prefix"
+          echo "$bats_prefix/bin" >> "$GITHUB_PATH"
+          "$bats_prefix/bin/bats" --version
+
+      - name: Run Python workflow contracts
+        run: python -m unittest discover -s tests/python -v
+
+      - name: Run Bash workflow contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
+
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
