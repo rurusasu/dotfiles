@@ -45,13 +45,20 @@ def route_paths(paths: Iterable[str], manifest_path: Path) -> dict[str, bool]:
 
 def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[str]]]]:
     manifest: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or manifest.get("version") != 1:
+    if not isinstance(manifest, dict) or set(manifest) != {"version", "outputs", "rules"}:
+        raise ValueError("routing manifest root keys are invalid")
+
+    version = manifest["version"]
+    if type(version) is not int or version != 1:
         raise ValueError("routing manifest must use version 1")
 
     outputs = manifest.get("outputs")
-    if not isinstance(outputs, list) or set(outputs) != EXPECTED_OUTPUTS or len(outputs) != len(EXPECTED_OUTPUTS):
-        raise ValueError("routing manifest outputs must be the supported output names")
-    if not all(isinstance(output, str) for output in outputs):
+    if (
+        not isinstance(outputs, list)
+        or len(outputs) != len(EXPECTED_OUTPUTS)
+        or not all(isinstance(output, str) for output in outputs)
+        or set(outputs) != EXPECTED_OUTPUTS
+    ):
         raise ValueError("routing manifest outputs must be strings")
 
     rules = manifest.get("rules")
@@ -60,8 +67,8 @@ def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[
 
     validated_rules: list[dict[str, list[str]]] = []
     for rule in rules:
-        if not isinstance(rule, dict):
-            raise ValueError("routing manifest rule must be an object")
+        if not isinstance(rule, dict) or set(rule) != {"patterns", "outputs"}:
+            raise ValueError("routing manifest rule keys are invalid")
         patterns = rule.get("patterns")
         rule_outputs = rule.get("outputs")
         if (
@@ -102,23 +109,31 @@ def _write_github_output(path: Path, result: dict[str, bool]) -> None:
     )
 
 
-def _parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
+def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--paths-file", type=Path)
     source.add_argument("--all", action="store_true")
     parser.add_argument("--github-output", type=Path)
-    return parser.parse_args(arguments)
+    return parser
+
+
+def _parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
+    return _argument_parser().parse_args(arguments)
 
 
 def main(arguments: list[str] | None = None) -> int:
-    args = _parse_arguments(arguments)
-    if args.all:
-        outputs, _ = _load_manifest(args.manifest)
-        result = dict.fromkeys(outputs, True)
-    else:
-        result = route_paths(_read_paths(args.paths_file), args.manifest)
+    parser = _argument_parser()
+    args = parser.parse_args(arguments)
+    try:
+        if args.all:
+            outputs, _ = _load_manifest(args.manifest)
+            result = dict.fromkeys(outputs, True)
+        else:
+            result = route_paths(_read_paths(args.paths_file), args.manifest)
+    except ValueError as error:
+        parser.error(str(error))
 
     if args.github_output is not None:
         _write_github_output(args.github_output, result)

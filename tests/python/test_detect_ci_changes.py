@@ -114,6 +114,57 @@ class DetectCiChangesTests(unittest.TestCase):
             {"contract"},
         )
 
+    def test_routing_infrastructure_enables_every_output(self) -> None:
+        paths = (
+            "ci/path-routing.json",
+            "scripts/python/detect_ci_changes.py",
+            "tests/python/test_detect_ci_changes.py",
+            ".github/actions/detect-ci-changes/action.yml",
+            ".github/workflows/ci-contract.yml",
+        )
+
+        for path in paths:
+            with self.subTest(path=path):
+                result = self.detector.route_paths([path], MANIFEST_PATH)
+
+                self.assertEqual(
+                    {name for name, enabled in result.items() if enabled},
+                    {
+                        "linux",
+                        "darwin",
+                        "wsl",
+                        "windows",
+                        "contract",
+                        "nix",
+                        "chezmoi",
+                        "hermes",
+                        "devcontainer",
+                        "package_catalog",
+                    },
+                )
+
+    def test_generic_workflow_path_enables_contract_only(self) -> None:
+        result = self.detector.route_paths(
+            [".github/workflows/ci-unregistered.yml"],
+            MANIFEST_PATH,
+        )
+
+        self.assertEqual(
+            {name for name, enabled in result.items() if enabled},
+            {"contract"},
+        )
+
+    def test_generic_ci_test_path_enables_contract_only(self) -> None:
+        result = self.detector.route_paths(
+            ["tests/bash/future-routing-contract.bats"],
+            MANIFEST_PATH,
+        )
+
+        self.assertEqual(
+            {name for name, enabled in result.items() if enabled},
+            {"contract"},
+        )
+
     def test_absolute_path_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             self.detector.route_paths(["/tmp/file"], MANIFEST_PATH)
@@ -139,6 +190,56 @@ class DetectCiChangesTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 self.detector.route_paths(["README.md"], temporary_manifest)
+
+    def test_boolean_manifest_version_is_rejected(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest["version"] = True
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_manifest = Path(temporary_directory) / "routing.json"
+            temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                self.detector.route_paths(["README.md"], temporary_manifest)
+
+    def test_unknown_manifest_root_key_is_rejected(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest["unexpected"] = []
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_manifest = Path(temporary_directory) / "routing.json"
+            temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                self.detector.route_paths(["README.md"], temporary_manifest)
+
+    def test_unknown_manifest_rule_key_is_rejected(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest["rules"][0]["unexpected"] = []
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_manifest = Path(temporary_directory) / "routing.json"
+            temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                self.detector.route_paths(["README.md"], temporary_manifest)
+
+    def test_specific_hermes_and_devcontainer_rules_precede_broad_rules(self) -> None:
+        rules = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))["rules"]
+        rule_index = {
+            pattern: index
+            for index, rule in enumerate(rules)
+            for pattern in rule["patterns"]
+        }
+
+        self.assertLess(
+            rule_index["scripts/powershell/handlers/Handler.HermesAgent.ps1"],
+            rule_index["scripts/powershell/**"],
+        )
+        self.assertLess(
+            rule_index["chezmoi/dot_config/devcontainer/**"],
+            rule_index["chezmoi/**"],
+        )
 
     def test_all_flag_enables_every_output(self) -> None:
         completed = self._run_cli("--manifest", str(MANIFEST_PATH), "--all")
@@ -190,6 +291,36 @@ class DetectCiChangesTests(unittest.TestCase):
             )
 
         self.assertEqual(completed.returncode, 2)
+        self.assertIn("error:", completed.stderr)
+
+    def test_cli_reports_unsafe_path_as_an_argument_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            paths_file = Path(temporary_directory) / "paths.txt"
+            paths_file.write_text("/tmp/file\n", encoding="utf-8")
+
+            completed = self._run_cli(
+                "--manifest",
+                str(MANIFEST_PATH),
+                "--paths-file",
+                str(paths_file),
+            )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("usage:", completed.stderr)
+        self.assertIn("error:", completed.stderr)
+
+    def test_cli_reports_malformed_manifest_as_an_argument_error(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest["version"] = True
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_manifest = Path(temporary_directory) / "routing.json"
+            temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+            completed = self._run_cli("--manifest", str(temporary_manifest), "--all")
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("usage:", completed.stderr)
         self.assertIn("error:", completed.stderr)
 
     @staticmethod
