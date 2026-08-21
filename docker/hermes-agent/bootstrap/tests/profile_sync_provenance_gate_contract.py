@@ -20,7 +20,10 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
+    r"^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|"
+    r"scripts/sh/hermes-agent\.sh|"
+    r"scripts/powershell/handlers/Handler\.HermesAgent\.ps1|"
+    r"tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
     r"\.pre-commit-config\.yaml|"
     r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
 )
@@ -36,13 +39,22 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         section = section.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
 
         container_index = section.index("docker build --target hermes-bootstrap-test")
+        xapi_windows_index = section.index(
+            "python -m unittest tests/python/test_xapi_image_contract.py -v"
+        )
+        xapi_unix_index = section.index(
+            "python3 -m unittest tests/python/test_xapi_image_contract.py -v"
+        )
         gh_index = section.index(
             "docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh"
         )
         contract_index = section.index("profile_sync_provenance_gate_contract.py")
         verifier_index = section.index(VERIFIER_COMMAND)
 
-        self.assertLess(container_index, gh_index)
+        self.assertLess(container_index, xapi_windows_index)
+        self.assertLess(container_index, xapi_unix_index)
+        self.assertLess(xapi_windows_index, gh_index)
+        self.assertLess(xapi_unix_index, gh_index)
         self.assertLess(gh_index, contract_index)
         self.assertLess(contract_index, verifier_index)
         self.assertIn(
@@ -73,6 +85,10 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(trigger, PRE_COMMIT_TRIGGER)
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
+            "docker/hermes-xapi-mcp/Dockerfile",
+            "scripts/sh/hermes-agent.sh",
+            "scripts/powershell/handlers/Handler.HermesAgent.ps1",
+            "tests/python/test_xapi_image_contract.py",
             "taskfiles/hermes/taskfile.yml",
             "Taskfile.yml",
             ".pre-commit-config.yaml",

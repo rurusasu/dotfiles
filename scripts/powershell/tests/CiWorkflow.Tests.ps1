@@ -177,11 +177,19 @@ Describe 'CI workflow configuration' {
 
     It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $powershellWorkflow | Should -Match '"install\.cmd"'
         $powershellWorkflow | Should -Match '"docker/hermes-agent/\*\*"'
-        $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
+    }
+
+    It 'should route generic Bats changes to Contract CI without devcontainer CI' {
+        $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+
+        $contractWorkflow | Should -Match '"tests/bash/\*\*"'
+        $contractWorkflow | Should -Match 'bats --print-output-on-failure tests/bash/ci_routing\.bats'
+        $contractWorkflow | Should -Not -Match '(?m)^\s*bats --print-output-on-failure tests/bash$'
+        $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
     }
 
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
@@ -200,7 +208,6 @@ Describe 'CI workflow configuration' {
         $chezmoiWorkflow | Should -Match '\$pesterConfig\.Run\.Path = "\./tests/chezmoi"'
         $powershellWorkflow | Should -Match '"scripts/powershell/\*\*"'
         $devcontainerWorkflow | Should -Match '"scripts/sh/dcnvim\.sh"'
-        $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
 
     It 'should use a supported Intel macOS runner for devcontainer E2E' {

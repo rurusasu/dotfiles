@@ -35,6 +35,10 @@ tasks:
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+      - cmd: python -m unittest tests/python/test_xapi_image_contract.py -v
+        platforms: [windows]
+      - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
+        platforms: [linux, darwin]
       - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
       - cmd: python docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
         platforms: [windows]
