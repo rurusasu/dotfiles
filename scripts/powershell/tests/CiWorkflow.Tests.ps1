@@ -129,7 +129,6 @@ Describe 'CI workflow configuration' {
         $chezmoiWorkflow | Should -Match '& pwsh -NoProfile -File \$scriptPath'
         $chezmoiWorkflow | Should -Match 'UDEVGothic\*NF\*'
         $chezmoiWorkflow | Should -Match 'Test-Path -LiteralPath \$fontPath -PathType Leaf'
-        $chezmoiWorkflow | Should -Match 'needs: \[lint, fmt, font-install\]'
     }
 
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
@@ -245,7 +244,7 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $chezmoiWorkflow | Should -Match '"chezmoi/\*\*"'
-        $chezmoiWorkflow | Should -Match '\$pesterConfig\.Run\.Path = "\./tests/chezmoi"'
+        $chezmoiWorkflow | Should -Match '\.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi'
         $powershellWorkflow | Should -Match '"scripts/powershell/\*\*"'
         $devcontainerWorkflow | Should -Match '"scripts/sh/dcnvim\.sh"'
     }
@@ -571,7 +570,6 @@ Describe 'CI workflow configuration' {
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; TestMarker = '$pesterConfig.Run.Path' },
             @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Pester -Configuration' },
             @{ Path = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
         )
@@ -590,6 +588,40 @@ Describe 'CI workflow configuration' {
             $job.IndexOf('winget install --id twpayne.chezmoi --exact') |
                 Should -BeLessThan $job.IndexOf($case.TestMarker)
         }
+    }
+
+    It 'should run Chezmoi Pester once in required lint and upload lint JUnit output' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
+        $pesterInvocation = '(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results\.xml$'
+        $lintJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+
+        $lintJob | Should -Not -BeNullOrEmpty
+        ([regex]::Matches($workflow, '(?m)^  test:\s*$')).Count | Should -Be 0
+        ([regex]::Matches($workflow, $pesterInvocation)).Count | Should -Be 1
+        $lintJob | Should -Match $pesterInvocation
+
+        foreach ($requiredJob in @(
+                @{ Job = 'lint'; Name = 'Lint \(Pester chezmoi\)' },
+                @{ Job = 'fmt'; Name = 'Format \(\.tmpl BOM check\)' },
+                @{ Job = 'op-guard'; Name = 'Render guard \(op unauthenticated\)' }
+            )) {
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($requiredJob.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Not -BeNullOrEmpty
+            $job | Should -Match "(?m)^    name: $($requiredJob.Name)$"
+        }
+
+        $fontInstallJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  font-install:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $fontInstallJob | Should -Match '(?m)^    name: Font install smoke \(Windows\)$'
+        $lintJob | Should -Match '(?ms)^      - name: Upload test results\r?\n        uses: actions/upload-artifact@[0-9a-f]{40}.*?\r?\n        if: always\(\)\r?\n        with:\r?\n          name: chezmoi-test-results\r?\n          path: scripts/powershell/chezmoi-test-results\.xml$'
     }
 
     It 'should use directory discovery when excluding Windows integration tests' {

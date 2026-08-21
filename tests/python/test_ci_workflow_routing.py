@@ -16,6 +16,7 @@ BOOTSTRAP_BUILD_WORKFLOW = "ci-bootstrap-build.yml"
 HOSTED_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-hosted.yml"
 LINUX_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-linux.yml"
 NIXOS_WSL_E2E_WORKFLOW = "ci-nixos-wsl.yml"
+CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
 INSTALL_NIX_ACTION = "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342"
@@ -32,6 +33,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         path = WORKFLOWS_DIRECTORY / name
         self.assertTrue(path.is_file(), f"missing workflow: {path}")
         return path.read_text(encoding="utf-8")
+
+    def _workflow_job(self, workflow: str, name: str) -> str:
+        job = re.search(
+            rf"(?ms)^  {re.escape(name)}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(job, f"missing {name} job")
+        return job.group("job") if job is not None else ""
 
     def _bootstrap_build_complete_script(self, workflow: str) -> str:
         complete_job = re.search(
@@ -535,6 +544,46 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("$refName = $env:HEAD_REF", switch_body)
         self.assertIn("$refName = $env:REF_NAME", switch_body)
         self.assertNotIn('$refName = "${{ github.head_ref }}"', switch_body)
+
+    def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
+        self,
+    ) -> None:
+        """Catch a second Chezmoi Pester job or a JUnit artifact detached from lint."""
+        workflow = self._named_workflow(CHEZMOI_WORKFLOW)
+        lint = self._workflow_job(workflow, "lint")
+        fmt = self._workflow_job(workflow, "fmt")
+        font_install = self._workflow_job(workflow, "font-install")
+        op_guard = self._workflow_job(workflow, "op-guard")
+
+        self.assertIsNone(
+            re.search(r"(?m)^  test:\s*$", workflow),
+            "Chezmoi CI must not define a duplicate top-level test job",
+        )
+        pester_invocation = (
+            r"(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path "
+            r"\.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile "
+            r"chezmoi-test-results\.xml$"
+        )
+        self.assertEqual(len(re.findall(pester_invocation, workflow)), 1)
+        self.assertRegex(lint, pester_invocation)
+
+        for job, required_name in (
+            (lint, "Lint (Pester chezmoi)"),
+            (fmt, "Format (.tmpl BOM check)"),
+            (op_guard, "Render guard (op unauthenticated)"),
+        ):
+            self.assertRegex(job, rf"(?m)^    name: {re.escape(required_name)}$")
+        self.assertRegex(font_install, r"(?m)^    name: Font install smoke \(Windows\)$")
+
+        self.assertRegex(
+            lint,
+            r"(?ms)^      - name: Upload test results\n"
+            r"        uses: actions/upload-artifact@[0-9a-f]{40}.*?\n"
+            r"        if: always\(\)\n"
+            r"        with:\n"
+            r"          name: chezmoi-test-results\n"
+            r"          path: scripts/powershell/chezmoi-test-results\.xml$",
+        )
 
 
 if __name__ == "__main__":

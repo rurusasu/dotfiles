@@ -265,7 +265,6 @@ Describe '標準キーバインド方針' {
     It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
         $ciJobs = @(
             @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; PesterStep = '- name: Install Pester' },
-            @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; PesterStep = '- name: Install Pester' },
             @{ Workflow = '.github/workflows/ci-powershell.yml'; Job = 'test'; PesterStep = '- name: Install PowerShell modules' },
             @{ Workflow = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; PesterStep = '- name: Install pinned Pester' }
         )
