@@ -13,6 +13,7 @@ WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 BOOTSTRAP_BUILD_WORKFLOW = "ci-bootstrap-build.yml"
+HOSTED_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-hosted.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
 INSTALL_NIX_ACTION = "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342"
@@ -62,6 +63,45 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             r'^[ \t]+success\|skipped\) ;;\n'
             r'^[ \t]+\*\)\n'
             r'^[ \t]+echo "Bootstrap platform job did not complete successfully: '
+            r'\$\{result\}"\n'
+            r'^[ \t]+exit 1\n'
+            r'^[ \t]+;;\n'
+            r'^[ \t]+esac\n'
+            r'^[ \t]+done$',
+        )
+
+    def _hosted_bootstrap_e2e_complete_script(self, workflow: str) -> str:
+        complete_job = re.search(
+            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(complete_job, "missing hosted complete job")
+        complete = complete_job.group("job") if complete_job is not None else ""
+        step = re.search(
+            r"(?ms)^      - name: Verify routed job results\n"
+            r"(?:        env:\n.*?^        run: \|\n)(?P<script>.*?"
+            r'^          echo "All required hosted bootstrap contracts completed successfully\."\n)',
+            complete,
+        )
+        self.assertIsNotNone(step, "missing hosted complete-job result verification step")
+        return step.group("script") if step is not None else ""
+
+    def _assert_hosted_bootstrap_e2e_failure_guards(self, complete_script: str) -> None:
+        self.assertRegex(
+            complete_script,
+            r'(?m)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
+            r'^[ \t]+echo "CI change detection did not complete successfully: '
+            r'\$\{CHANGES_RESULT\}"\n'
+            r'^[ \t]+exit 1\n'
+            r'^[ \t]+fi$',
+        )
+        self.assertRegex(
+            complete_script,
+            r'(?m)^[ \t]+for result in "\$\{WINDOWS_RESULT\}" "\$\{MACOS_RESULT\}"; do\n'
+            r'^[ \t]+case "\$\{result\}" in\n'
+            r'^[ \t]+success\|skipped\) ;;\n'
+            r'^[ \t]+\*\)\n'
+            r'^[ \t]+echo "Hosted bootstrap platform job did not complete successfully: '
             r'\$\{result\}"\n'
             r'^[ \t]+exit 1\n'
             r'^[ \t]+;;\n'
@@ -318,6 +358,107 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             self._assert_bootstrap_build_failure_guards(without_platform_default)
+
+    def test_hosted_bootstrap_e2e_routes_platform_jobs_and_propagates_failures(self) -> None:
+        """Catch missing hosted platform gates or a complete job that masks failures."""
+        workflow = self._named_workflow(HOSTED_BOOTSTRAP_E2E_WORKFLOW)
+
+        self.assertRegex(
+            workflow,
+            r"(?ms)^  pull_request:\n    branches: \[main\]\n(?!    paths:)",
+        )
+        self.assertRegex(workflow, r"(?m)^  workflow_dispatch:\s*$")
+        self.assertIn(
+            "protected-bootstrap-${{ github.event.pull_request.number || github.ref }}",
+            workflow,
+        )
+        self.assertIn(
+            "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}",
+            workflow,
+        )
+
+        changes_job = re.search(
+            r"(?ms)^  changes:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(changes_job, "missing hosted changes job")
+        changes = changes_job.group("job") if changes_job is not None else ""
+        for output in ("windows", "darwin"):
+            self.assertRegex(
+                changes,
+                rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
+            )
+        self.assertIn(CHECKOUT_ACTION, changes)
+        self.assertRegex(changes, r"(?m)^\s+fetch-depth: 0$")
+        self.assertIn("uses: ./.github/actions/detect-ci-changes", changes)
+        self.assertIn(
+            "github.event_name == 'pull_request' && github.event.pull_request.base.sha",
+            changes,
+        )
+        self.assertIn("github.event.before", changes)
+        self.assertIn(
+            "github.event_name == 'pull_request' && github.event.pull_request.head.sha",
+            changes,
+        )
+        self.assertIn("github.sha", changes)
+        self.assertIn("run-all: ${{ github.event_name == 'workflow_dispatch' }}", changes)
+
+        for job_name, output in (("windows", "windows"), ("macos", "darwin")):
+            job = re.search(
+                rf"(?ms)^  {job_name}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+                workflow,
+            )
+            self.assertIsNotNone(job, f"missing {job_name} job")
+            job_body = job.group("job") if job is not None else ""
+            self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
+            self.assertIn(
+                f"needs.changes.outputs.{output} == 'true'",
+                job_body,
+            )
+            self.assertIn("ref: ${{ env.TESTED_SHA }}", job_body)
+
+        complete_job = re.search(
+            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(complete_job, "missing hosted complete job")
+        complete = complete_job.group("job") if complete_job is not None else ""
+        self.assertRegex(complete, r"(?m)^\s+name: Protected Bootstrap E2E$")
+        self.assertRegex(complete, r"(?m)^\s+if: \$\{{ always\(\) \}\}$")
+        self.assertRegex(complete, r"(?m)^\s+needs: \[changes, windows, macos\]$")
+        for result in ("changes", "windows", "macos"):
+            self.assertIn(f"needs.{result}.result", complete)
+
+        complete_script = self._hosted_bootstrap_e2e_complete_script(workflow)
+        self._assert_hosted_bootstrap_e2e_failure_guards(complete_script)
+
+        changes_guard = re.search(
+            r'(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
+            r'.*?^[ \t]+fi$',
+            complete_script,
+        )
+        self.assertIsNotNone(changes_guard, "missing hosted changes failure guard")
+        without_changes_guard = complete_script.replace(
+            changes_guard.group(0) if changes_guard is not None else "",
+            "",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_hosted_bootstrap_e2e_failure_guards(without_changes_guard)
+
+        platform_default = re.search(
+            r'(?ms)^[ \t]+\*\)\n.*?^[ \t]+;;$',
+            complete_script,
+        )
+        self.assertIsNotNone(platform_default, "missing hosted platform default failure branch")
+        without_platform_default = complete_script.replace(
+            platform_default.group(0) if platform_default is not None else "",
+            "",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_hosted_bootstrap_e2e_failure_guards(without_platform_default)
 
 
 if __name__ == "__main__":

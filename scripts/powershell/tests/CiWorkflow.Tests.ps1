@@ -18,6 +18,24 @@ BeforeAll {
             throw 'Bootstrap Build complete job must exit 1 for every non-success-or-skipped platform result.'
         }
     }
+
+    function Assert-ProtectedBootstrapE2ECompleteFailureGuards {
+        param(
+            [Parameter(Mandatory)]
+            [string]$CompleteScript
+        )
+
+        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
+        $platformDefault = '(?ms)^[ \t]+for result in "\$\{WINDOWS_RESULT\}" "\$\{MACOS_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Hosted bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
+
+        if ($CompleteScript -notmatch $changesGuard) {
+            throw 'Protected Bootstrap E2E complete job must exit 1 when change detection is not successful.'
+        }
+
+        if ($CompleteScript -notmatch $platformDefault) {
+            throw 'Protected Bootstrap E2E complete job must exit 1 for every non-success-or-skipped platform result.'
+        }
+    }
 }
 
 Describe 'CI workflow configuration' {
@@ -416,12 +434,50 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'bats(?: --print-output-on-failure)? tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
-        $workflow | Should -Match 'needs:\s*\[windows, macos\]'
+        $workflow | Should -Match '(?m)^  workflow_dispatch:\s*$'
+        $workflow | Should -Match '(?ms)^  pull_request:\r?\n    branches: \[main\]\r?\n(?!    paths:)'
+        $workflow | Should -Match 'protected-bootstrap-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}'
+        $workflow | Should -Match "TESTED_SHA:\s+\$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}"
+        $workflow | Should -Match 'needs:\s*\[changes, windows, macos\]'
         $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
+        $workflow | Should -Match 'needs\.changes\.outputs\.windows == ''true'''
+        $workflow | Should -Match 'needs\.changes\.outputs\.darwin == ''true'''
+        $workflow | Should -Match 'fetch-depth:\s+0'
+        $workflow | Should -Match 'uses:\s+\.\/\.github\/actions\/detect-ci-changes'
+        $workflow | Should -Match 'run-all:\s+\$\{\{ github\.event_name == ''workflow_dispatch'' \}\}'
         $workflow | Should -Match 'needs\.windows\.result'
         $workflow | Should -Match 'needs\.macos\.result'
+        $workflow | Should -Match 'needs\.changes\.result'
+        ([regex]::Matches($workflow, 'ref:\s+\$\{\{ env\.TESTED_SHA \}\}')).Count | Should -Be 2
         ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
-        ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
+
+        $completeJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  complete:\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Groups['job'].Value
+        $completeJob | Should -Not -BeNullOrEmpty
+        $completeScript = [regex]::Match(
+            $completeJob,
+            '(?ms)^      - name: Verify routed job results\r?\n(?:        env:\r?\n.*?^        run: \|\r?\n)(?<script>.*?^          echo "All required hosted bootstrap contracts completed successfully\."\r?\n)'
+        ).Groups['script'].Value
+        $completeScript | Should -Not -BeNullOrEmpty
+        Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $completeScript
+
+        $changesGuard = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
+        ).Value
+        $changesGuard | Should -Not -BeNullOrEmpty
+        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $withoutChangesGuard } | Should -Throw
+
+        $platformDefault = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
+        ).Value
+        $platformDefault | Should -Not -BeNullOrEmpty
+        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
