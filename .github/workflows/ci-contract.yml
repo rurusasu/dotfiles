@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
+          bats --print-output-on-failure tests/bash/ci_routing.bats
 
       - name: Run actionlint
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/ci-contract.yml

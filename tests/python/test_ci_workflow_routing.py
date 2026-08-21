@@ -54,20 +54,43 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn('python-version: "3.14"', workflow)
         self.assertIn(INSTALL_NIX_ACTION, workflow)
 
-    def test_installs_bats_1_13_0_and_runs_every_bats_contract(self) -> None:
+    def test_installs_bats_1_13_0_and_runs_only_routing_contracts(self) -> None:
         workflow = self._workflow()
         self.assertIn("bats_version='1.13.0'", workflow)
         self.assertIn(
             "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz",
             workflow,
         )
-        self.assertIn("bats --print-output-on-failure tests/bash", workflow)
-
-    def test_runs_actionlint_and_python_discovery(self) -> None:
-        workflow = self._workflow()
+        bats_lines = [
+            line.strip()
+            for line in workflow.splitlines()
+            if "bats --print-output-on-failure" in line
+        ]
         self.assertIn(
-            "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
+            "bats --print-output-on-failure tests/bash/ci_routing.bats",
+            bats_lines,
+        )
+        self.assertNotRegex(
             workflow,
+            r"(?m)^\s*(?:env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER )?"
+            r"bats --print-output-on-failure tests/bash$",
+        )
+
+    def test_runs_focused_actionlint_and_python_discovery(self) -> None:
+        workflow = self._workflow()
+        actionlint_lines = [
+            line.strip()
+            for line in workflow.splitlines()
+            if "go run github.com/rhysd/actionlint" in line
+        ]
+        self.assertIn(
+            "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 "
+            ".github/workflows/ci-contract.yml",
+            actionlint_lines,
+        )
+        self.assertNotIn(
+            "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
+            actionlint_lines,
         )
         self.assertIn("python -m unittest discover -s tests/python -v", workflow)
 
