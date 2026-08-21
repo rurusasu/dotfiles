@@ -1,0 +1,75 @@
+name: Detect CI changes
+description: Route changed repository paths to the CI outputs selected by the local detector.
+
+inputs:
+  base-sha:
+    description: Base commit for the changed-path diff.
+    required: true
+  head-sha:
+    description: Head commit for the changed-path diff.
+    required: true
+  run-all:
+    description: Enable every CI output instead of calculating changed paths.
+    required: false
+    default: "false"
+
+outputs:
+  linux:
+    description: Whether Linux CI is required.
+    value: ${{ steps.detect.outputs.linux }}
+  darwin:
+    description: Whether macOS CI is required.
+    value: ${{ steps.detect.outputs.darwin }}
+  wsl:
+    description: Whether WSL CI is required.
+    value: ${{ steps.detect.outputs.wsl }}
+  windows:
+    description: Whether Windows CI is required.
+    value: ${{ steps.detect.outputs.windows }}
+  contract:
+    description: Whether CI contract checks are required.
+    value: ${{ steps.detect.outputs.contract }}
+  nix:
+    description: Whether Nix CI is required.
+    value: ${{ steps.detect.outputs.nix }}
+  chezmoi:
+    description: Whether chezmoi CI is required.
+    value: ${{ steps.detect.outputs.chezmoi }}
+  hermes:
+    description: Whether Hermes CI is required.
+    value: ${{ steps.detect.outputs.hermes }}
+  devcontainer:
+    description: Whether devcontainer CI is required.
+    value: ${{ steps.detect.outputs.devcontainer }}
+  package_catalog:
+    description: Whether package catalog CI is required.
+    value: ${{ steps.detect.outputs.package_catalog }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: "3.14"
+    - name: Detect changed CI targets
+      id: detect
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        RUN_ALL: ${{ inputs.run-all }}
+      run: |
+        set -euo pipefail
+
+        if [[ "${RUN_ALL}" == "true" ]]; then
+          python scripts/python/detect_ci_changes.py \
+            --all \
+            --github-output "${GITHUB_OUTPUT}"
+        else
+          paths_file="${RUNNER_TEMP}/ci-changed-paths.txt"
+          git diff --name-only --diff-filter=ACMR "${BASE_SHA}" "${HEAD_SHA}" > "${paths_file}"
+          python scripts/python/detect_ci_changes.py \
+            --paths-file "${paths_file}" \
+            --github-output "${GITHUB_OUTPUT}"
+        fi
