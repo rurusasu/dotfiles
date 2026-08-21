@@ -143,7 +143,11 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
         $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
-        $workflow | Should -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
+        $workflow | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
+        $workflow | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
+        $workflow | Should -Match '\$refName = \$env:HEAD_REF'
+        $workflow | Should -Match '\$refName = \$env:REF_NAME'
+        $workflow | Should -Not -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
         $workflow | Should -Match '\$distroName = "NixOS-CI-\$safeRef-\$refHash"'
         $workflow | Should -Not -Match '\$distroName = "NixOS-CI-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}"'
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
@@ -396,6 +400,64 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'docker/hermes-agent/compose\.yml'
         $test | Should -Match 'docker compose.*ps'
+    }
+
+    It 'should route Linux and WSL bootstrap E2E jobs through change detection without weakening fork protection' {
+        $linuxWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-e2e-linux.yml'
+        $wslWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-nixos-wsl.yml'
+        $linuxWorkflow = Get-Content -LiteralPath $linuxWorkflowPath -Raw
+        $wslWorkflow = Get-Content -LiteralPath $wslWorkflowPath -Raw
+
+        foreach ($case in @(
+                @{ Workflow = $linuxWorkflow; Path = 'ci-bootstrap-e2e-linux.yml'; Output = 'linux' },
+                @{ Workflow = $wslWorkflow; Path = 'ci-nixos-wsl.yml'; Output = 'wsl' }
+            )) {
+            foreach ($routingPath in @(
+                    'ci/path-routing.json',
+                    'scripts/python/detect_ci_changes.py',
+                    'tests/python/test_detect_ci_changes.py',
+                    '.github/actions/detect-ci-changes/**',
+                    '.github/workflows/ci-contract.yml',
+                    ".github/workflows/$($case.Path)"
+                )) {
+                ([regex]::Matches($case.Workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
+            }
+
+            $changesJob = [regex]::Match(
+                $case.Workflow,
+                '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            ).Value
+            $changesJob | Should -Not -BeNullOrEmpty
+            $changesJob | Should -Match 'fetch-depth:\s+0'
+            $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
+            $changesJob | Should -Match "steps\.detect\.outputs\.$($case.Output)"
+            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
+            $changesJob | Should -Match 'github\.event\.before'
+            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
+            $changesJob | Should -Match 'github\.sha'
+            $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
+        }
+
+        foreach ($jobName in @('ubuntu', 'debian', 'nixos')) {
+            $job = [regex]::Match(
+                $linuxWorkflow,
+                "(?ms)^  ${jobName}:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Match 'needs:\s+changes'
+            $job | Should -Match "needs\.changes\.outputs\.linux == 'true'"
+        }
+
+        $switchJob = [regex]::Match(
+            $wslWorkflow,
+            '(?ms)^  switch:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $switchJob | Should -Match 'needs:\s+changes'
+        $switchJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
+        $switchJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
+        $switchJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
+        $switchJob | Should -Match '\$refName = \$env:HEAD_REF'
+        $switchJob | Should -Match '\$refName = \$env:REF_NAME'
+        $switchJob | Should -Not -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
     }
 
     It 'should run bootstrap contracts exclusively on GitHub-hosted runners' {

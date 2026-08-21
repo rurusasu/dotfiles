@@ -12,6 +12,11 @@ on:
       - "scripts/powershell/ci/**"
       - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
       - "scripts/powershell/lib/**"
+      - "ci/path-routing.json"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
       - ".github/workflows/ci-nixos-wsl.yml"
   pull_request:
     branches: [main]
@@ -23,6 +28,11 @@ on:
       - "scripts/powershell/ci/**"
       - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
       - "scripts/powershell/lib/**"
+      - "ci/path-routing.json"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
       - ".github/workflows/ci-nixos-wsl.yml"
 
 concurrency:
@@ -30,9 +40,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      wsl: ${{ steps.detect.outputs.wsl }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed CI targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+
   switch:
     name: Switch (Windows WSL2)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: changes
+    if: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: windows-2025
     timeout-minutes: 120
     permissions:
@@ -63,13 +96,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WSLENV: GITHUB_TOKEN/u
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
 
-          $refName = "${{ github.head_ref }}"
+          $refName = $env:HEAD_REF
           if ([string]::IsNullOrWhiteSpace($refName)) {
-            $refName = "${{ github.ref_name }}"
+            $refName = $env:REF_NAME
           }
           $safeRef = $refName -replace "[^A-Za-z0-9_.-]", "-"
           if ([string]::IsNullOrWhiteSpace($safeRef)) {

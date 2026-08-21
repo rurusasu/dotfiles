@@ -14,6 +14,8 @@ PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 BOOTSTRAP_BUILD_WORKFLOW = "ci-bootstrap-build.yml"
 HOSTED_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-hosted.yml"
+LINUX_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-linux.yml"
+NIXOS_WSL_E2E_WORKFLOW = "ci-nixos-wsl.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
 INSTALL_NIX_ACTION = "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342"
@@ -459,6 +461,80 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             self._assert_hosted_bootstrap_e2e_failure_guards(without_platform_default)
+
+    def test_linux_and_wsl_e2e_route_platform_jobs_without_weakening_fork_protection(
+        self,
+    ) -> None:
+        """Catch missing Linux/WSL gates or a WSL condition that bypasses fork protection."""
+        routing_paths = (
+            "ci/path-routing.json",
+            "scripts/python/detect_ci_changes.py",
+            "tests/python/test_detect_ci_changes.py",
+            ".github/actions/detect-ci-changes/**",
+            ".github/workflows/ci-contract.yml",
+        )
+
+        linux_workflow = self._named_workflow(LINUX_BOOTSTRAP_E2E_WORKFLOW)
+        wsl_workflow = self._named_workflow(NIXOS_WSL_E2E_WORKFLOW)
+
+        for workflow, workflow_path in (
+            (linux_workflow, LINUX_BOOTSTRAP_E2E_WORKFLOW),
+            (wsl_workflow, NIXOS_WSL_E2E_WORKFLOW),
+        ):
+            for event in ("push", "pull_request"):
+                paths = self._trigger_paths(workflow, event)
+                for routing_path in (*routing_paths, f".github/workflows/{workflow_path}"):
+                    self.assertIn(routing_path, paths)
+
+            changes_job = re.search(
+                r"(?ms)^  changes:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+                workflow,
+            )
+            self.assertIsNotNone(changes_job, f"missing changes job in {workflow_path}")
+            changes = changes_job.group("job") if changes_job is not None else ""
+            self.assertIn(CHECKOUT_ACTION, changes)
+            self.assertRegex(changes, r"(?m)^\s+fetch-depth: 0$")
+            self.assertIn("uses: ./.github/actions/detect-ci-changes", changes)
+            self.assertIn(
+                "github.event_name == 'pull_request' && github.event.pull_request.base.sha",
+                changes,
+            )
+            self.assertIn("github.event.before", changes)
+            self.assertIn(
+                "github.event_name == 'pull_request' && github.event.pull_request.head.sha",
+                changes,
+            )
+            self.assertIn("github.sha", changes)
+            self.assertIn("run-all: ${{ github.event_name == 'workflow_dispatch' }}", changes)
+
+        for job_name in ("ubuntu", "debian", "nixos"):
+            job = re.search(
+                rf"(?ms)^  {job_name}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+                linux_workflow,
+            )
+            self.assertIsNotNone(job, f"missing {job_name} job")
+            job_body = job.group("job") if job is not None else ""
+            self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
+            self.assertIn("needs.changes.outputs.linux == 'true'", job_body)
+
+        switch = re.search(
+            r"(?ms)^  switch:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            wsl_workflow,
+        )
+        self.assertIsNotNone(switch, "missing WSL switch job")
+        switch_body = switch.group("job") if switch is not None else ""
+        self.assertRegex(switch_body, r"(?m)^\s+needs: changes$")
+        self.assertRegex(
+            switch_body,
+            r"(?m)^\s+if: \$\{\{ needs\.changes\.outputs\.wsl == 'true' && "
+            r"\(github\.event_name != 'pull_request' \|\| "
+            r"github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$",
+        )
+        self.assertIn("HEAD_REF: ${{ github.head_ref }}", switch_body)
+        self.assertIn("REF_NAME: ${{ github.ref_name }}", switch_body)
+        self.assertIn("$refName = $env:HEAD_REF", switch_body)
+        self.assertIn("$refName = $env:REF_NAME", switch_body)
+        self.assertNotIn('$refName = "${{ github.head_ref }}"', switch_body)
 
 
 if __name__ == "__main__":
