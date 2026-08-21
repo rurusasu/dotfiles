@@ -243,6 +243,61 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'package-support-report'
     }
 
+    It 'should route Bootstrap Build jobs through CI change detection without masking failures' {
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-build.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        foreach ($routingPath in @(
+                'ci/path-routing.json',
+                'scripts/python/detect_ci_changes.py',
+                'tests/python/test_detect_ci_changes.py',
+                '.github/actions/detect-ci-changes/**',
+                '.github/workflows/ci-contract.yml',
+                '.github/workflows/ci-bootstrap-build.yml'
+            )) {
+            ([regex]::Matches($workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
+        }
+
+        $changesJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $changesJob | Should -Not -BeNullOrEmpty
+        $changesJob | Should -Match 'fetch-depth:\s+0'
+        $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
+        $changesJob | Should -Match 'steps\.detect\.outputs\.linux'
+        $changesJob | Should -Match 'steps\.detect\.outputs\.darwin'
+        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
+        $changesJob | Should -Match 'github\.event\.before'
+        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
+        $changesJob | Should -Match 'github\.sha'
+        $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
+
+        foreach ($gate in @(
+                @{ Job = 'linux'; Output = 'linux' },
+                @{ Job = 'darwin'; Output = 'darwin' }
+            )) {
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($gate.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Match 'needs:\s+changes'
+            $job | Should -Match "needs\.changes\.outputs\.$($gate.Output) == 'true'"
+        }
+
+        $completeJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $completeJob | Should -Match 'if:\s+\$\{\{ always\(\) \}\}'
+        $completeJob | Should -Match 'needs:\s+\[changes, linux, darwin\]'
+        $completeJob | Should -Match 'needs\.changes\.result'
+        $completeJob | Should -Match 'needs\.linux\.result'
+        $completeJob | Should -Match 'needs\.darwin\.result'
+        $completeJob | Should -Match '\$\{CHANGES_RESULT\}" != "success"'
+        $completeJob | Should -Match 'success\|skipped'
+    }
+
     It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-linux.yml"
         $workflowPath | Should -Exist
