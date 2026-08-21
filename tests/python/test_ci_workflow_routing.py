@@ -30,6 +30,45 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertTrue(path.is_file(), f"missing workflow: {path}")
         return path.read_text(encoding="utf-8")
 
+    def _bootstrap_build_complete_script(self, workflow: str) -> str:
+        complete_job = re.search(
+            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(complete_job, "missing complete job")
+        complete = complete_job.group("job") if complete_job is not None else ""
+        step = re.search(
+            r"(?ms)^      - name: Verify routed job results\n"
+            r"        run: \|\n(?P<script>.*?"
+            r'^          echo "All required bootstrap outputs built successfully\."\n)',
+            complete,
+        )
+        self.assertIsNotNone(step, "missing complete-job result verification step")
+        return step.group("script") if step is not None else ""
+
+    def _assert_bootstrap_build_failure_guards(self, complete_script: str) -> None:
+        self.assertRegex(
+            complete_script,
+            r'(?m)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
+            r'^[ \t]+echo "CI change detection did not complete successfully: '
+            r'\$\{CHANGES_RESULT\}"\n'
+            r'^[ \t]+exit 1\n'
+            r'^[ \t]+fi$',
+        )
+        self.assertRegex(
+            complete_script,
+            r'(?m)^[ \t]+for result in "\$\{LINUX_RESULT\}" "\$\{DARWIN_RESULT\}"; do\n'
+            r'^[ \t]+case "\$\{result\}" in\n'
+            r'^[ \t]+success\|skipped\) ;;\n'
+            r'^[ \t]+\*\)\n'
+            r'^[ \t]+echo "Bootstrap platform job did not complete successfully: '
+            r'\$\{result\}"\n'
+            r'^[ \t]+exit 1\n'
+            r'^[ \t]+;;\n'
+            r'^[ \t]+esac\n'
+            r'^[ \t]+done$',
+        )
+
     def _trigger_paths(self, workflow: str, event: str) -> str:
         match = re.search(
             rf"(?ms)^  {re.escape(event)}:\n"
@@ -249,9 +288,36 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertRegex(complete, r"(?m)^\s+needs: \[changes, linux, darwin\]$")
         for result in ("changes", "linux", "darwin"):
             self.assertIn(f"needs.{result}.result", complete)
-        self.assertIn('"${CHANGES_RESULT}" != "success"', complete)
-        self.assertIn('case "${result}" in', complete)
-        self.assertIn("success|skipped", complete)
+
+        complete_script = self._bootstrap_build_complete_script(workflow)
+        self._assert_bootstrap_build_failure_guards(complete_script)
+
+        changes_guard = re.search(
+            r'(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
+            r'.*?^[ \t]+fi$',
+            complete_script,
+        )
+        self.assertIsNotNone(changes_guard, "missing changes failure guard")
+        without_changes_guard = complete_script.replace(
+            changes_guard.group(0) if changes_guard is not None else "",
+            "",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_bootstrap_build_failure_guards(without_changes_guard)
+
+        platform_default = re.search(
+            r'(?ms)^[ \t]+\*\)\n.*?^[ \t]+;;$',
+            complete_script,
+        )
+        self.assertIsNotNone(platform_default, "missing platform default failure branch")
+        without_platform_default = complete_script.replace(
+            platform_default.group(0) if platform_default is not None else "",
+            "",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_bootstrap_build_failure_guards(without_platform_default)
 
 
 if __name__ == "__main__":

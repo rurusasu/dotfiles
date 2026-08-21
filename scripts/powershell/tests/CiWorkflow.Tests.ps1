@@ -1,5 +1,23 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+
+    function Assert-BootstrapBuildCompleteFailureGuards {
+        param(
+            [Parameter(Mandatory)]
+            [string]$CompleteScript
+        )
+
+        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
+        $platformDefault = '(?ms)^[ \t]+for result in "\$\{LINUX_RESULT\}" "\$\{DARWIN_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
+
+        if ($CompleteScript -notmatch $changesGuard) {
+            throw 'Bootstrap Build complete job must exit 1 when change detection is not successful.'
+        }
+
+        if ($CompleteScript -notmatch $platformDefault) {
+            throw 'Bootstrap Build complete job must exit 1 for every non-success-or-skipped platform result.'
+        }
+    }
 }
 
 Describe 'CI workflow configuration' {
@@ -294,8 +312,29 @@ Describe 'CI workflow configuration' {
         $completeJob | Should -Match 'needs\.changes\.result'
         $completeJob | Should -Match 'needs\.linux\.result'
         $completeJob | Should -Match 'needs\.darwin\.result'
-        $completeJob | Should -Match '\$\{CHANGES_RESULT\}" != "success"'
-        $completeJob | Should -Match 'success\|skipped'
+
+        $completeScript = [regex]::Match(
+            $completeJob,
+            '(?ms)^      - name: Verify routed job results\r?\n        run: \|\r?\n(?<script>.*?^          echo "All required bootstrap outputs built successfully\."\r?\n)'
+        ).Groups['script'].Value
+        $completeScript | Should -Not -BeNullOrEmpty
+        Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $completeScript
+
+        $changesGuard = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
+        ).Value
+        $changesGuard | Should -Not -BeNullOrEmpty
+        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
+        { Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $withoutChangesGuard } | Should -Throw
+
+        $platformDefault = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
+        ).Value
+        $platformDefault | Should -Not -BeNullOrEmpty
+        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
+        { Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
