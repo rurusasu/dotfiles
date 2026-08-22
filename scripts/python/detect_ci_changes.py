@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 from collections.abc import Iterable
+from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -36,11 +37,35 @@ def route_paths(paths: Iterable[str], manifest_path: Path) -> dict[str, bool]:
     for raw_path in paths:
         path = _validate_path(raw_path)
         for rule in rules:
-            if any(path.full_match(pattern) for pattern in rule["patterns"]):
+            if any(_full_match(path, pattern) for pattern in rule["patterns"]):
                 for output in rule["outputs"]:
                     selected[output] = True
 
     return selected
+
+
+def _full_match(path: PurePosixPath, pattern: str) -> bool:
+    """Match an anchored POSIX glob with recursive ``**`` on Python 3.12+."""
+    path_parts = path.parts
+    pattern_parts = PurePosixPath(pattern).parts
+
+    def match(path_index: int, pattern_index: int) -> bool:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            return match(path_index, pattern_index + 1) or (
+                path_index < len(path_parts) and match(path_index + 1, pattern_index)
+            )
+
+        return (
+            path_index < len(path_parts)
+            and fnmatchcase(path_parts[path_index], pattern_part)
+            and match(path_index + 1, pattern_index + 1)
+        )
+
+    return match(0, 0)
 
 
 def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[str]]]]:
