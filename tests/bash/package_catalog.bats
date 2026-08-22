@@ -175,7 +175,9 @@ setup() {
 
 @test "ChatGPT Linux package is wired as a reproducible Nix derivation" {
 	[ -f "$REPO_ROOT/nix/packages/chatgpt/default.nix" ]
-	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_amd64.deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_arm64.deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	! grep -q '/latest/chatgpt_' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'sha256-' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 }
 
@@ -185,6 +187,11 @@ setup() {
 	grep -q 'autoPatchelfIgnoreMissingDeps' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'libc\.musl-x86_64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'libc\.musl-aarch64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
+@test "ChatGPT Linux package uses the normal Nix output layout" {
+	grep -q 'cp -R "\$unpacked/usr/." "\$out/"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'makeWrapper "\$out/lib/chatgpt/ChatGPT"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 }
 
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {

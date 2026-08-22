@@ -41,11 +41,11 @@ let
   version = "26.818.41705";
   sources = {
     x86_64-linux = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb";
+      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_amd64.deb";
       hash = "sha256-ySfJhVd73luszsx38C4UsxHZTmIwFWYh+vkleawDalU=";
     };
     aarch64-linux = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_arm64.deb";
+      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_arm64.deb";
       hash = "sha256-Y3WtHooJT3Z5HiC58xyIhxnOz6E/Ct0sS7yAlgb3NIE=";
     };
   };
@@ -108,9 +108,12 @@ stdenv.mkDerivation {
 
   installPhase = ''
     runHook preInstall
-    dpkg-deb --extract "$src" "$out"
+    unpacked="$TMPDIR/chatgpt"
+    dpkg-deb --extract "$src" "$unpacked"
+    mkdir -p "$out"
+    cp -R "$unpacked/usr/." "$out/"
     mkdir -p "$out/bin"
-    makeWrapper "$out/usr/lib/chatgpt/ChatGPT" "$out/bin/chatgpt" \
+    makeWrapper "$out/lib/chatgpt/ChatGPT" "$out/bin/chatgpt" \
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath runtimeDependencies}"
     runHook postInstall
   '';
