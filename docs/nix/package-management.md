@@ -83,8 +83,8 @@ cat result/package-support-report.json
 | ------------------------------------------------ | ----------------------------------- |
 | shell から使う共通 CLI                           | Home Manager `home.packages`        |
 | Docker daemon/socket、ユーザー group、OS service | NixOS / System Manager / nix-darwin |
-| macOS CLI                                       | nix-homebrew formula                |
-| macOS GUI application                           | nix-homebrew cask                   |
+| macOS CLI                                        | nix-homebrew formula                |
+| macOS GUI application                            | nix-homebrew cask                   |
 | Windows GUI/OS application                       | winget/msstore handler              |
 | shell、Git、terminal、editor 設定                | chezmoi                             |
 
