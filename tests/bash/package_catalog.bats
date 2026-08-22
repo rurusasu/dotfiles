@@ -179,6 +179,14 @@ setup() {
 	grep -q 'sha256-' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 }
 
+@test "ChatGPT Linux package supplies Qt runtimes and ignores optional musl modules" {
+	grep -q '^    qt5\.qtbase$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q '^    qt6\.qtbase$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'autoPatchelfIgnoreMissingDeps' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'libc\.musl-x86_64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'libc\.musl-aarch64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

@@ -33,6 +33,8 @@
   nss,
   pango,
   pulseaudio,
+  qt5,
+  qt6,
   systemd,
 }:
 let
@@ -79,6 +81,8 @@ let
     nss
     pango
     pulseaudio
+    qt5.qtbase
+    qt6.qtbase
     systemd
   ];
 in
@@ -93,6 +97,11 @@ stdenv.mkDerivation {
     makeWrapper
   ];
   buildInputs = runtimeDependencies;
+
+  autoPatchelfIgnoreMissingDeps = [
+    "libc.musl-x86_64.so.1"
+    "libc.musl-aarch64.so.1"
+  ];
 
   dontConfigure = true;
   dontBuild = true;
