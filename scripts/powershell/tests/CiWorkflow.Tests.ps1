@@ -37,66 +37,24 @@ BeforeAll {
         }
     }
 
-    function Get-ChezmoiExecutionReferences {
+    function Assert-UniqueChezmoiPathOccurrence {
         param(
             [Parameter(Mandatory)]
-            [string]$Section
-        )
-
-        $references = [System.Collections.Generic.List[string]]::new()
-        $steps = [regex]::Matches(
-            $Section,
-            '(?ms)^      - .*?(?=^      - |^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        )
-        foreach ($step in $steps) {
-            foreach ($pattern in @(
-                    '(?m)^        run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|\z))*)',
-                    '(?m)^      - run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|\z))*)'
-                )) {
-                $blockRun = [regex]::Match($step.Value, $pattern)
-                if ($blockRun.Success) {
-                    foreach ($line in $blockRun.Groups['body'].Value -split '\r?\n') {
-                        if ($line -notmatch '^\s*#') {
-                            foreach ($match in [regex]::Matches($line, '(?<![\w])tests[\\/]chezmoi\b')) {
-                                $references.Add($match.Value)
-                            }
-                        }
-                    }
-                }
-            }
-
-            foreach ($pattern in @(
-                    '(?m)^        run: (?!\|$)(?<command>.*)$',
-                    '(?m)^      - run: (?!\|$)(?<command>.*)$'
-                )) {
-                $inlineRun = [regex]::Match($step.Value, $pattern)
-                if ($inlineRun.Success) {
-                    foreach ($match in [regex]::Matches($inlineRun.Groups['command'].Value, '(?<![\w])tests[\\/]chezmoi\b')) {
-                        $references.Add($match.Value)
-                    }
-                }
-            }
-        }
-
-        return $references
-    }
-
-    function Assert-UniqueChezmoiExecutionReference {
-        param(
-            [Parameter(Mandatory)]
-            [string]$Jobs,
+            [string]$Workflow,
 
             [Parameter(Mandatory)]
             [string]$LintJob
         )
 
-        $references = @(Get-ChezmoiExecutionReferences -Section $Jobs)
-        $lintReferences = @(Get-ChezmoiExecutionReferences -Section $LintJob)
-        if ($references.Count -ne 1) {
-            throw "Chezmoi CI must contain exactly one tests/chezmoi execution reference; found $($references.Count)."
+        $normalizedWorkflow = $Workflow.ToLowerInvariant().Replace('\', '/')
+        $normalizedLint = $LintJob.ToLowerInvariant().Replace('\', '/')
+        $workflowOccurrences = ([regex]::Matches($normalizedWorkflow, [regex]::Escape('tests/chezmoi'))).Count
+        $lintOccurrences = ([regex]::Matches($normalizedLint, [regex]::Escape('tests/chezmoi'))).Count
+        if ($workflowOccurrences -ne 1) {
+            throw "Chezmoi CI must contain exactly one tests/chezmoi path occurrence; found $workflowOccurrences."
         }
-        if ($lintReferences.Count -ne 1 -or $references[0] -ne $lintReferences[0]) {
-            throw 'The unique tests/chezmoi execution reference must belong to the lint job.'
+        if ($lintOccurrences -ne 1) {
+            throw 'The unique tests/chezmoi path occurrence must belong to the lint job.'
         }
     }
 }
@@ -656,7 +614,6 @@ Describe 'CI workflow configuration' {
     It 'should run Chezmoi Pester once in required lint and upload lint JUnit output' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
         $pesterInvocation = '(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results\.xml$'
-        $jobs = [regex]::Match($workflow, '(?ms)^jobs:\r?\n(?<jobs>.*)\z').Groups['jobs'].Value
         $lintJob = [regex]::Match(
             $workflow,
             '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
@@ -664,19 +621,23 @@ Describe 'CI workflow configuration' {
 
         $lintJob | Should -Not -BeNullOrEmpty
         ([regex]::Matches($workflow, '(?m)^  test:\s*$')).Count | Should -Be 0
-        Assert-UniqueChezmoiExecutionReference -Jobs $jobs -LintJob $lintJob
+        Assert-UniqueChezmoiPathOccurrence -Workflow $workflow -LintJob $lintJob
         $lintJob | Should -Match $pesterInvocation
         $canonicalInvocation = '.\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml'
-        $mutatedWorkflow = $workflow.Replace(
-            $canonicalInvocation,
-            "$canonicalInvocation`r`n      - run: Invoke-Pester -Path .\tests\chezmoi"
-        )
-        $mutatedJobs = [regex]::Match($mutatedWorkflow, '(?ms)^jobs:\r?\n(?<jobs>.*)\z').Groups['jobs'].Value
-        $mutatedLintJob = [regex]::Match(
-            $mutatedWorkflow,
-            '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Value
-        { Assert-UniqueChezmoiExecutionReference -Jobs $mutatedJobs -LintJob $mutatedLintJob } | Should -Throw
+        foreach ($alternateInvocation in @(
+                "      - run: >-`r`n          Invoke-Pester -Path .\tests\CHEZMOI",
+                '      - run: Invoke-Pester -Path ./tests/chezmoi'
+            )) {
+            $mutatedWorkflow = $workflow.Replace(
+                $canonicalInvocation,
+                "$canonicalInvocation`r`n$alternateInvocation"
+            )
+            $mutatedLintJob = [regex]::Match(
+                $mutatedWorkflow,
+                '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            ).Value
+            { Assert-UniqueChezmoiPathOccurrence -Workflow $mutatedWorkflow -LintJob $mutatedLintJob } | Should -Throw
+        }
 
         foreach ($requiredJob in @(
                 @{ Job = 'lint'; Name = 'Lint \(Pester chezmoi\)' },
