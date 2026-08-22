@@ -47,7 +47,6 @@ main() {
 	validate_configuration
 	require_tart_command
 	mkdir -p "$TART_HOME_ROOT"
-	require_free_space
 
 	local vm_dir="$TART_HOME_ROOT/vms/$TART_VM_NAME"
 	if [[ -e $vm_dir || -L $vm_dir ]]; then
@@ -55,6 +54,7 @@ main() {
 		dotfiles_log "Tart VM already exists: $TART_VM_NAME"
 		return 0
 	fi
+	require_free_space
 
 	dotfiles_log "Cloning $TART_IMAGE as $TART_VM_NAME. The initial image download is large and may take a while..."
 	TART_HOME="$TART_HOME_ROOT" "$TART_COMMAND" clone "$TART_IMAGE" "$TART_VM_NAME"

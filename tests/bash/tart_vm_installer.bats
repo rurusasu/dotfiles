@@ -60,7 +60,7 @@ EOF
 	write_tart_stub
 	mkdir -p "$TART_HOME/vms/tahoe-base"
 
-	run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" DOTFILES_TART_MIN_FREE_GIB=0 "$INSTALLER"
+	run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" DOTFILES_TART_MIN_FREE_GIB=999999 "$INSTALLER"
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"already exists"* ]]
