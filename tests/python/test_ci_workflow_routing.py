@@ -222,7 +222,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         workflow = self._named_workflow("ci-nix.yml")
         required_scripts = (
             "scripts/sh/dcnvim.sh",
-            "scripts/sh/uninstall-arc-browser.sh",
         )
 
         for event in ("push", "pull_request"):

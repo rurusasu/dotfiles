@@ -94,16 +94,6 @@ in
     autoMigrate = true;
   };
 
-  # This runs after nix-darwin's Homebrew activation to repair Arc and start
-  # Ollama for the active user.
-  system.activationScripts.postActivation.text = lib.mkAfter ''
-
-    /usr/bin/sudo --user=${lib.escapeShellArg user} -- /bin/bash -c ${lib.escapeShellArg (builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh)}
-    /bin/rm -rf -- ${lib.escapeShellArg "${home}/Library/Caches/CloudKit/company.thebrowser.Browser"} 2>/dev/null || true
-    ollama_uid="$(/usr/bin/id -u -- ${lib.escapeShellArg user})"
-    /bin/launchctl asuser "$ollama_uid" /usr/bin/sudo --user=${lib.escapeShellArg user} -- /usr/bin/open -gj -a Ollama
-  '';
-
   homebrew = {
     enable = true;
     brews = sets.darwinBrews;

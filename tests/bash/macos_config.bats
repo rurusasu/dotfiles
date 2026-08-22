@@ -21,15 +21,7 @@ setup() {
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
 	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'activationScripts.postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
-}
-
-@test "Darwin activation zaps an existing Arc cask" {
-	grep -q 'builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q '/usr/bin/sudo --user=' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'company.thebrowser.Browser' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
 @test "Darwin enables automatic Homebrew cask upgrades" {
@@ -158,9 +150,8 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin provisions GNU timeout and launches native Ollama" {
+@test "Darwin provisions GNU timeout for native Ollama" {
 	grep -Fq 'pkgs.coreutils' "$REPO_ROOT/nix/home/common.nix"
-	grep -Fq '/usr/bin/open -gj -a Ollama' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
 @test "Darwin zsh restores WezTerm terminfo after inherited Home Manager sentinels" {

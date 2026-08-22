@@ -98,10 +98,6 @@
       "outputs": ["linux", "darwin", "contract"]
     },
     {
-      "patterns": ["scripts/sh/uninstall-arc-browser.sh"],
-      "outputs": ["darwin", "contract", "nix"]
-    },
-    {
       "patterns": ["scripts/sh/install-linux.sh", "scripts/sh/install-nixos.sh"],
       "outputs": ["linux", "contract"]
     },
