@@ -1,7 +1,7 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-    function Assert-BootstrapBuildCompleteFailureGuards {
+    function Assert-BootstrapBuildCompleteFailureGuard {
         param(
             [Parameter(Mandatory)]
             [string]$CompleteScript
@@ -19,7 +19,7 @@ BeforeAll {
         }
     }
 
-    function Assert-ProtectedBootstrapE2ECompleteFailureGuards {
+    function Assert-ProtectedBootstrapE2ECompleteFailureGuard {
         param(
             [Parameter(Mandatory)]
             [string]$CompleteScript
@@ -388,7 +388,7 @@ Describe 'CI workflow configuration' {
             '(?ms)^      - name: Verify routed job results\r?\n        run: \|\r?\n(?<script>.*?^          echo "All required bootstrap outputs built successfully\."\r?\n)'
         ).Groups['script'].Value
         $completeScript | Should -Not -BeNullOrEmpty
-        Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $completeScript
+        Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $completeScript
 
         $changesGuard = [regex]::Match(
             $completeScript,
@@ -396,7 +396,7 @@ Describe 'CI workflow configuration' {
         ).Value
         $changesGuard | Should -Not -BeNullOrEmpty
         $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
-        { Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $withoutChangesGuard } | Should -Throw
+        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
 
         $platformDefault = [regex]::Match(
             $completeScript,
@@ -404,7 +404,7 @@ Describe 'CI workflow configuration' {
         ).Value
         $platformDefault | Should -Not -BeNullOrEmpty
         $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
-        { Assert-BootstrapBuildCompleteFailureGuards -CompleteScript $withoutPlatformDefault } | Should -Throw
+        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
@@ -571,7 +571,7 @@ Describe 'CI workflow configuration' {
             '(?ms)^      - name: Verify routed job results\r?\n(?:        env:\r?\n.*?^        run: \|\r?\n)(?<script>.*?^          echo "All required hosted bootstrap contracts completed successfully\."\r?\n)'
         ).Groups['script'].Value
         $completeScript | Should -Not -BeNullOrEmpty
-        Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $completeScript
+        Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $completeScript
 
         $changesGuard = [regex]::Match(
             $completeScript,
@@ -579,7 +579,7 @@ Describe 'CI workflow configuration' {
         ).Value
         $changesGuard | Should -Not -BeNullOrEmpty
         $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
-        { Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $withoutChangesGuard } | Should -Throw
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
 
         $platformDefault = [regex]::Match(
             $completeScript,
@@ -587,7 +587,7 @@ Describe 'CI workflow configuration' {
         ).Value
         $platformDefault | Should -Not -BeNullOrEmpty
         $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
-        { Assert-ProtectedBootstrapE2ECompleteFailureGuards -CompleteScript $withoutPlatformDefault } | Should -Throw
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
