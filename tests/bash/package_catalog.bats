@@ -160,6 +160,25 @@ setup() {
 	[[ "$output" == *'args = [ "--version" ];'* ]]
 }
 
+@test "ChatGPT desktop has native Linux, Darwin cask, and Microsoft Store providers" {
+	run awk '
+		/^    chatgpt = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    \};/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;'* ]]
+	[[ "$output" == *'msstore = "9NT1R1C2HH7J";'* ]]
+	[[ "$output" == *'cask = "chatgpt"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+}
+
+@test "ChatGPT Linux package is wired as a reproducible Nix derivation" {
+	[ -f "$REPO_ROOT/nix/packages/chatgpt/default.nix" ]
+	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'sha256-' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

@@ -190,7 +190,20 @@ let
 
   wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
-  msstorePackages = map (
+  msstoreFromMap = lib.mapAttrsToList (
+    name: id:
+    attachSkipInstall sets.wingetSkipInstall name (
+      attachCiSkipInstall sets.wingetCiSkipInstall name (
+        attachSkipInstall sets.wingetSkipInstall id (
+          attachCiSkipInstall sets.wingetCiSkipInstall id (
+            attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+          )
+        )
+      )
+    )
+  ) sets.msstoreMap;
+
+  msstorePackagesWindowsOnly = map (
     id:
     attachSkipInstall sets.wingetSkipInstall id (
       attachCiSkipInstall sets.wingetCiSkipInstall id (
@@ -198,6 +211,8 @@ let
       )
     )
   ) sets.windowsOnly.msstore;
+
+  msstorePackages = msstoreFromMap ++ msstorePackagesWindowsOnly;
 
   # --- pnpm ---
   pnpmFromGlobal = map (
