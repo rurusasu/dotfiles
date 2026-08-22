@@ -345,6 +345,7 @@ Describe 'CI workflow configuration' {
         $macosJob | Should -Match 'command -v lua'
         $macosJob | Should -Match 'command -v luac'
         $macosJob | Should -Match 'command -v wezterm'
+        $macosJob | Should -Match 'env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER'
         $macosJob | Should -Match 'bats tests/wezterm'
         $macosJob | Should -Match 'luac -p chezmoi/terminals/hammerspoon/init\.lua'
         $macosJob | Should -Match 'lua tests/lua/hammerspoon_terminal_prefix_test\.lua'
