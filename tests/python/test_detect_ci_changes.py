@@ -95,6 +95,7 @@ BOOTSTRAP_CASES = {
         "nix",
     },
     "flake.nix": {"linux", "darwin", "wsl", "contract", "nix"},
+    "install.sh": {"linux", "darwin", "contract"},
     ".github/workflows/ci-bootstrap.yml": {
         "linux",
         "darwin",

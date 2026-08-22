@@ -19,7 +19,6 @@
         "flake.nix",
         "flake.lock",
         "nix/**",
-        "install.sh",
         "scripts/sh/dcnvim.sh",
         ".github/e2e/**",
         ".github/workflows/ci-bootstrap.yml"
@@ -86,7 +85,7 @@
       "outputs": ["darwin"]
     },
     {
-      "patterns": ["scripts/sh/install.sh"],
+      "patterns": ["install.sh"],
       "outputs": ["linux", "darwin"]
     },
     {
