@@ -42,6 +42,55 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(job, f"missing {name} job")
         return job.group("job") if job is not None else ""
 
+    def _workflow_jobs(self, workflow: str) -> str:
+        jobs = re.search(r"(?ms)^jobs:\n(?P<jobs>.*)\Z", workflow)
+        self.assertIsNotNone(jobs, "missing jobs section")
+        return jobs.group("jobs") if jobs is not None else ""
+
+    @staticmethod
+    def _chezmoi_execution_references(section: str) -> list[str]:
+        references: list[str] = []
+        for step in re.finditer(
+            r"(?ms)^      - .*?(?=^      - |^  [a-zA-Z0-9_-]+:\s*$|\Z)",
+            section,
+        ):
+            for pattern in (
+                r"(?m)^        run: \|\n(?P<body>(?:^          [^\n]*(?:\n|\Z))*)",
+                r"(?m)^      - run: \|\n(?P<body>(?:^          [^\n]*(?:\n|\Z))*)",
+            ):
+                block_run = re.search(pattern, step.group())
+                if block_run is not None:
+                    for line in block_run.group("body").splitlines():
+                        if not line.lstrip().startswith("#"):
+                            references.extend(
+                                re.findall(r"(?<![\w])tests[\\/]chezmoi\b", line)
+                            )
+
+            for pattern in (
+                r"(?m)^        run: (?!\|$)(?P<command>.*)$",
+                r"(?m)^      - run: (?!\|$)(?P<command>.*)$",
+            ):
+                inline_run = re.search(pattern, step.group())
+                if inline_run is not None:
+                    references.extend(
+                        re.findall(
+                            r"(?<![\w])tests[\\/]chezmoi\b",
+                            inline_run.group("command"),
+                        )
+                    )
+
+        return references
+
+    def _assert_single_chezmoi_execution_reference(
+        self,
+        jobs: str,
+        lint: str,
+    ) -> None:
+        references = self._chezmoi_execution_references(jobs)
+        lint_references = self._chezmoi_execution_references(lint)
+        self.assertEqual(len(references), 1)
+        self.assertEqual(references, lint_references)
+
     def _bootstrap_build_complete_script(self, workflow: str) -> str:
         complete_job = re.search(
             r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
@@ -550,6 +599,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     ) -> None:
         """Catch a second Chezmoi Pester job or a JUnit artifact detached from lint."""
         workflow = self._named_workflow(CHEZMOI_WORKFLOW)
+        jobs = self._workflow_jobs(workflow)
         lint = self._workflow_job(workflow, "lint")
         fmt = self._workflow_job(workflow, "fmt")
         font_install = self._workflow_job(workflow, "font-install")
@@ -564,8 +614,23 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             r"\.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile "
             r"chezmoi-test-results\.xml$"
         )
-        self.assertEqual(len(re.findall(pester_invocation, workflow)), 1)
+        self._assert_single_chezmoi_execution_reference(jobs, lint)
         self.assertRegex(lint, pester_invocation)
+        mutated_workflow = workflow.replace(
+            ".\\tests\\Invoke-Tests.ps1 -Path .\\tests\\chezmoi -MinimumCoverage 0 "
+            "-OutputFile chezmoi-test-results.xml",
+            ".\\tests\\Invoke-Tests.ps1 -Path .\\tests\\chezmoi -MinimumCoverage 0 "
+            "-OutputFile chezmoi-test-results.xml\n"
+            "      - run: Invoke-Pester -Path .\\tests\\chezmoi",
+            1,
+        )
+        mutated_jobs = self._workflow_jobs(mutated_workflow)
+        mutated_lint = self._workflow_job(mutated_workflow, "lint")
+        with self.assertRaises(AssertionError):
+            self._assert_single_chezmoi_execution_reference(
+                mutated_jobs,
+                mutated_lint,
+            )
 
         for job, required_name in (
             (lint, "Lint (Pester chezmoi)"),
