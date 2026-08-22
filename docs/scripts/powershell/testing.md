@@ -58,13 +58,13 @@ cd scripts/powershell/tests
 
 ## CI テスト戦略
 
-| Workflow                      | Runner                     | Guarantee                                                     |
-| ----------------------------- | -------------------------- | ------------------------------------------------------------- |
-| `ci-bootstrap-e2e-hosted.yml` | hosted Windows/macOS/Linux | Windows/macOS contract と `Protected Bootstrap E2E` aggregate |
+| Workflow           | Runner                     | Guarantee                                                      |
+| ------------------ | -------------------------- | -------------------------------------------------------------- |
+| `ci-bootstrap.yml` | hosted Linux/macOS/Windows | Linux/Darwin/WSL/Windows の platform-routed contract aggregate |
 
 Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
 
-Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap-e2e-linux.yml` がUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
+Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
 
 ## Windows environment acceptance
 
@@ -88,7 +88,7 @@ acceptance は次を検証します。
 .\Invoke-Tests.ps1 -Path .\Test-Environment.Tests.ps1 -MinimumCoverage 0
 ```
 
-`Protected Bootstrap E2E` は hosted Windows の全Pester contract、hosted macOSの全Bats contractとnix-darwin buildを集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
+`Bootstrap CI` は hosted Windows の全Pester contract、hosted macOSの全Bats contractとnix-darwin build、Linux/WSLのbootstrap checksを集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
 
 ## pre-commit 統合
 

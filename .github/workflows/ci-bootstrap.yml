@@ -1,0 +1,1073 @@
+name: Bootstrap CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "install.sh"
+      - "install.cmd"
+      - "nix/**"
+      - "scripts/sh/**"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/handlers/Handler.NixRebuild.ps1"
+      - "scripts/powershell/lib/**"
+      - "scripts/powershell/install.ps1"
+      - "scripts/powershell/install.user.ps1"
+      - "scripts/powershell/tests/**"
+      - "windows/**"
+      - "chezmoi/**"
+      - "docker/hermes-agent/**"
+      - "docker/hermes-browser/**"
+      - "docker/hermes-browser-mcp/**"
+      - "docker/hermes-xapi-mcp/**"
+      - ".github/e2e/**"
+      - "tests/bash/install_linux.bats"
+      - "tests/bash/install_macos.bats"
+      - "ci/path-routing.json"
+      - "ci/bootstrap-path-routing.json"
+      - "Taskfile.yml"
+      - "taskfiles/**"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - "tests/python/test_ci_workflow_routing.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
+      - ".github/workflows/ci-bootstrap.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "install.sh"
+      - "install.cmd"
+      - "nix/**"
+      - "scripts/sh/**"
+      - "scripts/powershell/ci/**"
+      - "scripts/powershell/handlers/**"
+      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      - "scripts/powershell/handlers/Handler.NixRebuild.ps1"
+      - "scripts/powershell/lib/**"
+      - "scripts/powershell/install.ps1"
+      - "scripts/powershell/install.user.ps1"
+      - "scripts/powershell/tests/**"
+      - "windows/**"
+      - "chezmoi/**"
+      - "docker/hermes-agent/**"
+      - "docker/hermes-browser/**"
+      - "docker/hermes-browser-mcp/**"
+      - "docker/hermes-xapi-mcp/**"
+      - ".github/e2e/**"
+      - "tests/bash/install_linux.bats"
+      - "tests/bash/install_macos.bats"
+      - "ci/path-routing.json"
+      - "ci/bootstrap-path-routing.json"
+      - "Taskfile.yml"
+      - "taskfiles/**"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - "tests/python/test_ci_workflow_routing.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
+      - ".github/workflows/ci-bootstrap.yml"
+
+concurrency:
+  group: bootstrap-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  DOTFILES_SKIP_FLAKE_UPDATE: "1"
+
+jobs:
+  changes:
+    name: Bootstrap / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed bootstrap targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/bootstrap-path-routing.json
+    outputs:
+      linux: ${{ steps.detect.outputs.linux }}
+      darwin: ${{ steps.detect.outputs.darwin }}
+      wsl: ${{ steps.detect.outputs.wsl }}
+      windows: ${{ steps.detect.outputs.windows }}
+      nix: ${{ steps.detect.outputs.nix }}
+      platforms: ${{ steps.detect.outputs.linux == 'true' || steps.detect.outputs.darwin == 'true' || steps.detect.outputs.wsl == 'true' || steps.detect.outputs.windows == 'true' }}
+
+  nix-lint:
+    name: Bootstrap / Nix / Lint
+    needs: changes
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run statix
+        run: |
+          # statix exits non-zero when findings exist; capture that separately from infra errors.
+          # stderr is preserved so build/infra failures surface in logs.
+          set +e
+          nix shell nixpkgs#statix --command \
+            statix check --format json . > statix.json || STATIX_EXIT=$?
+          set -e
+          statix_exit="${STATIX_EXIT:-0}"
+          if (( statix_exit > 1 )); then
+            echo "statix infrastructure failure (exit ${statix_exit})"
+            exit "${statix_exit}"
+          fi
+          echo "statix_exit=${STATIX_EXIT:-0}" >> "$GITHUB_ENV"
+
+      - name: Convert to SARIF
+        run: |
+          python3 - << 'PYEOF'
+          import json, sys
+
+          # statix --format json emits one JSON object per file on separate lines (NDJSON).
+          SEV_MAP = {"Error": "error", "Warn": "warning", "Hint": "note"}
+          data = []
+          error_count = 0
+          invalid_count = 0
+          try:
+              with open("statix.json") as f:
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      try:
+                          data.append(json.loads(line))
+                      except json.JSONDecodeError as e:
+                          invalid_count += 1
+                          print(f"Warning: skipping unparseable line: {e}", file=sys.stderr)
+          except FileNotFoundError:
+              print("Warning: statix.json not found — empty SARIF will be uploaded", file=sys.stderr)
+
+          results = []
+          for item in data:
+              file_path = item.get("file", "")
+              for check in item.get("report", []):
+                  note = check.get("note", "")
+                  severity = check.get("severity", "Warn")
+                  level = SEV_MAP.get(severity, "warning")
+                  for diag in check.get("diagnostics", []):
+                      at = diag.get("at", {})
+                      frm = at.get("from", {})
+                      to = at.get("to", {})
+                      if severity in ("Error", "Warn"):
+                          error_count += 1
+                      results.append({
+                          "ruleId": "statix/lint",
+                          "message": {"text": f"{note}: {diag.get('message', '')}".strip(": ")},
+                          "level": level,
+                          "locations": [{
+                              "physicalLocation": {
+                                  "artifactLocation": {
+                                      "uri": file_path,
+                                      "uriBaseId": "%SRCROOT%"
+                                  },
+                                  "region": {
+                                      "startLine": max(1, frm.get("line", 1)),
+                                      "startColumn": max(1, frm.get("column", 1)),
+                                      "endLine": max(1, to.get("line", 1)),
+                                      "endColumn": max(1, to.get("column", 1))
+                                  }
+                              }
+                          }]
+                      })
+
+          sarif = {
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                  "tool": {
+                      "driver": {
+                          "name": "statix",
+                          "informationUri": "https://github.com/nerdypepper/statix",
+                          "rules": []
+                      }
+                  },
+                  "results": results
+              }]
+          }
+          with open("statix.sarif", "w") as f:
+              json.dump(sarif, f, indent=2)
+          print(f"SARIF: {len(results)} finding(s), {error_count} error(s)")
+
+          with open("statix_errors.txt", "w") as f:
+              f.write(str(error_count))
+          with open("statix_records.txt", "w") as f:
+              f.write(str(len(data)))
+          with open("statix_invalid.txt", "w") as f:
+              f.write(str(invalid_count))
+          PYEOF
+
+      - name: Upload SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          sarif_file: statix.sarif
+          category: statix
+
+      - name: Fail on statix errors
+        run: |
+          statix_exit=${STATIX_EXIT:-0}
+          records=$(cat statix_records.txt 2>/dev/null || echo "0")
+          invalid=$(cat statix_invalid.txt 2>/dev/null || echo "0")
+          if (( statix_exit == 1 && (records == 0 || invalid > 0) )); then
+            echo "statix produced no valid diagnostics; treating this as an infrastructure failure"
+            exit 1
+          fi
+          errors=$(cat statix_errors.txt 2>/dev/null || echo "0")
+          if [ "$errors" -gt 0 ]; then
+            echo "statix: $errors error(s) found"
+            exit 1
+          fi
+
+  nix-format:
+    name: Bootstrap / Nix / Format
+    needs: [changes, nix-lint]
+    if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache PSScriptAnalyzer
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/powershell/Modules/PSScriptAnalyzer
+          key: ${{ runner.os }}-pssa-nix-format-1.22.0
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default
+          }
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) {
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery
+          }
+
+      - name: Check formatting
+        run: nix fmt -- --fail-on-change
+
+  nix-test:
+    name: Bootstrap / Nix / Test
+    needs: [changes, nix-lint, nix-format]
+    if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' && needs.nix-format.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /opt/ghc \
+            /opt/hostedtoolcache
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Check flake evaluation
+        run: |
+          set -o pipefail
+          nix flake check --no-build 2>&1 | tee /tmp/nix-check.txt
+          if grep -q "evaluation warning" /tmp/nix-check.txt; then
+            echo "ERROR: evaluation warnings found"
+            exit 1
+          fi
+
+      - name: Build package sets
+        run: |
+          nix build .#minimal
+          nix build .#default
+          nix build .#full
+          nix build .#fonts
+
+      - name: Build NixOS WSL system
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link
+
+      - name: Install full profile and smoke test tools
+        run: |
+          set -euo pipefail
+          profile="$RUNNER_TEMP/dotfiles-full-profile"
+          nix profile install --profile "$profile" .#full
+          export PATH="$profile/bin:$PATH"
+
+          check() {
+            local name=$1; shift
+            local out
+            out=$("$name" "$@" 2>&1) || { echo "FAIL $name (exit $?)"; exit 1; }
+            echo "OK  $name: $out"
+          }
+
+          echo "=== Smoke testing installed full profile tools ==="
+          check chezmoi --version
+          check git --version
+          check gh --version
+          check fd --version
+          check rg --version
+          check bat --version
+          check jq --version
+          check eza --version
+          check zoxide --version
+          check fzf --version
+          check direnv --version
+          check unzip -v
+          check 7z
+          check node --version
+          check python --version
+          check go version
+          check make --version
+          check cmake --version
+          check ghq --version
+          check uv --version
+          check pnpm --version
+          check task --version
+          check devcontainer --version
+          check lazygit --version
+          check bats --version
+          check magick --version
+          check gs --version
+          check pdftoppm -v
+          check tmux -V
+          check starship --version
+          check wezterm --version
+          check op --version
+          check opencode --version
+          check claude --version
+          check codex --version
+          check gcloud version
+          check kind version
+          check kubectl version --client=true
+          check helm version --short
+          check kustomize version
+          check stern --version
+          check argocd version --client --short
+          check sops --version
+          check trivy --version
+          check dive --version
+          check nixd --version
+          check ruff --version
+          check yaml-language-server --version
+          check taplo --version
+          check bash-language-server --version
+          check lua-language-server --version
+          check stylua --version
+          check marksman --version
+          check gopls version
+          check rust-analyzer --version
+          echo "=== Installed full profile tools OK ==="
+
+  linux-build:
+    name: Bootstrap / Linux / Build
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /home/runner
+      DOTFILES_UID: "1000"
+      DOTFILES_GID: "1000"
+      DOTFILES_GROUP: runner
+      DOTFILES_SYSTEM: x86_64-linux
+      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/hardware-configuration.nix
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux declarative outputs
+        run: |
+          set -euo pipefail
+          nix build .#systemConfigs.ubuntu --impure --no-link
+          nix build .#systemConfigs.debian --impure --no-link
+          nix build .#nixosConfigurations.linux.config.system.build.toplevel --impure --no-link
+          nix build .#homeConfigurations.x86_64-linux.activationPackage --impure --no-link
+          nix build .#package-support-report --no-link
+
+  linux-ubuntu:
+    name: Bootstrap / Linux / E2E / Ubuntu
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: First one-command convergence
+        run: |
+          ./.github/e2e/run-bootstrap-acceptance.sh
+          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Second idempotent convergence
+        run: |
+          ./.github/e2e/run-bootstrap-acceptance.sh
+          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
+
+      - name: Write Ubuntu attestation
+        if: always()
+        run: |
+          . ./scripts/sh/install-common.sh
+          export DOTFILES_USER="$USER"
+          {
+            echo "sha=$TESTED_SHA"
+            echo "system_manager=$(readlink -f /run/system-manager/system 2>/dev/null || true)"
+            echo "docker=$(dotfiles_run_in_group docker docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+          } > ubuntu-attestation.txt
+
+      - name: Upload Ubuntu attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bootstrap-linux-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ubuntu-attestation.txt
+
+  linux-debian:
+    name: Bootstrap / Linux / E2E / Debian
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install systemd-nspawn prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes debootstrap systemd-container
+
+      - name: Run Debian bootstrap twice
+        env:
+          DEBIAN_ROOT: ${{ runner.temp }}/debian-root
+          MACHINE_NAME: dotfiles-debian-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          sudo debootstrap --variant=minbase bookworm "$DEBIAN_ROOT" https://deb.debian.org/debian
+          sudo systemd-nspawn -D "$DEBIAN_ROOT" /bin/bash -lc '
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install --yes ca-certificates curl git sudo xz-utils systemd systemd-sysv dbus
+            useradd --create-home --shell /bin/bash dotfiles
+            printf "dotfiles ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/dotfiles
+            chmod 0440 /etc/sudoers.d/dotfiles
+          '
+
+          {
+            sudo systemd-nspawn \
+              --directory="$DEBIAN_ROOT" \
+              --machine="$MACHINE_NAME" \
+              --boot \
+              --capability=all \
+              --bind="$GITHUB_WORKSPACE:/workspace"
+          } >debian-nspawn.log 2>&1 &
+          nspawn_pid=$!
+          cleanup() {
+            sudo machinectl terminate "$MACHINE_NAME" >/dev/null 2>&1 || true
+            wait "$nspawn_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 60); do
+            if [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value 2>/dev/null || true) == running ]]; then
+              break
+            fi
+            sleep 2
+          done
+          [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value) == running ]]
+          machine_ready=0
+          for _ in $(seq 1 60); do
+            if sudo machinectl shell --quiet "root@$MACHINE_NAME" /bin/bash -lc \
+              'systemctl is-system-running | grep -E "^(running|degraded)$"' \
+              >/dev/null 2>&1; then
+              machine_ready=1
+              break
+            fi
+            sleep 2
+          done
+          if ((machine_ready == 0)); then
+            tail -200 debian-nspawn.log
+            exit 1
+          fi
+
+          run_inside() {
+            sudo machinectl shell --quiet "dotfiles@$MACHINE_NAME" /bin/bash -lc "$1"
+          }
+
+          # The variables below must expand inside the Debian machine.
+          # shellcheck disable=SC2016
+          bootstrap='export DOTFILES_SKIP_FLAKE_UPDATE=1; cd /workspace; ./.github/e2e/run-bootstrap-acceptance.sh'
+          # shellcheck disable=SC2016
+          verify='export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
+          run_inside "$bootstrap"
+          run_inside "$verify"
+          run_inside "$bootstrap"
+          run_inside "$verify"
+
+          {
+            echo "sha=$TESTED_SHA"
+            # shellcheck disable=SC2016
+            run_inside 'echo system_manager=$(readlink -f /run/system-manager/system); echo docker=$(docker version --format "{{.Server.Version}}")'
+          } >debian-attestation.txt
+
+      - name: Upload Debian logs and attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bootstrap-linux-debian-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            debian-attestation.txt
+            debian-nspawn.log
+
+  linux-nixos:
+    name: Bootstrap / Linux / E2E / NixOS
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run idempotent NixOS VM test
+        run: nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --print-build-logs
+
+      - name: Write NixOS attestation
+        if: always()
+        run: printf 'sha=%s\ncheck=bootstrap-nixos-vm\n' "$TESTED_SHA" > nixos-attestation.txt
+
+      - name: Upload NixOS attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bootstrap-linux-nixos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nixos-attestation.txt
+
+  darwin:
+    name: Bootstrap / Darwin
+    needs: changes
+    if: ${{ needs.changes.outputs.darwin == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /Users/runner
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Bash, Bats, GNU coreutils, Lua, Task, and WezTerm
+        run: |
+          set -euo pipefail
+          brew install bash coreutils go-task lua
+          bats_version='1.13.0'
+          bats_root="$RUNNER_TEMP/bats-core-$bats_version"
+          bats_prefix="$RUNNER_TEMP/bats-prefix"
+          curl -fsSL "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP"
+          "$bats_root/install.sh" "$bats_prefix"
+          echo "$bats_prefix/bin" >>"$GITHUB_PATH"
+          "$bats_prefix/bin/bats" --version
+          bash scripts/sh/install-wezterm-nightly.sh
+          command -v lua
+          command -v luac
+          command -v wezterm
+          {
+            echo "$(brew --prefix bash)/bin"
+            echo "$(brew --prefix coreutils)/libexec/gnubin"
+          } >> "$GITHUB_PATH"
+
+      - name: Run POSIX and Hammerspoon adapter contracts
+        run: |
+          set -euo pipefail
+          env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
+          bats tests/wezterm
+          luac -p chezmoi/terminals/hammerspoon/init.lua
+          lua tests/lua/hammerspoon_terminal_prefix_test.lua
+
+      - name: Build macOS declarative output
+        run: nix build .#darwinConfigurations.macos.system --impure --no-link
+
+      - name: Verify provider coverage
+        run: nix build .#package-support-report --no-link
+
+      - name: Write macOS contract attestation
+        if: always()
+        run: |
+          {
+            echo "sha=$TESTED_SHA"
+            echo "runner_image=$ImageOS-$ImageVersion"
+            echo "layer=darwin-bootstrap"
+            echo "runtime=not-applicable-on-github-hosted-runner"
+          } > darwin-contract-attestation.txt
+
+      - name: Upload Darwin contract results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bootstrap-darwin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: darwin-contract-attestation.txt
+
+  wsl:
+    name: Bootstrap / WSL
+    needs: changes
+    if: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Prepare WSL2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $env:WSL_UTF8 = "1"
+          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+            winget install --id Microsoft.WSL --exact --accept-source-agreements --accept-package-agreements --silent
+          }
+
+          wsl --version
+          wsl --set-default-version 2
+          wsl --status
+
+      - name: Run isolated NixOS-WSL switch
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WSLENV: GITHUB_TOKEN/u
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $refName = $env:HEAD_REF
+          if ([string]::IsNullOrWhiteSpace($refName)) {
+            $refName = $env:REF_NAME
+          }
+          $safeRef = $refName -replace "[^A-Za-z0-9_.-]", "-"
+          if ([string]::IsNullOrWhiteSpace($safeRef)) {
+            $safeRef = "ref"
+          }
+          if ($safeRef.Length -gt 48) {
+            $safeRef = $safeRef.Substring(0, 48).TrimEnd("-", ".", "_")
+          }
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $refHashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($refName))
+          }
+          finally {
+            $sha256.Dispose()
+          }
+          $refHash = (-join ($refHashBytes | ForEach-Object { $_.ToString("x2") })).Substring(0, 8)
+          $distroName = "NixOS-CI-$safeRef-$refHash"
+          $installDir = Join-Path $env:RUNNER_TEMP $distroName
+
+          pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+            -File scripts/powershell/ci/Invoke-NixosWslE2E.ps1 `
+            -DistroName $distroName `
+            -InstallDir $installDir
+
+  windows:
+    name: Bootstrap / Windows
+    needs: changes
+    if: ${{ needs.changes.outputs.windows == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install chezmoi
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
+          }
+          $chezmoiDirectory = Split-Path -Parent (Get-Command chezmoi -ErrorAction Stop).Source
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $chezmoiDirectory -Encoding utf8
+
+      - name: Install and validate AutoHotkey v2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) {
+            throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
+          }
+          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
+          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
+            throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
+          }
+          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
+            throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
+          }
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
+          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
+          }
+          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
+          if ($LASTEXITCODE -ne 0) {
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
+          }
+
+      - name: Install pinned Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Windows bootstrap contracts
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit.xml
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows bootstrap contracts failed: $LASTEXITCODE"
+          }
+
+      - name: Write Windows contract attestation
+        if: always()
+        shell: pwsh
+        run: |
+          @(
+            "sha=$env:TESTED_SHA"
+            "runner_image=$env:ImageOS-$env:ImageVersion"
+            "layer=windows-bootstrap"
+            "runtime=not-applicable-on-github-hosted-runner"
+          ) | Set-Content -LiteralPath windows-contract-attestation.txt -Encoding utf8
+
+      - name: Upload Windows contract results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bootstrap-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            windows-contract-attestation.txt
+            windows-contract-junit.xml
+          if-no-files-found: warn
+
+  windows-installer:
+    name: Bootstrap / Windows / Installer
+    needs: changes
+    if: ${{ needs.changes.outputs.windows == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Bootstrap winget
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          # Ensure winget is available on the runner
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
+            $ErrorActionPreference = 'Continue'
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
+            $ErrorActionPreference = 'Stop'
+            Install-Module -Name Microsoft.WinGet.Client -RequiredVersion '1.29.280' -Scope CurrentUser -Force -Repository PSGallery
+            Repair-WinGetPackageManager
+          }
+          function Invoke-WingetSourceUpdate {
+            param([int]$Attempts = 3)
+
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+              Write-Host "winget source update attempt $attempt/$Attempts"
+              $ErrorActionPreference = 'Continue'
+              $sourceOutput = winget source update 2>&1 | ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+              $sourceUpdateExit = $LASTEXITCODE
+              $ErrorActionPreference = 'Stop'
+
+              $sourceText = $sourceOutput -join [Environment]::NewLine
+              if ($sourceUpdateExit -eq 0 -and $sourceText -notmatch '(?im)\bCancelled\b') {
+                return
+              }
+
+              Write-Warning "winget source update did not complete cleanly (exit=$sourceUpdateExit). Retrying after source reset."
+              $ErrorActionPreference = 'Continue'
+              winget source reset --force
+              $ErrorActionPreference = 'Stop'
+              Start-Sleep -Seconds 5
+            }
+
+            throw "winget source update did not complete after $Attempts attempts"
+          }
+
+          # Validate winget sources before proceeding. A textual "Cancelled"
+          # with exit 0 still leaves later winget install calls unable to resolve
+          # packages, so detect it explicitly.
+          Invoke-WingetSourceUpdate
+          winget --version
+          winget source list
+
+      - name: Run install.cmd strict user phase
+        shell: pwsh
+        timeout-minutes: 70
+        env:
+          DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS: "180"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          Push-Location $env:GITHUB_WORKSPACE
+          try {
+            $ErrorActionPreference = 'Continue'
+            $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly 2>&1 |
+              ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+            $exitCode = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+          }
+          finally {
+            Pop-Location
+          }
+
+          $out = $output -join [Environment]::NewLine
+
+          if ($exitCode -ne 0) {
+            throw "install.cmd strict user phase failed with exit code $exitCode"
+          }
+          if ($out -notmatch 'User Phase Complete!') {
+            throw 'install.cmd did not reach the user phase completion marker'
+          }
+
+  complete:
+    name: Bootstrap / Complete
+    if: ${{ always() }}
+    needs:
+      [
+        changes,
+        nix-lint,
+        nix-format,
+        nix-test,
+        linux-build,
+        linux-ubuntu,
+        linux-debian,
+        linux-nixos,
+        darwin,
+        wsl,
+        windows,
+        windows-installer,
+      ]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      PLATFORM_REQUIRED: ${{ needs.changes.outputs.platforms }}
+      LINUX_REQUIRED: ${{ needs.changes.outputs.linux }}
+      DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin }}
+      WSL_REQUIRED: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows }}
+      NIX_REQUIRED: ${{ needs.changes.outputs.nix }}
+      LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
+      LINUX_UBUNTU_RESULT: ${{ needs.linux-ubuntu.result }}
+      LINUX_DEBIAN_RESULT: ${{ needs.linux-debian.result }}
+      LINUX_NIXOS_RESULT: ${{ needs.linux-nixos.result }}
+      DARWIN_RESULT: ${{ needs.darwin.result }}
+      WSL_RESULT: ${{ needs.wsl.result }}
+      WINDOWS_RESULT: ${{ needs.windows.result }}
+      NIX_LINT_RESULT: ${{ needs.nix-lint.result }}
+      NIX_FORMAT_RESULT: ${{ needs.nix-format.result }}
+      NIX_TEST_RESULT: ${{ needs.nix-test.result }}
+      WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
+    steps:
+      - name: Verify routed job results
+        run: |
+          set -euo pipefail
+
+          if [[ "${CHANGES_RESULT}" != "success" ]]; then
+            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
+            exit 1
+          fi
+
+          if [[ "${PLATFORM_REQUIRED}" != "true" ]]; then
+            echo "Bootstrap CI selected no platform job; refusing a green result."
+            exit 1
+          fi
+
+          check_platform() {
+            local name="$1"
+            local required="$2"
+            local result="$3"
+
+            if [[ "${required}" == "true" && "${result}" != "success" ]]; then
+              echo "Required Bootstrap platform job ${name} did not succeed: ${result}"
+              return 1
+            fi
+            if [[ "${required}" != "true" && "${result}" != "skipped" ]]; then
+              echo "Unselected Bootstrap platform job ${name} ran unexpectedly: ${result}"
+              return 1
+            fi
+          }
+
+          check_required_job() {
+            local name="$1"
+            local required="$2"
+            local result="$3"
+
+            if [[ "${required}" == "true" && "${result}" != "success" ]]; then
+              echo "Required Bootstrap job ${name} did not succeed: ${result}"
+              return 1
+            fi
+            if [[ "${required}" != "true" && "${result}" != "skipped" ]]; then
+              echo "Unselected Bootstrap job ${name} ran unexpectedly: ${result}"
+              return 1
+            fi
+          }
+
+          check_required_job "Nix / Lint" "${NIX_REQUIRED}" "${NIX_LINT_RESULT}"
+          check_required_job "Nix / Format" "${NIX_REQUIRED}" "${NIX_FORMAT_RESULT}"
+          check_required_job "Nix / Test" "${NIX_REQUIRED}" "${NIX_TEST_RESULT}"
+          check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
+
+          check_platform "Linux / Build" "${LINUX_REQUIRED}" "${LINUX_BUILD_RESULT}"
+          check_platform "Linux / E2E / Ubuntu" "${LINUX_REQUIRED}" "${LINUX_UBUNTU_RESULT}"
+          check_platform "Linux / E2E / Debian" "${LINUX_REQUIRED}" "${LINUX_DEBIAN_RESULT}"
+          check_platform "Linux / E2E / NixOS" "${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"
+          check_platform "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
+          check_platform "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
+          check_platform "Windows" "${WINDOWS_REQUIRED}" "${WINDOWS_RESULT}"
+
+          echo "All required bootstrap platform jobs completed successfully."

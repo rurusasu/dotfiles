@@ -12,10 +12,6 @@ WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
 WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
-BOOTSTRAP_BUILD_WORKFLOW = "ci-bootstrap-build.yml"
-HOSTED_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-hosted.yml"
-LINUX_BOOTSTRAP_E2E_WORKFLOW = "ci-bootstrap-e2e-linux.yml"
-NIXOS_WSL_E2E_WORKFLOW = "ci-nixos-wsl.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
@@ -52,84 +48,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertEqual(normalized_workflow.count("tests/chezmoi"), 1)
         self.assertEqual(normalized_lint.count("tests/chezmoi"), 1)
 
-    def _bootstrap_build_complete_script(self, workflow: str) -> str:
-        complete_job = re.search(
-            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(complete_job, "missing complete job")
-        complete = complete_job.group("job") if complete_job is not None else ""
-        step = re.search(
-            r"(?ms)^      - name: Verify routed job results\n"
-            r"        run: \|\n(?P<script>.*?"
-            r'^          echo "All required bootstrap outputs built successfully\."\n)',
-            complete,
-        )
-        self.assertIsNotNone(step, "missing complete-job result verification step")
-        return step.group("script") if step is not None else ""
-
-    def _assert_bootstrap_build_failure_guards(self, complete_script: str) -> None:
-        self.assertRegex(
-            complete_script,
-            r'(?m)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
-            r'^[ \t]+echo "CI change detection did not complete successfully: '
-            r'\$\{CHANGES_RESULT\}"\n'
-            r'^[ \t]+exit 1\n'
-            r'^[ \t]+fi$',
-        )
-        self.assertRegex(
-            complete_script,
-            r'(?m)^[ \t]+for result in "\$\{LINUX_RESULT\}" "\$\{DARWIN_RESULT\}"; do\n'
-            r'^[ \t]+case "\$\{result\}" in\n'
-            r'^[ \t]+success\|skipped\) ;;\n'
-            r'^[ \t]+\*\)\n'
-            r'^[ \t]+echo "Bootstrap platform job did not complete successfully: '
-            r'\$\{result\}"\n'
-            r'^[ \t]+exit 1\n'
-            r'^[ \t]+;;\n'
-            r'^[ \t]+esac\n'
-            r'^[ \t]+done$',
-        )
-
-    def _hosted_bootstrap_e2e_complete_script(self, workflow: str) -> str:
-        complete_job = re.search(
-            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(complete_job, "missing hosted complete job")
-        complete = complete_job.group("job") if complete_job is not None else ""
-        step = re.search(
-            r"(?ms)^      - name: Verify routed job results\n"
-            r"(?:        env:\n.*?^        run: \|\n)(?P<script>.*?"
-            r'^          echo "All required hosted bootstrap contracts completed successfully\."\n)',
-            complete,
-        )
-        self.assertIsNotNone(step, "missing hosted complete-job result verification step")
-        return step.group("script") if step is not None else ""
-
-    def _assert_hosted_bootstrap_e2e_failure_guards(self, complete_script: str) -> None:
-        self.assertRegex(
-            complete_script,
-            r'(?m)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
-            r'^[ \t]+echo "CI change detection did not complete successfully: '
-            r'\$\{CHANGES_RESULT\}"\n'
-            r'^[ \t]+exit 1\n'
-            r'^[ \t]+fi$',
-        )
-        self.assertRegex(
-            complete_script,
-            r'(?m)^[ \t]+for result in "\$\{WINDOWS_RESULT\}" "\$\{MACOS_RESULT\}"; do\n'
-            r'^[ \t]+case "\$\{result\}" in\n'
-            r'^[ \t]+success\|skipped\) ;;\n'
-            r'^[ \t]+\*\)\n'
-            r'^[ \t]+echo "Hosted bootstrap platform job did not complete successfully: '
-            r'\$\{result\}"\n'
-            r'^[ \t]+exit 1\n'
-            r'^[ \t]+;;\n'
-            r'^[ \t]+esac\n'
-            r'^[ \t]+done$',
-        )
-
     def _trigger_paths(self, workflow: str, event: str) -> str:
         match = re.search(
             rf"(?ms)^  {re.escape(event)}:\n"
@@ -158,6 +76,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         push_section = push_match.group("section") if push_match is not None else ""
         for path in (
             "ci/path-routing.json",
+            "ci/bootstrap-path-routing.json",
             "scripts/python/detect_ci_changes.py",
             ".github/actions/detect-ci-changes/**",
             ".github/workflows/**",
@@ -165,6 +84,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "tests/python/**",
         ):
             self.assertIn(path, push_section)
+
+    def test_change_detector_action_accepts_a_manifest_path(self) -> None:
+        action_path = REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
+        action = action_path.read_text(encoding="utf-8")
+
+        self.assertIn("  manifest:\n", action)
+        self.assertIn("default: ci/path-routing.json", action)
+        self.assertIn('--manifest "${MANIFEST_PATH}"', action)
 
     def test_pins_checkout_python_and_nix_setup(self) -> None:
         workflow = self._workflow()
@@ -218,20 +145,49 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIn("python -m unittest discover -s tests/python -v", workflow)
 
-    def test_nix_ci_watches_only_nix_embedded_shell_scripts(self) -> None:
-        workflow = self._named_workflow("ci-nix.yml")
-        required_scripts = (
-            "scripts/sh/dcnvim.sh",
-            "scripts/sh/install-wezterm-nightly.sh",
-            "scripts/sh/uninstall-arc-browser.sh",
-        )
+    def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        for event in ("push", "pull_request"):
+            paths = self._trigger_paths(workflow, event)
+            self.assertIn('"scripts/sh/**"', paths)
+            self.assertIn('".github/e2e/**"', paths)
+
+    def test_bootstrap_workflow_integrates_nix_and_winget_validation(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("nix: ${{ steps.detect.outputs.nix }}", changes)
+
+        for job_name, output in (
+            ("nix-lint", "nix"),
+            ("nix-format", "nix"),
+            ("nix-test", "nix"),
+            ("windows-installer", "windows"),
+        ):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        self.assertIn("Bootstrap / Nix / Lint", workflow)
+        self.assertIn("Bootstrap / Nix / Format", workflow)
+        self.assertIn("Bootstrap / Nix / Test", workflow)
+        self.assertIn("Bootstrap / Windows / Installer", workflow)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("NIX_REQUIRED", complete)
+        self.assertIn("WINDOWS_INSTALLER_RESULT", complete)
+        self.assertIn("nix-lint", complete)
+        self.assertIn("nix-format", complete)
+        self.assertIn("nix-test", complete)
+        self.assertIn("windows-installer", complete)
+        self.assertIn("check_required_job", complete)
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
-            for script in required_scripts:
-                self.assertIn(script, paths)
-            self.assertNotIn("scripts/sh/**", paths)
-            self.assertNotIn("tests/bash/**", paths)
+            self.assertIn('"scripts/powershell/handlers/**"', paths)
+
+    def test_legacy_nix_and_winget_workflows_are_removed(self) -> None:
+        for name in ("ci-nix.yml", "ci-winget.yml"):
+            self.assertFalse((WORKFLOWS_DIRECTORY / name).exists(), name)
 
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")
@@ -294,279 +250,75 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             task,
         )
 
-    def test_bootstrap_build_routes_platform_jobs_and_propagates_failures(self) -> None:
-        """Catch missing platform gates or a complete job that masks detector failures."""
-        workflow = self._named_workflow(BOOTSTRAP_BUILD_WORKFLOW)
+    def test_unified_bootstrap_workflow_routes_all_platforms(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        self.assertIn("name: Bootstrap CI", workflow)
+        self.assertIn("manifest: ci/bootstrap-path-routing.json", workflow)
+        for output in ("linux", "darwin", "wsl", "windows"):
+            self.assertRegex(
+                workflow,
+                rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
+            )
+
+        for marker in (
+            "Bootstrap / Linux / Build",
+            "Bootstrap / Linux / E2E / Ubuntu",
+            "Bootstrap / Linux / E2E / Debian",
+            "Bootstrap / Linux / E2E / NixOS",
+            "Bootstrap / Darwin",
+            "Bootstrap / WSL",
+            "Bootstrap / Windows",
+            "Bootstrap / Complete",
+        ):
+            self.assertIn(marker, workflow)
+
+        for job_name, output in (
+            ("linux-build", "linux"),
+            ("linux-ubuntu", "linux"),
+            ("linux-debian", "linux"),
+            ("linux-nixos", "linux"),
+            ("darwin", "darwin"),
+            ("wsl", "wsl"),
+            ("windows", "windows"),
+        ):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("needs: changes", job)
+            self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("if: ${{ always() }}", complete)
+        self.assertNotIn("success|skipped", complete)
+
+    def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
-            for routing_path in (
-                "ci/path-routing.json",
-                "scripts/python/detect_ci_changes.py",
-                "tests/python/test_detect_ci_changes.py",
-                ".github/actions/detect-ci-changes/**",
-                ".github/workflows/ci-contract.yml",
-                ".github/workflows/ci-bootstrap-build.yml",
-            ):
-                self.assertIn(routing_path, paths)
+            self.assertIn('      - "Taskfile.yml"', paths)
+            self.assertIn('      - "taskfiles/**"', paths)
 
-        changes_job = re.search(
-            r"(?ms)^  changes:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(changes_job, "missing changes job")
-        changes = changes_job.group("job") if changes_job is not None else ""
-        self.assertRegex(changes, r"(?m)^\s+linux: \$\{\{ steps\.detect\.outputs\.linux \}\}$")
-        self.assertRegex(changes, r"(?m)^\s+darwin: \$\{\{ steps\.detect\.outputs\.darwin \}\}$")
-        self.assertIn(CHECKOUT_ACTION, changes)
-        self.assertRegex(changes, r"(?m)^\s+fetch-depth: 0$")
-        self.assertIn("uses: ./.github/actions/detect-ci-changes", changes)
-        self.assertIn(
-            "github.event_name == 'pull_request' && github.event.pull_request.base.sha",
-            changes,
-        )
-        self.assertIn("github.event.before", changes)
-        self.assertIn(
-            "github.event_name == 'pull_request' && github.event.pull_request.head.sha",
-            changes,
-        )
-        self.assertIn("github.sha", changes)
-        self.assertIn("run-all: ${{ github.event_name == 'workflow_dispatch' }}", changes)
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("platforms:", changes)
 
-        for job_name, output in (("linux", "linux"), ("darwin", "darwin")):
-            job = re.search(
-                rf"(?ms)^  {job_name}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-                workflow,
-            )
-            self.assertIsNotNone(job, f"missing {job_name} job")
-            job_body = job.group("job") if job is not None else ""
-            self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
-            self.assertIn(
-                f"needs.changes.outputs.{output} == 'true'",
-                job_body,
-            )
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("PLATFORM_REQUIRED", complete)
+        self.assertIn("LINUX_REQUIRED", complete)
+        self.assertIn("WSL_REQUIRED", complete)
+        self.assertIn("check_platform", complete)
+        self.assertNotIn("success|skipped", complete)
 
-        complete_job = re.search(
-            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(complete_job, "missing complete job")
-        complete = complete_job.group("job") if complete_job is not None else ""
-        self.assertRegex(complete, r"(?m)^\s+if: \$\{\{ always\(\) \}\}$")
-        self.assertRegex(complete, r"(?m)^\s+needs: \[changes, linux, darwin\]$")
-        for result in ("changes", "linux", "darwin"):
-            self.assertIn(f"needs.{result}.result", complete)
-
-        complete_script = self._bootstrap_build_complete_script(workflow)
-        self._assert_bootstrap_build_failure_guards(complete_script)
-
-        changes_guard = re.search(
-            r'(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
-            r'.*?^[ \t]+fi$',
-            complete_script,
-        )
-        self.assertIsNotNone(changes_guard, "missing changes failure guard")
-        without_changes_guard = complete_script.replace(
-            changes_guard.group(0) if changes_guard is not None else "",
-            "",
-            1,
-        )
-        with self.assertRaises(AssertionError):
-            self._assert_bootstrap_build_failure_guards(without_changes_guard)
-
-        platform_default = re.search(
-            r'(?ms)^[ \t]+\*\)\n.*?^[ \t]+;;$',
-            complete_script,
-        )
-        self.assertIsNotNone(platform_default, "missing platform default failure branch")
-        without_platform_default = complete_script.replace(
-            platform_default.group(0) if platform_default is not None else "",
-            "",
-            1,
-        )
-        with self.assertRaises(AssertionError):
-            self._assert_bootstrap_build_failure_guards(without_platform_default)
-
-    def test_hosted_bootstrap_e2e_routes_platform_jobs_and_propagates_failures(self) -> None:
-        """Catch missing hosted platform gates or a complete job that masks failures."""
-        workflow = self._named_workflow(HOSTED_BOOTSTRAP_E2E_WORKFLOW)
-
-        self.assertRegex(
-            workflow,
-            r"(?ms)^  pull_request:\n    branches: \[main\]\n(?!    paths:)",
-        )
-        self.assertRegex(workflow, r"(?m)^  workflow_dispatch:\s*$")
-        self.assertIn(
-            "protected-bootstrap-${{ github.event.pull_request.number || github.ref }}",
-            workflow,
-        )
-        self.assertIn(
-            "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
-            "github.event.pull_request.head.sha || github.sha }}",
-            workflow,
-        )
-
-        changes_job = re.search(
-            r"(?ms)^  changes:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(changes_job, "missing hosted changes job")
-        changes = changes_job.group("job") if changes_job is not None else ""
-        for output in ("windows", "darwin"):
-            self.assertRegex(
-                changes,
-                rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
-            )
-        self.assertIn(CHECKOUT_ACTION, changes)
-        self.assertRegex(changes, r"(?m)^\s+fetch-depth: 0$")
-        self.assertIn("uses: ./.github/actions/detect-ci-changes", changes)
-        self.assertIn(
-            "github.event_name == 'pull_request' && github.event.pull_request.base.sha",
-            changes,
-        )
-        self.assertIn("github.event.before", changes)
-        self.assertIn(
-            "github.event_name == 'pull_request' && github.event.pull_request.head.sha",
-            changes,
-        )
-        self.assertIn("github.sha", changes)
-        self.assertIn("run-all: ${{ github.event_name == 'workflow_dispatch' }}", changes)
-
-        for job_name, output in (("windows", "windows"), ("macos", "darwin")):
-            job = re.search(
-                rf"(?ms)^  {job_name}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-                workflow,
-            )
-            self.assertIsNotNone(job, f"missing {job_name} job")
-            job_body = job.group("job") if job is not None else ""
-            self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
-            self.assertIn(
-                f"needs.changes.outputs.{output} == 'true'",
-                job_body,
-            )
-            self.assertIn("ref: ${{ env.TESTED_SHA }}", job_body)
-
-        complete_job = re.search(
-            r"(?ms)^  complete:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(complete_job, "missing hosted complete job")
-        complete = complete_job.group("job") if complete_job is not None else ""
-        self.assertRegex(complete, r"(?m)^\s+name: Protected Bootstrap E2E$")
-        self.assertRegex(complete, r"(?m)^\s+if: \$\{{ always\(\) \}\}$")
-        self.assertRegex(complete, r"(?m)^\s+needs: \[changes, windows, macos\]$")
-        for result in ("changes", "windows", "macos"):
-            self.assertIn(f"needs.{result}.result", complete)
-
-        complete_script = self._hosted_bootstrap_e2e_complete_script(workflow)
-        self._assert_hosted_bootstrap_e2e_failure_guards(complete_script)
-
-        changes_guard = re.search(
-            r'(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\n'
-            r'.*?^[ \t]+fi$',
-            complete_script,
-        )
-        self.assertIsNotNone(changes_guard, "missing hosted changes failure guard")
-        without_changes_guard = complete_script.replace(
-            changes_guard.group(0) if changes_guard is not None else "",
-            "",
-            1,
-        )
-        with self.assertRaises(AssertionError):
-            self._assert_hosted_bootstrap_e2e_failure_guards(without_changes_guard)
-
-        platform_default = re.search(
-            r'(?ms)^[ \t]+\*\)\n.*?^[ \t]+;;$',
-            complete_script,
-        )
-        self.assertIsNotNone(platform_default, "missing hosted platform default failure branch")
-        without_platform_default = complete_script.replace(
-            platform_default.group(0) if platform_default is not None else "",
-            "",
-            1,
-        )
-        with self.assertRaises(AssertionError):
-            self._assert_hosted_bootstrap_e2e_failure_guards(without_platform_default)
-
-    def test_linux_and_wsl_e2e_route_platform_jobs_without_weakening_fork_protection(
-        self,
-    ) -> None:
-        """Catch missing Linux/WSL gates or a WSL condition that bypasses fork protection."""
-        routing_paths = (
-            "ci/path-routing.json",
-            "scripts/python/detect_ci_changes.py",
-            "tests/python/test_detect_ci_changes.py",
-            ".github/actions/detect-ci-changes/**",
-            ".github/workflows/ci-contract.yml",
-        )
-
-        linux_workflow = self._named_workflow(LINUX_BOOTSTRAP_E2E_WORKFLOW)
-        wsl_workflow = self._named_workflow(NIXOS_WSL_E2E_WORKFLOW)
-
-        for workflow, workflow_path in (
-            (linux_workflow, LINUX_BOOTSTRAP_E2E_WORKFLOW),
-            (wsl_workflow, NIXOS_WSL_E2E_WORKFLOW),
+        for job_name in (
+            "linux-build",
+            "linux-ubuntu",
+            "linux-debian",
+            "linux-nixos",
+            "darwin",
+            "wsl",
+            "windows",
         ):
-            for event in ("push", "pull_request"):
-                paths = self._trigger_paths(workflow, event)
-                for routing_path in (*routing_paths, f".github/workflows/{workflow_path}"):
-                    self.assertIn(routing_path, paths)
-
-            changes_job = re.search(
-                r"(?ms)^  changes:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-                workflow,
-            )
-            self.assertIsNotNone(changes_job, f"missing changes job in {workflow_path}")
-            changes = changes_job.group("job") if changes_job is not None else ""
-            self.assertIn(CHECKOUT_ACTION, changes)
-            self.assertRegex(changes, r"(?m)^\s+fetch-depth: 0$")
-            self.assertIn("uses: ./.github/actions/detect-ci-changes", changes)
-            self.assertIn(
-                "github.event_name == 'pull_request' && github.event.pull_request.base.sha",
-                changes,
-            )
-            self.assertIn("github.event.before", changes)
-            self.assertIn(
-                "github.event_name == 'pull_request' && github.event.pull_request.head.sha",
-                changes,
-            )
-            self.assertIn("github.sha", changes)
-            self.assertIn("run-all: ${{ github.event_name == 'workflow_dispatch' }}", changes)
-
-        for job_name in ("ubuntu", "debian", "nixos"):
-            job = re.search(
-                rf"(?ms)^  {job_name}:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-                linux_workflow,
-            )
-            self.assertIsNotNone(job, f"missing {job_name} job")
-            job_body = job.group("job") if job is not None else ""
-            self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
-            self.assertIn("needs.changes.outputs.linux == 'true'", job_body)
-
-        for event in ("push", "pull_request"):
-            activation_paths = self._trigger_paths(linux_workflow, event)
-            self.assertIn("install.sh", activation_paths)
-            self.assertIn("scripts/sh/**", activation_paths)
-            self.assertIn(".github/e2e/**", activation_paths)
-
-        switch = re.search(
-            r"(?ms)^  switch:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
-            wsl_workflow,
-        )
-        self.assertIsNotNone(switch, "missing WSL switch job")
-        switch_body = switch.group("job") if switch is not None else ""
-        self.assertRegex(switch_body, r"(?m)^\s+needs: changes$")
-        self.assertRegex(
-            switch_body,
-            r"(?m)^\s+if: \$\{\{ needs\.changes\.outputs\.wsl == 'true' && "
-            r"\(github\.event_name != 'pull_request' \|\| "
-            r"github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$",
-        )
-        self.assertIn("HEAD_REF: ${{ github.head_ref }}", switch_body)
-        self.assertIn("REF_NAME: ${{ github.ref_name }}", switch_body)
-        self.assertIn("$refName = $env:HEAD_REF", switch_body)
-        self.assertIn("$refName = $env:REF_NAME", switch_body)
-        self.assertNotIn('$refName = "${{ github.head_ref }}"', switch_body)
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("ref: ${{ env.TESTED_SHA }}", job)
 
     def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
         self,

@@ -16,7 +16,7 @@ ACTION_PATH = REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "a
 DETECTOR_PATH = REPOSITORY_ROOT / "scripts" / "python" / "detect_ci_changes.py"
 MANIFEST_PATH = REPOSITORY_ROOT / "ci" / "path-routing.json"
 SETUP_PYTHON = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
-INPUTS = {"base-sha", "head-sha", "run-all"}
+INPUTS = {"base-sha", "head-sha", "run-all", "manifest"}
 OUTPUTS = {
     "linux",
     "darwin",

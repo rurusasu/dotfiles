@@ -1,42 +1,6 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-    function Assert-BootstrapBuildCompleteFailureGuard {
-        param(
-            [Parameter(Mandatory)]
-            [string]$CompleteScript
-        )
-
-        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
-        $platformDefault = '(?ms)^[ \t]+for result in "\$\{LINUX_RESULT\}" "\$\{DARWIN_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
-
-        if ($CompleteScript -notmatch $changesGuard) {
-            throw 'Bootstrap Build complete job must exit 1 when change detection is not successful.'
-        }
-
-        if ($CompleteScript -notmatch $platformDefault) {
-            throw 'Bootstrap Build complete job must exit 1 for every non-success-or-skipped platform result.'
-        }
-    }
-
-    function Assert-ProtectedBootstrapE2ECompleteFailureGuard {
-        param(
-            [Parameter(Mandatory)]
-            [string]$CompleteScript
-        )
-
-        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
-        $platformDefault = '(?ms)^[ \t]+for result in "\$\{WINDOWS_RESULT\}" "\$\{MACOS_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Hosted bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
-
-        if ($CompleteScript -notmatch $changesGuard) {
-            throw 'Protected Bootstrap E2E complete job must exit 1 when change detection is not successful.'
-        }
-
-        if ($CompleteScript -notmatch $platformDefault) {
-            throw 'Protected Bootstrap E2E complete job must exit 1 for every non-success-or-skipped platform result.'
-        }
-    }
-
     function Assert-UniqueChezmoiPathOccurrence {
         param(
             [Parameter(Mandatory)]
@@ -61,7 +25,7 @@ BeforeAll {
 
 Describe 'CI workflow configuration' {
     It 'should install pinned PSScriptAnalyzer before nix fmt runs treefmt powershell formatter' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $workflow | Should -Match 'name:\s+Install PSScriptAnalyzer'
         $workflow | Should -Match 'RequiredVersion 1\.22\.0'
@@ -106,7 +70,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {
-        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-winget.yml") -Raw
+        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $wingetWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd'
         $wingetWorkflow | Should -Match 'install\.cmd'
@@ -118,20 +82,20 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {
-        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $nixWorkflow | Should -Match 'Build NixOS WSL system'
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
     It 'should build the font package set on hosted Nix CI' {
-        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $nixWorkflow | Should -Match 'nix build \.#fonts'
     }
 
     It 'should free hosted runner disk space before Nix package builds' {
-        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $nixWorkflow | Should -Match 'Free runner disk space'
         $nixWorkflow | Should -Match '/usr/share/dotnet'
@@ -153,7 +117,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nixos-wsl.yml"
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml"
         $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $script = Get-Content -LiteralPath $scriptPath -Raw
@@ -219,12 +183,20 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should retry winget source update when the runner reports Cancelled' {
-        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-winget.yml") -Raw
+        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $wingetWorkflow | Should -Match 'function Invoke-WingetSourceUpdate'
         $wingetWorkflow | Should -Match '\bCancelled\b'
         $wingetWorkflow | Should -Match 'winget source reset --force'
         $wingetWorkflow | Should -Match 'throw "winget source update did not complete after \$Attempts attempts"'
+    }
+
+    It 'should pin the WinGet fallback module and avoid an AllUsers repair' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+
+        $workflow | Should -Match "Install-Module -Name Microsoft\.WinGet\.Client -RequiredVersion '1\.29\.280' -Scope CurrentUser -Force -Repository PSGallery"
+        $workflow | Should -Match 'Repair-WinGetPackageManager'
+        $workflow | Should -Not -Match 'Repair-WinGetPackageManager -AllUsers'
     }
 
     It 'should verify generated npm package catalog consistency' {
@@ -314,288 +286,62 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match 'retrying in \$\{sleep_seconds\}s'
     }
 
-    It 'should build every declarative bootstrap output on hosted runners' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-build.yml"
-        $workflowPath | Should -Exist
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+    It 'should preserve the Linux bootstrap acceptance coverage in the unified workflow' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
 
-        $workflow | Should -Match 'name:\s+Bootstrap Build'
-        $workflow | Should -Match 'timeout-minutes:'
-        $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
-        $workflow | Should -Match 'cachix/install-nix-action@[0-9a-f]{40}'
-        $workflow | Should -Match 'darwinConfigurations\.macos\.system'
-        $workflow | Should -Match 'systemConfigs\.ubuntu'
-        $workflow | Should -Match 'systemConfigs\.debian'
-        $workflow | Should -Match 'nixosConfigurations\.linux\.config\.system\.build\.toplevel'
-        $workflow | Should -Match 'homeConfigurations\.x86_64-linux\.activationPackage'
-        $workflow | Should -Match 'package-support-report'
+        $workflow | Should -Match 'Bootstrap / Linux / E2E / Ubuntu'
+        $workflow | Should -Match 'Bootstrap / Linux / E2E / Debian'
+        $workflow | Should -Match 'Bootstrap / Linux / E2E / NixOS'
+        $workflow | Should -Match 'systemd-nspawn'
+        $workflow | Should -Match '(?s)for _ in \$\(seq 1 60\).*machinectl shell.*systemctl is-system-running'
+        $workflow | Should -Match 'dotfiles_run_in_group docker.*verify-environment\.sh --runtime'
+        $workflow | Should -Match 'bootstrap-nixos-vm'
+        $workflow | Should -Match '\./\.github/e2e/run-bootstrap-acceptance\.sh'
+        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
     }
 
-    It 'should route Bootstrap Build jobs through CI change detection without masking failures' {
-        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-build.yml'
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+    It 'should preserve WSL fork protection and NixOS E2E coverage in the unified workflow' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/bootstrap-nixos.nix') -Raw
 
-        foreach ($routingPath in @(
-                'ci/path-routing.json',
-                'scripts/python/detect_ci_changes.py',
-                'tests/python/test_detect_ci_changes.py',
-                '.github/actions/detect-ci-changes/**',
-                '.github/workflows/ci-contract.yml',
-                '.github/workflows/ci-bootstrap-build.yml'
-            )) {
-            ([regex]::Matches($workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
-        }
-
-        $changesJob = [regex]::Match(
+        $wslJob = [regex]::Match(
             $workflow,
-            '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            '(?ms)^  wsl:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $changesJob | Should -Not -BeNullOrEmpty
-        $changesJob | Should -Match 'fetch-depth:\s+0'
-        $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
-        $changesJob | Should -Match 'steps\.detect\.outputs\.linux'
-        $changesJob | Should -Match 'steps\.detect\.outputs\.darwin'
-        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
-        $changesJob | Should -Match 'github\.event\.before'
-        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
-        $changesJob | Should -Match 'github\.sha'
-        $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
-
-        foreach ($gate in @(
-                @{ Job = 'linux'; Output = 'linux' },
-                @{ Job = 'darwin'; Output = 'darwin' }
-            )) {
-            $job = [regex]::Match(
-                $workflow,
-                "(?ms)^  $($gate.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
-            ).Value
-            $job | Should -Match 'needs:\s+changes'
-            $job | Should -Match "needs\.changes\.outputs\.$($gate.Output) == 'true'"
-        }
+        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
+        $wslJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
+        $wslJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
+        $wslJob | Should -Match 'Invoke-NixosWslE2E\.ps1'
 
         $completeJob = [regex]::Match(
             $workflow,
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $completeJob | Should -Match 'if:\s+\$\{\{ always\(\) \}\}'
-        $completeJob | Should -Match 'needs:\s+\[changes, linux, darwin\]'
-        $completeJob | Should -Match 'needs\.changes\.result'
-        $completeJob | Should -Match 'needs\.linux\.result'
-        $completeJob | Should -Match 'needs\.darwin\.result'
-
-        $completeScript = [regex]::Match(
-            $completeJob,
-            '(?ms)^      - name: Verify routed job results\r?\n        run: \|\r?\n(?<script>.*?^          echo "All required bootstrap outputs built successfully\."\r?\n)'
-        ).Groups['script'].Value
-        $completeScript | Should -Not -BeNullOrEmpty
-        Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $completeScript
-
-        $changesGuard = [regex]::Match(
-            $completeScript,
-            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
-        ).Value
-        $changesGuard | Should -Not -BeNullOrEmpty
-        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
-        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
-
-        $platformDefault = [regex]::Match(
-            $completeScript,
-            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
-        ).Value
-        $platformDefault | Should -Not -BeNullOrEmpty
-        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
-        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
-    }
-
-    It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-linux.yml"
-        $workflowPath | Should -Exist
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
-
-        $workflow | Should -Match 'name:\s+Ubuntu Destructive'
-        $workflow | Should -Match 'name:\s+Debian systemd Destructive'
-        $workflow | Should -Match 'timeout-minutes:'
-        $workflow | Should -Match 'systemd-nspawn'
-        $workflow | Should -Match '(?s)for _ in \$\(seq 1 60\).*machinectl shell.*systemctl is-system-running'
-        $workflow | Should -Match 'dotfiles_run_in_group docker.*verify-environment\.sh --runtime'
-        $workflow | Should -Match 'systemd systemd-sysv dbus'
-        ([regex]::Matches($workflow, '(?m)^\s+- "flake\.nix"\s*$')).Count | Should -Be 2
-        ([regex]::Matches($workflow, '(?m)^\s+- "flake\.lock"\s*$')).Count | Should -Be 2
-        ([regex]::Matches($workflow, '(?m)^\s*\./\.github/e2e/run-bootstrap-acceptance\.sh\s*$')).Count | Should -BeGreaterOrEqual 2
-        ([regex]::Matches($workflow, 'scripts/sh/verify-environment\.sh --runtime')).Count | Should -BeGreaterOrEqual 2
-        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
-        $workflow | Should -Match 'if:\s+always\(\)'
-    }
-
-    It 'should run idempotent NixOS activation and Docker acceptance in a VM' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-linux.yml"
-        $testPath = Join-Path $script:repoRoot "nix/tests/bootstrap-nixos.nix"
-        $workflowPath | Should -Exist
-        $testPath | Should -Exist
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
-        $test = Get-Content -LiteralPath $testPath -Raw
-
-        $workflow | Should -Match 'name:\s+NixOS VM'
-        $workflow | Should -Match 'bootstrap-nixos-vm'
-        $test | Should -Match 'dotfilesSource\s*=\s*\.\./\.\.'
-        $test | Should -Match 'testScript\s*=\s*\{\s*nodes,\s*\.\.\.\s*\}:'
+        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
-        $test | Should -Match 'cp -r \$\{dotfilesSource\} /home/nixos/dotfiles'
-        $test | Should -Match '/home/nixos/dotfiles/\.github/e2e/run-bootstrap-acceptance\.sh'
-        $test | Should -Not -Match 'sg docker -c'
-        ([regex]::Matches($test, 'machine\.succeed\(install\)')).Count | Should -Be 2
-        $test | Should -Match 'verify-environment\.sh --runtime'
         $test | Should -Match 'docker/hermes-agent/compose\.yml'
-        $test | Should -Match 'docker compose.*ps'
     }
 
-    It 'should route Linux and WSL bootstrap E2E jobs through change detection without weakening fork protection' {
-        $linuxWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-e2e-linux.yml'
-        $wslWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-nixos-wsl.yml'
-        $linuxWorkflow = Get-Content -LiteralPath $linuxWorkflowPath -Raw
-        $wslWorkflow = Get-Content -LiteralPath $wslWorkflowPath -Raw
+    It 'should keep hosted Windows and Darwin contracts in the unified workflow' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
 
-        foreach ($case in @(
-                @{ Workflow = $linuxWorkflow; Path = 'ci-bootstrap-e2e-linux.yml'; Output = 'linux' },
-                @{ Workflow = $wslWorkflow; Path = 'ci-nixos-wsl.yml'; Output = 'wsl' }
-            )) {
-            foreach ($routingPath in @(
-                    'ci/path-routing.json',
-                    'scripts/python/detect_ci_changes.py',
-                    'tests/python/test_detect_ci_changes.py',
-                    '.github/actions/detect-ci-changes/**',
-                    '.github/workflows/ci-contract.yml',
-                    ".github/workflows/$($case.Path)"
-                )) {
-                ([regex]::Matches($case.Workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
-            }
-
-            $changesJob = [regex]::Match(
-                $case.Workflow,
-                '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-            ).Value
-            $changesJob | Should -Not -BeNullOrEmpty
-            $changesJob | Should -Match 'fetch-depth:\s+0'
-            $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
-            $changesJob | Should -Match "steps\.detect\.outputs\.$($case.Output)"
-            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
-            $changesJob | Should -Match 'github\.event\.before'
-            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
-            $changesJob | Should -Match 'github\.sha'
-            $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
-        }
-
-        foreach ($jobName in @('ubuntu', 'debian', 'nixos')) {
-            $job = [regex]::Match(
-                $linuxWorkflow,
-                "(?ms)^  ${jobName}:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
-            ).Value
-            $job | Should -Match 'needs:\s+changes'
-            $job | Should -Match "needs\.changes\.outputs\.linux == 'true'"
-        }
-
-        $switchJob = [regex]::Match(
-            $wslWorkflow,
-            '(?ms)^  switch:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Value
-        $switchJob | Should -Match 'needs:\s+changes'
-        $switchJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
-        $switchJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
-        $switchJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
-        $switchJob | Should -Match '\$refName = \$env:HEAD_REF'
-        $switchJob | Should -Match '\$refName = \$env:REF_NAME'
-        $switchJob | Should -Not -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
-    }
-
-    It 'should run bootstrap contracts exclusively on GitHub-hosted runners' {
-        $oldWorkflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
-
-        $oldWorkflowPath | Should -Not -Exist
-        $workflowPath | Should -Exist
-
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
-        $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $workflow | Should -Match 'runs-on:\s+macos-15'
-        $workflow | Should -Match 'runs-on:\s+ubuntu-24\.04'
-        $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
-        $workflow | Should -Not -Match 'dotfiles-e2e'
-        $workflow | Should -Not -Match 'destructive-e2e'
-        $workflow | Should -Not -Match 'head\.repo\.full_name == github\.repository'
-        $workflow | Should -Not -Match '(?m)^\s+paths:\s*$'
-        $workflow | Should -Match 'permissions:\s*\r?\n\s+contents:\s+read'
-        ([regex]::Matches($workflow, 'timeout-minutes:\s+30')).Count | Should -Be 2
-        $workflow | Should -Match 'timeout-minutes:\s+5'
-    }
-
-    It 'should aggregate Windows and macOS contracts with explicit non-runtime attestations' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
-
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
-        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit\.xml'
-        $workflow | Should -Not -Match 'Invoke-Tests\.ps1[^\r\n]*-IncludeIntegration'
+        $workflow | Should -Match 'Invoke-Tests\.ps1 -MinimumCoverage 0'
         $workflow | Should -Match 'brew install bash coreutils go-task lua'
-        $workflow | Should -Match 'brew --prefix bash\)/bin'
-        $workflow | Should -Match 'brew --prefix coreutils\)/libexec/gnubin'
-        $workflow | Should -Match 'LC_ALL:\s+en_US\.UTF-8'
-        $workflow | Should -Match 'bats(?: --print-output-on-failure)? tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
-        ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
-        $workflow | Should -Match '(?m)^  workflow_dispatch:\s*$'
-        $workflow | Should -Match '(?ms)^  pull_request:\r?\n    branches: \[main\]\r?\n(?!    paths:)'
-        $workflow | Should -Match 'protected-bootstrap-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}'
-        $workflow | Should -Match "TESTED_SHA:\s+\$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}"
-        $workflow | Should -Match 'needs:\s*\[changes, windows, macos\]'
-        $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
-        $workflow | Should -Match 'needs\.changes\.outputs\.windows == ''true'''
-        $workflow | Should -Match 'needs\.changes\.outputs\.darwin == ''true'''
-        $workflow | Should -Match 'fetch-depth:\s+0'
-        $workflow | Should -Match 'uses:\s+\.\/\.github\/actions\/detect-ci-changes'
-        $workflow | Should -Match 'run-all:\s+\$\{\{ github\.event_name == ''workflow_dispatch'' \}\}'
-        $workflow | Should -Match 'needs\.windows\.result'
-        $workflow | Should -Match 'needs\.macos\.result'
-        $workflow | Should -Match 'needs\.changes\.result'
-        ([regex]::Matches($workflow, 'ref:\s+\$\{\{ env\.TESTED_SHA \}\}')).Count | Should -Be 2
-        ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
-
-        $completeJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  complete:\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Groups['job'].Value
-        $completeJob | Should -Not -BeNullOrEmpty
-        $completeScript = [regex]::Match(
-            $completeJob,
-            '(?ms)^      - name: Verify routed job results\r?\n(?:        env:\r?\n.*?^        run: \|\r?\n)(?<script>.*?^          echo "All required hosted bootstrap contracts completed successfully\."\r?\n)'
-        ).Groups['script'].Value
-        $completeScript | Should -Not -BeNullOrEmpty
-        Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $completeScript
-
-        $changesGuard = [regex]::Match(
-            $completeScript,
-            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
-        ).Value
-        $changesGuard | Should -Not -BeNullOrEmpty
-        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
-        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
-
-        $platformDefault = [regex]::Match(
-            $completeScript,
-            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
-        ).Value
-        $platformDefault | Should -Not -BeNullOrEmpty
-        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
-        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
+        $workflow | Should -Match 'runtime=not-applicable-on-github-hosted-runner'
+        $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
     It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
-        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-e2e-hosted.yml'
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $macosJob = [regex]::Match(
             $workflow,
-            '(?ms)^  macos:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
 
         $macosJob | Should -Not -BeNullOrEmpty
@@ -605,6 +351,7 @@ Describe 'CI workflow configuration' {
         $macosJob | Should -Match 'command -v lua'
         $macosJob | Should -Match 'command -v luac'
         $macosJob | Should -Match 'command -v wezterm'
+        $macosJob | Should -Match 'env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER'
         $macosJob | Should -Match 'bats tests/wezterm'
         $macosJob | Should -Match 'luac -p chezmoi/terminals/hammerspoon/init\.lua'
         $macosJob | Should -Match 'lua tests/lua/hammerspoon_terminal_prefix_test\.lua'
@@ -620,7 +367,7 @@ Describe 'CI workflow configuration' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
             @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Pester -Configuration' },
-            @{ Path = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
+            @{ Path = '.github/workflows/ci-bootstrap.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
         )
 
         foreach ($case in $workflowCases) {
@@ -695,5 +442,28 @@ Describe 'CI workflow configuration' {
         $runner | Should -Match '\$Path = @\(\$scriptRoot\)'
         $runner | Should -Match '\$pesterConfig\.Run\.ExcludePath = @\("\*\*/Integration\.Tests\.ps1"\)'
         $runner | Should -Match '(?s)Set-StrictMode -Off.*Invoke-Pester -Configuration \$pesterConfig'
+    }
+
+    It 'should expose one platform-routed Bootstrap CI workflow' {
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        $workflow | Should -Match 'name:\s+Bootstrap CI'
+        $workflow | Should -Match 'manifest:\s+ci/bootstrap-path-routing\.json'
+        $workflow | Should -Match 'Bootstrap / Linux / Build'
+        $workflow | Should -Match 'Bootstrap / Darwin'
+        $workflow | Should -Match 'Bootstrap / WSL'
+        $workflow | Should -Match 'Bootstrap / Windows'
+        $workflow | Should -Match 'Bootstrap / Complete'
+        $workflow | Should -Match "needs\.changes\.outputs\.linux == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.darwin == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.wsl == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.windows == 'true'"
+        $workflow | Should -Match 'Taskfile\.yml'
+        $workflow | Should -Match 'taskfiles/\*\*'
+        $workflow | Should -Match 'PLATFORM_REQUIRED'
+        $workflow | Should -Match 'check_platform'
+        $workflow | Should -Not -Match 'success\|skipped'
+        $workflow | Should -Match 'ref: \$\{\{ env\.TESTED_SHA \}\}'
     }
 }
