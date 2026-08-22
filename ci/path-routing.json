@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "outputs": [
+    "linux",
+    "darwin",
+    "wsl",
+    "windows",
+    "contract",
+    "nix",
+    "chezmoi",
+    "hermes",
+    "devcontainer",
+    "package_catalog"
+  ],
+  "rules": [
+    {
+      "patterns": [
+        "ci/path-routing.json",
+        "scripts/python/detect_ci_changes.py",
+        "tests/python/test_detect_ci_changes.py",
+        ".github/actions/detect-ci-changes/**",
+        ".github/workflows/ci-contract.yml"
+      ],
+      "outputs": [
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+        "chezmoi",
+        "hermes",
+        "devcontainer",
+        "package_catalog"
+      ]
+    },
+    {
+      "patterns": ["flake.nix", "flake.lock", "nix/flakes/**", "nix/lib/**"],
+      "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/packages/**"],
+      "outputs": [
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog"
+      ]
+    },
+    {
+      "patterns": ["windows/winget/packages.json", "windows/npm/packages.json"],
+      "outputs": ["windows", "contract", "package_catalog"]
+    },
+    {
+      "patterns": ["windows/pnpm/packages.json"],
+      "outputs": ["wsl", "windows", "contract", "package_catalog"]
+    },
+    {
+      "patterns": ["nix/home/common.nix"],
+      "outputs": ["linux", "darwin", "wsl", "contract", "nix", "chezmoi"]
+    },
+    {
+      "patterns": [
+        "nix/home/linux/**",
+        "nix/home/users/**",
+        "nix/hosts/linux/**",
+        "nix/system-manager/**",
+        "nix/tests/**"
+      ],
+      "outputs": ["linux", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/home/wsl/**", "nix/hosts/wsl/**", "nix/modules/wsl/**"],
+      "outputs": ["wsl", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/darwin/**"],
+      "outputs": ["darwin", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/modules/host/**"],
+      "outputs": ["linux", "wsl", "contract", "nix"]
+    },
+    {
+      "patterns": ["scripts/sh/dcnvim.sh"],
+      "outputs": ["linux", "darwin", "windows", "contract", "nix", "devcontainer"]
+    },
+    {
+      "patterns": ["install.sh"],
+      "outputs": ["linux", "darwin", "contract", "devcontainer"]
+    },
+    {
+      "patterns": ["scripts/sh/verify-environment.sh"],
+      "outputs": ["linux", "darwin", "contract"]
+    },
+    {
+      "patterns": ["scripts/sh/install-wezterm-nightly.sh"],
+      "outputs": ["linux", "darwin", "contract", "nix"]
+    },
+    {
+      "patterns": ["scripts/sh/uninstall-arc-browser.sh"],
+      "outputs": ["darwin", "contract", "nix"]
+    },
+    {
+      "patterns": ["scripts/sh/install-linux.sh", "scripts/sh/install-nixos.sh"],
+      "outputs": ["linux", "contract"]
+    },
+    {
+      "patterns": ["scripts/sh/install-macos.sh"],
+      "outputs": ["darwin", "contract"]
+    },
+    {
+      "patterns": ["scripts/sh/nixos-wsl-postinstall.sh"],
+      "outputs": ["wsl", "windows", "contract", "nix"]
+    },
+    {
+      "patterns": ["scripts/sh/install-common.sh"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "nix", "chezmoi"]
+    },
+    {
+      "patterns": ["scripts/sh/install-home-manager.sh"],
+      "outputs": ["linux", "darwin", "wsl", "contract", "nix", "chezmoi"]
+    },
+    {
+      "patterns": ["scripts/powershell/handlers/Handler.NixOSWSL.ps1"],
+      "outputs": ["wsl", "windows", "contract"]
+    },
+    {
+      "patterns": ["scripts/powershell/handlers/Handler.NixRebuild.ps1"],
+      "outputs": ["wsl", "windows", "contract", "nix"]
+    },
+    {
+      "patterns": [
+        "docker/hermes-agent/**",
+        "docker/hermes-browser/**",
+        "docker/hermes-browser-mcp/**",
+        "docker/hermes-xapi-mcp/**",
+        "scripts/sh/hermes-*.sh",
+        "scripts/powershell/hermes-*.ps1",
+        "scripts/powershell/handlers/Handler.HermesAgent.ps1"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": [".devcontainer/**", "bootstrap.sh", "chezmoi/dot_config/devcontainer/**"],
+      "outputs": ["linux", "darwin", "windows", "contract", "devcontainer"]
+    },
+    {
+      "patterns": ["scripts/powershell/**"],
+      "outputs": ["windows", "contract"]
+    },
+    {
+      "patterns": ["chezmoi/.chezmoi*", "chezmoi/.chezmoidata/**", "chezmoi/.chezmoiscripts/**"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "chezmoi"]
+    },
+    {
+      "patterns": ["chezmoi/**/*_windows*"],
+      "outputs": ["windows", "contract", "chezmoi"]
+    },
+    {
+      "patterns": ["chezmoi/**/*_darwin*"],
+      "outputs": ["darwin", "contract", "chezmoi"]
+    },
+    {
+      "patterns": ["chezmoi/**/*_linux*"],
+      "outputs": ["linux", "contract", "chezmoi"]
+    },
+    {
+      "patterns": ["chezmoi/**"],
+      "outputs": ["contract", "chezmoi"]
+    },
+    {
+      "patterns": ["Taskfile.yml"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": ["taskfiles/nix/**"],
+      "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
+    },
+    {
+      "patterns": ["taskfiles/hermes/**"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": [".github/workflows/ci-bootstrap-build.yml"],
+      "outputs": ["linux", "darwin", "contract", "nix"]
+    },
+    {
+      "patterns": [".github/workflows/ci-bootstrap-e2e-hosted.yml"],
+      "outputs": ["darwin", "windows", "contract", "nix"]
+    },
+    {
+      "patterns": [".github/workflows/ci-bootstrap-e2e-linux.yml"],
+      "outputs": ["linux", "contract", "nix"]
+    },
+    {
+      "patterns": [".github/workflows/ci-chezmoi.yml"],
+      "outputs": ["linux", "windows", "contract", "chezmoi"]
+    },
+    {
+      "patterns": [".github/workflows/ci-consistency.yml"],
+      "outputs": ["linux", "windows", "contract", "nix", "package_catalog"]
+    },
+    {
+      "patterns": [".github/workflows/ci-devcontainer.yml"],
+      "outputs": ["linux", "darwin", "windows", "contract", "devcontainer"]
+    },
+    {
+      "patterns": [".github/workflows/ci-hermes-bootstrap.yml"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": [".github/workflows/ci-nix.yml"],
+      "outputs": ["linux", "wsl", "contract", "nix"]
+    },
+    {
+      "patterns": [".github/workflows/ci-nixos-wsl.yml"],
+      "outputs": ["wsl", "windows", "contract", "nix"]
+    },
+    {
+      "patterns": [".github/workflows/ci-powershell.yml"],
+      "outputs": ["windows", "contract"]
+    },
+    {
+      "patterns": [".github/workflows/ci-winget.yml"],
+      "outputs": ["windows", "contract", "package_catalog"]
+    },
+    {
+      "patterns": ["tests/bash/install_macos.bats", "tests/bash/install_linux.bats"],
+      "outputs": ["contract", "devcontainer"]
+    },
+    {
+      "patterns": [".github/workflows/codeql.yml"],
+      "outputs": ["linux", "contract"]
+    },
+    {
+      "patterns": [".github/e2e/**"],
+      "outputs": ["linux", "contract"]
+    },
+    {
+      "patterns": [".github/workflows/**", "taskfiles/**", "tests/**"],
+      "outputs": ["contract"]
+    }
+  ]
+}

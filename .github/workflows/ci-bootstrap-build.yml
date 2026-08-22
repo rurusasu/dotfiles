@@ -8,6 +8,11 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "ci/path-routing.json"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
       - ".github/workflows/ci-bootstrap-build.yml"
   pull_request:
     branches: [main]
@@ -15,6 +20,11 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "ci/path-routing.json"
+      - "scripts/python/detect_ci_changes.py"
+      - "tests/python/test_detect_ci_changes.py"
+      - ".github/actions/detect-ci-changes/**"
+      - ".github/workflows/ci-contract.yml"
       - ".github/workflows/ci-bootstrap-build.yml"
 
 concurrency:
@@ -22,8 +32,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      linux: ${{ steps.detect.outputs.linux }}
+      darwin: ${{ steps.detect.outputs.darwin }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed CI targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+
   linux:
     name: Bootstrap Build (Linux)
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
@@ -58,6 +93,8 @@ jobs:
 
   darwin:
     name: Bootstrap Build (Darwin)
+    needs: changes
+    if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-14
     timeout-minutes: 90
     permissions:
@@ -81,10 +118,34 @@ jobs:
 
   complete:
     name: Bootstrap Build
-    needs: [linux, darwin]
+    if: ${{ always() }}
+    needs: [changes, linux, darwin]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      LINUX_RESULT: ${{ needs.linux.result }}
+      DARWIN_RESULT: ${{ needs.darwin.result }}
     steps:
-      - run: echo "All bootstrap outputs built successfully."
+      - name: Verify routed job results
+        run: |
+          set -euo pipefail
+
+          if [[ "${CHANGES_RESULT}" != "success" ]]; then
+            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
+            exit 1
+          fi
+
+          for result in "${LINUX_RESULT}" "${DARWIN_RESULT}"; do
+            case "${result}" in
+              success|skipped) ;;
+              *)
+                echo "Bootstrap platform job did not complete successfully: ${result}"
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "All required bootstrap outputs built successfully."

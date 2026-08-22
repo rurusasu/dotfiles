@@ -1,5 +1,62 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+
+    function Assert-BootstrapBuildCompleteFailureGuard {
+        param(
+            [Parameter(Mandatory)]
+            [string]$CompleteScript
+        )
+
+        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
+        $platformDefault = '(?ms)^[ \t]+for result in "\$\{LINUX_RESULT\}" "\$\{DARWIN_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
+
+        if ($CompleteScript -notmatch $changesGuard) {
+            throw 'Bootstrap Build complete job must exit 1 when change detection is not successful.'
+        }
+
+        if ($CompleteScript -notmatch $platformDefault) {
+            throw 'Bootstrap Build complete job must exit 1 for every non-success-or-skipped platform result.'
+        }
+    }
+
+    function Assert-ProtectedBootstrapE2ECompleteFailureGuard {
+        param(
+            [Parameter(Mandatory)]
+            [string]$CompleteScript
+        )
+
+        $changesGuard = '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n^[ \t]+echo "CI change detection did not complete successfully: \$\{CHANGES_RESULT\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+fi$'
+        $platformDefault = '(?ms)^[ \t]+for result in "\$\{WINDOWS_RESULT\}" "\$\{MACOS_RESULT\}"; do\r?\n^[ \t]+case "\$\{result\}" in\r?\n^[ \t]+success\|skipped\) ;;\r?\n^[ \t]+\*\)\r?\n^[ \t]+echo "Hosted bootstrap platform job did not complete successfully: \$\{result\}"\r?\n^[ \t]+exit 1\r?\n^[ \t]+;;\r?\n^[ \t]+esac\r?\n^[ \t]+done$'
+
+        if ($CompleteScript -notmatch $changesGuard) {
+            throw 'Protected Bootstrap E2E complete job must exit 1 when change detection is not successful.'
+        }
+
+        if ($CompleteScript -notmatch $platformDefault) {
+            throw 'Protected Bootstrap E2E complete job must exit 1 for every non-success-or-skipped platform result.'
+        }
+    }
+
+    function Assert-UniqueChezmoiPathOccurrence {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Workflow,
+
+            [Parameter(Mandatory)]
+            [string]$LintJob
+        )
+
+        $normalizedWorkflow = $Workflow.ToLowerInvariant().Replace('\', '/')
+        $normalizedLint = $LintJob.ToLowerInvariant().Replace('\', '/')
+        $workflowOccurrences = ([regex]::Matches($normalizedWorkflow, [regex]::Escape('tests/chezmoi'))).Count
+        $lintOccurrences = ([regex]::Matches($normalizedLint, [regex]::Escape('tests/chezmoi'))).Count
+        if ($workflowOccurrences -ne 1) {
+            throw "Chezmoi CI must contain exactly one tests/chezmoi path occurrence; found $workflowOccurrences."
+        }
+        if ($lintOccurrences -ne 1) {
+            throw 'The unique tests/chezmoi path occurrence must belong to the lint job.'
+        }
+    }
 }
 
 Describe 'CI workflow configuration' {
@@ -93,7 +150,6 @@ Describe 'CI workflow configuration' {
         $chezmoiWorkflow | Should -Match '& pwsh -NoProfile -File \$scriptPath'
         $chezmoiWorkflow | Should -Match 'UDEVGothic\*NF\*'
         $chezmoiWorkflow | Should -Match 'Test-Path -LiteralPath \$fontPath -PathType Leaf'
-        $chezmoiWorkflow | Should -Match 'needs: \[lint, fmt, font-install\]'
     }
 
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
@@ -107,7 +163,11 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
         $workflow | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
-        $workflow | Should -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
+        $workflow | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
+        $workflow | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
+        $workflow | Should -Match '\$refName = \$env:HEAD_REF'
+        $workflow | Should -Match '\$refName = \$env:REF_NAME'
+        $workflow | Should -Not -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
         $workflow | Should -Match '\$distroName = "NixOS-CI-\$safeRef-\$refHash"'
         $workflow | Should -Not -Match '\$distroName = "NixOS-CI-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}"'
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
@@ -177,11 +237,47 @@ Describe 'CI workflow configuration' {
 
     It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $powershellWorkflow | Should -Match '"install\.cmd"'
         $powershellWorkflow | Should -Match '"docker/hermes-agent/\*\*"'
-        $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
+    }
+
+    It 'should assign every Bats file to exactly one CI owner' {
+        $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+
+        $contractWorkflow | Should -Match '"tests/bash/\*\*"'
+        $contractWorkflow | Should -Match 'shopt -s nullglob'
+        $contractWorkflow | Should -Match 'bats_files=\(tests/bash/\*\.bats\)'
+        $contractWorkflow | Should -Match 'bats --print-output-on-failure "\$\{bats_files\[@\]\}"'
+
+        $excludedBats = @('install_macos.bats', 'install_linux.bats')
+        $allBats = Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'tests/bash') -Filter '*.bats' -File |
+            Select-Object -ExpandProperty Name
+        $allBats | Should -Contain 'ci_routing.bats'
+        $contractExclusions = @(
+            [regex]::Matches(
+                $contractWorkflow,
+                'tests/bash/(install_(?:macos|linux)\.bats)'
+            ) | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+        )
+        $contractExclusions.Count | Should -Be 2
+        foreach ($excludedBat in $excludedBats) {
+            $contractExclusions | Should -Contain $excludedBat
+        }
+        foreach ($batsFile in $allBats) {
+            if ($batsFile -in $excludedBats) {
+                $devcontainerWorkflow | Should -Match "tests/bash/$([regex]::Escape($batsFile))"
+            }
+            else {
+                $contractWorkflow | Should -Match 'bats_files=\(tests/bash/\*\.bats\)'
+            }
+        }
+
+        $excludedBats.Count | Should -Be 2
+        $devcontainerWorkflow | Should -Match '"tests/bash/install_macos\.bats"'
+        $devcontainerWorkflow | Should -Match '"tests/bash/install_linux\.bats"'
+        $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
     }
 
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
@@ -197,10 +293,9 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $chezmoiWorkflow | Should -Match '"chezmoi/\*\*"'
-        $chezmoiWorkflow | Should -Match '\$pesterConfig\.Run\.Path = "\./tests/chezmoi"'
+        $chezmoiWorkflow | Should -Match '\.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi'
         $powershellWorkflow | Should -Match '"scripts/powershell/\*\*"'
         $devcontainerWorkflow | Should -Match '"scripts/sh/dcnvim\.sh"'
-        $devcontainerWorkflow | Should -Match '"tests/bash/\*\*"'
     }
 
     It 'should use a supported Intel macOS runner for devcontainer E2E' {
@@ -234,6 +329,82 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'nixosConfigurations\.linux\.config\.system\.build\.toplevel'
         $workflow | Should -Match 'homeConfigurations\.x86_64-linux\.activationPackage'
         $workflow | Should -Match 'package-support-report'
+    }
+
+    It 'should route Bootstrap Build jobs through CI change detection without masking failures' {
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-build.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        foreach ($routingPath in @(
+                'ci/path-routing.json',
+                'scripts/python/detect_ci_changes.py',
+                'tests/python/test_detect_ci_changes.py',
+                '.github/actions/detect-ci-changes/**',
+                '.github/workflows/ci-contract.yml',
+                '.github/workflows/ci-bootstrap-build.yml'
+            )) {
+            ([regex]::Matches($workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
+        }
+
+        $changesJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $changesJob | Should -Not -BeNullOrEmpty
+        $changesJob | Should -Match 'fetch-depth:\s+0'
+        $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
+        $changesJob | Should -Match 'steps\.detect\.outputs\.linux'
+        $changesJob | Should -Match 'steps\.detect\.outputs\.darwin'
+        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
+        $changesJob | Should -Match 'github\.event\.before'
+        $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
+        $changesJob | Should -Match 'github\.sha'
+        $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
+
+        foreach ($gate in @(
+                @{ Job = 'linux'; Output = 'linux' },
+                @{ Job = 'darwin'; Output = 'darwin' }
+            )) {
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($gate.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Match 'needs:\s+changes'
+            $job | Should -Match "needs\.changes\.outputs\.$($gate.Output) == 'true'"
+        }
+
+        $completeJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $completeJob | Should -Match 'if:\s+\$\{\{ always\(\) \}\}'
+        $completeJob | Should -Match 'needs:\s+\[changes, linux, darwin\]'
+        $completeJob | Should -Match 'needs\.changes\.result'
+        $completeJob | Should -Match 'needs\.linux\.result'
+        $completeJob | Should -Match 'needs\.darwin\.result'
+
+        $completeScript = [regex]::Match(
+            $completeJob,
+            '(?ms)^      - name: Verify routed job results\r?\n        run: \|\r?\n(?<script>.*?^          echo "All required bootstrap outputs built successfully\."\r?\n)'
+        ).Groups['script'].Value
+        $completeScript | Should -Not -BeNullOrEmpty
+        Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $completeScript
+
+        $changesGuard = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
+        ).Value
+        $changesGuard | Should -Not -BeNullOrEmpty
+        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
+        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
+
+        $platformDefault = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
+        ).Value
+        $platformDefault | Should -Not -BeNullOrEmpty
+        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
+        { Assert-BootstrapBuildCompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Ubuntu and Debian destructive installers twice with runtime acceptance' {
@@ -279,6 +450,64 @@ Describe 'CI workflow configuration' {
         $test | Should -Match 'docker compose.*ps'
     }
 
+    It 'should route Linux and WSL bootstrap E2E jobs through change detection without weakening fork protection' {
+        $linuxWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap-e2e-linux.yml'
+        $wslWorkflowPath = Join-Path $script:repoRoot '.github/workflows/ci-nixos-wsl.yml'
+        $linuxWorkflow = Get-Content -LiteralPath $linuxWorkflowPath -Raw
+        $wslWorkflow = Get-Content -LiteralPath $wslWorkflowPath -Raw
+
+        foreach ($case in @(
+                @{ Workflow = $linuxWorkflow; Path = 'ci-bootstrap-e2e-linux.yml'; Output = 'linux' },
+                @{ Workflow = $wslWorkflow; Path = 'ci-nixos-wsl.yml'; Output = 'wsl' }
+            )) {
+            foreach ($routingPath in @(
+                    'ci/path-routing.json',
+                    'scripts/python/detect_ci_changes.py',
+                    'tests/python/test_detect_ci_changes.py',
+                    '.github/actions/detect-ci-changes/**',
+                    '.github/workflows/ci-contract.yml',
+                    ".github/workflows/$($case.Path)"
+                )) {
+                ([regex]::Matches($case.Workflow, [regex]::Escape($routingPath))).Count | Should -Be 2
+            }
+
+            $changesJob = [regex]::Match(
+                $case.Workflow,
+                '(?ms)^  changes:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            ).Value
+            $changesJob | Should -Not -BeNullOrEmpty
+            $changesJob | Should -Match 'fetch-depth:\s+0'
+            $changesJob | Should -Match 'uses:\s+\./\.github/actions/detect-ci-changes'
+            $changesJob | Should -Match "steps\.detect\.outputs\.$($case.Output)"
+            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha"
+            $changesJob | Should -Match 'github\.event\.before'
+            $changesJob | Should -Match "github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha"
+            $changesJob | Should -Match 'github\.sha'
+            $changesJob | Should -Match "run-all:\s+\$\{\{ github\.event_name == 'workflow_dispatch' \}\}"
+        }
+
+        foreach ($jobName in @('ubuntu', 'debian', 'nixos')) {
+            $job = [regex]::Match(
+                $linuxWorkflow,
+                "(?ms)^  ${jobName}:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Match 'needs:\s+changes'
+            $job | Should -Match "needs\.changes\.outputs\.linux == 'true'"
+        }
+
+        $switchJob = [regex]::Match(
+            $wslWorkflow,
+            '(?ms)^  switch:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $switchJob | Should -Match 'needs:\s+changes'
+        $switchJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
+        $switchJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
+        $switchJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
+        $switchJob | Should -Match '\$refName = \$env:HEAD_REF'
+        $switchJob | Should -Match '\$refName = \$env:REF_NAME'
+        $switchJob | Should -Not -Match '\$refName = "\$\{\{ github\.head_ref \}\}"'
+    }
+
     It 'should run bootstrap contracts exclusively on GitHub-hosted runners' {
         $oldWorkflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-self-hosted.yml"
         $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap-e2e-hosted.yml"
@@ -315,12 +544,50 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'bats(?: --print-output-on-failure)? tests/bash'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         ([regex]::Matches($workflow, 'runtime=not-applicable-on-github-hosted-runner')).Count | Should -Be 2
-        $workflow | Should -Match 'needs:\s*\[windows, macos\]'
+        $workflow | Should -Match '(?m)^  workflow_dispatch:\s*$'
+        $workflow | Should -Match '(?ms)^  pull_request:\r?\n    branches: \[main\]\r?\n(?!    paths:)'
+        $workflow | Should -Match 'protected-bootstrap-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}'
+        $workflow | Should -Match "TESTED_SHA:\s+\$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}"
+        $workflow | Should -Match 'needs:\s*\[changes, windows, macos\]'
         $workflow | Should -Match 'name:\s+Protected Bootstrap E2E'
+        $workflow | Should -Match 'needs\.changes\.outputs\.windows == ''true'''
+        $workflow | Should -Match 'needs\.changes\.outputs\.darwin == ''true'''
+        $workflow | Should -Match 'fetch-depth:\s+0'
+        $workflow | Should -Match 'uses:\s+\.\/\.github\/actions\/detect-ci-changes'
+        $workflow | Should -Match 'run-all:\s+\$\{\{ github\.event_name == ''workflow_dispatch'' \}\}'
         $workflow | Should -Match 'needs\.windows\.result'
         $workflow | Should -Match 'needs\.macos\.result'
+        $workflow | Should -Match 'needs\.changes\.result'
+        ([regex]::Matches($workflow, 'ref:\s+\$\{\{ env\.TESTED_SHA \}\}')).Count | Should -Be 2
         ([regex]::Matches($workflow, 'actions/upload-artifact@[0-9a-f]{40}')).Count | Should -Be 2
-        ([regex]::Matches($workflow, 'github\.event\.pull_request\.head\.sha')).Count | Should -BeGreaterOrEqual 2
+
+        $completeJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  complete:\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Groups['job'].Value
+        $completeJob | Should -Not -BeNullOrEmpty
+        $completeScript = [regex]::Match(
+            $completeJob,
+            '(?ms)^      - name: Verify routed job results\r?\n(?:        env:\r?\n.*?^        run: \|\r?\n)(?<script>.*?^          echo "All required hosted bootstrap contracts completed successfully\."\r?\n)'
+        ).Groups['script'].Value
+        $completeScript | Should -Not -BeNullOrEmpty
+        Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $completeScript
+
+        $changesGuard = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+if \[\[ "\$\{CHANGES_RESULT\}" != "success" \]\]; then\r?\n.*?^[ \t]+fi$'
+        ).Value
+        $changesGuard | Should -Not -BeNullOrEmpty
+        $withoutChangesGuard = $completeScript.Replace($changesGuard, '')
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutChangesGuard } | Should -Throw
+
+        $platformDefault = [regex]::Match(
+            $completeScript,
+            '(?ms)^[ \t]+\*\)\r?\n.*?^[ \t]+;;$'
+        ).Value
+        $platformDefault | Should -Not -BeNullOrEmpty
+        $withoutPlatformDefault = $completeScript.Replace($platformDefault, '')
+        { Assert-ProtectedBootstrapE2ECompleteFailureGuard -CompleteScript $withoutPlatformDefault } | Should -Throw
     }
 
     It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
@@ -352,7 +619,6 @@ Describe 'CI workflow configuration' {
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'test'; TestMarker = '$pesterConfig.Run.Path' },
             @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Pester -Configuration' },
             @{ Path = '.github/workflows/ci-bootstrap-e2e-hosted.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
         )
@@ -371,6 +637,55 @@ Describe 'CI workflow configuration' {
             $job.IndexOf('winget install --id twpayne.chezmoi --exact') |
                 Should -BeLessThan $job.IndexOf($case.TestMarker)
         }
+    }
+
+    It 'should run Chezmoi Pester once in required lint and upload lint JUnit output' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
+        $pesterInvocation = '(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results\.xml$'
+        $lintJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+
+        $lintJob | Should -Not -BeNullOrEmpty
+        ([regex]::Matches($workflow, '(?m)^  test:\s*$')).Count | Should -Be 0
+        Assert-UniqueChezmoiPathOccurrence -Workflow $workflow -LintJob $lintJob
+        $lintJob | Should -Match $pesterInvocation
+        $canonicalInvocation = '.\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml'
+        foreach ($alternateInvocation in @(
+                "      - run: >-`r`n          Invoke-Pester -Path .\tests\CHEZMOI",
+                '      - run: Invoke-Pester -Path ./tests/chezmoi'
+            )) {
+            $mutatedWorkflow = $workflow.Replace(
+                $canonicalInvocation,
+                "$canonicalInvocation`r`n$alternateInvocation"
+            )
+            $mutatedLintJob = [regex]::Match(
+                $mutatedWorkflow,
+                '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+            ).Value
+            { Assert-UniqueChezmoiPathOccurrence -Workflow $mutatedWorkflow -LintJob $mutatedLintJob } | Should -Throw
+        }
+
+        foreach ($requiredJob in @(
+                @{ Job = 'lint'; Name = 'Lint \(Pester chezmoi\)' },
+                @{ Job = 'fmt'; Name = 'Format \(\.tmpl BOM check\)' },
+                @{ Job = 'op-guard'; Name = 'Render guard \(op unauthenticated\)' }
+            )) {
+            $job = [regex]::Match(
+                $workflow,
+                "(?ms)^  $($requiredJob.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
+            ).Value
+            $job | Should -Not -BeNullOrEmpty
+            $job | Should -Match "(?m)^    name: $($requiredJob.Name)$"
+        }
+
+        $fontInstallJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  font-install:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $fontInstallJob | Should -Match '(?m)^    name: Font install smoke \(Windows\)$'
+        $lintJob | Should -Match '(?ms)^      - name: Upload test results\r?\n        uses: actions/upload-artifact@[0-9a-f]{40}.*?\r?\n        if: always\(\)\r?\n        with:\r?\n          name: chezmoi-test-results\r?\n          path: scripts/powershell/chezmoi-test-results\.xml$'
     }
 
     It 'should use directory discovery when excluding Windows integration tests' {

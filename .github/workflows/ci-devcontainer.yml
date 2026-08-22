@@ -9,7 +9,8 @@ on:
       - "install.sh"
       - "scripts/sh/install-macos.sh"
       - "scripts/sh/dcnvim.sh"
-      - "tests/bash/**"
+      - "tests/bash/install_macos.bats"
+      - "tests/bash/install_linux.bats"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"
   pull_request:
@@ -19,7 +20,8 @@ on:
       - "install.sh"
       - "scripts/sh/install-macos.sh"
       - "scripts/sh/dcnvim.sh"
-      - "tests/bash/**"
+      - "tests/bash/install_macos.bats"
+      - "tests/bash/install_linux.bats"
       - ".devcontainer/**"
       - ".github/workflows/ci-devcontainer.yml"
 

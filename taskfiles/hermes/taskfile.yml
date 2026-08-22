@@ -30,6 +30,15 @@ tasks:
     desc: Run the Hermes bootstrap container, gh wrapper, and provenance suites
     vars:
       PROVENANCE_URL: '{{.HERMES_HOME_PROVENANCE_URL | default "https://github.com/rurusasu/hermes-home.git"}}'
+    cmds:
+      - cmd: python -m unittest tests/python/test_xapi_image_contract.py -v
+        platforms: [windows]
+      - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
+        platforms: [linux, darwin]
+      - task: hermes:bootstrap:test:container
+
+  hermes:bootstrap:test:container:
+    internal: true
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
