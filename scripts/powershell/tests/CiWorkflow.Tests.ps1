@@ -312,6 +312,12 @@ Describe 'CI workflow configuration' {
         $wslJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
         $wslJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
         $wslJob | Should -Match 'Invoke-NixosWslE2E\.ps1'
+
+        $completeJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'docker/hermes-agent/compose\.yml'

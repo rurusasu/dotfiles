@@ -998,7 +998,7 @@ jobs:
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.platforms }}
       LINUX_REQUIRED: ${{ needs.changes.outputs.linux }}
       DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin }}
-      WSL_REQUIRED: ${{ needs.changes.outputs.wsl }}
+      WSL_REQUIRED: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
       WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows }}
       NIX_REQUIRED: ${{ needs.changes.outputs.nix }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
