@@ -97,7 +97,7 @@ cat result/package-support-report.json
 | `nix/packages/support-report.nix` | coverage report derivation               |
 | `nix/packages/winget.nix`         | generated Windows manifests              |
 | `nix/home/common.nix`             | shared Home Manager packages             |
-| `nix/darwin/default.nix`          | macOS system and casks                   |
+| `nix/hosts/darwin/default.nix`    | macOS system and casks                   |
 | `nix/system-manager/`             | Ubuntu/Debian system packages and Docker |
 | `nix/hosts/linux/`                | native NixOS system packages and Docker  |
 | `nix/flakes/packages.nix`         | package sets, report, and checks         |

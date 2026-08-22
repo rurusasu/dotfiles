@@ -106,7 +106,7 @@ Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Ho
 
 - ユーザー設定: `chezmoi/`
 - Home Manager: `nix/home/common.nix`
-- macOS: `nix/darwin/`
+- macOS: `nix/hosts/darwin/`
 - Ubuntu / Debian: `nix/system-manager/`
 - NixOS / WSL: `nix/hosts/`
 - パッケージ provider catalog: `nix/packages/sets.nix`

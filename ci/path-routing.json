@@ -78,7 +78,7 @@
       "outputs": ["wsl", "contract", "nix"]
     },
     {
-      "patterns": ["nix/darwin/**"],
+      "patterns": ["nix/hosts/darwin/**"],
       "outputs": ["darwin", "contract", "nix"]
     },
     {

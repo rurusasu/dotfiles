@@ -19,8 +19,8 @@ setup() {
 }
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
-	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/hosts/darwin/default.nix"
+	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
 }
 
@@ -76,7 +76,7 @@ setup() {
 }
 
 @test "Darwin frees Command Space by disabling macOS launcher hotkeys" {
-	local config="$REPO_ROOT/nix/darwin/default.nix"
+	local config="$REPO_ROOT/nix/hosts/darwin/default.nix"
 
 	grep -qF 'system.defaults.CustomUserPreferences."com.apple.symbolichotkeys"' "$config"
 	grep -qF 'AppleSymbolicHotKeys' "$config"
@@ -90,7 +90,7 @@ setup() {
 }
 
 @test "Darwin configures global Zoom shortcuts for English and Japanese menus" {
-	local config="$REPO_ROOT/nix/darwin/default.nix"
+	local config="$REPO_ROOT/nix/hosts/darwin/default.nix"
 
 	grep -qF 'activationScripts.globalZoomShortcut.text' "$config"
 	grep -qF 'uid="$(id -u -- ${lib.escapeShellArg user})"' "$config"
@@ -99,8 +99,8 @@ setup() {
 }
 
 @test "Darwin omits the incompatible generated documentation" {
-	grep -q 'documentation.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'tools.darwin-uninstaller.enable = false' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'documentation.enable = false' "$REPO_ROOT/nix/hosts/darwin/default.nix"
+	grep -q 'tools.darwin-uninstaller.enable = false' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 }
 
 @test "Home Manager accepts the bootstrap user and home environment" {

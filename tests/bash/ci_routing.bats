@@ -59,7 +59,7 @@ assert_bootstrap_routing() {
 
 @test "bootstrap Darwin-only paths enable only Darwin" {
 	assert_bootstrap_routing \
-		"nix/darwin/default.nix" \
+		"nix/hosts/darwin/default.nix" \
 		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
 }
 

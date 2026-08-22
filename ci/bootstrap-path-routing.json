@@ -81,7 +81,11 @@
       "outputs": ["linux", "wsl"]
     },
     {
-      "patterns": ["nix/darwin/**", "scripts/sh/install-macos.sh", "tests/bash/install_macos.bats"],
+      "patterns": [
+        "nix/hosts/darwin/**",
+        "scripts/sh/install-macos.sh",
+        "tests/bash/install_macos.bats"
+      ],
       "outputs": ["darwin"]
     },
     {

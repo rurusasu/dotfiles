@@ -7,7 +7,7 @@
 let
   user = builtins.getEnv "DOTFILES_USER";
   home = builtins.getEnv "DOTFILES_HOME";
-  sets = import ../packages/sets.nix {
+  sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
 in
@@ -139,7 +139,7 @@ in
     users.${user} =
       { ... }:
       {
-        imports = [ ../home/common.nix ];
+        imports = [ ../../home/common.nix ];
 
         programs.zsh.shellAliases = {
           nrs = "~/.dotfiles/install.sh";

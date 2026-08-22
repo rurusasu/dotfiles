@@ -4,7 +4,7 @@
 # Used by:
 #   - nix/home/wsl/users.nix   → NixOS module integration
 #   - nix/flakes/home.nix      → standalone homeConfigurations
-#   - nix/darwin/default.nix   → nix-darwin Home Manager integration
+#   - nix/hosts/darwin/default.nix → nix-darwin Home Manager integration
 {
   pkgs,
   lib,
