@@ -9,8 +9,7 @@ on:
       - "docker/hermes-agent/**"
       - "scripts/powershell/**"
       - "chezmoi/dot_config/plane-github-sync/**"
-      - ".github/workflows/ci-nix.yml"
-      - ".github/workflows/ci-nixos-wsl.yml"
+      - ".github/workflows/ci-bootstrap.yml"
       - ".github/workflows/ci-powershell.yml"
   pull_request:
     branches: [main]
@@ -19,8 +18,7 @@ on:
       - "docker/hermes-agent/**"
       - "scripts/powershell/**"
       - "chezmoi/dot_config/plane-github-sync/**"
-      - ".github/workflows/ci-nix.yml"
-      - ".github/workflows/ci-nixos-wsl.yml"
+      - ".github/workflows/ci-bootstrap.yml"
       - ".github/workflows/ci-powershell.yml"
 
 concurrency:

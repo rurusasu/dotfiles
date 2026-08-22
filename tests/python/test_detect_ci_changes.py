@@ -74,17 +74,34 @@ CASES = {
 }
 BOOTSTRAP_CASES = {
     "windows/winget/packages.json": {"windows", "contract"},
-    "nix/darwin/default.nix": {"darwin", "contract"},
-    "nix/hosts/linux/configuration.nix": {"linux", "contract"},
-    "nix/hosts/wsl/configuration.nix": {"wsl", "contract"},
+    "nix/darwin/default.nix": {"darwin", "contract", "nix"},
+    "nix/hosts/linux/configuration.nix": {"linux", "contract", "nix"},
+    "nix/hosts/wsl/configuration.nix": {"wsl", "contract", "nix"},
     "scripts/powershell/handlers/Handler.NixOSWSL.ps1": {"wsl", "contract"},
     "scripts/powershell/lib/SetupHandler.ps1": {"wsl", "windows", "contract"},
+    "chezmoi/shells/Microsoft.PowerShell_profile.ps1": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+    },
     "nix/packages/sets.nix": {
         "linux",
         "darwin",
         "wsl",
         "windows",
         "contract",
+        "nix",
+    },
+    "flake.nix": {"linux", "darwin", "wsl", "contract", "nix"},
+    ".github/workflows/ci-bootstrap.yml": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
     },
 }
 

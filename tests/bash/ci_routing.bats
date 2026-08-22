@@ -60,23 +60,23 @@ assert_bootstrap_routing() {
 @test "bootstrap Darwin-only paths enable only Darwin" {
 	assert_bootstrap_routing \
 		"nix/darwin/default.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
+		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
 @test "bootstrap Linux-only paths enable only Linux" {
 	assert_bootstrap_routing \
 		"nix/hosts/linux/configuration.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
+		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
 @test "bootstrap WSL-only paths enable only WSL" {
 	assert_bootstrap_routing \
 		"nix/hosts/wsl/configuration.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": false, "wsl": true}'
+		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
 }
 
 @test "bootstrap shared paths enable every platform" {
 	assert_bootstrap_routing \
 		"nix/packages/sets.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": false, "package_catalog": false, "windows": true, "wsl": true}'
+		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": true, "wsl": true}'
 }

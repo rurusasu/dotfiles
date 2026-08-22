@@ -66,6 +66,9 @@ runs:
         MANIFEST_PATH: ${{ inputs.manifest }}
       run: |
         set -euo pipefail
+        if [[ -z "${MANIFEST_PATH:-}" ]]; then
+          MANIFEST_PATH="ci/path-routing.json"
+        fi
 
         if [[ "${RUN_ALL}" == "true" ]]; then
           python scripts/python/detect_ci_changes.py \

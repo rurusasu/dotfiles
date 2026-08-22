@@ -26,20 +26,26 @@ EXPECTED_OUTPUTS = frozenset(
         "package_catalog",
     }
 )
+PLATFORM_OUTPUTS = frozenset({"linux", "darwin", "wsl", "windows"})
 DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "ci" / "path-routing.json"
 
 
 def route_paths(paths: Iterable[str], manifest_path: Path) -> dict[str, bool]:
     """Return the union of manifest outputs selected by repository-relative paths."""
-    outputs, rules = _load_manifest(manifest_path)
+    outputs, rules, fallback_outputs = _load_manifest(manifest_path)
     selected = {output: output == "contract" for output in outputs}
 
     for raw_path in paths:
         path = _validate_path(raw_path)
+        matched_platform = False
         for rule in rules:
             if any(_full_match(path, pattern) for pattern in rule["patterns"]):
+                matched_platform |= bool(PLATFORM_OUTPUTS.intersection(rule["outputs"]))
                 for output in rule["outputs"]:
                     selected[output] = True
+        if not matched_platform:
+            for output in fallback_outputs:
+                selected[output] = True
 
     return selected
 
@@ -68,9 +74,17 @@ def _full_match(path: PurePosixPath, pattern: str) -> bool:
     return match(0, 0)
 
 
-def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[str]]]]:
+def _load_manifest(
+    manifest_path: Path,
+) -> tuple[list[str], list[dict[str, list[str]]], list[str]]:
     manifest: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or set(manifest) != {"version", "outputs", "rules"}:
+    required_keys = {"version", "outputs", "rules"}
+    allowed_keys = required_keys | {"fallback_outputs"}
+    if (
+        not isinstance(manifest, dict)
+        or not required_keys.issubset(manifest)
+        or not set(manifest).issubset(allowed_keys)
+    ):
         raise ValueError("routing manifest root keys are invalid")
 
     version = manifest["version"]
@@ -85,6 +99,14 @@ def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[
         or set(outputs) != EXPECTED_OUTPUTS
     ):
         raise ValueError("routing manifest outputs must be strings")
+
+    fallback_outputs = manifest.get("fallback_outputs", [])
+    if (
+        not isinstance(fallback_outputs, list)
+        or not all(isinstance(output, str) for output in fallback_outputs)
+        or not set(fallback_outputs).issubset(EXPECTED_OUTPUTS)
+    ):
+        raise ValueError("routing manifest fallback outputs must be known strings")
 
     rules = manifest.get("rules")
     if not isinstance(rules, list):
@@ -113,7 +135,7 @@ def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[
             }
         )
 
-    return outputs, validated_rules
+    return outputs, validated_rules, fallback_outputs
 
 
 def _validate_path(raw_path: str) -> PurePosixPath:
@@ -168,7 +190,7 @@ def main(arguments: list[str] | None = None) -> int:
     args = parser.parse_args(arguments)
     try:
         if args.all:
-            outputs, _ = _load_manifest(args.manifest)
+            outputs, _, _ = _load_manifest(args.manifest)
             result = dict.fromkeys(outputs, True)
         else:
             result = route_paths(_read_paths(args.paths_file), args.manifest)
