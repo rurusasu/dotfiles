@@ -12,6 +12,7 @@ TART_IMAGE="${DOTFILES_TART_IMAGE:-ghcr.io/cirruslabs/macos-tahoe-base:latest}"
 TART_VM_NAME="${DOTFILES_TART_VM_NAME:-tahoe-base}"
 TART_HOME_ROOT="${TART_HOME:-$HOME/.tart}"
 MIN_FREE_GIB="${DOTFILES_TART_MIN_FREE_GIB:-40}"
+MAX_FREE_GIB=8796093022207
 
 require_tart_command() {
   if [[ $TART_COMMAND == */* ]]; then
@@ -24,6 +25,12 @@ require_tart_command() {
 validate_configuration() {
   [[ $MIN_FREE_GIB =~ ^[0-9]+$ ]] ||
     dotfiles_die "DOTFILES_TART_MIN_FREE_GIB must be a non-negative integer: $MIN_FREE_GIB"
+  local normalized_min_free_gib="${MIN_FREE_GIB#"${MIN_FREE_GIB%%[!0]*}"}"
+  normalized_min_free_gib="${normalized_min_free_gib:-0}"
+  if ((${#normalized_min_free_gib} > ${#MAX_FREE_GIB})) ||
+    ((${#normalized_min_free_gib} == ${#MAX_FREE_GIB} && 10#$normalized_min_free_gib > 10#$MAX_FREE_GIB)); then
+    dotfiles_die "DOTFILES_TART_MIN_FREE_GIB is too large: $MIN_FREE_GIB"
+  fi
   [[ $TART_VM_NAME =~ ^[A-Za-z0-9._-]+$ ]] ||
     dotfiles_die "DOTFILES_TART_VM_NAME contains unsupported characters: $TART_VM_NAME"
   [[ $TART_VM_NAME != "." && $TART_VM_NAME != ".." ]] ||

@@ -77,6 +77,16 @@ EOF
 	[ ! -s "$COMMAND_LOG" ]
 }
 
+@test "Tart preparation rejects a capacity threshold that would overflow" {
+	write_tart_stub
+
+	run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" DOTFILES_TART_MIN_FREE_GIB=8796093022208 "$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"DOTFILES_TART_MIN_FREE_GIB is too large"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
 @test "Tart preparation clones the configured image into TART_HOME" {
 	write_tart_stub
 
