@@ -51,7 +51,25 @@ cd dotfiles
 ./install.sh
 ```
 
-Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が Homebrew と Docker Desktop cask を管理します。Home Manager、chezmoi、Docker Compose、runtime acceptance まで同じコマンド内で実行します。macOS では WSL や NixOS を導入しません。
+Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が Homebrew formula と Docker Desktop cask を管理します。Home Manager、chezmoi、Docker Compose、runtime acceptance まで同じコマンド内で実行します。macOS では WSL や NixOS を導入しません。
+
+Tart CLI もこの macOS activation で導入されますが、約25GBの VM image は通常の `./install.sh` では取得しません。大容量ダウンロードを開始するタイミングを分離するため、初回だけ次を実行します。
+
+```bash
+task tart:prepare
+tart run tahoe-base
+```
+
+`task tart:prepare` は `TART_HOME`（既定値 `~/.tart`）の空き容量を確認し、`tahoe-base` が既に存在する場合は再取得せず終了します。image、VM 名、必要空き容量は次で変更できます。
+
+```bash
+DOTFILES_TART_IMAGE=ghcr.io/cirruslabs/macos-tahoe-base:latest \
+DOTFILES_TART_VM_NAME=tahoe-base \
+DOTFILES_TART_MIN_FREE_GIB=40 \
+task tart:prepare
+```
+
+`latest` image の更新は通常の dotfiles activation では自動実行しません。既存 VM を更新する場合は、必要な VM の退避・削除を確認してから明示的に再作成してください。
 
 ### NixOS / Ubuntu / Debian
 
