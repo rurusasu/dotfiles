@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPOSITORY_ROOT / "ci" / "path-routing.json"
+BOOTSTRAP_MANIFEST_PATH = REPOSITORY_ROOT / "ci" / "bootstrap-path-routing.json"
 DETECTOR_PATH = REPOSITORY_ROOT / "scripts" / "python" / "detect_ci_changes.py"
 OUTPUTS = {
     "linux",
@@ -71,6 +72,21 @@ CASES = {
         "hermes",
     },
 }
+BOOTSTRAP_CASES = {
+    "windows/winget/packages.json": {"windows", "contract"},
+    "nix/darwin/default.nix": {"darwin", "contract"},
+    "nix/hosts/linux/configuration.nix": {"linux", "contract"},
+    "nix/hosts/wsl/configuration.nix": {"wsl", "contract"},
+    "scripts/powershell/handlers/Handler.NixOSWSL.ps1": {"wsl", "contract"},
+    "scripts/powershell/lib/SetupHandler.ps1": {"wsl", "windows", "contract"},
+    "nix/packages/sets.nix": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+    },
+}
 
 
 def load_detector():
@@ -95,6 +111,16 @@ class DetectCiChangesTests(unittest.TestCase):
                 result = self.detector.route_paths([path], MANIFEST_PATH)
 
                 self.assertEqual(set(result), OUTPUTS)
+                self.assertEqual(
+                    {name for name, enabled in result.items() if enabled},
+                    expected_enabled,
+                )
+
+    def test_bootstrap_paths_route_to_the_expected_platform_sets(self) -> None:
+        for path, expected_enabled in BOOTSTRAP_CASES.items():
+            with self.subTest(path=path):
+                result = self.detector.route_paths([path], BOOTSTRAP_MANIFEST_PATH)
+
                 self.assertEqual(
                     {name for name, enabled in result.items() if enabled},
                     expected_enabled,
