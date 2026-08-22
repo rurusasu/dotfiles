@@ -38,6 +38,8 @@ workflow ファイルと表示名を次に統一する。
 
 workflow が path trigger によって起動しても、全 platform job を無条件には実行しない。既存の `scripts/python/detect_ci_changes.py` と `ci/path-routing.json` による platform 判定をそのまま利用し、各 job の `if` で実行対象を絞る。例えば Windows 専用 package の変更では Windows job だけが起動し、Darwin 専用 package の変更では Darwin job だけが起動する。共有 package 定義や共通 installer の変更では、routing が返す複数 platform の job が起動する。`workflow_dispatch` の手動実行では、既存の `run-all` 契約に従い全 platform を実行する。
 
+この platform 単位の絞り込みは Linux と WSL にも同じように適用する。Linux 専用 path の変更では Linux の build/E2E job だけを起動し、WSL 専用 path の変更では WSL job だけを起動する。Windows runner を共有する WSL と Windows も一つの `windows` output にまとめず、`wsl` と `windows` の routing output を別々に評価する。
+
 platform ごとの検証は次のとおりとする。
 
 - Linux: declarative build、Ubuntu destructive convergence、Debian systemd convergence、NixOS VM build
@@ -69,7 +71,7 @@ artifact 名には platform と検証層を含め、同一 run 内で衝突し�
 
 1. YAML の構文と workflow の job/needs/if の整合性を静的に検証する。
 2. routing の既存 Bats/Python テストを実行し、platform output の契約を確認する。
-3. Windows 専用 path、Darwin 専用 path、共有 path の routing テストを確認し、対象外 platform が `false` になることを検証する。
+3. Linux、Darwin、WSL、Windows の各専用 path と共有 path の routing テストを確認し、対象外 platform が `false` になることを検証する。
 4. 新 workflow が対象 path と旧 workflow の実行対象を引き継いでいることを focused script で確認する。
 5. 変更差分を確認し、旧 workflow の参照、重複した trigger、artifact 名の衝突、fork PR での権限逸脱がないことを確認する。
 6. hosted GitHub Actions では 4 platform の job が共通 `changes` 後に変更対象だけ並列起動し、`Bootstrap / Complete` が `success` / `skipped` を正しく集約することを確認する。
