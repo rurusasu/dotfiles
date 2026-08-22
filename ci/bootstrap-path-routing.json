@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "outputs": [
+    "linux",
+    "darwin",
+    "wsl",
+    "windows",
+    "contract",
+    "nix",
+    "chezmoi",
+    "hermes",
+    "devcontainer",
+    "package_catalog"
+  ],
+  "fallback_outputs": ["linux", "darwin", "wsl", "windows"],
+  "rules": [
+    {
+      "patterns": [
+        "flake.nix",
+        "flake.lock",
+        "nix/**",
+        "install.sh",
+        "scripts/sh/dcnvim.sh",
+        ".github/e2e/**",
+        ".github/workflows/ci-bootstrap.yml"
+      ],
+      "outputs": ["nix"]
+    },
+    {
+      "patterns": [
+        "ci/bootstrap-path-routing.json",
+        "ci/path-routing.json",
+        "scripts/python/detect_ci_changes.py",
+        "tests/python/test_detect_ci_changes.py",
+        "tests/python/test_ci_workflow_routing.py",
+        "tests/bash/ci_routing.bats",
+        ".github/actions/detect-ci-changes/**",
+        ".github/workflows/ci-contract.yml",
+        ".github/workflows/ci-bootstrap.yml"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": ["flake.nix", "flake.lock", "nix/flakes/**", "nix/lib/**"],
+      "outputs": ["linux", "darwin", "wsl"]
+    },
+    {
+      "patterns": ["nix/packages/**"],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": [
+        "nix/home/linux/**",
+        "nix/home/users/**",
+        "nix/hosts/linux/**",
+        "nix/system-manager/**",
+        "nix/tests/**",
+        "scripts/sh/install-linux.sh",
+        "scripts/sh/install-nixos.sh",
+        ".github/e2e/**",
+        "tests/bash/install_linux.bats"
+      ],
+      "outputs": ["linux"]
+    },
+    {
+      "patterns": ["nix/home/common.nix"],
+      "outputs": ["linux", "darwin", "wsl"]
+    },
+    {
+      "patterns": [
+        "nix/home/wsl/**",
+        "nix/hosts/wsl/**",
+        "nix/modules/wsl/**",
+        "scripts/sh/nixos-wsl-postinstall.sh",
+        "scripts/powershell/ci/Invoke-NixosWslE2E.ps1",
+        "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
+      ],
+      "outputs": ["wsl"]
+    },
+    {
+      "patterns": ["nix/modules/host/**"],
+      "outputs": ["linux", "wsl"]
+    },
+    {
+      "patterns": ["nix/darwin/**", "scripts/sh/install-macos.sh", "tests/bash/install_macos.bats"],
+      "outputs": ["darwin"]
+    },
+    {
+      "patterns": ["scripts/sh/install.sh"],
+      "outputs": ["linux", "darwin"]
+    },
+    {
+      "patterns": ["scripts/sh/install-common.sh"],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": ["scripts/sh/install-home-manager.sh"],
+      "outputs": ["linux", "darwin", "wsl"]
+    },
+    {
+      "patterns": ["scripts/sh/dcnvim.sh"],
+      "outputs": ["linux", "darwin", "wsl"]
+    },
+    {
+      "patterns": ["scripts/sh/verify-environment.sh"],
+      "outputs": ["linux", "darwin"]
+    },
+    {
+      "patterns": ["scripts/powershell/handlers/Handler.NixRebuild.ps1"],
+      "outputs": ["wsl", "windows"]
+    },
+    {
+      "patterns": ["scripts/powershell/lib/**"],
+      "outputs": ["wsl", "windows"]
+    },
+    {
+      "patterns": [
+        "scripts/powershell/tests/**",
+        "scripts/powershell/install.ps1",
+        "scripts/powershell/install.user.ps1",
+        "scripts/powershell/handlers/Handler.Winget.ps1",
+        "scripts/powershell/handlers/Handler.Npm.ps1",
+        "scripts/powershell/handlers/Handler.Pnpm.ps1",
+        "scripts/powershell/handlers/Handler.Codex.ps1",
+        "scripts/powershell/handlers/Handler.ClaudeCode.ps1",
+        "scripts/powershell/handlers/Handler.Bun.ps1",
+        "chezmoi/terminals/windows-terminal/**",
+        "chezmoi/**/*_windows*",
+        "windows/**",
+        "install.cmd"
+      ],
+      "outputs": ["windows"]
+    },
+    {
+      "patterns": ["chezmoi/**/*_darwin*"],
+      "outputs": ["darwin"]
+    },
+    {
+      "patterns": ["chezmoi/**/*_linux*"],
+      "outputs": ["linux"]
+    },
+    {
+      "patterns": [
+        "chezmoi/.chezmoiignore",
+        "chezmoi/.chezmoiignore.tmpl",
+        "chezmoi/.chezmoi.toml.tmpl",
+        "chezmoi/README.md",
+        "chezmoi/dot_gitconfig*",
+        "chezmoi/shells/bashrc",
+        "chezmoi/shells/profile",
+        "chezmoi/terminals/wezterm/**",
+        "chezmoi/editors/**",
+        "chezmoi/cli/**",
+        "chezmoi/dot_config/**",
+        "chezmoi/dot_codex/**"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": [
+        "docker/hermes-agent/**",
+        "docker/hermes-browser/**",
+        "docker/hermes-browser-mcp/**",
+        "docker/hermes-xapi-mcp/**"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": ["Taskfile.yml", "taskfiles/hermes/**"],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": ["taskfiles/nix/**"],
+      "outputs": ["linux", "darwin", "wsl"]
+    }
+  ]
+}

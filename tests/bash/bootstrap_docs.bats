@@ -15,8 +15,8 @@ setup() {
 
 @test "operational docs require only hosted bootstrap CI" {
 	[ ! -e "$REPO_ROOT/docs/ci/self-hosted-bootstrap-runners.md" ]
-	grep -q 'ci-bootstrap-e2e-hosted.yml' "$REPO_ROOT/docs/architecture.md"
-	grep -q 'Protected Bootstrap E2E' "$REPO_ROOT/docs/scripts/powershell/testing.md"
+	grep -q 'ci-bootstrap.yml' "$REPO_ROOT/docs/architecture.md"
+	grep -q 'Bootstrap CI' "$REPO_ROOT/docs/scripts/powershell/testing.md"
 	for file in \
 		"$REPO_ROOT/README.md" \
 		"$REPO_ROOT/docs/architecture.md" \

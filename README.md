@@ -3,10 +3,9 @@
 [![NixOS](https://img.shields.io/badge/NixOS-26.05-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
-[![ci-nix](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml)
+[![Bootstrap CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-bootstrap.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-bootstrap.yml)
 [![ci-powershell](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml)
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
-[![ci-winget](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-winget.yml)
 [![ci-consistency](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 

@@ -7,7 +7,7 @@ setup() {
 }
 
 @test "destructive Linux E2E routes installers through the acceptance fixture" {
-	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap-e2e-linux.yml"
+	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
 	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
 
 	[ "$(grep -c '.github/e2e/run-bootstrap-acceptance.sh' "$workflow")" -ge 3 ]
