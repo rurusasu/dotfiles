@@ -27,6 +27,16 @@ EOF
 	chmod +x "$STUB_BIN/tart"
 }
 
+write_df_stub() {
+	cat >"$STUB_BIN/df" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf '/dev/mock 100000000 0 36700160 0%% /\n'
+EOF
+	chmod +x "$STUB_BIN/df"
+}
+
 @test "catalog declares Tart as a macOS Homebrew formula" {
 	run awk '
 		/^    tart = \{/ { in_entry=1 }
@@ -85,6 +95,32 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"DOTFILES_TART_MIN_FREE_GIB is too large"* ]]
 	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "Tart preparation treats leading-zero capacity as decimal" {
+	write_tart_stub
+	write_df_stub
+
+	run env PATH="$STUB_BIN:$PATH" \
+		DOTFILES_TART_COMMAND="$STUB_BIN/tart" \
+		DOTFILES_TART_MIN_FREE_GIB=040 \
+		"$INSTALLER"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Insufficient free space"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "Tart preparation accepts leading-zero capacity with digit eight" {
+	write_tart_stub
+
+	run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" \
+		DOTFILES_TART_MIN_FREE_GIB=08 \
+		DOTFILES_TART_VM_NAME=eight-gib \
+		"$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -Fxq 'tart clone ghcr.io/cirruslabs/macos-tahoe-base:latest eight-gib' "$COMMAND_LOG"
 }
 
 @test "Tart preparation clones the configured image into TART_HOME" {

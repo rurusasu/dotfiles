@@ -27,6 +27,7 @@ validate_configuration() {
     dotfiles_die "DOTFILES_TART_MIN_FREE_GIB must be a non-negative integer: $MIN_FREE_GIB"
   local normalized_min_free_gib="${MIN_FREE_GIB#"${MIN_FREE_GIB%%[!0]*}"}"
   normalized_min_free_gib="${normalized_min_free_gib:-0}"
+  MIN_FREE_GIB="$normalized_min_free_gib"
   if ((${#normalized_min_free_gib} > ${#MAX_FREE_GIB})) ||
     ((${#normalized_min_free_gib} == ${#MAX_FREE_GIB} && 10#$normalized_min_free_gib > 10#$MAX_FREE_GIB)); then
     dotfiles_die "DOTFILES_TART_MIN_FREE_GIB is too large: $MIN_FREE_GIB"
