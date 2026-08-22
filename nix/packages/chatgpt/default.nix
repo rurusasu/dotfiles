@@ -81,8 +81,8 @@ let
     nss
     pango
     pulseaudio
-    qt5.qtbase
-    qt6.qtbase
+    (lib.getLib qt5.qtbase)
+    (lib.getLib qt6.qtbase)
     systemd
   ];
 in

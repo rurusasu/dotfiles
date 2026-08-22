@@ -180,8 +180,8 @@ setup() {
 }
 
 @test "ChatGPT Linux package supplies Qt runtimes and ignores optional musl modules" {
-	grep -q '^    qt5\.qtbase$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
-	grep -q '^    qt6\.qtbase$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q '^    (lib\.getLib qt5\.qtbase)$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q '^    (lib\.getLib qt6\.qtbase)$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'autoPatchelfIgnoreMissingDeps' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'libc\.musl-x86_64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'libc\.musl-aarch64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
