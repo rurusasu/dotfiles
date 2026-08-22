@@ -8,7 +8,8 @@ from pathlib import Path
 
 DOTFILES_ROOT = Path(__file__).resolve().parents[4]
 HERMES_TASKFILE = DOTFILES_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
-WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-bootstrap.yml"
+BOOTSTRAP_WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-bootstrap.yml"
+WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-provenance.yml"
 PRE_COMMIT = DOTFILES_ROOT / ".pre-commit-config.yaml"
 PROVENANCE = (
     DOTFILES_ROOT
@@ -24,7 +25,8 @@ PRE_COMMIT_TRIGGER = (
     r"scripts/powershell/handlers/Handler\.HermesAgent\.ps1|"
     r"tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
     r"\.pre-commit-config\.yaml|"
-    r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
+    r"\.github/workflows/ci-hermes-bootstrap\.yml|"
+    r"\.github/workflows/ci-hermes-provenance\.yml)$"
 )
 
 
@@ -103,6 +105,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
             "Taskfile.yml",
             ".pre-commit-config.yaml",
             ".github/workflows/ci-hermes-bootstrap.yml",
+            ".github/workflows/ci-hermes-provenance.yml",
         ):
             with self.subTest(changed_path=changed_path):
                 self.assertIsNotNone(re.fullmatch(trigger, changed_path))
@@ -112,6 +115,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self,
     ) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        bootstrap_workflow = BOOTSTRAP_WORKFLOW.read_text(encoding="utf-8")
         checkout_pins = re.findall(
             r"uses: actions/checkout@([0-9a-f]{40})",
             workflow,
@@ -121,9 +125,12 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(len(checkout_pins), 1)
         self.assertEqual(len(set(checkout_pins)), 1)
         self.assertEqual(workflow.count("persist-credentials: false"), 1)
+        self.assertNotIn("  pull_request:\n", workflow)
+        self.assertNotIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("Checkout provenance-pinned hermes-home", workflow)
         self.assertNotIn("hermes-home-provenance", workflow)
         self.assertEqual(workflow.count("secrets.HERMES_HOME_READ_TOKEN"), 1)
+        self.assertNotIn("HERMES_HOME_READ_TOKEN", bootstrap_workflow)
         self.assertNotIn(provenance["source_commit"], workflow)
         self.assertNotIn("id: provenance", workflow)
         self.assertIn(

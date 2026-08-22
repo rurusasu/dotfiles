@@ -228,6 +228,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
+            ".github/workflows/ci-hermes-provenance.yml",
         )
 
         for event in ("push", "pull_request"):
