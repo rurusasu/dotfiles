@@ -110,8 +110,8 @@ let
     };
 
     # ── dev ───────────────────────────────────────────────
-    nodejs_24 = {
-      pkg = pkgs.nodejs_24;
+    nodejs = {
+      pkg = pkgs.nodejs;
       winget = "OpenJS.NodeJS.LTS";
       category = "dev";
     };
@@ -928,6 +928,7 @@ lib.mapAttrs (_: resolve) grouped
   pnpmGlobal = [
     "@prisma/language-server"
     "@agentclientprotocol/claude-agent-acp"
+    "@deepseek-ai/dsh"
     "@playwright/cli@0.1.14"
     "playwright@1.61.0"
     "typescript-language-server"
@@ -957,6 +958,10 @@ lib.mapAttrs (_: resolve) grouped
       type = "commandExists";
       command = "claude-agent-acp";
       args = [ ];
+    };
+    "@deepseek-ai/dsh" = {
+      command = "dsh";
+      args = [ "--version" ];
     };
     "@playwright/cli" = {
       command = "playwright-cli";
@@ -1042,7 +1047,7 @@ lib.mapAttrs (_: resolve) grouped
       command = "nvim";
       args = [ "--version" ];
     };
-    nodejs_24 = {
+    nodejs = {
       command = "node";
       args = [ "--version" ];
     };

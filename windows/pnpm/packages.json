@@ -18,6 +18,13 @@
       }
     },
     {
+      "name": "@deepseek-ai/dsh",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "dsh"
+      }
+    },
+    {
       "name": "@playwright/cli@0.1.14",
       "verifyCommand": {
         "args": ["--version"],
