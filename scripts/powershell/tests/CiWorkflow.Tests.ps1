@@ -600,8 +600,8 @@ Describe 'CI workflow configuration' {
 
         $macosJob | Should -Not -BeNullOrEmpty
         $macosJob | Should -Match 'brew install bash coreutils go-task lua'
-        $macosJob | Should -Match 'bash scripts/sh/install-wezterm-nightly\.sh'
-        $macosJob | Should -Not -Match 'brew install --cask wezterm@nightly'
+        $macosJob | Should -Not -Match 'bash scripts/sh/.*wezterm.*nightly'
+        $macosJob | Should -Match 'brew install --cask wezterm@nightly'
         $macosJob | Should -Match 'command -v lua'
         $macosJob | Should -Match 'command -v luac'
         $macosJob | Should -Match 'command -v wezterm'
@@ -612,7 +612,7 @@ Describe 'CI workflow configuration' {
         $macosJob | Should -Not -Match '(?:command -v (?:lua|luac).*(?:\|\| true)|if\s+command -v (?:lua|luac))'
         $macosJob.IndexOf('brew install bash bats-core coreutils go-task lua') |
             Should -BeLessThan $macosJob.IndexOf('luac -p chezmoi/terminals/hammerspoon/init.lua')
-        $macosJob.IndexOf('bash scripts/sh/install-wezterm-nightly.sh') |
+        $macosJob.IndexOf('brew install --cask wezterm@nightly') |
             Should -BeLessThan $macosJob.IndexOf('bats tests/wezterm')
     }
 

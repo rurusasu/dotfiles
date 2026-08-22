@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Outdated Semantics Fix Design
 
+> **Status:** Historical design. The standalone cask updater described here was superseded by nix-darwin's declarative Homebrew Bundle with `upgrade = true`.
+
 ## Goal
 
 `nrs` の明示的な Homebrew cask 更新処理を、現在の Homebrew CLI の終了コードと tap 修飾名の扱いに適合させる。

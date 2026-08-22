@@ -98,10 +98,6 @@
       "outputs": ["linux", "darwin", "contract"]
     },
     {
-      "patterns": ["scripts/sh/install-wezterm-nightly.sh"],
-      "outputs": ["linux", "darwin", "contract", "nix"]
-    },
-    {
       "patterns": ["scripts/sh/uninstall-arc-browser.sh"],
       "outputs": ["darwin", "contract", "nix"]
     },

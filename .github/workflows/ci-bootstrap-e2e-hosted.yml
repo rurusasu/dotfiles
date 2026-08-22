@@ -164,7 +164,7 @@ jobs:
           "$bats_root/install.sh" "$bats_prefix"
           echo "$bats_prefix/bin" >>"$GITHUB_PATH"
           "$bats_prefix/bin/bats" --version
-          bash scripts/sh/install-wezterm-nightly.sh
+          brew install --cask wezterm@nightly
           command -v lua
           command -v luac
           command -v wezterm

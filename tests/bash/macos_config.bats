@@ -20,7 +20,7 @@ setup() {
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
 	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'activationScripts.postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
 }
@@ -32,7 +32,7 @@ setup() {
 	grep -q 'postActivation.text' "$REPO_ROOT/nix/darwin/default.nix"
 }
 
-@test "Darwin separates missing-cask installation from explicit greedy upgrades" {
+@test "Darwin enables automatic Homebrew cask upgrades" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
@@ -40,7 +40,7 @@ setup() {
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
 			in {
 				inherit (config.homebrew) greedyCasks;
-				inherit (config.homebrew.onActivation) autoUpdate upgrade;
+				inherit (config.homebrew.onActivation) autoUpdate extraEnv upgrade;
 			}
 		"
 
@@ -48,9 +48,39 @@ setup() {
 	run jq -e '
 		.autoUpdate == true and
 		.greedyCasks == true and
-		.upgrade == false
+		.upgrade == true and
+		.extraEnv.HOMEBREW_AUTO_UPDATE_SECS == "86400" and
+		.extraEnv.HOMEBREW_NO_ENV_HINTS == "1"
 	' <<<"$output"
 	[ "$status" -eq 0 ]
+}
+
+@test "Darwin passes Homebrew controls to the activation bundle" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let
+				config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.homebrew.text
+	"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'HOMEBREW_AUTO_UPDATE_SECS=86400'* ]]
+	[[ "$output" == *'HOMEBREW_NO_ENV_HINTS=1'* ]]
+	[[ "$output" != *'--no-upgrade'* ]]
+}
+
+@test "Darwin generates WezTerm nightly in the Homebrew Bundle" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --no-write-lock-file --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.brewfile
+		"
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'cask "wezterm@nightly", greedy: true'* ]]
 }
 
 @test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {
@@ -84,6 +114,33 @@ setup() {
 @test "Home Manager accepts the bootstrap user and home environment" {
 	grep -q 'DOTFILES_USER' "$REPO_ROOT/nix/home/common.nix"
 	grep -q 'DOTFILES_HOME' "$REPO_ROOT/nix/home/common.nix"
+}
+
+@test "Darwin shells use Homebrew's 24-hour auto-update interval" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+			in flake.darwinConfigurations.macos.config.home-manager.users.codex.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS
+	"
+	[ "$status" -eq 0 ]
+	[ "$output" = "86400" ]
+}
+
+@test "Darwin uses Homebrew's renamed Ollama cask" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let
+				config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.casks
+	"
+	[ "$status" -eq 0 ]
+	run jq -e 'any(.[]; .name == "ollama-app") and all(.[]; .name != "ollama")' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {

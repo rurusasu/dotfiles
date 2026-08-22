@@ -100,34 +100,32 @@ in
     autoMigrate = true;
   };
 
-  # This runs after nix-darwin's Homebrew activation. The nightly cask is
-  # intentionally filtered below because its preflight currently rejects the
-  # official archive layout.
-  system.activationScripts.postActivation.text = lib.mkAfter (
-    (builtins.readFile ../../scripts/sh/install-wezterm-nightly.sh)
-    + ''
+  # This runs after nix-darwin's Homebrew activation to repair Arc and start
+  # Ollama for the active user.
+  system.activationScripts.postActivation.text = lib.mkAfter ''
 
-      /usr/bin/sudo --user=${lib.escapeShellArg user} -- /bin/bash -c ${lib.escapeShellArg (builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh)}
-      /bin/rm -rf -- ${lib.escapeShellArg "${home}/Library/Caches/CloudKit/company.thebrowser.Browser"} 2>/dev/null || true
-      ollama_uid="$(/usr/bin/id -u -- ${lib.escapeShellArg user})"
-      /bin/launchctl asuser "$ollama_uid" /usr/bin/sudo --user=${lib.escapeShellArg user} -- /usr/bin/open -gj -a Ollama
-    ''
-  );
+    /usr/bin/sudo --user=${lib.escapeShellArg user} -- /bin/bash -c ${lib.escapeShellArg (builtins.readFile ../../scripts/sh/uninstall-arc-browser.sh)}
+    /bin/rm -rf -- ${lib.escapeShellArg "${home}/Library/Caches/CloudKit/company.thebrowser.Browser"} 2>/dev/null || true
+    ollama_uid="$(/usr/bin/id -u -- ${lib.escapeShellArg user})"
+    /bin/launchctl asuser "$ollama_uid" /usr/bin/sudo --user=${lib.escapeShellArg user} -- /usr/bin/open -gj -a Ollama
+  '';
 
   homebrew = {
     enable = true;
     brews = sets.darwinBrews;
-    # The official nightly archive currently does not match Homebrew's
-    # source_glob preflight. Install it from the archive in an activation
-    # script while retaining the catalog entry for provider reporting.
-    casks = builtins.filter (cask: cask != "wezterm@nightly") sets.darwinCasks;
-    # nix-darwin installs missing casks. Explicit greedy upgrades, retries,
-    # and verification are handled by update-homebrew-casks.sh.
+    # The official WezTerm nightly cask is managed by nix-darwin/Homebrew
+    # Bundle together with the rest of the Darwin cask catalog.
+    casks = sets.darwinCasks;
+    # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
     onActivation = {
       autoUpdate = true;
-      upgrade = false;
+      upgrade = true;
       cleanup = "none";
+      extraEnv = {
+        HOMEBREW_AUTO_UPDATE_SECS = "86400";
+        HOMEBREW_NO_ENV_HINTS = "1";
+      };
     };
   };
 
