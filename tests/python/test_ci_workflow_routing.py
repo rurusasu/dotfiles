@@ -275,9 +275,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name, output in (
             ("linux-build", "linux"),
-            ("linux-ubuntu", "linux"),
-            ("linux-debian", "linux"),
-            ("linux-nixos", "linux"),
             ("darwin", "darwin"),
             ("wsl", "wsl"),
             ("windows", "windows"),
@@ -285,6 +282,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("needs: changes", job)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("needs: [changes, linux-build]", job)
+            self.assertIn("needs.changes.outputs.linux == 'true'", job)
 
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("if: ${{ always() }}", complete)
