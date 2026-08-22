@@ -5,6 +5,7 @@
 pnpm_global_packages:
   - "@prisma/language-server"
   - "@agentclientprotocol/claude-agent-acp"
+  - "@deepseek-ai/dsh"
   - "@playwright/cli"
   - "typescript-language-server"
   - "typescript"

@@ -14,6 +14,24 @@ setup() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
+@test "Node.js follows the current nixpkgs major" {
+	run awk '
+		/^    nodejs = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };$/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = pkgs.nodejs;'* ]]
+	[[ "$output" != *'nodejs_24'* ]]
+}
+
+@test "DeepSeek Harness is managed as a cross-platform pnpm package" {
+	grep -q '"@deepseek-ai/dsh"' "$SETS"
+	grep -q '"@deepseek-ai/dsh"' "$REPO_ROOT/chezmoi/.chezmoidata/pnpm_global.yaml"
+	grep -q '"@deepseek-ai/dsh"' "$REPO_ROOT/windows/pnpm/packages.json"
+	grep -q 'command = "dsh";' "$SETS"
+}
+
 @test "cross-platform applications are not classified as Windows-only" {
 	windows_only="$(sed -n '/windowsOnly = {/,/^  };/p' "$SETS")"
 	for package_id in \

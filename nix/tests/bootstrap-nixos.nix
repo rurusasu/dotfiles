@@ -65,7 +65,7 @@ pkgs.testers.runNixOSTest {
         jq
         go-task
         neovim
-        nodejs_24
+        nodejs
         python3
         go
         rustup
