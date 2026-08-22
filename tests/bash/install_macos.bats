@@ -54,10 +54,8 @@ setup() {
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-	export DOTFILES_HOMEBREW_CASK_UPDATER="$STUB_BIN/update-homebrew-casks"
 	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/untrusted/bin"
 	export DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$BATS_TEST_TMPDIR/untrusted/cli-plugins"
-	export HOMEBREW_CASK_UPDATE_STATUS=0
 	export TEST_HOMEBREW_PARENT_METADATA='0 755'
 	export TEST_HOMEBREW_PARENT_ACL_STATE=absent
 	export TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER=1
@@ -162,10 +160,6 @@ printf "\n" >&2
 exit 97
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub update-homebrew-casks '
-printf "update-homebrew-casks %s\n" "$*" >>"$COMMAND_LOG"
-exit "$HOMEBREW_CASK_UPDATE_STATUS"
-'
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
@@ -337,7 +331,6 @@ assert_log_order() {
 		[ "$status" -ne 0 ]
 		[[ "$output" == *"$expected"* ]]
 		assert_no_homebrew_cask_link_mutations
-		! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 	done
 }
 
@@ -368,7 +361,6 @@ ensure_homebrew_cask_link_directories_under_parent \
   "$TEST_HOMEBREW_CASK_PARENT_DIR" \
   "$TEST_HOMEBREW_CASK_BIN_DIR" \
   "$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"
-"$DOTFILES_HOMEBREW_CASK_UPDATER"
 '
 }
 
@@ -406,7 +398,6 @@ run_macos_installer() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Homebrew cask link parent must not have an extended ACL: $TEST_HOMEBREW_CASK_PARENT_DIR"* ]]
 	assert_no_homebrew_cask_link_mutations
-	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 }
 
 @test "caller-writable Homebrew cask link parent stops before privileged mutation" {
@@ -417,7 +408,6 @@ run_macos_installer() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Homebrew cask link parent must not be writable by the current caller: $TEST_HOMEBREW_CASK_PARENT_DIR"* ]]
 	assert_no_homebrew_cask_link_mutations
-	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 }
 
 @test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
@@ -430,7 +420,6 @@ run_macos_installer() {
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"update-homebrew-casks " \
 		"docker info" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
@@ -602,7 +591,6 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"sudo </bin/chmod> <0775> </usr/local/bin>" \
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>" \
 		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>" \
-		"update-homebrew-casks " \
 		"docker info"
 }
 
@@ -639,8 +627,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"sudo </bin/chmod> <0775> <$TEST_HOMEBREW_CASK_BIN_DIR>" \
 		"sudo </bin/mkdir> <--> <$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>" \
 		"sudo </usr/sbin/chown> <test-user:admin> <$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>" \
-		"sudo </bin/chmod> <0775> <$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>" \
-		"update-homebrew-casks "
+		"sudo </bin/chmod> <0775> <$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>"
 }
 
 @test "unsafe Homebrew cask link targets stop all privileged mutations" {
@@ -670,7 +657,6 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		[ "$status" -ne 0 ]
 		[[ "$output" == *"$expected"* ]]
 		assert_no_homebrew_cask_link_mutations
-		! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 	done
 }
 
@@ -684,10 +670,9 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	[[ "$output" == *"Refusing symbolic Homebrew cask link directory: $TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"* ]]
 	[ "$(grep -Fc "<$TEST_HOMEBREW_CASK_BIN_DIR>" "$COMMAND_LOG")" -eq 3 ]
 	! grep -Fq "<$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>" "$COMMAND_LOG"
-	! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 }
 
-@test "privileged mutation failures stop later mutations and cask updates" {
+@test "privileged mutation failures stop later installer stages" {
 	local operation expected_count
 	for operation in mkdir chown chmod; do
 		reset_test_homebrew_cask_link_targets
@@ -703,7 +688,6 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		[ "$status" -eq "$SUDO_FAILURE_STATUS" ]
 		[ "$(grep -c '^sudo ' "$COMMAND_LOG")" -eq "$expected_count" ]
 		! grep -Fq "<$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR>" "$COMMAND_LOG"
-		! grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
 	done
 }
 
@@ -717,19 +701,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	[ ! -e "$unexpected" ]
 }
 
-@test "cask update failure stops macOS before Docker runtime and chezmoi" {
-	write_installed_stubs
-	export HOMEBREW_CASK_UPDATE_STATUS=47
-
-	run_macos_installer
-
-	[ "$status" -eq 47 ]
-	grep -q '^update-homebrew-casks ' "$COMMAND_LOG"
-	! grep -q '^chezmoi ' "$COMMAND_LOG"
-	! grep -q '^verify-environment ' "$COMMAND_LOG"
-}
-
-@test "repairs Homebrew cask link directories before cask updates" {
+@test "repairs Homebrew cask link directories before later installer stages" {
 	write_installed_stubs
 	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	chmod 0700 "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
@@ -744,8 +716,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	assert_log_order \
 		"sudo </usr/sbin/chown> <test-user:admin> <$FAKE_HOMEBREW_BIN_DIR>" \
 		"sudo </bin/chmod> <0775> <$FAKE_HOMEBREW_BIN_DIR>" \
-		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"update-homebrew-casks "
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
 @test "rejects an unsafe Homebrew cask link directory before privileged changes" {
@@ -760,7 +731,6 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	[[ "$output" == *"Homebrew cask link directory must be a real directory"* ]]
 	! grep -Fq 'sudo </usr/sbin/chown>' "$COMMAND_LOG"
 	! grep -Fq 'sudo </bin/chmod>' "$COMMAND_LOG"
-	! grep -q "^update-homebrew-casks " "$COMMAND_LOG"
 }
 
 @test "Hermes bootstrap failure recovers macOS runtime before returning failure" {

@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Link Permission Convergence Design
 
+> **Status:** Historical design. The cask-updater boundary described here is no longer an operational source of truth; cask installation and upgrades are handled by nix-darwin's declarative Homebrew Bundle.
+
 ## Context
 
 `nrs` updates declared Homebrew casks after `nix-darwin` activation. Docker Desktop 4.85.0 failed during that phase while creating `/usr/local/bin/kubectl`, because `/usr/local/bin` was `root:wheel` with mode `0700`. Homebrew rolled Docker Desktop back to 4.84.0, while the other declared desktop applications upgraded successfully.

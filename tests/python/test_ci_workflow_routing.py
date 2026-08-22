@@ -136,7 +136,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         ]
         self.assertIn(
             "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 "
-            ".github/workflows/ci-contract.yml",
+            ".github/workflows/*.yml",
             actionlint_lines,
         )
         self.assertNotIn(
@@ -144,6 +144,25 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             actionlint_lines,
         )
         self.assertIn("python -m unittest discover -s tests/python -v", workflow)
+
+    def test_ci_security_checks_cover_local_actions_and_pinned_devcontainer_tools(
+        self,
+    ) -> None:
+        codeql = self._named_workflow("codeql.yml")
+        self.assertEqual(codeql.count('      - ".github/actions/**"'), 2)
+
+        devcontainer = self._named_workflow("ci-devcontainer.yml")
+        self.assertIn(
+            "uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4",
+            devcontainer,
+        )
+        self.assertEqual(
+            devcontainer.count(
+                "npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0"
+            ),
+            2,
+        )
+        self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
 
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
@@ -209,6 +228,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
+            ".github/workflows/ci-hermes-provenance.yml",
         )
 
         for event in ("push", "pull_request"):
@@ -275,9 +295,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name, output in (
             ("linux-build", "linux"),
-            ("linux-ubuntu", "linux"),
-            ("linux-debian", "linux"),
-            ("linux-nixos", "linux"),
             ("darwin", "darwin"),
             ("wsl", "wsl"),
             ("windows", "windows"),
@@ -285,6 +302,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("needs: changes", job)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("needs: [changes, linux-build]", job)
+            self.assertIn("needs.changes.outputs.linux == 'true'", job)
 
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("if: ${{ always() }}", complete)

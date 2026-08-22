@@ -1,5 +1,7 @@
 # GitHub Actions Platform Routing Design
 
+> **Status:** Historical design. The obsolete WezTerm installer path mentioned in this document was removed; current routing follows the declarative nix-darwin Homebrew cask configuration.
+
 ## Goal
 
 GitHub Actions の重い build/E2E を変更の実際の処理経路に合わせて選択し、Linux、Darwin、WSL、Windows の検証境界を失わずに不要な実行時間を削減する。

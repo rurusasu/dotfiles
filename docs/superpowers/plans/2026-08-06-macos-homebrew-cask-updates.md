@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Updates Implementation Plan
 
+> **Status:** Superseded on 2026-08-22. The dedicated updater and WezTerm archive installer described here were removed; nix-darwin's declarative Homebrew Bundle now owns cask installation and upgrades.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `nrs` reliably update every dotfiles-declared macOS Homebrew cask, including greedy casks, with bounded retries, final convergence checks, and restart of applications that were running before the update.

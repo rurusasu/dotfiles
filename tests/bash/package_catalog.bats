@@ -164,7 +164,7 @@ setup() {
 	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
 	[[ "$output" == *'category = "llm";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]
-	[[ "$output" == *'cask = "ollama";'* ]]
+	[[ "$output" == *'cask = "ollama-app";'* ]]
 	[[ "$output" == *'provider = "nix";'* ]]
 
 	run awk '
@@ -212,7 +212,7 @@ setup() {
 	grep -q 'makeWrapper "\$out/lib/chatgpt/ChatGPT"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 }
 
-@test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {
+@test "Darwin evaluation installs WezTerm nightly and its terminfo" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
@@ -229,7 +229,7 @@ setup() {
 		}
 	"
 	[ "$status" -eq 0 ]
-	[ "$output" = '{"casks":[],"terminfoPackages":["wezterm-terminfo"]}' ]
+	[ "$output" = '{"casks":["wezterm@nightly"],"terminfoPackages":["wezterm-terminfo"]}' ]
 }
 
 @test "Warp is removed from the package catalog" {

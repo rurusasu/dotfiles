@@ -78,7 +78,7 @@
       "outputs": ["wsl", "contract", "nix"]
     },
     {
-      "patterns": ["nix/darwin/**"],
+      "patterns": ["nix/hosts/darwin/**"],
       "outputs": ["darwin", "contract", "nix"]
     },
     {
@@ -96,14 +96,6 @@
     {
       "patterns": ["scripts/sh/verify-environment.sh"],
       "outputs": ["linux", "darwin", "contract"]
-    },
-    {
-      "patterns": ["scripts/sh/install-wezterm-nightly.sh"],
-      "outputs": ["linux", "darwin", "contract", "nix"]
-    },
-    {
-      "patterns": ["scripts/sh/uninstall-arc-browser.sh"],
-      "outputs": ["darwin", "contract", "nix"]
     },
     {
       "patterns": ["scripts/sh/install-linux.sh", "scripts/sh/install-nixos.sh"],

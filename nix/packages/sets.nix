@@ -354,7 +354,7 @@ let
       support = {
         darwin = {
           provider = "homebrew-cask";
-          cask = "ollama";
+          cask = "ollama-app";
         };
         linux = {
           provider = "nix";

@@ -6,7 +6,7 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-tart-vm.sh"
 	SETS="$REPO_ROOT/nix/packages/sets.nix"
-	DARWIN_CONFIG="$REPO_ROOT/nix/darwin/default.nix"
+	DARWIN_CONFIG="$REPO_ROOT/nix/hosts/darwin/default.nix"
 	TASKFILE="$REPO_ROOT/taskfiles/install/taskfile.yml"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	TART_HOME="$TEST_HOME/.tart"

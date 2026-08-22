@@ -458,7 +458,7 @@ jobs:
 
   linux-ubuntu:
     name: Bootstrap / Linux / E2E / Ubuntu
-    needs: changes
+    needs: [changes, linux-build]
     if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -513,7 +513,7 @@ jobs:
 
   linux-debian:
     name: Bootstrap / Linux / E2E / Debian
-    needs: changes
+    needs: [changes, linux-build]
     if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -612,7 +612,7 @@ jobs:
 
   linux-nixos:
     name: Bootstrap / Linux / E2E / NixOS
-    needs: changes
+    needs: [changes, linux-build]
     if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -665,7 +665,7 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bash, Bats, GNU coreutils, Lua, Task, and WezTerm
+      - name: Install Bash, Bats, GNU coreutils, Lua, and Task
         run: |
           set -euo pipefail
           brew install bash coreutils go-task lua
@@ -677,10 +677,8 @@ jobs:
           "$bats_root/install.sh" "$bats_prefix"
           echo "$bats_prefix/bin" >>"$GITHUB_PATH"
           "$bats_prefix/bin/bats" --version
-          bash scripts/sh/install-wezterm-nightly.sh
           command -v lua
           command -v luac
-          command -v wezterm
           {
             echo "$(brew --prefix bash)/bin"
             echo "$(brew --prefix coreutils)/libexec/gnubin"
@@ -690,7 +688,6 @@ jobs:
         run: |
           set -euo pipefail
           env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
-          bats tests/wezterm
           luac -p chezmoi/terminals/hammerspoon/init.lua
           lua tests/lua/hammerspoon_terminal_prefix_test.lua
 
