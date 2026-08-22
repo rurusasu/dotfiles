@@ -47,6 +47,9 @@ CASES = {
     },
     "scripts/sh/install-linux.sh": {"linux", "contract"},
     "scripts/sh/install-macos.sh": {"darwin", "contract"},
+    "install.sh": {"linux", "darwin", "contract", "devcontainer"},
+    "scripts/sh/verify-environment.sh": {"linux", "darwin", "contract"},
+    ".github/e2e/run-bootstrap-acceptance.sh": {"linux", "contract"},
     "scripts/sh/nixos-wsl-postinstall.sh": {
         "wsl",
         "windows",
@@ -165,6 +168,29 @@ class DetectCiChangesTests(unittest.TestCase):
             {"contract"},
         )
 
+    def test_special_bats_paths_enable_contract_and_devcontainer(self) -> None:
+        special_paths = ("tests/bash/install_macos.bats", "tests/bash/install_linux.bats")
+        for path in special_paths:
+            with self.subTest(path=path):
+                result = self.detector.route_paths([path], MANIFEST_PATH)
+                self.assertEqual(
+                    {name for name, enabled in result.items() if enabled},
+                    {"contract", "devcontainer"},
+                )
+
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest["rules"] = [
+            rule
+            for rule in manifest["rules"]
+            if set(rule["patterns"]) != set(special_paths)
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_manifest = Path(temporary_directory) / "routing.json"
+            temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+            mutated_result = self.detector.route_paths([special_paths[0]], temporary_manifest)
+
+        self.assertFalse(mutated_result["devcontainer"])
+
     def test_absolute_path_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             self.detector.route_paths(["/tmp/file"], MANIFEST_PATH)
@@ -223,6 +249,21 @@ class DetectCiChangesTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 self.detector.route_paths(["README.md"], temporary_manifest)
+
+    def test_unsafe_manifest_patterns_fail_closed_for_the_api_and_cli(self) -> None:
+        for pattern in ("", "/absolute/path", "scripts\\sh\\bad", "scripts/../bad"):
+            with self.subTest(pattern=pattern), tempfile.TemporaryDirectory() as temporary_directory:
+                manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+                manifest["rules"][0]["patterns"] = [pattern]
+                temporary_manifest = Path(temporary_directory) / "routing.json"
+                temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+                with self.assertRaises(ValueError):
+                    self.detector.route_paths(["README.md"], temporary_manifest)
+
+                completed = self._run_cli("--manifest", str(temporary_manifest), "--all")
+                self.assertEqual(completed.returncode, 2)
+                self.assertIn("error:", completed.stderr)
 
     def test_specific_hermes_and_devcontainer_rules_precede_broad_rules(self) -> None:
         rules = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))["rules"]

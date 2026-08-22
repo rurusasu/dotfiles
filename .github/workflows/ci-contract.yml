@@ -55,7 +55,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bats --print-output-on-failure tests/bash/ci_routing.bats
+          shopt -s nullglob
+          bats_files=(tests/bash/*.bats)
+          safe_bats_files=()
+          for bats_file in "${bats_files[@]}"; do
+            case "${bats_file}" in
+              tests/bash/install_macos.bats|tests/bash/install_linux.bats)
+                continue
+                ;;
+              *)
+                safe_bats_files+=("${bats_file}")
+                ;;
+            esac
+          done
+          bats_files=("${safe_bats_files[@]}")
+          ((${#bats_files[@]} > 0))
+          bats --print-output-on-failure "${bats_files[@]}"
 
       - name: Run actionlint
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/ci-contract.yml

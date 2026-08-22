@@ -81,7 +81,12 @@ def _load_manifest(manifest_path: Path) -> tuple[list[str], list[dict[str, list[
             or not set(rule_outputs).issubset(EXPECTED_OUTPUTS)
         ):
             raise ValueError("routing manifest rule contains invalid patterns or outputs")
-        validated_rules.append({"patterns": patterns, "outputs": rule_outputs})
+        validated_rules.append(
+            {
+                "patterns": [_validate_pattern(pattern) for pattern in patterns],
+                "outputs": rule_outputs,
+            }
+        )
 
     return outputs, validated_rules
 
@@ -94,6 +99,16 @@ def _validate_path(raw_path: str) -> PurePosixPath:
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"path must be repository-relative: {raw_path}")
     return path
+
+
+def _validate_pattern(pattern: str) -> str:
+    if not pattern or "\\" in pattern:
+        raise ValueError(f"routing pattern must be a nonempty POSIX-relative path: {pattern}")
+
+    path = PurePosixPath(pattern)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"routing pattern must be a nonempty POSIX-relative path: {pattern}")
+    return pattern
 
 
 def _read_paths(paths_file: Path) -> list[str]:

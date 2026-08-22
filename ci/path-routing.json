@@ -90,6 +90,14 @@
       "outputs": ["linux", "darwin", "windows", "contract", "nix", "devcontainer"]
     },
     {
+      "patterns": ["install.sh"],
+      "outputs": ["linux", "darwin", "contract", "devcontainer"]
+    },
+    {
+      "patterns": ["scripts/sh/verify-environment.sh"],
+      "outputs": ["linux", "darwin", "contract"]
+    },
+    {
       "patterns": ["scripts/sh/install-wezterm-nightly.sh"],
       "outputs": ["linux", "darwin", "contract", "nix"]
     },
@@ -222,11 +230,19 @@
       "outputs": ["windows", "contract", "package_catalog"]
     },
     {
+      "patterns": ["tests/bash/install_macos.bats", "tests/bash/install_linux.bats"],
+      "outputs": ["contract", "devcontainer"]
+    },
+    {
       "patterns": [".github/workflows/codeql.yml"],
       "outputs": ["linux", "contract"]
     },
     {
-      "patterns": [".github/workflows/**", "taskfiles/**", "tests/**", ".github/e2e/**"],
+      "patterns": [".github/e2e/**"],
+      "outputs": ["linux", "contract"]
+    },
+    {
+      "patterns": [".github/workflows/**", "taskfiles/**", "tests/**"],
       "outputs": ["contract"]
     }
   ]

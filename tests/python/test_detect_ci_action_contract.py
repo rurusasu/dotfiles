@@ -57,7 +57,8 @@ class DetectCiActionContractTests(unittest.TestCase):
 
         self.assertIn("set -euo pipefail", script)
         self.assertIn('paths_file="${RUNNER_TEMP}/ci-changed-paths.txt"', script)
-        self.assertIn("git diff --name-only --diff-filter=ACMR", script)
+        self.assertIn("git diff --name-only --no-renames", script)
+        self.assertNotIn("--diff-filter=ACMR", script)
         self.assertIn("--paths-file", script)
         self.assertIn("--github-output", script)
         self.assertIn("--all", script)
@@ -108,6 +109,80 @@ class DetectCiActionContractTests(unittest.TestCase):
             self.assertEqual(self._read_outputs(output_path), dict.fromkeys(OUTPUTS, True))
             self.assertFalse((runner_temp / "ci-changed-paths.txt").exists())
 
+    def test_deleted_linux_path_keeps_linux_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = self._make_test_repository(Path(temporary_directory))
+            base_sha = self._commit_linux_installer(repository)
+            (repository / "scripts" / "sh" / "install-linux.sh").unlink()
+            self._git(repository, "add", "-A")
+            self._git(repository, "commit", "-m", "delete linux installer")
+            head_sha = self._git(repository, "rev-parse", "HEAD")
+
+            completed, output_path, runner_temp = self._run_action_script(
+                repository,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                run_all=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(self._read_outputs(output_path)["linux"])
+            self.assertEqual(
+                (runner_temp / "ci-changed-paths.txt").read_text(encoding="utf-8"),
+                "scripts/sh/install-linux.sh\n",
+            )
+
+    def test_renaming_linux_path_out_keeps_its_old_path_and_linux_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = self._make_test_repository(Path(temporary_directory))
+            base_sha = self._commit_linux_installer(repository)
+            self._git(
+                repository,
+                "mv",
+                "scripts/sh/install-linux.sh",
+                "renamed-installer.sh",
+            )
+            self._git(repository, "commit", "-m", "rename linux installer")
+            head_sha = self._git(repository, "rev-parse", "HEAD")
+
+            completed, output_path, runner_temp = self._run_action_script(
+                repository,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                run_all=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(self._read_outputs(output_path)["linux"])
+            self.assertEqual(
+                set((runner_temp / "ci-changed-paths.txt").read_text(encoding="utf-8").splitlines()),
+                {"renamed-installer.sh", "scripts/sh/install-linux.sh"},
+            )
+
+    def test_type_change_keeps_linux_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = self._make_test_repository(Path(temporary_directory))
+            base_sha = self._commit_linux_installer(repository)
+            (repository / "scripts" / "sh" / "install-linux.sh").unlink()
+            (repository / "scripts" / "sh" / "install-linux.sh").symlink_to("../target")
+            self._git(repository, "add", "-A")
+            self._git(repository, "commit", "-m", "change linux installer type")
+            head_sha = self._git(repository, "rev-parse", "HEAD")
+
+            completed, output_path, runner_temp = self._run_action_script(
+                repository,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                run_all=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(self._read_outputs(output_path)["linux"])
+            self.assertEqual(
+                (runner_temp / "ci-changed-paths.txt").read_text(encoding="utf-8"),
+                "scripts/sh/install-linux.sh\n",
+            )
+
     def _section(self, name: str) -> str:
         lines = self.action.splitlines()
         try:
@@ -157,6 +232,16 @@ class DetectCiActionContractTests(unittest.TestCase):
         self._git(repository, "add", ".")
         self._git(repository, "commit", "-m", "initial")
         return repository
+
+    def _commit_linux_installer(self, repository: Path) -> str:
+        (repository / "scripts" / "sh").mkdir(parents=True)
+        (repository / "scripts" / "sh" / "install-linux.sh").write_text(
+            "#!/bin/sh\n",
+            encoding="utf-8",
+        )
+        self._git(repository, "add", ".")
+        self._git(repository, "commit", "-m", "add linux installer")
+        return self._git(repository, "rev-parse", "HEAD")
 
     def _run_action_script(
         self,

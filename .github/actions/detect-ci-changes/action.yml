@@ -68,7 +68,7 @@ runs:
             --github-output "${GITHUB_OUTPUT}"
         else
           paths_file="${RUNNER_TEMP}/ci-changed-paths.txt"
-          git diff --name-only --diff-filter=ACMR "${BASE_SHA}" "${HEAD_SHA}" > "${paths_file}"
+          git diff --name-only --no-renames "${BASE_SHA}" "${HEAD_SHA}" > "${paths_file}"
           python scripts/python/detect_ci_changes.py \
             --paths-file "${paths_file}" \
             --github-output "${GITHUB_OUTPUT}"

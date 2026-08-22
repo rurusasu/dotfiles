@@ -242,13 +242,41 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow | Should -Match '"docker/hermes-agent/\*\*"'
     }
 
-    It 'should route generic Bats changes to Contract CI without devcontainer CI' {
+    It 'should assign every Bats file to exactly one CI owner' {
         $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
         $contractWorkflow | Should -Match '"tests/bash/\*\*"'
-        $contractWorkflow | Should -Match 'bats --print-output-on-failure tests/bash/ci_routing\.bats'
-        $contractWorkflow | Should -Not -Match '(?m)^\s*bats --print-output-on-failure tests/bash$'
+        $contractWorkflow | Should -Match 'shopt -s nullglob'
+        $contractWorkflow | Should -Match 'bats_files=\(tests/bash/\*\.bats\)'
+        $contractWorkflow | Should -Match 'bats --print-output-on-failure "\$\{bats_files\[@\]\}"'
+
+        $excludedBats = @('install_macos.bats', 'install_linux.bats')
+        $allBats = Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'tests/bash') -Filter '*.bats' -File |
+            Select-Object -ExpandProperty Name
+        $allBats | Should -Contain 'ci_routing.bats'
+        $contractExclusions = @(
+            [regex]::Matches(
+                $contractWorkflow,
+                'tests/bash/(install_(?:macos|linux)\.bats)'
+            ) | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+        )
+        $contractExclusions.Count | Should -Be 2
+        foreach ($excludedBat in $excludedBats) {
+            $contractExclusions | Should -Contain $excludedBat
+        }
+        foreach ($batsFile in $allBats) {
+            if ($batsFile -in $excludedBats) {
+                $devcontainerWorkflow | Should -Match "tests/bash/$([regex]::Escape($batsFile))"
+            }
+            else {
+                $contractWorkflow | Should -Match 'bats_files=\(tests/bash/\*\.bats\)'
+            }
+        }
+
+        $excludedBats.Count | Should -Be 2
+        $devcontainerWorkflow | Should -Match '"tests/bash/install_macos\.bats"'
+        $devcontainerWorkflow | Should -Match '"tests/bash/install_linux\.bats"'
         $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
     }
 

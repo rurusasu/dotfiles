@@ -173,27 +173,32 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn('python-version: "3.14"', workflow)
         self.assertIn(INSTALL_NIX_ACTION, workflow)
 
-    def test_installs_bats_1_13_0_and_runs_only_routing_contracts(self) -> None:
+    def test_installs_bats_1_13_0_and_owns_every_safe_bats_file(self) -> None:
         workflow = self._workflow()
         self.assertIn("bats_version='1.13.0'", workflow)
         self.assertIn(
             "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz",
             workflow,
         )
-        bats_lines = [
-            line.strip()
-            for line in workflow.splitlines()
-            if "bats --print-output-on-failure" in line
-        ]
-        self.assertIn(
-            "bats --print-output-on-failure tests/bash/ci_routing.bats",
-            bats_lines,
-        )
-        self.assertNotRegex(
+        self.assertIn("shopt -s nullglob", workflow)
+        self.assertIn("bats_files=(tests/bash/*.bats)", workflow)
+        self.assertIn("tests/bash/install_macos.bats", workflow)
+        self.assertIn("tests/bash/install_linux.bats", workflow)
+        self.assertIn('bats --print-output-on-failure "${bats_files[@]}"', workflow)
+        all_bats_files = {path.name for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")}
+        excluded_bats_files = {"install_macos.bats", "install_linux.bats"}
+        exclusion_case = re.search(
+            r"(?ms)case \"\$\{bats_file\}\" in(?P<case>.*?)^\s*esac$",
             workflow,
-            r"(?m)^\s*(?:env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER )?"
-            r"bats --print-output-on-failure tests/bash$",
         )
+        self.assertIsNotNone(exclusion_case)
+        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
+        self.assertEqual(
+            set(re.findall(r"tests/bash/([^|)]+\.bats)", case_body)),
+            excluded_bats_files,
+        )
+        self.assertIn("ci_routing.bats", all_bats_files - excluded_bats_files)
+        self.assertGreater(len(all_bats_files - excluded_bats_files), 0)
 
     def test_runs_focused_actionlint_and_python_discovery(self) -> None:
         workflow = self._workflow()
@@ -228,12 +233,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertNotIn("scripts/sh/**", paths)
             self.assertNotIn("tests/bash/**", paths)
 
-    def test_devcontainer_ci_ignores_generic_bats_changes(self) -> None:
+    def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
             self.assertIn("scripts/sh/dcnvim.sh", paths)
+            self.assertIn("tests/bash/install_macos.bats", paths)
+            self.assertIn("tests/bash/install_linux.bats", paths)
             self.assertNotIn("tests/bash/**", paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
@@ -535,6 +542,12 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             job_body = job.group("job") if job is not None else ""
             self.assertRegex(job_body, r"(?m)^\s+needs: changes$")
             self.assertIn("needs.changes.outputs.linux == 'true'", job_body)
+
+        for event in ("push", "pull_request"):
+            activation_paths = self._trigger_paths(linux_workflow, event)
+            self.assertIn("install.sh", activation_paths)
+            self.assertIn("scripts/sh/**", activation_paths)
+            self.assertIn(".github/e2e/**", activation_paths)
 
         switch = re.search(
             r"(?ms)^  switch:\n(?P<job>.*?)(?=^  [a-zA-Z0-9_-]+:\s*$|\Z)",
