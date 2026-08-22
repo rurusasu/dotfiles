@@ -113,8 +113,6 @@ in
   homebrew = {
     enable = true;
     brews = sets.darwinBrews;
-    # The official WezTerm nightly cask is managed by nix-darwin/Homebrew
-    # Bundle together with the rest of the Darwin cask catalog.
     casks = sets.darwinCasks;
     # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
