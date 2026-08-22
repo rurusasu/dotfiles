@@ -136,7 +136,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         ]
         self.assertIn(
             "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 "
-            ".github/workflows/ci-contract.yml",
+            ".github/workflows/*.yml",
             actionlint_lines,
         )
         self.assertNotIn(
@@ -144,6 +144,25 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             actionlint_lines,
         )
         self.assertIn("python -m unittest discover -s tests/python -v", workflow)
+
+    def test_ci_security_checks_cover_local_actions_and_pinned_devcontainer_tools(
+        self,
+    ) -> None:
+        codeql = self._named_workflow("codeql.yml")
+        self.assertEqual(codeql.count('      - ".github/actions/**"'), 2)
+
+        devcontainer = self._named_workflow("ci-devcontainer.yml")
+        self.assertIn(
+            "uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4",
+            devcontainer,
+        )
+        self.assertEqual(
+            devcontainer.count(
+                "npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0"
+            ),
+            2,
+        )
+        self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
 
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
