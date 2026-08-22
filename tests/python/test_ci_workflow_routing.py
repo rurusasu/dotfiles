@@ -158,6 +158,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         push_section = push_match.group("section") if push_match is not None else ""
         for path in (
             "ci/path-routing.json",
+            "ci/bootstrap-path-routing.json",
             "scripts/python/detect_ci_changes.py",
             ".github/actions/detect-ci-changes/**",
             ".github/workflows/**",
@@ -165,6 +166,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "tests/python/**",
         ):
             self.assertIn(path, push_section)
+
+    def test_change_detector_action_accepts_a_manifest_path(self) -> None:
+        action_path = REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
+        action = action_path.read_text(encoding="utf-8")
+
+        self.assertIn("  manifest:\n", action)
+        self.assertIn("default: ci/path-routing.json", action)
+        self.assertIn('--manifest "${MANIFEST_PATH}"', action)
 
     def test_pins_checkout_python_and_nix_setup(self) -> None:
         workflow = self._workflow()

@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "ci/path-routing.json"
+      - "ci/bootstrap-path-routing.json"
       - "scripts/python/detect_ci_changes.py"
       - ".github/actions/detect-ci-changes/**"
       - ".github/workflows/**"
