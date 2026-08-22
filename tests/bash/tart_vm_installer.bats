@@ -113,8 +113,10 @@ EOF
 
 @test "Tart preparation accepts leading-zero capacity with digit eight" {
 	write_tart_stub
+	write_df_stub
 
-	run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" \
+	run env PATH="$STUB_BIN:$PATH" \
+		DOTFILES_TART_COMMAND="$STUB_BIN/tart" \
 		DOTFILES_TART_MIN_FREE_GIB=08 \
 		DOTFILES_TART_VM_NAME=eight-gib \
 		"$INSTALLER"
