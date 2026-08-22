@@ -83,7 +83,10 @@ setup() {
 	[[ "$output" == *'cask "wezterm@nightly", greedy: true'* ]]
 }
 
-@test "Darwin frees Command Space for Raycast by disabling Spotlight hotkey" {
+@test "Darwin frees Command Space by disabling macOS launcher hotkeys" {
+	local config="$REPO_ROOT/nix/darwin/default.nix"
+
+	grep -qF 'activationScripts.disableSpotlightHotkeys.text' "$config"
 	grep -q 'com.apple.symbolichotkeys' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'PlistBuddy' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'enabled bool false' "$REPO_ROOT/nix/darwin/default.nix"
@@ -92,9 +95,9 @@ setup() {
 	grep -q 'disableSymbolicHotKey 64' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'disableSymbolicHotKey 65' "$REPO_ROOT/nix/darwin/default.nix"
 	grep -q 'disableSymbolicHotKey 156' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'com.raycast.macos' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'raycastGlobalHotkey -string Command-49' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'activateSettings -u' "$REPO_ROOT/nix/darwin/default.nix"
+	! grep -q 'com.raycast.macos' "$config"
+	! grep -q 'open -gj -a Raycast' "$config"
+	grep -q 'activateSettings -u' "$config"
 }
 
 @test "Darwin configures global Zoom shortcuts for English and Japanese menus" {

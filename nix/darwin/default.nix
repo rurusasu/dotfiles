@@ -27,9 +27,7 @@ in
     primaryUser = user;
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
-    activationScripts.raycastHotkey.text = ''
-      # Configure Raycast as the launcher hotkey while preserving the rest of
-      # macOS's AppleSymbolicHotKeys dictionary.
+    activationScripts.disableSpotlightHotkeys.text = ''
       uid="$(id -u -- ${lib.escapeShellArg user})"
       symbolicHotKeysPlist=${lib.escapeShellArg "${home}/Library/Preferences/com.apple.symbolichotkeys.plist"}
       runAsUser() {
@@ -64,13 +62,9 @@ in
       disableSymbolicHotKey 65 65535 49 1572864
       disableSymbolicHotKey 156 65535 49 393216
       runAsUser /usr/bin/plutil -convert binary1 "$symbolicHotKeysPlist"
-      runAsUser /usr/bin/defaults write com.raycast.macos raycastGlobalHotkey -string Command-49
-      runAsUser /usr/bin/defaults write com.raycast.macos onboarding_setupHotkey -bool true
-      runAsUser /usr/bin/defaults write com.raycast.macos mainWindow_isMonitoringGlobalHotkeys -bool true
       runAsUser /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u 2>/dev/null || true
       runAsUser /usr/bin/killall cfprefsd 2>/dev/null || true
       runAsUser /usr/bin/killall SystemUIServer 2>/dev/null || true
-      runAsUser /usr/bin/open -gj -a Raycast 2>/dev/null || true
     '';
     activationScripts.globalZoomShortcut.text = ''
       uid="$(id -u -- ${lib.escapeShellArg user})"
