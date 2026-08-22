@@ -21,6 +21,7 @@
 #   - wingetPathEntries  → catalog attr name or winget ID → extra Windows PATH directories
 #   - supportReport      → per-package Windows/Darwin/Linux provider metadata
 #   - darwinCasks        → Homebrew casks derived from provider metadata
+#   - darwinBrews        → Homebrew formulas derived from provider metadata
 #   - linuxSystemModules → system-layer capabilities required on Linux
 #   - providerErrors     → unresolved provider metadata (must remain empty)
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/npm/pnpm)
@@ -487,6 +488,21 @@ let
     };
 
     # ── system capabilities ───────────────────────────────
+    tart = {
+      category = "system";
+      support = {
+        windows = {
+          unsupported = "Tart requires Apple Silicon macOS";
+        };
+        darwin = {
+          provider = "homebrew-formula";
+          formula = "openai/tools/tart";
+        };
+        linux = {
+          unsupported = "Tart requires Apple Silicon macOS";
+        };
+      };
+    };
     docker-desktop = {
       winget = "Docker.DockerDesktop";
       category = "system";
@@ -830,6 +846,9 @@ let
   darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
     lib.filterAttrs (_: entry: entry.support.darwin ? cask) catalog
   );
+  darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula) (
+    lib.filterAttrs (_: entry: entry.support.darwin ? formula) catalog
+  );
   linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule) (
     lib.filterAttrs (_: entry: entry.support.linux ? systemModule) catalog
   );
@@ -869,6 +888,7 @@ lib.mapAttrs (_: resolve) grouped
   inherit
     supportReport
     darwinCasks
+    darwinBrews
     linuxSystemModules
     providerErrors
     windowsOnlySupport

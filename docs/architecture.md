@@ -124,6 +124,7 @@ Hindsight は Hermes の起動依存ではありません。Hindsight 障害時�
 nix/packages/sets.nix (SSOT)
 ├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
 ├── darwinCasks ────────── nix-homebrew casks
+├── darwinBrews ────────── nix-homebrew formulas
 ├── linuxSystemModules ─── NixOS / System Manager packages and services
 ├── wingetMap + npmMap ─── generated Windows manifests
 ├── supportReport ──────── per-OS provider/unsupported evidence

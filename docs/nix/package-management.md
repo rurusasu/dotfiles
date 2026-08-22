@@ -30,7 +30,7 @@ mypackage = {
 };
 ```
 
-macOS cask や Linux system module が必要な application は、それぞれの provider metadata も同じ entry に追加します。どの OS にも provider がない場合は、その OS の `unsupported` reason が必要です。
+macOS formula/cask や Linux system module が必要な application は、それぞれの provider metadata も同じ entry に追加します。どの OS にも provider がない場合は、その OS の `unsupported` reason が必要です。
 
 ## OS ごとの反映
 
@@ -44,7 +44,7 @@ Ubuntu / Debian:  ./install.sh
 ```
 
 - Windows は catalog から生成された winget/npm/pnpm manifest を PowerShell handlers が適用します。
-- macOS は nix-darwin が Home Manager と nix-homebrew cask を同じ switch に含めます。
+- macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - Ubuntu/Debian は System Manager が Home Manager と system package/service を適用します。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
 
@@ -83,6 +83,7 @@ cat result/package-support-report.json
 | ------------------------------------------------ | ----------------------------------- |
 | shell から使う共通 CLI                           | Home Manager `home.packages`        |
 | Docker daemon/socket、ユーザー group、OS service | NixOS / System Manager / nix-darwin |
+| macOS CLI                                        | nix-homebrew formula                |
 | macOS GUI application                            | nix-homebrew cask                   |
 | Windows GUI/OS application                       | winget/msstore handler              |
 | shell、Git、terminal、editor 設定                | chezmoi                             |

@@ -116,6 +116,7 @@ in
 
   homebrew = {
     enable = true;
+    brews = sets.darwinBrews;
     # The official nightly archive currently does not match Homebrew's
     # source_glob preflight. Install it from the archive in an activation
     # script while retaining the catalog entry for provider reporting.

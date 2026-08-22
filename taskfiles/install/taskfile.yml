@@ -1,6 +1,12 @@
 version: "3"
 
 tasks:
+  tart:prepare:
+    desc: Download and clone the optional macOS Tart VM image
+    cmds:
+      - cmd: ./scripts/sh/install-tart-vm.sh
+        platforms: [darwin]
+
   install:
     desc: Run Windows installer
     cmds:
