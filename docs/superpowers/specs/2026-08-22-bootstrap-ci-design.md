@@ -34,11 +34,11 @@ workflow ファイルと表示名を次に統一する。
 
 ## 構成
 
-共通の `changes` job が `detect-ci-changes` を一度だけ実行し、`linux`、`darwin`、`wsl`、`windows` の outputs を公開する。各 platform job は `changes` の成功後、対象 output が `true` の場合だけ起動し、相互には依存しない。
+共通の `changes` job が `detect-ci-changes` を一度だけ実行し、`linux`、`darwin`、`wsl`、`windows` の outputs を公開する。統合後の bootstrap 判定には `ci/bootstrap-path-routing.json` を使い、各 platform job は `changes` の成功後、対象 output が `true` の場合だけ起動し、相互には依存しない。
 
 workflow が path trigger によって起動しても、全 platform job を無条件には実行しない。既存の `scripts/python/detect_ci_changes.py` と `ci/path-routing.json` による platform 判定をそのまま利用し、各 job の `if` で実行対象を絞る。例えば Windows 専用 package の変更では Windows job だけが起動し、Darwin 専用 package の変更では Darwin job だけが起動する。共有 package 定義や共通 installer の変更では、routing が返す複数 platform の job が起動する。`workflow_dispatch` の手動実行では、既存の `run-all` 契約に従い全 platform を実行する。
 
-この platform 単位の絞り込みは Linux と WSL にも同じように適用する。Linux 専用 path の変更では Linux の build/E2E job だけを起動し、WSL 専用 path の変更では WSL job だけを起動する。Windows runner を共有する WSL と Windows も一つの `windows` output にまとめず、`wsl` と `windows` の routing output を別々に評価する。
+この platform 単位の絞り込みは Linux と WSL にも同じように適用する。Linux 専用 path の変更では Linux の build/E2E job だけを起動し、WSL 専用 path の変更では WSL job だけを起動する。Windows runner を共有する WSL と Windows も一つの `windows` output にまとめず、`wsl` と `windows` の routing output を別々に評価する。WSL のホスト実装ファイルは bootstrap routing では WSL に属するものとして扱い、Windows bootstrap contract を起動しない。
 
 platform ごとの検証は次のとおりとする。
 
@@ -55,9 +55,9 @@ Linux の既存 3 E2E job は同じ workflow 内で個別 job として保持し
 
 新 workflow は既存 bootstrap workflow の path trigger を統合する。共通 detector/action、routing 定義、workflow 自体の変更は全 platform output を有効化する既存契約を利用する。
 
-`ci/path-routing.json` の workflow 固有ルールは新しい `.github/workflows/ci-bootstrap.yml` に置き換え、削除する旧 workflow への参照を残さない。検証対象のソースパスは既存 workflow の trigger 範囲を漏れなく合成する。
+既存の全 CI 用 `ci/path-routing.json` は他 workflow の契約を壊さないため維持する。bootstrap 専用の `ci/bootstrap-path-routing.json` を追加し、旧 bootstrap workflow の trigger 範囲を platform 単位に整理して記述する。`detect-ci-changes` と composite action は任意の manifest path を受け取れるようにし、通常 CI は既存 manifest、`Bootstrap CI` は bootstrap manifest を使う。新 workflow の workflow 固有ルールは bootstrap manifest 側に置き、削除する旧 workflow への参照を残さない。
 
-path trigger は workflow を起動するための候補範囲であり、実行 platform を決める source of truth ではない。実行 platform は routing output と job-level `if` で決める。この境界を保つことで、Windows package 変更時に workflow の `changes` job と `Bootstrap / Windows` だけが実行され、Darwin package 変更時に `Bootstrap / Darwin` だけが実行される。routing の既存ルールが共有扱いにしている `nix/packages/**` などは、意図した cross-platform package set として全対象を実行する。
+path trigger は workflow を起動するための候補範囲であり、実行 platform を決める source of truth ではない。実行 platform は bootstrap manifest の routing output と job-level `if` で決める。この境界を保つことで、Windows package 変更時に workflow の `changes` job と `Bootstrap / Windows` だけが実行され、Darwin package 変更時に `Bootstrap / Darwin` だけが実行される。Linux package、WSL package、各 platform の専用 installer/host path も同じ規則で対象 job だけを起動する。routing の既存ルールが共有扱いにしている `nix/packages/**` などは、意図した cross-platform package set として全対象を実行する。
 
 トリガーは `workflow_dispatch`、`main` への push、`main` 向け pull request とする。pull request の fork から secrets や Windows/WSL の privileged runtime を使う既存制約は維持し、該当 job を安全に skip する。
 
@@ -71,7 +71,7 @@ artifact 名には platform と検証層を含め、同一 run 内で衝突し�
 
 1. YAML の構文と workflow の job/needs/if の整合性を静的に検証する。
 2. routing の既存 Bats/Python テストを実行し、platform output の契約を確認する。
-3. Linux、Darwin、WSL、Windows の各専用 path と共有 path の routing テストを確認し、対象外 platform が `false` になることを検証する。
+3. bootstrap manifest に対して Linux、Darwin、WSL、Windows の各専用 path と共有 path の routing テストを確認し、対象外 platform が `false` になることを検証する。既存 manifest の WSL/Windows 連動契約も通常 CI 用として維持されることを確認する。
 4. 新 workflow が対象 path と旧 workflow の実行対象を引き継いでいることを focused script で確認する。
 5. 変更差分を確認し、旧 workflow の参照、重複した trigger、artifact 名の衝突、fork PR での権限逸脱がないことを確認する。
 6. hosted GitHub Actions では 4 platform の job が共通 `changes` 後に変更対象だけ並列起動し、`Bootstrap / Complete` が `success` / `skipped` を正しく集約することを確認する。
