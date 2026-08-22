@@ -15,6 +15,13 @@ VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-envir
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
 readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
+WEZTERM_CASK_TOKEN="${DOTFILES_WEZTERM_CASK_TOKEN:-wezterm@nightly}"
+WEZTERM_APP_PATH="${DOTFILES_WEZTERM_APP_PATH:-/Applications/WezTerm.app}"
+WEZTERM_BIN_DIR="${DOTFILES_WEZTERM_BIN_DIR:-/opt/homebrew/bin}"
+WEZTERM_BASH_COMPLETION_PATH="${DOTFILES_WEZTERM_BASH_COMPLETION_PATH:-/opt/homebrew/etc/bash_completion.d/wezterm}"
+WEZTERM_FISH_COMPLETION_PATH="${DOTFILES_WEZTERM_FISH_COMPLETION_PATH:-/opt/homebrew/share/fish/vendor_completions.d/wezterm.fish}"
+WEZTERM_ZSH_COMPLETION_PATH="${DOTFILES_WEZTERM_ZSH_COMPLETION_PATH:-/opt/homebrew/share/zsh/site-functions/_wezterm}"
+WEZTERM_MIGRATION_BACKUP_DIR="${DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR:-$HOME/Library/Application Support/dotfiles/migrations}"
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
@@ -231,6 +238,77 @@ ensure_homebrew_cask_link_directories() {
     "$HOMEBREW_CASK_CLI_PLUGIN_DIR"
 }
 
+homebrew_command() {
+  if [[ -n ${DOTFILES_BREW_COMMAND:-} ]]; then
+    printf '%s\n' "$DOTFILES_BREW_COMMAND"
+  elif command -v brew >/dev/null 2>&1; then
+    command -v brew
+  elif [[ -x /opt/homebrew/bin/brew ]]; then
+    printf '%s\n' /opt/homebrew/bin/brew
+  elif [[ -x /usr/local/bin/brew ]]; then
+    printf '%s\n' /usr/local/bin/brew
+  else
+    return 1
+  fi
+}
+
+homebrew_cask_is_installed() {
+  local brew_command
+  brew_command="$(homebrew_command)" || return 1
+  "$brew_command" list --cask --versions "$1" >/dev/null 2>&1
+}
+
+remove_unmanaged_wezterm_link() {
+  local link_path="$1" link_target
+  [[ -L $link_path ]] || return 0
+  link_target="$(/usr/bin/readlink "$link_path")"
+  [[ $link_target == "$WEZTERM_APP_PATH/"* ]] || return 0
+  sudo /bin/rm -f -- "$link_path"
+}
+
+migrate_unmanaged_wezterm_install() {
+  local backup_path link_path link_target
+  local has_unmanaged_install=0
+  local -a legacy_link_paths=(
+    "$WEZTERM_BIN_DIR/wezterm"
+    "$WEZTERM_BIN_DIR/wezterm-gui"
+    "$WEZTERM_BIN_DIR/wezterm-mux-server"
+    "$WEZTERM_BIN_DIR/strip-ansi-escapes"
+    "$WEZTERM_BASH_COMPLETION_PATH"
+    "$WEZTERM_FISH_COMPLETION_PATH"
+    "$WEZTERM_ZSH_COMPLETION_PATH"
+  )
+
+  if [[ -e $WEZTERM_APP_PATH || -L $WEZTERM_APP_PATH ]]; then
+    has_unmanaged_install=1
+  else
+    for link_path in "${legacy_link_paths[@]}"; do
+      [[ -L $link_path ]] || continue
+      link_target="$(/usr/bin/readlink "$link_path")"
+      if [[ $link_target == "$WEZTERM_APP_PATH/"* ]]; then
+        has_unmanaged_install=1
+        break
+      fi
+    done
+  fi
+
+  ((has_unmanaged_install == 1)) || return 0
+  homebrew_cask_is_installed "$WEZTERM_CASK_TOKEN" && return 0
+
+  if [[ -e $WEZTERM_APP_PATH || -L $WEZTERM_APP_PATH ]]; then
+    backup_path="$WEZTERM_MIGRATION_BACKUP_DIR/WezTerm.app.$(date +%Y%m%d%H%M%S)"
+    [[ ! -e $backup_path && ! -L $backup_path ]] ||
+      dotfiles_die "Refusing to overwrite an existing WezTerm migration backup: $backup_path"
+    /bin/mkdir -p -- "$WEZTERM_MIGRATION_BACKUP_DIR"
+    dotfiles_log "Moving unmanaged WezTerm.app aside before Homebrew cask activation..."
+    sudo /bin/mv -- "$WEZTERM_APP_PATH" "$backup_path"
+  fi
+
+  for link_path in "${legacy_link_paths[@]}"; do
+    remove_unmanaged_wezterm_link "$link_path"
+  done
+}
+
 docker_desktop_md5_link_state() {
   local md5_binary="$1" md5_link="$2"
   if [[ -L $md5_link && $(/usr/bin/readlink "$md5_link") == "$md5_binary" ]]; then
@@ -297,6 +375,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   stop_existing_docker_desktop
   repair_homebrew_cask_link_directories
+  migrate_unmanaged_wezterm_install
   apply_darwin_system
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories

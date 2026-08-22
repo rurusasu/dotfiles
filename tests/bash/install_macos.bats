@@ -141,11 +141,21 @@ case "${1:-}" in
 			exec "$@"
 		fi
 		;;
-	mv)
+	mv|/bin/mv)
 		if [[ $# -eq 3 &&
 			( ${2:-} == "$FAKE_BASHRC" || ${2:-} == "$FAKE_ZSHRC" ) &&
 			${3:-} == "${2:-}.before-nix-darwin" ]]; then
 			exec "$@"
+		fi
+		if [[ $# -eq 4 && ${2:-} == -- && ${3:-} == "${DOTFILES_WEZTERM_APP_PATH:-}" &&
+			${4:-} == "${DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR:-}"/WezTerm.app.* ]]; then
+			exec "$@"
+		fi
+		;;
+	/bin/rm)
+		if [[ $# -eq 4 && ${2:-} == -f && ${3:-} == -- ]]; then
+			rm -- "${4:-}"
+			exit 0
 		fi
 		;;
 	"$FAKE_DOCKER_APP/Contents/MacOS/install")
@@ -437,6 +447,107 @@ run_macos_installer() {
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "migrates an unmanaged WezTerm install before nix-darwin activation" {
+	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
+	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
+	local bash_completion="$BATS_TEST_TMPDIR/homebrew/etc/bash_completion.d/wezterm"
+	local fish_completion="$BATS_TEST_TMPDIR/homebrew/share/fish/vendor_completions.d/wezterm.fish"
+	local zsh_completion="$BATS_TEST_TMPDIR/homebrew/share/zsh/site-functions/_wezterm"
+	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
+
+	mkdir -p \
+		"$app_path/Contents/MacOS" \
+		"$app_path/Contents/Resources/shell-completion" \
+		"$bin_dir" \
+		"$(dirname "$bash_completion")" \
+		"$(dirname "$fish_completion")" \
+		"$(dirname "$zsh_completion")"
+	touch \
+		"$app_path/Contents/MacOS/wezterm" \
+		"$app_path/Contents/MacOS/wezterm-gui" \
+		"$app_path/Contents/Resources/shell-completion/bash" \
+		"$app_path/Contents/Resources/shell-completion/fish" \
+		"$app_path/Contents/Resources/shell-completion/zsh"
+	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
+	ln -s "$app_path/Contents/MacOS/wezterm-gui" "$bin_dir/wezterm-gui"
+	ln -s "$app_path/Contents/Resources/shell-completion/bash" "$bash_completion"
+	ln -s "$app_path/Contents/Resources/shell-completion/fish" "$fish_completion"
+	ln -s "$app_path/Contents/Resources/shell-completion/zsh" "$zsh_completion"
+
+	write_stub brew 'exit 1'
+	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
+	export DOTFILES_WEZTERM_APP_PATH="$app_path"
+	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
+	export DOTFILES_WEZTERM_BASH_COMPLETION_PATH="$bash_completion"
+	export DOTFILES_WEZTERM_FISH_COMPLETION_PATH="$fish_completion"
+	export DOTFILES_WEZTERM_ZSH_COMPLETION_PATH="$zsh_completion"
+	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+migrate_unmanaged_wezterm_install
+'
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$app_path" ]
+	[ ! -L "$bin_dir/wezterm" ]
+	[ ! -L "$bin_dir/wezterm-gui" ]
+	[ ! -L "$bash_completion" ]
+	[ ! -L "$fish_completion" ]
+	[ ! -L "$zsh_completion" ]
+	[ -d "$backup_dir/WezTerm.app.20260717010203" ]
+	grep -Fqx "sudo </bin/mv> <--> <$app_path> <$backup_dir/WezTerm.app.20260717010203>" "$COMMAND_LOG"
+}
+
+@test "removes stale unmanaged WezTerm links when the app is absent" {
+	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
+	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
+
+	mkdir -p "$bin_dir"
+	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
+	write_stub brew 'exit 1'
+	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
+	export DOTFILES_WEZTERM_APP_PATH="$app_path"
+	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
+	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$BATS_TEST_TMPDIR/wezterm-migration"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+migrate_unmanaged_wezterm_install
+'
+
+	[ "$status" -eq 0 ]
+	[ ! -L "$bin_dir/wezterm" ]
+	[ ! -e "$DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR" ]
+}
+
+@test "leaves a Homebrew-managed WezTerm install unchanged" {
+	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
+	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
+	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
+
+	mkdir -p "$app_path" "$bin_dir"
+	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
+	write_stub brew 'exit 0'
+	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
+	export DOTFILES_WEZTERM_APP_PATH="$app_path"
+	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
+	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+migrate_unmanaged_wezterm_install
+'
+
+	[ "$status" -eq 0 ]
+	[ -d "$app_path" ]
+	[ -L "$bin_dir/wezterm" ]
+	[ ! -e "$backup_dir" ]
 }
 
 @test "Docker Desktop md5 compatibility ensure uses fixed paths for all states" {
