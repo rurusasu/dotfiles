@@ -1,29 +1,55 @@
 name: Protected Bootstrap E2E
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
 
 concurrency:
-  group: protected-bootstrap-${{ github.event.pull_request.number }}
+  group: protected-bootstrap-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 env:
-  TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+  TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      windows: ${{ steps.detect.outputs.windows }}
+      darwin: ${{ steps.detect.outputs.darwin }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed CI targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+
   windows:
     name: Windows Bootstrap Contract
+    needs: changes
+    if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install chezmoi
@@ -105,6 +131,8 @@ jobs:
 
   macos:
     name: macOS Bootstrap Contract
+    needs: changes
+    if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
     timeout-minutes: 30
     env:
@@ -113,10 +141,10 @@ jobs:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
@@ -178,16 +206,34 @@ jobs:
 
   complete:
     name: Protected Bootstrap E2E
-    if: always()
-    needs: [windows, macos]
+    if: ${{ always() }}
+    needs: [changes, windows, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - name: Require every hosted bootstrap contract
+      - name: Verify routed job results
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           WINDOWS_RESULT: ${{ needs.windows.result }}
           MACOS_RESULT: ${{ needs.macos.result }}
         run: |
           set -euo pipefail
-          test "$WINDOWS_RESULT" = success
-          test "$MACOS_RESULT" = success
+
+          if [[ "${CHANGES_RESULT}" != "success" ]]; then
+            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
+            exit 1
+          fi
+
+          for result in "${WINDOWS_RESULT}" "${MACOS_RESULT}"; do
+            case "${result}" in
+              success|skipped) ;;
+              *)
+                echo "Hosted bootstrap platform job did not complete successfully: ${result}"
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "All required hosted bootstrap contracts completed successfully."

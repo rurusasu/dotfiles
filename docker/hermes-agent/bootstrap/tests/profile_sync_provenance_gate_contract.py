@@ -7,7 +7,6 @@ from pathlib import Path
 
 
 DOTFILES_ROOT = Path(__file__).resolve().parents[4]
-TASKFILE = DOTFILES_ROOT / "Taskfile.yml"
 HERMES_TASKFILE = DOTFILES_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 WORKFLOW = DOTFILES_ROOT / ".github/workflows/ci-hermes-bootstrap.yml"
 PRE_COMMIT = DOTFILES_ROOT / ".pre-commit-config.yaml"
@@ -20,29 +19,52 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
+    r"^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|"
+    r"scripts/sh/hermes-agent\.sh|"
+    r"scripts/powershell/handlers/Handler\.HermesAgent\.ps1|"
+    r"tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
     r"\.pre-commit-config\.yaml|"
     r"\.github/workflows/ci-hermes-bootstrap\.yml)$"
 )
 
 
 class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
-    def test_task_runs_the_host_gate_after_existing_suites(self) -> None:
-        taskfile = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in (TASKFILE, HERMES_TASKFILE)
-        )
+    def test_task_runs_xapi_contract_before_container_suites(self) -> None:
+        taskfile = HERMES_TASKFILE.read_text(encoding="utf-8")
         section = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
-        section = section.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
+        section, container_section = section.split(
+            "\n  hermes:bootstrap:test:container:\n",
+            maxsplit=1,
+        )
+        container_section = container_section.split(
+            "\n  hermes:bootstrap:config:\n",
+            maxsplit=1,
+        )[0]
 
-        container_index = section.index("docker build --target hermes-bootstrap-test")
-        gh_index = section.index(
+        xapi_windows_index = section.index(
+            "python -m unittest tests/python/test_xapi_image_contract.py -v"
+        )
+        xapi_unix_index = section.index(
+            "python3 -m unittest tests/python/test_xapi_image_contract.py -v"
+        )
+        container_task_index = section.index("task: hermes:bootstrap:test:container")
+        gh_index = container_section.index(
             "docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh"
         )
-        contract_index = section.index("profile_sync_provenance_gate_contract.py")
-        verifier_index = section.index(VERIFIER_COMMAND)
+        contract_index = container_section.index(
+            "profile_sync_provenance_gate_contract.py"
+        )
+        verifier_index = container_section.index(VERIFIER_COMMAND)
 
-        self.assertLess(container_index, gh_index)
+        self.assertNotIn("docker info", section)
+        self.assertNotIn("docker build", section)
+        self.assertLess(xapi_windows_index, container_task_index)
+        self.assertLess(xapi_unix_index, container_task_index)
+        self.assertIn(
+            'msg: "Docker daemon is not running. Start Docker Desktop and try again."',
+            container_section,
+        )
+        self.assertIn("- sh: docker info", container_section)
         self.assertLess(gh_index, contract_index)
         self.assertLess(contract_index, verifier_index)
         self.assertIn(
@@ -52,7 +74,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         )
         self.assertIn(
             '--source-url "{{.PROVENANCE_URL}}"',
-            section,
+            container_section,
         )
 
         pre_commit = PRE_COMMIT.read_text(encoding="utf-8")
@@ -73,6 +95,10 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertEqual(trigger, PRE_COMMIT_TRIGGER)
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
+            "docker/hermes-xapi-mcp/Dockerfile",
+            "scripts/sh/hermes-agent.sh",
+            "scripts/powershell/handlers/Handler.HermesAgent.ps1",
+            "tests/python/test_xapi_image_contract.py",
             "taskfiles/hermes/taskfile.yml",
             "Taskfile.yml",
             ".pre-commit-config.yaml",

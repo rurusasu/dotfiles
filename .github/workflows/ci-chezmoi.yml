@@ -95,7 +95,16 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          .\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0
+          .\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: chezmoi-test-results
+          path: scripts/powershell/chezmoi-test-results.xml
+          retention-days: 30
+          if-no-files-found: warn
 
   fmt:
     name: Format (.tmpl BOM check)
@@ -168,120 +177,6 @@ jobs:
             throw 'UDEV Gothic NF was not installed with a registry entry pointing to an existing font file.'
           }
           $entries | ForEach-Object { Write-Host "Verified font: $($_.Name) -> $($_.Value)" }
-
-  test:
-    name: Test (Pester + Codecov)
-    runs-on: windows-2025
-    timeout-minutes: 20
-    needs: [lint, fmt, font-install]
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install chezmoi
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE -ne 0) {
-            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
-          }
-          $chezmoiDirectory = Split-Path -Parent (Get-Command chezmoi -ErrorAction Stop).Source
-          Add-Content -LiteralPath $env:GITHUB_PATH -Value $chezmoiDirectory -Encoding utf8
-
-      - name: Install and validate AutoHotkey v2
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE -ne 0) {
-            throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
-          }
-          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
-          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
-            throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
-          }
-          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
-          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
-            throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
-          }
-          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
-          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
-          if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
-          }
-          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
-          if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
-          }
-
-      - name: Cache PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~\Documents\PowerShell\Modules
-          key: ${{ runner.os }}-psmodules-pester-5.6.1
-
-      - name: Install Pester
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-
-          function Invoke-WithRetry {
-            param([scriptblock]$Script, [int]$Max = 3)
-            for ($i = 1; $i -le $Max; $i++) {
-              try { & $Script; return } catch {
-                if ($i -eq $Max) { throw }
-                Write-Warning "Attempt $i failed: $_. Retrying in $($i * 5)s..."
-                Start-Sleep -Seconds ($i * 5)
-              }
-            }
-          }
-
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default
-          }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Invoke-WithRetry { Install-Module -Name Pester -RequiredVersion 5.6.1 -Scope CurrentUser -Force -Repository PSGallery }
-
-      - name: Run tests
-        shell: pwsh
-        working-directory: scripts/powershell
-        run: |
-          $pesterConfig = New-PesterConfiguration
-          $pesterConfig.Run.Path = "./tests/chezmoi"
-          $pesterConfig.Run.PassThru = $true
-          $pesterConfig.Output.Verbosity = "Detailed"
-
-          # JUnit output for GitHub
-          $pesterConfig.TestResult.Enabled = $true
-          $pesterConfig.TestResult.OutputPath = "test-results.xml"
-          $pesterConfig.TestResult.OutputFormat = "JUnitXml"
-
-          $result = Invoke-Pester -Configuration $pesterConfig
-
-          Write-Host ""
-          Write-Host "=== Test Summary ===" -ForegroundColor Cyan
-          Write-Host "Passed: $($result.PassedCount)" -ForegroundColor Green
-          Write-Host "Failed: $($result.FailedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { "Red" } else { "Gray" })
-          Write-Host "Skipped: $($result.SkippedCount)" -ForegroundColor Yellow
-
-          if ($result.FailedCount -gt 0) { exit 1 }
-
-      - name: Upload test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: chezmoi-test-results
-          path: scripts/powershell/test-results.xml
-          retention-days: 30
-          if-no-files-found: warn
 
   op-guard:
     # Behavioral guard for the "op present but unauthenticated" environment

@@ -8,6 +8,10 @@ on:
       - "docker/hermes-agent/**"
       - "docker/hermes-browser/**"
       - "docker/hermes-browser-mcp/**"
+      - "docker/hermes-xapi-mcp/**"
+      - "scripts/sh/hermes-agent.sh"
+      - "scripts/powershell/handlers/Handler.HermesAgent.ps1"
+      - "tests/python/test_xapi_image_contract.py"
       - "taskfiles/hermes/taskfile.yml"
       - ".github/workflows/ci-hermes-bootstrap.yml"
       - ".pre-commit-config.yaml"
@@ -18,6 +22,10 @@ on:
       - "docker/hermes-agent/**"
       - "docker/hermes-browser/**"
       - "docker/hermes-browser-mcp/**"
+      - "docker/hermes-xapi-mcp/**"
+      - "scripts/sh/hermes-agent.sh"
+      - "scripts/powershell/handlers/Handler.HermesAgent.ps1"
+      - "tests/python/test_xapi_image_contract.py"
       - "taskfiles/hermes/taskfile.yml"
       - ".github/workflows/ci-hermes-bootstrap.yml"
       - ".pre-commit-config.yaml"
@@ -47,6 +55,9 @@ jobs:
 
       - name: Verify provenance gate wiring
         run: python3 docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
+
+      - name: Run X API image contract
+        run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
       - name: Run the pinned container suite
         run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
