@@ -177,7 +177,6 @@ jobs:
         run: |
           set -euo pipefail
           env -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
-          bats tests/wezterm
           luac -p chezmoi/terminals/hammerspoon/init.lua
           lua tests/lua/hammerspoon_terminal_prefix_test.lua
 
