@@ -5,6 +5,7 @@
 #   - catalog categories (core, dev, terminal, editors, llm, …) → lists of derivations
 #   - all                → flat list of all derivations
 #   - wingetMap          → nix attr name → winget PackageIdentifier
+#   - msstoreMap         → nix attr name → Microsoft Store Product ID
 #   - npmMap             → nix attr name → npm package spec
 #   - pnpmGlobal         → cross-platform pnpm global package names
 #   - npmVerify          → catalog attr name → { command, args } for npm verification
@@ -331,6 +332,20 @@ let
       pkg = pkgs.codex;
       winget = "OpenAI.Codex";
       category = "llm";
+    };
+    chatgpt = {
+      pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;
+      msstore = "9NT1R1C2HH7J";
+      category = "desktop";
+      support = {
+        darwin = {
+          provider = "homebrew-cask";
+          cask = "chatgpt";
+        };
+        linux = {
+          provider = "nix";
+        };
+      };
     };
     ollama = {
       pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
@@ -767,6 +782,8 @@ let
       windows =
         if (entry.winget or null) != null then
           { provider = "winget"; }
+        else if (entry.msstore or null) != null then
+          { provider = "msstore"; }
         else if (entry.npm or null) != null then
           { provider = "npm"; }
         else
@@ -818,7 +835,6 @@ let
       mkWindowsOnlySupport "winget" "Windows compiler toolchain";
     "Microsoft.WindowsTerminal" = mkWindowsOnlySupport "winget" "Windows shell host";
     "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Windows subsystem component";
-    "9NT1R1C2HH7J" = mkWindowsOnlySupport "msstore" "Windows Store application";
     "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "Windows Store desktop application";
   };
 
@@ -840,6 +856,7 @@ let
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
+  msstoreMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.msstore or null) catalog);
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
   supportReport = lib.mapAttrs (_: entry: entry.support) catalog // windowsOnlySupport;
@@ -883,7 +900,7 @@ lib.mapAttrs (_: resolve) grouped
     resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
 
   # Windows: nix attr name → winget PackageIdentifier
-  inherit wingetMap npmMap;
+  inherit wingetMap msstoreMap npmMap;
 
   inherit
     supportReport
@@ -1241,7 +1258,6 @@ lib.mapAttrs (_: resolve) grouped
       "Microsoft.WSL"
     ];
     msstore = [
-      "9NT1R1C2HH7J"
       "9PLM9XGG6VKS"
     ];
     npm = [

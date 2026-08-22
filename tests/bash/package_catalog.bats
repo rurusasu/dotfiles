@@ -160,6 +160,40 @@ setup() {
 	[[ "$output" == *'args = [ "--version" ];'* ]]
 }
 
+@test "ChatGPT desktop has native Linux, Darwin cask, and Microsoft Store providers" {
+	run awk '
+		/^    chatgpt = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    \};/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;'* ]]
+	[[ "$output" == *'msstore = "9NT1R1C2HH7J";'* ]]
+	[[ "$output" == *'cask = "chatgpt"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+}
+
+@test "ChatGPT Linux package is wired as a reproducible Nix derivation" {
+	[ -f "$REPO_ROOT/nix/packages/chatgpt/default.nix" ]
+	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_amd64.deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_arm64.deb' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	! grep -q '/latest/chatgpt_' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'sha256-' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
+@test "ChatGPT Linux package supplies Qt runtimes and ignores optional musl modules" {
+	grep -q '^    (lib\.getLib qt5\.qtbase)$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q '^    (lib\.getLib qt6\.qtbase)$' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'autoPatchelfIgnoreMissingDeps' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'libc\.musl-x86_64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'libc\.musl-aarch64\.so\.1' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
+@test "ChatGPT Linux package uses the normal Nix output layout" {
+	grep -q 'cp -R "\$unpacked/usr/." "\$out/"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+	grep -q 'makeWrapper "\$out/lib/chatgpt/ChatGPT"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
+}
+
 @test "Darwin evaluation installs WezTerm terminfo and excludes the broken cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
