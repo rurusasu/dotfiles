@@ -27,45 +27,6 @@ in
     primaryUser = user;
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
-    activationScripts.disableSpotlightHotkeys.text = ''
-      uid="$(id -u -- ${lib.escapeShellArg user})"
-      symbolicHotKeysPlist=${lib.escapeShellArg "${home}/Library/Preferences/com.apple.symbolichotkeys.plist"}
-      runAsUser() {
-        launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
-      }
-
-      if ! runAsUser /bin/test -s "$symbolicHotKeysPlist"; then
-        runAsUser /usr/bin/defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict
-      fi
-      runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys dict" "$symbolicHotKeysPlist" 2>/dev/null || true
-
-      disableSymbolicHotKey() {
-        key="$1"
-        parameter0="$2"
-        parameter1="$3"
-        parameter2="$4"
-
-        runAsUser /usr/libexec/PlistBuddy -c "Delete :AppleSymbolicHotKeys:$key" "$symbolicHotKeysPlist" 2>/dev/null || true
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key dict" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:enabled bool false" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value dict" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value:parameters array" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value:parameters:0 integer $parameter0" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value:parameters:1 integer $parameter1" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value:parameters:2 integer $parameter2" "$symbolicHotKeysPlist"
-        runAsUser /usr/libexec/PlistBuddy -c "Add :AppleSymbolicHotKeys:$key:value:type string standard" "$symbolicHotKeysPlist"
-      }
-
-      disableSymbolicHotKey 60 32 49 1048576
-      disableSymbolicHotKey 61 32 49 1572864
-      disableSymbolicHotKey 64 65535 49 1048576
-      disableSymbolicHotKey 65 65535 49 1572864
-      disableSymbolicHotKey 156 65535 49 393216
-      runAsUser /usr/bin/plutil -convert binary1 "$symbolicHotKeysPlist"
-      runAsUser /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u 2>/dev/null || true
-      runAsUser /usr/bin/killall cfprefsd 2>/dev/null || true
-      runAsUser /usr/bin/killall SystemUIServer 2>/dev/null || true
-    '';
     activationScripts.globalZoomShortcut.text = ''
       uid="$(id -u -- ${lib.escapeShellArg user})"
       runAsUser() {
@@ -75,6 +36,64 @@ in
       runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
       runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
     '';
+  };
+
+  system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
+    "60" = {
+      enabled = false;
+      value = {
+        parameters = [
+          32
+          49
+          1048576
+        ];
+        type = "standard";
+      };
+    };
+    "61" = {
+      enabled = false;
+      value = {
+        parameters = [
+          32
+          49
+          1572864
+        ];
+        type = "standard";
+      };
+    };
+    "64" = {
+      enabled = false;
+      value = {
+        parameters = [
+          65535
+          49
+          1048576
+        ];
+        type = "standard";
+      };
+    };
+    "65" = {
+      enabled = false;
+      value = {
+        parameters = [
+          65535
+          49
+          1572864
+        ];
+        type = "standard";
+      };
+    };
+    "156" = {
+      enabled = false;
+      value = {
+        parameters = [
+          65535
+          49
+          393216
+        ];
+        type = "standard";
+      };
+    };
   };
 
   nix.settings.experimental-features = [

@@ -78,18 +78,15 @@ setup() {
 @test "Darwin frees Command Space by disabling macOS launcher hotkeys" {
 	local config="$REPO_ROOT/nix/darwin/default.nix"
 
-	grep -qF 'activationScripts.disableSpotlightHotkeys.text' "$config"
-	grep -q 'com.apple.symbolichotkeys' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'PlistBuddy' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'enabled bool false' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'disableSymbolicHotKey 60' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'disableSymbolicHotKey 61' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'disableSymbolicHotKey 64' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'disableSymbolicHotKey 65' "$REPO_ROOT/nix/darwin/default.nix"
-	grep -q 'disableSymbolicHotKey 156' "$REPO_ROOT/nix/darwin/default.nix"
+	grep -qF 'system.defaults.CustomUserPreferences."com.apple.symbolichotkeys"' "$config"
+	grep -qF 'AppleSymbolicHotKeys' "$config"
+	for key in 60 61 64 65 156; do
+		grep -qF "\"$key\" = {" "$config"
+	done
+	! grep -qF 'activationScripts.disableSpotlightHotkeys.text' "$config"
+	! grep -q 'PlistBuddy' "$config"
 	! grep -q 'com.raycast.macos' "$config"
 	! grep -q 'open -gj -a Raycast' "$config"
-	grep -q 'activateSettings -u' "$config"
 }
 
 @test "Darwin configures global Zoom shortcuts for English and Japanese menus" {
