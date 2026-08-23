@@ -124,7 +124,50 @@ exit 1
         }
     }
 
-    It 'rolls back after checkout placement fails and returns false if rollback also fails' {
+    It 'restores the original checkout when placement fails' {
+        $fakeGit = Join-Path $TestDrive 'rollback-success-git.ps1'
+        @'
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+$cloneIndex = [Array]::IndexOf($Arguments, 'clone')
+if ($cloneIndex -ge 0) {
+    $destination = $Arguments[$cloneIndex + 2]
+    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+    exit 0
+}
+exit 1
+'@ | Set-Content -LiteralPath $fakeGit -Encoding utf8
+
+        $script:gitCmd = $fakeGit
+        $targetDir = Join-Path $script:marketplacesDir 'rollback-success'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $targetDir 'original.txt') -Value 'original'
+        $script:moveItemCallCount = 0
+        function Move-Item {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory = $true)][string]$LiteralPath,
+                [Parameter(Mandatory = $true)][string]$Destination
+            )
+
+            $script:moveItemCallCount++
+            if ($script:moveItemCallCount -eq 2) {
+                throw 'injected checkout placement failure'
+            }
+            Microsoft.PowerShell.Management\Move-Item -LiteralPath $LiteralPath -Destination $Destination
+        }
+
+        try {
+            Recover-InvalidMarketplace -Repository 'example/repository' -TargetDir $targetDir |
+                Should -BeFalse
+        }
+        finally {
+            Remove-Item Function:\Move-Item -ErrorAction SilentlyContinue
+        }
+        Get-Content -LiteralPath (Join-Path $targetDir 'original.txt') |
+            Should -Be 'original'
+    }
+
+    It 'returns false when checkout placement and rollback both fail while retaining the backup' {
         $fakeGit = Join-Path $TestDrive 'recovery-git.ps1'
         @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -167,5 +210,9 @@ exit 1
             Remove-Item Function:\Move-Item -ErrorAction SilentlyContinue
         }
         Test-Path -LiteralPath $targetDir | Should -BeFalse
+        $backupDir = Get-ChildItem -LiteralPath $script:marketplacesDir -Filter 'rollback.invalid.*'
+        $backupDir.Count | Should -Be 1
+        Get-Content -LiteralPath (Join-Path $backupDir.FullName 'original.txt') |
+            Should -Be 'original'
     }
 }
