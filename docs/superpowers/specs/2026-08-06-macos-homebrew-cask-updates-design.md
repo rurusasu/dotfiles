@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Updates Design
 
+> **Status:** Superseded on 2026-08-22. This design documents the removed standalone updater and archive installer; the current implementation uses nix-darwin's declarative Homebrew Bundle.
+
 ## Goal
 
 `nrs` が nix-darwin の適用だけで完了したように見える状態をなくし、dotfiles で宣言した macOS デスクトップアプリを確実に更新する。

@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Link Permission Convergence Implementation Plan
 
+> **Status:** Historical plan. The cask-updater boundary described here is no longer an operational source of truth; cask installation and upgrades are handled by nix-darwin's declarative Homebrew Bundle.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Converge Docker Desktop's `/usr/local` cask link directories before cask upgrades so `nrs` can update Docker Desktop without a permission rollback.

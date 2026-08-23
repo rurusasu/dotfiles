@@ -19,10 +19,7 @@
         "flake.nix",
         "flake.lock",
         "nix/**",
-        "install.sh",
         "scripts/sh/dcnvim.sh",
-        "scripts/sh/install-wezterm-nightly.sh",
-        "scripts/sh/uninstall-arc-browser.sh",
         ".github/e2e/**",
         ".github/workflows/ci-bootstrap.yml"
       ],
@@ -85,15 +82,14 @@
     },
     {
       "patterns": [
-        "nix/darwin/**",
+        "nix/hosts/darwin/**",
         "scripts/sh/install-macos.sh",
-        "scripts/sh/uninstall-arc-browser.sh",
         "tests/bash/install_macos.bats"
       ],
       "outputs": ["darwin"]
     },
     {
-      "patterns": ["scripts/sh/install.sh"],
+      "patterns": ["install.sh"],
       "outputs": ["linux", "darwin"]
     },
     {
@@ -109,7 +105,7 @@
       "outputs": ["linux", "darwin", "wsl"]
     },
     {
-      "patterns": ["scripts/sh/verify-environment.sh", "scripts/sh/install-wezterm-nightly.sh"],
+      "patterns": ["scripts/sh/verify-environment.sh"],
       "outputs": ["linux", "darwin"]
     },
     {

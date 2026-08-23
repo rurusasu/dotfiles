@@ -1,5 +1,7 @@
 # Platform-Aware GitHub Actions Routing Implementation Plan
 
+> **Status:** Historical plan. The obsolete WezTerm installer path mentioned here was removed; current routing follows the declarative nix-darwin Homebrew cask configuration.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
 **Goal:** Route GitHub Actions by processing dependency and independently target Linux, Darwin, WSL, and Windows while preserving required check contexts.

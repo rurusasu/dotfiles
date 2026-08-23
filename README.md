@@ -106,7 +106,7 @@ Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Ho
 
 - ユーザー設定: `chezmoi/`
 - Home Manager: `nix/home/common.nix`
-- macOS: `nix/darwin/`
+- macOS: `nix/hosts/darwin/`
 - Ubuntu / Debian: `nix/system-manager/`
 - NixOS / WSL: `nix/hosts/`
 - パッケージ provider catalog: `nix/packages/sets.nix`
@@ -254,11 +254,10 @@ NixOS では `system-manager.target` の代わりに `readlink /run/current-syst
 .\scripts\powershell\Test-Environment.ps1 -Runtime
 ```
 
-### macOS で WezTerm nightly cask の適用に失敗する
+### macOS の WezTerm nightly cask
 
-Homebrew 更新後も `wezterm@nightly` のインストールが `source_glob` または
-`rb_file_s_rename` エラーで失敗する場合は、
-[Homebrew cask のトラブルシューティング](./docs/nix/homebrew-cask-troubleshooting.md)
+`wezterm@nightly` は nix-darwin の Homebrew cask として管理されます。
+Homebrew cask の適用に失敗する場合は、[Homebrew cask のトラブルシューティング](./docs/nix/homebrew-cask-troubleshooting.md)
 を参照してください。
 
 ### Windows Terminal 設定が反映されない

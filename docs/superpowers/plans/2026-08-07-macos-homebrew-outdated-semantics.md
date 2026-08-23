@@ -1,5 +1,7 @@
 # macOS Homebrew Cask Outdated Semantics Fix Implementation Plan
 
+> **Status:** Historical plan. The standalone cask updater described here was superseded by nix-darwin's declarative Homebrew Bundle with `upgrade = true`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `nrs` correctly update named Homebrew casks when current Homebrew reports outdated items with exit status 1, including tap-qualified casks such as `stablyai/orca/orca`.

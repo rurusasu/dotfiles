@@ -106,10 +106,10 @@ jobs:
           persist-credentials: false
 
       - name: Set up Docker
-        uses: docker/setup-docker-action@v4
+        uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # v4
 
       - name: Install devcontainer CLI
-        run: npm install -g @devcontainers/cli
+        run: npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0
 
       - name: Start devcontainer
         run: |
@@ -157,7 +157,7 @@ jobs:
 
       - name: Install devcontainer CLI
         shell: pwsh
-        run: npm install -g @devcontainers/cli
+        run: npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0
 
       - name: Validate devcontainer config
         shell: pwsh

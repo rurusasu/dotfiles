@@ -74,4 +74,4 @@ jobs:
           bats --print-output-on-failure "${bats_files[@]}"
 
       - name: Run actionlint
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/ci-contract.yml
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml

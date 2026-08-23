@@ -59,7 +59,7 @@ assert_bootstrap_routing() {
 
 @test "bootstrap Darwin-only paths enable only Darwin" {
 	assert_bootstrap_routing \
-		"nix/darwin/default.nix" \
+		"nix/hosts/darwin/default.nix" \
 		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
@@ -67,6 +67,12 @@ assert_bootstrap_routing() {
 	assert_bootstrap_routing \
 		"nix/hosts/linux/configuration.nix" \
 		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
+}
+
+@test "bootstrap installer changes enable Linux and Darwin" {
+	assert_bootstrap_routing \
+		"install.sh" \
+		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
 @test "bootstrap WSL-only paths enable only WSL" {

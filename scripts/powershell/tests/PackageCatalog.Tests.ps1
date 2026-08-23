@@ -123,7 +123,7 @@ Describe 'Package catalog consistency' {
                 "nix/packages/sets.nix",
                 "nix/flakes/packages.nix",
                 "nix/home/common.nix",
-                "nix/darwin/default.nix",
+                "nix/hosts/darwin/default.nix",
                 "nix/modules/host/default.nix",
                 "nix/packages/winget.nix",
                 "nix/packages/support-report.nix"

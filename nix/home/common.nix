@@ -4,7 +4,7 @@
 # Used by:
 #   - nix/home/wsl/users.nix   → NixOS module integration
 #   - nix/flakes/home.nix      → standalone homeConfigurations
-#   - nix/darwin/default.nix   → nix-darwin Home Manager integration
+#   - nix/hosts/darwin/default.nix → nix-darwin Home Manager integration
 {
   pkgs,
   lib,
@@ -52,6 +52,11 @@ in
       FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '";
       # pnpm global bin directory
       PNPM_HOME = "$HOME/.local/share/pnpm";
+    }
+    // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+      # Homebrew's default is already 24 hours; keep that interval explicit
+      # for interactive shells and tools launched from the Home Manager session.
+      HOMEBREW_AUTO_UPDATE_SECS = "86400";
     };
 
     # PATH: bun global binaries (claude-code, gemini-cli, etc.)

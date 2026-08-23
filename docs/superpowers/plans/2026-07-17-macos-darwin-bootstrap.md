@@ -1,5 +1,7 @@
 # macOS nix-darwin One-command Bootstrap Implementation Plan
 
+> **Status:** Historical plan. The current macOS Homebrew source of truth is nix-darwin's declarative Bundle with `upgrade = true`; this document is retained for context and is not an operational runbook.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace imperative Homebrew/Home Manager setup with one `./install.sh` path that applies nix-darwin, nix-homebrew, Home Manager, Docker Desktop, chezmoi, and Compose.
