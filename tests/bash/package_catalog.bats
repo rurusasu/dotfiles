@@ -32,6 +32,24 @@ setup() {
 	grep -q 'command = "dsh";' "$SETS"
 }
 
+@test "DeepSeek Harness native builds are pre-approved for pnpm global installs" {
+	for build_package in \
+		"@deepseek-ai/dsh-subprocess-local" \
+		"@google/genai" \
+		koffi \
+		node-pty \
+		protobufjs; do
+		grep -q -- "--allow-build=$build_package" "$SETS"
+		grep -q -- "--allow-build=$build_package" "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
+		grep -q -- "--allow-build=$build_package" "$REPO_ROOT/windows/pnpm/packages.json"
+	done
+	grep -q 'pnpm add -g.*PNPM_BUILD_ARGS' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
+}
+
+@test "DeepSeek Harness is reinstalled when the native build approval changes" {
+	grep -q 'pnpm remove -g.*PKG_NAME' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
+}
+
 @test "cross-platform applications are not classified as Windows-only" {
 	windows_only="$(sed -n '/windowsOnly = {/,/^  };/p' "$SETS")"
 	for package_id in \
