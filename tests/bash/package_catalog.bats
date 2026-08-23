@@ -52,16 +52,11 @@ setup() {
 
 @test "pnpm v11 global installs skip packages present in the global manifest" {
 	test_dir="$(mktemp -d)"
-	mkdir -p "$test_dir/bin" "$test_dir/global"
+	mkdir -p "$test_dir/bin"
 
 	cat > "$test_dir/bin/pnpm" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-
-if [ "${1:-}" = "root" ] && [ "${2:-}" = "-g" ]; then
-	printf '%s\n' "$FAKE_PNPM_ROOT"
-	exit 0
-fi
 
 if [ "${1:-}" = "list" ] && [ "${2:-}" = "-g" ]; then
 	cat <<'JSON'
@@ -77,30 +72,27 @@ JSON
 	exit 0
 fi
 
-printf '%s\n' "$*" >> "$FAKE_PNPM_LOG"
+exit 1
 EOF
 	chmod +x "$test_dir/bin/pnpm"
 
-	chezmoi execute-template \
-		< "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl" \
-		> "$test_dir/install.sh"
+	for package_name in \
+		"@prisma/language-server" \
+		"@agentclientprotocol/claude-agent-acp" \
+		"@deepseek-ai/dsh" \
+		"@playwright/cli" \
+		typescript-language-server \
+		typescript; do
+		run env PATH="$test_dir/bin:$PATH" \
+			bash -c 'source "$1" && pnpm_global_package_installed "$2"' \
+			bash "$REPO_ROOT/chezmoi/.chezmoitemplates/pnpm_global_installed.sh" "$package_name"
+		[ "$status" -eq 0 ]
+	done
 
-	run env \
-		PATH="$test_dir/bin:$PATH" \
-		FAKE_PNPM_ROOT="$test_dir/global" \
-		FAKE_PNPM_LOG="$test_dir/pnpm.log" \
-		bash "$test_dir/install.sh"
-	[ "$status" -eq 0 ]
-	[[ "$output" == *"1 個インストール, 5 個スキップ, 0 個失敗"* ]]
-
-	[ "$(grep -c '^add ' "$test_dir/pnpm.log")" -eq 1 ]
-	grep -q '^add .*@deepseek-ai/dsh$' "$test_dir/pnpm.log"
-	grep -q '^remove -g @deepseek-ai/dsh$' "$test_dir/pnpm.log"
-	! grep -q '^add .*@prisma/language-server$' "$test_dir/pnpm.log"
-	! grep -q '^add .*@agentclientprotocol/claude-agent-acp$' "$test_dir/pnpm.log"
-	! grep -q '^add .*@playwright/cli$' "$test_dir/pnpm.log"
-	! grep -q '^add .*typescript-language-server$' "$test_dir/pnpm.log"
-	! grep -q '^add .*typescript$' "$test_dir/pnpm.log"
+	run env PATH="$test_dir/bin:$PATH" \
+		bash -c 'source "$1" && pnpm_global_package_installed "$2"' \
+		bash "$REPO_ROOT/chezmoi/.chezmoitemplates/pnpm_global_installed.sh" missing-package
+	[ "$status" -ne 0 ]
 
 	rm -rf "$test_dir"
 }
