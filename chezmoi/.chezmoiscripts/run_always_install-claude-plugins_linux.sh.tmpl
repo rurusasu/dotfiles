@@ -8,12 +8,32 @@ MARKETPLACES_DIR="$HOME/.claude/plugins/marketplaces"
 # Ensure directory exists
 mkdir -p "$MARKETPLACES_DIR"
 
+marketplace_checkout_is_valid() {
+    local target_dir="$1"
+    local expected_root actual_root inside_work_tree
+
+    [ -d "$target_dir" ] || return 1
+    if ! expected_root="$(cd -- "$target_dir" && pwd -P)"; then
+        return 1
+    fi
+    if ! inside_work_tree="$(git -C "$target_dir" rev-parse --is-inside-work-tree 2>/dev/null)"; then
+        return 1
+    fi
+    [ "$inside_work_tree" = true ] || return 1
+    if ! actual_root="$(git -C "$target_dir" rev-parse --show-toplevel 2>/dev/null)"; then
+        return 1
+    fi
+    [ "$actual_root" = "$expected_root" ]
+}
+
 recover_invalid_marketplace() {
     local repo="$1"
     local target_dir="$2"
     local staging_dir backup_dir=""
 
-    staging_dir="$(mktemp -d "$MARKETPLACES_DIR/.marketplace.XXXXXX")"
+    if ! staging_dir="$(mktemp -d "$MARKETPLACES_DIR/.marketplace.XXXXXX")" || [ -z "$staging_dir" ]; then
+        return 1
+    fi
     if ! git clone "https://github.com/$repo.git" "$staging_dir/checkout" 2>&1; then
         rm -rf -- "$staging_dir"
         return 1
@@ -49,7 +69,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     if ! git clone "https://github.com/{{ .repo }}.git" "$TARGET_DIR" 2>&1; then
         echo "Warning: git clone failed for {{ .name }}, skipping"
     fi
-elif ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+elif ! marketplace_checkout_is_valid "$TARGET_DIR"; then
     echo "Invalid Git checkout for {{ .name }}, recreating..."
     if ! recover_invalid_marketplace "{{ .repo }}" "$TARGET_DIR"; then
         echo "Warning: unable to recreate {{ .name }}, skipping"
