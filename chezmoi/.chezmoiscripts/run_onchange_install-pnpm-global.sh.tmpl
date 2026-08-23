@@ -40,10 +40,22 @@ else
   PNPM_BUILD_ARGS=()
 fi
 PKG_DIR="${PKG_NAME#@*/}"  # scoped package → scope removed for dir check
+INSTALL_REQUIRED=1
+REMOVE_FAILED=0
 if [ -n "$GLOBAL_ROOT" ] && [ -d "$GLOBAL_ROOT/$PKG_NAME" ]; then
-  echo "  スキップ (インストール済み): $PKG_NAME"
-  SKIPPED=$((SKIPPED + 1))
-else
+  if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
+    echo "  再インストール (native build approval を適用): $PKG_NAME"
+    if ! pnpm remove -g "$PKG_NAME"; then
+      echo "  ✗ $PKG_NAME の既存インストール削除に失敗しました"
+      REMOVE_FAILED=1
+    fi
+  else
+    echo "  スキップ (インストール済み): $PKG_NAME"
+    SKIPPED=$((SKIPPED + 1))
+    INSTALL_REQUIRED=0
+  fi
+fi
+if [ "$INSTALL_REQUIRED" -eq 1 ] && [ "$REMOVE_FAILED" -eq 0 ]; then
   echo "  インストール中: $PKG_NAME"
   if pnpm add -g "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
     echo "  ✓ $PKG_NAME"
@@ -52,6 +64,8 @@ else
     echo "  ✗ $PKG_NAME のインストールに失敗しました"
     FAILED=$((FAILED + 1))
   fi
+elif [ "$REMOVE_FAILED" -eq 1 ]; then
+  FAILED=$((FAILED + 1))
 fi
 
 {{ end -}}

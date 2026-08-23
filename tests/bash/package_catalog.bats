@@ -46,6 +46,10 @@ setup() {
 	grep -q 'pnpm add -g.*PNPM_BUILD_ARGS' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
 }
 
+@test "DeepSeek Harness is reinstalled when the native build approval changes" {
+	grep -q 'pnpm remove -g.*PKG_NAME' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
+}
+
 @test "cross-platform applications are not classified as Windows-only" {
 	windows_only="$(sed -n '/windowsOnly = {/,/^  };/p' "$SETS")"
 	for package_id in \
