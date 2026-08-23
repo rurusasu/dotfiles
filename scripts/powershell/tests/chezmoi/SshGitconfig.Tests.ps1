@@ -178,6 +178,11 @@ Describe 'SSH deploy スクリプト' {
             $script:ps1Content | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
             $script:ps1Content | Should -Match 'timed out after \$OpReadTimeoutSeconds seconds' -Because "timeout should take the non-fatal skip path"
         }
+
+        It '設定済みアカウントがCLIにない場合に復旧方法を表示すること' {
+            $script:ps1Content | Should -Match 'configured 1Password account.*\$Account' -Because "missing account UUID should be distinguishable from a missing item"
+            $script:ps1Content | Should -Match 'sign in.*update.*account' -Because "the warning should explain how to repair the account configuration"
+        }
     }
 
     Context 'Linux/macOS (sh.tmpl)' {
@@ -205,6 +210,11 @@ Describe 'SSH deploy スクリプト' {
             $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=60' -Because "WSL op.exe reads can exceed 20 seconds after app auth"
             $script:shContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
             $script:shContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout should take the non-fatal skip path"
+        }
+
+        It '設定済みアカウントがCLIにない場合に復旧方法を表示すること' {
+            $script:shContent | Should -Match 'configured 1Password account.*\$account' -Because "missing account UUID should be distinguishable from a missing item"
+            $script:shContent | Should -Match 'sign in.*update.*account' -Because "the warning should explain how to repair the account configuration"
         }
     }
 }

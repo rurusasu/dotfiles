@@ -12,3 +12,17 @@ setup() {
 
 	[ -z "$violations" ]
 }
+
+@test "Claude marketplace installers recover invalid checkouts" {
+	for template in \
+		"$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_darwin.sh.tmpl" \
+		"$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_linux.sh.tmpl"; do
+		grep -Fq 'git -C "$TARGET_DIR" rev-parse --is-inside-work-tree' "$template"
+		grep -Fq 'mktemp -d' "$template"
+		grep -Fq '.invalid.$(date +%Y%m%d%H%M%S)' "$template"
+	done
+
+	windows_template="$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_windows.ps1.tmpl"
+	grep -Fq 'rev-parse --is-inside-work-tree' "$windows_template"
+	grep -Fq '.invalid.$(Get-Date -Format yyyyMMddHHmmss)' "$windows_template"
+}

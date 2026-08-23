@@ -14,6 +14,41 @@ if (-not (Test-Path -Path $marketplacesDir)) {
     New-Item -ItemType Directory -Force -Path $marketplacesDir | Out-Null
 }
 
+function Recover-InvalidMarketplace {
+    param(
+        [string]$Repository,
+        [string]$TargetDir
+    )
+
+    $stagingDir = Join-Path $marketplacesDir ".marketplace-$([Guid]::NewGuid().ToString('N'))"
+    $checkoutDir = Join-Path $stagingDir "checkout"
+    $backupDir = "$TargetDir.invalid.$(Get-Date -Format yyyyMMddHHmmss).$PID"
+    New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+
+    try {
+        & $gitCmd @gitNonInteractive clone "https://github.com/$Repository.git" $checkoutDir 2>&1 |
+            ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) { throw "git clone failed for $Repository" }
+
+        if (Test-Path -LiteralPath $TargetDir) {
+            Move-Item -LiteralPath $TargetDir -Destination $backupDir
+        }
+        Move-Item -LiteralPath $checkoutDir -Destination $TargetDir
+        Write-Host "Preserved invalid marketplace checkout at: $backupDir"
+    }
+    catch {
+        if ((Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $TargetDir)) {
+            Move-Item -LiteralPath $backupDir -Destination $TargetDir
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingDir) {
+            Remove-Item -LiteralPath $stagingDir -Recurse -Force
+        }
+    }
+}
+
 {{ range .claude_marketplaces -}}
 # Clone or update {{ .name }}
 $targetDir = Join-Path $marketplacesDir "{{ .name }}"
@@ -25,10 +60,17 @@ if (-not (Test-Path -Path $targetDir)) {
     if ($LASTEXITCODE -ne 0) { throw "git clone failed for {{ .name }}" }
 }
 else {
-    Write-Host "Updating {{ .name }}..."
-    Push-Location $targetDir
-    try { & $gitCmd @gitNonInteractive pull --ff-only 2>&1 | ForEach-Object { Write-Host $_ } } finally { Pop-Location }
-    if ($LASTEXITCODE -ne 0) { Write-Host "Warning: git pull failed for {{ .name }}, skipping" }
+    & $gitCmd @gitNonInteractive -C $targetDir rev-parse --is-inside-work-tree *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Invalid Git checkout for {{ .name }}, recreating..."
+        Recover-InvalidMarketplace -Repository "{{ .repo }}" -TargetDir $targetDir
+    }
+    else {
+        Write-Host "Updating {{ .name }}..."
+        Push-Location $targetDir
+        try { & $gitCmd @gitNonInteractive pull --ff-only 2>&1 | ForEach-Object { Write-Host $_ } } finally { Pop-Location }
+        if ($LASTEXITCODE -ne 0) { Write-Host "Warning: git pull failed for {{ .name }}, skipping" }
+    }
 }
 
 {{ end -}}
