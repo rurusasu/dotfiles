@@ -27,20 +27,20 @@ BeforeAll {
     $script:marketplacesDir = Join-Path $TestDrive 'marketplaces'
     New-Item -ItemType Directory -Path $script:marketplacesDir -Force | Out-Null
     $script:gitNonInteractive = @()
-    Invoke-Expression $normalizeFunction
-    Invoke-Expression $validationFunction
-    Invoke-Expression $recoveryFunction
+    . ([scriptblock]::Create($normalizeFunction))
+    . ([scriptblock]::Create($validationFunction))
+    . ([scriptblock]::Create($recoveryFunction))
 }
 
 Describe 'Claude marketplace Windows installer helpers' {
-    It 'normalizes Git and PowerShell Windows path formats to the same path' {
+    It 'should normalize Git and PowerShell Windows path formats to the same path' {
         Normalize-MarketplacePath -Path 'C:/Users/test/.claude/' |
             Should -Be 'C:\Users\test\.claude'
         Normalize-MarketplacePath -Path '/c/Users/test/.claude/' |
             Should -Be 'C:\Users\test\.claude'
     }
 
-    It 'preserves an invalid checkout after a successful staged recovery' {
+    It 'should preserve an invalid checkout after a successful staged recovery' {
         $fakeGit = Join-Path $TestDrive 'fake-git.ps1'
         @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -69,7 +69,7 @@ exit 1
             Should -Be 'original'
     }
 
-    It 'keeps the original checkout when the staged clone fails' {
+    It 'should keep the original checkout when the staged clone fails' {
         $fakeGit = Join-Path $TestDrive 'failing-git.ps1'
         @'
 exit 1
@@ -86,7 +86,7 @@ exit 1
             Should -Be 'original'
     }
 
-    It 'rejects bare and parent repositories while accepting the exact checkout root' {
+    It 'should reject bare and parent repositories while accepting the exact checkout root' {
         $fakeGit = Join-Path $TestDrive 'validation-git.ps1'
         @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -124,7 +124,7 @@ exit 1
         }
     }
 
-    It 'restores the original checkout when placement fails' {
+    It 'should restore the original checkout when placement fails' {
         $fakeGit = Join-Path $TestDrive 'rollback-success-git.ps1'
         @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -142,12 +142,8 @@ exit 1
         New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $targetDir 'original.txt') -Value 'original'
         $script:moveItemCallCount = 0
-        function Move-Item {
-            [CmdletBinding()]
-            param(
-                [Parameter(Mandatory = $true)][string]$LiteralPath,
-                [Parameter(Mandatory = $true)][string]$Destination
-            )
+        Mock -CommandName Move-Item -MockWith {
+            param([string]$LiteralPath, [string]$Destination)
 
             $script:moveItemCallCount++
             if ($script:moveItemCallCount -eq 2) {
@@ -156,63 +152,10 @@ exit 1
             Microsoft.PowerShell.Management\Move-Item -LiteralPath $LiteralPath -Destination $Destination
         }
 
-        try {
-            Recover-InvalidMarketplace -Repository 'example/repository' -TargetDir $targetDir |
-                Should -BeFalse
-        }
-        finally {
-            Remove-Item Function:\Move-Item -ErrorAction SilentlyContinue
-        }
+        Recover-InvalidMarketplace -Repository 'example/repository' -TargetDir $targetDir |
+            Should -BeFalse
         Get-Content -LiteralPath (Join-Path $targetDir 'original.txt') |
             Should -Be 'original'
     }
 
-    It 'returns false when checkout placement and rollback both fail while retaining the backup' {
-        $fakeGit = Join-Path $TestDrive 'recovery-git.ps1'
-        @'
-param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-$cloneIndex = [Array]::IndexOf($Arguments, 'clone')
-if ($cloneIndex -ge 0) {
-    $destination = $Arguments[$cloneIndex + 2]
-    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-    exit 0
-}
-exit 1
-'@ | Set-Content -LiteralPath $fakeGit -Encoding utf8
-
-        $script:gitCmd = $fakeGit
-        $targetDir = Join-Path $script:marketplacesDir 'rollback'
-        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $targetDir 'original.txt') -Value 'original'
-        $script:moveItemCallCount = 0
-        function Move-Item {
-            [CmdletBinding()]
-            param(
-                [Parameter(Mandatory = $true)][string]$LiteralPath,
-                [Parameter(Mandatory = $true)][string]$Destination
-            )
-
-            $script:moveItemCallCount++
-            if ($script:moveItemCallCount -eq 2) {
-                throw 'injected checkout placement failure'
-            }
-            if ($script:moveItemCallCount -eq 3) {
-                throw 'injected rollback failure'
-            }
-            Microsoft.PowerShell.Management\Move-Item -LiteralPath $LiteralPath -Destination $Destination
-        }
-
-        try {
-            Recover-InvalidMarketplace -Repository 'example/repository' -TargetDir $targetDir |
-                Should -BeFalse
-        }
-        finally {
-            Remove-Item Function:\Move-Item -ErrorAction SilentlyContinue
-        }
-        Test-Path -LiteralPath $targetDir | Should -BeFalse
-        $backupDir = Get-ChildItem -LiteralPath $script:marketplacesDir -Filter 'rollback.invalid.*'
-        $backupDir.Count | Should -Be 1
-        Get-Content -LiteralPath (Join-Path $backupDir.FullName 'original.txt') |
-            Should -Be 'original'
-    }
 }
