@@ -34,7 +34,23 @@ function Test-ValidMarketplaceCheckout {
     }
 
     $expectedRoot = (Get-Item -LiteralPath $TargetDir).FullName
-    return $actualRoot -eq $expectedRoot
+    return (Normalize-MarketplacePath -Path $actualRoot) -eq (Normalize-MarketplacePath -Path $expectedRoot)
+}
+
+function Normalize-MarketplacePath {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    $normalized = $Path.Trim() -replace '/', '\'
+    if ($normalized -match '^\\([A-Za-z])\\') {
+        $normalized = "$($Matches[1]):\$($normalized.Substring(3))"
+    }
+    return $normalized.TrimEnd('\')
 }
 
 function Recover-InvalidMarketplace {
@@ -53,14 +69,19 @@ function Recover-InvalidMarketplace {
         if ($LASTEXITCODE -ne 0) { throw "git clone failed for $Repository" }
 
         if (Test-Path -LiteralPath $TargetDir) {
-            Move-Item -LiteralPath $TargetDir -Destination $backupDir
+            Move-Item -LiteralPath $TargetDir -Destination $backupDir -ErrorAction Stop
         }
-        Move-Item -LiteralPath $checkoutDir -Destination $TargetDir
+        Move-Item -LiteralPath $checkoutDir -Destination $TargetDir -ErrorAction Stop
         Write-Host "Preserved invalid marketplace checkout at: $backupDir"
     }
     catch {
-        if ((Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $TargetDir)) {
-            Move-Item -LiteralPath $backupDir -Destination $TargetDir
+        try {
+            if ((Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $TargetDir)) {
+                Move-Item -LiteralPath $backupDir -Destination $TargetDir -ErrorAction Stop
+            }
+        }
+        catch {
+            Write-Host "Warning: failed to rollback marketplace ${Repository}: $($_.Exception.Message)"
         }
         Write-Host "Warning: marketplace recovery failed for ${Repository}: $($_.Exception.Message)"
         return $false

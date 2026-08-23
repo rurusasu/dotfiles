@@ -26,7 +26,12 @@ setup() {
 
 	windows_template="$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_windows.ps1.tmpl"
 	grep -Fq 'Test-ValidMarketplaceCheckout' "$windows_template"
+	grep -Fq 'Normalize-MarketplacePath' "$windows_template"
+	grep -Fq -- "-replace '/', '\\'" "$windows_template"
 	grep -Fq 'rev-parse --show-toplevel' "$windows_template"
 	grep -Fq 'if (-not (Recover-InvalidMarketplace' "$windows_template"
+	grep -Fq 'Move-Item -LiteralPath $TargetDir -Destination $backupDir -ErrorAction Stop' "$windows_template"
+	grep -Fq 'Move-Item -LiteralPath $checkoutDir -Destination $TargetDir -ErrorAction Stop' "$windows_template"
+	grep -Fq 'failed to rollback marketplace' "$windows_template"
 	grep -Fq '.invalid.$(Get-Date -Format yyyyMMddHHmmss)' "$windows_template"
 }
