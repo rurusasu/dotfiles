@@ -15,10 +15,7 @@ fi
 
 echo "pnpm グローバルパッケージをインストールしています..."
 
-GLOBAL_ROOT=""
-if raw_root=$(pnpm root -g 2>/dev/null); then
-  GLOBAL_ROOT="$raw_root"
-fi
+{{ include ".chezmoitemplates/pnpm_global_installed.sh" }}
 
 FAILED=0
 INSTALLED=0
@@ -39,10 +36,9 @@ if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
 else
   PNPM_BUILD_ARGS=()
 fi
-PKG_DIR="${PKG_NAME#@*/}"  # scoped package → scope removed for dir check
 INSTALL_REQUIRED=1
 REMOVE_FAILED=0
-if [ -n "$GLOBAL_ROOT" ] && [ -d "$GLOBAL_ROOT/$PKG_NAME" ]; then
+if pnpm_global_package_installed "$PKG_NAME"; then
   if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
     echo "  再インストール (native build approval を適用): $PKG_NAME"
     if ! pnpm remove -g "$PKG_NAME"; then

@@ -50,6 +50,53 @@ setup() {
 	grep -q 'pnpm remove -g.*PKG_NAME' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
 }
 
+@test "pnpm v11 global installs skip packages present in the global manifest" {
+	test_dir="$(mktemp -d)"
+	mkdir -p "$test_dir/bin"
+
+	cat > "$test_dir/bin/pnpm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "list" ] && [ "${2:-}" = "-g" ]; then
+	cat <<'JSON'
+[{"dependencies":{
+  "@prisma/language-server":{"version":"31.11.0"},
+  "@agentclientprotocol/claude-agent-acp":{"version":"0.70.0"},
+  "@deepseek-ai/dsh":{"version":"0.1.1-rc.2"},
+  "@playwright/cli":{"version":"0.1.18"},
+  "typescript-language-server":{"version":"6.0.0"},
+  "typescript":{"version":"7.0.2"}
+}}]
+JSON
+	exit 0
+fi
+
+exit 1
+EOF
+	chmod +x "$test_dir/bin/pnpm"
+
+	for package_name in \
+		"@prisma/language-server" \
+		"@agentclientprotocol/claude-agent-acp" \
+		"@deepseek-ai/dsh" \
+		"@playwright/cli" \
+		typescript-language-server \
+		typescript; do
+		run env PATH="$test_dir/bin:$PATH" \
+			bash -c 'source "$1" && pnpm_global_package_installed "$2"' \
+			bash "$REPO_ROOT/chezmoi/.chezmoitemplates/pnpm_global_installed.sh" "$package_name"
+		[ "$status" -eq 0 ]
+	done
+
+	run env PATH="$test_dir/bin:$PATH" \
+		bash -c 'source "$1" && pnpm_global_package_installed "$2"' \
+		bash "$REPO_ROOT/chezmoi/.chezmoitemplates/pnpm_global_installed.sh" missing-package
+	[ "$status" -ne 0 ]
+
+	rm -rf "$test_dir"
+}
+
 @test "cross-platform applications are not classified as Windows-only" {
 	windows_only="$(sed -n '/windowsOnly = {/,/^  };/p' "$SETS")"
 	for package_id in \
