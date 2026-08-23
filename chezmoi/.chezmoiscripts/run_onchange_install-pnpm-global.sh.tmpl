@@ -23,17 +23,29 @@ fi
 FAILED=0
 INSTALLED=0
 SKIPPED=0
+PNPM_BUILD_ARGS=()
 
 {{ range .pnpm_global_packages -}}
 # {{ . }}
 PKG_NAME="{{ . }}"
+if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
+  PNPM_BUILD_ARGS=(
+    "--allow-build=@deepseek-ai/dsh-subprocess-local"
+    "--allow-build=@google/genai"
+    "--allow-build=koffi"
+    "--allow-build=node-pty"
+    "--allow-build=protobufjs"
+  )
+else
+  PNPM_BUILD_ARGS=()
+fi
 PKG_DIR="${PKG_NAME#@*/}"  # scoped package → scope removed for dir check
 if [ -n "$GLOBAL_ROOT" ] && [ -d "$GLOBAL_ROOT/$PKG_NAME" ]; then
   echo "  スキップ (インストール済み): $PKG_NAME"
   SKIPPED=$((SKIPPED + 1))
 else
   echo "  インストール中: $PKG_NAME"
-  if pnpm add -g "$PKG_NAME"; then
+  if pnpm add -g "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
     echo "  ✓ $PKG_NAME"
     INSTALLED=$((INSTALLED + 1))
   else

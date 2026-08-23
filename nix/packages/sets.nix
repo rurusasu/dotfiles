@@ -990,6 +990,13 @@ lib.mapAttrs (_: resolve) grouped
 
   # Extra pnpm install arguments for packages that need approved native builds.
   pnpmInstallArgs = {
+    "@deepseek-ai/dsh" = [
+      "--allow-build=@deepseek-ai/dsh-subprocess-local"
+      "--allow-build=@google/genai"
+      "--allow-build=koffi"
+      "--allow-build=node-pty"
+      "--allow-build=protobufjs"
+    ];
     "@google/gemini-cli" = [
       "--allow-build=@github/keytar"
       "--allow-build=node-pty"
