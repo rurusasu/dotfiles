@@ -71,7 +71,13 @@ function Read-OpSecret {
   $stdout = $process.StandardOutput.ReadToEnd()
   $stderr = $process.StandardError.ReadToEnd()
   if ($process.ExitCode -ne 0) {
-    Write-Host "WARNING: 1Password is not available, skipping $Label"
+    if ($stderr -match 'found no accounts for filter') {
+      Write-Host "WARNING: configured 1Password account is unavailable for ${Label}: $Account"
+      Write-Host "  Sign in to this account with 'op signin', or update the configured account ID."
+    }
+    else {
+      Write-Host "WARNING: 1Password is not available, skipping $Label"
+    }
     foreach ($line in (($stderr + "`n" + $stdout) -split "`r?`n")) {
       if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
         Write-Host "  $line"

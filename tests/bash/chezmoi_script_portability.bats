@@ -12,3 +12,26 @@ setup() {
 
 	[ -z "$violations" ]
 }
+
+@test "Claude marketplace installers recover invalid checkouts" {
+	for template in \
+		"$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_darwin.sh.tmpl" \
+		"$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_linux.sh.tmpl"; do
+		grep -Fq 'marketplace_checkout_is_valid()' "$template"
+		grep -Fq 'rev-parse --show-toplevel' "$template"
+		grep -Fq 'mktemp -d' "$template"
+		grep -Fq 'if ! staging_dir=' "$template"
+		grep -Fq '.invalid.$(date +%Y%m%d%H%M%S)' "$template"
+	done
+
+	windows_template="$REPO_ROOT/chezmoi/.chezmoiscripts/run_always_install-claude-plugins_windows.ps1.tmpl"
+	grep -Fq 'Test-ValidMarketplaceCheckout' "$windows_template"
+	grep -Fq 'Normalize-MarketplacePath' "$windows_template"
+	grep -Fq -- "-replace '/', '\\'" "$windows_template"
+	grep -Fq 'rev-parse --show-toplevel' "$windows_template"
+	grep -Fq 'if (-not (Recover-InvalidMarketplace' "$windows_template"
+	grep -Fq 'Move-Item -LiteralPath $TargetDir -Destination $backupDir -ErrorAction Stop' "$windows_template"
+	grep -Fq 'Move-Item -LiteralPath $checkoutDir -Destination $TargetDir -ErrorAction Stop' "$windows_template"
+	grep -Fq 'failed to rollback marketplace' "$windows_template"
+	grep -Fq '.invalid.$(Get-Date -Format yyyyMMddHHmmss)' "$windows_template"
+}
