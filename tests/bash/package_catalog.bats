@@ -50,6 +50,61 @@ setup() {
 	grep -q 'pnpm remove -g.*PKG_NAME' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl"
 }
 
+@test "pnpm v11 global installs skip packages present in the global manifest" {
+	test_dir="$(mktemp -d)"
+	mkdir -p "$test_dir/bin" "$test_dir/global"
+
+	cat > "$test_dir/bin/pnpm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "root" ] && [ "${2:-}" = "-g" ]; then
+	printf '%s\n' "$FAKE_PNPM_ROOT"
+	exit 0
+fi
+
+if [ "${1:-}" = "list" ] && [ "${2:-}" = "-g" ]; then
+	cat <<'JSON'
+[{"dependencies":{
+  "@prisma/language-server":{"version":"31.11.0"},
+  "@agentclientprotocol/claude-agent-acp":{"version":"0.70.0"},
+  "@deepseek-ai/dsh":{"version":"0.1.1-rc.2"},
+  "@playwright/cli":{"version":"0.1.18"},
+  "typescript-language-server":{"version":"6.0.0"},
+  "typescript":{"version":"7.0.2"}
+}}]
+JSON
+	exit 0
+fi
+
+printf '%s\n' "$*" >> "$FAKE_PNPM_LOG"
+EOF
+	chmod +x "$test_dir/bin/pnpm"
+
+	chezmoi execute-template \
+		< "$REPO_ROOT/chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl" \
+		> "$test_dir/install.sh"
+
+	run env \
+		PATH="$test_dir/bin:$PATH" \
+		FAKE_PNPM_ROOT="$test_dir/global" \
+		FAKE_PNPM_LOG="$test_dir/pnpm.log" \
+		bash "$test_dir/install.sh"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 個インストール, 5 個スキップ, 0 個失敗"* ]]
+
+	[ "$(grep -c '^add ' "$test_dir/pnpm.log")" -eq 1 ]
+	grep -q '^add .*@deepseek-ai/dsh$' "$test_dir/pnpm.log"
+	grep -q '^remove -g @deepseek-ai/dsh$' "$test_dir/pnpm.log"
+	! grep -q '^add .*@prisma/language-server$' "$test_dir/pnpm.log"
+	! grep -q '^add .*@agentclientprotocol/claude-agent-acp$' "$test_dir/pnpm.log"
+	! grep -q '^add .*@playwright/cli$' "$test_dir/pnpm.log"
+	! grep -q '^add .*typescript-language-server$' "$test_dir/pnpm.log"
+	! grep -q '^add .*typescript$' "$test_dir/pnpm.log"
+
+	rm -rf "$test_dir"
+}
+
 @test "cross-platform applications are not classified as Windows-only" {
 	windows_only="$(sed -n '/windowsOnly = {/,/^  };/p' "$SETS")"
 	for package_id in \
