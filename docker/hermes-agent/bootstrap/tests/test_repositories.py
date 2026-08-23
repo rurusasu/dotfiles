@@ -185,7 +185,7 @@ class RepositoryTests(unittest.TestCase):
                 text=True,
             )
             password = subprocess.run(
-                (str(askpass), "Password for 'https://github.com':"),
+                (str(askpass), "Password for 'https://myusername@github.com':"),
                 check=True,
                 env=environment,
                 stdout=subprocess.PIPE,
