@@ -102,7 +102,7 @@ read_op_secret() {
 echo "Deploying SSH configuration..."
 
 # Render ssh/config.tmpl inline (chezmoi template engine resolves this at apply time)
-SSH_CONFIG='{{ include "ssh/config.tmpl" }}'
+SSH_CONFIG='{{ includeTemplate "ssh/config.tmpl" . }}'
 deploy_content "$SSH_CONFIG" "$HOME_DIR/.ssh/config"
 chmod 600 "$HOME_DIR/.ssh/config"
 
