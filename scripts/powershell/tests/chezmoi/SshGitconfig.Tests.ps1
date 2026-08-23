@@ -20,6 +20,7 @@ BeforeAll {
     $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl"
     $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
+    $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account","op_account_work":"test-account"}'
 }
 
 Describe 'SSH config テンプレート' {
@@ -150,8 +151,18 @@ Describe 'SSH deploy スクリプト' {
             $script:ps1Content = Get-Content -Path $script:sshDeployPs1 -Raw
         }
 
-        It 'ssh/config.tmpl を include でインライン展開していること' {
-            $script:ps1Content | Should -Match 'include "ssh/config\.tmpl"' -Because "テンプレートファイルを直接コピーすると未展開のまま配置される"
+        It 'ssh/config.tmpl を includeTemplate で評価してインライン展開していること' {
+            $script:ps1Content | Should -Match 'includeTemplate "ssh/config\.tmpl" \.' -Because "include はテンプレート本文を再評価しないため、OS分岐を評価してから配置する"
+        }
+
+        It '展開後のWindows用deployスクリプトに未評価のテンプレートを残さないこと' {
+            $render = $script:ps1Content |
+                & chezmoi --source $script:chezmoiRoot --override-data $script:renderData execute-template
+            $LASTEXITCODE | Should -Be 0
+            $rendered = $render -join [Environment]::NewLine
+
+            $rendered | Should -Not -Match '\{\{'
+            $rendered | Should -Match 'IdentityAgent "//\./pipe/openssh-ssh-agent"'
         }
 
         It 'config.tmpl のハッシュが変更検出に使われていること' {
@@ -185,8 +196,28 @@ Describe 'SSH deploy スクリプト' {
             $script:shContent = Get-Content -Path $script:sshDeploySh -Raw
         }
 
-        It 'ssh/config.tmpl を include でインライン展開していること' {
-            $script:shContent | Should -Match 'include "ssh/config\.tmpl"' -Because "テンプレートファイルを直接コピーすると未展開のまま配置される"
+        It 'ssh/config.tmpl を includeTemplate で評価してインライン展開していること' {
+            $script:shContent | Should -Match 'includeTemplate "ssh/config\.tmpl" \.' -Because "include はテンプレート本文を再評価しないため、OS分岐を評価してから配置する"
+        }
+
+        It '展開後のmacOS用deployスクリプトに未評価のテンプレートを残さないこと' {
+            $render = $script:shContent |
+                & chezmoi --source $script:chezmoiRoot --override-data ($script:renderData -replace '"windows"', '"darwin"') execute-template
+            $LASTEXITCODE | Should -Be 0
+            $rendered = $render -join [Environment]::NewLine
+
+            $rendered | Should -Not -Match '\{\{'
+            $rendered | Should -Match 'IdentityAgent "~/Library/Group Containers/2BUA8C4S2C\.com\.1password/t/agent\.sock"'
+        }
+
+        It '展開後のLinux用deployスクリプトに未評価のテンプレートを残さないこと' {
+            $render = $script:shContent |
+                & chezmoi --source $script:chezmoiRoot --override-data ($script:renderData -replace '"windows"', '"linux"') execute-template
+            $LASTEXITCODE | Should -Be 0
+            $rendered = $render -join [Environment]::NewLine
+
+            $rendered | Should -Not -Match '\{\{'
+            $rendered | Should -Match 'IdentityAgent ~/.1password/agent\.sock'
         }
 
         It 'SSH config のパーミッションを 600 に設定していること' {

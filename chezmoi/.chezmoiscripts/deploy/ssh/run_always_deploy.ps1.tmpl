@@ -92,7 +92,7 @@ Write-Host "Deploying SSH configuration..."
 
 # Render ssh/config.tmpl inline (chezmoi template engine resolves this at apply time)
 $sshConfig = @'
-{{ include "ssh/config.tmpl" }}
+{{ includeTemplate "ssh/config.tmpl" . }}
 '@
 Deploy-Content $sshConfig "$HomeDir\.ssh\config"
 

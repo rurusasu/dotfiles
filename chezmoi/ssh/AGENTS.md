@@ -14,6 +14,6 @@
 
 ## deploy スクリプトの注意点
 
-- `config.tmpl` はテンプレートファイルなので、deploy スクリプト内で `{{ include "ssh/config.tmpl" }}` を使ってインライン展開すること。
+- `config.tmpl` はテンプレートファイルなので、deploy スクリプト内で `{{ includeTemplate "ssh/config.tmpl" . }}` を使って評価・インライン展開すること。ハッシュ計算だけは `include` で元ファイルの内容を参照する。
 - `Deploy-File` でファイルパスをコピーすると `ssh/config` を探すが存在しないため無言で失敗する。
 - Windows では Git Bash の SSH は named pipe (`//./pipe/openssh-ssh-agent`) に接続できない。`core.sshCommand = C:/Windows/System32/OpenSSH/ssh.exe` で Windows OpenSSH を使用すること。
