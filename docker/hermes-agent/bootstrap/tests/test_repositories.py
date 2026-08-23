@@ -19,6 +19,7 @@ from unittest import mock
 
 import hermes_bootstrap.repositories as repositories_module
 from hermes_bootstrap.errors import MigrationError, RepositoryError
+from hermes_bootstrap.git import _create_askpass
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import BootstrapManifest, SharedRepository
 from hermes_bootstrap.payload import SecretRedactor
@@ -170,6 +171,32 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn(result.working_tree, transaction.snapshots)
         self.assertNotIn(repo.legacy_target, transaction.snapshots)
         self.assertFalse(os.path.lexists(repo.legacy_target))
+
+    def test_github_askpass_uses_token_username_for_username_prompt(self) -> None:
+        askpass = _create_askpass(self.root)
+        environment = {"HERMES_BOOTSTRAP_GITHUB_TOKEN": self.auth.token}
+        try:
+            username = subprocess.run(
+                (str(askpass), "Username for 'https://github.com':"),
+                check=True,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            password = subprocess.run(
+                (str(askpass), "Password for 'https://github.com':"),
+                check=True,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        finally:
+            askpass.unlink()
+
+        self.assertEqual(username.stdout, "x-access-token\n")
+        self.assertEqual(password.stdout, f"{self.auth.token}\n")
 
     def test_initial_publication_release_failure_rolls_back_and_can_retry(self) -> None:
         repo = self.repository()

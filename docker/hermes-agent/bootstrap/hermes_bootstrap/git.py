@@ -196,7 +196,13 @@ def _create_askpass(workdir: Path) -> Path:
         os.fchmod(descriptor, 0o700)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             descriptor = -1
-            handle.write("#!/bin/sh\nexec printf '%s\\n' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\"\n")
+            handle.write(
+                "#!/bin/sh\n"
+                "case \"${1-}\" in\n"
+                "  *[Uu]sername*) exec printf '%s\\n' 'x-access-token' ;;\n"
+                "  *) exec printf '%s\\n' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" ;;\n"
+                "esac\n"
+            )
             handle.flush()
             os.fsync(handle.fileno())
         return path
