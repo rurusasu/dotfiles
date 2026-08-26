@@ -37,7 +37,7 @@ install_cli_profile() {
   local state_dir="$HOME/.local/state/dotfiles"
   local profile_link="$state_dir/tart-profile"
   local temporary_link="$state_dir/tart-profile.next.$$"
-  local command target
+  local command target nix_config
 
   mkdir -p "$state_dir" "$HOME/.local/bin"
   [[ ! -e $profile_link || -L $profile_link ]] || {
@@ -45,7 +45,10 @@ install_cli_profile() {
     exit 1
   }
   trap 'rm -f -- "$temporary_link"' RETURN
-  nix build "$REPO_ROOT#tart-minimal" --out-link "$temporary_link"
+  nix_config="${NIX_CONFIG:-}"
+  [[ -z $nix_config ]] || nix_config+=$'\n'
+  nix_config+='extra-experimental-features = nix-command flakes'
+  NIX_CONFIG="$nix_config" nix build "$REPO_ROOT#tart-minimal" --out-link "$temporary_link"
   rm -f -- "$profile_link"
   mv -f -- "$temporary_link" "$profile_link"
   trap - RETURN

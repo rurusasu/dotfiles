@@ -283,7 +283,7 @@ EOF
 	cat >"$bin/nix" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'nix %s\n' "$*" >>"$GUEST_LOG"
+printf 'nix_config=%s args=%s\n' "${NIX_CONFIG:-}" "$*" >>"$GUEST_LOG"
 [[ ${1:-} == build ]]
 while (($#)); do
   if [[ $1 == --out-link ]]; then
@@ -320,7 +320,7 @@ EOF
 		"$installer" "$guest_repo"
 
 	[ "$status" -eq 0 ]
-	grep -Fq "nix build $guest_repo#tart-minimal --out-link" "$guest_log"
+	grep -Fq "nix_config=extra-experimental-features = nix-command flakes args=build $guest_repo#tart-minimal --out-link" "$guest_log"
 	grep -Fxq 'brew install --cask wezterm@nightly' "$guest_log"
 	grep -Fxq "chezmoi init --source $guest_repo/chezmoi" "$guest_log"
 	grep -Fxq 'chezmoi apply --force' "$guest_log"
