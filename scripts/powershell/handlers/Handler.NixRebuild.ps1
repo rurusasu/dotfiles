@@ -8,7 +8,7 @@
     - pnpm グローバルパッケージのインストール (windows/pnpm/packages.json)
 
 .NOTES
-    Order = 55 (NixOSWSL=50 の後に実行)
+    Order = 55 (NixOSWSL=17 の後に実行)
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot

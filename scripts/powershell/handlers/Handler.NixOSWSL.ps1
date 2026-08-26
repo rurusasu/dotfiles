@@ -121,9 +121,9 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.EnsureWslWritable($ctx.DistroName)
 
             # Docker グループへのユーザー追加
-            # DockerHandler は NixOS インストール前（Phase 2a, Order=18）に実行されるため、
-            # 初回インストール時には NixOS が存在せず Docker 連携をスキップする。
-            # ここで docker グループ設定を行うことで初回インストール後も docker コマンドが使用可能になる。
+            # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
+            # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
+            # Docker ソケットを使用できる状態にする。
             $this.EnsureDockerGroup($ctx.DistroName)
 
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")
