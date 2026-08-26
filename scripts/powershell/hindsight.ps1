@@ -12,6 +12,141 @@ if ([string]::IsNullOrWhiteSpace($ComposeFile)) {
     $ComposeFile = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path 'docker/hindsight/compose.yml'
 }
 
+function Invoke-HindsightCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Command,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [switch]$AllowFailure,
+        [switch]$CaptureOutput
+    )
+
+    if ($CaptureOutput) {
+        $output = @(& $Command @Arguments)
+    }
+    else {
+        & $Command @Arguments | Out-Host
+        $output = @()
+    }
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0 -and -not $AllowFailure) {
+        throw "$Command failed with exit code $exitCode."
+    }
+    return [PSCustomObject]@{ ExitCode = $exitCode; Output = $output }
+}
+
+function Test-HindsightDataDirectoryHasContent {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
+    $ignored = @(
+        [System.IO.Path]::GetFullPath((Join-Path $Path 'pg0')),
+        [System.IO.Path]::GetFullPath((Join-Path $Path 'cache'))
+    )
+    foreach ($entry in Get-ChildItem -LiteralPath $Path -Force -Recurse) {
+        if ([System.IO.Path]::GetFullPath($entry.FullName) -notin $ignored) { return $true }
+    }
+    return $false
+}
+
+function Test-HindsightLegacyMemoryExists {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $hasMemory = $false
+    foreach ($component in @('pg0', 'cache')) {
+        $componentPath = Join-Path $Path $component
+        if (-not (Test-Path -LiteralPath $componentPath)) { continue }
+        $componentItem = Get-Item -LiteralPath $componentPath -Force
+        if (-not $componentItem.PSIsContainer -or ($componentItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Legacy Hindsight component is not a regular directory: $componentPath"
+        }
+        if ($null -ne (Get-ChildItem -LiteralPath $componentPath -Force -Recurse | Select-Object -First 1)) {
+            $hasMemory = $true
+        }
+    }
+    return $hasMemory
+}
+
+function Move-HindsightLegacyData {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$DataDir)
+
+    $hermesDataDir = if ($env:HERMES_DATA_DIR) { $env:HERMES_DATA_DIR } else { Join-Path $env:USERPROFILE '.hermes' }
+    $legacyDir = [System.IO.Path]::GetFullPath((Join-Path $hermesDataDir 'hindsight'))
+    $DataDir = [System.IO.Path]::GetFullPath($DataDir)
+    if ($legacyDir -eq $DataDir -or -not (Test-Path -LiteralPath $legacyDir)) { return }
+
+    $legacyItem = Get-Item -LiteralPath $legacyDir -Force
+    if (-not $legacyItem.PSIsContainer -or ($legacyItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Legacy Hindsight data path is not a regular directory: $legacyDir"
+    }
+    if (-not (Test-HindsightLegacyMemoryExists -Path $legacyDir)) { return }
+
+    $marker = Join-Path $DataDir '.legacy-migration-source'
+    if ((Test-Path -LiteralPath $marker -PathType Leaf) -and
+        -not ((Get-Item -LiteralPath $marker -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -and
+        (Get-Content -LiteralPath $marker -Raw).Trim() -eq $legacyDir) {
+        return
+    }
+    if (Test-Path -LiteralPath $DataDir) {
+        $dataItem = Get-Item -LiteralPath $DataDir -Force
+        if (-not $dataItem.PSIsContainer -or ($dataItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Hindsight data path is not a regular directory: $DataDir"
+        }
+        if (Test-HindsightDataDirectoryHasContent -Path $DataDir) {
+            throw "Legacy and independent Hindsight data directories both contain data; migrate them manually: $legacyDir -> $DataDir"
+        }
+    }
+
+    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hindsight') -AllowFailure -CaptureOutput
+    $legacyContainerExists = $inspect.ExitCode -eq 0
+    if ($legacyContainerExists) {
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hindsight')
+    }
+
+    $parent = Split-Path -Parent $DataDir
+    $null = New-Item -ItemType Directory -Path $parent -Force
+    $staging = "$DataDir.migrate.$PID"
+    if (Test-Path -LiteralPath $staging) { throw "Hindsight migration staging path already exists: $staging" }
+    $null = New-Item -ItemType Directory -Path $staging
+    try {
+        foreach ($component in @('pg0', 'cache')) {
+            $source = Join-Path $legacyDir $component
+            $destination = Join-Path $staging $component
+            if (Test-Path -LiteralPath $source -PathType Container) {
+                Copy-Item -LiteralPath $source -Destination $destination -Recurse
+            }
+            else {
+                $null = New-Item -ItemType Directory -Path $destination
+            }
+        }
+        Set-Content -LiteralPath (Join-Path $staging '.legacy-migration-source') -Value $legacyDir -Encoding utf8NoBOM
+    }
+    catch {
+        throw "Unable to copy legacy Hindsight data; the original remains at $legacyDir"
+    }
+
+    if (Test-Path -LiteralPath $DataDir -PathType Container) {
+        foreach ($component in @('pg0', 'cache')) {
+            $componentPath = Join-Path $DataDir $component
+            if (Test-Path -LiteralPath $componentPath -PathType Container) {
+                [System.IO.Directory]::Delete($componentPath, $false)
+            }
+        }
+        [System.IO.Directory]::Delete($DataDir, $false)
+    }
+    Move-Item -LiteralPath $staging -Destination $DataDir
+
+    if ($legacyContainerExists) {
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hindsight')
+    }
+    Write-Host "Migrated legacy Hindsight data to $DataDir; the source was preserved at $legacyDir."
+}
+
 function Wait-HindsightApi {
     $attempts = if ($env:HINDSIGHT_API_READY_ATTEMPTS) { [int]$env:HINDSIGHT_API_READY_ATTEMPTS } else { 150 }
     $delaySeconds = if ($env:HINDSIGHT_API_READY_DELAY_SECONDS) { [int]$env:HINDSIGHT_API_READY_DELAY_SECONDS } else { 2 }
@@ -30,23 +165,26 @@ function Wait-HindsightApi {
     throw "Hindsight API did not become ready after $attempts attempts."
 }
 
-& docker compose -f $ComposeFile config --quiet
-if ($LASTEXITCODE -ne 0) { throw 'Hindsight Compose validation failed.' }
+function Invoke-HindsightMain {
+    $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $ComposeFile, 'config', '--quiet')
 
-if ($Action -eq 'up') {
-    $environmentFile = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
-    $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
-    $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
-    & ollama pull $llmModel
-    if ($LASTEXITCODE -ne 0) { throw "Ollama model pull failed: $llmModel" }
-    & ollama pull $embeddingModel
-    if ($LASTEXITCODE -ne 0) { throw "Ollama model pull failed: $embeddingModel" }
+    if ($Action -eq 'up') {
+        $environmentFile = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
+        $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
+        $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
+        $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
+        Move-HindsightLegacyData -DataDir $dataDir
+        $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)
+        $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
 
-    $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
-    New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
-    & docker compose -f $ComposeFile up -d hindsight
-    if ($LASTEXITCODE -ne 0) { throw 'Hindsight startup failed.' }
+        New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $ComposeFile, 'up', '-d', 'hindsight')
+    }
+
+    Wait-HindsightApi
+    Write-Host 'Hindsight is healthy and database-connected.' -ForegroundColor Green
 }
 
-Wait-HindsightApi
-Write-Host 'Hindsight is healthy and database-connected.' -ForegroundColor Green
+if ($MyInvocation.InvocationName -ne '.') {
+    Invoke-HindsightMain
+}

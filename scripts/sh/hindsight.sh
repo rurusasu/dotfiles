@@ -37,6 +37,74 @@ hindsight_wait_for_api() {
   dotfiles_die "Hindsight API did not become ready after $attempts attempts."
 }
 
+hindsight_migrate_legacy_data() {
+  local data_dir="$1"
+  local legacy_dir="${HERMES_DATA_DIR:-$HOME/.hermes}/hindsight"
+  local existing staging component source marker legacy_container=0 legacy_has_memory=0
+
+  [[ $legacy_dir != "$data_dir" && -e $legacy_dir ]] || return 0
+  [[ -d $legacy_dir && ! -L $legacy_dir ]] ||
+    dotfiles_die "Legacy Hindsight data path is not a regular directory: $legacy_dir"
+  [[ ! -L $data_dir ]] || dotfiles_die "Hindsight data path must not be a symlink: $data_dir"
+
+  for component in pg0 cache; do
+    source="$legacy_dir/$component"
+    [[ ! -e $source || (-d $source && ! -L $source) ]] ||
+      dotfiles_die "Legacy Hindsight component is not a regular directory: $source"
+    if [[ -d $source ]] && [[ -n $(find "$source" -mindepth 1 -print -quit) ]]; then
+      legacy_has_memory=1
+    fi
+  done
+  ((legacy_has_memory == 1)) || return 0
+
+  marker="$data_dir/.legacy-migration-source"
+  if [[ -f $marker && ! -L $marker && $(<"$marker") == "$legacy_dir" ]]; then
+    return 0
+  fi
+
+  if [[ -d $data_dir ]]; then
+    existing="$(find "$data_dir" -mindepth 1 \
+      ! -path "$data_dir/pg0" ! -path "$data_dir/cache" -print -quit)"
+    [[ -z $existing ]] ||
+      dotfiles_die "Legacy and independent Hindsight data directories both contain data; migrate them manually: $legacy_dir -> $data_dir"
+  elif [[ -e $data_dir ]]; then
+    dotfiles_die "Hindsight data path is not a directory: $data_dir"
+  fi
+
+  if docker container inspect hindsight >/dev/null 2>&1; then
+    docker stop hindsight >/dev/null
+    legacy_container=1
+  fi
+
+  mkdir -p "$(dirname "$data_dir")"
+  staging="${data_dir}.migrate.$$"
+  [[ ! -e $staging ]] || dotfiles_die "Hindsight migration staging path already exists: $staging"
+  mkdir "$staging"
+  for component in pg0 cache; do
+    source="$legacy_dir/$component"
+    if [[ -d $source ]]; then
+      cp -a "$source" "$staging/$component" ||
+        dotfiles_die "Unable to copy legacy Hindsight data; the original remains at $legacy_dir"
+    else
+      mkdir "$staging/$component"
+    fi
+  done
+  printf '%s\n' "$legacy_dir" >"$staging/.legacy-migration-source"
+  chmod 600 "$staging/.legacy-migration-source"
+
+  if [[ -d $data_dir ]]; then
+    [[ ! -d $data_dir/pg0 ]] || rmdir "$data_dir/pg0"
+    [[ ! -d $data_dir/cache ]] || rmdir "$data_dir/cache"
+    rmdir "$data_dir"
+  fi
+  mv "$staging" "$data_dir"
+
+  if ((legacy_container == 1)); then
+    docker rm hindsight >/dev/null
+  fi
+  printf 'Migrated legacy Hindsight data to %s; the source was preserved at %s.\n' "$data_dir" "$legacy_dir"
+}
+
 hindsight_prepare() {
   local compose_file="$1" data_dir llm_model embedding_model
   for command in docker ollama curl jq; do
@@ -45,10 +113,11 @@ hindsight_prepare() {
 
   llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL)"
   embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)"
+  data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
+  hindsight_migrate_legacy_data "$data_dir"
   ollama pull "$llm_model"
   ollama pull "$embedding_model"
 
-  data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
 }

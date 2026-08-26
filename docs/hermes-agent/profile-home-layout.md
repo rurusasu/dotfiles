@@ -61,10 +61,11 @@ host ~/.hermes/                    container /opt/data/
   every named profile. The directory is mode `0700` and `config.json` is mode
   `0600`; it configures the profile-specific Hindsight bank but is not a profile
   distribution-owned Git path.
-- Root Hindsight database data is `${HERMES_DATA_DIR}/hindsight/pg0` and its
-  reranker cache is `${HERMES_DATA_DIR}/hindsight/cache`. These are runtime data,
-  not profile Git repository content. Named profile configuration files likewise
-  do not place retained memory data in their profile repositories.
+- Shared Hindsight database data is `${HINDSIGHT_DATA_DIR}/pg0` and its
+  reranker cache is `${HINDSIGHT_DATA_DIR}/cache` (default:
+  `~/.local/share/hindsight`). These are host-level runtime data, not profile Git
+  repository content. Named profile configuration files likewise do not place
+  retained memory data in their profile repositories.
 
 Remote named-profile repositories are exact local projections: canonical
 `.gitignore`, canonical `distribution.yaml`, and declared owned paths only.

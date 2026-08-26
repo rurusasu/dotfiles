@@ -1,7 +1,7 @@
 nerdfont: true
 merge_strategy: rebase
 
-agent: cc
+agent: cx
 
 agents:
   cx: "codex --auto-approve"

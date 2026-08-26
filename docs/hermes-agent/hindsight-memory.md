@@ -11,8 +11,10 @@ PostgreSQL、ローカル reranker、メモリ API を提供します。独立 C
 Hindsight のイメージは
 `ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d`
 に固定されています。API と UI はホストの loopback にのみ公開され、内蔵
-PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes の
-`depends_on` 前提ではありません。Hindsight が停止すると recall/retain は使え
+PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes Compose の
+`depends_on` や停止 lifecycle には含めません。ただし `hermes:setup` と
+`hermes:bootstrap` は `hindsight:up` を先に実行し、external network と memory
+service が存在する状態を保証します。Hindsight が停止すると recall/retain は使え
 ませんが、Hermes gateway を停止・再起動させる構成ではありません。
 
 ## Supported platforms
@@ -45,6 +47,13 @@ task hindsight:up
 この処理は独立 Compose を検証し、ホスト Ollama へモデルを取得し、
 `${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0` と `cache` を作成してから
 Hindsight だけを起動します。Hermes の起動・停止は行いません。
+
+旧構成の `${HERMES_DATA_DIR:-~/.hermes}/hindsight` が存在し、新しい保存先にまだ
+メモリがない場合、初回起動は旧 `hindsight` container を停止し、旧 `pg0` と
+`cache` を staging 経由で新しい保存先へコピーしてから旧 container を削除します。
+コピー元は rollback 用に残し、新保存先の marker により2回目以降は移行を
+繰り返しません。旧保存先と新保存先の両方にデータがある場合は自動上書きや併合を
+せず、起動前に明示的に失敗します。受入検証の state/evidence は移行対象外です。
 
 ## Model inventory
 

@@ -84,6 +84,11 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:bootstrap"),
         )
 
+    def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
+        for task_name in ("hermes:setup", "hermes:bootstrap"):
+            with self.subTest(task_name=task_name):
+                self.assertIn("task: hindsight:up", self._task_block(task_name))
+
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
         windows_wrapper = XAPI_WINDOWS_WRAPPER.read_text(encoding="utf-8")

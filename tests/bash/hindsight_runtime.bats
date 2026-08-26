@@ -19,6 +19,9 @@ setup() {
 	cat >"$BIN/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$LOG"
+if [[ ${1:-} == container && ${2:-} == inspect ]]; then
+	[[ ${HINDSIGHT_LEGACY_CONTAINER_EXISTS:-0} == 1 ]]
+fi
 EOF
 	cat >"$BIN/ollama" <<'EOF'
 #!/usr/bin/env bash
@@ -32,6 +35,45 @@ EOF
 	chmod +x "$BIN/docker" "$BIN/ollama" "$BIN/curl"
 	export HOME="$TEST_HOME" LOG PATH="$BIN:$PATH"
 	export HINDSIGHT_API_READY_ATTEMPTS=1 HINDSIGHT_API_READY_DELAY_SECONDS=0
+}
+
+@test "first independent start copies legacy Hermes memory and retires its container" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
+	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	printf 'reranker-cache\n' >"$HOME/.hermes/hindsight/cache/model"
+	export HINDSIGHT_LEGACY_CONTAINER_EXISTS=1
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HOME/.local/share/hindsight/pg0/memory")" = retained-memory ]
+	[ "$(cat "$HOME/.local/share/hindsight/cache/model")" = reranker-cache ]
+	[ "$(cat "$HOME/.hermes/hindsight/pg0/memory")" = retained-memory ]
+	[ "$(cat "$HOME/.local/share/hindsight/.legacy-migration-source")" = "$HOME/.hermes/hindsight" ]
+	grep -Fxq 'docker stop hindsight' "$LOG"
+	grep -Fxq 'docker rm hindsight' "$LOG"
+	stop_line="$(grep -nFx 'docker stop hindsight' "$LOG" | cut -d: -f1)"
+	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
+	[ "$stop_line" -lt "$start_line" ]
+
+	: >"$LOG"
+	run "$SCRIPT" up "$COMPOSE"
+	[ "$status" -eq 0 ]
+	! grep -Fq 'docker stop hindsight' "$LOG"
+}
+
+@test "legacy migration refuses to overwrite an independent memory database" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.local/share/hindsight/pg0"
+	printf 'legacy\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	printf 'current\n' >"$HOME/.local/share/hindsight/pg0/memory"
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'both contain data'* ]]
+	[ "$(cat "$HOME/.local/share/hindsight/pg0/memory")" = current ]
+	! grep -Fq 'docker stop hindsight' "$LOG"
+	! grep -Fq 'ollama pull' "$LOG"
 }
 
 @test "independent up pulls two models creates private data and starts only Hindsight" {

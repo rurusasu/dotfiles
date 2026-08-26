@@ -104,14 +104,15 @@ shared-lifelog synchronization through the common bootstrap command.
 Hindsight は host-native Ollama と Compose の `hindsight` service で構成する
 local-only memory provider です。API と UI はそれぞれ host loopback の
 `127.0.0.1:8888` と `127.0.0.1:9999` にだけ公開し、埋め込み PostgreSQL は
-公開しません。Hermes と Hindsight は `hermes-memory` bridge network で接続しますが、
-Hindsight は Hermes の起動依存ではありません。Hindsight 障害時は memory recall/retain
-が使えなくても Hermes gateway は稼働を継続します。
+公開しません。Hermes と Hindsight は `dotfiles-memory` bridge network で接続します。
+公開 Hermes 起動タスクは network と memory service を先に準備しますが、Compose の
+lifecycle は独立しています。Hindsight 障害時は memory recall/retain が使えなくても
+Hermes gateway は稼働を継続します。
 
 | 所有者                                               | 永続化対象                           | Git との境界                                                          |
 | ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
-| `${HERMES_DATA_DIR}/hindsight/pg0`                   | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
-| `${HERMES_DATA_DIR}/hindsight/cache`                 | local reranker cache                 | profile repository には含めない                                       |
+| `${HINDSIGHT_DATA_DIR}/pg0`                          | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
+| `${HINDSIGHT_DATA_DIR}/cache`                        | local reranker cache                 | profile repository には含めない                                       |
 | `$HERMES_HOME/hindsight/config.json`                 | root/default provider configuration  | bootstrap が transactionally 管理し、profile Git content には含めない |
 | `$HERMES_HOME/profiles/<name>/hindsight/config.json` | named-profile provider configuration | bootstrap が transactionally 管理し、profile Git content には含めない |
 

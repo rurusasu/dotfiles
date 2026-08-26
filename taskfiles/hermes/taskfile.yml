@@ -4,6 +4,8 @@ tasks:
   hermes:setup:
     desc: Run Hermes Agent setup wizard in Docker
     interactive: true
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -17,6 +19,8 @@ tasks:
   hermes:bootstrap:
     desc: Bootstrap the Hermes runtime through the supported host adapter
     interactive: true
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
