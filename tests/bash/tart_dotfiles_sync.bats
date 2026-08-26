@@ -63,6 +63,19 @@ push_update() {
 	grep -Fxq "$CHECKOUT" "$APPLY_LOG"
 }
 
+@test "shorthand branch ref resolves to its canonical remote ref" {
+	run env \
+		DOTFILES_REPOSITORY_URL="$REMOTE_REPO" \
+		DOTFILES_REPOSITORY_REF=main \
+		DOTFILES_TART_CHECKOUT="$CHECKOUT" \
+		DOTFILES_TART_STATE_FILE="$STATE_FILE" \
+		DOTFILES_TART_APPLY_COMMAND="$APPLY_SCRIPT" \
+		"$SYNC_SCRIPT"
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$STATE_FILE")" = "$(remote_head)" ]
+}
+
 @test "unchanged remote hash skips checkout and apply" {
 	sync_dotfiles
 	: >"$APPLY_LOG"
@@ -85,6 +98,29 @@ push_update() {
 	[ "$(cat "$CHECKOUT/version.txt")" = two ]
 	[ "$(cat "$STATE_FILE")" = "$(remote_head)" ]
 	grep -Fxq "$CHECKOUT" "$APPLY_LOG"
+}
+
+@test "existing checkout fetches from an overridden repository URL" {
+	alt_remote="$BATS_TEST_TMPDIR/fork.git"
+	sync_dotfiles
+	git clone --bare "$REMOTE_REPO" "$alt_remote" >/dev/null
+	git -C "$SEED_REPO" remote add fork "$alt_remote"
+	printf 'fork-only\n' >"$SEED_REPO/version.txt"
+	git -C "$SEED_REPO" add version.txt
+	git -C "$SEED_REPO" commit -m fork-only >/dev/null
+	git -C "$SEED_REPO" push fork main >/dev/null
+
+	run env \
+		DOTFILES_REPOSITORY_URL="$alt_remote" \
+		DOTFILES_REPOSITORY_REF=main \
+		DOTFILES_TART_CHECKOUT="$CHECKOUT" \
+		DOTFILES_TART_STATE_FILE="$STATE_FILE" \
+		DOTFILES_TART_APPLY_COMMAND="$APPLY_SCRIPT" \
+		"$SYNC_SCRIPT"
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$CHECKOUT/version.txt")" = fork-only ]
+	[ "$(cat "$STATE_FILE")" = "$(git --git-dir "$alt_remote" rev-parse refs/heads/main)" ]
 }
 
 @test "failed apply never advances the applied hash" {

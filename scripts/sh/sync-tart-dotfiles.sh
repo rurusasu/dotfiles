@@ -13,11 +13,26 @@ die() {
 }
 
 remote_hash() {
-  local output hash ref extra
-  output="$(git ls-remote --exit-code "$REPOSITORY_URL" "$REPOSITORY_REF")" ||
+  local output hash="" ref="" extra candidate_hash candidate_ref count=0
+  output="$(git ls-remote --exit-code --refs "$REPOSITORY_URL" "$REPOSITORY_REF")" ||
     die "Unable to resolve $REPOSITORY_REF from $REPOSITORY_URL"
-  read -r hash ref extra <<<"$output"
-  [[ -n $hash && $ref == "$REPOSITORY_REF" && -z ${extra:-} ]] ||
+
+  while read -r candidate_hash candidate_ref extra; do
+    [[ -n $candidate_hash && -n $candidate_ref && -z ${extra:-} ]] ||
+      die "Remote returned an unexpected revision for $REPOSITORY_REF"
+    hash="$candidate_hash"
+    ref="$candidate_ref"
+    ((count += 1))
+  done <<<"$output"
+  ((count == 1)) || die "Remote returned an ambiguous revision for $REPOSITORY_REF"
+  if [[ $REPOSITORY_REF == refs/* ]]; then
+    [[ $ref == "$REPOSITORY_REF" ]] ||
+      die "Remote returned an unexpected revision for $REPOSITORY_REF"
+  else
+    [[ $ref == "refs/heads/$REPOSITORY_REF" || $ref == "refs/tags/$REPOSITORY_REF" ]] ||
+      die "Remote returned an unexpected revision for $REPOSITORY_REF"
+  fi
+  [[ -n $hash ]] ||
     die "Remote returned an unexpected revision for $REPOSITORY_REF"
   [[ $hash =~ ^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$ ]] ||
     die "Remote returned an invalid commit hash for $REPOSITORY_REF"
@@ -58,7 +73,7 @@ main() {
     git clone --no-checkout --filter=blob:none "$REPOSITORY_URL" "$CHECKOUT"
   fi
 
-  git -C "$CHECKOUT" fetch --force --depth=1 origin "$target"
+  git -C "$CHECKOUT" fetch --force --depth=1 "$REPOSITORY_URL" "$target"
   git -C "$CHECKOUT" checkout --detach --force "$target"
   apply_checkout
 
