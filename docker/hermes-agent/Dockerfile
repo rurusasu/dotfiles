@@ -150,7 +150,12 @@ COPY hermes-agent/gateway_convergence.py /workspace/docker/hermes-agent/gateway_
 COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
-  -s /workspace/docker/hermes-agent/bootstrap/tests
+  -s /workspace/docker/hermes-agent/bootstrap/tests \
+  -p 'test_[!t]*.py'
+
+RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
+  -s /workspace/docker/hermes-agent/bootstrap/tests \
+  -p 'test_t*.py'
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests \
