@@ -176,7 +176,7 @@ class HermesAgentHandler : SetupHandlerBase {
             return $true
         }
 
-        return -not $this.IsTruthy($ctx.GetOption('HermesAgentEnabled', $true))
+        return -not $this.IsTruthy($ctx.GetOption('WithHermes', $false))
     }
 
     hidden [bool] IsTruthy([object]$value) {

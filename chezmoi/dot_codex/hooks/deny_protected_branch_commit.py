@@ -1,7 +1,6 @@
 """Deny direct git commits on protected branches (main, staging, master).
 
-Shared PreToolUse hook for Claude Code (.claude/settings.json) and
-Codex CLI (.codex/config.toml). Both pass the same JSON payload on stdin.
+Shared PreToolUse hook for Codex CLI (.codex/config.toml).
 """
 
 from __future__ import annotations

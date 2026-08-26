@@ -187,6 +187,25 @@ Describe 'Package catalog consistency' {
             $package | Should -Not -BeNullOrEmpty
             $package.verifyCommand.command | Should -Be 'ollama'
             @($package.verifyCommand.args) | Should -Contain '--version'
+            $package.installFeature | Should -Be 'WithOllama'
+        }
+    }
+
+    Context 'optional installer profiles' {
+        It 'marks Docker Chrome and Discord with their owning feature' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
+
+            (@($packages | Where-Object PackageIdentifier -eq 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
+            (@($packages | Where-Object PackageIdentifier -eq 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -eq 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
+        }
+
+        It 'marks Playwright browser packages as Hermes-only' {
+            $json = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $playwright = @($json.globalPackages | Where-Object { $_.name -match '^playwright@' })[0]
+
+            $playwright.installFeature | Should -Be 'WithHermes'
         }
     }
 

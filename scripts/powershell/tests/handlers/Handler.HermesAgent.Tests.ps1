@@ -206,6 +206,7 @@ Describe 'HermesAgentHandler' {
     BeforeEach {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
+        $script:ctx.Options['WithHermes'] = $true
         $script:composeDir = Join-Path $TestDrive 'docker/hermes-agent'
         $script:composeFile = Join-Path $script:composeDir 'compose.yml'
         $script:userProfile = Join-Path $TestDrive 'user'
@@ -297,6 +298,12 @@ Describe 'HermesAgentHandler' {
     }
 
     Context 'constructor and prerequisites' {
+        It 'is disabled by default without WithHermes' {
+            $ctx.Options.Remove('WithHermes')
+
+            $handler.CanApply($ctx) | Should -BeFalse
+        }
+
         It 'keeps the Phase 2 non-admin installer metadata and ordering' {
             $handler.Name | Should -Be 'HermesAgent'
             $handler.Order | Should -Be 56

@@ -323,11 +323,6 @@ let
     };
 
     # ── llm ───────────────────────────────────────────────
-    claude-code = {
-      pkg = pkgs.claude-code;
-      winget = null;
-      category = "llm";
-    };
     codex = {
       pkg = pkgs.codex;
       winget = "OpenAI.Codex";
@@ -351,6 +346,7 @@ let
       pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
       winget = "Ollama.Ollama";
       category = "llm";
+      installFeature = "WithOllama";
       support = {
         darwin = {
           provider = "homebrew-cask";
@@ -379,6 +375,7 @@ let
       pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;
       winget = "Discord.Discord";
       category = "desktop";
+      installFeature = "WithHermes";
       support = {
         darwin = {
           provider = "homebrew-cask";
@@ -397,22 +394,6 @@ let
         darwin = {
           provider = "homebrew-cask";
           cask = "1password";
-        };
-      };
-    };
-    claude-desktop = {
-      winget = "Anthropic.Claude";
-      category = "desktop";
-      support = {
-        windows = {
-          provider = "winget";
-        };
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "claude";
-        };
-        linux = {
-          unsupported = "Vendor does not publish a supported Linux desktop build";
         };
       };
     };
@@ -450,6 +431,7 @@ let
       pkg = pkgs.google-chrome;
       winget = "Google.Chrome";
       category = "desktop";
+      installFeature = "WithHermes";
       support = {
         darwin = {
           provider = "homebrew-cask";
@@ -485,23 +467,6 @@ let
         };
       };
     };
-    tableplus = {
-      winget = "TablePlus.TablePlus";
-      category = "desktop";
-      support = {
-        windows = {
-          provider = "winget";
-        };
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "tableplus";
-        };
-        linux = {
-          unsupported = "No pinned Nix provider is available";
-        };
-      };
-    };
-
     # ── system capabilities ───────────────────────────────
     tart = {
       category = "system";
@@ -521,6 +486,7 @@ let
     docker-desktop = {
       winget = "Docker.DockerDesktop";
       category = "system";
+      installFeature = "WithDocker";
       support = {
         windows = {
           provider = "winget";
@@ -732,7 +698,6 @@ let
       "bat"
       "bats"
       "cilium-cli"
-      "claude-code"
       "cmake"
       "dive"
       "ghostscript"
@@ -856,6 +821,9 @@ let
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
+  wingetFeatureMap = lib.filterAttrs (_: v: v != null) (
+    lib.mapAttrs (_: v: v.installFeature or null) catalog
+  );
   msstoreMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.msstore or null) catalog);
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
@@ -900,7 +868,12 @@ lib.mapAttrs (_: resolve) grouped
     resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
 
   # Windows: nix attr name → winget PackageIdentifier
-  inherit wingetMap msstoreMap npmMap;
+  inherit
+    wingetMap
+    wingetFeatureMap
+    msstoreMap
+    npmMap
+    ;
 
   inherit
     supportReport
@@ -927,13 +900,17 @@ lib.mapAttrs (_: resolve) grouped
   # Cross-platform pnpm global packages
   pnpmGlobal = [
     "@prisma/language-server"
-    "@agentclientprotocol/claude-agent-acp"
     "@deepseek-ai/dsh"
     "@playwright/cli@0.1.14"
     "playwright@1.61.0"
     "typescript-language-server"
     "typescript"
   ];
+
+  pnpmInstallFeature = {
+    "@playwright/cli" = "WithHermes";
+    playwright = "WithHermes";
+  };
 
   # Post-install verification commands for pnpm packages.
   # Keys match globalPackages entries. Packages not listed skip verification.
@@ -953,11 +930,6 @@ lib.mapAttrs (_: resolve) grouped
     "typescript" = {
       command = "tsc";
       args = [ "--version" ];
-    };
-    "@agentclientprotocol/claude-agent-acp" = {
-      type = "commandExists";
-      command = "claude-agent-acp";
-      args = [ ];
     };
     "@deepseek-ai/dsh" = {
       command = "dsh";

@@ -114,7 +114,7 @@ config.send_composed_key_when_left_alt_is_pressed = false
 config.send_composed_key_when_right_alt_is_pressed = false
 
 config.keys = {
-    -- Shift+Enter → insert newline (Claude Code, Codex, multi-line prompts)
+    -- Shift+Enter → insert newline (Codex and other multi-line prompts)
     { key = "Return", mods = "SHIFT", action = act.SendString("\n") },
     -- Preserve Backspace when it is pressed immediately after the leader key.
     { key = "Backspace", mods = "LEADER", action = act.SendKey({ key = "Backspace" }) },

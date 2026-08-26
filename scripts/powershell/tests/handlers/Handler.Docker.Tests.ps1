@@ -19,6 +19,7 @@ Describe 'DockerHandler' {
     BeforeEach {
         $script:handler = [DockerHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+        $script:ctx.Options["WithDocker"] = $true
         Mock Test-DockerDaemon { return $true }
     }
 
@@ -42,6 +43,12 @@ Describe 'DockerHandler' {
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
             Mock Test-WslAvailable { return $true }
+        }
+
+        It 'should return false by default without WithDocker' {
+            $ctx.Options.Remove("WithDocker")
+
+            $handler.CanApply($ctx) | Should -BeFalse
         }
 
         It 'should return false when Retries is 0' {

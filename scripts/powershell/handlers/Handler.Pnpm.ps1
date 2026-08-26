@@ -111,7 +111,10 @@ class PnpmHandler : SetupHandlerBase {
             $this.Log("ソース: $packagesPath")
 
             $packagesJson = Get-JsonContent -Path $packagesPath
-            $packages = $packagesJson.globalPackages
+            $packages = @($packagesJson.globalPackages | Where-Object {
+                    $feature = $this.GetPackageProperty($_, "installFeature")
+                    $null -eq $feature -or [bool]$ctx.GetOption([string]$feature, $false)
+                })
 
             if (-not $packages -or $packages.Count -eq 0) {
                 $this.Log("インストールするパッケージがありません", "Gray")

@@ -4,7 +4,6 @@ merge_strategy: rebase
 agent: cc
 
 agents:
-  cc: "claude --dangerously-skip-permissions"
   cx: "codex --auto-approve"
   oc: "opencode"
 

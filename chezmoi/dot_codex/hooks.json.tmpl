@@ -7,12 +7,12 @@
           {
             "type": "command",
 {{- if eq .chezmoi.os "windows" }}
-            "command": "uv run --isolated --managed-python python \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py\"",
+            "command": "uv run --isolated --managed-python python \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/command_permission_policy.py\"",
 {{- else }}
-            "command": "python3 \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/claude_permission_policy.py\"",
+            "command": "python3 \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/hooks/command_permission_policy.py\"",
 {{- end }}
             "timeout": 30,
-            "statusMessage": "Checking Claude-aligned Bash policy"
+            "statusMessage": "Checking command policy"
           },
           {
             "type": "command",

@@ -59,8 +59,7 @@ in
       HOMEBREW_AUTO_UPDATE_SECS = "86400";
     };
 
-    # PATH: bun global binaries (claude-code, gemini-cli, etc.)
-    #       pnpm global binaries
+    # PATH: bun and pnpm global binaries
     sessionPath = [
       "$HOME/.bun/bin"
       "$HOME/.local/share/pnpm/bin"

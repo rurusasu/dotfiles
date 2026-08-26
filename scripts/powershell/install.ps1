@@ -26,6 +26,9 @@ param(
     [string]$SyncBack = "lock",
     [switch]$UserPhaseOnly,
     [switch]$WingetVerifyCommandOnly,
+    [switch]$WithOllama,
+    [switch]$WithDocker,
+    [switch]$WithHermes,
     [switch]$NoPause
 )
 
@@ -38,7 +41,14 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new()
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
+. (Join-Path $libPath "InstallProfiles.ps1")
 . (Join-Path $PSScriptRoot "Test-Environment.ps1")
+
+$Options = Resolve-DotfilesInstallOptions `
+    -Options $Options `
+    -WithOllama:$WithOllama `
+    -WithDocker:$WithDocker `
+    -WithHermes:$WithHermes
 
 if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
     $InstallDir = Join-Path $env:USERPROFILE "NixOS"

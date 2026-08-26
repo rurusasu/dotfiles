@@ -166,6 +166,10 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "skipReason") {
                                     $skipReason = [string]$pkg.skipReason
                                 }
+                                $installFeature = $null
+                                if ($pkg.PSObject.Properties.Name -contains "installFeature") {
+                                    $installFeature = [string]$pkg.installFeature
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id                    = $pkg.PackageIdentifier
                                     Version               = $version
@@ -179,6 +183,7 @@ class WingetHandler : SetupHandlerBase {
                                     PathEntries           = $pathEntries
                                     SkipInstall           = $skipInstall
                                     SkipReason            = $skipReason
+                                    InstallFeature        = $installFeature
                                 }
                             }
                         }
@@ -192,6 +197,11 @@ class WingetHandler : SetupHandlerBase {
                 $ciSkipMessage = if ($ciSkipped -gt 0) { ", $ciSkipped 個 CI 対象外" } else { "" }
                 $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個$ciSkipMessage)", "Gray")
             }
+
+            $packages = @($packages | Where-Object {
+                    [string]::IsNullOrWhiteSpace($_.InstallFeature) -or
+                    [bool]$ctx.GetOption($_.InstallFeature, $false)
+                })
 
             if ($packages.Count -eq 0) {
                 $this.Log("インストールするパッケージがありません", "Gray")

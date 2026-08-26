@@ -1,6 +1,6 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
-# Sync Claude skills to Codex/Gemini/Cursor after apply.
+# Sync shared agent skills to Codex/Gemini/Cursor after apply.
 # mode: {{ .skills_sync.mode }}
 # source: {{ .skills_sync.source_agent }}
 # targets: {{ range .skills_sync.target_agents }}{{ . }} {{ end }}

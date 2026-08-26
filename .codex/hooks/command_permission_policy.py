@@ -1,4 +1,4 @@
-"""Claude-aligned command policy hook for Codex."""
+"""Command policy hook for Codex."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def main() -> int:
     for segment in split_shell_segments(command):
         if PYTHON_PREFIX_RE.search(segment) and "pyproject" in segment.lower():
             deny(
-                "Blocked to match Claude permissions: Python commands that reference pyproject are denied."
+                "Blocked by dotfiles policy: Python commands that reference pyproject are denied."
             )
             break
 

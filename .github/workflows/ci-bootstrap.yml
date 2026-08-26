@@ -397,7 +397,6 @@ jobs:
           check wezterm --version
           check op --version
           check opencode --version
-          check claude --version
           check codex --version
           check gcloud version
           check kind version
