@@ -71,6 +71,33 @@ function Test-HindsightLegacyMemoryContent {
     return $hasMemory
 }
 
+function Remove-HindsightCompletedLegacyContainer {
+    [CmdletBinding()]
+    param()
+
+    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
+    if ($inspect.ExitCode -ne 0) { return }
+
+    $legacyContainerStopped = $false
+    try {
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
+        $legacyContainerStopped = $true
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hermes-hindsight')
+    }
+    catch {
+        $retirementError = $_
+        if ($legacyContainerStopped) {
+            try {
+                $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
+            }
+            catch {
+                throw "$($retirementError.Exception.Message) Also failed to restart hermes-hindsight: $($_.Exception.Message)"
+            }
+        }
+        throw $retirementError
+    }
+}
+
 function Move-HindsightLegacyData {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$DataDir)
@@ -90,6 +117,7 @@ function Move-HindsightLegacyData {
     if ((Test-Path -LiteralPath $marker -PathType Leaf) -and
         -not ((Get-Item -LiteralPath $marker -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -and
         (Get-Content -LiteralPath $marker -Raw).Trim() -eq $legacyDir) {
+        Remove-HindsightCompletedLegacyContainer
         return
     }
     if (Test-Path -LiteralPath $DataDir) {

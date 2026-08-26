@@ -48,6 +48,17 @@ hindsight_restore_legacy_container_on_exit() {
   exit "$migration_status"
 }
 
+hindsight_retire_completed_legacy_container() {
+  docker container inspect hermes-hindsight >/dev/null 2>&1 || return 0
+  docker stop hermes-hindsight >/dev/null
+  if ! docker rm hermes-hindsight >/dev/null; then
+    if ! docker start hermes-hindsight >/dev/null; then
+      dotfiles_die "Unable to retire hermes-hindsight after migrating its data, and the legacy container could not be restarted."
+    fi
+    dotfiles_die "Unable to retire hermes-hindsight after migrating its data."
+  fi
+}
+
 hindsight_migrate_legacy_data() {
   local data_dir="$1"
   local legacy_dir="${HERMES_DATA_DIR:-$HOME/.hermes}/hindsight"
@@ -70,6 +81,7 @@ hindsight_migrate_legacy_data() {
 
   marker="$data_dir/.legacy-migration-source"
   if [[ -f $marker && ! -L $marker && $(<"$marker") == "$legacy_dir" ]]; then
+    hindsight_retire_completed_legacy_container
     return 0
   fi
 

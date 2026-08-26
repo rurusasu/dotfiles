@@ -15,6 +15,8 @@ AfterAll {
 Describe 'Independent Hindsight data migration' {
     BeforeEach {
         $script:calls = [System.Collections.Generic.List[string]]::new()
+        $script:failLegacyRemove = $false
+        $script:legacyContainerExists = $true
         $env:USERPROFILE = Join-Path $TestDrive 'home'
         $env:HERMES_DATA_DIR = Join-Path $TestDrive 'hermes'
         $legacyDir = Join-Path $env:HERMES_DATA_DIR 'hindsight'
@@ -26,7 +28,17 @@ Describe 'Independent Hindsight data migration' {
 
         Mock Invoke-HindsightCommand {
             $script:calls.Add("$Command $($Arguments -join ' ')")
-            $exitCode = if ($Arguments[0] -eq 'container' -and $Arguments[2] -ne 'hermes-hindsight') { 1 } else { 0 }
+            if ($script:failLegacyRemove -and $Arguments[0] -eq 'rm' -and $Arguments[1] -eq 'hermes-hindsight') {
+                throw 'simulated legacy container removal failure'
+            }
+            if ($Arguments[0] -eq 'rm' -and $Arguments[1] -eq 'hermes-hindsight') {
+                $script:legacyContainerExists = $false
+            }
+            if ($Arguments[0] -eq 'start' -and $Arguments[1] -eq 'hermes-hindsight') {
+                $script:legacyContainerExists = $true
+            }
+            $exitCode = if ($Arguments[0] -eq 'container' -and
+                ($Arguments[2] -ne 'hermes-hindsight' -or -not $script:legacyContainerExists)) { 1 } else { 0 }
             [PSCustomObject]@{ ExitCode = $exitCode; Output = @() }
         }
     }
@@ -44,7 +56,7 @@ Describe 'Independent Hindsight data migration' {
 
         $script:calls.Clear()
         Move-HindsightLegacyData -DataDir $script:dataDir
-        $script:calls.Count | Should -Be 0
+        $script:calls | Should -Be @('docker container inspect hermes-hindsight')
     }
 
     It 'should write the migration marker without a PowerShell 7-only Set-Content encoding' {
@@ -64,6 +76,21 @@ Describe 'Independent Hindsight data migration' {
         $script:calls | Should -Contain 'docker start hermes-hindsight'
         $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
         (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
+    }
+
+    It 'should retry legacy retirement before honoring a completed marker' {
+        $script:failLegacyRemove = $true
+
+        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*simulated legacy container removal failure*'
+        Test-Path -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') | Should -BeTrue
+        $script:calls | Should -Contain 'docker start hermes-hindsight'
+
+        $script:calls.Clear()
+        $script:failLegacyRemove = $false
+        Move-HindsightLegacyData -DataDir $script:dataDir
+
+        $script:calls | Should -Contain 'docker stop hermes-hindsight'
+        $script:calls | Should -Contain 'docker rm hermes-hindsight'
     }
 
     It 'should refuse to overwrite an independent memory database' {
