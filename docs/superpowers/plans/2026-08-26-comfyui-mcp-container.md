@@ -335,7 +335,7 @@ Run:
 ```bash
 git add docker/comfyui-mcp tests/python/test_comfyui_mcp_image_contract.py
 git diff --cached --name-status
-git commit -m "feat: add containerized ComfyUI MCP image"
+task commit -- "feat: add containerized ComfyUI MCP image"
 ```
 
 Expected staged paths: only `docker/comfyui-mcp/*` and `tests/python/test_comfyui_mcp_image_contract.py`.
@@ -399,7 +399,7 @@ Add these methods to `ComfyUiMcpImageContractTests`:
         self.assertNotIn("ports", service)
         self.assertTrue(service["read_only"])
         self.assertIn("no-new-privileges:true", service["security_opt"])
-        self.assertEqual(service["user"], "node")
+        self.assertRegex(service["user"], r"^\d+:\d+$")
 
     def test_compose_keeps_endpoints_loopback_only_and_mounts_no_host_runtime(self) -> None:
         service = compose_config()["services"]["comfyui-mcp"]
@@ -461,7 +461,9 @@ services:
     container_name: comfyui-mcp
     restart: unless-stopped
     network_mode: host
-    user: node
+    # Compose runs as the host account's numeric identity so a host-created
+    # bind mount remains writable when macOS UID 501 differs from image UID 1000.
+    user: "${COMFYUI_MCP_UID:-1000}:${COMFYUI_MCP_GID:-1000}"
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -530,7 +532,11 @@ tasks:
         msg: "This initial ComfyUI MCP service supports Docker Desktop for macOS only."
     cmds:
       - mkdir -p "${COMFYUI_MCP_DATA_DIR:-$HOME/.local/share/comfyui-mcp}"
-      - docker compose -f {{.COMFYUI_MCP_COMPOSE_FILE}} up -d --build
+      - export COMFYUI_MCP_UID="$(id -u)" COMFYUI_MCP_GID="$(id -g)" && docker compose -f {{.COMFYUI_MCP_COMPOSE_FILE}} up -d --build
+
+The `up` task passes the macOS account's UID/GID to Compose, so the bind-mounted
+data directory created above is writable by the non-root container process even
+when the image's `node` UID is different from the host UID.
 
   comfyui:mcp:down:
     desc: Stop the ComfyUI MCP service without deleting its data
@@ -612,7 +618,7 @@ Run:
 ```bash
 git add Taskfile.yml taskfiles/comfyui/taskfile.yml docker/comfyui-mcp/compose.yml tests/python/test_comfyui_mcp_image_contract.py
 git diff --cached --name-status
-git commit -m "feat: manage ComfyUI MCP lifecycle"
+task commit -- "feat: manage ComfyUI MCP lifecycle"
 ```
 
 Expected staged paths: exactly the four paths listed above.
@@ -751,7 +757,7 @@ Run:
 ```bash
 git add chezmoi/.chezmoidata/mcp_servers.yaml scripts/powershell/tests/chezmoi/ChezmoiTemplate.Tests.ps1 tests/python/test_comfyui_mcp_image_contract.py
 git diff --cached --name-status
-git commit -m "feat: register ComfyUI MCP for Codex"
+task commit -- "feat: register ComfyUI MCP for Codex"
 ```
 
 Expected staged paths: exactly the three paths listed above.
@@ -903,7 +909,7 @@ Run:
 ```bash
 git add docs/comfyui/mcp.md tests/python/test_comfyui_mcp_image_contract.py
 git diff --cached --name-status
-git commit -m "docs: add ComfyUI MCP runbook"
+task commit -- "docs: add ComfyUI MCP runbook"
 ```
 
 Expected staged paths: exactly the runbook and focused contract test.
