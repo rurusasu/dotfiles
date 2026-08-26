@@ -71,6 +71,20 @@ function Test-HindsightLegacyMemoryContent {
     return $hasMemory
 }
 
+function Get-HindsightLegacyContainerState {
+    [CmdletBinding()]
+    param()
+
+    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @(
+        'container', 'inspect', '--format', '{{.State.Running}}', 'hermes-hindsight'
+    ) -AllowFailure -CaptureOutput
+    if ($inspect.ExitCode -ne 0) {
+        return [PSCustomObject]@{ Exists = $false; Running = $false }
+    }
+    $running = (($inspect.Output -join '').Trim().ToLowerInvariant() -eq 'true')
+    return [PSCustomObject]@{ Exists = $true; Running = $running }
+}
+
 function Move-HindsightLegacyData {
     [CmdletBinding()]
     param(
@@ -106,9 +120,8 @@ function Move-HindsightLegacyData {
     }
     if ($ValidateOnly) { return }
 
-    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
-    $legacyContainerExists = $inspect.ExitCode -eq 0
-    $legacyContainerStopped = $false
+    $legacyState = Get-HindsightLegacyContainerState
+    $legacyContainerWasRunning = $legacyState.Running
     try {
         $parent = Split-Path -Parent $DataDir
         $null = New-Item -ItemType Directory -Path $parent -Force
@@ -116,9 +129,8 @@ function Move-HindsightLegacyData {
         if (Test-Path -LiteralPath $staging) { throw "Hindsight migration staging path already exists: $staging" }
         $null = New-Item -ItemType Directory -Path $staging
 
-        if ($legacyContainerExists) {
+        if ($legacyContainerWasRunning) {
             $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
-            $legacyContainerStopped = $true
         }
 
         try {
@@ -154,7 +166,7 @@ function Move-HindsightLegacyData {
     }
     catch {
         $migrationError = $_
-        if ($legacyContainerStopped) {
+        if ($legacyContainerWasRunning) {
             try {
                 $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
             }
@@ -165,6 +177,7 @@ function Move-HindsightLegacyData {
         throw $migrationError
     }
     Write-Host "Migrated legacy Hindsight data to $DataDir; the source was preserved at $legacyDir."
+    return $legacyContainerWasRunning
 }
 
 function Wait-HindsightApi {
@@ -203,14 +216,13 @@ function Invoke-HindsightMain {
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
         New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
-        Move-HindsightLegacyData -DataDir $dataDir
+        $migrationStoppedRunningLegacy = [bool](Move-HindsightLegacyData -DataDir $dataDir)
 
-        $legacyInspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
-        $legacyContainerStopped = $false
+        $legacyState = Get-HindsightLegacyContainerState
+        $legacyContainerWasRunning = $migrationStoppedRunningLegacy -or $legacyState.Running
         try {
-            if ($legacyInspect.ExitCode -eq 0) {
+            if ($legacyState.Running) {
                 $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
-                $legacyContainerStopped = $true
             }
             $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', 'hindsight')
             Wait-HindsightApi
@@ -218,7 +230,7 @@ function Invoke-HindsightMain {
         catch {
             $replacementError = $_
             $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'stop', 'hindsight') -AllowFailure
-            if ($legacyContainerStopped) {
+            if ($legacyContainerWasRunning) {
                 try {
                     $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
                 }
@@ -228,7 +240,7 @@ function Invoke-HindsightMain {
             }
             throw $replacementError
         }
-        if ($legacyContainerStopped) {
+        if ($legacyState.Exists) {
             $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hermes-hindsight')
         }
 
