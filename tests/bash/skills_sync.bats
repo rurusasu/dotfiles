@@ -7,9 +7,12 @@ setup() {
 	mkdir -p "$TEST_HOME/.agents/skills/current" "$TEST_HOME/.claude/skills/legacy-directory"
 	printf 'managed\n' >"$TEST_HOME/.agents/skills/current/SKILL.md"
 	printf 'legacy\n' >"$TEST_HOME/.claude/skills/legacy-directory/SKILL.md"
-	chezmoi execute-template --source "$REPO_ROOT/chezmoi" \
-		<"$REPO_ROOT/chezmoi/.chezmoiscripts/run_after_sync-agent-skills_linux.sh.tmpl" \
-		>"$SYNC_SCRIPT"
+	awk '
+		NR == 1 || $0 == "{{ end -}}" { next }
+		/^source_agent=/ { print "source_agent=\"agents\""; next }
+		/^target_agents=/ { print "target_agents=(\"codex\" \"gemini\" \"cursor\")"; next }
+		{ print }
+	' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_after_sync-agent-skills_linux.sh.tmpl" >"$SYNC_SCRIPT"
 	chmod +x "$SYNC_SCRIPT"
 }
 
