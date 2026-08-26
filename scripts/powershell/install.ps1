@@ -10,6 +10,8 @@
        — Runs without UAC so 1Password desktop app integration works
     3. Admin phase (elevate when required): install.admin.ps1 -AdminOnly
        — Phase 2 handlers that require admin (WSL, Docker, etc.)
+    4. Post-admin convergence (Docker profiles only): install.admin.ps1 -AdminOnly:$false
+       — Re-runs non-admin handlers that may have deferred until WSL/NixOS existed
 
 #>
 
@@ -237,6 +239,16 @@ if ($adminRequired) {
 else {
     Write-Host "No admin-required tasks detected. Running admin phase without elevation." -ForegroundColor Green
     & $adminScriptPath @phaseParams -AdminOnly:$true
+}
+
+if ($adminRequired -and [bool]$Options["WithDocker"]) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "Phase 2c: Post-Admin Docker Convergence" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    & $adminScriptPath @phaseParams -AdminOnly:$false
 }
 
 Write-Host ""

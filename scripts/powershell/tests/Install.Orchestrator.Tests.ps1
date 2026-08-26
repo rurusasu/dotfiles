@@ -47,6 +47,16 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\[switch\]\$NoPause'
     }
 
+    It 'should converge deferred Docker setup after admin work and before acceptance' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $convergence = $content.IndexOf('Phase 2c: Post-Admin Docker Convergence')
+        $acceptance = $content.IndexOf('Environment Acceptance')
+
+        $convergence | Should -BeGreaterThan -1
+        $acceptance | Should -BeGreaterThan $convergence
+        $content | Should -Match '(?s)\$adminRequired -and \[bool\]\$Options\["WithDocker"\].*\$adminScriptPath.*-AdminOnly:\$false'
+    }
+
     It 'should support CI user-phase package verification switches' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$UserPhaseOnly'
