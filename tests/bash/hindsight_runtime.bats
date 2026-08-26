@@ -89,6 +89,22 @@ EOF
 	! grep -qi hermes "$LOG"
 }
 
+@test "acceptance can inject an offline Ollama executable explicitly" {
+	cat >"$BIN/offline-ollama" <<'EOF'
+#!/usr/bin/env bash
+printf 'offline-ollama %s\n' "$*" >>"$LOG"
+EOF
+	chmod +x "$BIN/offline-ollama"
+	export DOTFILES_HINDSIGHT_OLLAMA_EXECUTABLE="$BIN/offline-ollama"
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -eq 0 ]
+	grep -Fxq 'offline-ollama pull qwen3.6:35b' "$LOG"
+	grep -Fxq 'offline-ollama pull qwen3-embedding:0.6b' "$LOG"
+	! grep -Eq '^ollama ' "$LOG"
+}
+
 @test "duplicate model assignment fails before pulling or starting" {
 	printf '%s\n' \
 		'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b' \

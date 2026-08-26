@@ -34,7 +34,7 @@ setup() {
 
 @test "acceptance runner installs only fixture plumbing before invoking install.sh" {
 	test_root="$BATS_TEST_TMPDIR/repo"
-	mkdir -p "$test_root/docker/hermes-agent" "$test_root/activated/bin"
+	mkdir -p "$test_root/docker/hermes-agent" "$test_root/docker/hindsight" "$test_root/activated/bin"
 	cat >"$test_root/activated/bin/op" <<'EOF'
 #!/usr/bin/env bash
 exit 99
@@ -52,9 +52,13 @@ cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/compose.yml"
 test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hermes-bootstrap-fixture.sh"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hindsight-health.json"
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/hindsight-health.json"
+cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-compose.yml" \
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/compose.yml"
 test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
 test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
+	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
+test "$DOTFILES_HINDSIGHT_OLLAMA_EXECUTABLE" = \
 	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
 test "$DOTFILES_HERMES_CURL_EXECUTABLE" = \
 	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/curl"
@@ -144,13 +148,16 @@ EOF
 	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
 	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
+	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
+	grep -Fq 'name: dotfiles-memory' "$compose"
+	grep -Fq 'external: true' "$compose"
 	grep -Fq 'condition: service_started' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
 }
 
 @test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {
-	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
+	compose="$FIXTURE_ROOT/hindsight-compose.yml"
 	ollama="$FIXTURE_ROOT/bin/ollama"
 	curl="$FIXTURE_ROOT/bin/curl"
 

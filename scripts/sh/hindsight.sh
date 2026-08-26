@@ -106,8 +106,9 @@ hindsight_migrate_legacy_data() {
 }
 
 hindsight_prepare() {
-  local compose_file="$1" data_dir llm_model embedding_model
-  for command in docker ollama curl jq; do
+  local compose_file="$1" data_dir llm_model embedding_model ollama_command
+  ollama_command="${DOTFILES_HINDSIGHT_OLLAMA_EXECUTABLE:-ollama}"
+  for command in docker "$ollama_command" curl jq; do
     dotfiles_have "$command" || dotfiles_die "$command is required for Hindsight."
   done
 
@@ -115,8 +116,8 @@ hindsight_prepare() {
   embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)"
   data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
   hindsight_migrate_legacy_data "$data_dir"
-  ollama pull "$llm_model"
-  ollama pull "$embedding_model"
+  "$ollama_command" pull "$llm_model"
+  "$ollama_command" pull "$embedding_model"
 
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
