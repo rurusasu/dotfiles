@@ -47,6 +47,14 @@ Describe 'Independent Hindsight data migration' {
         $script:calls.Count | Should -Be 0
     }
 
+    It 'should write the migration marker without a PowerShell 7-only Set-Content encoding' {
+        Mock Set-Content { throw 'Set-Content utf8NoBOM is unavailable in Windows PowerShell 5.1' }
+
+        Move-HindsightLegacyData -DataDir $script:dataDir
+
+        (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
+    }
+
     It 'should refuse to overwrite an independent memory database' {
         New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'pg0') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'

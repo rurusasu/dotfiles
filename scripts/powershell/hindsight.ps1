@@ -124,7 +124,9 @@ function Move-HindsightLegacyData {
                 $null = New-Item -ItemType Directory -Path $destination
             }
         }
-        Set-Content -LiteralPath (Join-Path $staging '.legacy-migration-source') -Value $legacyDir -Encoding utf8NoBOM
+        $markerPath = Join-Path $staging '.legacy-migration-source'
+        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+        [System.IO.File]::WriteAllText($markerPath, ($legacyDir + [Environment]::NewLine), $utf8NoBom)
     }
     catch {
         throw "Unable to copy legacy Hindsight data; the original remains at $legacyDir"
