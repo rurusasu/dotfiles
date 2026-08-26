@@ -571,15 +571,26 @@ tasks:
 Add this variable below `HERMES_COMPOSE_FILE` in `Taskfile.yml`:
 
 ```yaml
-COMFYUI_MCP_COMPOSE_FILE: docker/comfyui-mcp/compose.yml
+vars:
+  DISTRO: NixOS
+  DOTFILES_PATH: ~/.dotfiles
+  HERMES_COMPOSE_FILE: docker/hermes-agent/compose.yml
+  COMFYUI_MCP_COMPOSE_FILE: docker/comfyui-mcp/compose.yml
 ```
 
 Add this flattened include below the existing `hermes` include:
 
 ```yaml
-comfyui:
-  taskfile: ./taskfiles/comfyui/taskfile.yml
-  flatten: true
+includes:
+  hermes:
+    taskfile: ./taskfiles/hermes/taskfile.yml
+    flatten: true
+  comfyui:
+    taskfile: ./taskfiles/comfyui/taskfile.yml
+    flatten: true
+  hooks:
+    taskfile: ./taskfiles/hooks/taskfile.yml
+    flatten: true
 ```
 
 - [ ] **Step 6: Validate the Compose model and verify GREEN**
@@ -824,7 +835,6 @@ task comfyui:mcp:build
 task comfyui:mcp:up
 task comfyui:mcp:ps
 ```
-````
 
 ## Verify MCP
 
@@ -873,7 +883,6 @@ Update the exact Node image version and digest, the exact `comfyui-mcp` package 
 ## Security and scope
 
 Docker host networking gives this trusted container access to host loopback services. The service runs non-root with a read-only root filesystem, no credentials, no Docker socket, and no host model or workflow mounts. Agent Panel, LAN exposure, model downloads, custom-node installation, and automatic ComfyUI process control are outside this setup.
-
 ````
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
@@ -883,7 +892,7 @@ Run:
 ```bash
 python3 -m unittest tests/python/test_comfyui_mcp_image_contract.py -v
 git diff --check -- docs/comfyui/mcp.md
-````
+```
 
 Expected: all Python tests pass and `git diff --check` exits zero.
 
