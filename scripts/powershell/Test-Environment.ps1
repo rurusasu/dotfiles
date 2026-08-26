@@ -10,6 +10,7 @@
 
 [CmdletBinding()]
 param(
+    [switch]$Docker,
     [switch]$Runtime
 )
 
@@ -30,8 +31,11 @@ function Assert-DotfilesAcceptanceExitCode {
 function Test-DotfilesEnvironment {
     [CmdletBinding()]
     param(
+        [switch]$Docker,
         [switch]$Runtime
     )
+
+    $dockerEnabled = $Docker -or $Runtime
 
     $requiredCommands = @(
         "winget",
@@ -46,9 +50,11 @@ function Test-DotfilesEnvironment {
         "uv",
         "go",
         "rustup",
-        "docker",
         "wsl"
     )
+    if ($dockerEnabled) {
+        $requiredCommands += "docker"
+    }
 
     foreach ($name in $requiredCommands) {
         if (-not (Get-Command -Name $name -ErrorAction SilentlyContinue)) {
@@ -56,11 +62,13 @@ function Test-DotfilesEnvironment {
         }
     }
 
-    Invoke-Docker -Arguments @("info") | Out-Null
-    Assert-DotfilesAcceptanceExitCode -Label "docker info"
+    if ($dockerEnabled) {
+        Invoke-Docker -Arguments @("info") | Out-Null
+        Assert-DotfilesAcceptanceExitCode -Label "docker info"
 
-    Invoke-Docker -Arguments @("compose", "version") | Out-Null
-    Assert-DotfilesAcceptanceExitCode -Label "docker compose version"
+        Invoke-Docker -Arguments @("compose", "version") | Out-Null
+        Assert-DotfilesAcceptanceExitCode -Label "docker compose version"
+    }
 
     Invoke-Chezmoi -Arguments @("apply", "--dry-run") | Out-Null
     Assert-DotfilesAcceptanceExitCode -Label "chezmoi apply --dry-run"
@@ -82,5 +90,5 @@ function Test-DotfilesEnvironment {
 }
 
 if ($MyInvocation.InvocationName -ne ".") {
-    Test-DotfilesEnvironment -Runtime:$Runtime
+    Test-DotfilesEnvironment -Docker:$Docker -Runtime:$Runtime
 }

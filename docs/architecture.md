@@ -19,7 +19,7 @@
    - Ubuntu/Debian: System Manager
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
-   - 必須 CLI、chezmoi drift、Docker、Compose 全サービス、hello-world を確認
+   - 必須 CLI と chezmoi drift を確認し、Docker profile では Docker、Compose、hello-world も確認
    - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造

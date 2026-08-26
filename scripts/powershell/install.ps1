@@ -244,7 +244,7 @@ Write-Host "Environment Acceptance" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$acceptanceResult = Test-DotfilesEnvironment -Runtime
+$acceptanceResult = Test-DotfilesEnvironment -Docker:$Options["WithDocker"] -Runtime:$Options["WithDocker"]
 if (-not $acceptanceResult.Success) {
     throw $acceptanceResult.Message
 }

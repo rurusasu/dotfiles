@@ -64,23 +64,27 @@ cd scripts/powershell/tests
 
 Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
 
-Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは各installer末尾のacceptanceが失敗を返します。
+Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
 ## Windows environment acceptance
 
 Unit testsだけでなく、`install.cmd` の最後に [Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) を実行します。`Setup Complete!` は acceptance が成功した後にだけ表示されます。
 
 ```powershell
+# core-only profile
+.\scripts\powershell\Test-Environment.ps1
+
+# Docker profile
 .\scripts\powershell\Test-Environment.ps1 -Runtime
 ```
 
 acceptance は次を検証します。
 
-- winget、git、gh、chezmoi、rg、fd、jq、nvim、Node.js、Python、Go、Rust、Docker、WSL の command resolution
-- `docker info` と `docker compose version`
+- winget、git、gh、chezmoi、rg、fd、jq、nvim、Node.js、uv、Go、Rust、WSL の command resolution
+- Docker profile の場合だけ Docker の command resolution、`docker info`、`docker compose version`
 - `chezmoi apply --dry-run`
 - `wsl --status`
-- runtime mode の `docker run --rm hello-world`
+- runtime mode の `docker run --rm hello-world`（runtime mode は Docker を暗黙に有効化）
 
 外部 process は `Invoke-Docker`、`Invoke-Chezmoi`、`Invoke-Wsl` wrapper 経由で呼び出し、[Test-Environment.Tests.ps1](../../../scripts/powershell/tests/Test-Environment.Tests.ps1) では wrapper と `Get-Command` を mock します。
 

@@ -26,7 +26,7 @@ Describe 'Independent Hindsight data migration' {
 
         Mock Invoke-HindsightCommand {
             $script:calls.Add("$Command $($Arguments -join ' ')")
-            $exitCode = if ($Arguments[0] -eq 'container') { 0 } else { 0 }
+            $exitCode = if ($Arguments[0] -eq 'container' -and $Arguments[2] -ne 'hermes-hindsight') { 1 } else { 0 }
             [PSCustomObject]@{ ExitCode = $exitCode; Output = @() }
         }
     }
@@ -38,8 +38,9 @@ Describe 'Independent Hindsight data migration' {
         (Get-Content -LiteralPath (Join-Path $dataDir 'cache/model') -Raw).Trim() | Should -Be 'reranker-cache'
         (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
         (Get-Content -LiteralPath (Join-Path $dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
-        $script:calls | Should -Contain 'docker stop hindsight'
-        $script:calls | Should -Contain 'docker rm hindsight'
+        $script:calls | Should -Contain 'docker container inspect hermes-hindsight'
+        $script:calls | Should -Contain 'docker stop hermes-hindsight'
+        $script:calls | Should -Contain 'docker rm hermes-hindsight'
 
         $script:calls.Clear()
         Move-HindsightLegacyData -DataDir $dataDir

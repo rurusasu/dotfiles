@@ -20,7 +20,7 @@ setup() {
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$LOG"
 if [[ ${1:-} == container && ${2:-} == inspect ]]; then
-	[[ ${HINDSIGHT_LEGACY_CONTAINER_EXISTS:-0} == 1 ]]
+	[[ ${3:-} == hermes-hindsight && ${HINDSIGHT_LEGACY_CONTAINER_EXISTS:-0} == 1 ]]
 fi
 EOF
 	cat >"$BIN/ollama" <<'EOF'
@@ -50,16 +50,16 @@ EOF
 	[ "$(cat "$HOME/.local/share/hindsight/cache/model")" = reranker-cache ]
 	[ "$(cat "$HOME/.hermes/hindsight/pg0/memory")" = retained-memory ]
 	[ "$(cat "$HOME/.local/share/hindsight/.legacy-migration-source")" = "$HOME/.hermes/hindsight" ]
-	grep -Fxq 'docker stop hindsight' "$LOG"
-	grep -Fxq 'docker rm hindsight' "$LOG"
-	stop_line="$(grep -nFx 'docker stop hindsight' "$LOG" | cut -d: -f1)"
+	grep -Fxq 'docker stop hermes-hindsight' "$LOG"
+	grep -Fxq 'docker rm hermes-hindsight' "$LOG"
+	stop_line="$(grep -nFx 'docker stop hermes-hindsight' "$LOG" | cut -d: -f1)"
 	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
 	[ "$stop_line" -lt "$start_line" ]
 
 	: >"$LOG"
 	run "$SCRIPT" up "$COMPOSE"
 	[ "$status" -eq 0 ]
-	! grep -Fq 'docker stop hindsight' "$LOG"
+	! grep -Fq 'docker stop hermes-hindsight' "$LOG"
 }
 
 @test "legacy migration refuses to overwrite an independent memory database" {

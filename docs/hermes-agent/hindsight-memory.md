@@ -49,7 +49,7 @@ task hindsight:up
 Hindsight だけを起動します。Hermes の起動・停止は行いません。
 
 旧構成の `${HERMES_DATA_DIR:-~/.hermes}/hindsight` が存在し、新しい保存先にまだ
-メモリがない場合、初回起動は旧 `hindsight` container を停止し、旧 `pg0` と
+メモリがない場合、初回起動は旧 `hermes-hindsight` container を停止し、旧 `pg0` と
 `cache` を staging 経由で新しい保存先へコピーしてから旧 container を削除します。
 コピー元は rollback 用に残し、新保存先の marker により2回目以降は移行を
 繰り返しません。旧保存先と新保存先の両方にデータがある場合は自動上書きや併合を

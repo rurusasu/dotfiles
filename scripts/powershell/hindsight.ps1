@@ -102,10 +102,10 @@ function Move-HindsightLegacyData {
         }
     }
 
-    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hindsight') -AllowFailure -CaptureOutput
+    $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
     $legacyContainerExists = $inspect.ExitCode -eq 0
     if ($legacyContainerExists) {
-        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hindsight')
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
     }
 
     $parent = Split-Path -Parent $DataDir
@@ -142,7 +142,7 @@ function Move-HindsightLegacyData {
     Move-Item -LiteralPath $staging -Destination $DataDir
 
     if ($legacyContainerExists) {
-        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hindsight')
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hermes-hindsight')
     }
     Write-Host "Migrated legacy Hindsight data to $DataDir; the source was preserved at $legacyDir."
 }

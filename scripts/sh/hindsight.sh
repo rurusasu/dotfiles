@@ -71,8 +71,8 @@ hindsight_migrate_legacy_data() {
     dotfiles_die "Hindsight data path is not a directory: $data_dir"
   fi
 
-  if docker container inspect hindsight >/dev/null 2>&1; then
-    docker stop hindsight >/dev/null
+  if docker container inspect hermes-hindsight >/dev/null 2>&1; then
+    docker stop hermes-hindsight >/dev/null
     legacy_container=1
   fi
 
@@ -100,7 +100,7 @@ hindsight_migrate_legacy_data() {
   mv "$staging" "$data_dir"
 
   if ((legacy_container == 1)); then
-    docker rm hindsight >/dev/null
+    docker rm hermes-hindsight >/dev/null
   fi
   printf 'Migrated legacy Hindsight data to %s; the source was preserved at %s.\n' "$data_dir" "$legacy_dir"
 }

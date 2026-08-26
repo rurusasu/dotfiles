@@ -243,7 +243,7 @@ exit 0
 '@
         $stubAcceptance = @'
 function Test-DotfilesEnvironment {
-    param([switch]$Runtime)
+    param([switch]$Docker, [switch]$Runtime)
     Write-Host "STUB_ACCEPTANCE_COMPLETE"
     return [pscustomobject]@{ Success = $true; Message = "OK" }
 }

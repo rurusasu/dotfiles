@@ -111,7 +111,7 @@ DOTFILES_ALLOW_USER_ONLY=1 ./install.sh
 
 ### 成功条件と CI
 
-「コマンドが終了した」だけでは成功扱いにしません。必須 CLI、chezmoi drift、Docker daemon、Compose 全サービス、`docker run --rm hello-world` を acceptance で確認します。CI は GitHub-hosted Actions だけで完結し、Windows は PowerShell/Pester、macOS は Bats と nix-darwin build で installer 契約を検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
+「コマンドが終了した」だけでは成功扱いにしません。必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。CI は GitHub-hosted Actions だけで完結し、Windows は PowerShell/Pester、macOS は Bats と nix-darwin build で installer 契約を検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
 
 標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
 
