@@ -121,6 +121,7 @@ Describe 'Independent Hindsight startup cutover' {
         $script:pullShouldFail = $false
         $script:legacyContainerRunning = $true
         $env:USERPROFILE = Join-Path $TestDrive 'startup-home'
+        $env:HERMES_DATA_DIR = Join-Path $TestDrive 'startup-hermes'
         $composeDir = Join-Path $TestDrive 'compose'
         $script:composeFile = Join-Path $composeDir 'compose.yml'
         New-Item -ItemType Directory -Path $composeDir, $env:USERPROFILE -Force | Out-Null
@@ -193,6 +194,26 @@ Describe 'Independent Hindsight startup cutover' {
         $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
         $script:calls | Should -Contain 'docker start hermes-hindsight'
         $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
+    }
+
+    It 'should quarantine the migrated snapshot before restoring the legacy container' {
+        $dataDir = Join-Path $env:USERPROFILE '.local/share/hindsight'
+        $legacyDir = [System.IO.Path]::GetFullPath((Join-Path $env:HERMES_DATA_DIR 'hindsight'))
+        New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dataDir 'pg0/memory') -Value 'before-restoration'
+        Set-Content -LiteralPath (Join-Path $dataDir '.legacy-migration-source') -Value $legacyDir
+        $script:waitShouldFail = $true
+
+        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
+            Should -Throw '*simulated readiness failure*'
+
+        Test-Path -LiteralPath $dataDir | Should -BeFalse
+        $quarantine = @(Get-ChildItem -LiteralPath (Split-Path -Parent $dataDir) -Directory |
+                Where-Object Name -Like 'hindsight.failed-cutover.*')
+        $quarantine.Count | Should -Be 1
+        (Get-Content -LiteralPath (Join-Path $quarantine[0].FullName 'pg0/memory') -Raw).Trim() |
+            Should -Be 'before-restoration'
+        $script:calls | Should -Contain 'docker start hermes-hindsight'
     }
 
     It 'should preserve a previously stopped legacy container when replacement readiness fails' {

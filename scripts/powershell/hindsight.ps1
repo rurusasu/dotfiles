@@ -180,6 +180,35 @@ function Move-HindsightLegacyData {
     return $legacyContainerWasRunning
 }
 
+function Move-HindsightMigratedDataForRetry {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$DataDir)
+
+    $hermesDataDir = if ($env:HERMES_DATA_DIR) { $env:HERMES_DATA_DIR } else { Join-Path $env:USERPROFILE '.hermes' }
+    $legacyDir = [System.IO.Path]::GetFullPath((Join-Path $hermesDataDir 'hindsight'))
+    $DataDir = [System.IO.Path]::GetFullPath($DataDir)
+    if (-not (Test-Path -LiteralPath $DataDir)) { return }
+
+    $dataItem = Get-Item -LiteralPath $DataDir -Force
+    if (-not $dataItem.PSIsContainer -or ($dataItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Hindsight data path is not a regular directory: $DataDir"
+    }
+    $marker = Join-Path $DataDir '.legacy-migration-source'
+    if (-not (Test-Path -LiteralPath $marker -PathType Leaf) -or
+        ((Get-Item -LiteralPath $marker -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
+        (Get-Content -LiteralPath $marker -Raw).Trim() -ne $legacyDir) {
+        return
+    }
+
+    $timestamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+    $quarantine = "$DataDir.failed-cutover.$timestamp.$PID"
+    if (Test-Path -LiteralPath $quarantine) {
+        throw "Hindsight failed-cutover quarantine path already exists: $quarantine"
+    }
+    Move-Item -LiteralPath $DataDir -Destination $quarantine
+    Write-Warning "Quarantined failed independent Hindsight data at $quarantine before restoring the legacy service."
+}
+
 function Wait-HindsightApi {
     $attempts = if ($env:HINDSIGHT_API_READY_ATTEMPTS) { [int]$env:HINDSIGHT_API_READY_ATTEMPTS } else { 150 }
     $delaySeconds = if ($env:HINDSIGHT_API_READY_DELAY_SECONDS) { [int]$env:HINDSIGHT_API_READY_DELAY_SECONDS } else { 2 }
@@ -229,13 +258,19 @@ function Invoke-HindsightMain {
         }
         catch {
             $replacementError = $_
-            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'stop', 'hindsight') -AllowFailure
+            $stopResult = Invoke-HindsightCommand -Command 'docker' -Arguments @(
+                'compose', '-f', $RequestedComposeFile, 'stop', 'hindsight'
+            ) -AllowFailure
             if ($legacyContainerWasRunning) {
+                if ($stopResult.ExitCode -ne 0) {
+                    throw "$($replacementError.Exception.Message) Also failed to stop independent Hindsight; hermes-hindsight was not restarted to avoid concurrent writers."
+                }
                 try {
+                    Move-HindsightMigratedDataForRetry -DataDir $dataDir
                     $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
                 }
                 catch {
-                    throw "$($replacementError.Exception.Message) Also failed to restart hermes-hindsight: $($_.Exception.Message)"
+                    throw "$($replacementError.Exception.Message) Also failed to quarantine failed data or restart hermes-hindsight: $($_.Exception.Message)"
                 }
             }
             throw $replacementError

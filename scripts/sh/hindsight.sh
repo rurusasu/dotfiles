@@ -48,15 +48,39 @@ hindsight_restore_legacy_container_on_exit() {
   exit "$migration_status"
 }
 
+hindsight_quarantine_migrated_data_for_retry() {
+  local data_dir="$1"
+  local legacy_dir="${HERMES_DATA_DIR:-$HOME/.hermes}/hindsight"
+  local marker="$data_dir/.legacy-migration-source"
+  local quarantine
+
+  [[ -d $data_dir && ! -L $data_dir ]] || return 0
+  [[ -f $marker && ! -L $marker && $(<"$marker") == "$legacy_dir" ]] || return 0
+  quarantine="${data_dir}.failed-cutover.$(date -u +%Y%m%dT%H%M%SZ).$$"
+  [[ ! -e $quarantine && ! -L $quarantine ]] ||
+    dotfiles_die "Hindsight failed-cutover quarantine path already exists: $quarantine"
+  mv "$data_dir" "$quarantine"
+  printf 'Quarantined failed independent Hindsight data at %s before restoring the legacy service.\n' "$quarantine" >&2
+}
+
 hindsight_restore_legacy_after_replacement_failure() {
   local replacement_status="$?"
+  local replacement_stopped=0
   trap - EXIT
   if ((replacement_status != 0)); then
-    if ! docker compose -f "$compose_file" stop hindsight >/dev/null 2>&1; then
+    if docker compose -f "$compose_file" stop hindsight >/dev/null 2>&1; then
+      replacement_stopped=1
+    else
       printf 'Unable to stop the failed independent Hindsight service.\n' >&2
     fi
-    if ((legacy_container_was_running == 1)) && ! docker start hermes-hindsight >/dev/null; then
-      printf 'Unable to restart hermes-hindsight after independent Hindsight failed.\n' >&2
+    if ((legacy_container_was_running == 1)); then
+      if ((replacement_stopped == 0)); then
+        printf 'The legacy Hindsight service was not restarted to avoid concurrent writers.\n' >&2
+      elif ! hindsight_quarantine_migrated_data_for_retry "$data_dir"; then
+        printf 'Unable to quarantine the failed independent Hindsight data; the legacy service was not restarted.\n' >&2
+      elif ! docker start hermes-hindsight >/dev/null; then
+        printf 'Unable to restart hermes-hindsight after independent Hindsight failed.\n' >&2
+      fi
     fi
   fi
   exit "$replacement_status"
@@ -160,8 +184,9 @@ hindsight_prepare() {
 }
 
 hindsight_up() {
-  local compose_file="$1" replacement_status legacy_state legacy_container=0 legacy_container_was_running=0
+  local compose_file="$1" data_dir replacement_status legacy_state legacy_container=0 legacy_container_was_running=0
   local hindsight_migration_stopped_running_legacy=0
+  data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
   hindsight_prepare "$compose_file"
   if legacy_state="$(docker container inspect --format '{{.State.Running}}' hermes-hindsight 2>/dev/null)"; then
     legacy_container=1

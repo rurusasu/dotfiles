@@ -173,6 +173,28 @@ EOF
 	! grep -Fxq 'docker rm hermes-hindsight' "$LOG"
 }
 
+@test "failed replacement quarantines its snapshot and recopies restored legacy memory on retry" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
+	printf 'before-restoration\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	export HINDSIGHT_LEGACY_CONTAINER_EXISTS=1 HINDSIGHT_COMPOSE_UP_FAIL=1
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -ne 0 ]
+	[ ! -e "$HOME/.local/share/hindsight" ]
+	quarantine="$(find "$HOME/.local/share" -maxdepth 1 -type d -name 'hindsight.failed-cutover.*' -print -quit)"
+	[ -n "$quarantine" ]
+	[ "$(cat "$quarantine/pg0/memory")" = before-restoration ]
+
+	printf 'after-restoration\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	: >"$LOG"
+	export HINDSIGHT_COMPOSE_UP_FAIL=0
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$HOME/.local/share/hindsight/pg0/memory")" = after-restoration ]
+}
+
 @test "completed migration retries legacy retirement before honoring its marker" {
 	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
 	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
