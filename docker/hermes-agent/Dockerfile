@@ -7,13 +7,13 @@ ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
 ARG HINDSIGHT_CLIENT_VERSION=0.6.1
 
-COPY xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
-COPY gh-wrapper.sh /usr/local/bin/gh
-COPY bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap
-COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
-COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap
-COPY hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
-COPY gateway_convergence.py /usr/local/bin/hermes-gateway-converge
+COPY hermes-agent/xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
+COPY hermes-agent/gh-wrapper.sh /usr/local/bin/gh
+COPY hermes-agent/bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap
+COPY hermes-agent/bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
+COPY hermes-agent/hermes-bootstrap /usr/local/bin/hermes-bootstrap
+COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
+COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge
 RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
 RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
 
@@ -140,13 +140,14 @@ FROM hermes-bootstrap-runtime AS hermes-bootstrap-test
 
 WORKDIR /workspace
 
-COPY Dockerfile /workspace/docker/hermes-agent/Dockerfile
-COPY compose.yml /workspace/docker/hermes-agent/compose.yml
-COPY hindsight.env /workspace/docker/hermes-agent/hindsight.env
-COPY bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
-COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
-COPY gateway_convergence.py /workspace/docker/hermes-agent/gateway_convergence.py
-COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
+COPY hermes-agent/Dockerfile /workspace/docker/hermes-agent/Dockerfile
+COPY hermes-agent/compose.yml /workspace/docker/hermes-agent/compose.yml
+COPY hindsight/compose.yml /workspace/docker/hindsight/compose.yml
+COPY hindsight/hindsight.env /workspace/docker/hindsight/hindsight.env
+COPY hermes-agent/bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
+COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
+COPY hermes-agent/gateway_convergence.py /workspace/docker/hermes-agent/gateway_convergence.py
+COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests

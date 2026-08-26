@@ -876,6 +876,15 @@ in
 # Category-resolved package lists (auto-derived from catalog)
 lib.mapAttrs (_: resolve) grouped
 // {
+  # Tart guests intentionally receive only the requested CLI tools. WezTerm is
+  # installed as a macOS cask because its Nix package is unavailable on Darwin.
+  tartMinimal = resolve [
+    "git"
+    "chezmoi"
+    "neovim"
+    "codex"
+  ];
+
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
   allWithout =

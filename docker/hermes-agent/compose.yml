@@ -3,8 +3,8 @@ name: hermes-agent
 services:
   hermes:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: hermes-agent/Dockerfile
     image: local/hermes-agent-gh:latest
     container_name: hermes
     restart: unless-stopped
@@ -44,42 +44,10 @@ services:
       - hermes-browser
       - hermes-memory
 
-  hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d
-    container_name: hermes-hindsight
-    restart: unless-stopped
-    env_file:
-      - path: ./hindsight.env
-        required: true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888"
-      - "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999"
-    volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/pg0
-        target: /home/hindsight/.pg0
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/cache
-        target: /home/hindsight/.cache
-    shm_size: 1g
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8888/health', timeout=5)); raise SystemExit(0 if d.get('status') == 'healthy' and d.get('database') == 'connected' else 1)"
-      interval: 10s
-      timeout: 10s
-      retries: 30
-      start_period: 60s
-    networks:
-      - hermes-memory
-
   hermes-bootstrap:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: hermes-agent/Dockerfile
     image: local/hermes-agent-gh:latest
     profiles:
       - bootstrap
@@ -198,5 +166,5 @@ networks:
     name: hermes-browser
     driver: bridge
   hermes-memory:
-    name: hermes-memory
-    driver: bridge
+    name: dotfiles-memory
+    external: true

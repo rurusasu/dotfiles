@@ -7,6 +7,14 @@ tasks:
       - cmd: ./scripts/sh/install-tart-vm.sh
         platforms: [darwin]
 
+  tart:run:
+    desc: Start Tart, sync the latest dotfiles, and share host Hindsight
+    deps:
+      - task: hindsight:up
+    cmds:
+      - cmd: ./scripts/sh/run-tart-vm.sh
+        platforms: [darwin]
+
   install:
     desc: Run Windows installer
     cmds:

@@ -14,7 +14,6 @@ setup() {
 	write_stub apt-get 'exit 0'
 	write_stub sudo 'exec "$@"'
 	write_stub chezmoi 'echo "chezmoi stub"; exit 0'
-	write_stub claude 'echo "claude stub"; exit 0'
 	write_stub npm 'echo "npm stub"; exit 0'
 	write_stub nvim 'if [ "${1:-}" = "--version" ]; then echo "NVIM v0.10.0"; exit 0; fi; exit 0'
 }
@@ -40,8 +39,7 @@ EOF
 	[[ "$output" == *"bootstrap complete"* ]]
 }
 
-@test "bootstrap.sh installs claude code without writing workspace npm config" {
-	rm "$STUB_BIN/claude"
+@test "bootstrap.sh does not install Claude Code" {
 	export HOME="$TEST_HOME"
 	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
 	write_stub npm '
@@ -67,7 +65,5 @@ exit 0
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"bootstrap complete"* ]]
-	grep -q "args=install -g @anthropic-ai/claude-code" "$NPM_LOG"
-	grep -q "prefix=$TEST_HOME/.local/npm" "$NPM_LOG"
-	! grep -q "args=config set prefix" "$NPM_LOG"
+	[ ! -e "$NPM_LOG" ]
 }

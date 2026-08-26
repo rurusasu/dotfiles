@@ -16,7 +16,7 @@ class DockerfileContractTests(unittest.TestCase):
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
         self.assertIn(
-            "COPY gateway_convergence.py /usr/local/bin/hermes-gateway-converge",
+            "COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge",
             dockerfile,
         )
         self.assertIn("chmod 0755 /usr/local/bin/hermes-gateway-converge", dockerfile)

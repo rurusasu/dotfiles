@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 dotfiles_hermes_agent_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-. "$dotfiles_hermes_agent_script_dir/hermes-hindsight.sh"
 unset dotfiles_hermes_agent_script_dir
 
 dotfiles_hermes_data_dir() {
@@ -563,23 +562,6 @@ dotfiles_hermes_start_stack() {
     dotfiles_die "Hermes 1Password Service Account is unavailable."
 
   if "$docker_runner" compose -f "$compose_file" config --quiet; then
-    :
-  else
-    status=$?
-    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
-    return "$status"
-  fi
-  if dotfiles_hermes_hindsight_configure_ollama_url "$docker_runner"; then
-    :
-  else
-    return $?
-  fi
-  if dotfiles_hermes_hindsight_prepare_host "$compose_file"; then
-    :
-  else
-    return $?
-  fi
-  if dotfiles_hermes_hindsight_start "$docker_runner" "$compose_file"; then
     :
   else
     status=$?

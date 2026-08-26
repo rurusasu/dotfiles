@@ -7,7 +7,6 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\Invoke-ExternalCommand.ps1')
 . (Join-Path $libPath 'lib\HermesBootstrap.ps1')
 . (Join-Path $libPath 'lib\HermesXApi.ps1')
-. (Join-Path $libPath 'lib\HermesHindsight.ps1')
 . (Join-Path $libPath 'lib\HermesGateway.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
@@ -70,24 +69,6 @@ class HermesAgentHandler : SetupHandlerBase {
             $validation = $this.InvokeCompose($composeFile, @('config', '--quiet'))
             if (-not $validation.Success) {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
-            }
-
-            try {
-                $null = Initialize-HermesHindsightHost -ComposeFile $composeFile -DataDir $dataDir
-            }
-            catch {
-                return $this.CreateFailureResult("Hindsight host preparation failed: $($_.Exception.Message)")
-            }
-
-            $hindsightStart = $this.InvokeCompose($composeFile, @('up', '-d', 'hindsight'))
-            if (-not $hindsightStart.Success) {
-                return $this.CreateFailureResult("Hindsight startup failed: $($hindsightStart.Message)")
-            }
-            try {
-                Wait-HermesHindsightApi
-            }
-            catch {
-                return $this.CreateFailureResult("Hindsight readiness failed: $($_.Exception.Message)")
             }
 
             $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap', 'chromium', 'xapi-mcp'))

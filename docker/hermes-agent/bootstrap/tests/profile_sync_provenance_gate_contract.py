@@ -62,6 +62,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertNotIn("docker build", section)
         self.assertLess(xapi_windows_index, container_task_index)
         self.assertLess(xapi_unix_index, container_task_index)
+        self.assertIn('PROVENANCE_URL: "{{.PROVENANCE_URL}}"', section)
         self.assertIn(
             'msg: "Docker daemon is not running. Start Docker Desktop and try again."',
             container_section,

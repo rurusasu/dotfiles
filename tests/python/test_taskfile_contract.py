@@ -129,8 +129,7 @@ class TaskfileContractTests(unittest.TestCase):
 
         unix_phases = (
             "config --quiet",
-            "dotfiles_hermes_hindsight_prepare_host",
-            "dotfiles_hermes_hindsight_start",
+            "hindsight_up",
             "hermes-hindsight-acceptance probe",
             "hermes-hindsight-acceptance seed",
             "restart hindsight",
@@ -142,8 +141,7 @@ class TaskfileContractTests(unittest.TestCase):
         )
         windows_phases = (
             "'config', '--quiet'",
-            "Initialize-HermesHindsightHost",
-            "'up', '-d', 'hindsight'",
+            "Invoke-HindsightServiceUp",
             "'hermes-hindsight-acceptance', 'probe'",
             "'hermes-hindsight-acceptance', 'seed'",
             "'restart', 'hindsight'",
@@ -178,7 +176,7 @@ class TaskfileContractTests(unittest.TestCase):
 
         self.assertTrue(acceptance.startswith("#!/opt/hermes/.venv/bin/python\n"))
         self.assertIn(
-            "COPY hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
+            "COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
             dockerfile,
         )
         self.assertIn(
@@ -186,7 +184,7 @@ class TaskfileContractTests(unittest.TestCase):
             dockerfile,
         )
         self.assertIn(
-            "COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
+            "COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
             dockerfile,
         )
 
@@ -204,7 +202,7 @@ class TaskfileContractTests(unittest.TestCase):
             "FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", maxsplit=1
         )[1].split("FROM hermes-bootstrap-runtime", maxsplit=1)[0]
 
-        self.assertIn("COPY bootstrap/tests", test_stage)
+        self.assertIn("COPY hermes-agent/bootstrap/tests", test_stage)
         self.assertIn("-p 'hindsight_real_provider_gate.py'", test_stage)
         self.assertIn("provider_factory=None", gate)
         self.assertIn("acceptance._resolved_provider", gate)

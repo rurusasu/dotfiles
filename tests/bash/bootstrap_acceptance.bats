@@ -63,7 +63,6 @@ EOF
 	mkdir -p "$test_root/scripts/sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$test_root/scripts/sh/install-common.sh"
 	cp "$REPO_ROOT/scripts/sh/hermes-agent.sh" "$test_root/scripts/sh/hermes-agent.sh"
-	cp "$REPO_ROOT/scripts/sh/hermes-hindsight.sh" "$test_root/scripts/sh/hermes-hindsight.sh"
 
 	run env \
 		DOTFILES_ACCEPTANCE_REPO_ROOT="$test_root" \

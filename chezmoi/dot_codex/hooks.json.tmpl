@@ -26,6 +26,51 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+{{- if eq .chezmoi.os "windows" }}
+            "command": "uv run --isolated --managed-python python \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/session_start.py\"",
+{{- else }}
+            "command": "python3 \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/session_start.py\"",
+{{- end }}
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+{{- if eq .chezmoi.os "windows" }}
+            "command": "uv run --isolated --managed-python python \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/recall.py\"",
+{{- else }}
+            "command": "python3 \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/recall.py\"",
+{{- end }}
+            "timeout": 45
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+{{- if eq .chezmoi.os "windows" }}
+            "command": "uv run --isolated --managed-python python \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/retain.py\"",
+{{- else }}
+            "command": "python3 \"{{ .chezmoi.homeDir | replace "\\" "/" }}/.hindsight/codex/scripts/retain.py\"",
+{{- end }}
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }

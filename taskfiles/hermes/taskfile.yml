@@ -9,6 +9,8 @@ tasks:
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -f {{.HERMES_COMPOSE_FILE}}
         msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+      - sh: test -f {{.HINDSIGHT_COMPOSE_FILE}}
+        msg: "Hindsight compose file not found: {{.HINDSIGHT_COMPOSE_FILE}}"
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
@@ -36,6 +38,8 @@ tasks:
       - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [linux, darwin]
       - task: hermes:bootstrap:test:container
+        vars:
+          PROVENANCE_URL: "{{.PROVENANCE_URL}}"
 
   hermes:bootstrap:test:container:
     internal: true
@@ -43,7 +47,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
       - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
       - cmd: python docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
         platforms: [windows]

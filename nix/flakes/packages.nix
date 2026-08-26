@@ -4,6 +4,7 @@
 #   nix profile install .#minimal   (core only)
 #   nix profile install .#full      (everything, unfree allowed)
 #   nix profile install .#core      (individual set)
+#   nix profile install .#tart-minimal (Tart: git + chezmoi + neovim + codex)
 #   nix build .#winget-export       (generate Windows package JSON)
 { inputs, ... }:
 {
@@ -46,6 +47,10 @@
         minimal = pkgs.buildEnv {
           name = "dotfiles-minimal";
           paths = sets.core;
+        };
+        tart-minimal = pkgs.buildEnv {
+          name = "dotfiles-tart-minimal";
+          paths = sets.tartMinimal;
         };
         full = pkgs.buildEnv {
           name = "dotfiles-full";

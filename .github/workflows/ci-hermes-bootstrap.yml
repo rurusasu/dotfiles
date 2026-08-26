@@ -56,7 +56,7 @@ jobs:
         run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
       - name: Run the pinned container suite
-        run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+        run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
 
       - name: Run Hermes browser runtime contracts
         run: docker/hermes-browser/tests/test_runtime_contract.sh

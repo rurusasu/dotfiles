@@ -971,8 +971,6 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
-	cp "$REPO_ROOT/scripts/sh/hermes-hindsight.sh" "$HOME/.dotfiles/scripts/sh/hermes-hindsight.sh"
-	cp "$REPO_ROOT/docker/hermes-agent/hindsight.env" "$HOME/.dotfiles/docker/hermes-agent/hindsight.env"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"

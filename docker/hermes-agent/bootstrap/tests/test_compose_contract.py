@@ -13,7 +13,8 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-agent/compose.yml"
-HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hermes-agent/hindsight.env"
+HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/hindsight/compose.yml"
+HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hindsight/hindsight.env"
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
 RESOLVED_CONFIG_ENV = "HERMES_BOOTSTRAP_COMPOSE_CONFIG_JSON"
 DATA_BIND = {
@@ -56,12 +57,12 @@ HINDSIGHT_ENVIRONMENT = {
 }
 HINDSIGHT_PG_BIND = {
     "type": "bind",
-    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/pg0",
+    "source": "${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/pg0",
     "target": "/home/hindsight/.pg0",
 }
 HINDSIGHT_CACHE_BIND = {
     "type": "bind",
-    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/hindsight/cache",
+    "source": "${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/cache",
     "target": "/home/hindsight/.cache",
 }
 HINDSIGHT_HEALTHCHECK = (
@@ -82,11 +83,19 @@ class ComposeContractTests(unittest.TestCase):
         self.services = self.compose["services"]
         self.hermes = self.services["hermes"]
         self.bootstrap = self.services.get("hermes-bootstrap")
+        self.hindsight_compose = yaml.safe_load(
+            HINDSIGHT_COMPOSE_FILE.read_text(encoding="utf-8")
+        )
+        self.hindsight_services = self.hindsight_compose["services"]
 
     def test_bootstrap_service_is_an_isolated_hermes_companion(self) -> None:
         self.assertIsNotNone(self.bootstrap)
         assert self.bootstrap is not None
         self.assertEqual(self.bootstrap["build"], self.hermes["build"])
+        self.assertEqual(
+            self.hermes["build"],
+            {"context": "..", "dockerfile": "hermes-agent/Dockerfile"},
+        )
         self.assertEqual(self.bootstrap["image"], self.hermes["image"])
         self.assertEqual(self.bootstrap["volumes"], [DATA_BIND])
         self.assertEqual(self.bootstrap["environment"], {"HERMES_HOME": "/opt/data"})
@@ -107,13 +116,14 @@ class ComposeContractTests(unittest.TestCase):
         )
 
     def test_hindsight_is_a_pinned_multi_arch_private_memory_runtime(self) -> None:
-        hindsight = self.services.get("hindsight")
+        self.assertNotIn("hindsight", self.services)
+        hindsight = self.hindsight_services.get("hindsight")
         self.assertIsNotNone(hindsight)
         assert hindsight is not None
 
         self.assertEqual(hindsight["image"], HINDSIGHT_IMAGE)
         self.assertNotIn("platform", hindsight)
-        self.assertEqual(hindsight["container_name"], "hermes-hindsight")
+        self.assertEqual(hindsight["container_name"], "hindsight")
         self.assertEqual(hindsight["restart"], "unless-stopped")
         self.assertEqual(
             hindsight["env_file"], [{"path": "./hindsight.env", "required": True}],
@@ -133,10 +143,10 @@ class ComposeContractTests(unittest.TestCase):
             hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
         )
         self.assertEqual(hindsight["shm_size"], "1g")
-        self.assertEqual(hindsight["networks"], ["hermes-memory"])
+        self.assertEqual(hindsight["networks"], ["memory"])
 
     def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
-        hindsight = self.services.get("hindsight")
+        hindsight = self.hindsight_services.get("hindsight")
         self.assertIsNotNone(hindsight)
         assert hindsight is not None
 
@@ -159,7 +169,11 @@ class ComposeContractTests(unittest.TestCase):
         self.assertNotIn("hindsight", self.hermes["depends_on"])
         self.assertEqual(
             self.compose["networks"]["hermes-memory"],
-            {"name": "hermes-memory", "driver": "bridge"},
+            {"name": "dotfiles-memory", "external": True},
+        )
+        self.assertEqual(
+            self.hindsight_compose["networks"]["memory"],
+            {"name": "dotfiles-memory", "driver": "bridge"},
         )
 
     def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
@@ -304,15 +318,18 @@ class ComposeContractTests(unittest.TestCase):
         latest_base = "docker.io/nousresearch/hermes-agent:latest"
 
         self.assertIn(f"FROM {latest_base} AS hermes-bootstrap-runtime", dockerfile)
-        self.assertIn("COPY bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap", dockerfile)
+        self.assertIn("COPY hermes-agent/bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap", dockerfile)
         self.assertIn(
-            "COPY bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml",
+            "COPY hermes-agent/bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml",
             dockerfile,
         )
-        self.assertIn("COPY hermes-bootstrap /usr/local/bin/hermes-bootstrap", dockerfile)
+        self.assertIn(
+            "COPY hermes-agent/hermes-bootstrap /usr/local/bin/hermes-bootstrap",
+            dockerfile,
+        )
         self.assertIn("chmod 0755 /usr/local/bin/hermes-bootstrap", dockerfile)
         self.assertIn("FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", dockerfile)
-        self.assertIn("COPY bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests", dockerfile)
+        self.assertIn("COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests", dockerfile)
         self.assertIn("python -m unittest discover", dockerfile)
         self.assertTrue(dockerfile.rstrip().endswith("FROM hermes-bootstrap-runtime\n\nWORKDIR /"))
 
