@@ -175,6 +175,8 @@ tasks:
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."

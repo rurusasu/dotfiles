@@ -5,11 +5,12 @@
 # is supplied as `--dotfiles-repository`. Sets up the minimum needed
 # for the "host terminal → container tmux+nvim" workflow:
 #
-#   1. tmux + git + curl + tar via apt (Debian/Ubuntu base only).
+#   1. tmux + git + curl + tar + npm via apt (Debian/Ubuntu base only).
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
-#   3. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
+#   3. Codex CLI into ~/.local/npm.
+#   4. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
 #      so the container gets the same dotfiles as the host.
-#   4. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
+#   5. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
 #
 # Idempotent — safe to re-run on every DevcontainerUp.
 
@@ -44,6 +45,7 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
   have curl || need+=("curl")
   have git || need+=("git")
   have tar || need+=("tar")
+  have npm || need+=("npm")
   dpkg -s ca-certificates >/dev/null 2>&1 || need+=("ca-certificates")
   if [ "${#need[@]}" -gt 0 ]; then
     log "apt install: ${need[*]}"
@@ -53,6 +55,18 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
   fi
 elif ! have apt-get; then
   log "apt-get not found — package install skipped (install tmux/curl/git manually)"
+fi
+
+# ── Codex CLI ──────────────────────────────────────────────────────────
+if ! have codex; then
+  if ! have npm; then
+    log "npm is required to install Codex"
+    exit 1
+  fi
+  log "installing Codex CLI to ~/.local/npm"
+  mkdir -p "$HOME/.local/npm"
+  NPM_CONFIG_PREFIX="$HOME/.local/npm" \
+    npm install --global --no-audit --no-fund @openai/codex
 fi
 
 # ── chezmoi binary (best effort) ────────────────────────────────────────
@@ -128,8 +142,8 @@ fi
 # `bash -l` (used by `dcnvim`) reads ~/.profile, not ~/.bashrc. Append to
 # both so PATH is visible regardless of which init path runs.
 for f in "$HOME/.profile" "$HOME/.bashrc"; do
-  if ! grep -q '\.local/bin' "$f" 2>/dev/null; then
-    printf '\n# Added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$f"
+  if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
+    printf '\n# Added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
   fi
 done
 

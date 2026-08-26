@@ -13,23 +13,23 @@ Describe 'HindsightHandler' {
         New-Item -ItemType Directory -Path $composeDir, $scriptDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $composeDir 'compose.yml') -Value 'services: {}'
         Set-Content -LiteralPath (Join-Path $scriptDir 'hindsight.ps1') -Value 'param($Action, $ComposeFile)'
-        $ctx = [SetupContext]::new($root)
-        $handler = [HindsightHandler]::new()
+        $script:ctx = [SetupContext]::new($root)
+        $script:handler = [HindsightHandler]::new()
         Mock Get-Command { [PSCustomObject]@{ Name = $Name } }
     }
 
     It 'is disabled by default' {
-        $handler.CanApply($ctx) | Should -BeFalse
+        $script:handler.CanApply($script:ctx) | Should -BeFalse
     }
 
     It 'is enabled by the Docker-derived Hindsight option' {
-        $ctx.Options['WithHindsight'] = $true
-        $handler.CanApply($ctx) | Should -BeTrue
+        $script:ctx.Options['WithHindsight'] = $true
+        $script:handler.CanApply($script:ctx) | Should -BeTrue
     }
 
     It 'runs before Hermes and outside its handler' {
-        $handler.Order | Should -BeLessThan 56
-        $handler.Name | Should -Be 'Hindsight'
+        $script:handler.Order | Should -BeLessThan 56
+        $script:handler.Name | Should -Be 'Hindsight'
         $source = Get-Content -LiteralPath $PSScriptRoot/../../handlers/Handler.HermesAgent.ps1 -Raw
         $source | Should -Not -Match 'hindsight\.ps1|docker\\hindsight'
     }

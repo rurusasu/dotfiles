@@ -55,9 +55,28 @@ setup() {
 	grep -q '/.hindsight/codex/scripts/session_start.py' "$hooks"
 	grep -q '/.hindsight/codex/scripts/recall.py' "$hooks"
 	grep -q '/.hindsight/codex/scripts/retain.py' "$hooks"
-	grep -q '"hindsightApiUrl": "http://127.0.0.1:8888"' "$config"
+	grep -q '"hindsightApiUrl": ""' "$config"
+	grep -q '"apiPort": 8888' "$config"
 	grep -q '"bankId": "codex-shared"' "$config"
 	grep -q '"upgradeNotice": false' "$config"
+}
+
+@test "Codex hooks honor a non-default Hindsight API port" {
+	config="$REPO_ROOT/chezmoi/dot_hindsight/codex.json"
+	home="$BATS_TEST_TMPDIR/home"
+	mkdir -p "$home/.hindsight"
+	cp "$config" "$home/.hindsight/codex.json"
+
+	run env HOME="$home" HINDSIGHT_API_PORT=18888 python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from config import load_config
+config = load_config()
+assert config["hindsightApiUrl"] == ""
+assert config["apiPort"] == 18888
+' "$REPO_ROOT/chezmoi/dot_hindsight/codex/scripts/lib"
+
+	[ "$status" -eq 0 ]
 }
 
 @test "vendored Codex hooks record their upstream revision" {

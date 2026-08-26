@@ -1,5 +1,6 @@
 {
-  "hindsightApiUrl": "http://127.0.0.1:8888",
+  "hindsightApiUrl": "",
+  "apiPort": 8888,
   "bankId": "codex-shared",
   "autoRecall": true,
   "autoRetain": true,

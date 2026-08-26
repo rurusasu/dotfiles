@@ -117,7 +117,7 @@ push_update() {
 	grep -q 'paths = sets.tartMinimal' "$packages"
 }
 
-@test "Tart run task starts Hindsight and uses the managed launcher" {
+@test "Tart run task attempts Hindsight non-fatally and uses the managed launcher" {
 	taskfile="$REPO_ROOT/taskfiles/install/taskfile.yml"
 
 	run awk '
@@ -127,7 +127,8 @@ push_update() {
 	' "$taskfile"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'task: hindsight:up'* ]]
+	[[ "$output" == *'if ! task hindsight:up'* ]]
+	[[ "$output" == *'continuing without shared Hindsight'* ]]
 	[[ "$output" == *'scripts/sh/run-tart-vm.sh'* ]]
 }
 
@@ -136,7 +137,8 @@ push_update() {
 
 	grep -q -- '-R.*8888.*127.0.0.1' "$launcher"
 	grep -q 'sync-tart-dotfiles.sh' "$launcher"
-	grep -q 'DOTFILES_RUNTIME=tart' "$launcher"
+	grep -q 'DOTFILES_RUNTIME=%q' "$launcher"
+	grep -q 'DOTFILES_REPOSITORY_URL=%q' "$launcher"
 }
 
 @test "Tart launcher establishes one persistent tunnel and streams the sync script" {
@@ -158,9 +160,19 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'ssh %s\n' "$*" >>"$LAUNCHER_LOG"
+if [[ " $* " == *" true " ]]; then
+  attempts=0
+  [[ ! -e $SSH_ATTEMPTS ]] || attempts="$(cat "$SSH_ATTEMPTS")"
+  attempts=$((attempts + 1))
+  printf '%s\n' "$attempts" >"$SSH_ATTEMPTS"
+  ((attempts >= 3))
+  exit
+fi
 if [[ " $* " == *" bash -s "* ]]; then
   payload="$(cat)"
   [[ $payload == *'git ls-remote'* ]]
+  [[ " $* " == *'DOTFILES_REPOSITORY_URL=https://example.invalid/dotfiles.git'* ]]
+  [[ " $* " == *'DOTFILES_REPOSITORY_REF=feature/review-fix'* ]]
 fi
 EOF
 	chmod +x "$bin/tart" "$bin/ssh"
@@ -168,15 +180,20 @@ EOF
 	run env \
 		LAUNCHER_LOG="$launcher_log" \
 		TART_STARTED="$started" \
+		SSH_ATTEMPTS="$BATS_TEST_TMPDIR/ssh-attempts" \
+		DOTFILES_REPOSITORY_URL=https://example.invalid/dotfiles.git \
+		DOTFILES_REPOSITORY_REF=feature/review-fix \
 		DOTFILES_TART_COMMAND="$bin/tart" \
 		DOTFILES_TART_SSH_COMMAND="$bin/ssh" \
 		DOTFILES_TART_IP_WAIT_DELAY_SECONDS=0 \
+		DOTFILES_TART_SSH_WAIT_DELAY_SECONDS=0 \
 		DOTFILES_TART_RUN_STATE_DIR="$BATS_TEST_TMPDIR/state" \
 		"$launcher"
 
 	[ "$status" -eq 0 ]
+	[ "$(cat "$BATS_TEST_TMPDIR/ssh-attempts")" -eq 3 ]
 	grep -Eq 'ssh .* -M .* -f -N -R 127\.0\.0\.1:8888:127\.0\.0\.1:8888 admin@192\.0\.2\.10' "$launcher_log"
-	grep -Eq "ssh .* -S .* admin@192\.0\.2\.10 DOTFILES_RUNTIME=tart bash -s" "$launcher_log"
+	grep -Eq "ssh .* -S .* admin@192\.0\.2\.10 DOTFILES_RUNTIME=tart DOTFILES_REPOSITORY_URL=https://example.invalid/dotfiles.git DOTFILES_REPOSITORY_REF=feature/review-fix bash -s" "$launcher_log"
 	grep -Eq 'ssh -S .* -O exit admin@192\.0\.2\.10' "$launcher_log"
 }
 
@@ -184,15 +201,17 @@ EOF
 	installer="$REPO_ROOT/scripts/sh/install-tart-guest.sh"
 	bin="$BATS_TEST_TMPDIR/guest-bin"
 	store="$BATS_TEST_TMPDIR/store-profile"
+	second_store="$BATS_TEST_TMPDIR/store-profile-2"
 	guest_log="$BATS_TEST_TMPDIR/guest.log"
 	guest_repo="$BATS_TEST_TMPDIR/guest-repo"
-	mkdir -p "$bin" "$store/bin" "$guest_repo/chezmoi"
+	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi"
 	for command in git chezmoi nvim codex; do
 		cat >"$store/bin/$command" <<EOF
 #!/usr/bin/env bash
 printf '$command %s\n' "\$*" >>"\$GUEST_LOG"
 EOF
 		chmod +x "$store/bin/$command"
+		cp "$store/bin/$command" "$second_store/bin/$command"
 	done
 	cat >"$bin/nix" <<'EOF'
 #!/usr/bin/env bash
@@ -216,6 +235,16 @@ printf 'brew %s\n' "$*" >>"$GUEST_LOG"
 EOF
 	chmod +x "$bin/nix" "$bin/brew"
 
+	run env \
+		HOME="$BATS_TEST_TMPDIR/guest-home" \
+		PATH="$bin:$PATH" \
+		GUEST_LOG="$guest_log" \
+		GUEST_STORE="$second_store" \
+		"$installer" "$guest_repo"
+
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$BATS_TEST_TMPDIR/guest-home/.local/state/dotfiles/tart-profile")" = "$second_store" ]
+	[ -z "$(find "$store" -maxdepth 1 -name 'tart-profile.next.*' -print -quit)" ]
 	run env \
 		HOME="$BATS_TEST_TMPDIR/guest-home" \
 		PATH="$bin:$PATH" \

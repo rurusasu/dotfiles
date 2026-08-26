@@ -9,6 +9,10 @@ VM_USER="${DOTFILES_TART_VM_USER:-admin}"
 HINDSIGHT_PORT="${HINDSIGHT_API_PORT:-8888}"
 WAIT_ATTEMPTS="${DOTFILES_TART_IP_WAIT_ATTEMPTS:-60}"
 WAIT_DELAY="${DOTFILES_TART_IP_WAIT_DELAY_SECONDS:-2}"
+SSH_WAIT_ATTEMPTS="${DOTFILES_TART_SSH_WAIT_ATTEMPTS:-$WAIT_ATTEMPTS}"
+SSH_WAIT_DELAY="${DOTFILES_TART_SSH_WAIT_DELAY_SECONDS:-$WAIT_DELAY}"
+REPOSITORY_URL="${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles.git}"
+REPOSITORY_REF="${DOTFILES_REPOSITORY_REF:-main}"
 STATE_DIR="${DOTFILES_TART_RUN_STATE_DIR:-$HOME/.local/state/dotfiles/tart}"
 CONTROL_SOCKET="$STATE_DIR/${VM_NAME}.ssh"
 KNOWN_HOSTS="$STATE_DIR/known_hosts"
@@ -42,6 +46,19 @@ wait_for_ip() {
   die "VM did not obtain an IP address after $WAIT_ATTEMPTS attempts."
 }
 
+wait_for_ssh() {
+  local attempt
+  for ((attempt = 1; attempt <= SSH_WAIT_ATTEMPTS; attempt++)); do
+    if "$SSH_COMMAND" "${ssh_options[@]}" -o ConnectTimeout=5 \
+      "$VM_USER@$vm_ip" true >/dev/null 2>&1; then
+      return 0
+    fi
+    kill -0 "$tart_pid" >/dev/null 2>&1 || die "Tart exited before SSH became ready."
+    ((attempt == SSH_WAIT_ATTEMPTS)) || sleep "$SSH_WAIT_DELAY"
+  done
+  die "VM SSH did not become ready after $SSH_WAIT_ATTEMPTS attempts."
+}
+
 for command in "$TART_COMMAND" "$SSH_COMMAND"; do
   [[ $command == */* ]] || command -v "$command" >/dev/null 2>&1 || die "$command is required."
 done
@@ -63,13 +80,17 @@ ssh_options=(
   -o StrictHostKeyChecking=accept-new
   -o "UserKnownHostsFile=$KNOWN_HOSTS"
 )
+wait_for_ssh
 "$SSH_COMMAND" "${ssh_options[@]}" -M -S "$CONTROL_SOCKET" -f -N \
   -R "127.0.0.1:8888:127.0.0.1:${HINDSIGHT_PORT}" \
   "$VM_USER@$vm_ip"
 tunnel_open=1
 
+printf -v remote_sync_command \
+  'DOTFILES_RUNTIME=%q DOTFILES_REPOSITORY_URL=%q DOTFILES_REPOSITORY_REF=%q bash -s' \
+  tart "$REPOSITORY_URL" "$REPOSITORY_REF"
 "$SSH_COMMAND" "${ssh_options[@]}" -S "$CONTROL_SOCKET" "$VM_USER@$vm_ip" \
-  'DOTFILES_RUNTIME=tart bash -s' <"$SCRIPT_DIR/sync-tart-dotfiles.sh"
+  "$remote_sync_command" <"$SCRIPT_DIR/sync-tart-dotfiles.sh"
 
 printf 'tart-run: %s is running; Hindsight is available in the guest at 127.0.0.1:8888.\n' "$VM_NAME"
 wait "$tart_pid"

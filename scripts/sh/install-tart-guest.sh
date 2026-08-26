@@ -46,6 +46,7 @@ install_cli_profile() {
   }
   trap 'rm -f -- "$temporary_link"' RETURN
   nix build "$REPO_ROOT#tart-minimal" --out-link "$temporary_link"
+  rm -f -- "$profile_link"
   mv -f -- "$temporary_link" "$profile_link"
   trap - RETURN
 

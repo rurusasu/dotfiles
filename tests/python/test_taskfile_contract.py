@@ -85,7 +85,7 @@ class TaskfileContractTests(unittest.TestCase):
         )
 
     def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
-        for task_name in ("hermes:setup", "hermes:bootstrap"):
+        for task_name in ("hermes:setup", "hermes:bootstrap", "hermes:up"):
             with self.subTest(task_name=task_name):
                 self.assertIn("task: hindsight:up", self._task_block(task_name))
 

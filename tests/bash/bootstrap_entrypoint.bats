@@ -39,7 +39,7 @@ EOF
 	[[ "$output" == *"bootstrap complete"* ]]
 }
 
-@test "bootstrap.sh does not install Claude Code" {
+@test "bootstrap.sh installs Codex without installing Claude Code" {
 	export HOME="$TEST_HOME"
 	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
 	write_stub npm '
@@ -52,7 +52,7 @@ exit 0
 	IFS=: read -r -a path_entries <<<"$PATH"
 	for path_entry in "${path_entries[@]}"; do
 		[ -n "$path_entry" ] || continue
-		[ -x "$path_entry/claude" ] && continue
+		{ [ -x "$path_entry/claude" ] || [ -x "$path_entry/codex" ]; } && continue
 		if [ -z "$filtered_path" ]; then
 			filtered_path="$path_entry"
 		else
@@ -65,5 +65,6 @@ exit 0
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"bootstrap complete"* ]]
-	[ ! -e "$NPM_LOG" ]
+	grep -q '@openai/codex' "$NPM_LOG"
+	! grep -qi 'claude' "$NPM_LOG"
 }

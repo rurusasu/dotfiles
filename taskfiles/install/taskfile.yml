@@ -9,9 +9,12 @@ tasks:
 
   tart:run:
     desc: Start Tart, sync the latest dotfiles, and share host Hindsight
-    deps:
-      - task: hindsight:up
     cmds:
+      - cmd: |
+          if ! task hindsight:up; then
+            printf '%s\n' 'tart-run: continuing without shared Hindsight; Docker, Ollama, or Hindsight is unavailable.' >&2
+          fi
+        platforms: [darwin]
       - cmd: ./scripts/sh/run-tart-vm.sh
         platforms: [darwin]
 

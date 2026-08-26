@@ -51,7 +51,7 @@ function Test-HindsightDataDirectoryHasContent {
     return $false
 }
 
-function Test-HindsightLegacyMemoryExists {
+function Test-HindsightLegacyMemoryContent {
     [CmdletBinding()]
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$Path)
@@ -84,7 +84,7 @@ function Move-HindsightLegacyData {
     if (-not $legacyItem.PSIsContainer -or ($legacyItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "Legacy Hindsight data path is not a regular directory: $legacyDir"
     }
-    if (-not (Test-HindsightLegacyMemoryExists -Path $legacyDir)) { return }
+    if (-not (Test-HindsightLegacyMemoryContent -Path $legacyDir)) { return }
 
     $marker = Join-Path $DataDir '.legacy-migration-source'
     if ((Test-Path -LiteralPath $marker -PathType Leaf) -and
@@ -166,10 +166,16 @@ function Wait-HindsightApi {
 }
 
 function Invoke-HindsightMain {
-    $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $ComposeFile, 'config', '--quiet')
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidateSet('up', 'verify')][string]$RequestedAction,
+        [Parameter(Mandatory)][string]$RequestedComposeFile
+    )
 
-    if ($Action -eq 'up') {
-        $environmentFile = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
+    $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'config', '--quiet')
+
+    if ($RequestedAction -eq 'up') {
+        $environmentFile = Join-Path (Split-Path -Parent $RequestedComposeFile) 'hindsight.env'
         $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
         $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
         $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
@@ -178,7 +184,7 @@ function Invoke-HindsightMain {
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
 
         New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
-        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $ComposeFile, 'up', '-d', 'hindsight')
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', 'hindsight')
     }
 
     Wait-HindsightApi
@@ -186,5 +192,5 @@ function Invoke-HindsightMain {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    Invoke-HindsightMain
+    Invoke-HindsightMain -RequestedAction $Action -RequestedComposeFile $ComposeFile
 }

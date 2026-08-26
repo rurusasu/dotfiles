@@ -18,7 +18,7 @@ Describe 'Independent Hindsight data migration' {
         $env:USERPROFILE = Join-Path $TestDrive 'home'
         $env:HERMES_DATA_DIR = Join-Path $TestDrive 'hermes'
         $legacyDir = Join-Path $env:HERMES_DATA_DIR 'hindsight'
-        $dataDir = Join-Path $env:USERPROFILE '.local/share/hindsight'
+        $script:dataDir = Join-Path $env:USERPROFILE '.local/share/hindsight'
         Remove-Item -LiteralPath $env:HERMES_DATA_DIR, $env:USERPROFILE -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path (Join-Path $legacyDir 'pg0'), (Join-Path $legacyDir 'cache') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Value 'retained-memory'
@@ -32,28 +32,28 @@ Describe 'Independent Hindsight data migration' {
     }
 
     It 'should copy legacy memory atomically and retire the legacy container' {
-        Move-HindsightLegacyData -DataDir $dataDir
+        Move-HindsightLegacyData -DataDir $script:dataDir
 
-        (Get-Content -LiteralPath (Join-Path $dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
-        (Get-Content -LiteralPath (Join-Path $dataDir 'cache/model') -Raw).Trim() | Should -Be 'reranker-cache'
+        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
+        (Get-Content -LiteralPath (Join-Path $script:dataDir 'cache/model') -Raw).Trim() | Should -Be 'reranker-cache'
         (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
-        (Get-Content -LiteralPath (Join-Path $dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
+        (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
         $script:calls | Should -Contain 'docker container inspect hermes-hindsight'
         $script:calls | Should -Contain 'docker stop hermes-hindsight'
         $script:calls | Should -Contain 'docker rm hermes-hindsight'
 
         $script:calls.Clear()
-        Move-HindsightLegacyData -DataDir $dataDir
+        Move-HindsightLegacyData -DataDir $script:dataDir
         $script:calls.Count | Should -Be 0
     }
 
     It 'should refuse to overwrite an independent memory database' {
-        New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $dataDir 'pg0/memory') -Value 'current-memory'
+        New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'pg0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'
 
-        { Move-HindsightLegacyData -DataDir $dataDir } | Should -Throw '*both contain data*'
+        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*both contain data*'
 
-        (Get-Content -LiteralPath (Join-Path $dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'current-memory'
+        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'current-memory'
         $script:calls.Count | Should -Be 0
     }
 }
