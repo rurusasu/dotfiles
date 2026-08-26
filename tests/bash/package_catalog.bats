@@ -253,6 +253,21 @@ EOF
 	[[ "$output" == *'category = "llm";'* ]]
 	[[ "$output" == *'provider = "homebrew-formula";'* ]]
 	[[ "$output" == *'formula = "jundot/omlx/omlx";'* ]]
+	local entry="$output"
+	run awk '
+		/^        windows = \{/ { in_platform=1 }
+		in_platform { print }
+		in_platform && /^        };$/ { exit }
+	' <<<"$entry"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'unsupported = "oMLX requires Apple Silicon macOS";'* ]]
+
+	run awk '
+		/^        linux = \{/ { in_platform=1 }
+		in_platform { print }
+		in_platform && /^        };$/ { exit }
+	' <<<"$entry"
+	[ "$status" -eq 0 ]
 	[[ "$output" == *'unsupported = "oMLX requires Apple Silicon macOS";'* ]]
 }
 
