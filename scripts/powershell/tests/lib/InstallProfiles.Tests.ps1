@@ -4,9 +4,9 @@ BeforeAll {
     . $PSScriptRoot/../../lib/InstallProfiles.ps1
 }
 
-Describe 'Resolve-DotfilesInstallOptions' {
+Describe 'Resolve-DotfilesInstallOption' {
     It 'keeps the default install core-only' {
-        $result = Resolve-DotfilesInstallOptions -Options @{}
+        $result = Resolve-DotfilesInstallOption -Options @{}
 
         $result.WithOllama | Should -BeFalse
         $result.WithDocker | Should -BeFalse
@@ -18,7 +18,7 @@ Describe 'Resolve-DotfilesInstallOptions' {
     }
 
     It 'enables only Ollama for WithOllama' {
-        $result = Resolve-DotfilesInstallOptions -Options @{} -WithOllama
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithOllama
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeFalse
@@ -27,7 +27,7 @@ Describe 'Resolve-DotfilesInstallOptions' {
     }
 
     It 'expands WithDocker to Ollama and independent Hindsight' {
-        $result = Resolve-DotfilesInstallOptions -Options @{} -WithDocker
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithDocker
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeTrue
@@ -36,7 +36,7 @@ Describe 'Resolve-DotfilesInstallOptions' {
     }
 
     It 'expands WithHermes to its complete desktop and runtime profile' {
-        $result = Resolve-DotfilesInstallOptions -Options @{} -WithHermes
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithHermes
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeTrue
@@ -48,7 +48,7 @@ Describe 'Resolve-DotfilesInstallOptions' {
     }
 
     It 'preserves unrelated caller options' {
-        $result = Resolve-DotfilesInstallOptions -Options @{ SyncMarker = 'keep' } -WithOllama
+        $result = Resolve-DotfilesInstallOption -Options @{ SyncMarker = 'keep' } -WithOllama
 
         $result.SyncMarker | Should -Be 'keep'
     }

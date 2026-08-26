@@ -10,7 +10,7 @@ function ConvertTo-DotfilesFeatureBoolean {
     return ([string]$Value).Trim() -match '^(1|true|yes|on)$'
 }
 
-function Resolve-DotfilesInstallOptions {
+function Resolve-DotfilesInstallOption {
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(

@@ -14,6 +14,9 @@ load_nix() {
 }
 
 ensure_nix() {
+  if command -v nix >/dev/null 2>&1; then
+    return
+  fi
   load_nix
   if command -v nix >/dev/null 2>&1; then
     return

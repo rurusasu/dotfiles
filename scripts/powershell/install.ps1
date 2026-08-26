@@ -44,7 +44,7 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "InstallProfiles.ps1")
 . (Join-Path $PSScriptRoot "Test-Environment.ps1")
 
-$Options = Resolve-DotfilesInstallOptions `
+$Options = Resolve-DotfilesInstallOption `
     -Options $Options `
     -WithOllama:$WithOllama `
     -WithDocker:$WithDocker `
