@@ -55,6 +55,17 @@ Describe 'Independent Hindsight data migration' {
         (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
     }
 
+    It 'should restart the legacy container when migration fails after stopping it' {
+        Mock Copy-Item { throw 'simulated copy failure' }
+
+        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*Unable to copy legacy Hindsight data*'
+
+        $script:calls | Should -Contain 'docker stop hermes-hindsight'
+        $script:calls | Should -Contain 'docker start hermes-hindsight'
+        $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
+        (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
+    }
+
     It 'should refuse to overwrite an independent memory database' {
         New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'pg0') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'

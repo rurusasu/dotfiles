@@ -37,10 +37,21 @@ hindsight_wait_for_api() {
   dotfiles_die "Hindsight API did not become ready after $attempts attempts."
 }
 
+hindsight_restore_legacy_container_on_exit() {
+  local migration_status="$?"
+  trap - EXIT
+  if ((migration_status != 0 && legacy_container == 1)); then
+    if ! docker start hermes-hindsight >/dev/null; then
+      printf 'Unable to restart hermes-hindsight after the migration failed.\n' >&2
+    fi
+  fi
+  exit "$migration_status"
+}
+
 hindsight_migrate_legacy_data() {
   local data_dir="$1"
   local legacy_dir="${HERMES_DATA_DIR:-$HOME/.hermes}/hindsight"
-  local existing staging component source marker legacy_container=0 legacy_has_memory=0
+  local existing staging component source marker migration_status legacy_container=0 legacy_has_memory=0
 
   [[ $legacy_dir != "$data_dir" && -e $legacy_dir ]] || return 0
   [[ -d $legacy_dir && ! -L $legacy_dir ]] ||
@@ -71,36 +82,49 @@ hindsight_migrate_legacy_data() {
     dotfiles_die "Hindsight data path is not a directory: $data_dir"
   fi
 
+  mkdir -p "$(dirname "$data_dir")"
+  staging="${data_dir}.migrate.$$"
+  [[ ! -e $staging ]] || dotfiles_die "Hindsight migration staging path already exists: $staging"
+  mkdir "$staging"
   if docker container inspect hermes-hindsight >/dev/null 2>&1; then
     docker stop hermes-hindsight >/dev/null
     legacy_container=1
   fi
 
-  mkdir -p "$(dirname "$data_dir")"
-  staging="${data_dir}.migrate.$$"
-  [[ ! -e $staging ]] || dotfiles_die "Hindsight migration staging path already exists: $staging"
-  mkdir "$staging"
-  for component in pg0 cache; do
-    source="$legacy_dir/$component"
-    if [[ -d $source ]]; then
-      cp -a "$source" "$staging/$component" ||
-        dotfiles_die "Unable to copy legacy Hindsight data; the original remains at $legacy_dir"
-    else
-      mkdir "$staging/$component"
-    fi
-  done
-  printf '%s\n' "$legacy_dir" >"$staging/.legacy-migration-source"
-  chmod 600 "$staging/.legacy-migration-source"
+  set +e
+  (
+    trap hindsight_restore_legacy_container_on_exit EXIT
+    set -e
+    for component in pg0 cache; do
+      source="$legacy_dir/$component"
+      if [[ -d $source ]]; then
+        cp -a "$source" "$staging/$component" ||
+          dotfiles_die "Unable to copy legacy Hindsight data; the original remains at $legacy_dir"
+      else
+        mkdir "$staging/$component"
+      fi
+    done
+    printf '%s\n' "$legacy_dir" >"$staging/.legacy-migration-source"
+    chmod 600 "$staging/.legacy-migration-source"
 
-  if [[ -d $data_dir ]]; then
-    [[ ! -d $data_dir/pg0 ]] || rmdir "$data_dir/pg0"
-    [[ ! -d $data_dir/cache ]] || rmdir "$data_dir/cache"
-    rmdir "$data_dir"
-  fi
-  mv "$staging" "$data_dir"
+    if [[ -d $data_dir ]]; then
+      [[ ! -d $data_dir/pg0 ]] || rmdir "$data_dir/pg0"
+      [[ ! -d $data_dir/cache ]] || rmdir "$data_dir/cache"
+      rmdir "$data_dir"
+    fi
+    mv "$staging" "$data_dir"
+  )
+  migration_status=$?
+  set -e
+  ((migration_status == 0)) || return "$migration_status"
 
   if ((legacy_container == 1)); then
-    docker rm hermes-hindsight >/dev/null
+    if ! docker rm hermes-hindsight >/dev/null; then
+      if ! docker start hermes-hindsight >/dev/null; then
+        dotfiles_die "Unable to retire hermes-hindsight after migrating its data, and the legacy container could not be restarted."
+      fi
+      dotfiles_die "Unable to retire hermes-hindsight after migrating its data."
+    fi
   fi
   printf 'Migrated legacy Hindsight data to %s; the source was preserved at %s.\n' "$data_dir" "$legacy_dir"
 }

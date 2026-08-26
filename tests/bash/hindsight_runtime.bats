@@ -62,6 +62,26 @@ EOF
 	! grep -Fq 'docker stop hermes-hindsight' "$LOG"
 }
 
+@test "failed legacy migration restarts the container it stopped" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
+	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	export HINDSIGHT_LEGACY_CONTAINER_EXISTS=1
+	cat >"$BIN/cp" <<'EOF'
+#!/usr/bin/env bash
+exit 42
+EOF
+	chmod +x "$BIN/cp"
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -ne 0 ]
+	grep -Fxq 'docker stop hermes-hindsight' "$LOG"
+	grep -Fxq 'docker start hermes-hindsight' "$LOG"
+	run grep -Fq 'docker rm hermes-hindsight' "$LOG"
+	[ "$status" -ne 0 ]
+	[ "$(cat "$HOME/.hermes/hindsight/pg0/memory")" = retained-memory ]
+}
+
 @test "legacy migration refuses to overwrite an independent memory database" {
 	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.local/share/hindsight/pg0"
 	printf 'legacy\n' >"$HOME/.hermes/hindsight/pg0/memory"

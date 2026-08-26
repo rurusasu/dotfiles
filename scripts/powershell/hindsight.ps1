@@ -104,47 +104,65 @@ function Move-HindsightLegacyData {
 
     $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
     $legacyContainerExists = $inspect.ExitCode -eq 0
-    if ($legacyContainerExists) {
-        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
-    }
-
-    $parent = Split-Path -Parent $DataDir
-    $null = New-Item -ItemType Directory -Path $parent -Force
-    $staging = "$DataDir.migrate.$PID"
-    if (Test-Path -LiteralPath $staging) { throw "Hindsight migration staging path already exists: $staging" }
-    $null = New-Item -ItemType Directory -Path $staging
+    $legacyContainerStopped = $false
     try {
-        foreach ($component in @('pg0', 'cache')) {
-            $source = Join-Path $legacyDir $component
-            $destination = Join-Path $staging $component
-            if (Test-Path -LiteralPath $source -PathType Container) {
-                Copy-Item -LiteralPath $source -Destination $destination -Recurse
-            }
-            else {
-                $null = New-Item -ItemType Directory -Path $destination
-            }
+        $parent = Split-Path -Parent $DataDir
+        $null = New-Item -ItemType Directory -Path $parent -Force
+        $staging = "$DataDir.migrate.$PID"
+        if (Test-Path -LiteralPath $staging) { throw "Hindsight migration staging path already exists: $staging" }
+        $null = New-Item -ItemType Directory -Path $staging
+
+        if ($legacyContainerExists) {
+            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
+            $legacyContainerStopped = $true
         }
-        $markerPath = Join-Path $staging '.legacy-migration-source'
-        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
-        [System.IO.File]::WriteAllText($markerPath, ($legacyDir + [Environment]::NewLine), $utf8NoBom)
+
+        try {
+            foreach ($component in @('pg0', 'cache')) {
+                $source = Join-Path $legacyDir $component
+                $destination = Join-Path $staging $component
+                if (Test-Path -LiteralPath $source -PathType Container) {
+                    Copy-Item -LiteralPath $source -Destination $destination -Recurse
+                }
+                else {
+                    $null = New-Item -ItemType Directory -Path $destination
+                }
+            }
+            $markerPath = Join-Path $staging '.legacy-migration-source'
+            $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+            [System.IO.File]::WriteAllText($markerPath, ($legacyDir + [Environment]::NewLine), $utf8NoBom)
+        }
+        catch {
+            throw "Unable to copy legacy Hindsight data; the original remains at $legacyDir"
+        }
+
+        if (Test-Path -LiteralPath $DataDir -PathType Container) {
+            foreach ($component in @('pg0', 'cache')) {
+                $componentPath = Join-Path $DataDir $component
+                if (Test-Path -LiteralPath $componentPath -PathType Container) {
+                    [System.IO.Directory]::Delete($componentPath, $false)
+                }
+            }
+            [System.IO.Directory]::Delete($DataDir, $false)
+        }
+        Move-Item -LiteralPath $staging -Destination $DataDir
+
+        if ($legacyContainerExists) {
+            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hermes-hindsight')
+            $legacyContainerStopped = $false
+        }
     }
     catch {
-        throw "Unable to copy legacy Hindsight data; the original remains at $legacyDir"
-    }
-
-    if (Test-Path -LiteralPath $DataDir -PathType Container) {
-        foreach ($component in @('pg0', 'cache')) {
-            $componentPath = Join-Path $DataDir $component
-            if (Test-Path -LiteralPath $componentPath -PathType Container) {
-                [System.IO.Directory]::Delete($componentPath, $false)
+        $migrationError = $_
+        if ($legacyContainerStopped) {
+            try {
+                $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
+            }
+            catch {
+                throw "$($migrationError.Exception.Message) Also failed to restart hermes-hindsight: $($_.Exception.Message)"
             }
         }
-        [System.IO.Directory]::Delete($DataDir, $false)
-    }
-    Move-Item -LiteralPath $staging -Destination $DataDir
-
-    if ($legacyContainerExists) {
-        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('rm', 'hermes-hindsight')
+        throw $migrationError
     }
     Write-Host "Migrated legacy Hindsight data to $DataDir; the source was preserved at $legacyDir."
 }
