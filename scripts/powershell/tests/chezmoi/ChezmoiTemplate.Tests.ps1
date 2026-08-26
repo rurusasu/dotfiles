@@ -568,6 +568,17 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Agent skill synchronization' {
+        It 'should enumerate and safely remove orphaned Windows skill links' {
+            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_after_sync-agent-skills_windows.ps1.tmpl'
+            $content = Get-Content -LiteralPath $templatePath -Raw
+
+            $content | Should -Match 'Get-ChildItem -LiteralPath \$targetSkillsDir -Force' -Because 'dangling links are not directories'
+            $content | Should -Match 'FileAttributes\]::ReparsePoint' -Because 'directory links require explicit link handling'
+            $content | Should -Match 'if \(\$isLink\) \{\s*Remove-Item -LiteralPath \$existing\.FullName -Force' -Because 'removing a link must not recurse into its target'
+        }
+    }
+
     Context 'supports ID の整合性' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"

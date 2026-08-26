@@ -41,9 +41,12 @@ if [[ ${1:-} == compose && ${*: -3} == 'up -d hindsight' && ${HINDSIGHT_COMPOSE_
 	exit 43
 fi
 EOF
-	cat >"$BIN/ollama" <<'EOF'
+cat >"$BIN/ollama" <<'EOF'
 #!/usr/bin/env bash
 printf 'ollama %s\n' "$*" >>"$LOG"
+if [[ ${1:-} == pull && ${HINDSIGHT_OLLAMA_PULL_FAIL:-0} == 1 ]]; then
+	exit 44
+fi
 EOF
 	cat >"$BIN/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -70,6 +73,8 @@ EOF
 	[ "$(cat "$HOME/.local/share/hindsight/.legacy-migration-source")" = "$HOME/.hermes/hindsight" ]
 	grep -Fxq 'docker stop hermes-hindsight' "$LOG"
 	grep -Fxq 'docker rm hermes-hindsight' "$LOG"
+	run grep -Fxq 'docker start hermes-hindsight' "$LOG"
+	[ "$status" -ne 0 ]
 	pull_line="$(grep -nFx 'ollama pull qwen3-embedding:0.6b' "$LOG" | cut -d: -f1)"
 	config_line="$(grep -nFx "docker compose -f $COMPOSE config --quiet" "$LOG" | cut -d: -f1)"
 	stop_line="$(grep -nFx 'docker stop hermes-hindsight' "$LOG" | tail -n 1 | cut -d: -f1)"
@@ -85,6 +90,21 @@ EOF
 	run "$SCRIPT" up "$COMPOSE"
 	[ "$status" -eq 0 ]
 	! grep -Fq 'docker stop hermes-hindsight' "$LOG"
+}
+
+@test "model preparation failure leaves the legacy service untouched" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
+	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	export HINDSIGHT_LEGACY_CONTAINER_EXISTS=1 HINDSIGHT_OLLAMA_PULL_FAIL=1
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -ne 0 ]
+	grep -Fxq 'ollama pull qwen3.6:35b' "$LOG"
+	run grep -Fxq 'docker stop hermes-hindsight' "$LOG"
+	[ "$status" -ne 0 ]
+	run grep -Fxq 'docker rm hermes-hindsight' "$LOG"
+	[ "$status" -ne 0 ]
 }
 
 @test "failed legacy migration restarts the container it stopped" {

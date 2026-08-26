@@ -39,7 +39,7 @@ Describe 'Independent Hindsight data migration' {
         }
     }
 
-    It 'should copy legacy memory atomically and restore the legacy service until replacement' {
+    It 'should copy legacy memory atomically and keep the database quiescent until replacement' {
         Move-HindsightLegacyData -DataDir $script:dataDir
 
         (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
@@ -48,7 +48,7 @@ Describe 'Independent Hindsight data migration' {
         (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
         $script:calls | Should -Contain 'docker container inspect hermes-hindsight'
         $script:calls | Should -Contain 'docker stop hermes-hindsight'
-        $script:calls | Should -Contain 'docker start hermes-hindsight'
+        $script:calls | Should -Not -Contain 'docker start hermes-hindsight'
         $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
 
         $script:calls.Clear()
@@ -99,6 +99,7 @@ Describe 'Independent Hindsight startup cutover' {
     BeforeEach {
         $script:calls = [System.Collections.Generic.List[string]]::new()
         $script:waitShouldFail = $false
+        $script:pullShouldFail = $false
         $env:USERPROFILE = Join-Path $TestDrive 'startup-home'
         $composeDir = Join-Path $TestDrive 'compose'
         $script:composeFile = Join-Path $composeDir 'compose.yml'
@@ -109,13 +110,18 @@ Describe 'Independent Hindsight startup cutover' {
             'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
         )
 
-        Mock Move-HindsightLegacyData { $script:calls.Add('migrate') }
+        Mock Move-HindsightLegacyData {
+            $script:calls.Add($(if ($ValidateOnly) { 'migrate validate' } else { 'migrate' }))
+        }
         Mock Wait-HindsightApi {
             $script:calls.Add('wait')
             if ($script:waitShouldFail) { throw 'simulated readiness failure' }
         }
         Mock Invoke-HindsightCommand {
             $script:calls.Add("$Command $($Arguments -join ' ')")
+            if ($script:pullShouldFail -and $Command -eq 'ollama' -and $Arguments[0] -eq 'pull') {
+                throw 'simulated model pull failure'
+            }
             $exitCode = if ($Arguments[0] -eq 'container' -and $Arguments[1] -eq 'inspect') { 0 } else { 0 }
             [PSCustomObject]@{ ExitCode = $exitCode; Output = @() }
         }
@@ -124,15 +130,30 @@ Describe 'Independent Hindsight startup cutover' {
     It 'should retire the legacy container only after the replacement is healthy' {
         Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile
 
+        $validateIndex = $script:calls.IndexOf('migrate validate')
         $pullIndex = $script:calls.IndexOf('ollama pull qwen3-embedding:0.6b')
+        $migrateIndex = $script:calls.IndexOf('migrate')
         $stopIndex = $script:calls.IndexOf('docker stop hermes-hindsight')
         $upIndex = $script:calls.IndexOf("docker compose -f $script:composeFile up -d hindsight")
         $waitIndex = $script:calls.IndexOf('wait')
         $retireIndex = $script:calls.IndexOf('docker rm hermes-hindsight')
-        $pullIndex | Should -BeLessThan $stopIndex
+        $validateIndex | Should -BeLessThan $pullIndex
+        $pullIndex | Should -BeLessThan $migrateIndex
+        $migrateIndex | Should -BeLessThan $stopIndex
         $stopIndex | Should -BeLessThan $upIndex
         $upIndex | Should -BeLessThan $waitIndex
         $waitIndex | Should -BeLessThan $retireIndex
+    }
+
+    It 'should leave legacy data running when model preparation fails' {
+        $script:pullShouldFail = $true
+
+        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
+            Should -Throw '*simulated model pull failure*'
+
+        $script:calls | Should -Contain 'migrate validate'
+        $script:calls | Should -Not -Contain 'migrate'
+        $script:calls | Should -Not -Contain 'docker stop hermes-hindsight'
     }
 
     It 'should restore the legacy container when replacement readiness fails' {

@@ -64,6 +64,7 @@ hindsight_restore_legacy_after_replacement_failure() {
 
 hindsight_migrate_legacy_data() {
   local data_dir="$1"
+  local migration_mode="${2:-migrate}"
   local legacy_dir="${HERMES_DATA_DIR:-$HOME/.hermes}/hindsight"
   local existing staging component source marker migration_status legacy_container=0 legacy_has_memory=0
 
@@ -95,6 +96,7 @@ hindsight_migrate_legacy_data() {
   elif [[ -e $data_dir ]]; then
     dotfiles_die "Hindsight data path is not a directory: $data_dir"
   fi
+  [[ $migration_mode == validate ]] && return 0
 
   mkdir -p "$(dirname "$data_dir")"
   staging="${data_dir}.migrate.$$"
@@ -132,10 +134,6 @@ hindsight_migrate_legacy_data() {
   set -e
   ((migration_status == 0)) || return "$migration_status"
 
-  if ((legacy_container == 1)); then
-    docker start hermes-hindsight >/dev/null ||
-      dotfiles_die "Unable to restart hermes-hindsight after migrating its data."
-  fi
   printf 'Migrated legacy Hindsight data to %s; the source was preserved at %s.\n' "$data_dir" "$legacy_dir"
 }
 
@@ -149,12 +147,13 @@ hindsight_prepare() {
   llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL)"
   embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)"
   data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
-  hindsight_migrate_legacy_data "$data_dir"
+  hindsight_migrate_legacy_data "$data_dir" validate
   "$ollama_command" pull "$llm_model"
   "$ollama_command" pull "$embedding_model"
 
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
+  hindsight_migrate_legacy_data "$data_dir"
 }
 
 hindsight_up() {

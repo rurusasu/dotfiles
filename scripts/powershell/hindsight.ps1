@@ -73,7 +73,10 @@ function Test-HindsightLegacyMemoryContent {
 
 function Move-HindsightLegacyData {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$DataDir)
+    param(
+        [Parameter(Mandatory)][string]$DataDir,
+        [switch]$ValidateOnly
+    )
 
     $hermesDataDir = if ($env:HERMES_DATA_DIR) { $env:HERMES_DATA_DIR } else { Join-Path $env:USERPROFILE '.hermes' }
     $legacyDir = [System.IO.Path]::GetFullPath((Join-Path $hermesDataDir 'hindsight'))
@@ -101,6 +104,7 @@ function Move-HindsightLegacyData {
             throw "Legacy and independent Hindsight data directories both contain data; migrate them manually: $legacyDir -> $DataDir"
         }
     }
+    if ($ValidateOnly) { return }
 
     $inspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
     $legacyContainerExists = $inspect.ExitCode -eq 0
@@ -147,10 +151,6 @@ function Move-HindsightLegacyData {
         }
         Move-Item -LiteralPath $staging -Destination $DataDir
 
-        if ($legacyContainerExists) {
-            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('start', 'hermes-hindsight')
-            $legacyContainerStopped = $false
-        }
     }
     catch {
         $migrationError = $_
@@ -199,10 +199,11 @@ function Invoke-HindsightMain {
         $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
         $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
         $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
-        Move-HindsightLegacyData -DataDir $dataDir
+        Move-HindsightLegacyData -DataDir $dataDir -ValidateOnly
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
         New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
+        Move-HindsightLegacyData -DataDir $dataDir
 
         $legacyInspect = Invoke-HindsightCommand -Command 'docker' -Arguments @('container', 'inspect', 'hermes-hindsight') -AllowFailure -CaptureOutput
         $legacyContainerStopped = $false
