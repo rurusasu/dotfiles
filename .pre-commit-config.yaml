@@ -29,4 +29,4 @@ repos:
         language: system
         pass_filenames: false
         require_serial: true
-        files: '^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|scripts/sh/hermes-agent\.sh|scripts/powershell/handlers/Handler\.HermesAgent\.ps1|tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|\.pre-commit-config\.yaml|\.github/workflows/ci-hermes-bootstrap\.yml|\.github/workflows/ci-hermes-provenance\.yml)$'
+        files: '^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|docker/hindsight/.*|scripts/sh/hermes-agent\.sh|scripts/powershell/handlers/Handler\.HermesAgent\.ps1|tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|\.pre-commit-config\.yaml|\.github/workflows/ci-hermes-bootstrap\.yml|\.github/workflows/ci-hermes-provenance\.yml)$'

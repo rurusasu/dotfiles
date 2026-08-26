@@ -163,7 +163,8 @@
         "docker/hermes-agent/**",
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
-        "docker/hermes-xapi-mcp/**"
+        "docker/hermes-xapi-mcp/**",
+        "docker/hindsight/**"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },

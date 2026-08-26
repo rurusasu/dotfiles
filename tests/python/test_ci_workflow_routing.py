@@ -170,6 +170,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             paths = self._trigger_paths(workflow, event)
             self.assertIn('"scripts/sh/**"', paths)
             self.assertIn('".github/e2e/**"', paths)
+            self.assertIn('"docker/hindsight/**"', paths)
 
     def test_bootstrap_workflow_integrates_nix_and_winget_validation(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
@@ -225,6 +226,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "docker/hermes-browser/**",
             "docker/hermes-browser-mcp/**",
             "docker/hermes-xapi-mcp/**",
+            "docker/hindsight/**",
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
@@ -255,6 +257,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "docker/hermes-xapi-mcp/Dockerfile",
+            "docker/hindsight/compose.yml",
             "tests/python/test_xapi_image_contract.py",
         ):
             self.assertIsNotNone(re.fullmatch(pattern, path))

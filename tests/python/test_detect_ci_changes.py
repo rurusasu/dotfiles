@@ -71,6 +71,14 @@ CASES = {
         "contract",
         "hermes",
     },
+    "docker/hindsight/compose.yml": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "hermes",
+    },
 }
 BOOTSTRAP_CASES = {
     "windows/winget/packages.json": {"windows", "contract"},
@@ -96,6 +104,13 @@ BOOTSTRAP_CASES = {
     },
     "flake.nix": {"linux", "darwin", "wsl", "contract", "nix"},
     "install.sh": {"linux", "darwin", "contract"},
+    "docker/hindsight/compose.yml": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+    },
     ".github/workflows/ci-bootstrap.yml": {
         "linux",
         "darwin",
