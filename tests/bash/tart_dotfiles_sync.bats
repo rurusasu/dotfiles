@@ -76,6 +76,37 @@ push_update() {
 	[ "$(cat "$STATE_FILE")" = "$(remote_head)" ]
 }
 
+@test "annotated tag records the peeled commit and skips the second apply" {
+	git -C "$SEED_REPO" tag -a tart-v1 -m tart-v1
+	git -C "$SEED_REPO" push origin refs/tags/tart-v1 >/dev/null
+	peeled_commit="$(git -C "$SEED_REPO" rev-parse 'refs/tags/tart-v1^{}')"
+
+	run env \
+		DOTFILES_REPOSITORY_URL="$REMOTE_REPO" \
+		DOTFILES_REPOSITORY_REF=refs/tags/tart-v1 \
+		DOTFILES_TART_CHECKOUT="$CHECKOUT" \
+		DOTFILES_TART_STATE_FILE="$STATE_FILE" \
+		DOTFILES_TART_APPLY_COMMAND="$APPLY_SCRIPT" \
+		"$SYNC_SCRIPT"
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$STATE_FILE")" = "$peeled_commit" ]
+	[ "$(git -C "$CHECKOUT" rev-parse HEAD)" = "$peeled_commit" ]
+	: >"$APPLY_LOG"
+
+	run env \
+		DOTFILES_REPOSITORY_URL="$REMOTE_REPO" \
+		DOTFILES_REPOSITORY_REF=refs/tags/tart-v1 \
+		DOTFILES_TART_CHECKOUT="$CHECKOUT" \
+		DOTFILES_TART_STATE_FILE="$STATE_FILE" \
+		DOTFILES_TART_APPLY_COMMAND="$APPLY_SCRIPT" \
+		"$SYNC_SCRIPT"
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"already applied"* ]]
+	[ ! -s "$APPLY_LOG" ]
+}
+
 @test "unchanged remote hash skips checkout and apply" {
 	sync_dotfiles
 	: >"$APPLY_LOG"

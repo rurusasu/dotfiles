@@ -13,30 +13,49 @@ die() {
 }
 
 remote_hash() {
-  local output hash="" ref="" extra candidate_hash candidate_ref count=0
-  output="$(git ls-remote --exit-code --refs "$REPOSITORY_URL" "$REPOSITORY_REF")" ||
+  local output base_hash="" base_ref="" peeled_hash="" peeled_ref="" extra
+  local candidate_hash candidate_ref candidate_base_ref base_count=0 peeled_count=0
+  output="$(git ls-remote --exit-code "$REPOSITORY_URL" "$REPOSITORY_REF" "$REPOSITORY_REF^{}")" ||
     die "Unable to resolve $REPOSITORY_REF from $REPOSITORY_URL"
 
   while read -r candidate_hash candidate_ref extra; do
     [[ -n $candidate_hash && -n $candidate_ref && -z ${extra:-} ]] ||
       die "Remote returned an unexpected revision for $REPOSITORY_REF"
-    hash="$candidate_hash"
-    ref="$candidate_ref"
-    ((count += 1))
+    [[ $candidate_hash =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]] ||
+      die "Remote returned an invalid object hash for $REPOSITORY_REF"
+
+    candidate_base_ref="$candidate_ref"
+    if [[ $candidate_ref == *'^{}' ]]; then
+      candidate_base_ref="${candidate_ref%^\{\}}"
+    fi
+    if [[ $REPOSITORY_REF == refs/* ]]; then
+      [[ $candidate_base_ref == "$REPOSITORY_REF" ]] ||
+        die "Remote returned an unexpected revision for $REPOSITORY_REF"
+    else
+      [[ $candidate_base_ref == "refs/heads/$REPOSITORY_REF" || $candidate_base_ref == "refs/tags/$REPOSITORY_REF" ]] ||
+        die "Remote returned an unexpected revision for $REPOSITORY_REF"
+    fi
+
+    if [[ $candidate_ref == *'^{}' ]]; then
+      peeled_hash="$candidate_hash"
+      peeled_ref="$candidate_base_ref"
+      ((peeled_count += 1))
+    else
+      base_hash="$candidate_hash"
+      base_ref="$candidate_ref"
+      ((base_count += 1))
+    fi
   done <<<"$output"
-  ((count == 1)) || die "Remote returned an ambiguous revision for $REPOSITORY_REF"
-  if [[ $REPOSITORY_REF == refs/* ]]; then
-    [[ $ref == "$REPOSITORY_REF" ]] ||
-      die "Remote returned an unexpected revision for $REPOSITORY_REF"
+
+  ((base_count == 1 && peeled_count <= 1)) ||
+    die "Remote returned an ambiguous revision for $REPOSITORY_REF"
+  if ((peeled_count == 1)); then
+    [[ $peeled_ref == "$base_ref" ]] ||
+      die "Remote returned an unexpected peeled revision for $REPOSITORY_REF"
+    printf '%s\n' "$peeled_hash"
   else
-    [[ $ref == "refs/heads/$REPOSITORY_REF" || $ref == "refs/tags/$REPOSITORY_REF" ]] ||
-      die "Remote returned an unexpected revision for $REPOSITORY_REF"
+    printf '%s\n' "$base_hash"
   fi
-  [[ -n $hash ]] ||
-    die "Remote returned an unexpected revision for $REPOSITORY_REF"
-  [[ $hash =~ ^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$ ]] ||
-    die "Remote returned an invalid commit hash for $REPOSITORY_REF"
-  printf '%s\n' "${hash,,}"
 }
 
 checkout_hash() {
