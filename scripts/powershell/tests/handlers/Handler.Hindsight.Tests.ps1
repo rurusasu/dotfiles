@@ -2,6 +2,7 @@
 
 BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
+    . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Hindsight.ps1
 }
 
@@ -16,6 +17,7 @@ Describe 'HindsightHandler' {
         $script:ctx = [SetupContext]::new($root)
         $script:handler = [HindsightHandler]::new()
         Mock Get-Command { [PSCustomObject]@{ Name = $Name } }
+        Mock Test-DockerDaemon { $true }
     }
 
     It 'is disabled by default' {
@@ -25,6 +27,18 @@ Describe 'HindsightHandler' {
     It 'is enabled by the Docker-derived Hindsight option' {
         $script:ctx.Options['WithHindsight'] = $true
         $script:handler.CanApply($script:ctx) | Should -BeTrue
+    }
+
+    It 'does not apply before the Docker daemon is ready' {
+        $script:ctx.Options['WithHindsight'] = $true
+        $script:dockerReadinessChecks = 0
+        Mock Test-DockerDaemon {
+            $script:dockerReadinessChecks++
+            return $false
+        }
+
+        $script:handler.CanApply($script:ctx) | Should -BeFalse
+        $script:dockerReadinessChecks | Should -Be 1
     }
 
     It 'runs before Hermes and outside its handler' {

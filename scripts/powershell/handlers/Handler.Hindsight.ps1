@@ -3,7 +3,12 @@
     Starts the host-level Hindsight service independently of Hermes.
 #>
 
+$libPath = Split-Path -Parent $PSScriptRoot
+. (Join-Path $libPath 'lib\Invoke-ExternalCommand.ps1')
+
 class HindsightHandler : SetupHandlerBase {
+    [int]$DockerCheckTimeoutSeconds = 15
+
     HindsightHandler() {
         $this.Name = 'Hindsight'
         $this.Description = 'Shared Hindsight Docker memory service'
@@ -19,6 +24,10 @@ class HindsightHandler : SetupHandlerBase {
         }
         if (-not (Get-Command -Name 'docker' -ErrorAction SilentlyContinue)) {
             $this.Log('docker command was not found.', 'Gray')
+            return $false
+        }
+        if (-not (Test-DockerDaemon -TimeoutSeconds $this.DockerCheckTimeoutSeconds)) {
+            $this.Log('Docker daemon is not ready; skipping Hindsight.', 'Gray')
             return $false
         }
         if (-not (Get-Command -Name 'ollama' -ErrorAction SilentlyContinue)) {

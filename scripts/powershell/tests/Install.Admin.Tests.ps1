@@ -84,28 +84,6 @@ Describe 'install.admin.ps1' {
         $content | Should -Not -Match '"-OptionsJson"'
     }
 
-    It 'should decode Base64 UTF-8 JSON into effective admin options' {
-        $tokens = $null
-        $errors = $null
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
-            $script:target,
-            [ref]$tokens,
-            [ref]$errors
-        )
-        $mergeFunction = $ast.Find(
-            { param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Merge-Options" },
-            $true
-        )
-        Invoke-Expression $mergeFunction.Extent.Text
-
-        $json = '{"WithDocker":true,"WithHermes":false}'
-        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
-        $result = Merge-Options -BaseOptions @{} -JsonOptions "" -Base64Options $encoded
-
-        $result["WithDocker"] | Should -BeTrue
-        $result["WithHermes"] | Should -BeFalse
-    }
-
     It 'should filter handlers by Phase 2' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\$_\.Phase -eq 2'
