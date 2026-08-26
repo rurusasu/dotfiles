@@ -253,6 +253,34 @@ EOF
 	[[ "$output" == *'args = [ "--version" ];'* ]]
 }
 
+@test "oMLX is a Darwin Homebrew formula with reviewed non-Darwin support" {
+	run awk '
+		/^    omlx = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^    };$/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'category = "llm";'* ]]
+	[[ "$output" == *'provider = "homebrew-formula";'* ]]
+	[[ "$output" == *'formula = "jundot/omlx/omlx";'* ]]
+	local entry="$output"
+	run awk '
+		/^        windows = \{/ { in_platform=1 }
+		in_platform { print }
+		in_platform && /^        };$/ { exit }
+	' <<<"$entry"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'unsupported = "oMLX requires Apple Silicon macOS";'* ]]
+
+	run awk '
+		/^        linux = \{/ { in_platform=1 }
+		in_platform { print }
+		in_platform && /^        };$/ { exit }
+	' <<<"$entry"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'unsupported = "oMLX requires Apple Silicon macOS";'* ]]
+}
+
 @test "ChatGPT desktop has native Linux, Darwin cask, and Microsoft Store providers" {
 	run awk '
 		/^    chatgpt = \{/ { in_entry=1 }
