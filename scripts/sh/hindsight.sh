@@ -48,15 +48,18 @@ hindsight_restore_legacy_container_on_exit() {
   exit "$migration_status"
 }
 
-hindsight_retire_completed_legacy_container() {
-  docker container inspect hermes-hindsight >/dev/null 2>&1 || return 0
-  docker stop hermes-hindsight >/dev/null
-  if ! docker rm hermes-hindsight >/dev/null; then
-    if ! docker start hermes-hindsight >/dev/null; then
-      dotfiles_die "Unable to retire hermes-hindsight after migrating its data, and the legacy container could not be restarted."
+hindsight_restore_legacy_after_replacement_failure() {
+  local replacement_status="$?"
+  trap - EXIT
+  if ((replacement_status != 0 && legacy_container == 1)); then
+    if ! docker compose -f "$compose_file" stop hindsight >/dev/null 2>&1; then
+      printf 'Unable to stop the failed independent Hindsight service.\n' >&2
     fi
-    dotfiles_die "Unable to retire hermes-hindsight after migrating its data."
+    if ! docker start hermes-hindsight >/dev/null; then
+      printf 'Unable to restart hermes-hindsight after independent Hindsight failed.\n' >&2
+    fi
   fi
+  exit "$replacement_status"
 }
 
 hindsight_migrate_legacy_data() {
@@ -81,7 +84,6 @@ hindsight_migrate_legacy_data() {
 
   marker="$data_dir/.legacy-migration-source"
   if [[ -f $marker && ! -L $marker && $(<"$marker") == "$legacy_dir" ]]; then
-    hindsight_retire_completed_legacy_container
     return 0
   fi
 
@@ -131,12 +133,8 @@ hindsight_migrate_legacy_data() {
   ((migration_status == 0)) || return "$migration_status"
 
   if ((legacy_container == 1)); then
-    if ! docker rm hermes-hindsight >/dev/null; then
-      if ! docker start hermes-hindsight >/dev/null; then
-        dotfiles_die "Unable to retire hermes-hindsight after migrating its data, and the legacy container could not be restarted."
-      fi
-      dotfiles_die "Unable to retire hermes-hindsight after migrating its data."
-    fi
+    docker start hermes-hindsight >/dev/null ||
+      dotfiles_die "Unable to restart hermes-hindsight after migrating its data."
   fi
   printf 'Migrated legacy Hindsight data to %s; the source was preserved at %s.\n' "$data_dir" "$legacy_dir"
 }
@@ -160,10 +158,28 @@ hindsight_prepare() {
 }
 
 hindsight_up() {
-  local compose_file="$1"
+  local compose_file="$1" replacement_status legacy_container=0
   hindsight_prepare "$compose_file"
-  docker compose -f "$compose_file" up -d hindsight
-  hindsight_wait_for_api
+  if docker container inspect hermes-hindsight >/dev/null 2>&1; then
+    docker stop hermes-hindsight >/dev/null
+    legacy_container=1
+  fi
+
+  set +e
+  (
+    trap hindsight_restore_legacy_after_replacement_failure EXIT
+    set -e
+    docker compose -f "$compose_file" up -d hindsight
+    hindsight_wait_for_api
+  )
+  replacement_status=$?
+  set -e
+  ((replacement_status == 0)) || return "$replacement_status"
+
+  if ((legacy_container == 1)); then
+    docker rm hermes-hindsight >/dev/null ||
+      dotfiles_die "Independent Hindsight is healthy, but hermes-hindsight could not be retired."
+  fi
 }
 
 hindsight_verify() {

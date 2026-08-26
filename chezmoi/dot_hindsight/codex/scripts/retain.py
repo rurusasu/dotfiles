@@ -78,7 +78,7 @@ def main():
             debug_log(config, f"Turn {turn_count}/{retain_every_n}, skipping retain (next at turn {next_at})")
             return
 
-    if retain_mode == "chunked" and retain_every_n > 1:
+    if retain_mode == "chunked":
         overlap_turns = config.get("retainOverlapTurns", 0)
         window_turns = retain_every_n + overlap_turns
         messages_to_retain = slice_last_turns_by_user_boundary(all_messages, window_turns)
@@ -124,7 +124,7 @@ def main():
 
     # Document ID: use session_id so the same session always upserts.
     # In chunked mode, append timestamp to create distinct documents per chunk.
-    if retain_mode == "chunked" and retain_every_n > 1:
+    if retain_mode == "chunked":
         document_id = f"{session_id}-{int(time.time() * 1000)}"
     else:
         document_id = session_id

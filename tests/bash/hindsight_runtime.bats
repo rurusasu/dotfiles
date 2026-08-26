@@ -37,6 +37,9 @@ fi
 if [[ ${1:-} == start && ${2:-} == hermes-hindsight ]]; then
 	printf '1\n' >"$LEGACY_CONTAINER_STATE"
 fi
+if [[ ${1:-} == compose && ${*: -3} == 'up -d hindsight' && ${HINDSIGHT_COMPOSE_UP_FAIL:-0} == 1 ]]; then
+	exit 43
+fi
 EOF
 	cat >"$BIN/ollama" <<'EOF'
 #!/usr/bin/env bash
@@ -67,9 +70,16 @@ EOF
 	[ "$(cat "$HOME/.local/share/hindsight/.legacy-migration-source")" = "$HOME/.hermes/hindsight" ]
 	grep -Fxq 'docker stop hermes-hindsight' "$LOG"
 	grep -Fxq 'docker rm hermes-hindsight' "$LOG"
-	stop_line="$(grep -nFx 'docker stop hermes-hindsight' "$LOG" | cut -d: -f1)"
+	pull_line="$(grep -nFx 'ollama pull qwen3-embedding:0.6b' "$LOG" | cut -d: -f1)"
+	config_line="$(grep -nFx "docker compose -f $COMPOSE config --quiet" "$LOG" | cut -d: -f1)"
+	stop_line="$(grep -nFx 'docker stop hermes-hindsight' "$LOG" | tail -n 1 | cut -d: -f1)"
 	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
+	health_line="$(grep -nF 'curl --fail --silent --show-error' "$LOG" | cut -d: -f1)"
+	retire_line="$(grep -nFx 'docker rm hermes-hindsight' "$LOG" | cut -d: -f1)"
+	[ "$pull_line" -lt "$stop_line" ]
+	[ "$config_line" -lt "$stop_line" ]
 	[ "$stop_line" -lt "$start_line" ]
+	[ "$health_line" -lt "$retire_line" ]
 
 	: >"$LOG"
 	run "$SCRIPT" up "$COMPOSE"
@@ -97,6 +107,20 @@ EOF
 	[ "$(cat "$HOME/.hermes/hindsight/pg0/memory")" = retained-memory ]
 }
 
+@test "failed independent startup restores the legacy service" {
+	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
+	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
+	export HINDSIGHT_LEGACY_CONTAINER_EXISTS=1 HINDSIGHT_COMPOSE_UP_FAIL=1
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -ne 0 ]
+	grep -Fxq 'docker stop hermes-hindsight' "$LOG"
+	grep -Fxq "docker compose -f $COMPOSE stop hindsight" "$LOG"
+	grep -Fxq 'docker start hermes-hindsight' "$LOG"
+	! grep -Fxq 'docker rm hermes-hindsight' "$LOG"
+}
+
 @test "completed migration retries legacy retirement before honoring its marker" {
 	mkdir -p "$HOME/.hermes/hindsight/pg0" "$HOME/.hermes/hindsight/cache"
 	printf 'retained-memory\n' >"$HOME/.hermes/hindsight/pg0/memory"
@@ -106,7 +130,7 @@ EOF
 
 	[ "$status" -ne 0 ]
 	[ -f "$HOME/.local/share/hindsight/.legacy-migration-source" ]
-	grep -Fxq 'docker start hermes-hindsight' "$LOG"
+	grep -Fxq "docker compose -f $COMPOSE up -d hindsight" "$LOG"
 
 	: >"$LOG"
 	export HINDSIGHT_LEGACY_RM_FAIL=0
@@ -117,7 +141,7 @@ EOF
 	grep -Fxq 'docker rm hermes-hindsight' "$LOG"
 	retire_line="$(grep -nFx 'docker rm hermes-hindsight' "$LOG" | cut -d: -f1)"
 	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
-	[ "$retire_line" -lt "$start_line" ]
+	[ "$start_line" -lt "$retire_line" ]
 }
 
 @test "legacy migration refuses to overwrite an independent memory database" {
@@ -144,7 +168,7 @@ EOF
 	grep -Fxq "docker compose -f $COMPOSE up -d hindsight" "$LOG"
 	[ -d "$HOME/.local/share/hindsight/pg0" ]
 	[ -d "$HOME/.local/share/hindsight/cache" ]
-	! grep -qi hermes "$LOG"
+	! grep -Eq '^docker (stop|start|rm) hermes-hindsight$' "$LOG"
 }
 
 @test "acceptance can inject an offline Ollama executable explicitly" {
