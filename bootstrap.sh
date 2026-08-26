@@ -138,15 +138,6 @@ if [ "$need_nvim" -eq 1 ]; then
   fi
 fi
 
-# ── PATH wiring for future shells ───────────────────────────────────────
-# `bash -l` (used by `dcnvim`) reads ~/.profile, not ~/.bashrc. Append to
-# both so PATH is visible regardless of which init path runs.
-for f in "$HOME/.profile" "$HOME/.bashrc"; do
-  if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
-    printf '\n# Added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
-  fi
-done
-
 # ── chezmoi apply (host と同じ dotfiles を container に展開) ────────────
 # devcontainer-cli が clone した $ROOT を source として再利用するため
 # `chezmoi init --apply --source` を使う (二重 clone 回避)。
@@ -157,6 +148,15 @@ if have chezmoi; then
   chezmoi init --apply --source "$ROOT/chezmoi" 2>&1 | sed 's/^/[chezmoi] /' >&2 ||
     log "chezmoi apply had errors (continuing — container may be partially configured)"
 fi
+
+# The managed profile/bashrc own this PATH. Keep a post-apply fallback for a
+# partial chezmoi deployment so later login and interactive shells still find
+# the Codex binary installed above.
+for f in "$HOME/.profile" "$HOME/.bashrc"; do
+  if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
+    printf '\n# Fallback added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
+  fi
+done
 
 # ── lazy.nvim plugin pre-warm (best effort) ─────────────────────────────
 # stderr goes to a log file so a broken init.lua or plugin compile error

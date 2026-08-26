@@ -68,3 +68,24 @@ exit 0
 	grep -q '@openai/codex' "$NPM_LOG"
 	! grep -qi 'claude' "$NPM_LOG"
 }
+
+@test "chezmoi apply preserves the Codex npm path in future shells" {
+	export HOME="$TEST_HOME"
+	export MANAGED_SHELLS="$REPO_ROOT/chezmoi/shells"
+	export PATH="$STUB_BIN:$PATH"
+	write_stub npm '
+mkdir -p "$NPM_CONFIG_PREFIX/bin"
+printf "#!/usr/bin/env sh\nexit 0\n" >"$NPM_CONFIG_PREFIX/bin/codex"
+chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
+'
+	write_stub chezmoi '
+cp "$MANAGED_SHELLS/profile" "$HOME/.profile"
+cp "$MANAGED_SHELLS/bashrc" "$HOME/.bashrc"
+'
+
+	run timeout 30 bash "$REPO_ROOT/bootstrap.sh" 2>&1
+
+	[ "$status" -eq 0 ]
+	grep -q '\.local/npm/bin' "$HOME/.profile"
+	grep -q '\.local/npm/bin' "$HOME/.bashrc"
+}
