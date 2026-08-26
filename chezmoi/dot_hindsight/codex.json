@@ -11,5 +11,6 @@
     "managedBy": "dotfiles"
   },
   "retainContext": "codex",
-  "upgradeNotice": false
+  "upgradeNotice": false,
+  "autoStartDaemon": false
 }

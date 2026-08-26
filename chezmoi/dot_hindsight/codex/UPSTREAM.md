@@ -7,3 +7,6 @@
 
 The hook configuration is merged into the existing dotfiles-managed Codex
 hooks file. Local connection and bank overrides live in ../codex.json.
+The vendored connection layer has a local `autoStartDaemon` switch so the
+dotfiles-managed shared Docker endpoint degrades without launching an embedded
+fallback service.

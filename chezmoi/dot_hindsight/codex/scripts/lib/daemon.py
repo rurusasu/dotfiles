@@ -103,7 +103,12 @@ def get_api_url(config: dict, debug_fn=None, allow_daemon_start: bool = False) -
             debug_fn(f"Existing server healthy on port {port}")
         return base_url
 
-    # Mode 3: Auto-start daemon (only when allowed)
+    # Mode 3: Auto-start daemon (only when both the caller and config allow it)
+    if not config.get("autoStartDaemon", True):
+        raise RuntimeError(
+            f"No Hindsight server on port {port}. Start the configured shared "
+            "Hindsight service before using recall or retain."
+        )
     if not allow_daemon_start:
         raise RuntimeError(
             f"No Hindsight server on port {port}. Set hindsightApiUrl for external "
@@ -231,8 +236,8 @@ def prestart_daemon_background(config: dict, debug_fn=None):
     Called from SessionStart hook to warm up the daemon before the first
     recall or retain hook fires.
     """
-    if config.get("hindsightApiUrl"):
-        return  # External API mode — no local daemon needed
+    if config.get("hindsightApiUrl") or not config.get("autoStartDaemon", True):
+        return  # External or shared-service mode — no local daemon needed
 
     port = config.get("apiPort", 9077)
     if _check_health(f"http://127.0.0.1:{port}"):

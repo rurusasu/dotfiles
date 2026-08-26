@@ -39,6 +39,7 @@ DEFAULTS = {
     "hindsightApiToken": None,
     "apiPort": 9077,
     "daemonIdleTimeout": 0,
+    "autoStartDaemon": True,
     "embedVersion": "latest",
     "embedPackagePath": None,
     # Bank
@@ -73,6 +74,7 @@ ENV_OVERRIDES = {
     "HINDSIGHT_RECALL_CONTEXT_TURNS": ("recallContextTurns", int),
     "HINDSIGHT_API_PORT": ("apiPort", int),
     "HINDSIGHT_DAEMON_IDLE_TIMEOUT": ("daemonIdleTimeout", int),
+    "HINDSIGHT_AUTO_START_DAEMON": ("autoStartDaemon", bool),
     "HINDSIGHT_EMBED_VERSION": ("embedVersion", str),
     "HINDSIGHT_EMBED_PACKAGE_PATH": ("embedPackagePath", str),
     "HINDSIGHT_DYNAMIC_BANK_ID": ("dynamicBankId", bool),

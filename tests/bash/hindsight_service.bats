@@ -59,6 +59,43 @@ setup() {
 	grep -q '"apiPort": 8888' "$config"
 	grep -q '"bankId": "codex-shared"' "$config"
 	grep -q '"upgradeNotice": false' "$config"
+	grep -q '"autoStartDaemon": false' "$config"
+}
+
+@test "managed Codex hooks never start an embedded Hindsight fallback" {
+	config="$REPO_ROOT/chezmoi/dot_hindsight/codex.json"
+
+	run python3 - "$REPO_ROOT/chezmoi/dot_hindsight/codex/scripts" "$config" <<'PY'
+import json
+import sys
+from unittest.mock import patch
+
+sys.path.insert(0, sys.argv[1])
+from lib import daemon
+
+with open(sys.argv[2], encoding="utf-8") as handle:
+    config = json.load(handle)
+
+assert config["autoStartDaemon"] is False
+with patch.object(daemon, "_check_health", return_value=False), patch.object(
+    daemon, "_ensure_daemon_running"
+) as ensure:
+    try:
+        daemon.get_api_url(config, allow_daemon_start=True)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("unavailable shared endpoint must degrade")
+    ensure.assert_not_called()
+
+with patch.object(daemon, "_check_health", return_value=False), patch.object(
+    daemon, "_is_embed_available"
+) as available:
+    daemon.prestart_daemon_background(config)
+    available.assert_not_called()
+PY
+
+	[ "$status" -eq 0 ]
 }
 
 @test "Codex hooks honor a non-default Hindsight API port" {

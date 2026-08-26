@@ -2,6 +2,7 @@
 
 BeforeAll {
     $script:target = Join-Path (Split-Path -Parent $PSScriptRoot) "install.admin.ps1"
+    $script:entrypoint = Join-Path (Split-Path -Parent $PSScriptRoot) "install.ps1"
     $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
     $windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
     $script:fileBoundaryShell = if ($pwsh) {
@@ -53,6 +54,8 @@ Describe 'install.admin.ps1' {
             return
         }
 
+        $optionsJson = '{"SkipWslInstall":true,"SkipVhdExpand":true}'
+        $optionsBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($optionsJson))
         $output = & $script:fileBoundaryShell `
             -NoLogo `
             -NoProfile `
@@ -60,18 +63,47 @@ Describe 'install.admin.ps1' {
             -File $script:target `
             -CheckOnly `
             "-AdminOnly:$true" `
-            -OptionsJson '{"SkipWslInstall":true,"SkipVhdExpand":true}' 2>&1
+            -OptionsBase64 $optionsBase64 2>&1
         $exitCode = $LASTEXITCODE
         $outputText = ($output | Out-String).Trim()
         $outputLines = @(
             $output |
-            ForEach-Object { [string]$_ } |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                ForEach-Object { [string]$_ } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
         )
 
         $exitCode | Should -Be 0 -Because $outputText
         $outputText | Should -Not -Match "Cannot process argument transformation on parameter 'AdminOnly'"
         $outputLines[-1] | Should -Be "False" -Because $outputText
+    }
+
+    It 'should encode elevated options so Start-Process cannot strip JSON quotes' {
+        $content = Get-Content -LiteralPath $script:entrypoint -Raw
+        $content | Should -Match '\[Convert\]::ToBase64String'
+        $content | Should -Match '"-OptionsBase64"'
+        $content | Should -Not -Match '"-OptionsJson"'
+    }
+
+    It 'should decode Base64 UTF-8 JSON into effective admin options' {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $script:target,
+            [ref]$tokens,
+            [ref]$errors
+        )
+        $mergeFunction = $ast.Find(
+            { param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Merge-Options" },
+            $true
+        )
+        Invoke-Expression $mergeFunction.Extent.Text
+
+        $json = '{"WithDocker":true,"WithHermes":false}'
+        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
+        $result = Merge-Options -BaseOptions @{} -JsonOptions "" -Base64Options $encoded
+
+        $result["WithDocker"] | Should -BeTrue
+        $result["WithHermes"] | Should -BeFalse
     }
 
     It 'should filter handlers by Phase 2' {

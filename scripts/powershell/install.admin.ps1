@@ -17,6 +17,7 @@ param(
     [string]$PostInstallScript = "",
     [hashtable]$Options = @{},
     [string]$OptionsJson = "",
+    [string]$OptionsBase64 = "",
     [ValidateSet("link", "repo", "nix", "none")]
     [string]$SyncMode = "link",
     [ValidateSet("repo", "lock", "none")]
@@ -93,13 +94,28 @@ function Merge-Options {
     [OutputType([hashtable])]
     param(
         [hashtable]$BaseOptions,
-        [string]$JsonOptions
+        [string]$JsonOptions,
+        [string]$Base64Options
     )
 
     $merged = @{}
     if ($null -ne $BaseOptions) {
         foreach ($key in $BaseOptions.Keys) {
             $merged[$key] = $BaseOptions[$key]
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($JsonOptions) -and
+        -not [string]::IsNullOrWhiteSpace($Base64Options)) {
+        throw "OptionsJson and OptionsBase64 cannot be supplied together."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Base64Options)) {
+        try {
+            $JsonOptions = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Base64Options))
+        }
+        catch {
+            throw "OptionsBase64 must contain Base64-encoded UTF-8 JSON. $($_.Exception.Message)"
         }
     }
 
@@ -115,7 +131,10 @@ function Merge-Options {
     return $merged
 }
 
-$effectiveOptions = Merge-Options -BaseOptions $Options -JsonOptions $OptionsJson
+$effectiveOptions = Merge-Options `
+    -BaseOptions $Options `
+    -JsonOptions $OptionsJson `
+    -Base64Options $OptionsBase64
 $adminOnlyFilter = ConvertTo-AdminOnlyFilter -Value $AdminOnly
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path

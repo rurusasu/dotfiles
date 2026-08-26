@@ -161,6 +161,7 @@ if ($adminRequired) {
         else {
             ConvertTo-Json -InputObject $Options -Depth 10 -Compress
         }
+        $optionsBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($optionsJson))
 
         $argList = @(
             "-NoProfile",
@@ -172,8 +173,8 @@ if ($adminRequired) {
             $DistroName,
             "-InstallDir",
             $InstallDir,
-            "-OptionsJson",
-            $optionsJson,
+            "-OptionsBase64",
+            $optionsBase64,
             "-SyncMode",
             $SyncMode,
             "-SyncBack",
