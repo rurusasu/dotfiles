@@ -56,15 +56,15 @@ dotfiles/
 
 ## セットアップフロー
 
-| Platform      | Entrypoint                                | System layer                             | User layer             | Runtime        |
-| ------------- | ----------------------------------------- | ---------------------------------------- | ---------------------- | -------------- |
-| Windows       | `install.cmd`                             | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop |
-| macOS ARM64   | `./install.sh`                            | nix-darwin + nix-homebrew                | Home Manager + chezmoi | Docker Desktop |
-| Ubuntu/Debian | `./install.sh`                            | System Manager                           | Home Manager + chezmoi | rootful Docker |
-| NixOS         | `./install.sh`                            | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker |
-| Other Linux   | `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` | none                                     | Home Manager only      | not managed    |
+| Platform      | Entrypoint                                | System layer                             | User layer             | Runtime                                                        |
+| ------------- | ----------------------------------------- | ---------------------------------------- | ---------------------- | -------------------------------------------------------------- |
+| Windows       | `install.cmd`                             | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop                                                 |
+| macOS ARM64   | `./install.sh`                            | nix-darwin + nix-homebrew                | Home Manager + chezmoi | optional profile: Ollama / Docker Desktop / Hindsight / Hermes |
+| Ubuntu/Debian | `./install.sh`                            | System Manager                           | Home Manager + chezmoi | rootful Docker                                                 |
+| NixOS         | `./install.sh`                            | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker                                                 |
+| Other Linux   | `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` | none                                     | Home Manager only      | not managed                                                    |
 
-Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。失敗時はその phase で停止し、同じ入口を再実行します。
+Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。macOS の `Compose → runtime acceptance` は `--with-docker` または `--with-hermes` を指定した場合だけ実行します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 ## 役割分担
 
@@ -124,7 +124,7 @@ Hermes gateway は稼働を継続します。
 ```
 nix/packages/sets.nix (SSOT)
 ├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
-├── darwinCasks ────────── nix-homebrew casks
+├── darwinCasksForInstallFeatures ── profile-filtered nix-homebrew casks
 ├── darwinBrews ────────── nix-homebrew formulas
 ├── linuxSystemModules ─── NixOS / System Manager packages and services
 ├── wingetMap + npmMap ─── generated Windows manifests

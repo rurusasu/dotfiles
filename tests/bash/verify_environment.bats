@@ -81,6 +81,15 @@ EOF
 	! grep -q '^docker run ' "$COMMAND_LOG"
 }
 
+@test "Darwin core verification does not require Docker" {
+	rm "$STUB_BIN/docker"
+
+	run "$VERIFIER"
+
+	[ "$status" -eq 0 ]
+	! grep -q '^docker ' "$COMMAND_LOG"
+}
+
 @test "missing running Compose service fails runtime verification" {
 	export COMPOSE_RUNNING_MISMATCH=1
 

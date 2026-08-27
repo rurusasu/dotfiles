@@ -312,8 +312,10 @@ create_mocked_installer_fixture() {
 	MOCK_REPO="$fixture_root/installer-repo"
 	MOCK_BIN="$fixture_root/installer-bin"
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
+	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
-		"$MOCK_REPO/docker/hermes-agent" "$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
+		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hindsight" \
+		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
@@ -343,7 +345,9 @@ homebrew_cask_link_parent_is_immutable_to_caller() {
 }
 main "$@"
 EOF
-	touch "$MOCK_REPO/flake.nix" "$MOCK_REPO/docker/hermes-agent/compose.yml"
+	touch "$MOCK_REPO/flake.nix" \
+		"$MOCK_REPO/docker/hermes-agent/compose.yml" \
+		"$MOCK_REPO/docker/hindsight/compose.yml"
 
 	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
 printf 'selected-installer=%s\n' "${DOTFILES_TEST_SELECTED_INSTALLER:-${BASH_SOURCE[1]}}" >>"$COMMAND_LOG"
@@ -418,11 +422,13 @@ case "${1:-}" in
     fi
     ;;
   /usr/bin/env)
-    if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
+    if [[ $# -eq 16 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
       ${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
-      ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "${PATH%%:*}/nix" &&
-      ${7:-} == run && ${8:-} == .#darwin-rebuild && ${9:-} == -- &&
-      ${10:-} == switch && ${11:-} == --flake && ${12:-} == .#macos && ${13:-} == --impure ]]; then
+      ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
+      ${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
+      ${9:-} == "${PATH%%:*}/nix" && ${10:-} == run && ${11:-} == .#darwin-rebuild &&
+      ${12:-} == -- && ${13:-} == switch && ${14:-} == --flake &&
+      ${15:-} == .#macos && ${16:-} == --impure ]]; then
       exec "$@"
     fi
     ;;
@@ -443,6 +449,8 @@ printf "\\n" >&2
 exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
 
@@ -460,6 +468,7 @@ EOF
 
 run_mocked_installer() {
 	local platform="$1"
+	shift
 	local test_root fixture_root marker hardware prebuilt systemd_dir os_release user_profile_root
 	local homebrew_bin_dir homebrew_cli_plugins_dir
 	test_root="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
@@ -516,6 +525,8 @@ EOF
 		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
+		DOTFILES_OPEN_COMMAND="$MOCK_BIN/open" \
 		DOTFILES_TASK_COMMAND="$MOCK_BIN/task" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
 		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/untrusted/bin" \
@@ -530,7 +541,7 @@ EOF
 		DOTFILES_NIXOS_MARKER="$marker" \
 		DOTFILES_NIXOS_HARDWARE_CONFIG="$hardware" \
 		DOTFILES_NIXOS_PREBUILT_SYSTEM="$MOCK_NIXOS_PREBUILT_SYSTEM" \
-		"$MOCK_REPO/install.sh"
+		"$MOCK_REPO/install.sh" "$@"
 }
 
 @test "Unix installers use the Taskfile as the canonical Hermes handoff" {
@@ -547,7 +558,11 @@ EOF
 	local platform task_line apply_line task_line_number expected_sudo_count target
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
-		run_mocked_installer "$platform"
+		if [[ $platform == macos ]]; then
+			run_mocked_installer "$platform" --with-hermes
+		else
+			run_mocked_installer "$platform"
+		fi
 
 		if [[ $status -ne 0 ]]; then
 			printf '%s installer failed:\n%s\n' "$platform" "$output" >&3
@@ -563,7 +578,7 @@ EOF
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
-			grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$MOCK_REPO> <$MOCK_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+			grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$MOCK_REPO> <DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1> <$MOCK_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"

@@ -10,6 +10,13 @@ let
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
+  withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
+  withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
+  withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
+  installFeatures =
+    lib.optionals withOllama [ "WithOllama" ]
+    ++ lib.optionals withDocker [ "WithDocker" ]
+    ++ lib.optionals withHermes [ "WithHermes" ];
 in
 {
   assertions = [
@@ -132,7 +139,7 @@ in
   homebrew = {
     enable = true;
     brews = sets.darwinBrews;
-    casks = sets.darwinCasks;
+    casks = sets.darwinCasksForInstallFeatures installFeatures;
     # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
     onActivation = {

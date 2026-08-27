@@ -20,8 +20,59 @@ setup() {
 
 @test "Darwin uses nix-homebrew catalog casks and Home Manager" {
 	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/hosts/darwin/default.nix"
-	grep -q 'casks = sets.darwinCasks' "$REPO_ROOT/nix/hosts/darwin/default.nix"
+	grep -q 'casks = sets.darwinCasksForInstallFeatures' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+}
+
+@test "Darwin default profile excludes optional casks" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.casks
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'all(.[]; [.name] | inside(["ollama-app", "docker-desktop", "google-chrome", "discord"]) | not)' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_DOCKER=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.casks
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.[]; .name == "ollama-app") and
+		any(.[]; .name == "docker-desktop") and
+		all(.[]; .name != "google-chrome" and .name != "discord")
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Hermes profile includes its complete optional cask set" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.casks
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.[]; .name == "ollama-app") and
+		any(.[]; .name == "docker-desktop") and
+		any(.[]; .name == "google-chrome") and
+		any(.[]; .name == "discord")
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Darwin enables automatic Homebrew cask upgrades" {
@@ -121,10 +172,10 @@ setup() {
 	[ "$output" = "86400" ]
 }
 
-@test "Darwin uses Homebrew's renamed Ollama cask" {
+@test "Darwin Ollama profile uses Homebrew's renamed Ollama cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
-	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_OLLAMA=1 \
 		nix eval --impure --json --expr "
 			let
 				config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;

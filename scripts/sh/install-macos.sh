@@ -8,9 +8,14 @@ export DOTFILES_LOG_PREFIX="macos-install"
 . "$ROOT/scripts/sh/install-common.sh"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/hindsight/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
+OLLAMA_APP="${DOTFILES_OLLAMA_APP_PATH:-/Applications/Ollama.app}"
+OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/version}"
+OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
+OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
@@ -27,6 +32,43 @@ ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
 HOMEBREW_BIN_DIR="${DOTFILES_HOMEBREW_BIN_DIR:-/usr/local/bin}"
 HOMEBREW_CLI_PLUGINS_DIR="${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-/usr/local/cli-plugins}"
+DOTFILES_WITH_OLLAMA=0
+DOTFILES_WITH_DOCKER=0
+DOTFILES_WITH_HERMES=0
+
+usage() {
+  cat <<'EOF'
+Usage: ./install.sh [--with-ollama | --with-docker | --with-hermes]
+
+  --with-ollama  Install and update Ollama.
+  --with-docker  Include Ollama, Docker Desktop, and independent Hindsight.
+  --with-hermes  Include the Docker profile, Hermes, Chrome, and Discord.
+EOF
+}
+
+resolve_install_profile() {
+  while (($# > 0)); do
+    case "$1" in
+    --with-ollama) DOTFILES_WITH_OLLAMA=1 ;;
+    --with-docker) DOTFILES_WITH_DOCKER=1 ;;
+    --with-hermes) DOTFILES_WITH_HERMES=1 ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *) dotfiles_die "Unknown argument: $1" ;;
+    esac
+    shift
+  done
+
+  if ((DOTFILES_WITH_HERMES == 1)); then
+    DOTFILES_WITH_DOCKER=1
+  fi
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    DOTFILES_WITH_OLLAMA=1
+  fi
+  export DOTFILES_WITH_OLLAMA DOTFILES_WITH_DOCKER DOTFILES_WITH_HERMES
+}
 
 preflight() {
   local os arch version major required
@@ -40,11 +82,19 @@ preflight() {
   [[ $major =~ ^[0-9]+$ ]] || dotfiles_die "Unable to parse macOS version: $version"
   ((major >= 26)) || dotfiles_die "macOS 26 or later is required (detected $version)."
 
-  for required in \
-    "$ROOT/flake.nix" \
-    "$ROOT/chezmoi" \
-    "$COMPOSE_FILE" \
-    "$VERIFY_ENVIRONMENT"; do
+  local -a required_paths=(
+    "$ROOT/flake.nix"
+    "$ROOT/chezmoi"
+    "$VERIFY_ENVIRONMENT"
+  )
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    required_paths+=("$HINDSIGHT_COMPOSE_FILE")
+  fi
+  if ((DOTFILES_WITH_HERMES == 1)); then
+    required_paths+=("$COMPOSE_FILE")
+  fi
+
+  for required in "${required_paths[@]}"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
 }
@@ -135,6 +185,9 @@ apply_darwin_system() {
       "DOTFILES_USER=$DOTFILES_USER" \
       "DOTFILES_HOME=$DOTFILES_HOME" \
       "DOTFILES_ROOT=$DOTFILES_ROOT" \
+      "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
+      "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \
+      "DOTFILES_WITH_HERMES=$DOTFILES_WITH_HERMES" \
       "$nix_bin" run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
@@ -360,6 +413,24 @@ setup_docker_runtime() {
   docker compose version >/dev/null
 }
 
+ollama_api_is_ready() {
+  curl --fail --silent --show-error --max-time 2 "$OLLAMA_API_URL" >/dev/null
+}
+
+setup_ollama_runtime() {
+  [[ -d $OLLAMA_APP ]] || dotfiles_die "Ollama was not installed by nix-darwin: $OLLAMA_APP"
+  [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
+  dotfiles_have curl || dotfiles_die "curl is required to verify Ollama."
+
+  if ollama_api_is_ready; then
+    return 0
+  fi
+
+  dotfiles_log "Starting Ollama..."
+  "$OPEN_COMMAND" -gj -a "$OLLAMA_APP"
+  dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
+}
+
 apply_chezmoi() {
   dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after nix-darwin activation."
   chezmoi init --source "$ROOT/chezmoi"
@@ -367,22 +438,37 @@ apply_chezmoi() {
 }
 
 main() {
+  resolve_install_profile "$@"
   preflight
   ensure_command_line_tools
   ensure_nix
   dotfiles_link_checkout "$ROOT"
   dotfiles_update_flake "$ROOT"
   preserve_shell_rc_for_nix_darwin
-  stop_existing_docker_desktop
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    stop_existing_docker_desktop
+  fi
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install
   apply_darwin_system
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
-  setup_docker_runtime
   apply_chezmoi
-  dotfiles_run_task hermes:bootstrap
-  "$VERIFY_ENVIRONMENT" --runtime
+  if ((DOTFILES_WITH_OLLAMA == 1)); then
+    setup_ollama_runtime
+  fi
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    setup_docker_runtime
+    if ((DOTFILES_WITH_HERMES == 1)); then
+      dotfiles_run_task hermes:bootstrap
+      DOTFILES_COMPOSE_FILE="$COMPOSE_FILE" "$VERIFY_ENVIRONMENT" --runtime
+    else
+      dotfiles_run_task hindsight:up
+      DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" "$VERIFY_ENVIRONMENT" --runtime
+    fi
+  else
+    "$VERIFY_ENVIRONMENT"
+  fi
   dotfiles_log "macOS setup complete."
 }
 
