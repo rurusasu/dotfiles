@@ -448,6 +448,8 @@ run_macos_installer() {
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment compose= args="
+	! grep -q "^open .*${FAKE_OLLAMA_APP}" "$COMMAND_LOG"
+	! grep -q '/api/version' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
 }
