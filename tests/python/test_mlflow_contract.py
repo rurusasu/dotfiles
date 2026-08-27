@@ -20,6 +20,26 @@ MLFLOW_BIND = {
     "source": "${MLFLOW_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/mlflow}",
     "target": "/mlflow",
 }
+CONTROL_PLANE_BINDS = [
+    {
+        "type": "bind",
+        "source": "./configure.py",
+        "target": "/opt/mlflow/configure.py",
+        "read_only": True,
+    },
+    {
+        "type": "bind",
+        "source": "./verify.py",
+        "target": "/opt/mlflow/verify.py",
+        "read_only": True,
+    },
+    {
+        "type": "bind",
+        "source": "./endpoints.yml",
+        "target": "/opt/mlflow/endpoints.yml",
+        "read_only": True,
+    },
+]
 
 
 class MlflowContractTests(unittest.TestCase):
@@ -63,8 +83,8 @@ class MlflowContractTests(unittest.TestCase):
         )
         self.assertEqual(self.mlflow["networks"], ["local-ai-services"])
 
-    def test_compose_uses_the_persistent_mlflow_store_and_artifacts_mount(self) -> None:
-        self.assertEqual(self.mlflow["volumes"], [MLFLOW_BIND])
+    def test_compose_separates_persistent_data_from_read_only_control_plane(self) -> None:
+        self.assertEqual(self.mlflow["volumes"], [MLFLOW_BIND, *CONTROL_PLANE_BINDS])
         self.assertEqual(
             self.mlflow["command"],
             [

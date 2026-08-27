@@ -23,6 +23,18 @@ services:
       - type: bind
         source: ${MLFLOW_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/mlflow}
         target: /mlflow
+      - type: bind
+        source: ./configure.py
+        target: /opt/mlflow/configure.py
+        read_only: true
+      - type: bind
+        source: ./verify.py
+        target: /opt/mlflow/verify.py
+        read_only: true
+      - type: bind
+        source: ./endpoints.yml
+        target: /opt/mlflow/endpoints.yml
+        read_only: true
     healthcheck:
       test:
         - CMD
