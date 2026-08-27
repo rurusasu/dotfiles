@@ -36,6 +36,12 @@ WSL では Ollama を Linux 側へ追加・常駐させません。Windows 側�
 ホストの `11434` へ到達させます。WSL の Ollama サービスを有効化して二重起動
 してはいけません。
 
+ここで説明する host gateway と `11434` への到達経路は、準備処理と受入検証が
+native Ollama のモデル存在・readiness を確認するためだけのものです。Hindsight の
+推論リクエストは常に MLflow Gateway を経由し、`host.docker.internal:11434` に
+推論を直接送信しません。`/api/tags` と `/api/version` はそれぞれ model inventory
+と readiness probe に限られ、inference request を運びません。
+
 ## Installation
 
 Windows では `-WithDocker` または `-WithHermes` を指定すると、Ollama、Docker、
@@ -102,11 +108,15 @@ curl --fail --silent --show-error http://127.0.0.1:8888/health
 既定の公開先は次のとおりです。環境変数でポートを変更している場合は、その値を
 使います。
 
-| 対象          | 既定の URL               |
-| ------------- | ------------------------ |
-| Ollama API    | `http://127.0.0.1:11434` |
-| Hindsight API | `http://127.0.0.1:8888`  |
-| Hindsight UI  | `http://127.0.0.1:9999`  |
+| 対象                                           | 既定の URL               |
+| ---------------------------------------------- | ------------------------ |
+| Ollama API（準備/受入の model/readiness 専用） | `http://127.0.0.1:11434` |
+| Hindsight API                                  | `http://127.0.0.1:8888`  |
+| Hindsight UI                                   | `http://127.0.0.1:9999`  |
+
+Status の Ollama URL は model pull、`/api/tags`、`/api/version` の確認用です。
+Hindsight inference はこの URL を使わず、`local-ai-services` 上の MLflow Gateway
+`http://mlflow:5000/gateway/mlflow/v1` と論理 endpoint 名を使います。
 
 ## Logs
 
