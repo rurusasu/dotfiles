@@ -135,32 +135,48 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin declares the oMLX Homebrew formula" {
+@test "Darwin excludes the oMLX Homebrew formula" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
 		nix eval --impure --json --no-write-lock-file --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
 			in config.homebrew.brews
-		"
+	"
 
 	[ "$status" -eq 0 ]
-	run jq -e 'any(.[]; .name == "jundot/omlx/omlx")' <<<"$output"
+	run jq -e 'all(.[]; .name != "jundot/omlx/omlx" and .name != "omlx")' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin taps oMLX from its nonstandard upstream repository" {
+@test "Darwin excludes the oMLX Homebrew tap" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
 		nix eval --impure --json --no-write-lock-file --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
 			in config.homebrew.taps
+	"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'all(.[]; .name != "jundot/omlx")' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin removes legacy oMLX installations during activation" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --no-write-lock-file --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.removeLegacyOmlx.text
 		"
 
 	[ "$status" -eq 0 ]
-	run jq -e 'any(.[]; .name == "jundot/omlx" and .clone_target == "https://github.com/jundot/omlx")' <<<"$output"
-	[ "$status" -eq 0 ]
+	[[ "$output" == *'list --formula --versions omlx'* ]]
+	[[ "$output" == *'uninstall --formula omlx'* ]]
+	[[ "$output" == *'untap jundot/omlx'* ]]
+	[[ "$output" == *'sudo --user=codex --set-home'* ]]
 }
 
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {

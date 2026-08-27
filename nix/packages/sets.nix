@@ -357,21 +357,6 @@ let
         };
       };
     };
-    omlx = {
-      category = "llm";
-      support = {
-        windows = {
-          unsupported = "oMLX requires Apple Silicon macOS";
-        };
-        darwin = {
-          provider = "homebrew-formula";
-          formula = "jundot/omlx/omlx";
-        };
-        linux = {
-          unsupported = "oMLX requires Apple Silicon macOS";
-        };
-      };
-    };
     workmux = {
       pkg = pkgs.workmux;
       winget = null;

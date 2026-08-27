@@ -36,6 +36,22 @@ in
       runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
       runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
     '';
+    activationScripts.removeLegacyOmlx.text = ''
+      brew="/opt/homebrew/bin/brew"
+      if [ -x "$brew" ]; then
+        uid="$(id -u -- ${lib.escapeShellArg user})"
+        runAsUser() {
+          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+        }
+
+        if runAsUser "$brew" list --formula --versions omlx >/dev/null 2>&1; then
+          runAsUser "$brew" uninstall --formula omlx
+        fi
+        if runAsUser "$brew" tap | ${lib.getExe pkgs.gnugrep} --fixed-strings --line-regexp --quiet "jundot/omlx"; then
+          runAsUser "$brew" untap jundot/omlx
+        fi
+      fi
+    '';
   };
 
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
@@ -117,12 +133,6 @@ in
     enable = true;
     brews = sets.darwinBrews;
     casks = sets.darwinCasks;
-    taps = [
-      {
-        name = "jundot/omlx";
-        clone_target = "https://github.com/jundot/omlx";
-      }
-    ];
     # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
     onActivation = {
