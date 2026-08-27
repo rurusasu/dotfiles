@@ -168,7 +168,7 @@
 
 - `GatewayClient.request(method: str, path: str, payload: dict[str, object] | None) -> dict[str, object]` performs JSON REST calls and raises a typed error containing status and a redacted response.
 - `reconcile_manifest(base_url: str, manifest_path: Path) -> None` creates or updates the named secret, model definitions, and endpoints without duplicate resources.
-- `verify_gateway(base_url: str, chat_endpoint: str, embedding_endpoint: str, experiment_name: str) -> None` sends both request shapes and confirms traces are searchable.
+- `verify_gateway(base_url: str, chat_endpoint: str, embedding_endpoint: str) -> None` sends both request shapes and confirms the corresponding endpoint traces contain unique request markers.
 
 - [ ] **Step 1: Write offline fake-server tests for the REST contract.**
 
@@ -311,7 +311,7 @@
 
 - [ ] **Step 3: Change Hindsight environment and Compose networking.**
 
-  Set chat and embedding base URLs to `http://mlflow:5000/gateway/mlflow/v1`, set the request model fields to the two logical endpoint names, retain the provider/API-key compatibility settings required by Hindsight, and add the two native model variables for preparation. Declare `local-ai-services` as an external network and attach Hindsight to it in addition to the existing `memory` network.
+  Set the chat base URL to `http://mlflow:5000/gateway/mlflow/v1` and the embedding base URL to `http://mlflow:5000/gateway/openai/v1`, set the request model fields to the two logical endpoint names, retain the provider/API-key compatibility settings required by Hindsight, and add the two native model variables for preparation. Declare `local-ai-services` as an external network and attach Hindsight to it in addition to the existing `memory` network.
 
 - [ ] **Step 4: Change both preparation adapters.**
 

@@ -96,9 +96,9 @@ uninstrumented direct Ollama inference client is not an accepted service.
 
 ## Hindsight migration
 
-Hindsight changes its chat and embedding base URLs to
-`http://mlflow:5000/gateway/mlflow/v1`, and uses respectively
-`ollama-chat-default` and `ollama-embedding-default` as model values. Its
+Hindsight changes its chat base URL to `http://mlflow:5000/gateway/mlflow/v1`
+and its embedding base URL to `http://mlflow:5000/gateway/openai/v1`. It uses
+respectively `ollama-chat-default` and `ollama-embedding-default` as model values. Its
 existing native `ollama pull`, `/api/tags`, and `/api/version` operations stay
 direct host management/readiness operations and are not inference traces.
 

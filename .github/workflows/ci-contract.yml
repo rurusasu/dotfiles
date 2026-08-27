@@ -14,6 +14,8 @@ on:
       - "tests/bash/**"
       - "tests/python/**"
       - "docker/mlflow/**"
+      - "docs/mlflow/**"
+      - "taskfiles/mlflow/**"
 
 permissions:
   contents: read

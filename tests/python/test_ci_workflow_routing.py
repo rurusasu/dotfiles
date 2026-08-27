@@ -82,6 +82,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             ".github/workflows/**",
             "tests/bash/**",
             "tests/python/**",
+            "docs/mlflow/**",
+            "taskfiles/mlflow/**",
         ):
             self.assertIn(path, push_section)
 

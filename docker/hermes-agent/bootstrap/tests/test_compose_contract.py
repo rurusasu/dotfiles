@@ -132,9 +132,7 @@ class ComposeContractTests(unittest.TestCase):
         self.assertEqual(
             hindsight["env_file"], [{"path": "./hindsight.env", "required": True}],
         )
-        self.assertEqual(
-            hindsight["extra_hosts"], ["host.docker.internal:host-gateway"],
-        )
+        self.assertNotIn("extra_hosts", hindsight)
         self.assertEqual(
             hindsight["ports"],
             [

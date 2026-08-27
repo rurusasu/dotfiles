@@ -11,6 +11,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 
 API_PREFIX = "/api/3.0/mlflow"
@@ -300,13 +301,15 @@ def _reconcile_endpoint(
 
 def reconcile_manifest(base_url: str, manifest_path: Path) -> None:
     endpoints = _load_manifest(manifest_path)
-    required = {"name", "provider", "model_name", "api_base", "usage_tracking"}
+    required = {"name", "provider", "model_name", "api_base", "capability", "usage_tracking"}
     for endpoint in endpoints:
         missing = required - endpoint.keys()
         if missing:
             raise ValueError(f"Manifest endpoint is missing {sorted(missing)}.")
         if endpoint["provider"] != "ollama" or endpoint["usage_tracking"] is not True:
             raise ValueError("Only usage-tracked Ollama endpoints are supported by this manifest.")
+        if endpoint["capability"] not in {"chat", "embeddings"}:
+            raise ValueError("Manifest endpoint capability must be one of: chat, embeddings.")
     api_bases = {str(endpoint["api_base"]) for endpoint in endpoints}
     if len(api_bases) != 1:
         raise ValueError("All Ollama endpoints must use one shared api_base.")
@@ -374,8 +377,57 @@ def _gateway_call(client: GatewayClient, path: str, payload: dict[str, object]) 
         raise GatewayVerificationError(f"Gateway availability failure: {error}") from error
 
 
+def _nested_trace_field(trace: object, field: str) -> object | None:
+    if isinstance(trace, dict):
+        if field in trace:
+            return trace[field]
+        for value in trace.values():
+            found = _nested_trace_field(value, field)
+            if found is not None:
+                return found
+    elif isinstance(trace, list):
+        for value in trace:
+            found = _nested_trace_field(value, field)
+            if found is not None:
+                return found
+    return None
+
+
+def _trace_endpoint_id(trace: object) -> str | None:
+    metadata = _nested_trace_field(trace, "trace_metadata")
+    if isinstance(metadata, list):
+        for entry in metadata:
+            if (
+                isinstance(entry, dict)
+                and entry.get("key") == "mlflow.gateway.endpointId"
+                and isinstance(entry.get("value"), str)
+            ):
+                return entry["value"]
+    elif isinstance(metadata, dict):
+        endpoint_id = metadata.get("mlflow.gateway.endpointId")
+        if isinstance(endpoint_id, str):
+            return endpoint_id
+    return None
+
+
+def _trace_request_contains_marker(trace: object, marker: str) -> bool:
+    preview = _nested_trace_field(trace, "request_preview")
+    if isinstance(preview, str) and marker in preview:
+        return True
+    request = _nested_trace_field(trace, "request")
+    if request is not None:
+        try:
+            return marker in json.dumps(request)
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
 def _search_trace_endpoint_ids(
-    client: GatewayClient, endpoints: dict[str, dict[str, object]], started_at_ms: int
+    client: GatewayClient,
+    endpoints: dict[str, dict[str, object]],
+    started_at_ms: int,
+    markers: dict[str, str],
 ) -> set[str]:
     locations = [
         {"type": "MLFLOW_EXPERIMENT", "mlflow_experiment": {"experiment_id": endpoint["experiment_id"]}}
@@ -393,24 +445,15 @@ def _search_trace_endpoint_ids(
     for trace in response.get("traces", []):
         if not isinstance(trace, dict):
             continue
-        metadata = trace.get("trace_metadata")
-        if isinstance(metadata, list):
-            for entry in metadata:
-                if (
-                    isinstance(entry, dict)
-                    and entry.get("key") == "mlflow.gateway.endpointId"
-                    and isinstance(entry.get("value"), str)
-                ):
-                    seen.add(entry["value"])
-        elif isinstance(metadata, dict):
-            endpoint_id = metadata.get("mlflow.gateway.endpointId")
-            if isinstance(endpoint_id, str):
-                seen.add(endpoint_id)
+        endpoint_id = _trace_endpoint_id(trace)
+        marker = markers.get(endpoint_id) if endpoint_id is not None else None
+        if marker is not None and _trace_request_contains_marker(trace, marker):
+            seen.add(endpoint_id)
     return seen
 
 
 def verify_gateway(
-    base_url: str, chat_endpoint: str, embedding_endpoint: str, experiment_name: str
+    base_url: str, chat_endpoint: str, embedding_endpoint: str
 ) -> None:
     client = GatewayClient(base_url)
     try:
@@ -422,12 +465,26 @@ def verify_gateway(
         raise GatewayVerificationError(f"Gateway availability failure: {error}") from error
 
     started_at_ms = int(time() * 1000)
+    verification_id = uuid4().hex
+    markers = {
+        str(endpoints[chat_endpoint]["endpoint_id"]): f"mlflow-verify-chat-{verification_id}",
+        str(endpoints[embedding_endpoint]["endpoint_id"]): (
+            f"mlflow-verify-embedding-{verification_id}"
+        ),
+    }
     chat = _gateway_call(
         client,
         "/gateway/mlflow/v1/chat/completions",
         {
             "model": chat_endpoint,
-            "messages": [{"role": "user", "content": "Reply with OK."}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"{markers[str(endpoints[chat_endpoint]['endpoint_id'])]} Reply with OK."
+                    ),
+                }
+            ],
             "max_tokens": 512,
             "temperature": 0,
         },
@@ -439,7 +496,13 @@ def verify_gateway(
     embeddings = _gateway_call(
         client,
         "/gateway/openai/v1/embeddings",
-        {"model": embedding_endpoint, "input": "mlflow gateway verification"},
+        {
+            "model": embedding_endpoint,
+            "input": (
+                f"{markers[str(endpoints[embedding_endpoint]['endpoint_id'])]} "
+                "mlflow gateway verification"
+            ),
+        },
     )
     _response_shape(
         _has_numeric_embeddings(embeddings),
@@ -449,7 +512,7 @@ def verify_gateway(
     required_ids = {str(endpoint["endpoint_id"]) for endpoint in endpoints.values()}
     for attempt in range(10):
         try:
-            seen_ids = _search_trace_endpoint_ids(client, endpoints, started_at_ms)
+            seen_ids = _search_trace_endpoint_ids(client, endpoints, started_at_ms, markers)
         except GatewayHTTPError as error:
             raise GatewayVerificationError(f"Gateway availability failure: {error}") from error
         if required_ids <= seen_ids:
@@ -460,7 +523,7 @@ def verify_gateway(
             sleep(1)
     missing = [name for name, endpoint in endpoints.items() if str(endpoint["endpoint_id"]) not in seen_ids]
     raise GatewayVerificationError(
-        f"Missing traces for {', '.join(missing)} in {experiment_name!r}."
+        f"Missing traces for {', '.join(missing)} in the verification request."
     )
 
 

@@ -11,9 +11,8 @@ def main() -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:5000")
     parser.add_argument("--chat-endpoint", default="ollama-chat-default")
     parser.add_argument("--embedding-endpoint", default="ollama-embedding-default")
-    parser.add_argument("--experiment-name", default="gateway/ollama-chat-default")
     args = parser.parse_args()
-    verify_gateway(args.base_url, args.chat_endpoint, args.embedding_endpoint, args.experiment_name)
+    verify_gateway(args.base_url, args.chat_endpoint, args.embedding_endpoint)
     return 0
 
 

@@ -8,8 +8,6 @@ services:
     env_file:
       - path: ./hindsight.env
         required: true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888"
       - "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999"

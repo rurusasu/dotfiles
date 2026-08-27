@@ -40,6 +40,8 @@ class GatewayFixture:
         self.embedding_response: dict[str, object] = {
             "data": [{"embedding": [0.0], "index": 0}]
         }
+        self.record_traces = True
+        self.trace_records: list[dict[str, object]] = []
         self.trace_search_status: int | None = None
         self.next_id = 1
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
@@ -171,23 +173,13 @@ class GatewayFixture:
                     ]
                     return {"endpoint": endpoint}
                 if path == "/gateway/mlflow/v1/chat/completions":
+                    fixture._record_trace(body)
                     return fixture.chat_response
                 if path == "/gateway/openai/v1/embeddings":
+                    fixture._record_trace(body)
                     return fixture.embedding_response
                 if path == "/api/3.0/mlflow/traces/search":
-                    return {
-                        "traces": [
-                            {
-                                "trace_metadata": [
-                                    {
-                                        "key": "mlflow.gateway.endpointId",
-                                        "value": endpoint["endpoint_id"],
-                                    }
-                                ]
-                            }
-                            for endpoint in fixture.endpoints.values()
-                        ]
-                    }
+                    return {"traces": fixture.trace_records}
                 raise KeyError(path)
 
             def _send(self, status: int, response: dict[str, object]) -> None:
@@ -199,6 +191,22 @@ class GatewayFixture:
                 self.wfile.write(encoded)
 
         return Handler
+
+    def _record_trace(self, body: dict[str, object]) -> None:
+        if not self.record_traces:
+            return
+        endpoint = self.endpoints[str(body["model"])]
+        self.trace_records.append(
+            {
+                "trace_metadata": [
+                    {
+                        "key": "mlflow.gateway.endpointId",
+                        "value": endpoint["endpoint_id"],
+                    }
+                ],
+                "request_preview": json.dumps(body),
+            }
+        )
 
     @staticmethod
     def _secret_info(secret: dict[str, object]) -> dict[str, object]:
@@ -265,6 +273,7 @@ class ConfigureGatewayTest(unittest.TestCase):
             set(self.gateway.endpoints), {"ollama-chat-default", "ollama-embedding-default"}
         )
         self.assertTrue(self.gateway.endpoints["ollama-chat-default"]["usage_tracking"])
+
         self.assertEqual(
             self.gateway.endpoints["ollama-chat-default"]["model_configs"][0]["linkage_type"],
             "PRIMARY",
@@ -310,6 +319,14 @@ class ConfigureGatewayTest(unittest.TestCase):
             self.gateway.calls[("POST", "/api/3.0/mlflow/gateway/endpoints/update")], 1
         )
         self.assertTrue(self.gateway.endpoints["ollama-chat-default"]["usage_tracking"])
+
+    def test_manifest_requires_a_supported_capability(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        del manifest["endpoints"][0]["capability"]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "capability"):
+            reconcile_manifest(self.gateway.url, self.manifest)
 
     def test_http_errors_include_status_and_path_without_sensitive_content(self) -> None:
         client = GatewayClient(self.gateway.url)
@@ -365,7 +382,6 @@ class ConfigureGatewayTest(unittest.TestCase):
             self.gateway.url,
             "ollama-chat-default",
             "ollama-embedding-default",
-            "gateway/ollama-chat-default",
         )
 
         requests = {
@@ -382,6 +398,7 @@ class ConfigureGatewayTest(unittest.TestCase):
         self.assertEqual(
             requests["/gateway/openai/v1/embeddings"]["model"], "ollama-embedding-default"
         )
+        self.assertEqual(len(self.gateway.trace_records), 2)
         trace_search = requests["/api/3.0/mlflow/traces/search"]
         self.assertEqual(len(trace_search["locations"]), 2)
         self.assertIn("trace.timestamp_ms >=", trace_search["filter"])
@@ -395,7 +412,6 @@ class ConfigureGatewayTest(unittest.TestCase):
                 self.gateway.url,
                 "ollama-chat-default",
                 "ollama-embedding-default",
-                "gateway/ollama-chat-default",
             )
 
     def test_verification_rejects_mixed_valid_and_malformed_chat_choices(self) -> None:
@@ -412,7 +428,6 @@ class ConfigureGatewayTest(unittest.TestCase):
                 self.gateway.url,
                 "ollama-chat-default",
                 "ollama-embedding-default",
-                "gateway/ollama-chat-default",
             )
 
     def test_verification_rejects_non_numeric_embedding_data(self) -> None:
@@ -424,7 +439,6 @@ class ConfigureGatewayTest(unittest.TestCase):
                 self.gateway.url,
                 "ollama-chat-default",
                 "ollama-embedding-default",
-                "gateway/ollama-chat-default",
             )
 
     def test_verification_rejects_non_finite_embedding_values(self) -> None:
@@ -438,7 +452,6 @@ class ConfigureGatewayTest(unittest.TestCase):
                         self.gateway.url,
                         "ollama-chat-default",
                         "ollama-embedding-default",
-                        "gateway/ollama-chat-default",
                     )
 
     def test_trace_search_http_failure_is_classified_as_gateway_availability(self) -> None:
@@ -450,7 +463,40 @@ class ConfigureGatewayTest(unittest.TestCase):
                 self.gateway.url,
                 "ollama-chat-default",
                 "ollama-embedding-default",
-                "gateway/ollama-chat-default",
+            )
+
+    def test_verification_rejects_missing_traces(self) -> None:
+        reconcile_manifest(self.gateway.url, self.manifest)
+        self.gateway.record_traces = False
+
+        with self.assertRaisesRegex(GatewayVerificationError, "Missing traces"):
+            verify_gateway(
+                self.gateway.url,
+                "ollama-chat-default",
+                "ollama-embedding-default",
+            )
+
+    def test_verification_rejects_unrelated_traces(self) -> None:
+        reconcile_manifest(self.gateway.url, self.manifest)
+        self.gateway.record_traces = False
+        self.gateway.trace_records = [
+            {
+                "trace_metadata": [
+                    {
+                        "key": "mlflow.gateway.endpointId",
+                        "value": endpoint["endpoint_id"],
+                    }
+                ],
+                "request_preview": json.dumps({"marker": "unrelated"}),
+            }
+            for endpoint in self.gateway.endpoints.values()
+        ]
+
+        with self.assertRaisesRegex(GatewayVerificationError, "Missing traces"):
+            verify_gateway(
+                self.gateway.url,
+                "ollama-chat-default",
+                "ollama-embedding-default",
             )
 
 
