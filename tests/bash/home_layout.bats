@@ -19,3 +19,7 @@ setup() {
 	grep -Fq 'imports = [ ./common.nix ];' "$REPO_ROOT/nix/home/linux.nix"
 	grep -Fq 'imports = [ ./common.nix ];' "$REPO_ROOT/nix/home/wsl.nix"
 }
+
+@test "the shared Home Manager module does not import an OS-specific module" {
+	! grep -Eq '^[[:space:]]*(import|imports)[[:space:]=].*(darwin|linux|wsl)\.nix' "$REPO_ROOT/nix/home/common.nix"
+}

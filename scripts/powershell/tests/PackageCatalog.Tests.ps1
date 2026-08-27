@@ -196,9 +196,9 @@ Describe 'Package catalog consistency' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
 
-            (@($packages | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
-            (@($packages | Where-Object PackageIdentifier -EQ 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
-            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -eq 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
+            (@($packages | Where-Object PackageIdentifier -eq 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -eq 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
         }
 
         It 'marks Playwright browser packages as Hermes-only' {

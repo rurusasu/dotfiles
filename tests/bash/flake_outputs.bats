@@ -50,3 +50,14 @@ setup() {
 	grep -Fq 'modules = [ ../home/darwin.nix ];' "$REPO_ROOT/nix/flakes/home.nix"
 	grep -Fq 'modules = [ ../home/linux.nix ];' "$REPO_ROOT/nix/flakes/home.nix"
 }
+
+@test "NixOS applies the selected user's canonical WSL Home Manager module" {
+	grep -Fq 'users.${user} = {' "$REPO_ROOT/nix/flakes/lib/hosts.nix"
+	grep -Fq 'imports = [ homeModulePath ];' "$REPO_ROOT/nix/flakes/lib/hosts.nix"
+
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	run --separate-stderr env DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_UID=1000 DOTFILES_GID=1000 DOTFILES_GROUP=nixos \
+		nix eval --impure --raw --no-write-lock-file "path:$REPO_ROOT#nixosConfigurations.nixos.config.home-manager.users.nixos.programs.zsh.shellAliases.nrs"
+	[ "$status" -eq 0 ]
+	[ "$output" = 'task --dir ~/.dotfiles nrs' ]
+}
