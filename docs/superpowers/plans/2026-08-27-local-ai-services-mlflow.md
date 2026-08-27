@@ -43,6 +43,8 @@
 - Create `tests/bash/mlflow_task_contract.bats`: validate public task names and command wiring using the repository's existing Taskfile test style.
 - Modify `ci/path-routing.json`: route MLflow, Hindsight migration, operator task, and focused test changes to contract plus platform/Hermes checks.
 - Modify `ci/bootstrap-path-routing.json`: route Docker MLflow and related bootstrap contract changes to all supported platform bootstrap outputs.
+- Modify `.github/workflows/ci-bootstrap.yml`: include MLflow Docker/docs paths in workflow triggers so bootstrap platform jobs can actually start.
+- Modify `.github/workflows/ci-contract.yml`: trigger for MLflow paths and execute the dedicated MLflow Gateway tests.
 - Modify `docs/architecture.md`: document the shared Gateway boundary, network, persistence, and migration conditions for PostgreSQL.
 - Modify `docs/hermes-agent/hindsight-memory.md`: document Gateway-based inference, direct-only model preparation, verification, privacy, retention, and future-service onboarding.
 - Create `docs/mlflow/local-ai-services.md`: operator runbook and service onboarding contract.
@@ -391,17 +393,21 @@
 
 - Modify: `ci/path-routing.json`
 - Modify: `ci/bootstrap-path-routing.json`
+- Modify: `.github/workflows/ci-bootstrap.yml`
+- Modify: `.github/workflows/ci-contract.yml`
 - Modify: `tests/python/test_detect_ci_changes.py` if routing fixtures require explicit coverage
+- Modify: `tests/python/test_ci_workflow_routing.py` if workflow path-filter coverage requires explicit coverage
 - Modify: `tests/bash/taskfile_test_routing.bats` if taskfile routing assertions require the new paths
 
 **Interfaces:**
 
 - Changes under `docker/mlflow/**`, `taskfiles/mlflow/**`, `docs/mlflow/**`, and MLflow-related Hindsight/operator tests trigger the existing contract and platform outputs that can execute Compose contracts.
 - MLflow changes do not create an unimplemented CI output name; they use the repository's existing `contract`, `linux`, `darwin`, `wsl`, `windows`, and `hermes` outputs as applicable.
+- Workflow path filters include MLflow Docker/docs paths, and the contract workflow explicitly executes `docker/mlflow/tests/test_configure.py` in addition to `tests/python` discovery.
 
 - [ ] **Step 1: Add failing routing assertions.**
 
-  Extend the routing tests with representative paths `docker/mlflow/compose.yml`, `docker/mlflow/configure.py`, `taskfiles/mlflow/taskfile.yml`, and `docs/mlflow/local-ai-services.md`, asserting that each maps to contract checks and that runtime/Hindsight changes retain platform and Hermes coverage.
+  Extend the routing tests with representative paths `docker/mlflow/compose.yml`, `docker/mlflow/configure.py`, `taskfiles/mlflow/taskfile.yml`, `docs/mlflow/local-ai-services.md`, `scripts/sh/hindsight.sh`, `scripts/powershell/hindsight.ps1`, and `scripts/powershell/lib/HermesHindsight.ps1`, asserting that each maps to contract checks and that runtime/Hindsight changes retain platform and Hermes coverage. Extend workflow tests to assert that `ci-bootstrap.yml` includes `docker/mlflow/**` and `docs/mlflow/**`, and that `ci-contract.yml` includes `docker/mlflow/**` and invokes the dedicated Gateway test file.
 
 - [ ] **Step 2: Run the routing tests.**
 
@@ -414,7 +420,7 @@
 
 - [ ] **Step 3: Update both routing manifests.**
 
-  Add MLflow Docker and taskfile patterns to the same contract/platform rules used by Hindsight and its Taskfile. Add documentation and focused Python/Bats test patterns to the contract rule. Keep the existing broad fallback behavior unchanged.
+  Add MLflow Docker and taskfile patterns to the same contract/platform rules used by Hindsight and its Taskfile. Add explicit Hindsight adapter patterns with the platform/Hermes outputs required by their execution chain. Add documentation and focused Python/Bats test patterns to the contract rule. Update both workflow path filters so MLflow Docker/docs changes start the intended workflows, and add `python -m unittest docker/mlflow/tests/test_configure.py -v` to the contract workflow. Keep the existing broad fallback behavior unchanged.
 
 - [ ] **Step 4: Run routing, formatting, and all focused tests.**
 
