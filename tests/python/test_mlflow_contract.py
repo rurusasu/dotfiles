@@ -96,6 +96,8 @@ class MlflowContractTests(unittest.TestCase):
                 "0.0.0.0",
                 "--port",
                 "5000",
+                "--allowed-hosts",
+                "localhost,127.0.0.1,mlflow:5000",
                 "--backend-store-uri",
                 "sqlite:////mlflow/mlflow.db",
                 "--default-artifact-root",
