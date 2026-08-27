@@ -23,16 +23,23 @@
   passed.
 - The required 7-suite Bats command exited 0: 81/81 passed. Bats emitted the
   existing `BW02` minimum-version warning from `flake_outputs.bats:59`.
-- The full PowerShell command was non-zero on macOS: observed failures depend
-  on unavailable Windows `C:` / `D:` drives (`ConfigureLifelogRoot`,
-  `Install.Admin`, `Install.Tests`, and `Install.User`). The complete Pester
-  summary could not be captured because the command exceeded the terminal's
-  30-second output window.
+- The full PowerShell command on macOS exited 1: 913 passed, 205 failed, and
+  5 skipped. The plan requires this suite to exit 0 on a Windows runner;
+  macOS acceptance is limited to the focused PackageCatalog suite below.
 - The focused PackageCatalog Pester command exited 0: 47 passed, 0 failed,
   0 skipped.
 
 ## Concerns
 
-The required all-PowerShell suite is not green in this macOS environment due
-to pre-existing Windows-drive assumptions outside Task 5. The Task 5-relevant
-PowerShell package-catalog contract passes.
+The 205 macOS full-suite failures are pre-existing environment limitations,
+not demonstrated CI-routing regressions:
+
+- Windows-host-only tests require Windows facilities such as `C:` / `D:`
+  drives, elevation, registry state, or WSL.
+- Windows executable and fixture tests require Windows binaries, paths, or
+  fixtures that are unavailable on macOS.
+- Test-harness portability failures arise from PowerShell/Pester assumptions
+  that do not hold on macOS.
+
+The focused Task 5 PowerShell package-catalog contract passes on macOS. Full
+Pester green status remains a Windows-runner requirement.
