@@ -56,5 +56,5 @@ setup() {
 }
 
 @test "macOS rebuild alias keeps the application-safe installer path" {
-	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/hosts/darwin/default.nix"
+	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/home/darwin.nix"
 }
