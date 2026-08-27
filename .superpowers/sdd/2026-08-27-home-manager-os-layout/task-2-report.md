@@ -38,8 +38,7 @@ bats tests/bash/home_layout.bats tests/bash/linux_config.bats tests/bash/macos_c
 
 Result: 36 passed, 2 failed (expected follow-up failures):
 
-- `nix/home/README.md` is missing. The contract test requires it, but it is
-  not a Task 2 file in the assigned brief.
+- `nix/home/README.md` is intentionally deferred to Task 4.
 - `nix/hosts/darwin/default.nix` has not yet imported `../../home/darwin.nix`.
   This is caller wiring owned by Task 3.
 
@@ -57,7 +56,17 @@ Both completed successfully.
 ## Concerns
 
 - Task 3 must update consumers before Nix evaluation can use the new modules.
-- `nix/home/README.md` needs an owner or an explicit scope decision; it was not
-  created to keep this change within the Task 2 file list.
 - Existing documentation and comments outside Task 2 still mention the removed
   WSL paths and are intentionally unchanged.
+
+## Review Follow-up
+
+Updated the stale gnome-keyring comment in `nix/modules/wsl/default.nix` to
+reference `nix/home/wsl.nix`.
+
+Focused validation completed successfully:
+
+```bash
+nix-instantiate --parse nix/modules/wsl/default.nix
+git diff --check
+```
