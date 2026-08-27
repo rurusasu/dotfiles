@@ -15,6 +15,7 @@ macOS のパッケージ管理を Nix derivation に統一し、現在 Homebrew 
 - upstream に同じ製品がない場合は、公式配布物から独自 derivation を作る。
 - GUI bundle は vendor 署名を壊さず、bundle ID、実行ファイル、起動を確認する。
 - Ollama は GUI cask を廃止し、`pkgs.ollama` と nix-darwin launchd service を使う。
+- `WithOllama`、`WithDocker`、`WithHermes` の optional install 境界を Nix package へ移行後も維持する。
 - 旧 Homebrew package は Nix 版の検証成功後にのみ削除し、ユーザーデータは削除しない。
 - 現在の移行はパッケージ単位のコミットに分け、全件完了後に 1 本の Pull Request として公開する。
 - 将来の version/provider 更新は CI が Pull Request を作成し、自動マージしない。
@@ -95,6 +96,8 @@ CLI/service package は `bundleId` の代わりに `command` を持つ。custom 
 
 `resolve` は現在の host platform に対して `support.<platform>.provider == "nix"` のエントリだけを Home Manager package list へ含める。`homebrew-cask`、`homebrew-formula`、`system-manager`、`winget`、`msstore`、`unsupported` は Nix user package として解決しない。
 
+Darwin の解決処理は nix-darwin が算出した `installFeatures` も受け取る。`installFeature` がない package は常に含め、`WithOllama`、`WithDocker`、`WithHermes` を持つ package は対応 feature が有効な場合だけ含める。Homebrew cask の feature filtering を削除する前に同じ境界を Nix package set へ移し、default profile が Ollama、Docker Desktop、Chrome、Discord を暗黙導入しないことを評価 test で保証する。
+
 正しい解決処理に加えて、Nix 評価時の assertion を設ける。最低限、次を拒否する。
 
 - 1 package/platform に provider と `unsupported` が同時に存在する。
@@ -148,7 +151,7 @@ Docker runtime は `WithDocker` が有効な場合だけ起動する。起動後
 
 ## Migration Flow
 
-作業は `codex/nix-darwin-provider-promotion` の独立 worktree で行う。元 checkout の未コミット `flake.lock` は変更せず、更新内容を作業 worktree へ複製して検証対象の nixpkgs revision とする。
+作業は `codex/nix-darwin-provider-promotion` の独立 worktree で行う。元 checkout の未コミット `flake.lock` は変更せず、更新内容を作業 worktree へ複製して検証対象の nixpkgs revision とする。実装開始前に `Taskfile.yml` の macOS/Linux `DOTFILES_PATH` を active root Taskfile の `.ROOT_DIR` から解決し、`task commit`、format、lint が `~/.dotfiles` の別 checkout ではなく現在の worktree へ作用することを contract test で固定する。Windows は従来どおり WSL 内の `~/.dotfiles` を使う。
 
 各 package は次の順序で移行する。
 
