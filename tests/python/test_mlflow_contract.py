@@ -14,8 +14,8 @@ ENDPOINTS_FILE = REPOSITORY_ROOT / "docker/mlflow/endpoints.yml"
 ROOT_TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
 MLFLOW_TASKFILE = REPOSITORY_ROOT / "taskfiles/mlflow/taskfile.yml"
 MLFLOW_IMAGE = (
-    "ghcr.io/mlflow/mlflow:v3.12.0@"
-    "sha256:2562eea480f1053f4feac2460eeadd9662f2099911254db2f1dc7260613aa2af"
+    "ghcr.io/mlflow/mlflow:v3.12.0-full@"
+    "sha256:364cdfa503f1a54a000e7f86f3910f9a838ea939d225b6394710010e4444f8a2"
 )
 MLFLOW_BIND = {
     "type": "bind",
