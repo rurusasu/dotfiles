@@ -43,3 +43,10 @@ setup() {
 	grep -q 'DOTFILES_NIXOS_HARDWARE_CONFIG' "$REPO_ROOT/nix/flakes/hosts.nix"
 	grep -q 'optionalAttrs.*hardwareConfig != ""' "$REPO_ROOT/nix/flakes/hosts.nix"
 }
+
+@test "flake outputs select canonical Home Manager OS modules" {
+	grep -Fq 'homeModulePath = ../home/wsl.nix;' "$REPO_ROOT/nix/flakes/hosts.nix"
+	grep -Fq 'homeModulePath = ../home/linux.nix;' "$REPO_ROOT/nix/flakes/hosts.nix"
+	grep -Fq 'modules = [ ../home/darwin.nix ];' "$REPO_ROOT/nix/flakes/home.nix"
+	grep -Fq 'modules = [ ../home/linux.nix ];' "$REPO_ROOT/nix/flakes/home.nix"
+}

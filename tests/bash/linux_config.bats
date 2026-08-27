@@ -33,7 +33,7 @@ setup() {
 }
 
 @test "WSL rebuild alias delegates the full sequence to Taskfile" {
-	grep -q 'nrs = "task --dir ~/.dotfiles nrs"' "$REPO_ROOT/nix/home/wsl/users.nix"
+	grep -q 'nrs = "task --dir ~/.dotfiles nrs"' "$REPO_ROOT/nix/home/wsl.nix"
 	grep -q '^  nrs:' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
 	grep -q 'task: hermes:bootstrap' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
 }
@@ -52,7 +52,7 @@ setup() {
 }
 
 @test "native NixOS rebuild alias keeps the hardware-safe installer path" {
-	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/home/linux/users.nix"
+	grep -q 'nrs = "~/.dotfiles/install.sh"' "$REPO_ROOT/nix/home/linux.nix"
 }
 
 @test "macOS rebuild alias keeps the application-safe installer path" {
