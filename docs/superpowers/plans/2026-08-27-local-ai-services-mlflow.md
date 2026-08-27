@@ -29,6 +29,7 @@
 - Create `docker/mlflow/endpoints.yml`: secret-free source of truth for stable chat and embedding endpoint definitions.
 - Create `docker/mlflow/configure.py`: typed, idempotent Gateway REST reconciler with redacted errors.
 - Create `docker/mlflow/verify.py`: container-side chat, embedding, and trace acceptance probe.
+- Modify `docker/mlflow/compose.yml`: mount the Gateway control scripts and manifest read-only at their stable container paths.
 - Create `docker/mlflow/tests/test_configure.py`: offline fake-server tests for reconciliation, idempotency, and failure handling.
 - Create `taskfiles/mlflow/taskfile.yml`: public `mlflow:*` operator tasks and their preconditions/dependencies.
 - Modify `Taskfile.yml`: shared MLflow Compose variable and included taskfile.
@@ -159,6 +160,7 @@
 - Create: `docker/mlflow/configure.py`
 - Create: `docker/mlflow/verify.py`
 - Create: `docker/mlflow/tests/test_configure.py`
+- Modify: `docker/mlflow/compose.yml`
 
 **Interfaces:**
 
@@ -188,11 +190,15 @@
 
   The endpoint model configuration must point to the reconciled model definition, set primary linkage/weight, preserve the logical endpoint name, and enable `usage_tracking`. If an existing named resource differs, update it; if it matches, leave it unchanged. Treat a missing resource as create, not as an error.
 
-- [ ] **Step 5: Implement the verification probe.**
+- [ ] **Step 5: Mount the control-plane files in Compose.**
+
+  Add read-only bind mounts from `./configure.py`, `./verify.py`, and `./endpoints.yml` to `/opt/mlflow/configure.py`, `/opt/mlflow/verify.py`, and `/opt/mlflow/endpoints.yml`. Keep the files outside the persistent `/mlflow` data mount so runtime data cannot overwrite repository configuration.
+
+- [ ] **Step 6: Implement the verification probe.**
 
   Send one OpenAI-compatible chat request to `/gateway/mlflow/v1/chat/completions` with model `ollama-chat-default`, and one embedding request to `/gateway/mlflow/v1/embeddings` with model `ollama-embedding-default`. Use deterministic short input and a low token limit. Query MLflow trace search for the resulting request window and require evidence of both endpoint names. Exit nonzero with separate messages for Gateway availability, upstream Ollama failure, response-shape failure, and missing traces.
 
-- [ ] **Step 6: Run offline tests and validate the script inside the pinned image.**
+- [ ] **Step 7: Run offline tests and validate the script inside the pinned image.**
 
   ```bash
   python3 -m unittest docker/mlflow/tests/test_configure.py -v
@@ -202,7 +208,7 @@
 
   Expected: all fake-server tests pass and both scripts start in the actual image with the required YAML/runtime dependencies.
 
-- [ ] **Step 7: Commit the Gateway control plane.**
+- [ ] **Step 8: Commit the Gateway control plane.**
 
   ```bash
   git add docker/mlflow/configure.py docker/mlflow/verify.py docker/mlflow/tests/test_configure.py
@@ -239,7 +245,7 @@
 
 - [ ] **Step 3: Implement the MLflow taskfile.**
 
-  Define `MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml` in the taskfile's local vars. Use `docker compose ... up -d --wait mlflow` for the startup wait, then call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`; mount the scripts and manifest read-only at those container paths. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
+  Define `MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml` in the taskfile's local vars. Use `docker compose ... up -d --wait mlflow` for the startup wait, then call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`; use the read-only mounts established by Task 2. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
 
 - [ ] **Step 4: Include the taskfile and wire Hindsight startup.**
 
