@@ -149,6 +149,20 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin taps oMLX from its nonstandard upstream repository" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --no-write-lock-file --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.homebrew.taps
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'any(.[]; .name == "jundot/omlx" and .clone_target == "https://github.com/jundot/omlx")' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {
 	run awk '
 		/sessionPath = \[/ { in_darwin=1 }
