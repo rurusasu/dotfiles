@@ -428,7 +428,7 @@ def verify_gateway(
         {
             "model": chat_endpoint,
             "messages": [{"role": "user", "content": "Reply with OK."}],
-            "max_tokens": 16,
+            "max_tokens": 512,
             "temperature": 0,
         },
     )

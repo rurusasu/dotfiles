@@ -376,8 +376,8 @@ class ConfigureGatewayTest(unittest.TestCase):
         self.assertEqual(
             requests["/gateway/mlflow/v1/chat/completions"]["model"], "ollama-chat-default"
         )
-        self.assertLessEqual(
-            requests["/gateway/mlflow/v1/chat/completions"]["max_tokens"], 16
+        self.assertEqual(
+            requests["/gateway/mlflow/v1/chat/completions"]["max_tokens"], 512
         )
         self.assertEqual(
             requests["/gateway/mlflow/v1/embeddings"]["model"], "ollama-embedding-default"
