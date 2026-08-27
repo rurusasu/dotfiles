@@ -27,7 +27,7 @@ Describe 'NixOSWSLHandler' {
         It 'should set <property> to <expected>' -ForEach @(
             @{ property = "Name"; expected = "NixOSWSL" }
             @{ property = "Description"; expected = "NixOS-WSL のダウンロードとインストール" }
-            @{ property = "Order"; expected = 50 }
+            @{ property = "Order"; expected = 17 }
             @{ property = "RequiresAdmin"; expected = $false }
         ) {
             $handler.$property | Should -Be $expected

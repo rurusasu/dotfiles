@@ -4,7 +4,8 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 image=${HERMES_GH_WRAPPER_IMAGE:-local/hermes-agent-gh-c10-test:latest}
 fixture=$(mktemp -d)
-data="$fixture/data"
+data=
+fixture_index=0
 fake_gh="$fixture/fake-gh"
 signal_container=
 parser_container=
@@ -26,7 +27,8 @@ fail() {
 }
 
 reset_fixture() {
-  rm -rf "$data"
+  fixture_index=$((fixture_index + 1))
+  data="$fixture/data-$fixture_index"
   mkdir -p "$data/capture/argv"
 }
 
@@ -144,7 +146,7 @@ if os.environ.get("GH_WRAPPER_TEST_SWAP_ANCESTOR") == "1":
     Path.lstat = controlled_lstat
 PY
 
-docker build -t "$image" "$repo_root/docker/hermes-agent" >"$fixture/build.log" 2>&1 ||
+docker build -t "$image" -f "$repo_root/docker/hermes-agent/Dockerfile" "$repo_root/docker" >"$fixture/build.log" 2>&1 ||
   fail 'final image build failed'
 docker run --rm --entrypoint sh "$image" -c 'test -x /usr/local/bin/gh' ||
   fail 'final image does not contain an executable gh wrapper'

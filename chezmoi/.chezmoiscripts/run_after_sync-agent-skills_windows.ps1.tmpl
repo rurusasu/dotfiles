@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 #!/usr/bin/env pwsh
-# Sync Claude skills to Codex/Gemini/Cursor after apply.
+# Sync shared agent skills to Codex/Gemini/Cursor after apply.
 # mode: {{ .skills_sync.mode }}
 # source: {{ .skills_sync.source_agent }}
 # targets: {{ range .skills_sync.target_agents }}{{ . }} {{ end }}
@@ -29,11 +29,17 @@ foreach ($agent in $targetAgents) {
   }
 
   # Remove orphaned entries in target.
-  $existingTargetDirs = @(Get-ChildItem -LiteralPath $targetSkillsDir -Directory -ErrorAction SilentlyContinue)
-  foreach ($existing in $existingTargetDirs) {
+  $existingTargetEntries = @(Get-ChildItem -LiteralPath $targetSkillsDir -Force -ErrorAction SilentlyContinue)
+  foreach ($existing in $existingTargetEntries) {
+    $isLink = [bool]($existing.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    if (-not $existing.PSIsContainer -and -not $isLink) { continue }
     $corresponding = Join-Path $sourceSkillsDir $existing.Name
     if (-not (Test-Path -LiteralPath $corresponding -PathType Container)) {
-      Remove-Item -LiteralPath $existing.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      if ($isLink) {
+        Remove-Item -LiteralPath $existing.FullName -Force -ErrorAction SilentlyContinue
+      } else {
+        Remove-Item -LiteralPath $existing.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      }
       Write-Host "Removed orphan skill: .$agent/skills/$($existing.Name)"
     }
   }

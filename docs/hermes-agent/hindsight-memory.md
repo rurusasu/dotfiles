@@ -2,17 +2,19 @@
 
 ## Architecture
 
-Hindsight は Hermes のローカル永続メモリプロバイダーです。ホストで動く
+Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。ホストで動く
 Ollama を推論・埋め込みに使い、Compose の `hindsight` サービスが埋め込み
-PostgreSQL、ローカル reranker、メモリ API を提供します。Hermes と Hindsight は
-専用の `hermes-memory` ネットワークで接続し、Hermes は
+PostgreSQL、ローカル reranker、メモリ API を提供します。独立 Compose project が
+`dotfiles-memory` ネットワークを所有し、Hermes は external network として接続して
 `http://hindsight:8888` を使います。
 
 Hindsight のイメージは
 `ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d`
 に固定されています。API と UI はホストの loopback にのみ公開され、内蔵
-PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes の
-`depends_on` 前提ではありません。Hindsight が停止すると recall/retain は使え
+PostgreSQL にホスト公開ポートはありません。Hindsight は Hermes Compose の
+`depends_on` や停止 lifecycle には含めません。ただし `hermes:setup` と
+`hermes:bootstrap` は `hindsight:up` を先に実行し、external network と memory
+service が存在する状態を保証します。Hindsight が停止すると recall/retain は使え
 ませんが、Hermes gateway を停止・再起動させる構成ではありません。
 
 ## Supported platforms
@@ -35,25 +37,28 @@ WSL では Ollama を Linux 側へ追加・常駐させません。Windows 側�
 
 ## Installation
 
-まず対象 OS の通常の dotfiles インストーラーを完了します。Windows は
-`install.cmd`、macOS/Linux は `./install.sh` が Ollama の配布経路を含みます。
-Docker daemon、Docker Compose、通常の Hermes bootstrap の前提条件を満たした後、
-次を実行します。
+Windows では `-WithDocker` または `-WithHermes` を指定すると、Ollama、Docker、
+独立 Hindsight が順に有効になります。Hindsight 単体の通常の操作入口は次です。
 
 ```text
-task hermes:bootstrap
+task hindsight:up
 ```
 
-この処理は Compose を検証し、ホスト Ollama の API を確認してモデルを取得し、
-`${HERMES_DATA_DIR}/hindsight/pg0` と
-`${HERMES_DATA_DIR}/hindsight/cache` を作成します。その後に Hindsight を起動して
-ヘルス確認を行い、既存の Hermes bootstrap とスタック起動を続行します。アダプター
-は Ollama の二つ目のプロセスを起動しません。
+この処理は独立 Compose を検証し、ホスト Ollama へモデルを取得し、
+`${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0` と `cache` を作成してから
+Hindsight だけを起動します。Hermes の起動・停止は行いません。
+
+旧構成の `${HERMES_DATA_DIR:-~/.hermes}/hindsight` が存在し、新しい保存先にまだ
+メモリがない場合、初回起動は旧 `hermes-hindsight` container を停止し、旧 `pg0` と
+`cache` を staging 経由で新しい保存先へコピーしてから旧 container を削除します。
+コピー元は rollback 用に残し、新保存先の marker により2回目以降は移行を
+繰り返しません。旧保存先と新保存先の両方にデータがある場合は自動上書きや併合を
+せず、起動前に明示的に失敗します。受入検証の state/evidence は移行対象外です。
 
 ## Model inventory
 
 モデルと Hindsight の非秘密ランタイム設定のソースは
-`docker/hermes-agent/hindsight.env` です。現在のモデルは次のとおりです。
+`docker/hindsight/hindsight.env` です。現在のモデルは次のとおりです。
 
 | 用途     | 値                                        |
 | -------- | ----------------------------------------- |
@@ -61,23 +66,15 @@ task hermes:bootstrap
 | 埋め込み | `qwen3-embedding:0.6b`                    |
 | reranker | `BAAI/bge-reranker-v2-m3`（ローカル CPU） |
 
-ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を取得し、Ollama の
-`/api/tags` で両方の正確な名前を確認します。Hindsight は Ollama OpenAI 互換
+ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を取得します。Hindsight は Ollama OpenAI 互換
 エンドポイント `http://host.docker.internal:11434/v1` を使います。
-
-モデル取得は Bash と PowerShell の両方で既定 3600 秒に制限されます。変更する
-場合は共通の `HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS` に正の整数を設定します。
-初回の約 23 GB の取得は 1800 秒を超えることがあるため、acceptance operation の
-300 秒上限をモデル download に適用しません。Bash 経路には GNU coreutils の
-`timeout`（macOS では `gtimeout` も可）が必要です。
 
 ## Startup
 
-通常の起動入口は `task hermes:bootstrap` です。既にホスト準備済みの状態で
-Hindsight だけを起動する場合は、リポジトリのルートから次を実行できます。
+通常の起動入口は次です。
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml up -d hindsight
+task hindsight:up
 ```
 
 起動の成否はポートの listen だけで判断せず、`/health` の `status` が
@@ -88,7 +85,7 @@ docker compose -f docker/hermes-agent/compose.yml up -d hindsight
 サービス状態と API ヘルスは次で確認します。
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml ps hindsight
+task hindsight:status
 curl --fail --silent --show-error http://127.0.0.1:8888/health
 ```
 
@@ -106,13 +103,19 @@ curl --fail --silent --show-error http://127.0.0.1:8888/health
 Hindsight の直近ログを追跡するには次を使います。
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml logs -f --tail=100 hindsight
+task hindsight:logs
 ```
 
 Hermes gateway 側の状態も同時に確認する場合は、`task hermes:logs` を使います。
 ログや API 応答に会話内容が含まれ得るため、共有時は内容を確認してください。
 
 ## Profile bank mapping
+
+Codex の公式 Hindsight hook はホストと Tart の両方で
+`http://127.0.0.1:8888`、bank `codex-shared` を使用します。Tart 起動中は SSH
+reverse forward が同じ loopback endpoint をホストへ転送するため、両方の Codex
+セッションが同じ記憶を retain/recall します。Ollama 自体には会話メモリを持たせず、
+Hindsight の推論・埋め込み backend としてのみ利用します。
 
 bootstrap は root/default と manifest にある全 named profile の
 `hindsight/config.json` をトランザクションで管理します。設定ファイルは各
@@ -130,8 +133,8 @@ bootstrap は root/default と manifest にある全 named profile の
 | `kuroda`       | `$HERMES_HOME/profiles/kuroda/hindsight/config.json`    | `hermes-kuroda`    |
 | `shiraishi`    | `$HERMES_HOME/profiles/shiraishi/hindsight/config.json` | `hermes-shiraishi` |
 
-データベースは `${HERMES_DATA_DIR}/hindsight/pg0`、reranker cache は
-`${HERMES_DATA_DIR}/hindsight/cache` にあります。これらのメモリデータは
+データベースは `${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0`、reranker cache は
+同じルートの `cache` にあります。これらのメモリデータは
 profile Git repository には含まれません。
 
 ## Acceptance evidence
@@ -159,11 +162,11 @@ own-sentinel recall全体は300秒未満でなければ失敗します。
 バックアップ前に Hindsight だけを停止します。
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml stop hindsight
+task hindsight:down
 ```
 
-停止を確認してから、`${HERMES_DATA_DIR}/hindsight/pg0` と
-`${HERMES_DATA_DIR}/hindsight/cache` の二つのディレクトリだけを archive します。
+停止を確認してから、`${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0` と
+同じルートの `cache` の二つのディレクトリだけを archive します。
 `config.json`、受入検証の state/evidence、profile ディレクトリ、または
 `${HERMES_DATA_DIR}` 全体を memory database backup として混在させません。
 
@@ -173,7 +176,7 @@ docker compose -f docker/hermes-agent/compose.yml stop hindsight
 ## Restore
 
 復元中は Hindsight を停止したままにします。復元先を空の
-`${HERMES_DATA_DIR}/hindsight` ディレクトリにし、backup に含めた `pg0` と
+`${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}` ディレクトリにし、backup に含めた `pg0` と
 `cache` だけを元の所有者で戻します。既存データへ上書き・併合はしません。
 
 復元後に Hindsight を起動し、必ず persistence phase を含む次の検証を実行します。
@@ -231,7 +234,7 @@ Hermes chat には credential、token、private key、その他の認証情報�
   追加しません。
 - Hindsight API が `healthy` / `connected` を返さない場合は、`pg0` と `cache` の
   所有権・復元手順、および Hindsight のログを確認します。
-- モデル取得または strict probe が失敗した場合は、`docker/hermes-agent/hindsight.env`
+- モデル取得または strict probe が失敗した場合は、`docker/hindsight/hindsight.env`
   の正確なモデル名と Ollama `/api/tags` を確認します。
 - profile 間でメモリが見える疑いがある場合は、`task hermes:memory:verify` を実行し、
   全 7 bank の cross-profile rejection を確認します。

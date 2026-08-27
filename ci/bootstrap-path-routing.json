@@ -125,7 +125,6 @@
         "scripts/powershell/handlers/Handler.Npm.ps1",
         "scripts/powershell/handlers/Handler.Pnpm.ps1",
         "scripts/powershell/handlers/Handler.Codex.ps1",
-        "scripts/powershell/handlers/Handler.ClaudeCode.ps1",
         "scripts/powershell/handlers/Handler.Bun.ps1",
         "chezmoi/terminals/windows-terminal/**",
         "chezmoi/**/*_windows*",
@@ -164,7 +163,8 @@
         "docker/hermes-agent/**",
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
-        "docker/hermes-xapi-mcp/**"
+        "docker/hermes-xapi-mcp/**",
+        "docker/hindsight/**"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },

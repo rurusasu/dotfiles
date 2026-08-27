@@ -20,7 +20,7 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|"
+    r"^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|docker/hindsight/.*|"
     r"scripts/sh/hermes-agent\.sh|"
     r"scripts/powershell/handlers/Handler\.HermesAgent\.ps1|"
     r"tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
@@ -62,6 +62,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertNotIn("docker build", section)
         self.assertLess(xapi_windows_index, container_task_index)
         self.assertLess(xapi_unix_index, container_task_index)
+        self.assertIn('PROVENANCE_URL: "{{.PROVENANCE_URL}}"', section)
         self.assertIn(
             'msg: "Docker daemon is not running. Start Docker Desktop and try again."',
             container_section,
@@ -98,6 +99,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
             "docker/hermes-xapi-mcp/Dockerfile",
+            "docker/hindsight/compose.yml",
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",

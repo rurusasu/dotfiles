@@ -10,6 +10,8 @@
        — Runs without UAC so 1Password desktop app integration works
     3. Admin phase (elevate when required): install.admin.ps1 -AdminOnly
        — Phase 2 handlers that require admin (WSL, Docker, etc.)
+    4. Post-admin convergence (Docker profiles only): install.admin.ps1 -AdminOnly:$false
+       — Re-runs non-admin handlers that may have deferred until WSL/NixOS existed
 
 #>
 
@@ -26,6 +28,9 @@ param(
     [string]$SyncBack = "lock",
     [switch]$UserPhaseOnly,
     [switch]$WingetVerifyCommandOnly,
+    [switch]$WithOllama,
+    [switch]$WithDocker,
+    [switch]$WithHermes,
     [switch]$NoPause
 )
 
@@ -38,7 +43,14 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new()
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
+. (Join-Path $libPath "InstallProfiles.ps1")
 . (Join-Path $PSScriptRoot "Test-Environment.ps1")
+
+$Options = Resolve-DotfilesInstallOption `
+    -Options $Options `
+    -WithOllama:$WithOllama `
+    -WithDocker:$WithDocker `
+    -WithHermes:$WithHermes
 
 if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
     $InstallDir = Join-Path $env:USERPROFILE "NixOS"
@@ -151,6 +163,7 @@ if ($adminRequired) {
         else {
             ConvertTo-Json -InputObject $Options -Depth 10 -Compress
         }
+        $optionsBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($optionsJson))
 
         $argList = @(
             "-NoProfile",
@@ -162,8 +175,8 @@ if ($adminRequired) {
             $DistroName,
             "-InstallDir",
             $InstallDir,
-            "-OptionsJson",
-            $optionsJson,
+            "-OptionsBase64",
+            $optionsBase64,
             "-SyncMode",
             $SyncMode,
             "-SyncBack",
@@ -228,13 +241,23 @@ else {
     & $adminScriptPath @phaseParams -AdminOnly:$true
 }
 
+if ($adminRequired -and [bool]$Options["WithDocker"]) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "Phase 2c: Post-Admin Docker Convergence" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    & $adminScriptPath @phaseParams -AdminOnly:$false
+}
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Environment Acceptance" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$acceptanceResult = Test-DotfilesEnvironment -Runtime
+$acceptanceResult = Test-DotfilesEnvironment -Docker:$Options["WithDocker"] -Runtime:$Options["WithDocker"]
 if (-not $acceptanceResult.Success) {
     throw $acceptanceResult.Message
 }

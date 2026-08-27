@@ -42,6 +42,13 @@ let
     in
     if installArgs == null then pkg else pkg // { inherit installArgs; };
 
+  attachInstallFeature =
+    featureMap: key: pkg:
+    let
+      installFeature = featureMap.${key} or null;
+    in
+    if installFeature == null then pkg else pkg // { inherit installFeature; };
+
   attachInstallTimeout =
     installTimeoutMap: key: pkg:
     let
@@ -166,7 +173,10 @@ let
 
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
-    name: id: attachWingetMetadata name (attachWingetIdMetadata id { PackageIdentifier = id; })
+    name: id:
+    attachInstallFeature sets.wingetFeatureMap name (
+      attachWingetMetadata name (attachWingetIdMetadata id { PackageIdentifier = id; })
+    )
   ) sets.wingetMap;
 
   wingetFromWindowsOnly = map (
@@ -220,8 +230,10 @@ let
     let
       key = pnpmPackageKey spec;
     in
-    attachPnpmInstallArgs sets.pnpmInstallArgs key (
-      attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
+    attachInstallFeature sets.pnpmInstallFeature key (
+      attachPnpmInstallArgs sets.pnpmInstallArgs key (
+        attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
+      )
     )
   ) sets.pnpmGlobal;
 

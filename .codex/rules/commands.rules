@@ -1,5 +1,5 @@
 # Codex execpolicy rules (Starlark)
-# Keep Bash deny/ask decisions aligned with chezmoi/dot_claude/settings.json.
+# Keep Bash deny/ask decisions aligned with the managed Codex hook policy.
 
 # --- Forbidden: destructive or sensitive ---
 prefix_rule(

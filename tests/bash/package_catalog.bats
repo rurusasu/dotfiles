@@ -7,6 +7,16 @@ setup() {
 	SETS="$REPO_ROOT/nix/packages/sets.nix"
 }
 
+@test "Claude and TablePlus are not managed by dotfiles" {
+	! grep -Eqi 'claude|tableplus' "$SETS"
+	! grep -Eqi 'Anthropic\.Claude|TablePlus\.TablePlus' "$REPO_ROOT/windows/winget/packages.json"
+	! grep -Eqi 'claude-agent-acp' "$REPO_ROOT/windows/pnpm/packages.json"
+	[ -z "$(find "$REPO_ROOT/chezmoi/dot_claude" -type f -print 2>/dev/null)" ]
+	[ -z "$(find "$REPO_ROOT/chezmoi/AppData/Roaming/Claude" -type f -print 2>/dev/null)" ]
+	[ ! -e "$REPO_ROOT/scripts/powershell/handlers/Handler.ClaudeCode.ps1" ]
+	[ -e "$REPO_ROOT/chezmoi/dot_agents/skills/create-agentsmd/SKILL.md" ]
+}
+
 @test "catalog defines provider coverage outputs" {
 	grep -q 'supportReport' "$SETS"
 	grep -q 'providerErrors' "$SETS"

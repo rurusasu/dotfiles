@@ -6,6 +6,7 @@
 [CmdletBinding()]
 param(
     [string]$ComposeFile = '',
+    [string]$HindsightComposeFile = '',
     [string]$DataDir = ''
 )
 
@@ -15,10 +16,18 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/Invoke-ExternalCommand.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesHindsight.ps1')
 
+function Invoke-HindsightServiceUp {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$ComposeFile)
+
+    & (Join-Path $PSScriptRoot 'hindsight.ps1') -Action up -ComposeFile $ComposeFile
+}
+
 function Get-HermesHindsightVerifyPath {
     [CmdletBinding()]
     param(
         [string]$ComposeFile = '',
+        [string]$HindsightComposeFile = '',
         [string]$DataDir = ''
     )
 
@@ -31,6 +40,15 @@ function Get-HermesHindsightVerifyPath {
     }
     else {
         [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'))
+    }
+    $resolvedHindsightComposeFile = if (-not [string]::IsNullOrWhiteSpace($HindsightComposeFile)) {
+        [System.IO.Path]::GetFullPath($HindsightComposeFile)
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:HINDSIGHT_COMPOSE_FILE)) {
+        [System.IO.Path]::GetFullPath($env:HINDSIGHT_COMPOSE_FILE)
+    }
+    else {
+        [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hindsight/compose.yml'))
     }
 
     $resolvedDataDir = if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
@@ -51,7 +69,8 @@ function Get-HermesHindsightVerifyPath {
 
     return [PSCustomObject]@{
         ComposeFile = $resolvedComposeFile
-        DataDir     = $resolvedDataDir
+        HindsightComposeFile = $resolvedHindsightComposeFile
+        DataDir = $resolvedDataDir
     }
 }
 
@@ -74,15 +93,23 @@ function Invoke-HermesHindsightVerify {
     [CmdletBinding()]
     param(
         [string]$ComposeFile = '',
+        [string]$HindsightComposeFile = '',
         [string]$DataDir = ''
     )
 
-    $paths = Get-HermesHindsightVerifyPath -ComposeFile $ComposeFile -DataDir $DataDir
+    $paths = Get-HermesHindsightVerifyPath `
+        -ComposeFile $ComposeFile `
+        -HindsightComposeFile $HindsightComposeFile `
+        -DataDir $DataDir
     if (-not (Test-Path -LiteralPath $paths.ComposeFile -PathType Leaf)) {
         throw [System.IO.FileNotFoundException]::new('Hermes Compose file was not found.')
     }
+    if (-not (Test-Path -LiteralPath $paths.HindsightComposeFile -PathType Leaf)) {
+        throw [System.IO.FileNotFoundException]::new('Hindsight Compose file was not found.')
+    }
 
     $compose = @('compose', '-f', $paths.ComposeFile)
+    $hindsightCompose = @('compose', '-f', $paths.HindsightComposeFile)
     $apiUrl = 'http://hindsight:8888'
     $ollamaUrl = 'http://host.docker.internal:11434'
     $stateFile = '/opt/data/hindsight/acceptance-state.json'
@@ -91,12 +118,7 @@ function Invoke-HermesHindsightVerify {
 
     $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('config', '--quiet'))
 
-    $null = Initialize-HermesHindsightHost `
-        -ComposeFile $paths.ComposeFile `
-        -DataDir $paths.DataDir
-
-    $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('up', '-d', 'hindsight'))
-    Wait-HermesHindsightApi
+    Invoke-HindsightServiceUp -ComposeFile $paths.HindsightComposeFile
 
     $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @(
             'exec', '-T', 'hermes',
@@ -117,7 +139,7 @@ function Invoke-HermesHindsightVerify {
             '--state', $stateFile
         ))
 
-    $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('restart', 'hindsight'))
+    $null = Invoke-HermesHindsightVerifyDocker -Arguments ($hindsightCompose + @('restart', 'hindsight'))
     Wait-HermesHindsightApi
 
     $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @(
@@ -131,7 +153,7 @@ function Invoke-HermesHindsightVerify {
 
     $hindsightStopped = $false
     try {
-        $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('stop', 'hindsight'))
+        $null = Invoke-HermesHindsightVerifyDocker -Arguments ($hindsightCompose + @('stop', 'hindsight'))
         $hindsightStopped = $true
 
         $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @(
@@ -186,14 +208,14 @@ function Invoke-HermesHindsightVerify {
         ) `
             -TimeoutSeconds 5
 
-        $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('start', 'hindsight'))
+        $null = Invoke-HermesHindsightVerifyDocker -Arguments ($hindsightCompose + @('start', 'hindsight'))
         Wait-HermesHindsightApi
         $hindsightStopped = $false
     }
     finally {
         if ($hindsightStopped) {
             try {
-                $null = Invoke-HermesHindsightVerifyDocker -Arguments ($compose + @('start', 'hindsight'))
+                $null = Invoke-HermesHindsightVerifyDocker -Arguments ($hindsightCompose + @('start', 'hindsight'))
                 Wait-HermesHindsightApi
             }
             catch {
@@ -222,7 +244,10 @@ function Invoke-HermesHindsightVerify {
 
 if ($MyInvocation.InvocationName -ne '.') {
     try {
-        Invoke-HermesHindsightVerify -ComposeFile $ComposeFile -DataDir $DataDir
+        Invoke-HermesHindsightVerify `
+            -ComposeFile $ComposeFile `
+            -HindsightComposeFile $HindsightComposeFile `
+            -DataDir $DataDir
         exit 0
     }
     catch {

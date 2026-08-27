@@ -6,206 +6,16 @@ BeforeAll {
     . $PSScriptRoot/../../lib/HermesBootstrap.ps1
     . $PSScriptRoot/../../lib/HermesXApi.ps1
     . $PSScriptRoot/../../lib/HermesGateway.ps1
-    function Initialize-HermesHindsightHost { }
-    function Wait-HermesHindsightApi { }
     . $PSScriptRoot/../../handlers/Handler.NixOSWSL.ps1
     . $PSScriptRoot/../../handlers/Handler.NixRebuild.ps1
     . $PSScriptRoot/../../handlers/Handler.HermesAgent.ps1
-}
-
-Describe 'HermesHindsight adapter' {
-    BeforeEach {
-        $script:oldHindsightApiPort = $env:HINDSIGHT_API_PORT
-        $script:oldHindsightOllamaPullTimeoutSeconds = $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS
-        $script:hindsightComposeDir = Join-Path $TestDrive 'hindsight-compose'
-        $script:hindsightComposeFile = Join-Path $script:hindsightComposeDir 'compose.yml'
-        $script:hindsightDataDir = Join-Path $TestDrive 'hindsight-data'
-        $script:hindsightCalls = [System.Collections.Generic.List[string]]::new()
-        $script:hindsightPullTimeouts = [System.Collections.Generic.List[int]]::new()
-        New-Item -ItemType Directory -Path $script:hindsightComposeDir -Force | Out-Null
-        Set-Content -LiteralPath $script:hindsightComposeFile -Value 'services: {}' -Encoding utf8
-        Set-Content -LiteralPath (Join-Path $script:hindsightComposeDir 'hindsight.env') -Value @(
-            'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b',
-            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
-        ) -Encoding utf8
-        Remove-Item Env:\HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-    }
-
-    AfterEach {
-        if ($null -eq $script:oldHindsightApiPort) {
-            Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:HINDSIGHT_API_PORT = $script:oldHindsightApiPort
-        }
-        if ($null -eq $script:oldHindsightOllamaPullTimeoutSeconds) {
-            Remove-Item Env:\HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS = $script:oldHindsightOllamaPullTimeoutSeconds
-        }
-    }
-
-    It 'provisions exactly two configured models through the timeout wrapper and creates persistent directories' {
-        Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
-        Mock Invoke-HermesHindsightCommand {
-            param($Command, $Arguments, $TimeoutSeconds)
-            $null = $TimeoutSeconds
-            $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
-            if ($Command -eq 'ollama') { $script:hindsightPullTimeouts.Add($TimeoutSeconds) }
-            if ($Arguments[-1] -eq 'http://127.0.0.1:11434/api/tags') {
-                return '{"models":[{"name":"qwen3.6:35b"},{"name":"qwen3-embedding:0.6b"}]}'
-            }
-            return '{"version":"0.1"}'
-        }
-
-        $environment = Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir
-
-        $environment.LlmModel | Should -Be 'qwen3.6:35b'
-        $environment.EmbeddingModel | Should -Be 'qwen3-embedding:0.6b'
-        $script:hindsightCalls | Should -Be @(
-            'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/version',
-            'ollama pull qwen3.6:35b',
-            'ollama pull qwen3-embedding:0.6b',
-            'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags'
-        )
-        $script:hindsightPullTimeouts | Should -Be @(3600, 3600)
-        (Join-Path $script:hindsightDataDir 'hindsight/pg0') | Should -Exist
-        (Join-Path $script:hindsightDataDir 'hindsight/cache') | Should -Exist
-    }
-
-    It 'fails clearly when the native Ollama command is missing' {
-        Mock Get-ExternalCommand { $null } -ParameterFilter { $Name -eq 'ollama' }
-
-        { Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir } |
-            Should -Throw '*ollama command was not found*'
-    }
-
-    It 'fails clearly when the native Ollama API is unreachable' {
-        $env:HINDSIGHT_OLLAMA_READY_ATTEMPTS = '1'
-        Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
-        Mock Invoke-HermesHindsightCommand { throw [System.InvalidOperationException]::new('curl failed: exit code 7') }
-
-        { Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir } |
-            Should -Throw '*Ollama API did not become ready after 1 attempts*'
-        Remove-Item Env:\HINDSIGHT_OLLAMA_READY_ATTEMPTS -ErrorAction SilentlyContinue
-    }
-
-    It 'passes the configured Ollama pull timeout to the command wrapper' {
-        $env:HINDSIGHT_OLLAMA_PULL_TIMEOUT_SECONDS = '7200'
-        Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
-        Mock Invoke-HermesHindsightCommand {
-            param($Command, $Arguments, $TimeoutSeconds)
-            if ($Command -eq 'ollama') { $script:hindsightPullTimeouts.Add($TimeoutSeconds) }
-            if ($Arguments[-1] -eq 'http://127.0.0.1:11434/api/tags') {
-                return '{"models":[{"name":"qwen3.6:35b"},{"name":"qwen3-embedding:0.6b"}]}'
-            }
-            return '{"version":"0.1"}'
-        }
-
-        $null = Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir
-
-        $script:hindsightPullTimeouts | Should -Be @(7200, 7200)
-    }
-
-    It 'propagates an Ollama pull timeout through the command wrapper' {
-        Mock Get-ExternalCommand { [PSCustomObject]@{ Name = $Name } }
-        Mock Invoke-HermesHindsightCommand {
-            param($Command, $Arguments, $TimeoutSeconds)
-            if ($Command -eq 'ollama' -and $Arguments[1] -eq 'qwen3-embedding:0.6b') {
-                throw [System.InvalidOperationException]::new("ollama timed out after $TimeoutSeconds seconds")
-            }
-            return '{"version":"0.1"}'
-        }
-
-        { Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:hindsightDataDir } |
-            Should -Throw '*timed out after 3600 seconds*'
-    }
-
-    It 'rejects a Hindsight health response without database connectivity' {
-        $env:HINDSIGHT_API_READY_ATTEMPTS = '1'
-        Mock Invoke-HermesHindsightCommand { '{"status":"healthy","database":"disconnected"}' }
-
-        { Wait-HermesHindsightApi } | Should -Throw '*Hindsight API did not become ready after 1 attempts*'
-    }
-
-    It 'succeeds on the 150th attempt with the default Hindsight readiness budget' {
-        $oldAttempts = $env:HINDSIGHT_API_READY_ATTEMPTS
-        $oldDelay = $env:HINDSIGHT_API_READY_DELAY_SECONDS
-        $script:hindsightColdStartAttempt = 0
-        try {
-            Remove-Item Env:\HINDSIGHT_API_READY_ATTEMPTS -ErrorAction SilentlyContinue
-            Remove-Item Env:\HINDSIGHT_API_READY_DELAY_SECONDS -ErrorAction SilentlyContinue
-            Mock Invoke-HermesHindsightCommand {
-                $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
-                $script:hindsightColdStartAttempt++
-                if ($script:hindsightColdStartAttempt -lt 150) {
-                    throw [System.InvalidOperationException]::new('curl failed: exit code 52')
-                }
-                '{"status":"healthy","database":"connected"}'
-            }
-            Mock Start-Sleep
-
-            Wait-HermesHindsightApi
-
-            $script:hindsightColdStartAttempt | Should -Be 150
-            Should -Invoke Start-Sleep -Times 149 -Exactly -ParameterFilter { $Seconds -eq 2 }
-        }
-        finally {
-            if ($null -eq $oldAttempts) {
-                Remove-Item Env:\HINDSIGHT_API_READY_ATTEMPTS -ErrorAction SilentlyContinue
-            }
-            else {
-                $env:HINDSIGHT_API_READY_ATTEMPTS = $oldAttempts
-            }
-            if ($null -eq $oldDelay) {
-                Remove-Item Env:\HINDSIGHT_API_READY_DELAY_SECONDS -ErrorAction SilentlyContinue
-            }
-            else {
-                $env:HINDSIGHT_API_READY_DELAY_SECONDS = $oldDelay
-            }
-        }
-    }
-
-    It 'probes the default Hindsight API port through the production readiness helper' {
-        Remove-Item Env:\HINDSIGHT_API_PORT -ErrorAction SilentlyContinue
-        Mock Invoke-HermesHindsightCommand {
-            param($Command, $Arguments, $TimeoutSeconds)
-            $null = $TimeoutSeconds
-            $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
-            '{"status":"healthy","database":"connected"}'
-        }
-
-        Wait-HermesHindsightApi
-
-        $script:hindsightCalls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health'
-    }
-
-    It 'probes the configured positive Hindsight API port through the production readiness helper' {
-        $env:HINDSIGHT_API_PORT = '9876'
-        Mock Invoke-HermesHindsightCommand {
-            param($Command, $Arguments, $TimeoutSeconds)
-            $null = $TimeoutSeconds
-            $script:hindsightCalls.Add("$Command $($Arguments -join ' ')")
-            '{"status":"healthy","database":"connected"}'
-        }
-
-        Wait-HermesHindsightApi
-
-        $script:hindsightCalls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:9876/health'
-    }
-
-    It 'rejects an invalid Hindsight API port clearly' {
-        $env:HINDSIGHT_API_PORT = 'not-a-port'
-
-        { Wait-HermesHindsightApi } | Should -Throw '*HINDSIGHT_API_PORT*'
-    }
 }
 
 Describe 'HermesAgentHandler' {
     BeforeEach {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
+        $script:ctx.Options['WithHermes'] = $true
         $script:composeDir = Join-Path $TestDrive 'docker/hermes-agent'
         $script:composeFile = Join-Path $script:composeDir 'compose.yml'
         $script:userProfile = Join-Path $TestDrive 'user'
@@ -255,13 +65,6 @@ Describe 'HermesAgentHandler' {
             [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
         }
         Mock Initialize-HermesBootstrapServiceAccountEnvironment { $true }
-        Mock Initialize-HermesHindsightHost {
-            $script:eventLog.Add('hindsight-host')
-            [PSCustomObject]@{ LlmModel = 'qwen3.6:35b'; EmbeddingModel = 'qwen3-embedding:0.6b' }
-        }
-        Mock Wait-HermesHindsightApi {
-            $script:eventLog.Add('hindsight-health')
-        }
         Mock Invoke-HermesXApiCredentialScope {
             $script:eventLog.Add('xapi-credentials')
             & $Action
@@ -297,6 +100,12 @@ Describe 'HermesAgentHandler' {
     }
 
     Context 'constructor and prerequisites' {
+        It 'is disabled by default without WithHermes' {
+            $ctx.Options.Remove('WithHermes')
+
+            $handler.CanApply($ctx) | Should -BeFalse
+        }
+
         It 'keeps the Phase 2 non-admin installer metadata and ordering' {
             $handler.Name | Should -Be 'HermesAgent'
             $handler.Order | Should -Be 56
@@ -343,7 +152,7 @@ Describe 'HermesAgentHandler' {
     }
 
     Context 'Apply' {
-        It 'prepares and starts Hindsight alone before building bootstrapping and recreating Hermes' {
+        It 'builds bootstraps and recreates Hermes without owning Hindsight' {
             $dataDir = Join-Path $TestDrive 'data'
             $browserDir = Join-Path $TestDrive 'browser'
             $env:HERMES_DATA_DIR = $dataDir
@@ -361,17 +170,12 @@ Describe 'HermesAgentHandler' {
             $browserDir | Should -Exist
             $script:dockerCalls | Should -Be @(
                 "compose -f $script:composeFile config --quiet",
-                "compose -f $script:composeFile up -d hindsight",
                 "compose -f $script:composeFile build hermes hermes-bootstrap chromium xapi-mcp",
                 "compose -f $script:composeFile ps --all --services hermes",
                 "compose -f $script:composeFile stop hermes",
                 "compose -f $script:composeFile up -d --force-recreate hermes chromium browser-mcp xapi-mcp"
             )
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
-            Should -Invoke Initialize-HermesHindsightHost -Times 1 -Exactly -ParameterFilter {
-                $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
-            }
-            Should -Invoke Wait-HermesHindsightApi -Times 1 -Exactly
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
                 $Uri -eq 'http://127.0.0.1:8642/health' -and
                 $Method -eq 'Get' -and
@@ -381,20 +185,6 @@ Describe 'HermesAgentHandler' {
                 $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
             }
             Should -Invoke Invoke-HermesXApiCredentialScope -Times 1 -Exactly
-        }
-
-        It 'names a native Ollama host preparation failure and does not build or stop Hermes' {
-            Mock Initialize-HermesHindsightHost {
-                throw [System.InvalidOperationException]::new('ollama command was not found.')
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'Hindsight host preparation failed'
-            $result.Message | Should -Match 'ollama command was not found'
-            $script:dockerCalls | Should -Be @("compose -f $script:composeFile config --quiet")
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
         }
 
         It 'does not bootstrap or recreate services when compose validation fails' {
@@ -555,7 +345,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build', 'stop', 'bootstrap', 'xapi-credentials')
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
             $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate hermes chromium browser-mcp xapi-mcp"
         }
 
@@ -586,7 +376,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeTrue
             $script:eventLog | Should -Be @(
-                'config', 'hindsight-host', 'up', 'hindsight-health', 'build',
+                'config', 'build',
                 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health',
                 'gateway-convergence', 'success'
             )
@@ -659,7 +449,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build')
+            $script:eventLog | Should -Be @('config', 'build')
             Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
         }
 
@@ -673,8 +463,8 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes bootstrap failed.'
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build', 'stop', 'bootstrap')
-            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 1
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
+            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 0
         }
 
         It 'returns failure after a compose startup exception with no later phase' {
@@ -689,7 +479,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up')
+            $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         }
 
         It 'propagates migration exit code 5 without starting services or writing host content' {
@@ -711,8 +501,8 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Match 'exit code 5'
-            $script:eventLog | Should -Be @('config', 'hindsight-host', 'up', 'hindsight-health', 'build', 'stop', 'bootstrap')
-            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 1
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
+            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 0
             $dataDir | Should -Exist
             $browserDir | Should -Exist
             (Join-Path $dataDir '.xurl') | Should -Exist

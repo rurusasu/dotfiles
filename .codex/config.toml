@@ -28,7 +28,6 @@ exclude = [
 
 [shell_environment_policy.set]
 TERM = "xterm-256color"
-CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
 
 [features]
 elevated_windows_sandbox = true
@@ -51,10 +50,10 @@ matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/claude_permission_policy.py"'
-command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/claude_permission_policy.py')\""
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/command_permission_policy.py"'
+command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/command_permission_policy.py')\""
 timeout = 30
-statusMessage = "Checking Claude-aligned Bash policy"
+statusMessage = "Checking command policy"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"

@@ -14,7 +14,6 @@ setup() {
 	write_stub apt-get 'exit 0'
 	write_stub sudo 'exec "$@"'
 	write_stub chezmoi 'echo "chezmoi stub"; exit 0'
-	write_stub claude 'echo "claude stub"; exit 0'
 	write_stub npm 'echo "npm stub"; exit 0'
 	write_stub nvim 'if [ "${1:-}" = "--version" ]; then echo "NVIM v0.10.0"; exit 0; fi; exit 0'
 }
@@ -40,8 +39,7 @@ EOF
 	[[ "$output" == *"bootstrap complete"* ]]
 }
 
-@test "bootstrap.sh installs claude code without writing workspace npm config" {
-	rm "$STUB_BIN/claude"
+@test "bootstrap.sh installs Codex without installing Claude Code" {
 	export HOME="$TEST_HOME"
 	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
 	write_stub npm '
@@ -54,7 +52,7 @@ exit 0
 	IFS=: read -r -a path_entries <<<"$PATH"
 	for path_entry in "${path_entries[@]}"; do
 		[ -n "$path_entry" ] || continue
-		[ -x "$path_entry/claude" ] && continue
+		{ [ -x "$path_entry/claude" ] || [ -x "$path_entry/codex" ]; } && continue
 		if [ -z "$filtered_path" ]; then
 			filtered_path="$path_entry"
 		else
@@ -67,7 +65,27 @@ exit 0
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"bootstrap complete"* ]]
-	grep -q "args=install -g @anthropic-ai/claude-code" "$NPM_LOG"
-	grep -q "prefix=$TEST_HOME/.local/npm" "$NPM_LOG"
-	! grep -q "args=config set prefix" "$NPM_LOG"
+	grep -q '@openai/codex' "$NPM_LOG"
+	! grep -qi 'claude' "$NPM_LOG"
+}
+
+@test "chezmoi apply preserves the Codex npm path in future shells" {
+	export HOME="$TEST_HOME"
+	export MANAGED_SHELLS="$REPO_ROOT/chezmoi/shells"
+	export PATH="$STUB_BIN:$PATH"
+	write_stub npm '
+mkdir -p "$NPM_CONFIG_PREFIX/bin"
+printf "#!/usr/bin/env sh\nexit 0\n" >"$NPM_CONFIG_PREFIX/bin/codex"
+chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
+'
+	write_stub chezmoi '
+cp "$MANAGED_SHELLS/profile" "$HOME/.profile"
+cp "$MANAGED_SHELLS/bashrc" "$HOME/.bashrc"
+'
+
+	run timeout 30 bash "$REPO_ROOT/bootstrap.sh" 2>&1
+
+	[ "$status" -eq 0 ]
+	grep -q '\.local/npm/bin' "$HOME/.profile"
+	grep -q '\.local/npm/bin' "$HOME/.bashrc"
 }

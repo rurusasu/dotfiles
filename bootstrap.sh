@@ -5,11 +5,11 @@
 # is supplied as `--dotfiles-repository`. Sets up the minimum needed
 # for the "host terminal → container tmux+nvim" workflow:
 #
-#   1. tmux + git + curl + tar via apt (Debian/Ubuntu base only).
+#   1. tmux + git + curl + tar + npm via apt (Debian/Ubuntu base only).
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
-#   3. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
+#   3. Codex CLI into ~/.local/npm.
+#   4. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
 #      so the container gets the same dotfiles as the host.
-#   4. claude code CLI install (best effort, via npm).
 #   5. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
 #
 # Idempotent — safe to re-run on every DevcontainerUp.
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # Ensure user-local bin paths are on PATH for this script's own checks
-# (have chezmoi / have claude / have nvim). Future shells get these from
+# (have chezmoi / have nvim). Future shells get these from
 # the rc wiring further down; this is for the current process only.
 export PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"
 
@@ -45,6 +45,7 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
   have curl || need+=("curl")
   have git || need+=("git")
   have tar || need+=("tar")
+  have npm || need+=("npm")
   dpkg -s ca-certificates >/dev/null 2>&1 || need+=("ca-certificates")
   if [ "${#need[@]}" -gt 0 ]; then
     log "apt install: ${need[*]}"
@@ -54,6 +55,18 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
   fi
 elif ! have apt-get; then
   log "apt-get not found — package install skipped (install tmux/curl/git manually)"
+fi
+
+# ── Codex CLI ──────────────────────────────────────────────────────────
+if ! have codex; then
+  if ! have npm; then
+    log "npm is required to install Codex"
+    exit 1
+  fi
+  log "installing Codex CLI to ~/.local/npm"
+  mkdir -p "$HOME/.local/npm"
+  NPM_CONFIG_PREFIX="$HOME/.local/npm" \
+    npm install --global --no-audit --no-fund @openai/codex
 fi
 
 # ── chezmoi binary (best effort) ────────────────────────────────────────
@@ -125,15 +138,6 @@ if [ "$need_nvim" -eq 1 ]; then
   fi
 fi
 
-# ── PATH wiring for future shells ───────────────────────────────────────
-# `bash -l` (used by `dcnvim`) reads ~/.profile, not ~/.bashrc. Append to
-# both so PATH is visible regardless of which init path runs.
-for f in "$HOME/.profile" "$HOME/.bashrc"; do
-  if ! grep -q '\.local/bin' "$f" 2>/dev/null; then
-    printf '\n# Added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$f"
-  fi
-done
-
 # ── chezmoi apply (host と同じ dotfiles を container に展開) ────────────
 # devcontainer-cli が clone した $ROOT を source として再利用するため
 # `chezmoi init --apply --source` を使う (二重 clone 回避)。
@@ -145,34 +149,14 @@ if have chezmoi; then
     log "chezmoi apply had errors (continuing — container may be partially configured)"
 fi
 
-# ── claude code CLI (best effort) ───────────────────────────────────────
-# Sidekick.nvim から container 内で起動するため。
-# npm が無ければ apt で nodejs+npm を試行。npm install は user-local
-# prefix で行い、 system 領域に書かない。
-if ! have claude; then
-  if ! have npm && [ "$can_install" -eq 1 ] && have apt-get; then
-    log "installing nodejs + npm for claude code"
-    $SUDO env DEBIAN_FRONTEND=noninteractive \
-      apt-get install -y -qq --no-install-recommends nodejs npm ||
-      log "nodejs/npm install failed"
+# The managed profile/bashrc own this PATH. Keep a post-apply fallback for a
+# partial chezmoi deployment so later login and interactive shells still find
+# the Codex binary installed above.
+for f in "$HOME/.profile" "$HOME/.bashrc"; do
+  if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
+    printf '\n# Fallback added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
   fi
-  if have npm; then
-    log "installing @anthropic-ai/claude-code (user-local prefix)"
-    npm_prefix="$HOME/.local/npm"
-    mkdir -p "$npm_prefix"
-    if NPM_CONFIG_PREFIX="$npm_prefix" npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
-      # PATH wiring for next shells
-      for f in "$HOME/.profile" "$HOME/.bashrc"; do
-        grep -q '\.local/npm/bin' "$f" 2>/dev/null ||
-          printf '\n# Added by dotfiles bootstrap (npm)\nexport PATH="$HOME/.local/npm/bin:$PATH"\n' >>"$f"
-      done
-    else
-      log "claude code install failed (continuing)"
-    fi
-  else
-    log "skipping claude code install (no npm)"
-  fi
-fi
+done
 
 # ── lazy.nvim plugin pre-warm (best effort) ─────────────────────────────
 # stderr goes to a log file so a broken init.lua or plugin compile error

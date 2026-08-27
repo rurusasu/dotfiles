@@ -31,7 +31,7 @@ local function resize_sidekick_cli_toward(terminal, direction)
 end
 
 return {
-    -- AI sidekick: AI CLI terminal (claude/codex/gemini/opencode)
+    -- AI sidekick: AI CLI terminal (codex/gemini/opencode)
     {
         "folke/sidekick.nvim",
         event = "VeryLazy",
@@ -44,13 +44,6 @@ return {
                 end,
                 mode = { "n", "t", "i", "x" },
                 desc = "Sidekick focus",
-            },
-            {
-                "<leader>aa",
-                function()
-                    require("sidekick.cli").toggle({ name = "claude", focus = true })
-                end,
-                desc = "Sidekick toggle Claude",
             },
             {
                 "<leader>as",
@@ -141,9 +134,6 @@ return {
                     backend = "tmux",
                     enabled = false,
                 },
-                tools = vim.fn.has("unix") == 1 and {
-                    claude = { cmd = { "env", "-u", "NVIM", "claude" } },
-                } or nil,
             },
         },
     },

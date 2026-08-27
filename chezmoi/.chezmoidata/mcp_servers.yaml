@@ -1,5 +1,5 @@
 # Unified MCP Server Configuration
-# Used by: Claude Code, Codex CLI, Cursor, Gemini CLI
+# Used by: Codex CLI, Cursor, Gemini CLI
 #
 # Each tool has different config formats, so templates convert this data accordingly.
 
@@ -14,8 +14,6 @@ mcp_servers:
     # pnpm/npm exec currently fails to resolve the Windows bin shim for this
     # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -33,7 +31,6 @@ mcp_servers:
     # Codex starts configured MCP servers at session startup. Keep OAuth-based
     # remote servers out of Codex by default to avoid login warnings.
     supports:
-      - claude-code
       - cursor
       - gemini
       - vscode
@@ -52,8 +49,6 @@ mcp_servers:
     op_env:
       PLANE_API_KEY: "op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential"
     supports:
-      - claude-code
-      - claude-desktop
       - cursor
       - gemini
       - vscode
@@ -71,7 +66,6 @@ mcp_servers:
     supports:
       - cursor
       - gemini
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -89,7 +83,6 @@ mcp_servers:
     startup_timeout_sec: 30
     supports:
       - codex
-      - claude-code
       - cursor
       - gemini
 
@@ -109,8 +102,6 @@ mcp_servers:
     # API-key Docker MCP servers fail Codex startup when the local env vars are
     # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -133,8 +124,6 @@ mcp_servers:
     # API-key Docker MCP servers fail Codex startup when the local env vars are
     # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -157,8 +146,6 @@ mcp_servers:
     # API-key Docker MCP servers fail Codex startup when the local env vars are
     # absent, so keep them available to clients that can launch them on demand.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -175,8 +162,6 @@ mcp_servers:
     # pnpm/npm exec currently fails to resolve the Windows bin shim for this
     # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -197,7 +182,6 @@ mcp_servers:
     # Codex starts configured MCP servers at session startup. Keep OAuth-based
     # remote servers out of Codex by default to avoid login warnings.
     supports:
-      - claude-code
       - cursor
       - gemini
       - vscode
@@ -212,8 +196,6 @@ mcp_servers:
     # Cloud Run MCP depends on local Google Cloud auth and currently exits
     # before the MCP handshake in Codex startup.
     supports:
-      - claude-code
-      - claude-desktop
       - vscode
       - windsurf
       - zed
@@ -234,8 +216,6 @@ mcp_servers:
       - "https://www.kaggle.com/mcp"
     startup_timeout_sec: 30
     supports:
-      - claude-code
-      - claude-desktop
       - cursor
       - gemini
       - vscode

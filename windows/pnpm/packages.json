@@ -10,14 +10,6 @@
       }
     },
     {
-      "name": "@agentclientprotocol/claude-agent-acp",
-      "verifyCommand": {
-        "args": [],
-        "command": "claude-agent-acp",
-        "type": "commandExists"
-      }
-    },
-    {
       "installArgs": [
         "--allow-build=@deepseek-ai/dsh-subprocess-local",
         "--allow-build=@google/genai",
@@ -32,6 +24,7 @@
       }
     },
     {
+      "installFeature": "WithHermes",
       "name": "@playwright/cli@0.1.14",
       "verifyCommand": {
         "args": ["--version"],
@@ -39,6 +32,7 @@
       }
     },
     {
+      "installFeature": "WithHermes",
       "name": "playwright@1.61.0",
       "postInstallCommand": {
         "args": ["install", "chromium"],

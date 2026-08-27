@@ -46,6 +46,11 @@ class DockerHandler : SetupHandlerBase {
         - リトライ回数が 0 より大きいか
     #>
     [bool] CanApply([SetupContext]$ctx) {
+        if (-not [bool]$ctx.GetOption("WithDocker", $false)) {
+            $this.Log("-WithDocker が指定されていないためスキップします", "Gray")
+            return $false
+        }
+
         # リトライ回数の取得
         $this.Retries = $ctx.GetOption("DockerIntegrationRetries", 5)
         $this.RetryDelaySeconds = $ctx.GetOption("DockerIntegrationRetryDelaySeconds", 5)

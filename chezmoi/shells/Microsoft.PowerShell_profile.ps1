@@ -117,23 +117,6 @@ function Invoke-CodexCli {
 
 Set-Alias -Name codex -Value Invoke-CodexCli -Scope Global
 
-# claude: intercept `claude update` to run pnpm install + postinstall.
-# pnpm v10 blocks build scripts by default, so the native binary postinstall
-# never runs when using `claude update` directly, leaving a stub exe.
-function claude {
-    if ($args[0] -eq 'update') {
-        pnpm install -g "@anthropic-ai/claude-code@latest"
-        if ($LASTEXITCODE -eq 0) {
-            $pkgDir = Join-Path (pnpm root -g).Trim() "@anthropic-ai\claude-code"
-            Push-Location $pkgDir
-            try { node install.cjs } finally { Pop-Location }
-        }
-        return
-    }
-    $ps1 = Get-Command claude -CommandType ExternalScript -ErrorAction SilentlyContinue | Where-Object { $_.Source -like '*\pnpm\*' } | Select-Object -First 1
-    if ($ps1) { & $ps1.Source @args } else { & claude.exe @args }
-}
-
 # VS Code sets VSCODE_PID in integrated terminals as well as extension consoles.
 # Keep PATH repair and CLI wrappers above this return, then skip heavy init
 # (starship/zoxide/PSReadLine) to avoid extension-console startup timeouts.
@@ -374,26 +357,6 @@ if ((Get-Command fzf -ErrorAction SilentlyContinue) -and (Get-Module PSReadLine)
     Set-PSReadLineKeyHandler -Chord Alt+d -ScriptBlock { Invoke-FzfDirectory }
     Set-PSReadLineKeyHandler -Chord Alt+t -ScriptBlock { Invoke-FzfInsertFile }
     Set-PSReadLineKeyHandler -Chord Alt+r -ScriptBlock { Invoke-FzfHistory }
-}
-
-# Ensure CLAUDE_CODE_GIT_BASH_PATH is set for the entire session.
-# Claude Code needs this env var to locate bash.exe on Windows.
-# Set it at session level so ALL child processes (node, pnpm, etc.) inherit it.
-if (-not $env:CLAUDE_CODE_GIT_BASH_PATH) {
-    # Codex 等の最小環境で起動された場合 $env:LOCALAPPDATA が null になるため Join-Path がエラーになる。
-    $_candidates = [System.Collections.Generic.List[string]]::new()
-    if ($env:LOCALAPPDATA) {
-        $_candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe"))
-    }
-    $_candidates.Add("C:\Program Files\Git\bin\bash.exe")
-    $_candidates.Add("C:\Program Files (x86)\Git\bin\bash.exe")
-    foreach ($_candidate in $_candidates) {
-        if (Test-Path -LiteralPath $_candidate -PathType Leaf) {
-            $env:CLAUDE_CODE_GIT_BASH_PATH = $_candidate
-            break
-        }
-    }
-    Remove-Variable _candidate, _candidates -ErrorAction SilentlyContinue
 }
 
 # devcontainer: enter the project's devcontainer in a tmux session

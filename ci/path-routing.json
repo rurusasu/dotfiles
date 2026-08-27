@@ -131,6 +131,7 @@
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
         "docker/hermes-xapi-mcp/**",
+        "docker/hindsight/**",
         "scripts/sh/hermes-*.sh",
         "scripts/powershell/hermes-*.ps1",
         "scripts/powershell/handlers/Handler.HermesAgent.ps1"

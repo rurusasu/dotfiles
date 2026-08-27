@@ -441,7 +441,7 @@ hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-boot
 - [ ] Build and validate.
 
 ```bash
-docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
 docker compose -f docker/hermes-agent/compose.yml config --quiet
 docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan
 ```
@@ -483,7 +483,7 @@ Expected: image tests pass, Compose is valid, and `secret-plan` prints item meta
 ```yaml
 hermes:bootstrap:test:
   cmds:
-    - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+    - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
 
 hermes:bootstrap:config:
   cmds:

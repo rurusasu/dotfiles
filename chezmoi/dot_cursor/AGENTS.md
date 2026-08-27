@@ -9,4 +9,4 @@
 
 - 変更は既存 permission ポリシーを壊さない。
 - 危険コマンドや secrets へのアクセス拒否を維持する。
-- `dot_claude/settings.json` との整合性を保つ。
+- `dot_codex/config.toml.tmpl` との整合性を保つ。

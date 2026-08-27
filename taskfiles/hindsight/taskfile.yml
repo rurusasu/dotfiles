@@ -1,0 +1,37 @@
+version: "3"
+
+tasks:
+  hindsight:up:
+    desc: Prepare models and start the independent Hindsight service
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - cmd: bash scripts/sh/hindsight.sh up "{{.HINDSIGHT_COMPOSE_FILE}}"
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hindsight.ps1 -Action up -ComposeFile "{{.HINDSIGHT_COMPOSE_FILE}}"
+        platforms: [windows]
+
+  hindsight:down:
+    desc: Stop the independent Hindsight service
+    cmds:
+      - docker compose -f {{.HINDSIGHT_COMPOSE_FILE}} stop hindsight
+
+  hindsight:status:
+    desc: Show independent Hindsight service status
+    cmds:
+      - docker compose -f {{.HINDSIGHT_COMPOSE_FILE}} ps hindsight
+
+  hindsight:logs:
+    desc: Follow independent Hindsight logs
+    interactive: true
+    cmds:
+      - docker compose -f {{.HINDSIGHT_COMPOSE_FILE}} logs -f --tail=100 hindsight
+
+  hindsight:verify:
+    desc: Verify the independent Hindsight API and persistence lifecycle
+    cmds:
+      - cmd: bash scripts/sh/hindsight.sh verify "{{.HINDSIGHT_COMPOSE_FILE}}"
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -File scripts/powershell/hindsight.ps1 -Action verify -ComposeFile "{{.HINDSIGHT_COMPOSE_FILE}}"
+        platforms: [windows]

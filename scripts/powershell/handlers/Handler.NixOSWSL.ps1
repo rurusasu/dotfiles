@@ -10,7 +10,7 @@
     - Post-install セットアップの実行
 
 .NOTES
-    Order = 50 (管理者権限が必要なため後半で実行)
+    Order = 17 (Docker の前にユーザー所有の NixOS ディストリビューションを登録)
 #>
 
 # 依存ファイルの読み込み
@@ -23,7 +23,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     NixOSWSLHandler() {
         $this.Name = "NixOSWSL"
         $this.Description = "NixOS-WSL のダウンロードとインストール"
-        $this.Order = 50
+        $this.Order = 17
         # WSL ディストリビューション登録は per-user 操作であり Windows admin 権限は不要。
         # AzureAD アカウントでは UAC 昇格すると別の HKCU が使われるため、
         # 管理者フェーズで実行すると登録が正規ユーザーの WSL に反映されない。
@@ -121,9 +121,9 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.EnsureWslWritable($ctx.DistroName)
 
             # Docker グループへのユーザー追加
-            # DockerHandler は NixOS インストール前（Phase 2a, Order=18）に実行されるため、
-            # 初回インストール時には NixOS が存在せず Docker 連携をスキップする。
-            # ここで docker グループ設定を行うことで初回インストール後も docker コマンドが使用可能になる。
+            # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
+            # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
+            # Docker ソケットを使用できる状態にする。
             $this.EnsureDockerGroup($ctx.DistroName)
 
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")

@@ -1,0 +1,16 @@
+{
+  "hindsightApiUrl": "",
+  "apiPort": 8888,
+  "bankId": "codex-shared",
+  "autoRecall": true,
+  "autoRetain": true,
+  "retainMode": "chunked",
+  "retainEveryNTurns": 1,
+  "retainOverlapTurns": 1,
+  "retainMetadata": {
+    "managedBy": "dotfiles"
+  },
+  "retainContext": "codex",
+  "upgradeNotice": false,
+  "autoStartDaemon": false
+}

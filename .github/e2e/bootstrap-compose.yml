@@ -15,6 +15,8 @@ services:
         exec nginx -g 'daemon off;'
     volumes:
       - ./hermes-gateway-converge.sh:/usr/local/bin/hermes-gateway-converge:ro
+    networks:
+      - memory
 
   xapi-mcp:
     image: nginx:1.29-alpine
@@ -24,22 +26,6 @@ services:
 
   browser-mcp:
     image: nginx:1.29-alpine
-
-  hindsight:
-    image: nginx:1.29-alpine
-    command:
-      - /bin/sh
-      - -c
-      - |
-        if [ -x /bin/httpd ]; then
-          exec /bin/httpd -f -p 80 -h /www
-        fi
-        exec nginx -g 'daemon off;'
-    ports:
-      - "127.0.0.1:8888:80"
-    volumes:
-      - ./hindsight-health.json:/usr/share/nginx/html/health:ro
-      - ./hindsight-health.json:/www/health:ro
 
   acceptance:
     image: nginx:1.29-alpine
@@ -68,3 +54,8 @@ services:
       - /fixture/hermes-bootstrap.sh
     volumes:
       - ./hermes-bootstrap-fixture.sh:/fixture/hermes-bootstrap.sh:ro
+
+networks:
+  memory:
+    name: dotfiles-memory
+    external: true

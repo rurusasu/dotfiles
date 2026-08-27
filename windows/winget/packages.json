@@ -36,9 +36,6 @@
           }
         },
         {
-          "PackageIdentifier": "Anthropic.Claude"
-        },
-        {
           "PackageIdentifier": "OpenAI.Codex",
           "portableLink": {
             "linkName": "codex.exe",
@@ -57,10 +54,12 @@
           }
         },
         {
-          "PackageIdentifier": "Discord.Discord"
+          "PackageIdentifier": "Discord.Discord",
+          "installFeature": "WithHermes"
         },
         {
-          "PackageIdentifier": "Docker.DockerDesktop"
+          "PackageIdentifier": "Docker.DockerDesktop",
+          "installFeature": "WithDocker"
         },
         {
           "PackageIdentifier": "dprint.dprint",
@@ -126,7 +125,8 @@
           }
         },
         {
-          "PackageIdentifier": "Google.Chrome"
+          "PackageIdentifier": "Google.Chrome",
+          "installFeature": "WithHermes"
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
@@ -196,6 +196,7 @@
         },
         {
           "PackageIdentifier": "Ollama.Ollama",
+          "installFeature": "WithOllama",
           "verifyCommand": {
             "args": ["--version"],
             "command": "ollama"
@@ -290,9 +291,6 @@
             "args": ["--version"],
             "command": "stylua"
           }
-        },
-        {
-          "PackageIdentifier": "TablePlus.TablePlus"
         },
         {
           "PackageIdentifier": "tamasfe.taplo",

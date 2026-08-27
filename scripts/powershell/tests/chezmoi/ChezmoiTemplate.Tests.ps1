@@ -279,8 +279,6 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'MCP client templates の op_env secret lookup' {
         BeforeAll {
             $script:mcpClientTemplates = @(
-                "AppData/Roaming/Claude/claude_desktop_config.json.tmpl",
-                "dot_claude/dot_claude.json.tmpl",
                 "dot_codeium/windsurf/mcp_config.json.tmpl",
                 "dot_codex/config.toml.tmpl",
                 "dot_cursor/cli-config.json.tmpl",
@@ -570,28 +568,36 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Agent skill synchronization' {
+        It 'should enumerate and safely remove orphaned Windows skill links' {
+            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_after_sync-agent-skills_windows.ps1.tmpl'
+            $content = Get-Content -LiteralPath $templatePath -Raw
+
+            $content | Should -Match 'Get-ChildItem -LiteralPath \$targetSkillsDir -Force' -Because 'dangling links are not directories'
+            $content | Should -Match 'FileAttributes\]::ReparsePoint' -Because 'directory links require explicit link handling'
+            $content | Should -Match 'if \(\$isLink\) \{\s*Remove-Item -LiteralPath \$existing\.FullName -Force' -Because 'removing a link must not recurse into its target'
+        }
+    }
+
     Context 'supports ID の整合性' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
         }
 
-        It 'mcp_servers.yaml で旧 claude ID が残っていないこと' {
+        It 'mcp_servers.yaml で Claude client ID が残っていないこと' {
             $lines = Get-Content -Path $script:mcpServersPath
             $violations = @()
             foreach ($line in $lines) {
-                # "- claude" exactly (not claude-code, claude-desktop)
-                if ($line -match '^\s+-\s+claude\s*$') {
+                if ($line -match '^\s+-\s+claude(?:-code|-desktop)?\s*$') {
                     $violations += $line.Trim()
                 }
             }
-            $violations | Should -BeNullOrEmpty -Because "旧 claude ID は claude-code に移行済み"
+            $violations | Should -BeNullOrEmpty -Because "Claude は管理対象外"
         }
 
-        It 'claude-code がテンプレートで正しく参照されていること' {
-            $claudeTemplate = Join-Path $script:chezmoiRoot "dot_claude/dot_claude.json.tmpl"
-            $content = Get-Content -Path $claudeTemplate -Raw
-            $content | Should -Match 'has "claude-code"' -Because "Claude Code テンプレートは claude-code ID を使用する"
-            $content | Should -Not -Match 'has "claude"[^-]' -Because "旧 claude ID は使用しない"
+        It 'Claude templates are absent' {
+            @(Get-ChildItem -LiteralPath (Join-Path $script:chezmoiRoot 'dot_claude') -File -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
+            @(Get-ChildItem -LiteralPath (Join-Path $script:chezmoiRoot 'AppData/Roaming/Claude') -File -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
         }
     }
 
@@ -646,7 +652,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content = Get-Content -LiteralPath $templatePath -Raw
 
             $content | Should -Not -Match '"command":\s*"python\s+' -Because "Windows must not depend on native Python installs"
-            $content | Should -Match 'uv run --isolated --managed-python python .+claude_permission_policy\.py' -Because "Codex hooks should use uv-managed Python on Windows"
+            $content | Should -Match 'uv run --isolated --managed-python python .+command_permission_policy\.py' -Because "Codex hooks should use uv-managed Python on Windows"
             $content | Should -Match 'uv run --isolated --managed-python python .+deny_protected_branch_commit\.py' -Because "Codex hooks should use uv-managed Python on Windows"
         }
     }
@@ -805,16 +811,6 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'stdio-only テンプレートで HTTP サーバーに mcp-remote が使われていること' {
-        It 'Claude Desktop テンプレートで mcp-remote が含まれていること' {
-            $templatePath = Join-Path $script:chezmoiRoot "AppData/Roaming/Claude/claude_desktop_config.json.tmpl"
-            if (-not (Test-Path $templatePath)) {
-                Set-ItResult -Skipped -Because "Claude Desktop テンプレートが存在しない"
-                return
-            }
-            $content = Get-Content -Path $templatePath -Raw
-            $content | Should -Match 'mcp-remote' -Because "HTTP MCP サーバーは mcp-remote 経由で接続する"
-        }
-
         It 'Windsurf テンプレートで serverUrl が使われていること' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codeium/windsurf/mcp_config.json.tmpl"
             if (-not (Test-Path $templatePath)) {
@@ -887,11 +883,9 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $linuxScript | Should -BeFalse
         }
 
-        It 'should not enable Warp plugins in Claude or opencode settings' {
-            $claudeSettings = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_claude/settings.json.tmpl") -Raw
+        It 'should not enable Warp plugins in opencode settings' {
             $opencodeSettings = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/opencode/opencode.json") -Raw
 
-            $claudeSettings | Should -Not -Match 'claude-code-warp|warpdotdev|warp@'
             $opencodeSettings | Should -Not -Match 'warp-dot-dev|opencode-warp'
         }
     }

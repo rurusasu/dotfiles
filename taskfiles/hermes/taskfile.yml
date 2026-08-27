@@ -4,17 +4,23 @@ tasks:
   hermes:setup:
     desc: Run Hermes Agent setup wizard in Docker
     interactive: true
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -f {{.HERMES_COMPOSE_FILE}}
         msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+      - sh: test -f {{.HINDSIGHT_COMPOSE_FILE}}
+        msg: "Hindsight compose file not found: {{.HINDSIGHT_COMPOSE_FILE}}"
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
   hermes:bootstrap:
     desc: Bootstrap the Hermes runtime through the supported host adapter
     interactive: true
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -36,6 +42,8 @@ tasks:
       - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [linux, darwin]
       - task: hermes:bootstrap:test:container
+        vars:
+          PROVENANCE_URL: "{{.PROVENANCE_URL}}"
 
   hermes:bootstrap:test:container:
     internal: true
@@ -43,7 +51,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test docker/hermes-agent
+      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
       - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
       - cmd: python docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
         platforms: [windows]
@@ -167,6 +175,8 @@ tasks:
 
   hermes:up:
     desc: Start Hermes Agent gateway and dashboard in Docker
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -236,6 +246,8 @@ tasks:
 
   hermes:rick:up:
     desc: Start Rick Hermes profile gateway in the Hermes container
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -270,6 +282,8 @@ tasks:
 
   hermes:hoffman:up:
     desc: Start Hoffman Hermes profile gateway in the Hermes container
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -304,6 +318,8 @@ tasks:
 
   hermes:risarisa:up:
     desc: Start RisaRisa Hermes profile gateway in the Hermes container
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -338,6 +354,8 @@ tasks:
 
   hermes:nancy:up:
     desc: Start Nancy Hermes profile gateway in the Hermes container
+    deps:
+      - task: hindsight:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."

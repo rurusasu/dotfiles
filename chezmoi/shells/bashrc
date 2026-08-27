@@ -1,5 +1,13 @@
 # ~/.bashrc managed by chezmoi
 
+# User-local npm globals (Codex in devcontainers)
+if [ -d "$HOME/.local/npm/bin" ]; then
+  case ":$PATH:" in
+    *":$HOME/.local/npm/bin:"*) ;;
+    *) export PATH="$HOME/.local/npm/bin:$PATH" ;;
+  esac
+fi
+
 # History
 HISTCONTROL=ignoreboth
 HISTFILE="$HOME/.bash_history"

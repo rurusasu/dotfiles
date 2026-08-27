@@ -1,10 +1,9 @@
 nerdfont: true
 merge_strategy: rebase
 
-agent: cc
+agent: cx
 
 agents:
-  cc: "claude --dangerously-skip-permissions"
   cx: "codex --auto-approve"
   oc: "opencode"
 

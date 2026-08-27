@@ -2,8 +2,8 @@ version: "3"
 
 tasks:
   skills:sync:
-    desc: Sync Claude Code skills from deployed ~/.claude/skills/ back to chezmoi source
+    desc: Sync shared agent skills from deployed ~/.agents/skills/ back to chezmoi source
     cmds:
-      - chezmoi re-add ~/.claude/skills/
+      - chezmoi re-add ~/.agents/skills/
     status:
-      - chezmoi diff ~/.claude/skills/ | grep -qv .
+      - chezmoi diff ~/.agents/skills/ | grep -qv .

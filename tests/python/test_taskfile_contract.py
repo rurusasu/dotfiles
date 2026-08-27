@@ -84,6 +84,19 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:bootstrap"),
         )
 
+    def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
+        for task_name in (
+            "hermes:setup",
+            "hermes:bootstrap",
+            "hermes:up",
+            "hermes:rick:up",
+            "hermes:hoffman:up",
+            "hermes:risarisa:up",
+            "hermes:nancy:up",
+        ):
+            with self.subTest(task_name=task_name):
+                self.assertIn("task: hindsight:up", self._task_block(task_name))
+
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
         windows_wrapper = XAPI_WINDOWS_WRAPPER.read_text(encoding="utf-8")
@@ -129,8 +142,7 @@ class TaskfileContractTests(unittest.TestCase):
 
         unix_phases = (
             "config --quiet",
-            "dotfiles_hermes_hindsight_prepare_host",
-            "dotfiles_hermes_hindsight_start",
+            "hindsight_up",
             "hermes-hindsight-acceptance probe",
             "hermes-hindsight-acceptance seed",
             "restart hindsight",
@@ -142,8 +154,7 @@ class TaskfileContractTests(unittest.TestCase):
         )
         windows_phases = (
             "'config', '--quiet'",
-            "Initialize-HermesHindsightHost",
-            "'up', '-d', 'hindsight'",
+            "Invoke-HindsightServiceUp",
             "'hermes-hindsight-acceptance', 'probe'",
             "'hermes-hindsight-acceptance', 'seed'",
             "'restart', 'hindsight'",
@@ -178,7 +189,7 @@ class TaskfileContractTests(unittest.TestCase):
 
         self.assertTrue(acceptance.startswith("#!/opt/hermes/.venv/bin/python\n"))
         self.assertIn(
-            "COPY hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
+            "COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
             dockerfile,
         )
         self.assertIn(
@@ -186,7 +197,7 @@ class TaskfileContractTests(unittest.TestCase):
             dockerfile,
         )
         self.assertIn(
-            "COPY hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
+            "COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
             dockerfile,
         )
 
@@ -204,7 +215,7 @@ class TaskfileContractTests(unittest.TestCase):
             "FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", maxsplit=1
         )[1].split("FROM hermes-bootstrap-runtime", maxsplit=1)[0]
 
-        self.assertIn("COPY bootstrap/tests", test_stage)
+        self.assertIn("COPY hermes-agent/bootstrap/tests", test_stage)
         self.assertIn("-p 'hindsight_real_provider_gate.py'", test_stage)
         self.assertIn("provider_factory=None", gate)
         self.assertIn("acceptance._resolved_provider", gate)

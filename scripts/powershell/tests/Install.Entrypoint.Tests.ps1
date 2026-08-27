@@ -199,6 +199,7 @@ exit 0
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\WindowsEnvironment.ps1") -Destination (Join-Path $libDir "WindowsEnvironment.ps1")
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\InstallProfiles.ps1") -Destination (Join-Path $libDir "InstallProfiles.ps1")
 
         $stubUser = @'
 [CmdletBinding()]
@@ -242,7 +243,7 @@ exit 0
 '@
         $stubAcceptance = @'
 function Test-DotfilesEnvironment {
-    param([switch]$Runtime)
+    param([switch]$Docker, [switch]$Runtime)
     Write-Host "STUB_ACCEPTANCE_COMPLETE"
     return [pscustomobject]@{ Success = $true; Message = "OK" }
 }

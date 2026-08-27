@@ -36,7 +36,15 @@ cd dotfiles
 .\install.cmd
 ```
 
-`install.cmd` は winget/npm 系パッケージ、Docker Desktop、WSL2/NixOS、Home Manager、chezmoi を適用し、Docker・Compose・WSL・`hello-world` の acceptance が成功してから完了を表示します。
+引数なしの `install.cmd` は core 環境だけを適用し、Ollama、Docker Desktop、
+Hindsight、Hermes、Chrome、Discord、Chromium/browser-mcp は導入しません。
+必要な構成だけを明示的に追加します。
+
+```powershell
+.\install.cmd -WithOllama # Ollama のみ
+.\install.cmd -WithDocker # Ollama + Docker + 独立 Hindsight
+.\install.cmd -WithHermes # 上記 + Hermes + Chrome + Discord + browser-mcp
+```
 
 ### macOS (Apple Silicon)
 
@@ -56,10 +64,17 @@ Tart CLI もこの macOS activation で導入されますが、約25GBの VM ima
 
 ```bash
 task tart:prepare
-tart run tahoe-base
+task tart:run
 ```
 
 `task tart:prepare` は `TART_HOME`（既定値 `~/.tart`）の空き容量を確認し、`tahoe-base` が既に存在する場合は再取得せず終了します。image、VM 名、必要空き容量は次で変更できます。
+
+`task tart:run` はホストの Hindsight を起動し、VM の起動後に GitHub `main` の
+commit hash を取得します。VM に最後に正常適用した hash と一致すれば何もせず、
+更新時だけ `~/.dotfiles` を更新して、git・chezmoi・Neovim・Codex と WezTerm、
+chezmoi 設定を適用します。適用に失敗した場合は hash を進めないため次回に再試行
+されます。SSH reverse forward により VM の Codex も
+`http://127.0.0.1:8888` の共有 Hindsight bank を利用します。
 
 ```bash
 DOTFILES_TART_IMAGE=ghcr.io/cirruslabs/macos-tahoe-base:latest \
@@ -96,7 +111,7 @@ DOTFILES_ALLOW_USER_ONLY=1 ./install.sh
 
 ### 成功条件と CI
 
-「コマンドが終了した」だけでは成功扱いにしません。必須 CLI、chezmoi drift、Docker daemon、Compose 全サービス、`docker run --rm hello-world` を acceptance で確認します。CI は GitHub-hosted Actions だけで完結し、Windows は PowerShell/Pester、macOS は Bats と nix-darwin build で installer 契約を検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
+「コマンドが終了した」だけでは成功扱いにしません。必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。CI は GitHub-hosted Actions だけで完結し、Windows は PowerShell/Pester、macOS は Bats と nix-darwin build で installer 契約を検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
 
 標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
 

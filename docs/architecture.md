@@ -19,7 +19,7 @@
    - Ubuntu/Debian: System Manager
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
-   - 必須 CLI、chezmoi drift、Docker、Compose 全サービス、hello-world を確認
+   - 必須 CLI と chezmoi drift を確認し、Docker profile では Docker、Compose、hello-world も確認
    - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造
@@ -104,14 +104,15 @@ shared-lifelog synchronization through the common bootstrap command.
 Hindsight は host-native Ollama と Compose の `hindsight` service で構成する
 local-only memory provider です。API と UI はそれぞれ host loopback の
 `127.0.0.1:8888` と `127.0.0.1:9999` にだけ公開し、埋め込み PostgreSQL は
-公開しません。Hermes と Hindsight は `hermes-memory` bridge network で接続しますが、
-Hindsight は Hermes の起動依存ではありません。Hindsight 障害時は memory recall/retain
-が使えなくても Hermes gateway は稼働を継続します。
+公開しません。Hermes と Hindsight は `dotfiles-memory` bridge network で接続します。
+公開 Hermes 起動タスクは network と memory service を先に準備しますが、Compose の
+lifecycle は独立しています。Hindsight 障害時は memory recall/retain が使えなくても
+Hermes gateway は稼働を継続します。
 
 | 所有者                                               | 永続化対象                           | Git との境界                                                          |
 | ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
-| `${HERMES_DATA_DIR}/hindsight/pg0`                   | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
-| `${HERMES_DATA_DIR}/hindsight/cache`                 | local reranker cache                 | profile repository には含めない                                       |
+| `${HINDSIGHT_DATA_DIR}/pg0`                          | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
+| `${HINDSIGHT_DATA_DIR}/cache`                        | local reranker cache                 | profile repository には含めない                                       |
 | `$HERMES_HOME/hindsight/config.json`                 | root/default provider configuration  | bootstrap が transactionally 管理し、profile Git content には含めない |
 | `$HERMES_HOME/profiles/<name>/hindsight/config.json` | named-profile provider configuration | bootstrap が transactionally 管理し、profile Git content には含めない |
 
@@ -212,22 +213,22 @@ $vhdPath = $context.SharedData["VhdPath"]
 | 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール         |
 | 6     | 1     | No    | Codex           | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                     | Codex CLI リンクと MCP PATH 設定         |
 | 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理             |
-| 7     | 1     | No    | ClaudeCode      | [Handler.ClaudeCode.ps1](../scripts/powershell/handlers/Handler.ClaudeCode.ps1)           | Claude Code スタンドアロンインストール   |
 | 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理            |
 | 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成               |
 | 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成           |
 | 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                    |
+| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                   |
 | 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携                  |
 | 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                          |
 | 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                       |
 | 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア          |
-| 50    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                   |
 | 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行              |
+| 55    | 2     | No    | Hindsight       | [Handler.Hindsight.ps1](../scripts/powershell/handlers/Handler.Hindsight.ps1)             | 独立HindsightをHermesより先に起動        |
 | 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | Hermes Agent Docker コンテナセットアップ |
 | 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ        |
 | 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録     |
 
-**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するローカルコンテナ系ハンドラーは NixOSWSL/NixRebuild の後に置く。
+**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するローカルコンテナ系ハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は共有メモリネットワークを準備するため、HermesAgent より先に実行する。
 
 ### ハンドラー実行フロー
 

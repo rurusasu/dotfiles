@@ -50,6 +50,16 @@ Describe 'Test-DotfilesEnvironment' {
         $script:commandLookups | Should -Not -Contain 'python'
     }
 
+    It 'should skip Docker requirements for the core-only profile' {
+        $result = Test-DotfilesEnvironment
+
+        $result.Success | Should -BeTrue
+        $script:commandLookups | Should -Not -Contain 'docker'
+        $script:dockerCalls.Count | Should -Be 0
+        ($script:chezmoiCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain 'apply --dry-run'
+        ($script:wslCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain '--status'
+    }
+
     It 'should fail when a required command is missing' {
         Mock Get-Command {
             if ($Name -eq 'nvim') { return $null }
@@ -64,12 +74,12 @@ Describe 'Test-DotfilesEnvironment' {
             $global:LASTEXITCODE = if ($Arguments -contains 'info') { 1 } else { 0 }
         }
 
-        { Test-DotfilesEnvironment } | Should -Throw '*docker info failed*'
+        { Test-DotfilesEnvironment -Docker } | Should -Throw '*docker info failed*'
     }
 
     It 'should run acceptance before printing final completion' {
         $content = Get-Content -LiteralPath $script:installTarget -Raw
-        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Runtime')
+        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker:$Options["WithDocker"] -Runtime:$Options["WithDocker"]')
         $completionIndex = $content.IndexOf('Setup Complete!')
 
         $acceptanceIndex | Should -BeGreaterThan -1

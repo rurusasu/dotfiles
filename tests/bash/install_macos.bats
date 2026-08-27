@@ -54,6 +54,8 @@ setup() {
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
+	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
 	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/untrusted/bin"
 	export DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$BATS_TEST_TMPDIR/untrusted/cli-plugins"
 	export TEST_HOMEBREW_PARENT_METADATA='0 755'
@@ -969,8 +971,6 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
-	cp "$REPO_ROOT/scripts/sh/hermes-hindsight.sh" "$HOME/.dotfiles/scripts/sh/hermes-hindsight.sh"
-	cp "$REPO_ROOT/docker/hermes-agent/hindsight.env" "$HOME/.dotfiles/docker/hermes-agent/hindsight.env"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
