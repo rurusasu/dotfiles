@@ -10,6 +10,7 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Docker.app"
+	FAKE_OLLAMA_APP="$BATS_TEST_TMPDIR/Ollama.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
 	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
@@ -35,6 +36,7 @@ setup() {
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
+	export FAKE_OLLAMA_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
@@ -44,6 +46,8 @@ setup() {
 	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
+	export DOTFILES_OLLAMA_APP_PATH="$FAKE_OLLAMA_APP"
+	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
@@ -52,6 +56,7 @@ setup() {
 	export DOTFILES_HOMEBREW_BIN_DIR="$FAKE_HOMEBREW_BIN_DIR"
 	export DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
+	export DOTFILES_OLLAMA_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
 	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
@@ -83,11 +88,17 @@ exit 2
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
+	*"/api/version"*)
+		if [[ ${OLLAMA_API_REQUIRES_OPEN:-0} == 1 ]] && ! grep -q "^open .*Ollama" "$COMMAND_LOG"; then
+			exit 1
+		fi
+		;;
   *"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}" ;;
   *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}" ;;
 esac
 exit 0
 '
+	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
@@ -237,7 +248,7 @@ EOF
 
 write_installed_stubs() {
 	write_docker_app
-	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR" "$FAKE_OLLAMA_APP"
 	mkdir -p "$(dirname "$DOTFILES_DOCKER_SETUP_MARKER")"
 	touch "$DOTFILES_DOCKER_SETUP_MARKER"
 
@@ -271,7 +282,7 @@ cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'
 set -euo pipefail
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "run" ]; then
-	mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin"
+	mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin" "$DOTFILES_OLLAMA_APP_PATH"
 		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
 #!/usr/bin/env bash
 printf "docker-install %s\n" "$*" >>"$COMMAND_LOG"
@@ -441,8 +452,27 @@ run_macos_installer() {
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
 }
 
+@test "WithOllama starts its API after chezmoi without starting Docker" {
+	write_installed_stubs
+	export OLLAMA_API_REQUIRES_OPEN=1
+
+	run_macos_installer --with-ollama
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
+	assert_log_order \
+		"chezmoi apply --force" \
+		"open -gj -a $FAKE_OLLAMA_APP" \
+		"verify-environment compose= args="
+	[ "$(grep -Fc 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/version' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -nF "open -gj -a $FAKE_OLLAMA_APP" "$COMMAND_LOG" | cut -d: -f1)" -lt \
+		"$(grep -nF 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/version' "$COMMAND_LOG" | tail -1 | cut -d: -f1)" ]
+	! grep -q '^docker ' "$COMMAND_LOG"
+}
+
 @test "WithDocker includes Ollama and starts only independent Hindsight after chezmoi" {
 	write_installed_stubs
+	export OLLAMA_API_REQUIRES_OPEN=1
 
 	run_macos_installer --with-docker
 
@@ -450,10 +480,27 @@ run_macos_installer() {
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
 		"chezmoi apply --force" \
+		"open -gj -a $FAKE_OLLAMA_APP" \
 		"docker info" \
 		"task --dir $REPO_ROOT hindsight:up" \
 		"verify-environment compose=$REPO_ROOT/docker/hindsight/compose.yml args=--runtime"
 	! grep -q 'task .*hermes:bootstrap' "$COMMAND_LOG"
+}
+
+@test "Ollama readiness timeout stops before Docker startup" {
+	write_installed_stubs
+	write_stub curl '
+printf "curl %s\n" "$*" >>"$COMMAND_LOG"
+exit 1
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Timed out waiting for Ollama API after 2 attempts."* ]]
+	grep -Fq "open -gj -a $FAKE_OLLAMA_APP" "$COMMAND_LOG"
+	! grep -q '^docker info$' "$COMMAND_LOG"
+	! grep -q 'task .*hindsight:up' "$COMMAND_LOG"
 }
 
 @test "WithHermes runs nix-darwin chezmoi and Compose in order" {

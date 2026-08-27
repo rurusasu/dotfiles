@@ -4,16 +4,19 @@
 
 `nix/packages/sets.nix` の catalog が全プラットフォームの package provider を一元管理します。Home Manager だけを SSOT とするのではなく、1 つの catalog から OS ごとの実装を導出します。
 
-| Catalog output        | Consumer                            | Platform                     |
-| --------------------- | ----------------------------------- | ---------------------------- |
-| `all` / category sets | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
-| `darwinCasks`         | nix-homebrew in nix-darwin          | macOS                        |
-| `linuxSystemModules`  | NixOS / System Manager modules      | Linux                        |
-| `wingetMap`, `npmMap` | `nix/packages/winget.nix`           | Windows                      |
-| `supportReport`       | `package-support-report` derivation | CI and review                |
-| `providerErrors`      | flake check                         | all platforms                |
+| Catalog output                  | Consumer                            | Platform                     |
+| ------------------------------- | ----------------------------------- | ---------------------------- |
+| `all` / category sets           | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
+| `darwinCasksForInstallFeatures` | nix-homebrew in nix-darwin          | macOS                        |
+| `linuxSystemModules`            | NixOS / System Manager modules      | Linux                        |
+| `wingetMap`, `npmMap`           | `nix/packages/winget.nix`           | Windows                      |
+| `supportReport`                 | `package-support-report` derivation | CI and review                |
+| `providerErrors`                | flake check                         | all platforms                |
 
 Windows だけに存在する GUI や OS component は `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
+
+macOS caskで`installFeature`を持つpackageは、installerが解決したprofileを
+`darwinCasksForInstallFeatures`へ渡した場合だけHomebrew Bundleへ含まれます。
 
 ## Provider の追加
 

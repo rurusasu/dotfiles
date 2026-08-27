@@ -124,7 +124,7 @@ Hermes gateway は稼働を継続します。
 ```
 nix/packages/sets.nix (SSOT)
 ├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
-├── darwinCasks ────────── nix-homebrew casks
+├── darwinCasksForInstallFeatures ── profile-filtered nix-homebrew casks
 ├── darwinBrews ────────── nix-homebrew formulas
 ├── linuxSystemModules ─── NixOS / System Manager packages and services
 ├── wingetMap + npmMap ─── generated Windows manifests

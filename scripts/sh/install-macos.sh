@@ -12,6 +12,10 @@ HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/hindsight/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
+OLLAMA_APP="${DOTFILES_OLLAMA_APP_PATH:-/Applications/Ollama.app}"
+OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/version}"
+OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
+OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
@@ -409,6 +413,24 @@ setup_docker_runtime() {
   docker compose version >/dev/null
 }
 
+ollama_api_is_ready() {
+  curl --fail --silent --show-error --max-time 2 "$OLLAMA_API_URL" >/dev/null
+}
+
+setup_ollama_runtime() {
+  [[ -d $OLLAMA_APP ]] || dotfiles_die "Ollama was not installed by nix-darwin: $OLLAMA_APP"
+  [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
+  dotfiles_have curl || dotfiles_die "curl is required to verify Ollama."
+
+  if ollama_api_is_ready; then
+    return 0
+  fi
+
+  dotfiles_log "Starting Ollama..."
+  "$OPEN_COMMAND" -gj -a "$OLLAMA_APP"
+  dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
+}
+
 apply_chezmoi() {
   dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after nix-darwin activation."
   chezmoi init --source "$ROOT/chezmoi"
@@ -432,6 +454,9 @@ main() {
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   apply_chezmoi
+  if ((DOTFILES_WITH_OLLAMA == 1)); then
+    setup_ollama_runtime
+  fi
   if ((DOTFILES_WITH_DOCKER == 1)); then
     setup_docker_runtime
     if ((DOTFILES_WITH_HERMES == 1)); then
