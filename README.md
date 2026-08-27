@@ -24,7 +24,10 @@ Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる�
 
 ## クイックスタート
 
-clone 後、OS ごとの入口を 1 回実行します。Full support の installer は Nix、OS パッケージ、Home Manager、chezmoi、Docker Compose を適用し、最後に runtime acceptance を実行します。途中で失敗した場合も同じコマンドを再実行できます。
+clone 後、OS ごとの入口を 1 回実行します。installer は Nix、OS パッケージ、
+Home Manager、chezmoi と明示的に選択した optional profile を適用します。
+Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
+同じコマンドを再実行できます。
 
 ### Windows
 
@@ -48,9 +51,8 @@ Hindsight、Hermes、Chrome、Discord、Chromium/browser-mcp は導入しませ�
 
 ### macOS (Apple Silicon)
 
-macOS 26 以降の Apple Silicon Mac で実行します。Docker Desktop と Nix の
-システムコンポーネントを導入するため、初回は管理者パスワードの入力と
-Docker Desktop のライセンス確認が必要です。
+macOS 26 以降の Apple Silicon Mac で実行します。Nix のシステムコンポーネントを
+導入するため、初回は管理者パスワードの入力が必要です。
 
 ```bash
 git clone https://github.com/rurusasu/dotfiles.git
@@ -58,7 +60,20 @@ cd dotfiles
 ./install.sh
 ```
 
-Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が Homebrew formula と Docker Desktop cask を管理します。Home Manager、chezmoi、Docker Compose、runtime acceptance まで同じコマンド内で実行します。macOS では WSL や NixOS を導入しません。
+引数なしでは core 環境だけを適用し、Ollama、Docker Desktop、Hindsight、
+Hermes、Chrome、Discord は install/update/起動の対象にしません。必要な構成だけを
+明示的に追加します。`--with-docker` と `--with-hermes` の runtime は、chezmoi と
+editor 同期が完了してから起動します。
+
+```bash
+./install.sh --with-ollama # Ollama のみ
+./install.sh --with-docker # Ollama + Docker + 独立 Hindsight
+./install.sh --with-hermes # 上記 + Hermes + Chrome + Discord + browser-mcp
+```
+
+Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が選択した
+Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
+適用します。macOS では WSL や NixOS を導入しません。
 
 Tart CLI もこの macOS activation で導入されますが、約25GBの VM image は通常の `./install.sh` では取得しません。大容量ダウンロードを開始するタイミングを分離するため、初回だけ次を実行します。
 

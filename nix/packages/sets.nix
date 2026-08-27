@@ -831,6 +831,19 @@ let
   darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
     lib.filterAttrs (_: entry: entry.support.darwin ? cask) catalog
   );
+  darwinCasksForInstallFeatures =
+    enabledFeatures:
+    lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
+      lib.filterAttrs (
+        _: entry:
+        entry.support.darwin ? cask
+        && (
+          !(entry ? installFeature)
+          || entry.installFeature == null
+          || builtins.elem entry.installFeature enabledFeatures
+        )
+      ) catalog
+    );
   darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula) (
     lib.filterAttrs (_: entry: entry.support.darwin ? formula) catalog
   );
@@ -887,6 +900,7 @@ lib.mapAttrs (_: resolve) grouped
   inherit
     supportReport
     darwinCasks
+    darwinCasksForInstallFeatures
     darwinBrews
     linuxSystemModules
     providerErrors

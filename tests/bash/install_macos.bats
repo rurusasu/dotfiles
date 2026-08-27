@@ -135,11 +135,13 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 13 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
+		if [[ $# -eq 16 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
 			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
-			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == "$STUB_BIN/nix" &&
-			${7:-} == run && ${8:-} == ".#darwin-rebuild" && ${9:-} == -- &&
-			${10:-} == switch && ${11:-} == --flake && ${12:-} == ".#macos" && ${13:-} == --impure ]]; then
+			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
+			${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
+			${9:-} == "$STUB_BIN/nix" && ${10:-} == run && ${11:-} == ".#darwin-rebuild" &&
+			${12:-} == -- && ${13:-} == switch && ${14:-} == --flake &&
+			${15:-} == ".#macos" && ${16:-} == --impure ]]; then
 			exec "$@"
 		fi
 		;;
@@ -171,7 +173,7 @@ printf " <%s>" "$@" >&2
 printf "\n" >&2
 exit 97
 '
-	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub verify-environment 'printf "verify-environment compose=%s args=%s\n" "${DOTFILES_COMPOSE_FILE:-}" "$*" >>"$COMMAND_LOG"'
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
@@ -422,19 +424,51 @@ run_macos_installer() {
 	assert_no_homebrew_cask_link_mutations
 }
 
-@test "installed prerequisites run nix-darwin chezmoi and Compose in order" {
+@test "default profile applies core configuration without optional runtimes" {
 	write_installed_stubs
 
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$REPO_ROOT> <$STUB_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"docker info" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
+		"verify-environment compose= args="
+	! grep -q '^docker ' "$COMMAND_LOG"
+	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
+}
+
+@test "WithDocker includes Ollama and starts only independent Hindsight after chezmoi" {
+	write_installed_stubs
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
+	assert_log_order \
+		"chezmoi apply --force" \
+		"docker info" \
+		"task --dir $REPO_ROOT hindsight:up" \
+		"verify-environment compose=$REPO_ROOT/docker/hindsight/compose.yml args=--runtime"
+	! grep -q 'task .*hermes:bootstrap' "$COMMAND_LOG"
+}
+
+@test "WithHermes runs nix-darwin chezmoi and Compose in order" {
+	write_installed_stubs
+
+	run_macos_installer --with-hermes
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
+	assert_log_order \
+		"nix flake update --flake $REPO_ROOT" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"chezmoi init --source $REPO_ROOT/chezmoi" \
+		"chezmoi apply --force" \
+		"docker info" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
@@ -442,13 +476,23 @@ run_macos_installer() {
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
 		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
-		"verify-environment --runtime"
+		"verify-environment compose=$REPO_ROOT/docker/hermes-agent/compose.yml args=--runtime"
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
 	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 2 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
+}
+
+@test "unknown install profile stops before mutation" {
+	write_installed_stubs
+
+	run_macos_installer --with-unknown
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Unknown argument: --with-unknown"* ]]
+	[ ! -s "$COMMAND_LOG" ]
 }
 
 @test "migrates an unmanaged WezTerm install before nix-darwin activation" {
@@ -683,7 +727,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fqx "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$REPO_ROOT> <$STUB_BIN/nix> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	! grep -Fq "$DOTFILES_HOMEBREW_CASK_BIN_DIR" "$COMMAND_LOG"
 	! grep -Fq "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" "$COMMAND_LOG"
 	[ "$(grep -Fxc 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG")" -eq 1 ]
@@ -704,7 +748,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"sudo </bin/chmod> <0775> </usr/local/bin>" \
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>" \
 		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>" \
-		"docker info"
+		"chezmoi apply --force"
 }
 
 @test "Linux harness stubs macOS-only parent inspection" {
@@ -850,7 +894,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	write_installed_stubs
 	export HERMES_BOOTSTRAP_STATUS=45
 
-	run_macos_installer
+	run_macos_installer --with-hermes
 
 	[ "$status" -eq 45 ]
 	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
@@ -894,7 +938,7 @@ esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run_macos_installer
+	run_macos_installer --with-docker
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
@@ -938,7 +982,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	write_fresh_install_stubs
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
-	run_macos_installer
+	run_macos_installer --with-hermes
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
@@ -946,8 +990,8 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	assert_log_order \
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"docker-install --accept-license --user=test-user" \
-		"chezmoi init --source $REPO_ROOT/chezmoi"
+		"chezmoi init --source $REPO_ROOT/chezmoi" \
+		"docker-install --accept-license --user=test-user"
 	[ "$(grep -c 'nix-installer --daemon' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
@@ -1010,7 +1054,7 @@ exit 0
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run_macos_installer
+	run_macos_installer --with-docker
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]
