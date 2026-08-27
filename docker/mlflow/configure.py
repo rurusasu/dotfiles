@@ -13,7 +13,30 @@ from urllib.request import Request, urlopen
 
 
 API_PREFIX = "/api/3.0/mlflow"
-SENSITIVE_KEYS = frozenset({"api_key", "value", "secret", "token", "prompt", "response"})
+SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "value",
+        "secret",
+        "token",
+        "prompt",
+        "response",
+        "request",
+        "request_preview",
+        "response_preview",
+        "messages",
+        "input",
+        "content",
+        "embedding",
+        "embeddings",
+        "choices",
+        "data",
+    }
+)
+INLINE_SENSITIVE_ASSIGNMENT = re.compile(
+    r"(?i)\b(?:api_key|value|secret|token|prompt|response|request(?:_preview)?|response_preview)\b"
+    r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^,}\]\s]+)"
+)
 
 
 class GatewayHTTPError(RuntimeError):
@@ -33,11 +56,13 @@ class GatewayVerificationError(RuntimeError):
 
 def _redact(value: object) -> object:
     if isinstance(value, dict):
-        redacted_count = sum(key.lower() in SENSITIVE_KEYS for key in value)
+        redacted_count = sum(
+            isinstance(key, str) and key.lower() in SENSITIVE_KEYS for key in value
+        )
         sanitized = {
             key: _redact(item)
             for key, item in value.items()
-            if key.lower() not in SENSITIVE_KEYS
+            if not isinstance(key, str) or key.lower() not in SENSITIVE_KEYS
         }
         if redacted_count:
             sanitized["redacted_fields"] = redacted_count
@@ -45,11 +70,7 @@ def _redact(value: object) -> object:
     if isinstance(value, list):
         return [_redact(item) for item in value]
     if isinstance(value, str):
-        return re.sub(
-            r"(?i)\\b(api_key|value|secret|token|prompt|response)\\b\\s*[:=]\\s*([^,}\]\\s]+)",
-            "<redacted>",
-            value,
-        )
+        return INLINE_SENSITIVE_ASSIGNMENT.sub("<redacted>", value)
     return value
 
 
@@ -156,9 +177,24 @@ def _reconcile_secret(client: GatewayClient, provider: str, api_base: str) -> st
         )
         return str(response["secret"]["secret_id"])  # type: ignore[index]
 
-    # The API intentionally returns only masked secret values, so a read cannot prove
-    # that the compatibility key is still present. Updating the named secret is safe,
-    # keeps the desired value reconciled, and never creates a duplicate resource.
+    if existing.get("provider") != provider:
+        raise RuntimeError(
+            f"Gateway secret {secret_name!r} has provider {existing.get('provider')!r}, "
+            f"not {provider!r}; MLflow does not support changing a secret provider in place."
+        )
+    masked_values = existing.get("masked_values")
+    matches = (
+        existing.get("auth_config") == auth_config
+        and isinstance(masked_values, dict)
+        and isinstance(masked_values.get("api_key"), str)
+        and bool(masked_values["api_key"])
+    )
+    if matches:
+        return str(existing["secret_id"])
+
+    # Values are intentionally masked by MLflow. A present mask proves the managed
+    # key exists but cannot reveal whether its value differs; rotate it only when
+    # the observable configuration drifts or MLflow cannot confirm the key exists.
     response = client.request(
         "POST",
         f"{API_PREFIX}/gateway/secrets/update",
@@ -293,6 +329,35 @@ def _response_shape(condition: bool, message: str) -> None:
         raise GatewayVerificationError(f"Gateway response-shape failure: {message}")
 
 
+def _has_assistant_content(response: dict[str, object]) -> bool:
+    choices = response.get("choices")
+    if not isinstance(choices, list):
+        return False
+    return any(
+        isinstance(choice, dict)
+        and isinstance(choice.get("message"), dict)
+        and choice["message"].get("role") == "assistant"
+        and isinstance(choice["message"].get("content"), str)
+        and bool(choice["message"]["content"].strip())
+        for choice in choices
+    )
+
+
+def _has_numeric_embeddings(response: dict[str, object]) -> bool:
+    data = response.get("data")
+    if not isinstance(data, list) or not data:
+        return False
+    for item in data:
+        if not isinstance(item, dict):
+            return False
+        vector = item.get("embedding")
+        if not isinstance(vector, list) or not vector:
+            return False
+        if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in vector):
+            return False
+    return True
+
+
 def _gateway_call(client: GatewayClient, path: str, payload: dict[str, object]) -> dict[str, object]:
     try:
         return client.request("POST", path, payload)
@@ -319,8 +384,19 @@ def _search_trace_endpoint_ids(
     )
     seen: set[str] = set()
     for trace in response.get("traces", []):
-        if isinstance(trace, dict) and isinstance(trace.get("trace_metadata"), dict):
-            endpoint_id = trace["trace_metadata"].get("mlflow.gateway.endpointId")
+        if not isinstance(trace, dict):
+            continue
+        metadata = trace.get("trace_metadata")
+        if isinstance(metadata, list):
+            for entry in metadata:
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("key") == "mlflow.gateway.endpointId"
+                    and isinstance(entry.get("value"), str)
+                ):
+                    seen.add(entry["value"])
+        elif isinstance(metadata, dict):
+            endpoint_id = metadata.get("mlflow.gateway.endpointId")
             if isinstance(endpoint_id, str):
                 seen.add(endpoint_id)
     return seen
@@ -350,8 +426,8 @@ def verify_gateway(
         },
     )
     _response_shape(
-        isinstance(chat.get("choices"), list) and bool(chat["choices"]),
-        "chat completion has no choices.",
+        _has_assistant_content(chat),
+        "chat completion has no assistant message content.",
     )
     embeddings = _gateway_call(
         client,
@@ -359,13 +435,16 @@ def verify_gateway(
         {"model": embedding_endpoint, "input": "mlflow gateway verification"},
     )
     _response_shape(
-        isinstance(embeddings.get("data"), list) and bool(embeddings["data"]),
-        "embedding response has no data.",
+        _has_numeric_embeddings(embeddings),
+        "embedding response has no numeric vectors.",
     )
 
     required_ids = {str(endpoint["endpoint_id"]) for endpoint in endpoints.values()}
     for attempt in range(10):
-        seen_ids = _search_trace_endpoint_ids(client, endpoints, started_at_ms)
+        try:
+            seen_ids = _search_trace_endpoint_ids(client, endpoints, started_at_ms)
+        except GatewayHTTPError as error:
+            raise GatewayVerificationError(f"Gateway availability failure: {error}") from error
         if required_ids <= seen_ids:
             return
         if attempt < 9:
