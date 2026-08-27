@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ SENSITIVE_KEYS = frozenset(
         "api_key",
         "value",
         "secret",
+        "secret_value",
         "token",
         "prompt",
         "response",
@@ -331,9 +333,9 @@ def _response_shape(condition: bool, message: str) -> None:
 
 def _has_assistant_content(response: dict[str, object]) -> bool:
     choices = response.get("choices")
-    if not isinstance(choices, list):
+    if not isinstance(choices, list) or not choices:
         return False
-    return any(
+    return all(
         isinstance(choice, dict)
         and isinstance(choice.get("message"), dict)
         and choice["message"].get("role") == "assistant"
@@ -353,7 +355,12 @@ def _has_numeric_embeddings(response: dict[str, object]) -> bool:
         vector = item.get("embedding")
         if not isinstance(vector, list) or not vector:
             return False
-        if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in vector):
+        if not all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            for value in vector
+        ):
             return False
     return True
 

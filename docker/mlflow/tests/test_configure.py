@@ -332,6 +332,7 @@ class ConfigureGatewayTest(unittest.TestCase):
                 "request_preview=request-body response_preview=response-body"
             ),
             "secret": "field-secret",
+            "secret_value": "field-secret-value",
             "prompt": "field-prompt",
             "response": "field-response",
             "request_preview": "field-request-preview",
@@ -349,6 +350,7 @@ class ConfigureGatewayTest(unittest.TestCase):
             "request-body",
             "response-body",
             "field-secret",
+            "field-secret-value",
             "field-prompt",
             "field-response",
             "field-request-preview",
@@ -396,6 +398,23 @@ class ConfigureGatewayTest(unittest.TestCase):
                 "gateway/ollama-chat-default",
             )
 
+    def test_verification_rejects_mixed_valid_and_malformed_chat_choices(self) -> None:
+        reconcile_manifest(self.gateway.url, self.manifest)
+        self.gateway.chat_response = {
+            "choices": [
+                {"message": {"role": "assistant", "content": "ok"}},
+                {},
+            ]
+        }
+
+        with self.assertRaisesRegex(GatewayVerificationError, "response-shape failure"):
+            verify_gateway(
+                self.gateway.url,
+                "ollama-chat-default",
+                "ollama-embedding-default",
+                "gateway/ollama-chat-default",
+            )
+
     def test_verification_rejects_non_numeric_embedding_data(self) -> None:
         reconcile_manifest(self.gateway.url, self.manifest)
         self.gateway.embedding_response = {"data": ["error"]}
@@ -407,6 +426,20 @@ class ConfigureGatewayTest(unittest.TestCase):
                 "ollama-embedding-default",
                 "gateway/ollama-chat-default",
             )
+
+    def test_verification_rejects_non_finite_embedding_values(self) -> None:
+        reconcile_manifest(self.gateway.url, self.manifest)
+
+        for value in (float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                self.gateway.embedding_response = {"data": [{"embedding": [value]}]}
+                with self.assertRaisesRegex(GatewayVerificationError, "response-shape failure"):
+                    verify_gateway(
+                        self.gateway.url,
+                        "ollama-chat-default",
+                        "ollama-embedding-default",
+                        "gateway/ollama-chat-default",
+                    )
 
     def test_trace_search_http_failure_is_classified_as_gateway_availability(self) -> None:
         reconcile_manifest(self.gateway.url, self.manifest)
