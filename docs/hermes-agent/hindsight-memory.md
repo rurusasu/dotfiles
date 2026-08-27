@@ -74,8 +74,9 @@ Hindsight だけを起動します。Hermes の起動・停止は行いません
 | reranker | `BAAI/bge-reranker-v2-m3`（ローカル CPU） |
 
 ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を native Ollama から取得します。
-Hindsight の推論は `local-ai-services` 上の MLflow Gateway
-`http://mlflow:5000/gateway/mlflow/v1` を使い、モデル値にはそれぞれ
+Hindsight の chat 推論は `local-ai-services` 上の MLflow Gateway
+`http://mlflow:5000/gateway/mlflow/v1` を使い、embedding 推論は
+`http://mlflow:5000/gateway/openai/v1` を使います。モデル値にはそれぞれ
 `ollama-chat-default` と `ollama-embedding-default` を指定します。モデル取得、
 `/api/tags`、`/api/version` readiness probe は native Ollama の直接 model-management
 操作であり、MLflow trace にはなりません。
@@ -115,8 +116,9 @@ curl --fail --silent --show-error http://127.0.0.1:8888/health
 | Hindsight UI                                   | `http://127.0.0.1:9999`  |
 
 Status の Ollama URL は model pull、`/api/tags`、`/api/version` の確認用です。
-Hindsight inference はこの URL を使わず、`local-ai-services` 上の MLflow Gateway
-`http://mlflow:5000/gateway/mlflow/v1` と論理 endpoint 名を使います。
+Hindsight inference はこの URL を使わず、chat では
+`http://mlflow:5000/gateway/mlflow/v1`、embedding では
+`http://mlflow:5000/gateway/openai/v1` と論理 endpoint 名を使います。
 
 ## Logs
 

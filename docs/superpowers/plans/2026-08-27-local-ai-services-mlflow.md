@@ -6,7 +6,7 @@
 
 **Architecture:** MLflow runs as an independent pinned Compose service on the externally named `local-ai-services` network. It is the only container allowed to call host Ollama through `host.docker.internal`; Docker clients use the OpenAI-compatible Gateway URL and stable logical endpoint names. MLflow tracking metadata and traces use a bind-mounted SQLite backend, while a repository-owned endpoint manifest is reconciled through the documented Gateway REST API.
 
-**Tech Stack:** Docker Compose, MLflow `v3.12.0` image pinned by digest, MLflow Gateway REST API, SQLite, Python 3 standard library plus the pinned image's YAML parser, go-task, Bash, PowerShell, unittest, Bats.
+**Tech Stack:** Docker Compose, MLflow `v3.12.0-full` image pinned by digest, MLflow Gateway REST API, SQLite, Python 3 standard library plus the pinned image's YAML parser, go-task, Bash, PowerShell, unittest, Bats.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-local-ai-services-mlflow-design.md`
 
@@ -14,12 +14,12 @@
 
 - Use the shared Docker network name `local-ai-services`; keep Hindsight's existing `dotfiles-memory` network and independent lifecycle.
 - Publish MLflow only on `127.0.0.1:5000`; container clients use `http://mlflow:5000/gateway/mlflow/v1`.
-- Pin the MLflow image to released version `v3.12.0` and the digest resolved from the registry; never use `latest`.
+- Pin the MLflow image to released version `v3.12.0-full` and the digest resolved from the registry; never use `latest`.
 - Use `sqlite:////mlflow/mlflow.db` with host data root `${MLFLOW_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/mlflow}` and retain data across `down`/restart.
 - Keep model pulls and Ollama readiness probes direct to host Ollama; route every model inference through MLflow or an explicitly documented MLflow instrumentation path.
 - Store no API keys, prompts, responses, or trace payloads in Git; keep the local MLflow data root outside the repository.
 - Gateway inference is fail-closed by default; no automatic direct-Ollama fallback may be introduced.
-- Preserve unrelated dirty files in the primary checkout and make implementation commits only in `/Users/ktome1995/Program/dotfiles/.worktrees/local-ai-mlflow`.
+- Preserve unrelated dirty files in the primary checkout and make implementation commits only in `/Users/ktome1995/Program/dotfiles/.worktrees/local-ai-mlflow-v2`.
 
 ---
 
@@ -67,7 +67,7 @@
   Add tests that parse the Compose YAML and manifest and assert:
 
   ```python
-  self.assertTrue(compose["services"]["mlflow"]["image"].startswith("ghcr.io/mlflow/mlflow:v3.12.0@sha256:"))
+  self.assertTrue(compose["services"]["mlflow"]["image"].startswith("ghcr.io/mlflow/mlflow:v3.12.0-full@sha256:"))
   self.assertEqual(compose["services"]["mlflow"]["ports"], ["127.0.0.1:${MLFLOW_PORT:-5000}:5000"])
   self.assertEqual(compose["networks"]["local-ai-services"], {"name": "local-ai-services", "external": True})
   self.assertEqual(manifest["endpoints"][0]["name"], "ollama-chat-default")
@@ -90,7 +90,7 @@
   Run:
 
   ```bash
-  docker buildx imagetools inspect ghcr.io/mlflow/mlflow:v3.12.0
+  docker buildx imagetools inspect ghcr.io/mlflow/mlflow:v3.12.0-full
   ```
 
   Use the registry digest returned for the multi-platform manifest in `docker/mlflow/compose.yml`; do not copy a platform-specific child digest and do not use `latest`.
@@ -124,13 +124,13 @@
     - name: ollama-chat-default
       provider: ollama
       model_name: qwen3.6:35b
-      api_base: http://host.docker.internal:11434
+      api_base: http://host.docker.internal:11434/v1
       capability: chat
       usage_tracking: true
     - name: ollama-embedding-default
       provider: ollama
       model_name: qwen3-embedding:0.6b
-      api_base: http://host.docker.internal:11434
+      api_base: http://host.docker.internal:11434/v1
       capability: embeddings
       usage_tracking: true
   ```
@@ -198,7 +198,7 @@
 
 - [ ] **Step 6: Implement the verification probe.**
 
-  Send one OpenAI-compatible chat request to `/gateway/mlflow/v1/chat/completions` with model `ollama-chat-default`, and one embedding request to `/gateway/mlflow/v1/embeddings` with model `ollama-embedding-default`. Use deterministic short input and a low token limit. Query MLflow trace search for the resulting request window and require evidence of both endpoint names. Exit nonzero with separate messages for Gateway availability, upstream Ollama failure, response-shape failure, and missing traces.
+  Send one OpenAI-compatible chat request to `/gateway/mlflow/v1/chat/completions` with model `ollama-chat-default`, and one embedding request to `/gateway/openai/v1/embeddings` with model `ollama-embedding-default`. Use deterministic short input and a bounded token limit sufficient for the configured reasoning model. Query MLflow trace search for the resulting request window and require evidence of both endpoint names. Exit nonzero with separate messages for Gateway availability, upstream Ollama failure, response-shape failure, and missing traces.
 
 - [ ] **Step 7: Run offline tests and validate the script inside the pinned image.**
 

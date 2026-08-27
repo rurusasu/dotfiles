@@ -69,6 +69,10 @@ same Gateway path through:
 http://127.0.0.1:5000/gateway/mlflow/v1
 ```
 
+Use this MLflow-compatible path for chat requests. For embeddings, use the
+OpenAI passthrough path `http://127.0.0.1:5000/gateway/openai/v1/embeddings`
+with the logical embedding endpoint name as `model`.
+
 MLflow itself listens on `0.0.0.0:5000` inside its container, but Compose
 publishes it only on the host loopback address (`127.0.0.1:5000`). It is not a
 remote service. The Docker URL above is reachable only from a client attached
