@@ -2,6 +2,34 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  TEST_ROOT="$BATS_TEST_TMPDIR/task-shell"
+  export TASK_TEST_PWSH_ARGS="$TEST_ROOT/pwsh-args"
+
+  mkdir -p "$TEST_ROOT/bin"
+  cat >"$TEST_ROOT/bin/pwsh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"$TASK_TEST_PWSH_ARGS"
+EOF
+  chmod +x "$TEST_ROOT/bin/pwsh"
+}
+
+run_task_command_through_shell() {
+  local source_task="$1"
+  local command_index="$2"
+  local taskfile="$TEST_ROOT/$source_task-$command_index.yml"
+  local command
+
+  command="$(ruby -ryaml -e '
+    taskfile = YAML.load_file(ARGV.fetch(0))
+    puts taskfile.fetch("tasks").fetch(ARGV.fetch(1)).fetch("cmds")[ARGV.fetch(2).to_i].fetch("cmd")
+  ' "$REPO_ROOT/taskfiles/mlflow/taskfile.yml" "$source_task" "$command_index")"
+  ruby -ryaml -e '
+    puts YAML.dump({"version" => "3", "tasks" => {"probe" => {"cmds" => [ARGV.fetch(0)]}}})
+  ' "$command" >"$taskfile"
+
+  run env PATH="$TEST_ROOT/bin:$PATH" task --taskfile "$taskfile" probe
+  [ "$status" -eq 0 ]
 }
 
 @test "root task listing exposes all public MLflow operator tasks" {
@@ -34,4 +62,18 @@ setup() {
   taskfile="$REPO_ROOT/taskfiles/hindsight/taskfile.yml"
 
   grep -A8 '^  hindsight:up:' "$taskfile" | grep -Fq 'task: mlflow:up'
+}
+
+@test "Windows PowerShell payloads survive Task's POSIX command layer" {
+  run_task_command_through_shell "mlflow:up" 1
+  mapfile -t pwsh_args <"$TASK_TEST_PWSH_ARGS"
+  [ "${pwsh_args[0]}" = "-NoProfile" ]
+  [ "${pwsh_args[1]}" = "-Command" ]
+  [ "${pwsh_args[2]}" = 'docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }' ]
+
+  run_task_command_through_shell "mlflow:status" 2
+  mapfile -t pwsh_args <"$TASK_TEST_PWSH_ARGS"
+  [ "${pwsh_args[0]}" = "-NoProfile" ]
+  [ "${pwsh_args[1]}" = "-Command" ]
+  [ "${pwsh_args[2]}" = 'Get-Content docker/mlflow/endpoints.yml | Select-String "^\s*-\s+name:\s*(\S+)\s*$" | ForEach-Object { $_.Matches[0].Groups[1].Value }' ]
 }

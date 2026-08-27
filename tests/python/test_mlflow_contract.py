@@ -193,7 +193,7 @@ class MlflowContractTests(unittest.TestCase):
                     "platforms": ["linux", "darwin"],
                 },
                 {
-                    "cmd": "pwsh -NoProfile -Command \"docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }\"",
+                    "cmd": "pwsh -NoProfile -Command 'docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }'",
                     "platforms": ["windows"],
                 },
                 "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --wait mlflow",
@@ -232,7 +232,7 @@ class MlflowContractTests(unittest.TestCase):
                     "platforms": ["linux", "darwin"],
                 },
                 {
-                    "cmd": "pwsh -NoProfile -Command \"Get-Content docker/mlflow/endpoints.yml | Select-String '^\\s*-\\s+name:\\s*(\\S+)\\s*$' | ForEach-Object { $_.Matches[0].Groups[1].Value }\"",
+                    "cmd": "pwsh -NoProfile -Command 'Get-Content docker/mlflow/endpoints.yml | Select-String \"^\\s*-\\s+name:\\s*(\\S+)\\s*$\" | ForEach-Object { $_.Matches[0].Groups[1].Value }'",
                     "platforms": ["windows"],
                 },
             ],
