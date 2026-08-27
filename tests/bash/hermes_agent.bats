@@ -312,9 +312,10 @@ create_mocked_installer_fixture() {
 	MOCK_REPO="$fixture_root/installer-repo"
 	MOCK_BIN="$fixture_root/installer-bin"
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
+	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
 		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hindsight" \
-		"$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
+		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
@@ -448,6 +449,8 @@ printf "\\n" >&2
 exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
 
@@ -522,6 +525,8 @@ EOF
 		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
+		DOTFILES_OPEN_COMMAND="$MOCK_BIN/open" \
 		DOTFILES_TASK_COMMAND="$MOCK_BIN/task" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
 		DOTFILES_HOMEBREW_CASK_BIN_DIR="$fixture_root/untrusted/bin" \
