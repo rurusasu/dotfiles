@@ -133,7 +133,7 @@ class MlflowContractTests(unittest.TestCase):
                     "name": "ollama-chat-default",
                     "provider": "ollama",
                     "model_name": "qwen3.6:35b",
-                    "api_base": "http://host.docker.internal:11434",
+                    "api_base": "http://host.docker.internal:11434/v1",
                     "capability": "chat",
                     "usage_tracking": True,
                 },
@@ -141,7 +141,7 @@ class MlflowContractTests(unittest.TestCase):
                     "name": "ollama-embedding-default",
                     "provider": "ollama",
                     "model_name": "qwen3-embedding:0.6b",
-                    "api_base": "http://host.docker.internal:11434",
+                    "api_base": "http://host.docker.internal:11434/v1",
                     "capability": "embeddings",
                     "usage_tracking": True,
                 },
@@ -149,6 +149,12 @@ class MlflowContractTests(unittest.TestCase):
         )
         self.assertTrue(
             all("secret" not in json.dumps(item).lower() for item in endpoints)
+        )
+
+    def test_manifest_retains_the_openai_compatible_v1_base_for_gateway_calls(self) -> None:
+        self.assertEqual(
+            {endpoint["api_base"] for endpoint in self.manifest["endpoints"]},
+            {"http://host.docker.internal:11434/v1"},
         )
 
     def test_root_taskfile_includes_the_flattened_mlflow_operator_tasks(self) -> None:
