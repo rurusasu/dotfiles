@@ -99,20 +99,33 @@ sessions, logs, and browser state remain local runtime data.
 profile homes are never Git repositories. The default profile owns
 shared-lifelog synchronization through the common bootstrap command.
 
-## Hermes Hindsight ローカルメモリ
+## Local AI services and Hermes Hindsight
 
-Hindsight は host-native Ollama と Compose の `hindsight` service で構成する
-local-only memory provider です。API と UI はそれぞれ host loopback の
-`127.0.0.1:8888` と `127.0.0.1:9999` にだけ公開し、埋め込み PostgreSQL は
-公開しません。Hermes と Hindsight は `dotfiles-memory` bridge network で接続します。
-公開 Hermes 起動タスクは network と memory service を先に準備しますが、Compose の
-lifecycle は独立しています。Hindsight 障害時は memory recall/retain が使えなくても
-Hermes gateway は稼働を継続します。
+MLflow is the local inference and trace boundary for Hindsight and future
+Docker AI services. Hindsight uses the stable logical endpoints
+`ollama-chat-default` and `ollama-embedding-default` over the external
+`local-ai-services` network. Only MLflow contacts native host Ollama for the
+configured provider. Hindsight's direct model pulls and Ollama readiness
+probes remain host-native model-management operations and are not inference
+traces.
+
+Hindsight remains an independent local-only memory provider. Its API and UI
+are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
+its embedded PostgreSQL is not published. Hermes and Hindsight continue to
+use the `dotfiles-memory` bridge network; `local-ai-services` is additive and
+does not replace it. Public Hermes startup prepares the memory network and
+service first, but the Compose lifecycles remain independent. If Hindsight is
+unavailable, memory recall/retain may be unavailable while the Hermes gateway
+continues running.
+
+The onboarding fields, approved connection modes, MLflow operator tasks, and
+runtime-data policy are defined in [Local AI services onboarding and
+operations](./mlflow/local-ai-services.md).
 
 | 所有者                                               | 永続化対象                           | Git との境界                                                          |
 | ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
-| `${HINDSIGHT_DATA_DIR}/pg0`                          | Hindsight embedded PostgreSQL        | profile repository には含めない                                       |
-| `${HINDSIGHT_DATA_DIR}/cache`                        | local reranker cache                 | profile repository には含めない                                       |
+| `${HINDSIGHT_DATA_DIR}/pg0`                          | Hindsight embedded PostgreSQL        | local runtime data、profile repository には含めない                   |
+| `${HINDSIGHT_DATA_DIR}/cache`                        | local reranker cache                 | local runtime data、profile repository には含めない                   |
 | `$HERMES_HOME/hindsight/config.json`                 | root/default provider configuration  | bootstrap が transactionally 管理し、profile Git content には含めない |
 | `$HERMES_HOME/profiles/<name>/hindsight/config.json` | named-profile provider configuration | bootstrap が transactionally 管理し、profile Git content には含めない |
 
