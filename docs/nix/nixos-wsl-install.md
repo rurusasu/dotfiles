@@ -52,7 +52,12 @@ nixos-rebuild switch
 ## 環境構築の自動実行
 
 `windows/install-nixos-wsl.ps1` は既定で `scripts/nixos-wsl-postinstall.sh` を実行し、
-Flake 化と Home Manager ベースの最小構成を作成します。
+Flake 化と NixOS host の最小構成を作成します。Home Manager の WSL 設定は、リポジトリで管理する
+`nix/home/wsl.nix` を使用し、postinstall では生成しません。
+
+Home Manager のユーザー識別は `DOTFILES_USER` を優先します。未指定の場合は NixOS の
+fallback ユーザー（`nixos`）が使われます。通常の WSL 導入では PowerShell 側が対象ユーザーを
+`DOTFILES_USER` として渡します。
 
 ### 同期の仕組み (図)
 
@@ -98,11 +103,11 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 
 生成される主なファイル:
 
-- `~/.dotfiles/nix/home/packages.nix`
-- `~/.dotfiles/nix/home/wsl/users.nix`
 - `~/.dotfiles/nix/hosts/wsl/default.nix`
 - `~/.dotfiles/nix/hosts/wsl/configuration.nix`
 - `~/.dotfiles/nix/hosts/wsl/hardware-configuration.nix`
+
+Home Manager の WSL 固有設定は生成物ではなく、`~/.dotfiles/nix/home/wsl.nix` を編集します。
 
 ## パッケージ追加方法
 
