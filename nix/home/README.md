@@ -16,6 +16,8 @@ caller は対象 OS のファイルだけを読み込み、各 OS ファイル�
 
 ## 所有境界
 
+- `nix/hosts/`: system/host サービス、OS ユーザー、hardware 設定、host 固有の NixOS/nix-darwin
+  設定を所有します。host/hardware 設定を `nix/home/` に置いてはいけません。
 - `nix/packages/sets.nix`: クロスプラットフォームのパッケージ集合の単一情報源。Home Manager の
   `common.nix` はこの集合を消費します。
 - `nix/home/`: Home Manager が所有するユーザー環境、ユーザー systemd サービス、OS 固有の
@@ -30,8 +32,10 @@ caller は対象 OS のファイルだけを読み込み、各 OS ファイル�
 
 1. 対象 OS の `darwin.nix`、`linux.nix`、または `wsl.nix` に追加し、`common.nix` に OS 条件を
    増やさずに済むか確認する。
-2. OS ファイルが `imports = [ ./common.nix ];` を維持し、`common.nix` が OS 固有ファイルを
+2. system/host サービス、ユーザー、hardware、host 固有設定なら `nix/hosts/` に追加し、
+   `nix/home/` には置かない。
+3. OS ファイルが `imports = [ ./common.nix ];` を維持し、`common.nix` が OS 固有ファイルを
    import しないことを確認する。
-3. パッケージ追加なら先に `nix/packages/sets.nix` の所有範囲と各 OS への影響を確認する。
-4. dotfile または秘密の扱いなら `chezmoi/` と既存の secret 経路に置き、所有の重複を避ける。
-5. 対象 OS の評価・テストと `tests/bash/home_layout.bats` を実行する。
+4. パッケージ追加なら先に `nix/packages/sets.nix` の所有範囲と各 OS への影響を確認する。
+5. dotfile または秘密の扱いなら `chezmoi/` と既存の secret 経路に置き、所有の重複を避ける。
+6. 対象 OS の評価・テストと `tests/bash/home_layout.bats` を実行する。

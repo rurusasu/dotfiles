@@ -20,8 +20,12 @@ precedence and NixOS falls back to `nixos` when it is absent.
 
 `nix/home/README.md` defines the layout and import direction
 `caller -> <os>.nix -> common.nix`, prohibits `default.nix` and `users.nix`,
-defines ownership with `nix/packages/sets.nix` and `chezmoi/`, documents secret
-handling, and provides an OS-specific-setting checklist.
+defines the boundary between `nix/hosts/` (system/host services, users,
+hardware, and host-specific configuration) and `nix/home/` (user-level Home
+Manager configuration), and states that host/hardware settings do not belong
+in `nix/home/`. It also defines ownership with `nix/packages/sets.nix` and
+`chezmoi/`, documents secret handling, and provides an OS-specific-setting
+checklist.
 
 ## Validation
 
@@ -29,6 +33,13 @@ handling, and provides an OS-specific-setting checklist.
 - `nixfmt --check nix/modules/wsl/default.nix` — pass.
 - `git diff --check` — pass.
 - Obsolete-path scan over the Task 4 files — no matches.
+- `bats tests/bash/bootstrap_entrypoint.bats tests/bash/bootstrap_docs.bats tests/bash/home_layout.bats` — 10/10 pass.
+
+## Review follow-up
+
+- Added the explicit `nix/hosts/` versus `nix/home/` ownership boundary
+  requested by Task 4 review.
+- `git diff --check` — pass.
 - `bats tests/bash/bootstrap_entrypoint.bats tests/bash/bootstrap_docs.bats tests/bash/home_layout.bats` — 10/10 pass.
 
 ## Notes
