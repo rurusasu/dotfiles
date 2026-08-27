@@ -438,7 +438,7 @@ def verify_gateway(
     )
     embeddings = _gateway_call(
         client,
-        "/gateway/mlflow/v1/embeddings",
+        "/gateway/openai/v1/embeddings",
         {"model": embedding_endpoint, "input": "mlflow gateway verification"},
     )
     _response_shape(

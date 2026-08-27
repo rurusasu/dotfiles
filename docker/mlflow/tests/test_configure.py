@@ -172,7 +172,7 @@ class GatewayFixture:
                     return {"endpoint": endpoint}
                 if path == "/gateway/mlflow/v1/chat/completions":
                     return fixture.chat_response
-                if path == "/gateway/mlflow/v1/embeddings":
+                if path == "/gateway/openai/v1/embeddings":
                     return fixture.embedding_response
                 if path == "/api/3.0/mlflow/traces/search":
                     return {
@@ -380,7 +380,7 @@ class ConfigureGatewayTest(unittest.TestCase):
             requests["/gateway/mlflow/v1/chat/completions"]["max_tokens"], 512
         )
         self.assertEqual(
-            requests["/gateway/mlflow/v1/embeddings"]["model"], "ollama-embedding-default"
+            requests["/gateway/openai/v1/embeddings"]["model"], "ollama-embedding-default"
         )
         trace_search = requests["/api/3.0/mlflow/traces/search"]
         self.assertEqual(len(trace_search["locations"]), 2)
