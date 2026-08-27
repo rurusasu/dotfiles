@@ -163,6 +163,22 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin removes legacy oMLX installations during activation" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --no-write-lock-file --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.removeLegacyOmlx.text
+		"
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'list --formula --versions omlx'* ]]
+	[[ "$output" == *'uninstall --formula omlx'* ]]
+	[[ "$output" == *'untap jundot/omlx'* ]]
+	[[ "$output" == *'sudo --user=codex --set-home'* ]]
+}
+
 @test "Home Manager exposes Apple Silicon package manager and Docker paths" {
 	run awk '
 		/sessionPath = \[/ { in_darwin=1 }
