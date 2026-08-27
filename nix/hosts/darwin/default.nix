@@ -117,6 +117,12 @@ in
     enable = true;
     brews = sets.darwinBrews;
     casks = sets.darwinCasks;
+    taps = [
+      {
+        name = "jundot/omlx";
+        clone_target = "https://github.com/jundot/omlx";
+      }
+    ];
     # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
     onActivation = {
