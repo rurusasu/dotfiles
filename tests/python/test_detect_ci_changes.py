@@ -148,6 +148,13 @@ CASES = {
         "contract",
         "hermes",
     },
+    "scripts/sh/hindsight.sh": {"linux", "darwin", "contract", "hermes"},
+    "scripts/powershell/hindsight.ps1": {"windows", "contract", "hermes"},
+    "scripts/powershell/lib/HermesHindsight.ps1": {
+        "windows",
+        "contract",
+        "hermes",
+    },
 }
 BOOTSTRAP_CASES = {
     "windows/winget/packages.json": {"windows", "contract"},

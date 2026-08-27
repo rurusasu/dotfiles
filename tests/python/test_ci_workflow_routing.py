@@ -52,7 +52,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         match = re.search(
             rf"(?ms)^  {re.escape(event)}:\n"
             r"\s+branches: \[main\]\n"
-            r"\s+paths:\n(?P<paths>.*?)(?=^  (?:push|pull_request):|^concurrency:)",
+            r"\s+paths:\n(?P<paths>.*?)(?=^  (?:push|pull_request):|^concurrency:|^permissions:)",
             workflow,
         )
         self.assertIsNotNone(match, f"missing {event} path filter")
@@ -171,6 +171,18 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn('"scripts/sh/**"', paths)
             self.assertIn('".github/e2e/**"', paths)
             self.assertIn('"docker/hindsight/**"', paths)
+            self.assertIn('"docker/mlflow/**"', paths)
+            self.assertIn('"docs/mlflow/**"', paths)
+
+    def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
+        workflow = self._workflow()
+        push_paths = self._trigger_paths(workflow, "push")
+
+        self.assertIn('"docker/mlflow/**"', push_paths)
+        self.assertIn(
+            "python -m unittest docker/mlflow/tests/test_configure.py -v",
+            workflow,
+        )
 
     def test_bootstrap_workflow_integrates_nix_and_winget_validation(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
