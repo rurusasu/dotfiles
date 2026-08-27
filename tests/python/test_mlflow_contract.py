@@ -11,6 +11,8 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPOSITORY_ROOT / "docker/mlflow/compose.yml"
 ENDPOINTS_FILE = REPOSITORY_ROOT / "docker/mlflow/endpoints.yml"
+ROOT_TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
+MLFLOW_TASKFILE = REPOSITORY_ROOT / "taskfiles/mlflow/taskfile.yml"
 MLFLOW_IMAGE = (
     "ghcr.io/mlflow/mlflow:v3.12.0@"
     "sha256:2562eea480f1053f4feac2460eeadd9662f2099911254db2f1dc7260613aa2af"
@@ -147,6 +149,107 @@ class MlflowContractTests(unittest.TestCase):
         )
         self.assertTrue(
             all("secret" not in json.dumps(item).lower() for item in endpoints)
+        )
+
+    def test_root_taskfile_includes_the_flattened_mlflow_operator_tasks(self) -> None:
+        root_taskfile = self._load_yaml(ROOT_TASKFILE)
+
+        self.assertEqual(
+            root_taskfile["vars"]["MLFLOW_COMPOSE_FILE"],
+            "docker/mlflow/compose.yml",
+        )
+        self.assertEqual(
+            root_taskfile["includes"]["mlflow"],
+            {"taskfile": "./taskfiles/mlflow/taskfile.yml", "flatten": True},
+        )
+
+    def test_mlflow_operator_tasks_preserve_the_compose_lifecycle_contract(self) -> None:
+        self.assertTrue(MLFLOW_TASKFILE.is_file(), f"missing {MLFLOW_TASKFILE}")
+        taskfile = self._load_yaml(MLFLOW_TASKFILE)
+        tasks = taskfile["tasks"]
+
+        self.assertEqual(
+            set(tasks),
+            {
+                "mlflow:up",
+                "mlflow:configure",
+                "mlflow:down",
+                "mlflow:status",
+                "mlflow:logs",
+                "mlflow:verify",
+            },
+        )
+        self.assertEqual(taskfile["vars"]["MLFLOW_COMPOSE_FILE"], "docker/mlflow/compose.yml")
+
+        up = tasks["mlflow:up"]
+        self.assertTrue(
+            any(condition["sh"] == "docker info" for condition in up["preconditions"])
+        )
+        self.assertEqual(
+            up["cmds"],
+            [
+                {
+                    "cmd": "docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services",
+                    "platforms": ["linux", "darwin"],
+                },
+                {
+                    "cmd": "pwsh -NoProfile -Command \"docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }\"",
+                    "platforms": ["windows"],
+                },
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --wait mlflow",
+                {"task": "mlflow:configure"},
+            ],
+        )
+
+        configure = tasks["mlflow:configure"]
+        self.assertTrue(
+            any(
+                "http://127.0.0.1:5000/health" in condition["sh"]
+                for condition in configure["preconditions"]
+            )
+        )
+        self.assertEqual(
+            configure["cmds"],
+            [
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml"
+            ],
+        )
+
+        self.assertEqual(
+            tasks["mlflow:down"]["cmds"],
+            ["docker compose -f {{.MLFLOW_COMPOSE_FILE}} stop mlflow"],
+        )
+        self.assertNotIn("down", " ".join(tasks["mlflow:down"]["cmds"]))
+        self.assertNotIn("volume", " ".join(tasks["mlflow:down"]["cmds"]))
+        self.assertNotIn("network", " ".join(tasks["mlflow:down"]["cmds"]))
+        self.assertTrue(tasks["mlflow:logs"]["interactive"])
+        self.assertEqual(
+            tasks["mlflow:status"]["cmds"],
+            [
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} ps mlflow",
+                {
+                    "cmd": "awk '/^[[:space:]]*-[[:space:]]+name:/{print $3}' docker/mlflow/endpoints.yml",
+                    "platforms": ["linux", "darwin"],
+                },
+                {
+                    "cmd": "pwsh -NoProfile -Command \"Get-Content docker/mlflow/endpoints.yml | Select-String '^\\s*-\\s+name:\\s*(\\S+)\\s*$' | ForEach-Object { $_.Matches[0].Groups[1].Value }\"",
+                    "platforms": ["windows"],
+                },
+            ],
+        )
+        self.assertEqual(
+            tasks["mlflow:verify"]["cmds"],
+            ["docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python /opt/mlflow/verify.py"],
+        )
+
+    def test_hindsight_up_waits_for_mlflow_startup(self) -> None:
+        hindsight_taskfile = self._load_yaml(
+            REPOSITORY_ROOT / "taskfiles/hindsight/taskfile.yml"
+        )
+
+        self.assertIn(
+            {"task": "mlflow:up"},
+            hindsight_taskfile["tasks"]["hindsight:up"]["deps"],
         )
 
 
