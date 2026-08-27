@@ -245,7 +245,7 @@
 
 - [ ] **Step 3: Implement the MLflow taskfile.**
 
-  Define `MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml` in the taskfile's local vars. Use `docker compose ... up -d --wait mlflow` for the startup wait, then call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`; use the read-only mounts established by Task 2. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
+  Define `MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml` in the taskfile's local vars. Before starting Compose, create the external network when absent with `docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services`. Then use `docker compose ... up -d --wait mlflow` for the startup wait, call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`, and use the read-only mounts established by Task 2. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
 
 - [ ] **Step 4: Include the taskfile and wire Hindsight startup.**
 
