@@ -10,6 +10,10 @@
       overlays ? [ ],
       homeExtraSpecialArgs ? { },
     }:
+    let
+      configuredUser = builtins.getEnv "DOTFILES_USER";
+      user = if configuredUser == "" then "nixos" else configuredUser;
+    in
     inputs.nixpkgs.lib.nixosSystem {
       specialArgs = { inherit inputs siteLib system; };
       modules = [
@@ -28,9 +32,12 @@
                 useUserPackages = true;
                 extraSpecialArgs = {
                   inherit inputs;
+                  isWSL = false;
                 }
                 // homeExtraSpecialArgs;
-                users = import homeModulePath;
+                users.${user} = {
+                  imports = [ homeModulePath ];
+                };
               };
             }
           ]

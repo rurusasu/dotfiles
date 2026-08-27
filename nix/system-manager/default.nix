@@ -59,7 +59,7 @@ in
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";
-    users.${user} = import ../home/common.nix;
+    users.${user} = import ../home/linux.nix;
     extraSpecialArgs = {
       inherit inputs;
       isWSL = false;
