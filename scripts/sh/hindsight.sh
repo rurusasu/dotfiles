@@ -171,8 +171,8 @@ hindsight_prepare() {
     dotfiles_have "$command" || dotfiles_die "$command is required for Hindsight."
   done
 
-  llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL)"
-  embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)"
+  llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_OLLAMA_LLM_MODEL)"
+  embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_OLLAMA_EMBEDDING_MODEL)"
   data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
   hindsight_migrate_legacy_data "$data_dir" validate
   "$ollama_command" pull "$llm_model"

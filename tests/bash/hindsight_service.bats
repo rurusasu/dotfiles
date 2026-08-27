@@ -14,6 +14,10 @@ setup() {
 	grep -q '127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999' "$HINDSIGHT_COMPOSE"
 	grep -q 'HINDSIGHT_DATA_DIR' "$HINDSIGHT_COMPOSE"
 	grep -q 'name: dotfiles-memory' "$HINDSIGHT_COMPOSE"
+	grep -q '^      - local-ai-services$' "$HINDSIGHT_COMPOSE"
+	grep -q '^  local-ai-services:$' "$HINDSIGHT_COMPOSE"
+	grep -q 'name: local-ai-services' "$HINDSIGHT_COMPOSE"
+	grep -q 'external: true' "$HINDSIGHT_COMPOSE"
 }
 
 @test "Hermes joins the shared memory network without owning Hindsight" {

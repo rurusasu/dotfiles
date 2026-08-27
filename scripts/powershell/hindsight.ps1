@@ -238,8 +238,8 @@ function Invoke-HindsightMain {
 
     if ($RequestedAction -eq 'up') {
         $environmentFile = Join-Path (Split-Path -Parent $RequestedComposeFile) 'hindsight.env'
-        $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
-        $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
+        $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_LLM_MODEL=(.+)$').Matches.Groups[1].Value
+        $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_EMBEDDING_MODEL=(.+)$').Matches.Groups[1].Value
         $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
         Move-HindsightLegacyData -DataDir $dataDir -ValidateOnly
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)

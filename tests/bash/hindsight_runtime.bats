@@ -13,8 +13,10 @@ setup() {
 	mkdir -p "$TEST_HOME" "$BIN" "$COMPOSE_DIR"
 	printf 'services: {}\n' >"$COMPOSE"
 	printf '%s\n' \
-		'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b' \
-		'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b' \
+		'HINDSIGHT_API_LLM_MODEL=ollama-chat-default' \
+		'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=ollama-embedding-default' \
+		'HINDSIGHT_OLLAMA_LLM_MODEL=qwen3.6:35b' \
+		'HINDSIGHT_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b' \
 		>"$COMPOSE_DIR/hindsight.env"
 	: >"$LOG"
 
@@ -239,6 +241,8 @@ EOF
 	[ "$status" -eq 0 ]
 	grep -Fxq 'ollama pull qwen3.6:35b' "$LOG"
 	grep -Fxq 'ollama pull qwen3-embedding:0.6b' "$LOG"
+	! grep -Fxq 'ollama pull ollama-chat-default' "$LOG"
+	! grep -Fxq 'ollama pull ollama-embedding-default' "$LOG"
 	grep -Fxq "docker compose -f $COMPOSE config --quiet" "$LOG"
 	grep -Fxq "docker compose -f $COMPOSE up -d hindsight" "$LOG"
 	[ -d "$HOME/.local/share/hindsight/pg0" ]
@@ -259,14 +263,18 @@ EOF
 	[ "$status" -eq 0 ]
 	grep -Fxq 'offline-ollama pull qwen3.6:35b' "$LOG"
 	grep -Fxq 'offline-ollama pull qwen3-embedding:0.6b' "$LOG"
+	! grep -Fxq 'offline-ollama pull ollama-chat-default' "$LOG"
+	! grep -Fxq 'offline-ollama pull ollama-embedding-default' "$LOG"
 	! grep -Eq '^ollama ' "$LOG"
 }
 
 @test "duplicate model assignment fails before pulling or starting" {
 	printf '%s\n' \
-		'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b' \
-		'HINDSIGHT_API_LLM_MODEL=duplicate' \
-		'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b' \
+		'HINDSIGHT_API_LLM_MODEL=ollama-chat-default' \
+		'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=ollama-embedding-default' \
+		'HINDSIGHT_OLLAMA_LLM_MODEL=qwen3.6:35b' \
+		'HINDSIGHT_OLLAMA_LLM_MODEL=duplicate' \
+		'HINDSIGHT_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b' \
 		>"$COMPOSE_DIR/hindsight.env"
 
 	run "$SCRIPT" up "$COMPOSE"

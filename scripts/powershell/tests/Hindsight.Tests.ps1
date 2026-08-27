@@ -127,8 +127,10 @@ Describe 'Independent Hindsight startup cutover' {
         New-Item -ItemType Directory -Path $composeDir, $env:USERPROFILE -Force | Out-Null
         Set-Content -LiteralPath $script:composeFile -Value 'services: {}'
         Set-Content -LiteralPath (Join-Path $composeDir 'hindsight.env') -Value @(
-            'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b'
-            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
+            'HINDSIGHT_API_LLM_MODEL=ollama-chat-default'
+            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=ollama-embedding-default'
+            'HINDSIGHT_OLLAMA_LLM_MODEL=qwen3.6:35b'
+            'HINDSIGHT_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b'
         )
 
         Mock Move-HindsightLegacyData {
@@ -172,6 +174,8 @@ Describe 'Independent Hindsight startup cutover' {
         $stopIndex | Should -BeLessThan $upIndex
         $upIndex | Should -BeLessThan $waitIndex
         $waitIndex | Should -BeLessThan $retireIndex
+        $script:calls | Should -Not -Contain 'ollama pull ollama-chat-default'
+        $script:calls | Should -Not -Contain 'ollama pull ollama-embedding-default'
     }
 
     It 'should leave legacy data running when model preparation fails' {

@@ -21,8 +21,10 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
         Set-Content -LiteralPath $script:composeFile -Value 'services: {}' -Encoding utf8
         Set-Content -LiteralPath $script:hindsightComposeFile -Value 'services: {}' -Encoding utf8
         Set-Content -LiteralPath (Join-Path $script:composeDirectory 'hindsight.env') -Value @(
-            'HINDSIGHT_API_LLM_MODEL=qwen3.6:35b'
-            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b'
+            'HINDSIGHT_API_LLM_MODEL=ollama-chat-default'
+            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=ollama-embedding-default'
+            'HINDSIGHT_OLLAMA_LLM_MODEL=qwen3.6:35b'
+            'HINDSIGHT_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b'
         ) -Encoding utf8
         Set-Content -LiteralPath $script:stateFile -Value '{"run_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","banks":{"default":"test-hermes-default-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","shiraishi":"test-hermes-shiraishi-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}' -Encoding utf8
         $script:stateBefore = Get-Content -LiteralPath $script:stateFile -Raw
@@ -95,6 +97,18 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
             )) {
             Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue
         }
+    }
+
+    It 'should prepare native Ollama models without pulling Gateway endpoint names' {
+        Initialize-HermesHindsightHost -ComposeFile $script:hindsightComposeFile -DataDir $script:dataDir
+
+        $script:calls | Should -Contain 'ollama pull qwen3.6:35b'
+        $script:calls | Should -Contain 'ollama pull qwen3-embedding:0.6b'
+        $script:calls | Should -Not -Contain 'ollama pull ollama-chat-default'
+        $script:calls | Should -Not -Contain 'ollama pull ollama-embedding-default'
+        $script:calls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/version'
+        $script:calls | Should -Contain 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags'
+        ($script:calls -join "`n") | Should -Not -Match 'mlflow:5000'
     }
 
     It 'should run all eleven phases in exact order and clean up only after recovery' {

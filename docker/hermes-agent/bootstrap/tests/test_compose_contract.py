@@ -15,6 +15,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-agent/compose.yml"
 HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/hindsight/compose.yml"
 HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hindsight/hindsight.env"
+HINDSIGHT_SHELL_SCRIPT = REPOSITORY_ROOT / "scripts/sh/hindsight.sh"
+HINDSIGHT_POWERSHELL_SCRIPT = REPOSITORY_ROOT / "scripts/powershell/hindsight.ps1"
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
 RESOLVED_CONFIG_ENV = "HERMES_BOOTSTRAP_COMPOSE_CONFIG_JSON"
 DATA_BIND = {
@@ -33,8 +35,8 @@ HINDSIGHT_IMAGE = (
 )
 HINDSIGHT_ENVIRONMENT = {
     "HINDSIGHT_API_LLM_PROVIDER": "ollama",
-    "HINDSIGHT_API_LLM_BASE_URL": "http://host.docker.internal:11434/v1",
-    "HINDSIGHT_API_LLM_MODEL": "qwen3.6:35b",
+    "HINDSIGHT_API_LLM_BASE_URL": "http://mlflow:5000/gateway/mlflow/v1",
+    "HINDSIGHT_API_LLM_MODEL": "ollama-chat-default",
     "HINDSIGHT_API_LLM_REASONING_EFFORT": "none",
     "HINDSIGHT_API_LLM_OLLAMA_NUM_CTX": "32768",
     "HINDSIGHT_API_LLM_STRICT_SCHEMA": "true",
@@ -47,9 +49,11 @@ HINDSIGHT_ENVIRONMENT = {
     "HINDSIGHT_API_RETAIN_WALL_TIMEOUT": "300",
     "HINDSIGHT_API_ENABLE_DRY_RUN_EXTRACT": "true",
     "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
-    "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": "http://host.docker.internal:11434/v1",
+    "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": "http://mlflow:5000/gateway/mlflow/v1",
     "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": "ollama",
-    "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": "qwen3-embedding:0.6b",
+    "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": "ollama-embedding-default",
+    "HINDSIGHT_OLLAMA_LLM_MODEL": "qwen3.6:35b",
+    "HINDSIGHT_OLLAMA_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
     "HINDSIGHT_API_RERANKER_PROVIDER": "local",
     "HINDSIGHT_API_RERANKER_LOCAL_MODEL": "BAAI/bge-reranker-v2-m3",
     "HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU": "true",
@@ -143,7 +147,7 @@ class ComposeContractTests(unittest.TestCase):
             hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
         )
         self.assertEqual(hindsight["shm_size"], "1g")
-        self.assertEqual(hindsight["networks"], ["memory"])
+        self.assertEqual(hindsight["networks"], ["memory", "local-ai-services"])
 
     def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
         hindsight = self.hindsight_services.get("hindsight")
@@ -175,6 +179,10 @@ class ComposeContractTests(unittest.TestCase):
             self.hindsight_compose["networks"]["memory"],
             {"name": "dotfiles-memory", "driver": "bridge"},
         )
+        self.assertEqual(
+            self.hindsight_compose["networks"]["local-ai-services"],
+            {"name": "local-ai-services", "external": True},
+        )
 
     def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
         environment = {}
@@ -184,6 +192,24 @@ class ComposeContractTests(unittest.TestCase):
                 environment[key] = value
 
         self.assertEqual(environment, HINDSIGHT_ENVIRONMENT)
+
+    def test_hindsight_preparation_uses_native_ollama_models(self) -> None:
+        shell_source = HINDSIGHT_SHELL_SCRIPT.read_text(encoding="utf-8")
+        powershell_source = HINDSIGHT_POWERSHELL_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("HINDSIGHT_OLLAMA_LLM_MODEL", shell_source)
+        self.assertIn("HINDSIGHT_OLLAMA_EMBEDDING_MODEL", shell_source)
+        self.assertNotIn(
+            'hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL', shell_source
+        )
+        self.assertNotIn(
+            'hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL',
+            shell_source,
+        )
+        self.assertIn("HINDSIGHT_OLLAMA_LLM_MODEL", powershell_source)
+        self.assertIn("HINDSIGHT_OLLAMA_EMBEDDING_MODEL", powershell_source)
+        self.assertNotIn("HINDSIGHT_API_LLM_MODEL", powershell_source)
+        self.assertNotIn("HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL", powershell_source)
 
     def test_hermes_services_load_the_private_service_account_environment_file(self) -> None:
         expected = [
