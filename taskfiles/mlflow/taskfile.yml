@@ -6,6 +6,8 @@ vars:
 tasks:
   mlflow:up:
     desc: Start MLflow, wait for health, and configure local endpoints
+    status:
+      - test "${DOTFILES_ACCEPTANCE_SKIP_MLFLOW:-0}" = "1"
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."

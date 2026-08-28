@@ -2,6 +2,7 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  command -v task >/dev/null 2>&1 || skip "go-task is unavailable"
   TEST_ROOT="$BATS_TEST_TMPDIR/task-shell"
   export TASK_TEST_PWSH_ARGS="$TEST_ROOT/pwsh-args"
 
