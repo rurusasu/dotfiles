@@ -41,4 +41,4 @@ flake 評価へ同じ識別情報を渡します。
    import しないことを確認する。
 4. パッケージ追加なら先に `nix/packages/sets.nix` の所有範囲と各 OS への影響を確認する。
 5. dotfile または秘密の扱いなら `chezmoi/` と既存の secret 経路に置き、所有の重複を避ける。
-6. 対象 OS の評価・テストと `tests/bash/home_layout.bats` を実行する。
+6. 対象 OS の評価と `nix flake check --no-build` を実行する。
