@@ -170,7 +170,7 @@ Describe 'HermesAgentHandler' {
             $browserDir | Should -Exist
             $script:dockerCalls | Should -Be @(
                 "compose -f $script:composeFile config --quiet",
-                "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium xapi-mcp",
+                "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium browser-mcp xapi-mcp",
                 "compose -f $script:composeFile ps --all --services hermes",
                 "compose -f $script:composeFile stop hermes",
                 "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
