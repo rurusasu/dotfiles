@@ -107,7 +107,7 @@ Describe 'Package catalog consistency' {
             $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
             $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
-            $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
+            $taskfile | Should -Match 'nix flake update && scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
             $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
             $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_root"'
             $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR"'

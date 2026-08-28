@@ -14,6 +14,8 @@ caller は対象 OS のファイルだけを読み込み、各 OS ファイル�
 `DOTFILES_USER` と `DOTFILES_HOME` から取り、NixOS の wiring では `DOTFILES_USER` 未指定時に
 `nixos` を fallback とします。WSL では postinstall が同じユーザーを NixOS host と Home
 Manager の両方へ渡すため、host 側の `wsl.defaultUser` と Home Manager の対象も一致します。
+日常の `nrs`、`nrt`、`nrb` も `scripts/sh/nixos-rebuild-with-user.sh` を経由し、`sudo` 後の
+flake 評価へ同じ識別情報を渡します。
 
 ## 所有境界
 

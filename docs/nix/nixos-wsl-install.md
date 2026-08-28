@@ -59,6 +59,7 @@ Home Manager と NixOS host のユーザー識別は、`--user <USER>` の指定
 自動検出したユーザーを `DOTFILES_USER` として共有します。未指定時は NixOS の fallback
 ユーザー（`nixos`）が使われます。postinstall は同じユーザーの home、UID、GID、group も
 `DOTFILES_HOME`、`DOTFILES_UID`、`DOTFILES_GID`、`DOTFILES_GROUP` として rebuild に渡します。
+以後の `nrs`、`nrt`、`nrb` も同じラッパーを使うため、通常の再構成でユーザーが `nixos` に戻りません。
 
 ### 同期の仕組み (図)
 
