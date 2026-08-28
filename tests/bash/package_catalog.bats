@@ -24,6 +24,16 @@ setup() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
+@test "catalog validates semantic provider metadata" {
+	for diagnostic in \
+		'provider and unsupported cannot coexist' \
+		'nix provider requires a derivation' \
+		'homebrew-cask provider requires cask' \
+		'source = nixpkgs requires nixAttr'; do
+		grep -q "$diagnostic" "$SETS"
+	done
+}
+
 @test "Node.js follows the current nixpkgs major" {
 	run awk '
 		/^    nodejs = \{/ { in_entry=1 }

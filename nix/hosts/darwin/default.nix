@@ -169,7 +169,7 @@ in
         };
       };
     extraSpecialArgs = {
-      inherit inputs;
+      inherit inputs installFeatures;
       isWSL = false;
     };
   };

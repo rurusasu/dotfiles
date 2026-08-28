@@ -9,6 +9,7 @@
   pkgs,
   lib,
   inputs ? null,
+  installFeatures ? null,
   isWSL,
   ...
 }:
@@ -34,11 +35,16 @@ in
     # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
     # output separately for shells and tools that resolve TERM=wezterm.
     packages =
-      sets.allWithout (
-        lib.optionals isWSL [
-          "discord"
-          "ollama"
-        ]
+      (
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          sets.allWithoutForInstallFeatures installFeatures [ ]
+        else
+          sets.allWithout (
+            lib.optionals isWSL [
+              "discord"
+              "ollama"
+            ]
+          )
       )
       ++ darwinAdditionalPackages;
 

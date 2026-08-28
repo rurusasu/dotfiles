@@ -9,6 +9,17 @@ BeforeAll {
 }
 
 Describe 'Package catalog consistency' {
+    Context 'Provider-aware catalog resolution' {
+        It 'should expose feature-aware resolver and provider identity metadata' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match 'resolveForInstallFeatures'
+            $sets | Should -Match 'source\s*='
+            $sets | Should -Match 'nixAttr\s*='
+            $sets | Should -Match 'identity\s*='
+        }
+    }
+
     It 'keeps Herdr out of the Winget manifest because Windows uses the official preview installer' {
         $sets = Get-Content -LiteralPath $script:setsPath -Raw
         $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
@@ -196,9 +207,9 @@ Describe 'Package catalog consistency' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
 
-            (@($packages | Where-Object PackageIdentifier -eq 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
-            (@($packages | Where-Object PackageIdentifier -eq 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
-            (@($packages | Where-Object PackageIdentifier -eq 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
         }
 
         It 'marks Playwright browser packages as Hermes-only' {

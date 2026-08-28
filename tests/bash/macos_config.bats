@@ -38,6 +38,36 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin default profile excludes optional Nix packages" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.map (package: package.name) config.home-manager.users.codex.home.packages
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		all(.[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin flake exposes Nix and Homebrew provider outputs by catalog ID" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
+		packages:
+		builtins.elem "darwin-vscode" (builtins.attrNames packages)
+		&& builtins.elem "darwin-docker-desktop" (builtins.attrNames packages)
+	'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "true" ]
+}
+
 @test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

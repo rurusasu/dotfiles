@@ -774,16 +774,75 @@ let
           if reason == null then { } else { unsupported = reason; };
     };
 
+  providerSource =
+    provider:
+    {
+      nix = "nixpkgs";
+      "homebrew-cask" = "homebrew";
+      "homebrew-formula" = "homebrew";
+      winget = "winget";
+      msstore = "msstore";
+      npm = "npm";
+      "system-manager" = "nixpkgs";
+    }
+    .${provider} or null;
+
+  providerIdentity =
+    name: entry: platformData:
+    let
+      provider = platformData.provider or null;
+    in
+    if provider == "homebrew-cask" then
+      platformData.cask or name
+    else if provider == "homebrew-formula" then
+      platformData.formula or name
+    else if provider == "winget" then
+      entry.winget or name
+    else if provider == "msstore" then
+      entry.msstore or name
+    else if provider == "npm" then
+      entry.npm or name
+    else if provider == "system-manager" then
+      platformData.systemModule or name
+    else
+      name;
+
+  normalizeProviderMetadata =
+    name: entry: support:
+    lib.mapAttrs (
+      _: platformData:
+      let
+        provider = platformData.provider or null;
+      in
+      if provider == null then
+        platformData
+      else
+        {
+          source = providerSource provider;
+          identity = providerIdentity name entry platformData;
+        }
+        // lib.optionalAttrs (provider == "nix" || provider == "system-manager") {
+          nixAttr = platformData.nixAttr or (platformData.systemModule or name);
+        }
+        // platformData
+    ) support;
+
   catalog = lib.mapAttrs (
     name: entry:
     entry
     // {
-      support = defaultSupport name entry // (entry.support or { });
+      support = normalizeProviderMetadata name entry (
+        defaultSupport name entry // (entry.support or { })
+      );
     }
   ) rawCatalog;
 
   mkWindowsOnlySupport = provider: reason: {
-    windows = { inherit provider; };
+    windows = {
+      inherit provider;
+      identity = reason;
+      source = providerSource provider;
+    };
     darwin = {
       unsupported = reason;
     };
@@ -806,18 +865,45 @@ let
   # Group package names by category
   grouped = lib.groupBy (name: catalog.${name}.category) (lib.attrNames catalog);
 
-  # Resolve attr names to derivations, filtering by platform availability
-  resolve =
-    names:
+  platformKey =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      "darwin"
+    else if pkgs.stdenv.hostPlatform.isLinux then
+      "linux"
+    else
+      "windows";
+
+  featureEnabled =
+    enabledFeatures: entry:
+    !(entry ? installFeature)
+    || entry.installFeature == null
+    || enabledFeatures == null
+    || builtins.elem entry.installFeature enabledFeatures;
+
+  # Resolve catalog IDs to Nix derivations selected for the current platform.
+  resolveForInstallFeatures =
+    enabledFeatures: names:
     builtins.filter (p: p != null) (
       map (
-        n:
+        name:
         let
-          p = catalog.${n}.pkg or null;
+          entry = catalog.${name};
+          package = entry.pkg or null;
+          provider = entry.support.${platformKey}.provider or null;
         in
-        if p != null && supports p pkgs.stdenv.hostPlatform.system then p else null
+        if
+          provider == "nix"
+          && featureEnabled enabledFeatures entry
+          && package != null
+          && supports package pkgs.stdenv.hostPlatform.system
+        then
+          package
+        else
+          null
       ) names
     );
+
+  resolve = resolveForInstallFeatures null;
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
@@ -828,47 +914,151 @@ let
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
   supportReport = lib.mapAttrs (_: entry: entry.support) catalog // windowsOnlySupport;
-  darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
-    lib.filterAttrs (_: entry: entry.support.darwin ? cask) catalog
+  darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.darwin.provider or null) == "homebrew-cask"
+      && (entry.support.darwin.cask or null) != null
+    ) catalog
   );
   darwinCasksForInstallFeatures =
     enabledFeatures:
-    lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
+    lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
       lib.filterAttrs (
         _: entry:
-        entry.support.darwin ? cask
-        && (
-          !(entry ? installFeature)
-          || entry.installFeature == null
-          || builtins.elem entry.installFeature enabledFeatures
-        )
+        (entry.support.darwin.provider or null) == "homebrew-cask"
+        && (entry.support.darwin.cask or null) != null
+        && featureEnabled enabledFeatures entry
       ) catalog
     );
-  darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula) (
-    lib.filterAttrs (_: entry: entry.support.darwin ? formula) catalog
+  darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.darwin.provider or null) == "homebrew-formula"
+      && (entry.support.darwin.formula or null) != null
+    ) catalog
   );
-  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule) (
-    lib.filterAttrs (_: entry: entry.support.linux ? systemModule) catalog
+  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.linux.provider or null) == "system-manager"
+      && (entry.support.linux.systemModule or null) != null
+    ) catalog
   );
-  providerErrors = lib.concatMap (
-    name:
+  darwinPackage =
+    name: entry:
+    let
+      support = entry.support.darwin;
+      provider = support.provider;
+    in
+    if provider == "nix" then
+      entry.pkg
+    else
+      pkgs.writeText "darwin-${name}-provider.json" (
+        builtins.toJSON {
+          inherit provider;
+          source = support.source;
+          identity = support.identity;
+        }
+      );
+  darwinPackages = lib.mapAttrs darwinPackage (
+    lib.filterAttrs (
+      _: entry:
+      let
+        provider = entry.support.darwin.provider or null;
+      in
+      if provider == "nix" then
+        (entry.pkg or null) != null && supports entry.pkg "aarch64-darwin"
+      else
+        builtins.elem provider [
+          "homebrew-cask"
+          "homebrew-formula"
+        ]
+    ) catalog
+  );
+
+  providerErrorsFor =
+    name: support:
     lib.concatMap
       (
         platform:
         let
-          hasPlatform = builtins.hasAttr platform supportReport.${name};
-          platformData = if hasPlatform then supportReport.${name}.${platform} else { };
-          resolved =
-            (platformData ? provider) || ((platformData ? unsupported) && platformData.unsupported != "");
+          platformData = support.${platform} or { };
+          provider = platformData.provider or null;
+          unsupported = platformData.unsupported or null;
+          entry = catalog.${name} or { };
+          package = entry.pkg or null;
+          prefix = "${name}: ${platform}: ";
+          providerSpecificErrors =
+            lib.optional (
+              provider == "homebrew-cask" && (platformData.cask or null) == null
+            ) "${prefix}homebrew-cask provider requires cask"
+            ++ lib.optional (
+              provider == "homebrew-formula" && (platformData.formula or null) == null
+            ) "${prefix}homebrew-formula provider requires formula"
+            ++ lib.optional (
+              provider == "winget" && (platformData.identity or null) == null
+            ) "${prefix}winget provider requires identity"
+            ++ lib.optional (
+              provider == "msstore" && (platformData.identity or null) == null
+            ) "${prefix}msstore provider requires identity"
+            ++ lib.optional (
+              provider == "npm" && (platformData.identity or null) == null
+            ) "${prefix}npm provider requires identity"
+            ++ lib.optional (
+              provider == "system-manager" && (platformData.systemModule or null) == null
+            ) "${prefix}system-manager provider requires systemModule";
         in
-        lib.optional (!resolved) "${name}: missing ${platform} provider or reviewed unsupported reason"
+        lib.optional (
+          provider == null && (unsupported == null || unsupported == "")
+        ) "${prefix}missing provider or reviewed unsupported reason"
+        ++ lib.optional (
+          provider != null && unsupported != null
+        ) "${prefix}provider and unsupported cannot coexist"
+        ++ lib.optional (
+          provider != null && (platformData.source or null) == null
+        ) "${prefix}provider requires source"
+        ++ lib.optional (
+          provider != null && (platformData.identity or null) == null
+        ) "${prefix}provider requires identity"
+        ++ lib.optional (
+          (platformData.source or null) == "nixpkgs" && (platformData.nixAttr or null) == null
+        ) "${prefix}source = nixpkgs requires nixAttr"
+        ++ lib.optional (
+          provider == "nix" && platform == platformKey && (package == null || !lib.isDerivation package)
+        ) "${prefix}nix provider requires a derivation"
+        ++ lib.optional (
+          provider == "nix"
+          && package != null
+          && lib.isDerivation package
+          && platform == platformKey
+          && !supports package pkgs.stdenv.hostPlatform.system
+        ) "${prefix}nix provider derivation does not support ${pkgs.stdenv.hostPlatform.system}"
+        ++ providerSpecificErrors
       )
       [
         "windows"
         "darwin"
         "linux"
-      ]
-  ) (lib.attrNames supportReport);
+      ];
+
+  darwinNixNames = lib.attrNames (
+    lib.filterAttrs (_: entry: (entry.support.darwin.provider or null) == "nix") catalog
+  );
+  darwinHomebrewNames = lib.attrNames (
+    lib.filterAttrs (
+      _: entry:
+      let
+        provider = entry.support.darwin.provider or null;
+      in
+      provider == "homebrew-cask" || provider == "homebrew-formula"
+    ) catalog
+  );
+  providerErrors =
+    lib.concatMap (name: providerErrorsFor name supportReport.${name}) (lib.attrNames supportReport)
+    ++ map (name: "${name}: darwin: catalog ID appears in both Nix and Homebrew resolution") (
+      lib.intersectLists darwinNixNames darwinHomebrewNames
+    );
 
 in
 # Category-resolved package lists (auto-derived from catalog)
@@ -885,9 +1075,16 @@ lib.mapAttrs (_: resolve) grouped
 
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
+  allForInstallFeatures =
+    enabledFeatures: resolveForInstallFeatures enabledFeatures (lib.attrNames catalog);
   allWithout =
     excludedNames:
     resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
+  allWithoutForInstallFeatures =
+    enabledFeatures: excludedNames:
+    resolveForInstallFeatures enabledFeatures (
+      builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
+    );
 
   # Windows: nix attr name → winget PackageIdentifier
   inherit
@@ -898,10 +1095,12 @@ lib.mapAttrs (_: resolve) grouped
     ;
 
   inherit
+    resolveForInstallFeatures
     supportReport
     darwinCasks
     darwinCasksForInstallFeatures
     darwinBrews
+    darwinPackages
     linuxSystemModules
     providerErrors
     windowsOnlySupport
