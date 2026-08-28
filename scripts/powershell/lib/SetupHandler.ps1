@@ -198,6 +198,9 @@ class SetupHandlerBase {
     # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager
     [int]$Phase = 2
 
+    # 成功していなければ実行してはいけないハンドラー名
+    [string[]]$DependsOn = @()
+
     # オプショナルサービスの同意設定（設定されている場合、一括同意プロンプトの対象になる）
     # ConsentKey: consent.json に保存するキー名 (例: "docker_enabled")
     # ConsentLabel: 一括同意プロンプトに表示する説明文
@@ -669,6 +672,7 @@ function Invoke-SetupHandler {
     )
 
     $results = @()
+    $resultsByHandler = @{}
 
     if ($Handlers.Count -eq 0) {
         Write-Warning "No handlers to execute"
@@ -679,6 +683,18 @@ function Invoke-SetupHandler {
         # Skip if in skip list
         if ($handler.Name -in $SkipHandlers) {
             Write-Host "[$($handler.Name)] Skipped (user request)" -ForegroundColor Gray
+            continue
+        }
+
+        $dependencyBlocked = $false
+        foreach ($dependency in @($handler.DependsOn)) {
+            if (-not $resultsByHandler.ContainsKey($dependency) -or -not $resultsByHandler[$dependency].Success) {
+                Write-Warning "[$($handler.Name)] Skipped because dependency [$dependency] did not complete successfully."
+                $dependencyBlocked = $true
+                break
+            }
+        }
+        if ($dependencyBlocked) {
             continue
         }
 
@@ -709,6 +725,7 @@ function Invoke-SetupHandler {
         try {
             $result = $handler.Apply($Context)
             $results += $result
+            $resultsByHandler[$handler.Name] = $result
 
             if ($result.Success) {
                 # Summary で表示するため OK ログは省略
@@ -724,6 +741,7 @@ function Invoke-SetupHandler {
             $exception = $_.Exception
             $result = [SetupResult]::CreateFailure($handler.Name, "Unhandled exception", $exception)
             $results += $result
+            $resultsByHandler[$handler.Name] = $result
             Write-Host "[$($handler.Name)] FAIL Exception: $($exception.Message)" -ForegroundColor Red
         }
     }

@@ -19,6 +19,7 @@ class HermesAgentHandler : SetupHandlerBase {
         $this.Order = 56
         $this.RequiresAdmin = $false
         $this.Phase = 2
+        $this.DependsOn = @('Hindsight')
     }
 
     [bool] CanApply([SetupContext]$ctx) {

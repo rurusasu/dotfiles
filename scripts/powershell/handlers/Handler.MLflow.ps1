@@ -22,6 +22,7 @@ class MLflowHandler : SetupHandlerBase {
         $this.Order = 54
         $this.RequiresAdmin = $false
         $this.Phase = 2
+        $this.DependsOn = @('Docker')
     }
 
     [bool] CanApply([SetupContext]$ctx) {
