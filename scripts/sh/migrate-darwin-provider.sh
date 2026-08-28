@@ -70,6 +70,33 @@ feature_is_enabled() {
   return 1
 }
 
+valid_homebrew_token() {
+  local token="$1"
+  [[ $token =~ ^[A-Za-z0-9][A-Za-z0-9@+._-]*(/[A-Za-z0-9][A-Za-z0-9@+._-]*)*$ ]]
+}
+
+legacy_package_is_installed() {
+  local provider="$1" name="$2" status
+  case "$provider" in
+  homebrew-cask)
+    if "$BREW_COMMAND" list --cask --versions "$name" >/dev/null; then
+      return 0
+    else
+      status=$?
+    fi
+    ;;
+  homebrew-formula)
+    if "$BREW_COMMAND" list --formula --versions "$name" >/dev/null; then
+      return 0
+    else
+      status=$?
+    fi
+    ;;
+  esac
+  [[ $status == 1 ]] || die "failed to inspect legacy Homebrew package $name"
+  return 1
+}
+
 migrate_id() {
   local package_id="$1" legacy_json legacy_provider legacy_name install_feature store_path
   [[ $package_id =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || die "invalid catalog ID: $package_id"
@@ -86,9 +113,12 @@ migrate_id() {
   *) die "unsupported legacy Darwin provider for $package_id: ${legacy_provider:-missing}" ;;
   esac
   [[ -n $legacy_name ]] || die "legacy Darwin package name is missing for $package_id"
+  valid_homebrew_token "$legacy_name" ||
+    die "invalid legacy Homebrew token for $package_id: $legacy_name"
 
   install_feature="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].installFeature // ""' "$support_json")"
   feature_is_enabled "$install_feature" || return 0
+  legacy_package_is_installed "$legacy_provider" "$legacy_name" || return 0
 
   store_path="$(build_output ".#darwin-$package_id")"
   "$VERIFY_COMMAND" \

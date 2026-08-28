@@ -19,6 +19,12 @@ die() {
   exit 1
 }
 
+require_path_component() {
+  local field_name="$1" value="$2"
+  [[ -n $value && $value != "." && $value != ".." && $value != */* ]] ||
+    die "$field_name must be a single path component"
+}
+
 support_json=""
 package_id=""
 store_path=""
@@ -77,8 +83,9 @@ app)
   app_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.appName // ""' "$support_json")"
   expected_bundle_id="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.bundleId // ""' "$support_json")"
   expected_executable="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.executable // ""' "$support_json")"
+  require_path_component "appName" "$app_name"
+  require_path_component "executable" "$expected_executable"
   [[ -n $expected_bundle_id ]] || die "bundleId is missing for $package_id"
-  [[ -n $expected_executable ]] || die "executable is missing for $package_id"
 
   app="$store_path/Applications/$app_name"
   plist="$app/Contents/Info.plist"
@@ -104,6 +111,7 @@ app)
 command)
   ((launch == 0)) || die "--launch is supported only for app identities"
   command_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.command // ""' "$support_json")"
+  require_path_component "command" "$command_name"
   "$JQ_COMMAND" -e --arg id "$package_id" '.[$id].darwin.versionArgs | type == "array"' "$support_json" >/dev/null ||
     die "versionArgs must be an array for $package_id"
   command_path="$store_path/bin/$command_name"

@@ -50,6 +50,44 @@ setup() {
     "installFeature": null,
     "legacyDarwin": null
   },
+  "traversal-app-name": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "traversal-app-name",
+      "nixAttr": "traversal-app-name",
+      "appName": "../Outside.app",
+      "bundleId": "com.example.outside",
+      "executable": "Outside"
+    },
+    "installFeature": null,
+    "legacyDarwin": null
+  },
+  "traversal-app-executable": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "traversal-app-executable",
+      "nixAttr": "traversal-app-executable",
+      "appName": "Test App.app",
+      "bundleId": "com.example.test-app",
+      "executable": "../Outside"
+    },
+    "installFeature": null,
+    "legacyDarwin": null
+  },
+  "traversal-command": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "traversal-command",
+      "nixAttr": "traversal-command",
+      "command": "..",
+      "versionArgs": ["--version"]
+    },
+    "installFeature": null,
+    "legacyDarwin": null
+  },
   "legacy-app": {
     "darwin": {
       "provider": "nix",
@@ -64,6 +102,36 @@ setup() {
     "legacyDarwin": {
       "provider": "homebrew-cask",
       "name": "legacy-app"
+    }
+  },
+  "legacy-option": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "legacy-option",
+      "nixAttr": "legacy-option",
+      "command": "test-command",
+      "versionArgs": ["version"]
+    },
+    "installFeature": null,
+    "legacyDarwin": {
+      "provider": "homebrew-cask",
+      "name": "--zap"
+    }
+  },
+  "legacy-formula": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "legacy-formula",
+      "nixAttr": "legacy-formula",
+      "command": "test-command",
+      "versionArgs": ["version"]
+    },
+    "installFeature": null,
+    "legacyDarwin": {
+      "provider": "homebrew-formula",
+      "name": "owner/tools/legacy-formula"
     }
   }
 }
@@ -82,7 +150,12 @@ esac
 	write_stub codesign 'log_command codesign "$@"'
 	write_stub spctl 'log_command spctl "$@"'
 	write_stub open 'log_command open "$@"'
-	write_stub brew 'log_command brew "$@"'
+	write_stub brew '
+log_command brew "$@"
+if [[ ${1:-} == list ]]; then
+  exit "${BREW_LIST_STATUS:-0}"
+fi
+'
 	write_stub verify '
 log_command verify "$@"
 exit "${VERIFY_STATUS:-0}"
@@ -177,6 +250,39 @@ assert_log_order() {
 	! grep -q '^plistbuddy ' "$COMMAND_LOG"
 }
 
+@test "appName traversal is rejected before inspecting an app" {
+	run "$BASH_32" "$VERIFIER" \
+		--support-json "$SUPPORT_JSON" \
+		--id traversal-app-name \
+		--store-path "$STORE_PATH"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"appName must be a single path component"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "app executable traversal is rejected before inspecting its path" {
+	run "$BASH_32" "$VERIFIER" \
+		--support-json "$SUPPORT_JSON" \
+		--id traversal-app-executable \
+		--store-path "$STORE_PATH"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"executable must be a single path component"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "command traversal is rejected before executing outside the store bin directory" {
+	run "$BASH_32" "$VERIFIER" \
+		--support-json "$SUPPORT_JSON" \
+		--id traversal-command \
+		--store-path "$STORE_PATH"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"command must be a single path component"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
 @test "verification failure leaves the legacy cask installed" {
 	export VERIFY_STATUS=42
 
@@ -187,7 +293,7 @@ assert_log_order() {
 		"nix <build> <.#package-support-report> <--no-link> <--print-out-paths>" \
 		"nix <build> <.#darwin-legacy-app> <--no-link> <--print-out-paths>" \
 		"verify <--support-json> <$SUPPORT_JSON> <--id> <legacy-app> <--store-path> <$STORE_PATH>"
-	! grep -q '^brew ' "$COMMAND_LOG"
+	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
 }
 
 @test "successful verification removes the legacy cask without zap" {
@@ -195,9 +301,34 @@ assert_log_order() {
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
+		"brew <list> <--cask> <--versions> <legacy-app>" \
 		"verify <--support-json> <$SUPPORT_JSON> <--id> <legacy-app> <--store-path> <$STORE_PATH>" \
 		"brew <uninstall> <--cask> <legacy-app>"
 	! grep -q -- '--zap' "$COMMAND_LOG"
+}
+
+@test "missing legacy cask is an idempotent no-op before package realization" {
+	export BREW_LIST_STATUS=1
+
+	run "$BASH_32" "$MIGRATOR" --id legacy-app --feature WithHermes
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "brew <list> <--cask> <--versions> <legacy-app>" "$COMMAND_LOG"
+	! grep -q 'darwin-legacy-app' "$COMMAND_LOG"
+	! grep -q '^verify ' "$COMMAND_LOG"
+	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
+}
+
+@test "missing legacy formula uses the formula installed check and exits cleanly" {
+	export BREW_LIST_STATUS=1
+
+	run "$BASH_32" "$MIGRATOR" --id legacy-formula
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "brew <list> <--formula> <--versions> <owner/tools/legacy-formula>" "$COMMAND_LOG"
+	! grep -q 'darwin-legacy-formula' "$COMMAND_LOG"
+	! grep -q '^verify ' "$COMMAND_LOG"
+	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
 }
 
 @test "disabled install feature skips both package build and legacy removal" {
@@ -206,6 +337,16 @@ assert_log_order() {
 	[ "$status" -eq 0 ]
 	grep -Fqx "nix <build> <.#package-support-report> <--no-link> <--print-out-paths>" "$COMMAND_LOG"
 	! grep -q 'darwin-legacy-app' "$COMMAND_LOG"
+	! grep -q '^verify ' "$COMMAND_LOG"
+	! grep -q '^brew ' "$COMMAND_LOG"
+}
+
+@test "legacy Homebrew token rejects option-like zap value before build or removal" {
+	run "$BASH_32" "$MIGRATOR" --id legacy-option
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"invalid legacy Homebrew token for legacy-option: --zap"* ]]
+	! grep -q 'darwin-legacy-option' "$COMMAND_LOG"
 	! grep -q '^verify ' "$COMMAND_LOG"
 	! grep -q '^brew ' "$COMMAND_LOG"
 }
