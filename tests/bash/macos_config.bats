@@ -22,6 +22,7 @@ setup() {
 	grep -q 'nix-homebrew = {' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 	grep -q 'casks = sets.darwinCasksForInstallFeatures' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 	grep -q 'home-manager.darwinModules.home-manager' "$REPO_ROOT/nix/flakes/darwin.nix"
+	grep -q '../../home/darwin.nix' "$REPO_ROOT/nix/hosts/darwin/default.nix"
 }
 
 @test "Darwin default profile excludes optional casks" {

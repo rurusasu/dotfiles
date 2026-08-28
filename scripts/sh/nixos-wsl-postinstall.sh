@@ -99,6 +99,20 @@ if [[ -z $USER_NAME ]]; then
   fi
 fi
 
+USER_HOME="$(getent passwd "$USER_NAME" | cut -d: -f6)"
+if [[ -z $USER_HOME ]]; then
+  echo "Unable to resolve the home directory for $USER_NAME." >&2
+  exit 1
+fi
+
+# Keep the NixOS host account and Home Manager target aligned with the user
+# selected by --user (or the auto-detected account).
+export DOTFILES_USER="$USER_NAME"
+export DOTFILES_HOME="$USER_HOME"
+export DOTFILES_UID="$(id -u "$USER_NAME")"
+export DOTFILES_GID="$(id -g "$USER_NAME")"
+export DOTFILES_GROUP="$(id -gn "$USER_NAME")"
+
 if [[ -z $REPO_DIR ]]; then
   REPO_DIR="/home/$USER_NAME/.dotfiles"
 fi
@@ -220,48 +234,15 @@ aarch64 | arm64)
 esac
 
 NIX_DIR="$TARGET_DIR/nix"
-HM_DIR="$NIX_DIR/home"
-HM_USERS_DIR="$HM_DIR/users"
-HM_PROFILES_DIR="$NIX_DIR/profiles/home"
 HOST_DIR="$NIX_DIR/hosts/wsl"
 
-mkdir -p "$HM_DIR/wsl" "$HM_USERS_DIR" "$HM_PROFILES_DIR" "$HOST_DIR"
+mkdir -p "$HOST_DIR"
 
-USER_HOME_PATH="$HM_USERS_DIR/$USER_NAME.nix"
-HOST_HOME_PATH="$HM_DIR/wsl/default.nix"
 HOST_DEFAULT_PATH="$HOST_DIR/default.nix"
 HOST_CONFIG_PATH="$HOST_DIR/configuration.nix"
 HOST_HW_PATH="$HOST_DIR/hardware-configuration.nix"
 
 # Only generate files if they don't exist (preserve existing configurations)
-if [[ ! -f $USER_HOME_PATH ]]; then
-  cat >"$USER_HOME_PATH" <<EOF
-{ config, pkgs, ... }:
-{
-  home.username = "$USER_NAME";
-  home.homeDirectory = "/home/$USER_NAME";
-}
-EOF
-  echo "Created: $USER_HOME_PATH"
-else
-  echo "Skipping (exists): $USER_HOME_PATH"
-fi
-
-if [[ ! -f $HOST_HOME_PATH ]]; then
-  cat >"$HOST_HOME_PATH" <<EOF
-{ config, pkgs, ... }:
-{
-  imports = [
-    ../users/$USER_NAME.nix
-    ../../profiles/home
-  ];
-}
-EOF
-  echo "Created: $HOST_HOME_PATH"
-else
-  echo "Skipping (exists): $HOST_HOME_PATH"
-fi
-
 if [[ ! -f $HOST_DEFAULT_PATH ]]; then
   cat >"$HOST_DEFAULT_PATH" <<EOF
 { config, inputs, pkgs, ... }:

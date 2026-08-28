@@ -65,8 +65,7 @@
     },
     {
       "patterns": [
-        "nix/home/linux/**",
-        "nix/home/users/**",
+        "nix/home/linux.nix",
         "nix/hosts/linux/**",
         "nix/system-manager/**",
         "nix/tests/**"
@@ -74,12 +73,16 @@
       "outputs": ["linux", "contract", "nix"]
     },
     {
-      "patterns": ["nix/home/wsl/**", "nix/hosts/wsl/**", "nix/modules/wsl/**"],
+      "patterns": ["nix/home/wsl.nix", "nix/hosts/wsl/**", "nix/modules/wsl/**"],
       "outputs": ["wsl", "contract", "nix"]
     },
     {
-      "patterns": ["nix/hosts/darwin/**"],
+      "patterns": ["nix/home/darwin.nix", "nix/hosts/darwin/**"],
       "outputs": ["darwin", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/home/README.md"],
+      "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
     },
     {
       "patterns": ["nix/modules/host/**"],

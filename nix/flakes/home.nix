@@ -7,25 +7,34 @@
 let
   Workmux = import ./lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
-  mkHome =
+  mkHome = system: {
+    pkgs = import inputs.nixpkgs {
+      inherit system;
+      config.allowUnfree = true;
+      overlays = [ workmuxOverlay ];
+    };
+    extraSpecialArgs = {
+      inherit inputs;
+      isWSL = false;
+    };
+  };
+  mkDarwinHome =
     system:
     inputs.home-manager.lib.homeManagerConfiguration {
-      pkgs = import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-        overlays = [ workmuxOverlay ];
-      };
-      extraSpecialArgs = {
-        inherit inputs;
-        isWSL = false;
-      };
-      modules = [ ../home/common.nix ];
+      inherit (mkHome system) pkgs extraSpecialArgs;
+      modules = [ ../home/darwin.nix ];
+    };
+  mkLinuxHome =
+    system:
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit (mkHome system) pkgs extraSpecialArgs;
+      modules = [ ../home/linux.nix ];
     };
 in
 {
   flake.homeConfigurations = {
-    "aarch64-darwin" = mkHome "aarch64-darwin";
-    "x86_64-linux" = mkHome "x86_64-linux";
-    "aarch64-linux" = mkHome "aarch64-linux";
+    "aarch64-darwin" = mkDarwinHome "aarch64-darwin";
+    "x86_64-linux" = mkLinuxHome "x86_64-linux";
+    "aarch64-linux" = mkLinuxHome "aarch64-linux";
   };
 }

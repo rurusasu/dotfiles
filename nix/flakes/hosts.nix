@@ -29,7 +29,7 @@ in
           Hosts.mkNixos {
             inherit system siteLib;
             hostPath = ../hosts/wsl;
-            homeModulePath = ../home/wsl/users.nix;
+            homeModulePath = ../home/wsl.nix;
             overlays = [ workmuxOverlay ];
             homeExtraSpecialArgs = {
               isWSL = true;
@@ -57,11 +57,8 @@ in
           Hosts.mkNixos {
             inherit system siteLib;
             hostPath = ../hosts/linux;
-            homeModulePath = ../home/linux/users.nix;
+            homeModulePath = ../home/linux.nix;
             overlays = [ workmuxOverlay ];
-            homeExtraSpecialArgs = {
-              isWSL = false;
-            };
             extraModules = [ (/. + hardwareConfig) ];
           }
         );
