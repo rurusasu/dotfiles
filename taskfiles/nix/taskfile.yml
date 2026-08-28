@@ -1,6 +1,14 @@
 version: "3"
 
 tasks:
+  darwin:verify:
+    cmds:
+      - "bash scripts/sh/verify-darwin-package.sh {{.CLI_ARGS}}"
+
+  darwin:migrate:
+    cmds:
+      - "bash scripts/sh/migrate-darwin-provider.sh {{.CLI_ARGS}}"
+
   nrs:
     desc: Update inputs, activate NixOS, upgrade the profile, and bootstrap Hermes
     cmds:

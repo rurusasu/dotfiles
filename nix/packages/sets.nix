@@ -963,7 +963,23 @@ let
   msstoreMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.msstore or null) catalog);
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
-  supportReport = lib.mapAttrs (_: entry: entry.support) catalog // windowsOnlySupport;
+  supportReport =
+    lib.mapAttrs (
+      _: entry:
+      entry.support
+      // {
+        installFeature = entry.installFeature or null;
+        legacyDarwin = entry.legacyDarwin or null;
+      }
+    ) catalog
+    // lib.mapAttrs (
+      _: support:
+      support
+      // {
+        installFeature = null;
+        legacyDarwin = null;
+      }
+    ) windowsOnlySupport;
   darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
     lib.filterAttrs (
       _: entry:
@@ -1049,6 +1065,11 @@ let
         "source"
         "identity"
         "nixAttr"
+        "appName"
+        "bundleId"
+        "executable"
+        "command"
+        "versionArgs"
       ]
     else if provider == "homebrew-cask" then
       [

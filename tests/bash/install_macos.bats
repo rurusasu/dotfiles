@@ -48,6 +48,7 @@ setup() {
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_OLLAMA_APP_PATH="$FAKE_OLLAMA_APP"
 	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
+	export DOTFILES_DARWIN_MIGRATION="$STUB_BIN/migrate-darwin-provider"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
@@ -99,6 +100,7 @@ esac
 exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
@@ -445,6 +447,7 @@ run_macos_installer() {
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"migrate-darwin-provider --all" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment compose= args="
@@ -463,6 +466,7 @@ run_macos_installer() {
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
+		"migrate-darwin-provider --all --feature WithOllama" \
 		"chezmoi apply --force" \
 		"open -gj -a $FAKE_OLLAMA_APP" \
 		"verify-environment compose= args="
@@ -481,6 +485,7 @@ run_macos_installer() {
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
+		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker" \
 		"chezmoi apply --force" \
 		"open -gj -a $FAKE_OLLAMA_APP" \
 		"docker info" \
@@ -515,6 +520,7 @@ exit 1
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"docker info" \

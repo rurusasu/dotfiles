@@ -17,6 +17,7 @@ OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/version}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
 OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
+DARWIN_MIGRATION="${DOTFILES_DARWIN_MIGRATION:-$ROOT/scripts/sh/migrate-darwin-provider.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
 readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
@@ -86,6 +87,7 @@ preflight() {
     "$ROOT/flake.nix"
     "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
+    "$DARWIN_MIGRATION"
   )
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
@@ -437,6 +439,20 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
+migrate_darwin_providers() {
+  local -a migration_args=(--all)
+  if ((DOTFILES_WITH_OLLAMA == 1)); then
+    migration_args+=(--feature WithOllama)
+  fi
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    migration_args+=(--feature WithDocker)
+  fi
+  if ((DOTFILES_WITH_HERMES == 1)); then
+    migration_args+=(--feature WithHermes)
+  fi
+  "$DARWIN_MIGRATION" "${migration_args[@]}"
+}
+
 main() {
   resolve_install_profile "$@"
   preflight
@@ -451,6 +467,7 @@ main() {
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install
   apply_darwin_system
+  migrate_darwin_providers
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   apply_chezmoi
