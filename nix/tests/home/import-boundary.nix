@@ -33,6 +33,12 @@ let
 
   contains = pattern: content: builtins.length (builtins.split pattern content) > 1;
 
+  containsImport =
+    target: content:
+    builtins.any (
+      line: builtins.match ".*(import|imports)[[:space:]=].*${target}\\.nix.*" line != null
+    ) (builtins.filter builtins.isString (builtins.split "\n" content));
+
   entryModules = [
     ../../home/darwin.nix
     ../../home/linux.nix
@@ -58,7 +64,7 @@ let
   );
 
   externalDirectImports = builtins.filter (
-    path: contains "common\\.nix" (builtins.readFile path)
+    path: containsImport "common" (builtins.readFile path)
   ) externalNixFiles;
 in
 {
@@ -83,7 +89,7 @@ in
   };
 
   testOSHomeEntrypointsImportCommon = {
-    expr = builtins.map (path: contains "common\\.nix" (builtins.readFile path)) entryModules;
+    expr = builtins.map (path: containsImport "common" (builtins.readFile path)) entryModules;
     expected = [
       true
       true
@@ -92,19 +98,11 @@ in
   };
 
   testSharedHomeModuleDoesNotImportOSModules = {
-    expr =
-      builtins.map
-        (
-          os:
-          contains "^[[:space:]]*(import|imports)[[:space:]=].*${os}\\.nix" (
-            builtins.readFile ../../home/common.nix
-          )
-        )
-        [
-          "darwin"
-          "linux"
-          "wsl"
-        ];
+    expr = builtins.map (os: containsImport os (builtins.readFile ../../home/common.nix)) [
+      "darwin"
+      "linux"
+      "wsl"
+    ];
     expected = [
       false
       false
