@@ -180,8 +180,23 @@ hindsight_prepare() {
 
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
-  docker compose -f "$compose_file" pull hindsight
+  hindsight_pull_image "$compose_file"
   hindsight_migrate_legacy_data "$data_dir"
+}
+
+hindsight_pull_image() {
+  local compose_file="$1" image
+  if docker compose -f "$compose_file" pull hindsight; then
+    return 0
+  fi
+
+  image="$(docker compose -f "$compose_file" config --images | sed -n '1p')"
+  if [[ -n $image ]] && docker image inspect "$image" >/dev/null 2>&1; then
+    printf 'Image pull failed; continuing with the cached Hindsight image.\n' >&2
+    return 0
+  fi
+
+  dotfiles_die "Could not pull the Hindsight image and no cached image is available."
 }
 
 hindsight_up() {

@@ -55,6 +55,16 @@ fi
 if [[ ${1:-} == compose && ${*: -5} == 'up -d --force-recreate --remove-orphans hindsight' && ${HINDSIGHT_COMPOSE_UP_FAIL:-0} == 1 ]]; then
 	exit 43
 fi
+if [[ ${1:-} == compose && ${4:-} == pull && ${5:-} == hindsight && ${HINDSIGHT_COMPOSE_PULL_FAIL:-0} == 1 ]]; then
+	exit 45
+fi
+if [[ ${1:-} == compose && ${4:-} == config && ${5:-} == --images ]]; then
+	printf 'nginx:1.29-alpine\n'
+	exit 0
+fi
+if [[ ${1:-} == image && ${2:-} == inspect && ${HINDSIGHT_LOCAL_IMAGE_EXISTS:-0} != 1 ]]; then
+	exit 1
+fi
 EOF
 cat >"$BIN/ollama" <<'EOF'
 #!/usr/bin/env bash
@@ -122,6 +132,17 @@ EOF
 	[ "$status" -ne 0 ]
 	run grep -Fxq 'docker rm hermes-hindsight' "$LOG"
 	[ "$status" -ne 0 ]
+}
+
+@test "image pull failure uses a cached image when the registry is unavailable" {
+	export HINDSIGHT_COMPOSE_PULL_FAIL=1 HINDSIGHT_LOCAL_IMAGE_EXISTS=1
+
+	run "$SCRIPT" up "$COMPOSE"
+
+	[ "$status" -eq 0 ]
+	grep -Fxq "docker compose -f $COMPOSE pull hindsight" "$LOG"
+	grep -Fxq 'docker image inspect nginx:1.29-alpine' "$LOG"
+	grep -Fxq "docker compose -f $COMPOSE up -d --force-recreate --remove-orphans hindsight" "$LOG"
 }
 
 @test "failed legacy migration restarts the container it stopped" {
