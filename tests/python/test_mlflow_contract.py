@@ -204,7 +204,8 @@ class MlflowContractTests(unittest.TestCase):
                     "cmd": "pwsh -NoProfile -Command 'docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }'",
                     "platforms": ["windows"],
                 },
-                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --wait mlflow",
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow",
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --force-recreate --remove-orphans --wait mlflow",
                 {"task": "mlflow:configure"},
             ],
         )
