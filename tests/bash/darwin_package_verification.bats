@@ -29,11 +29,12 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "test-app",
       "nixAttr": "test-app",
-      "appName": "Test App.app",
-      "bundleId": "com.example.test-app",
-      "executable": "Test App"
+      "identity": {
+        "appName": "Test App.app",
+        "bundleId": "com.example.test-app",
+        "executable": "Test App"
+      }
     },
     "installFeature": null,
     "legacyDarwin": null
@@ -42,10 +43,11 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "test-command",
       "nixAttr": "test-command",
-      "command": "test-command",
-      "versionArgs": ["version", "--json"]
+      "identity": {
+        "command": "test-command",
+        "versionArgs": ["version", "--json"]
+      }
     },
     "installFeature": null,
     "legacyDarwin": null
@@ -54,11 +56,12 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "traversal-app-name",
       "nixAttr": "traversal-app-name",
-      "appName": "../Outside.app",
-      "bundleId": "com.example.outside",
-      "executable": "Outside"
+      "identity": {
+        "appName": "../Outside.app",
+        "bundleId": "com.example.outside",
+        "executable": "Outside"
+      }
     },
     "installFeature": null,
     "legacyDarwin": null
@@ -67,11 +70,12 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "traversal-app-executable",
       "nixAttr": "traversal-app-executable",
-      "appName": "Test App.app",
-      "bundleId": "com.example.test-app",
-      "executable": "../Outside"
+      "identity": {
+        "appName": "Test App.app",
+        "bundleId": "com.example.test-app",
+        "executable": "../Outside"
+      }
     },
     "installFeature": null,
     "legacyDarwin": null
@@ -80,10 +84,11 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "traversal-command",
       "nixAttr": "traversal-command",
-      "command": "..",
-      "versionArgs": ["--version"]
+      "identity": {
+        "command": "..",
+        "versionArgs": ["--version"]
+      }
     },
     "installFeature": null,
     "legacyDarwin": null
@@ -92,11 +97,12 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "legacy-app",
       "nixAttr": "legacy-app",
-      "appName": "Test App.app",
-      "bundleId": "com.example.test-app",
-      "executable": "Test App"
+      "identity": {
+        "appName": "Test App.app",
+        "bundleId": "com.example.test-app",
+        "executable": "Test App"
+      }
     },
     "installFeature": "WithHermes",
     "legacyDarwin": {
@@ -108,10 +114,11 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "legacy-option",
       "nixAttr": "legacy-option",
-      "command": "test-command",
-      "versionArgs": ["version"]
+      "identity": {
+        "command": "test-command",
+        "versionArgs": ["version"]
+      }
     },
     "installFeature": null,
     "legacyDarwin": {
@@ -123,16 +130,30 @@ setup() {
     "darwin": {
       "provider": "nix",
       "source": "nixpkgs",
-      "identity": "legacy-formula",
       "nixAttr": "legacy-formula",
-      "command": "test-command",
-      "versionArgs": ["version"]
+      "identity": {
+        "command": "test-command",
+        "versionArgs": ["version"]
+      }
     },
     "installFeature": null,
     "legacyDarwin": {
       "provider": "homebrew-formula",
       "name": "owner/tools/legacy-formula"
     }
+  },
+  "flat-only-app": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "identity": "flat-only-app",
+      "nixAttr": "flat-only-app",
+      "appName": "Test App.app",
+      "bundleId": "com.example.test-app",
+      "executable": "Test App"
+    },
+    "installFeature": null,
+    "legacyDarwin": null
   }
 }
 JSON
@@ -248,6 +269,17 @@ assert_log_order() {
 	[ "$status" -eq 0 ]
 	grep -Fqx "test-command <version> <--json>" "$COMMAND_LOG"
 	! grep -q '^plistbuddy ' "$COMMAND_LOG"
+}
+
+@test "flat-only verification metadata is rejected instead of bypassing nested identity" {
+	run "$BASH_32" "$VERIFIER" \
+		--support-json "$SUPPORT_JSON" \
+		--id flat-only-app \
+		--store-path "$STORE_PATH"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Darwin verification identity is missing for flat-only-app"* ]]
+	[ ! -s "$COMMAND_LOG" ]
 }
 
 @test "appName traversal is rejected before inspecting an app" {

@@ -72,17 +72,18 @@ provider="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.provider // "
 [[ $provider == "nix" ]] || die "Darwin provider for $package_id is not nix: ${provider:-missing}"
 
 verification_kind="$("$JQ_COMMAND" -r --arg id "$package_id" '
-  if (.[$id].darwin.appName? // "") != "" then "app"
-  elif (.[$id].darwin.command? // "") != "" then "command"
+  if (.[$id].darwin.identity? | type) != "object" then ""
+  elif (.[$id].darwin.identity.appName? // "") != "" then "app"
+  elif (.[$id].darwin.identity.command? // "") != "" then "command"
   else ""
   end
 ' "$support_json")"
 
 case "$verification_kind" in
 app)
-  app_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.appName // ""' "$support_json")"
-  expected_bundle_id="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.bundleId // ""' "$support_json")"
-  expected_executable="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.executable // ""' "$support_json")"
+  app_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.identity.appName // ""' "$support_json")"
+  expected_bundle_id="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.identity.bundleId // ""' "$support_json")"
+  expected_executable="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.identity.executable // ""' "$support_json")"
   require_path_component "appName" "$app_name"
   require_path_component "executable" "$expected_executable"
   [[ -n $expected_bundle_id ]] || die "bundleId is missing for $package_id"
@@ -110,9 +111,9 @@ app)
   ;;
 command)
   ((launch == 0)) || die "--launch is supported only for app identities"
-  command_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.command // ""' "$support_json")"
+  command_name="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.identity.command // ""' "$support_json")"
   require_path_component "command" "$command_name"
-  "$JQ_COMMAND" -e --arg id "$package_id" '.[$id].darwin.versionArgs | type == "array"' "$support_json" >/dev/null ||
+  "$JQ_COMMAND" -e --arg id "$package_id" '.[$id].darwin.identity.versionArgs | type == "array"' "$support_json" >/dev/null ||
     die "versionArgs must be an array for $package_id"
   command_path="$store_path/bin/$command_name"
   [[ -x $command_path ]] || die "declared command is unavailable: $command_path"
@@ -120,7 +121,7 @@ command)
   version_args=()
   while IFS= read -r -d '' version_arg; do
     version_args[${#version_args[@]}]="$version_arg"
-  done < <("$JQ_COMMAND" -j --arg id "$package_id" '.[$id].darwin.versionArgs[] | ., "\u0000"' "$support_json")
+  done < <("$JQ_COMMAND" -j --arg id "$package_id" '.[$id].darwin.identity.versionArgs[] | ., "\u0000"' "$support_json")
   if ((${#version_args[@]} > 0)); then
     "$command_path" "${version_args[@]}"
   else
