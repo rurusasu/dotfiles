@@ -24,6 +24,40 @@ setup() {
 	[[ "$output" != *'cd ~/.dotfiles'* ]]
 }
 
+@test "commit task removes shell quoting from the commit subject" {
+	command -v task >/dev/null 2>&1 || skip "task is not available"
+
+	fixture="$(mktemp -d)"
+	cat > "$fixture/Taskfile.yml" <<EOF
+version: "3"
+vars:
+  DOTFILES_PATH: "$fixture"
+  WSL: ""
+includes:
+  git:
+    taskfile: "$REPO_ROOT/taskfiles/git/taskfile.yml"
+    flatten: true
+tasks:
+  skills:sync:
+    cmds: ["true"]
+  fmt:
+    cmds: ["true"]
+  lint:
+    cmds: ["true"]
+EOF
+	git -C "$fixture" init -q
+	git -C "$fixture" config user.name "Bats Test"
+	git -C "$fixture" config user.email "bats@example.invalid"
+	touch "$fixture/fixture"
+	git -C "$fixture" add fixture
+	git -C "$fixture" commit -qm "initial"
+
+	run task --dir "$fixture" --taskfile "$fixture/Taskfile.yml" commit -- "chore(nix): update flake inputs for Darwin packages"
+	[ "$status" -eq 0 ]
+	run git -C "$fixture" log -1 --format=%s
+	[ "$output" = "chore(nix): update flake inputs for Darwin packages" ]
+}
+
 @test "root Taskfile composes feature taskfiles without renaming public tasks" {
 	command -v task >/dev/null 2>&1 || skip "task is not available in this test environment"
 
