@@ -52,7 +52,7 @@ fi
 if [[ ${1:-} == stop && ${2:-} == hermes-hindsight ]]; then
 	printf '0\n' >"$LEGACY_CONTAINER_RUNNING_STATE"
 fi
-if [[ ${1:-} == compose && ${*: -3} == 'up -d hindsight' && ${HINDSIGHT_COMPOSE_UP_FAIL:-0} == 1 ]]; then
+if [[ ${1:-} == compose && ${*: -5} == 'up -d --force-recreate --remove-orphans hindsight' && ${HINDSIGHT_COMPOSE_UP_FAIL:-0} == 1 ]]; then
 	exit 43
 fi
 EOF
@@ -92,12 +92,14 @@ EOF
 	[ "$status" -ne 0 ]
 	pull_line="$(grep -nFx 'ollama pull qwen3-embedding:0.6b' "$LOG" | cut -d: -f1)"
 	config_line="$(grep -nFx "docker compose -f $COMPOSE config --quiet" "$LOG" | cut -d: -f1)"
+	image_pull_line="$(grep -nFx "docker compose -f $COMPOSE pull hindsight" "$LOG" | cut -d: -f1)"
 	stop_line="$(grep -nFx 'docker stop hermes-hindsight' "$LOG" | tail -n 1 | cut -d: -f1)"
-	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
+	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d --force-recreate --remove-orphans hindsight" "$LOG" | cut -d: -f1)"
 	health_line="$(grep -nF 'curl --fail --silent --show-error' "$LOG" | cut -d: -f1)"
 	retire_line="$(grep -nFx 'docker rm hermes-hindsight' "$LOG" | cut -d: -f1)"
 	[ "$pull_line" -lt "$stop_line" ]
 	[ "$config_line" -lt "$stop_line" ]
+	[ "$image_pull_line" -lt "$stop_line" ]
 	[ "$stop_line" -lt "$start_line" ]
 	[ "$health_line" -lt "$retire_line" ]
 
@@ -206,7 +208,7 @@ EOF
 
 	[ "$status" -ne 0 ]
 	[ -f "$HOME/.local/share/hindsight/.legacy-migration-source" ]
-	grep -Fxq "docker compose -f $COMPOSE up -d hindsight" "$LOG"
+	grep -Fxq "docker compose -f $COMPOSE up -d --force-recreate --remove-orphans hindsight" "$LOG"
 
 	: >"$LOG"
 	export HINDSIGHT_LEGACY_RM_FAIL=0
@@ -217,7 +219,7 @@ EOF
 	[ "$status" -ne 0 ]
 	grep -Fxq 'docker rm hermes-hindsight' "$LOG"
 	retire_line="$(grep -nFx 'docker rm hermes-hindsight' "$LOG" | cut -d: -f1)"
-	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d hindsight" "$LOG" | cut -d: -f1)"
+	start_line="$(grep -nFx "docker compose -f $COMPOSE up -d --force-recreate --remove-orphans hindsight" "$LOG" | cut -d: -f1)"
 	[ "$start_line" -lt "$retire_line" ]
 }
 
@@ -244,7 +246,7 @@ EOF
 	! grep -Fxq 'ollama pull ollama-chat-default' "$LOG"
 	! grep -Fxq 'ollama pull ollama-embedding-default' "$LOG"
 	grep -Fxq "docker compose -f $COMPOSE config --quiet" "$LOG"
-	grep -Fxq "docker compose -f $COMPOSE up -d hindsight" "$LOG"
+	grep -Fxq "docker compose -f $COMPOSE up -d --force-recreate --remove-orphans hindsight" "$LOG"
 	[ -d "$HOME/.local/share/hindsight/pg0" ]
 	[ -d "$HOME/.local/share/hindsight/cache" ]
 	! grep -Eq '^docker (stop|start|rm) hermes-hindsight$' "$LOG"

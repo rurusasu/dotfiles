@@ -180,6 +180,7 @@ hindsight_prepare() {
 
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
+  docker compose -f "$compose_file" pull hindsight
   hindsight_migrate_legacy_data "$data_dir"
 }
 
@@ -202,7 +203,7 @@ hindsight_up() {
   (
     trap hindsight_restore_legacy_after_replacement_failure EXIT
     set -e
-    docker compose -f "$compose_file" up -d hindsight
+    docker compose -f "$compose_file" up -d --force-recreate --remove-orphans hindsight
     hindsight_wait_for_api
   )
   replacement_status=$?

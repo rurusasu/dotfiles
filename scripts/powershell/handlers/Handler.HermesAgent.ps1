@@ -71,7 +71,7 @@ class HermesAgentHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
             }
 
-            $build = $this.InvokeCompose($composeFile, @('build', 'hermes', 'hermes-bootstrap', 'chromium', 'xapi-mcp'))
+            $build = $this.InvokeCompose($composeFile, @('build', '--pull', 'hermes', 'hermes-bootstrap', 'chromium', 'xapi-mcp'))
             if (-not $build.Success) {
                 return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
             }
@@ -114,7 +114,7 @@ class HermesAgentHandler : SetupHandlerBase {
             try {
                 $handler = $this
                 $start = Invoke-HermesXApiCredentialScope -DataDir $dataDir -Action {
-                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
+                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', '--remove-orphans', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
                 }
             }
             catch {

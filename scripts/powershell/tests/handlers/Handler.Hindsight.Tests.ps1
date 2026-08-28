@@ -3,6 +3,7 @@
 BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
+    . $PSScriptRoot/../../handlers/Handler.MLflow.ps1
     . $PSScriptRoot/../../handlers/Handler.Hindsight.ps1
 }
 
@@ -24,7 +25,7 @@ Describe 'HindsightHandler' {
         $script:handler.CanApply($script:ctx) | Should -BeFalse
     }
 
-    It 'is enabled by the Docker-derived Hindsight option' {
+    It 'is enabled only by the resolved Hindsight option' {
         $script:ctx.Options['WithHindsight'] = $true
         $script:handler.CanApply($script:ctx) | Should -BeTrue
     }
@@ -43,6 +44,7 @@ Describe 'HindsightHandler' {
 
     It 'runs before Hermes and outside its handler' {
         $script:handler.Order | Should -BeLessThan 56
+        $script:handler.Order | Should -BeGreaterThan ([MLflowHandler]::new().Order)
         $script:handler.Name | Should -Be 'Hindsight'
         $source = Get-Content -LiteralPath $PSScriptRoot/../../handlers/Handler.HermesAgent.ps1 -Raw
         $source | Should -Not -Match 'hindsight\.ps1|docker\\hindsight'

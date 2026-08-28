@@ -10,6 +10,7 @@ Describe 'Resolve-DotfilesInstallOption' {
 
         $result.WithOllama | Should -BeFalse
         $result.WithDocker | Should -BeFalse
+        $result.WithMLflow | Should -BeFalse
         $result.WithHindsight | Should -BeFalse
         $result.WithHermes | Should -BeFalse
         $result.WithChrome | Should -BeFalse
@@ -22,15 +23,37 @@ Describe 'Resolve-DotfilesInstallOption' {
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeFalse
+        $result.WithMLflow | Should -BeFalse
         $result.WithHindsight | Should -BeFalse
         $result.WithHermes | Should -BeFalse
     }
 
-    It 'expands WithDocker to Ollama and independent Hindsight' {
+    It 'enables only Docker for WithDocker' {
         $result = Resolve-DotfilesInstallOption -Options @{} -WithDocker
+
+        $result.WithOllama | Should -BeFalse
+        $result.WithDocker | Should -BeTrue
+        $result.WithMLflow | Should -BeFalse
+        $result.WithHindsight | Should -BeFalse
+        $result.WithHermes | Should -BeFalse
+    }
+
+    It 'expands WithMLflow to its Ollama and Docker dependencies' {
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithMLflow
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeTrue
+        $result.WithMLflow | Should -BeTrue
+        $result.WithHindsight | Should -BeFalse
+        $result.WithHermes | Should -BeFalse
+    }
+
+    It 'expands WithHindsight to MLflow and its runtime dependencies' {
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithHindsight
+
+        $result.WithOllama | Should -BeTrue
+        $result.WithDocker | Should -BeTrue
+        $result.WithMLflow | Should -BeTrue
         $result.WithHindsight | Should -BeTrue
         $result.WithHermes | Should -BeFalse
     }
@@ -40,6 +63,7 @@ Describe 'Resolve-DotfilesInstallOption' {
 
         $result.WithOllama | Should -BeTrue
         $result.WithDocker | Should -BeTrue
+        $result.WithMLflow | Should -BeTrue
         $result.WithHindsight | Should -BeTrue
         $result.WithHermes | Should -BeTrue
         $result.WithChrome | Should -BeTrue
