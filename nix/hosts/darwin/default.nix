@@ -155,6 +155,8 @@ in
 
   users.users.${user}.home = home;
 
+  environment.systemPackages = sets.darwinSystemPackagesForInstallFeatures installFeatures;
+
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;

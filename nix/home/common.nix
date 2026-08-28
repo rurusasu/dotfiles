@@ -37,7 +37,7 @@ in
     packages =
       (
         if pkgs.stdenv.hostPlatform.isDarwin then
-          sets.allWithoutForInstallFeatures installFeatures [ ]
+          sets.darwinHomePackagesForInstallFeatures installFeatures
         else
           sets.allWithout (
             lib.optionals isWSL [

@@ -45,42 +45,78 @@ setup() {
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
 		nix eval --impure --json --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
-			in builtins.map (package: package.name) config.home-manager.users.codex.home.packages
+			in {
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
 		"
 
 	[ "$status" -eq 0 ]
 	run jq -e '
-		all(.[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
+		all(.system[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
+		and all(.home[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin flake exposes Nix and Homebrew provider outputs by catalog ID" {
+@test "Darwin installs Nix GUI apps system-wide and command-only packages through Home Manager" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in {
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.system[]; test("^vscode(-|$)"))
+		and all(.home[]; test("^vscode(-|$)") | not)
+		and any(.home[]; test("^git(-|$)"))
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin flake exposes the Nix-managed Visual Studio Code application and legacy migration metadata" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
 	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
 		packages:
 		builtins.elem "darwin-vscode" (builtins.attrNames packages)
-		&& builtins.elem "darwin-docker-desktop" (builtins.attrNames packages)
 	'
 
 	[ "$status" -eq 0 ]
 	[ "$output" = "true" ]
 
-	run nix build --no-link .#darwin-vscode .#darwin-docker-desktop
+	run nix build --no-link .#darwin-vscode
 	[ "$status" -eq 0 ]
 
-	for package in vscode docker-desktop; do
-		expected_identity="$package"
-		[ "$package" = "vscode" ] && expected_identity="visual-studio-code"
-		run --separate-stderr nix eval --raw ".#darwin-$package"
-		[ "$status" -eq 0 ]
-		run jq -e --arg identity "$expected_identity" '
-			.provider == "homebrew-cask" and .source == "homebrew" and .identity == $identity
-		' "$output"
-		[ "$status" -eq 0 ]
-	done
+	run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
+	[ "$status" -eq 0 ]
+	[ -f "$output/support.json" ]
+	run jq -e '
+		.vscode.darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://code.visualstudio.com/",
+				"appName": "Visual Studio Code.app",
+				"bundleId": "com.microsoft.VSCode",
+				"executable": "Code"
+			},
+			"nixAttr": "vscode"
+		}
+		and .vscode.legacyDarwin == {
+			"provider": "homebrew-cask",
+			"name": "visual-studio-code"
+		}
+	' "$output/support.json"
+	[ "$status" -eq 0 ]
 }
 
 @test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {

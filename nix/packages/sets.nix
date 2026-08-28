@@ -312,34 +312,25 @@ let
           category = "editors";
         };
         vscode = {
-          # VS Code 1.129.1's macOS arm64 archive omits the bundled ripgrep
-          # binary, so use the separately packaged ripgrep instead.
-          pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
-            old:
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              {
-                postPatch =
-                  lib.replaceStrings
-                    [
-                      "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nln -s"
-                    ]
-                    [
-                      "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nmkdir -p Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64\nln -s"
-                    ]
-                    old.postPatch;
-              }
-            else
-              { }
-          );
+          pkg = pkgs.vscode;
           winget = "Microsoft.VisualStudioCode";
           category = "editors";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "visual-studio-code";
-              cask = "visual-studio-code";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "vscode";
+              identity = {
+                homepage = "https://code.visualstudio.com/";
+                appName = "Visual Studio Code.app";
+                bundleId = "com.microsoft.VSCode";
+                executable = "Code";
+              };
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "visual-studio-code";
           };
         };
 
@@ -930,9 +921,17 @@ let
     || enabledFeatures == null
     || builtins.elem entry.installFeature enabledFeatures;
 
+  isDarwinGuiNixPackage =
+    entry:
+    let
+      darwinSupport = entry.support.darwin or { };
+      identity = darwinSupport.identity or null;
+    in
+    (darwinSupport.provider or null) == "nix" && builtins.isAttrs identity && identity ? appName;
+
   # Resolve catalog IDs to Nix derivations selected for the current platform.
-  resolveForInstallFeatures =
-    enabledFeatures: names:
+  resolveForInstallFeaturesWhere =
+    enabledFeatures: predicate: names:
     builtins.filter (p: p != null) (
       map (
         name:
@@ -944,6 +943,7 @@ let
         if
           provider == "nix"
           && featureEnabled enabledFeatures entry
+          && predicate entry
           && package != null
           && supports package pkgs.stdenv.hostPlatform.system
         then
@@ -953,7 +953,26 @@ let
       ) names
     );
 
+  resolveForInstallFeatures =
+    enabledFeatures: resolveForInstallFeaturesWhere enabledFeatures (_: true);
+
   resolve = resolveForInstallFeatures null;
+
+  darwinSystemPackagesForInstallFeatures =
+    enabledFeatures:
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      resolveForInstallFeaturesWhere enabledFeatures isDarwinGuiNixPackage (lib.attrNames catalog)
+    else
+      [ ];
+
+  darwinHomePackagesForInstallFeatures =
+    enabledFeatures:
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      resolveForInstallFeaturesWhere enabledFeatures (entry: !isDarwinGuiNixPackage entry) (
+        lib.attrNames catalog
+      )
+    else
+      [ ];
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
@@ -1221,6 +1240,8 @@ lib.mapAttrs (_: resolve) grouped
   inherit
     resolveForInstallFeatures
     supportReport
+    darwinSystemPackagesForInstallFeatures
+    darwinHomePackagesForInstallFeatures
     darwinCasks
     darwinCasksForInstallFeatures
     darwinBrews

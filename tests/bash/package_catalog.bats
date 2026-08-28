@@ -18,6 +18,60 @@ nix_fixture_errors() {
 	"
 }
 
+nix_fixture_darwin_package_split() {
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			lib = flake.inputs.nixpkgs.lib;
+			sets = import $SETS {
+				inherit pkgs lib;
+				catalogOverride = {
+					gui = {
+						pkg = pkgs.hello;
+						category = \"test\";
+						installFeature = \"WithGui\";
+						support.darwin = {
+							provider = \"nix\";
+							source = \"nixpkgs\";
+							nixAttr = \"hello\";
+							identity.appName = \"Test App.app\";
+						};
+					};
+					command = {
+						pkg = pkgs.cowsay;
+						category = \"test\";
+						support.darwin = {
+							provider = \"nix\";
+							source = \"nixpkgs\";
+							nixAttr = \"cowsay\";
+							identity = \"cowsay\";
+						};
+					};
+				};
+			};
+			contains = package: packages: builtins.elem package packages;
+			defaultSystem = sets.darwinSystemPackagesForInstallFeatures [ ];
+			defaultHome = sets.darwinHomePackagesForInstallFeatures [ ];
+			enabledSystem = sets.darwinSystemPackagesForInstallFeatures [ \"WithGui\" ];
+			enabledHome = sets.darwinHomePackagesForInstallFeatures [ \"WithGui\" ];
+		in {
+			default = {
+				guiSystem = contains pkgs.hello defaultSystem;
+				guiHome = contains pkgs.hello defaultHome;
+				commandSystem = contains pkgs.cowsay defaultSystem;
+				commandHome = contains pkgs.cowsay defaultHome;
+			};
+			enabled = {
+				guiSystem = contains pkgs.hello enabledSystem;
+				guiHome = contains pkgs.hello enabledHome;
+				commandSystem = contains pkgs.cowsay enabledSystem;
+				commandHome = contains pkgs.cowsay enabledHome;
+			};
+		}
+	"
+}
+
 @test "Claude and TablePlus are not managed by dotfiles" {
 	! grep -Eqi 'claude|tableplus' "$SETS"
 	! grep -Eqi 'Anthropic\.Claude|TablePlus\.TablePlus' "$REPO_ROOT/windows/winget/packages.json"
@@ -277,6 +331,52 @@ EOF
 	grep -q 'cask = "thebrowsercompany-dia"' "$SETS"
 	grep -q 'orca-editor = {' "$SETS"
 	grep -q 'cask = "stablyai/orca/orca"' "$SETS"
+}
+
+@test "Visual Studio Code uses the unmodified nixpkgs application with migration metadata" {
+	run awk '
+		/^[[:space:]]*vscode = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^        };$/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'pkg = pkgs.vscode;'* ]]
+	[[ "$output" == *'provider = "nix";'* ]]
+	[[ "$output" == *'source = "nixpkgs";'* ]]
+	[[ "$output" == *'nixAttr = "vscode";'* ]]
+	[[ "$output" == *'homepage = "https://code.visualstudio.com/";'* ]]
+	[[ "$output" == *'appName = "Visual Studio Code.app";'* ]]
+	[[ "$output" == *'bundleId = "com.microsoft.VSCode";'* ]]
+	[[ "$output" == *'executable = "Code";'* ]]
+	[[ "$output" == *'legacyDarwin = {'* ]]
+	[[ "$output" == *'provider = "homebrew-cask";'* ]]
+	[[ "$output" == *'name = "visual-studio-code";'* ]]
+	[[ "$output" != *'useVSCodeRipgrep'* ]]
+	[[ "$output" != *'postPatch'* ]]
+	[[ "$output" != *'cask = "visual-studio-code"'* ]]
+}
+
+@test "Darwin routes Nix GUI apps to system packages and keeps commands in Home Manager" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	nix_fixture_darwin_package_split
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.default == {
+			"guiSystem": false,
+			"guiHome": false,
+			"commandSystem": false,
+			"commandHome": true
+		}
+		and .enabled == {
+			"guiSystem": true,
+			"guiHome": false,
+			"commandSystem": false,
+			"commandHome": true
+		}
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Arc remains Windows-only and Dia remains macOS-only" {
