@@ -3,7 +3,7 @@ version: "3"
 
 vars:
   DISTRO: NixOS
-  DOTFILES_PATH: ~/.dotfiles
+  DOTFILES_PATH: '{{if eq OS "windows"}}~/.dotfiles{{else}}{{.ROOT_DIR}}{{end}}'
   HERMES_COMPOSE_FILE: docker/hermes-agent/compose.yml
   HINDSIGHT_COMPOSE_FILE: docker/hindsight/compose.yml
   # OS は go-task の特殊変数なのでドット無しで参照する（`.OS` は常に空になり、

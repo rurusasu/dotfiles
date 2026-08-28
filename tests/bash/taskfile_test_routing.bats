@@ -14,6 +14,16 @@ setup() {
 	[[ "$output" != *"Invoke-Tests.ps1"* ]]
 }
 
+@test "quality and commit tasks target the active root on Unix" {
+	command -v task >/dev/null 2>&1 || skip "task is not available"
+	run task --dir "$REPO_ROOT" --dry commit -- "test commit"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"cd $REPO_ROOT && nix fmt"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && git add -A"* ]]
+	[[ "$output" != *'cd ~/.dotfiles'* ]]
+}
+
 @test "root Taskfile composes feature taskfiles without renaming public tasks" {
 	command -v task >/dev/null 2>&1 || skip "task is not available in this test environment"
 
