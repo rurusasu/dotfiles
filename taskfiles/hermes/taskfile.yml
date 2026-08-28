@@ -73,6 +73,8 @@ tasks:
   hermes:memory:verify:
     desc: Run the complete Hermes Hindsight live acceptance lifecycle
     interactive: true
+    deps:
+      - task: mlflow:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
