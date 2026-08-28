@@ -57,6 +57,7 @@ setup() {
 
 @test "Darwin flake exposes Nix and Homebrew provider outputs by catalog ID" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
 	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
 		packages:
@@ -66,6 +67,20 @@ setup() {
 
 	[ "$status" -eq 0 ]
 	[ "$output" = "true" ]
+
+	run nix build --no-link .#darwin-vscode .#darwin-docker-desktop
+	[ "$status" -eq 0 ]
+
+	for package in vscode docker-desktop; do
+		expected_identity="$package"
+		[ "$package" = "vscode" ] && expected_identity="visual-studio-code"
+		run --separate-stderr nix eval --raw ".#darwin-$package"
+		[ "$status" -eq 0 ]
+		run jq -e --arg identity "$expected_identity" '
+			.provider == "homebrew-cask" and .source == "homebrew" and .identity == $identity
+		' "$output"
+		[ "$status" -eq 0 ]
+	done
 }
 
 @test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {

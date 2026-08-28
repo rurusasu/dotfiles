@@ -10,13 +10,64 @@ BeforeAll {
 
 Describe 'Package catalog consistency' {
     Context 'Provider-aware catalog resolution' {
-        It 'should expose feature-aware resolver and provider identity metadata' {
+        It 'should expose explicit feature-aware resolver and provider metadata contracts' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
             $sets | Should -Match 'resolveForInstallFeatures'
-            $sets | Should -Match 'source\s*='
-            $sets | Should -Match 'nixAttr\s*='
-            $sets | Should -Match 'identity\s*='
+            $sets | Should -Match 'provider requires source'
+            $sets | Should -Match 'provider requires identity'
+            $sets | Should -Match 'provider cannot include'
+            $sets | Should -Match 'nix provider derivation does not support'
+            $sets | Should -Match 'catalog ID appears in both Nix and Homebrew resolution'
+            $sets | Should -Match 'mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:'
+        }
+
+        It 'should evaluate invalid provider metadata fixtures when Nix is available' {
+            $nix = Get-Command nix -ErrorAction SilentlyContinue
+            if ($null -eq $nix) {
+                Set-ItResult -Skipped -Because 'Nix is not available on this host'
+                return
+            }
+
+            $repoRootJson = $script:repoRoot | ConvertTo-Json -Compress
+            $setsPathJson = $script:setsPath | ConvertTo-Json -Compress
+            $expression = @"
+let
+  flake = builtins.getFlake (builtins.toPath $repoRootJson);
+  pkgs = import flake.inputs.nixpkgs { system = "aarch64-darwin"; config.allowUnfree = true; };
+  lib = flake.inputs.nixpkgs.lib;
+  sets = import (builtins.toPath $setsPathJson) {
+    inherit pkgs lib;
+    catalogOverride = {
+      extra = {
+        pkg = pkgs.hello;
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "extra"; nixAttr = "hello"; cask = "wrong"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      inactive = {
+        pkg = "not-a-derivation";
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { unsupported = "fixture"; };
+          linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive"; nixAttr = "hello"; };
+        };
+      };
+    };
+  };
+in sets.providerErrors
+"@
+
+            $errors = @(& $nix.Source eval --impure --json --expr $expression | ConvertFrom-Json)
+
+            $LASTEXITCODE | Should -Be 0
+            $errors | Should -Contain 'extra: darwin: nix provider cannot include cask'
+            $errors | Should -Contain 'extra: darwin: catalog ID appears in both Nix and Homebrew resolution'
+            $errors | Should -Contain 'inactive: linux: nix provider requires a derivation'
         }
     }
 
@@ -494,8 +545,8 @@ Describe 'Package catalog consistency' {
         It 'should keep true Windows-only components with explicit unsupported reasons' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*reason:\s*\{.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
-            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Windows system utility";'
+            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:\s*\{.*?inherit\s+provider\s+identity;.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
+            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Microsoft\.PowerToys"\s*"Windows system utility";'
         }
     }
 }

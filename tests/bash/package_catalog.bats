@@ -7,6 +7,17 @@ setup() {
 	SETS="$REPO_ROOT/nix/packages/sets.nix"
 }
 
+nix_fixture_errors() {
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			lib = flake.inputs.nixpkgs.lib;
+			sets = import $SETS { inherit pkgs lib; catalogOverride = $1; };
+		in sets.providerErrors
+	"
+}
+
 @test "Claude and TablePlus are not managed by dotfiles" {
 	! grep -Eqi 'claude|tableplus' "$SETS"
 	! grep -Eqi 'Anthropic\.Claude|TablePlus\.TablePlus' "$REPO_ROOT/windows/winget/packages.json"
@@ -24,21 +35,84 @@ setup() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
-@test "catalog validates semantic provider metadata" {
-	for diagnostic in \
-		'provider and unsupported cannot coexist' \
-		'nix provider requires a derivation' \
-		'homebrew-cask provider requires cask' \
-		'source = nixpkgs requires nixAttr'; do
-		grep -q "$diagnostic" "$SETS"
-	done
+@test "catalog rejects incomplete extra and inactive-platform provider metadata" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	nix_fixture_errors '{
+		missing-source = {
+			pkg = pkgs.hello;
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { provider = "nix"; source = ""; identity = "missing-source"; nixAttr = "hello"; };
+				linux = { unsupported = "fixture"; };
+			};
+		};
+		missing = {
+			pkg = pkgs.hello;
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { provider = "nix"; source = "nixpkgs"; identity = ""; nixAttr = ""; };
+				linux = { unsupported = "fixture"; };
+			};
+		};
+		missing-cask = {
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { provider = "homebrew-cask"; source = "homebrew"; identity = ""; cask = ""; };
+				linux = { unsupported = "fixture"; };
+			};
+		};
+		extra = {
+			pkg = pkgs.hello;
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { provider = "nix"; source = "nixpkgs"; identity = "extra"; nixAttr = "hello"; cask = "wrong"; };
+				linux = { unsupported = "fixture"; };
+			};
+		};
+		inactive-invalid = {
+			pkg = "not-a-derivation";
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { unsupported = "fixture"; };
+				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-invalid"; nixAttr = "hello"; };
+			};
+		};
+		inactive-platform = {
+			pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; });
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { unsupported = "fixture"; };
+				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-platform"; nixAttr = "hello"; };
+			};
+		};
+	}'
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.[]; contains("missing-source: darwin: provider requires source")) and
+		any(.[]; contains("missing: darwin: provider requires identity")) and
+		any(.[]; contains("missing: darwin: source = nixpkgs requires nixAttr")) and
+		any(.[]; contains("missing-cask: darwin: homebrew-cask provider requires cask")) and
+		any(.[]; contains("extra: darwin: nix provider cannot include cask")) and
+		any(.[]; contains("extra: darwin: catalog ID appears in both Nix and Homebrew resolution")) and
+		any(.[]; contains("inactive-invalid: linux: nix provider requires a derivation")) and
+		any(.[]; contains("inactive-platform: linux: nix provider derivation does not support linux"))
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Node.js follows the current nixpkgs major" {
 	run awk '
-		/^    nodejs = \{/ { in_entry=1 }
+		/^[[:space:]]*nodejs = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };$/ { exit }
+		in_entry && /^        };$/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = pkgs.nodejs;'* ]]
@@ -136,7 +210,7 @@ EOF
 	run awk '
 		/docker-desktop = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'winget = "Docker.DockerDesktop"'* ]]
@@ -187,19 +261,19 @@ EOF
 }
 
 @test "Arc remains Windows-only and Dia remains macOS-only" {
-	run grep -n -A18 '^    arc-browser = {' "$SETS"
+	run grep -n -A18 '^[[:space:]]*arc-browser = {' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'winget = "TheBrowserCompany.Arc"'* ]]
 	[[ "$output" == *'unsupported = "Use Dia instead of Arc on macOS"'* ]]
 	[[ "$output" != *'cask = "arc"'* ]]
 
-	run grep -n -A12 '^    dia-browser = {' "$SETS"
+	run grep -n -A12 '^[[:space:]]*dia-browser = {' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
 }
 
 @test "Discord is a cross-platform desktop package" {
-	run grep -n -A12 '^    discord = {' "$SETS"
+	run grep -n -A12 '^[[:space:]]*discord = {' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;'* ]]
 	[[ "$output" == *'winget = "Discord.Discord";'* ]]
@@ -227,7 +301,7 @@ EOF
 	run awk '
 		/wezterm = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;'* ]]
@@ -240,9 +314,9 @@ EOF
 
 @test "Ollama has native Nix, Homebrew cask, and Winget catalog providers with verification" {
 	run awk '
-		/^    ollama = \{/ { in_entry=1 }
+		/^[[:space:]]*ollama = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;'* ]]
@@ -254,9 +328,9 @@ EOF
 
 	run awk '
 		/^  wingetVerify = \{/ { in_section=1 }
-		in_section && /^    ollama = \{/ { in_entry=1 }
+		in_section && /^[[:space:]]*ollama = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'command = "ollama";'* ]]
@@ -265,9 +339,9 @@ EOF
 
 @test "ChatGPT desktop has native Linux, Darwin cask, and Microsoft Store providers" {
 	run awk '
-		/^    chatgpt = \{/ { in_entry=1 }
+		/^[[:space:]]*chatgpt = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    \};/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;'* ]]
@@ -325,9 +399,9 @@ EOF
 
 @test "terminal keybinding helpers have platform-scoped providers" {
 	run awk '
-		/^    hammerspoon = \{/ { in_entry=1 }
+		/^[[:space:]]*hammerspoon = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'category = "terminal"'* ]]
@@ -335,9 +409,9 @@ EOF
 	[[ "$output" == *'cask = "hammerspoon"'* ]]
 
 	run awk '
-		/^    autohotkey = \{/ { in_entry=1 }
+		/^[[:space:]]*autohotkey = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'winget = "AutoHotkey.AutoHotkey"'* ]]
