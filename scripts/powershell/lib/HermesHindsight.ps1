@@ -75,8 +75,8 @@ function Get-HermesHindsightEnvironment {
     param([Parameter(Mandatory)][string]$ComposeFile)
 
     $environmentFile = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
-    $llmModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_API_LLM_MODEL'
-    $embeddingModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL'
+    $llmModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_OLLAMA_LLM_MODEL'
+    $embeddingModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_OLLAMA_EMBEDDING_MODEL'
     return [PSCustomObject]@{
         PSTypeName     = 'HermesHindsightEnvironment'
         LlmModel       = $llmModel

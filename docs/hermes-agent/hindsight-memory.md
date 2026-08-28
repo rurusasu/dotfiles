@@ -2,11 +2,12 @@
 
 ## Architecture
 
-Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。ホストで動く
-Ollama を推論・埋め込みに使い、Compose の `hindsight` サービスが埋め込み
-PostgreSQL、ローカル reranker、メモリ API を提供します。独立 Compose project が
-`dotfiles-memory` ネットワークを所有し、Hermes は external network として接続して
-`http://hindsight:8888` を使います。
+Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。Compose の
+`hindsight` サービスが埋め込み PostgreSQL、ローカル reranker、メモリ API を提供し、
+`dotfiles-memory` ネットワークを所有します。Hermes は external network として接続して
+`http://hindsight:8888` を使います。推論・埋め込みは MLflow Gateway の論理 endpoint
+`ollama-chat-default` と `ollama-embedding-default` を `local-ai-services` 経由で使い、
+MLflow だけが設定済み provider として native host Ollama に接続します。
 
 Hindsight のイメージは
 `ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d`
@@ -35,6 +36,12 @@ WSL では Ollama を Linux 側へ追加・常駐させません。Windows 側�
 ホストの `11434` へ到達させます。WSL の Ollama サービスを有効化して二重起動
 してはいけません。
 
+ここで説明する host gateway と `11434` への到達経路は、準備処理と受入検証が
+native Ollama のモデル存在・readiness を確認するためだけのものです。Hindsight の
+推論リクエストは常に MLflow Gateway を経由し、`host.docker.internal:11434` に
+推論を直接送信しません。`/api/tags` と `/api/version` はそれぞれ model inventory
+と readiness probe に限られ、inference request を運びません。
+
 ## Installation
 
 Windows では `-WithDocker` または `-WithHermes` を指定すると、Ollama、Docker、
@@ -44,7 +51,7 @@ Windows では `-WithDocker` または `-WithHermes` を指定すると、Ollama
 task hindsight:up
 ```
 
-この処理は独立 Compose を検証し、ホスト Ollama へモデルを取得し、
+この処理は MLflow を先に起動・設定し、native host Ollama へモデルを取得し、
 `${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0` と `cache` を作成してから
 Hindsight だけを起動します。Hermes の起動・停止は行いません。
 
@@ -66,8 +73,13 @@ Hindsight だけを起動します。Hermes の起動・停止は行いません
 | 埋め込み | `qwen3-embedding:0.6b`                    |
 | reranker | `BAAI/bge-reranker-v2-m3`（ローカル CPU） |
 
-ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を取得します。Hindsight は Ollama OpenAI 互換
-エンドポイント `http://host.docker.internal:11434/v1` を使います。
+ホスト準備は `qwen3.6:35b` と `qwen3-embedding:0.6b` を native Ollama から取得します。
+Hindsight の chat 推論は `local-ai-services` 上の MLflow Gateway
+`http://mlflow:5000/gateway/mlflow/v1` を使い、embedding 推論は
+`http://mlflow:5000/gateway/openai/v1` を使います。モデル値にはそれぞれ
+`ollama-chat-default` と `ollama-embedding-default` を指定します。モデル取得、
+`/api/tags`、`/api/version` readiness probe は native Ollama の直接 model-management
+操作であり、MLflow trace にはなりません。
 
 ## Startup
 
@@ -79,6 +91,11 @@ task hindsight:up
 
 起動の成否はポートの listen だけで判断せず、`/health` の `status` が
 `healthy` かつ `database` が `connected` であることを確認します。
+
+推論経路を確認する場合は、先に `task mlflow:verify` を実行します。この検証は
+chat と embeddings を Gateway 経由で送信し、両方の論理 endpoint ID が MLflow の
+trace search 結果に現れることを要求します。コンテナの health、native Ollama の
+直接応答、または trace のない Gateway 応答だけでは Hindsight 移行の証拠になりません。
 
 ## Status
 
@@ -92,11 +109,16 @@ curl --fail --silent --show-error http://127.0.0.1:8888/health
 既定の公開先は次のとおりです。環境変数でポートを変更している場合は、その値を
 使います。
 
-| 対象          | 既定の URL               |
-| ------------- | ------------------------ |
-| Ollama API    | `http://127.0.0.1:11434` |
-| Hindsight API | `http://127.0.0.1:8888`  |
-| Hindsight UI  | `http://127.0.0.1:9999`  |
+| 対象                                           | 既定の URL               |
+| ---------------------------------------------- | ------------------------ |
+| Ollama API（準備/受入の model/readiness 専用） | `http://127.0.0.1:11434` |
+| Hindsight API                                  | `http://127.0.0.1:8888`  |
+| Hindsight UI                                   | `http://127.0.0.1:9999`  |
+
+Status の Ollama URL は model pull、`/api/tags`、`/api/version` の確認用です。
+Hindsight inference はこの URL を使わず、chat では
+`http://mlflow:5000/gateway/mlflow/v1`、embedding では
+`http://mlflow:5000/gateway/openai/v1` と論理 endpoint 名を使います。
 
 ## Logs
 
@@ -229,9 +251,12 @@ Hermes chat には credential、token、private key、その他の認証情報�
 
 ## Troubleshooting
 
-- Ollama API が `http://127.0.0.1:11434/api/version` で応答しない場合は、ホストの
-  native Ollama を修復します。WSL では Windows-host Ollama を修復し、WSL daemon を
-  追加しません。
+- Ollama の native readiness probe が `http://127.0.0.1:11434/api/version` で応答しない
+  場合は、ホストの Ollama とモデル管理を修復します。WSL では Windows-host Ollama を
+  修復し、WSL daemon を追加しません。これは MLflow trace の検証ではありません。
+- MLflow Gateway が unavailable の場合は、`task mlflow:status`、`task mlflow:logs`、
+  `task mlflow:verify` を実行します。Hindsight inference は direct host Ollama へ
+  fail-open してはいけません。
 - Hindsight API が `healthy` / `connected` を返さない場合は、`pg0` と `cache` の
   所有権・復元手順、および Hindsight のログを確認します。
 - モデル取得または strict probe が失敗した場合は、`docker/hindsight/hindsight.env`

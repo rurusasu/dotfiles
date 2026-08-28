@@ -164,12 +164,28 @@
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
         "docker/hermes-xapi-mcp/**",
-        "docker/hindsight/**"
+        "docker/hindsight/**",
+        "docker/mlflow/**"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },
     {
-      "patterns": ["Taskfile.yml", "taskfiles/hermes/**"],
+      "patterns": [
+        "Taskfile.yml",
+        "taskfiles/hermes/**",
+        "taskfiles/hindsight/**",
+        "taskfiles/mlflow/**"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": [
+        "docs/mlflow/**",
+        "tests/python/test_mlflow_contract.py",
+        "tests/bash/mlflow_task_contract.bats",
+        "tests/bash/hindsight_runtime.bats",
+        "tests/bash/hindsight_service.bats"
+      ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },
     {

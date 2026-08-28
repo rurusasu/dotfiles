@@ -3,6 +3,8 @@ version: "3"
 tasks:
   hindsight:up:
     desc: Prepare models and start the independent Hindsight service
+    deps:
+      - task: mlflow:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."

@@ -55,6 +55,7 @@ cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/hindsight-health.json"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/compose.yml"
+[ "${DOTFILES_ACCEPTANCE_SKIP_MLFLOW:-}" = 1 ]
 test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
 test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
 	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"

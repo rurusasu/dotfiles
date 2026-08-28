@@ -132,11 +132,23 @@
         "docker/hermes-browser-mcp/**",
         "docker/hermes-xapi-mcp/**",
         "docker/hindsight/**",
+        "docker/mlflow/**",
         "scripts/sh/hermes-*.sh",
         "scripts/powershell/hermes-*.ps1",
         "scripts/powershell/handlers/Handler.HermesAgent.ps1"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": ["scripts/sh/hindsight.sh"],
+      "outputs": ["linux", "darwin", "contract", "hermes"]
+    },
+    {
+      "patterns": [
+        "scripts/powershell/hindsight.ps1",
+        "scripts/powershell/lib/HermesHindsight.ps1"
+      ],
+      "outputs": ["windows", "contract", "hermes"]
     },
     {
       "patterns": [".devcontainer/**", "bootstrap.sh", "chezmoi/dot_config/devcontainer/**"],
@@ -175,7 +187,19 @@
       "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
     },
     {
-      "patterns": ["taskfiles/hermes/**"],
+      "patterns": ["taskfiles/hermes/**", "taskfiles/hindsight/**", "taskfiles/mlflow/**"],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
+    },
+    {
+      "patterns": [
+        "docs/mlflow/**",
+        "tests/python/test_mlflow_contract.py",
+        "tests/bash/mlflow_task_contract.bats"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows", "contract"]
+    },
+    {
+      "patterns": ["tests/bash/hindsight_runtime.bats", "tests/bash/hindsight_service.bats"],
       "outputs": ["linux", "darwin", "wsl", "windows", "contract", "hermes"]
     },
     {
