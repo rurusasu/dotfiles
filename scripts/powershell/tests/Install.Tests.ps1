@@ -15,6 +15,34 @@ BeforeAll {
     # SetupHandler.ps1 に含まれています
     . $PSScriptRoot/../lib/SetupHandler.ps1
     . $PSScriptRoot/../lib/Invoke-ExternalCommand.ps1
+
+    function New-DependencyTestHandler {
+        param(
+            [string]$Name,
+            [int]$Order,
+            [string[]]$DependsOn,
+            [bool]$ShouldSucceed
+        )
+
+        $handler = [PSCustomObject]@{
+            Name = $Name
+            Order = $Order
+            DependsOn = $DependsOn
+            ShouldSucceed = $ShouldSucceed
+            _bufferLogs = $false
+            _logBuffer = [System.Collections.ArrayList]::new()
+        }
+        $handler | Add-Member ScriptMethod CanApply { return $true }
+        $handler | Add-Member ScriptMethod ClearLogBuffer { }
+        $handler | Add-Member ScriptMethod FlushLogBuffer { }
+        $handler | Add-Member ScriptMethod Apply {
+            if ($this.ShouldSucceed) {
+                return [SetupResult]::CreateSuccess($this.Name, 'OK')
+            }
+            return [SetupResult]::CreateFailure($this.Name, 'failed')
+        }
+        return $handler
+    }
 }
 
 Describe 'Get-SetupHandler' {
@@ -123,6 +151,7 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
 
     BeforeEach {
         Mock Write-Host { }
+        Mock Write-Warning { }
         $script:ctx = [SetupContext]::new("D:\dotfiles")
     }
 
@@ -134,6 +163,19 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
         $results | Should -HaveCount 0
         Should -Invoke Write-Host -ParameterFilter {
             $Object -match "Skipped"
+        }
+    }
+
+    It 'should not execute a handler when a dependency failed' {
+        $dependency = New-DependencyTestHandler 'MLflow' 10 @() $false
+        $dependent = New-DependencyTestHandler 'Hindsight' 20 @('MLflow') $true
+
+        $results = @(Invoke-SetupHandler -Handlers @($dependency, $dependent) -Context $ctx)
+
+        $results | Should -HaveCount 1
+        $results[0].HandlerName | Should -Be 'MLflow'
+        Should -Invoke Write-Warning -ParameterFilter {
+            $Message -match 'Hindsight.*MLflow'
         }
     }
 }

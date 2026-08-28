@@ -47,6 +47,15 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\[switch\]\$NoPause'
     }
 
+    It 'should expose one explicit switch for each local AI service' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '\[switch\]\$WithOllama'
+        $content | Should -Match '\[switch\]\$WithDocker'
+        $content | Should -Match '\[switch\]\$WithMLflow'
+        $content | Should -Match '\[switch\]\$WithHindsight'
+        $content | Should -Match '\[switch\]\$WithHermes'
+    }
+
     It 'should converge deferred Docker setup after admin work and before acceptance' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $convergence = $content.IndexOf('Phase 2c: Post-Admin Docker Convergence')

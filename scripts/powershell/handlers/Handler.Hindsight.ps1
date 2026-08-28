@@ -15,6 +15,7 @@ class HindsightHandler : SetupHandlerBase {
         $this.Order = 55
         $this.RequiresAdmin = $false
         $this.Phase = 2
+        $this.DependsOn = @('MLflow')
     }
 
     [bool] CanApply([SetupContext]$ctx) {

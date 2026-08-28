@@ -14,6 +14,10 @@ setup() {
 	grep -q '127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999' "$HINDSIGHT_COMPOSE"
 	grep -q 'HINDSIGHT_DATA_DIR' "$HINDSIGHT_COMPOSE"
 	grep -q 'name: dotfiles-memory' "$HINDSIGHT_COMPOSE"
+	grep -q '^      - local-ai-services$' "$HINDSIGHT_COMPOSE"
+	grep -q '^  local-ai-services:$' "$HINDSIGHT_COMPOSE"
+	grep -q 'name: local-ai-services' "$HINDSIGHT_COMPOSE"
+	grep -q 'external: true' "$HINDSIGHT_COMPOSE"
 }
 
 @test "Hermes joins the shared memory network without owning Hindsight" {
@@ -39,7 +43,11 @@ setup() {
 
 @test "Windows installs Hindsight in its own handler before Hermes" {
 	hindsight_handler="$REPO_ROOT/scripts/powershell/handlers/Handler.Hindsight.ps1"
+	mlflow_handler="$REPO_ROOT/scripts/powershell/handlers/Handler.MLflow.ps1"
 	hermes_handler="$REPO_ROOT/scripts/powershell/handlers/Handler.HermesAgent.ps1"
+	grep -q "Name = 'MLflow'" "$mlflow_handler"
+	grep -q 'Order = 54' "$mlflow_handler"
+	grep -q "WithMLflow" "$mlflow_handler"
 	grep -q "Name = 'Hindsight'" "$hindsight_handler"
 	grep -q 'Order = 55' "$hindsight_handler"
 	grep -q "WithHindsight" "$hindsight_handler"

@@ -174,8 +174,8 @@ in sets.providerErrors
         }
 
         It 'should update WSL inputs and route native NixOS through the hardware-safe installer' {
-            $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl/users.nix") -Raw
-            $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux/users.nix") -Raw
+            $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl.nix") -Raw
+            $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux.nix") -Raw
 
             $wslUsers | Should -Match 'nrs\s*=\s*"task --dir ~/.dotfiles nrs"'
             $linuxUsers | Should -Match 'nrs\s*=\s*"~/.dotfiles/install\.sh"'
@@ -188,7 +188,7 @@ in sets.providerErrors
             $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
             $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
-            $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
+            $taskfile | Should -Match 'nix flake update && scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
             $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
             $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_root"'
             $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR"'

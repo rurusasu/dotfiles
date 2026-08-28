@@ -161,15 +161,9 @@ in
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";
-    users.${user} =
-      { ... }:
-      {
-        imports = [ ../../home/common.nix ];
-
-        programs.zsh.shellAliases = {
-          nrs = "~/.dotfiles/install.sh";
-        };
-      };
+    users.${user} = {
+      imports = [ ../../home/darwin.nix ];
+    };
     extraSpecialArgs = {
       inherit inputs installFeatures;
       isWSL = false;

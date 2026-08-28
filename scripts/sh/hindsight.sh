@@ -171,8 +171,8 @@ hindsight_prepare() {
     dotfiles_have "$command" || dotfiles_die "$command is required for Hindsight."
   done
 
-  llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL)"
-  embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL)"
+  llm_model="$(hindsight_env_value "$compose_file" HINDSIGHT_OLLAMA_LLM_MODEL)"
+  embedding_model="$(hindsight_env_value "$compose_file" HINDSIGHT_OLLAMA_EMBEDDING_MODEL)"
   data_dir="${HINDSIGHT_DATA_DIR:-$HOME/.local/share/hindsight}"
   hindsight_migrate_legacy_data "$data_dir" validate
   "$ollama_command" pull "$llm_model"
@@ -180,7 +180,23 @@ hindsight_prepare() {
 
   mkdir -p "$data_dir/pg0" "$data_dir/cache"
   docker compose -f "$compose_file" config --quiet
+  hindsight_pull_image "$compose_file"
   hindsight_migrate_legacy_data "$data_dir"
+}
+
+hindsight_pull_image() {
+  local compose_file="$1" image
+  if docker compose -f "$compose_file" pull hindsight; then
+    return 0
+  fi
+
+  image="$(docker compose -f "$compose_file" config --images | sed -n '1p')"
+  if [[ -n $image ]] && docker image inspect "$image" >/dev/null 2>&1; then
+    printf 'Image pull failed; continuing with the cached Hindsight image.\n' >&2
+    return 0
+  fi
+
+  dotfiles_die "Could not pull the Hindsight image and no cached image is available."
 }
 
 hindsight_up() {
@@ -202,7 +218,7 @@ hindsight_up() {
   (
     trap hindsight_restore_legacy_after_replacement_failure EXIT
     set -e
-    docker compose -f "$compose_file" up -d hindsight
+    docker compose -f "$compose_file" up -d --force-recreate --remove-orphans hindsight
     hindsight_wait_for_api
   )
   replacement_status=$?

@@ -45,8 +45,10 @@ Hindsight、Hermes、Chrome、Discord、Chromium/browser-mcp は導入しませ�
 
 ```powershell
 .\install.cmd -WithOllama # Ollama のみ
-.\install.cmd -WithDocker # Ollama + Docker + 独立 Hindsight
-.\install.cmd -WithHermes # 上記 + Hermes + Chrome + Discord + browser-mcp
+.\install.cmd -WithDocker # Docker のみ
+.\install.cmd -WithMLflow # Ollama + Docker + MLflow
+.\install.cmd -WithHindsight # Ollama + Docker + MLflow + Hindsight
+.\install.cmd -WithHermes # Ollama + Docker + MLflow + Hindsight + Hermes + Chrome + Discord + browser-mcp
 ```
 
 ### macOS (Apple Silicon)

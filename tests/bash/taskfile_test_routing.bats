@@ -108,7 +108,7 @@ EOF
 	run task --dir "$REPO_ROOT" --dry --force nrs
 
 	[ "$status" -eq 0 ]
-	rebuild_line="$(grep -n 'nix flake update && sudo nixos-rebuild switch' <<<"$output" | cut -d: -f1)"
+	rebuild_line="$(grep -n 'nix flake update && scripts/sh/nixos-rebuild-with-user.sh switch' <<<"$output" | cut -d: -f1)"
 	profile_line="$(grep -n "nix profile upgrade '.*'" <<<"$output" | cut -d: -f1)"
 	bootstrap_line="$(grep -n 'task: \[hermes:bootstrap\]' <<<"$output" | cut -d: -f1)"
 	[ -n "$rebuild_line" ]
@@ -116,6 +116,12 @@ EOF
 	[ -n "$bootstrap_line" ]
 	[ "$rebuild_line" -lt "$profile_line" ]
 	[ "$profile_line" -lt "$bootstrap_line" ]
+}
+
+@test "NixOS rebuild helper is used for every WSL rebuild shortcut" {
+	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
+	grep -Fq 'nrt = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh test' "$REPO_ROOT/nix/home/wsl.nix"
+	grep -Fq 'nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot' "$REPO_ROOT/nix/home/wsl.nix"
 }
 
 @test "Hermes restart reuses the xapi-aware up task" {

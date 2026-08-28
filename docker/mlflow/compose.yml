@@ -1,0 +1,58 @@
+name: local-ai-mlflow
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.12.0-full@sha256:364cdfa503f1a54a000e7f86f3910f9a838ea939d225b6394710010e4444f8a2
+    restart: unless-stopped
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - localhost,127.0.0.1,127.0.0.1:5000,mlflow:5000
+      - --backend-store-uri
+      - sqlite:////mlflow/mlflow.db
+      - --default-artifact-root
+      - /mlflow/artifacts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - type: bind
+        source: ${MLFLOW_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/mlflow}
+        target: /mlflow
+      - type: bind
+        source: ./configure.py
+        target: /opt/mlflow/configure.py
+        read_only: true
+      - type: bind
+        source: ./verify.py
+        target: /opt/mlflow/verify.py
+        read_only: true
+      - type: bind
+        source: ./endpoints.yml
+        target: /opt/mlflow/endpoints.yml
+        read_only: true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    networks:
+      - local-ai-services
+
+networks:
+  local-ai-services:
+    name: local-ai-services
+    external: true

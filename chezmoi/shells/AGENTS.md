@@ -15,7 +15,7 @@
 2. 秘密情報は直接書かず `~/.config/shell/secret.*` を source する。
 3. alias 追加は既存キーと衝突しないことを確認する。
 4. zsh の alias・設定は `nix/home/common.nix`（全プラットフォーム共通）または
-   `nix/home/wsl/users.nix`（WSL 固有）の `programs.zsh` に書く。
+   `nix/home/wsl.nix`（WSL 固有）の `programs.zsh` に書く。
 
 ## 反映
 

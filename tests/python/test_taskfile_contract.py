@@ -127,6 +127,7 @@ class TaskfileContractTests(unittest.TestCase):
     ) -> None:
         task = self._task_block("hermes:memory:verify")
 
+        self.assertIn("task: mlflow:up", task)
         self.assertIn("scripts/sh/hermes-hindsight-verify.sh", task)
         self.assertIn("platforms: [linux, darwin]", task)
         self.assertIn(

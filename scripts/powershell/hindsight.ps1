@@ -238,12 +238,13 @@ function Invoke-HindsightMain {
 
     if ($RequestedAction -eq 'up') {
         $environmentFile = Join-Path (Split-Path -Parent $RequestedComposeFile) 'hindsight.env'
-        $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_LLM_MODEL=(.+)$').Matches.Groups[1].Value
-        $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=(.+)$').Matches.Groups[1].Value
+        $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_LLM_MODEL=(.+)$').Matches.Groups[1].Value
+        $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_EMBEDDING_MODEL=(.+)$').Matches.Groups[1].Value
         $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }
         Move-HindsightLegacyData -DataDir $dataDir -ValidateOnly
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'pull', 'hindsight')
         New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
         $migrationStoppedRunningLegacy = [bool](Move-HindsightLegacyData -DataDir $dataDir)
 
@@ -253,7 +254,7 @@ function Invoke-HindsightMain {
             if ($legacyState.Running) {
                 $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
             }
-            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', 'hindsight')
+            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', '--force-recreate', '--remove-orphans', 'hindsight')
             Wait-HindsightApi
         }
         catch {

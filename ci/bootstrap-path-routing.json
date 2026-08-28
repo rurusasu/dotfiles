@@ -49,8 +49,7 @@
     },
     {
       "patterns": [
-        "nix/home/linux/**",
-        "nix/home/users/**",
+        "nix/home/linux.nix",
         "nix/hosts/linux/**",
         "nix/system-manager/**",
         "nix/tests/**",
@@ -67,7 +66,7 @@
     },
     {
       "patterns": [
-        "nix/home/wsl/**",
+        "nix/home/wsl.nix",
         "nix/hosts/wsl/**",
         "nix/modules/wsl/**",
         "scripts/sh/nixos-wsl-postinstall.sh",
@@ -82,11 +81,16 @@
     },
     {
       "patterns": [
+        "nix/home/darwin.nix",
         "nix/hosts/darwin/**",
         "scripts/sh/install-macos.sh",
         "tests/bash/install_macos.bats"
       ],
       "outputs": ["darwin"]
+    },
+    {
+      "patterns": ["nix/home/README.md"],
+      "outputs": ["linux", "darwin", "wsl"]
     },
     {
       "patterns": ["install.sh"],
@@ -164,12 +168,28 @@
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
         "docker/hermes-xapi-mcp/**",
-        "docker/hindsight/**"
+        "docker/hindsight/**",
+        "docker/mlflow/**"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },
     {
-      "patterns": ["Taskfile.yml", "taskfiles/hermes/**"],
+      "patterns": [
+        "Taskfile.yml",
+        "taskfiles/hermes/**",
+        "taskfiles/hindsight/**",
+        "taskfiles/mlflow/**"
+      ],
+      "outputs": ["linux", "darwin", "wsl", "windows"]
+    },
+    {
+      "patterns": [
+        "docs/mlflow/**",
+        "tests/python/test_mlflow_contract.py",
+        "tests/bash/mlflow_task_contract.bats",
+        "tests/bash/hindsight_runtime.bats",
+        "tests/bash/hindsight_service.bats"
+      ],
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },
     {

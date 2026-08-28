@@ -7,13 +7,18 @@
 
 { ... }:
 
+let
+  configuredUser = builtins.getEnv "DOTFILES_USER";
+  user = if configuredUser == "" then "nixos" else configuredUser;
+in
+
 {
   imports = [
     # include NixOS-WSL modules
   ];
 
   wsl.enable = true;
-  wsl.defaultUser = "nixos";
+  wsl.defaultUser = user;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

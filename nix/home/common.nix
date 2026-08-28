@@ -2,9 +2,10 @@
 # Uses builtins.getEnv to avoid hardcoding usernames in the repository.
 #
 # Used by:
-#   - nix/home/wsl/users.nix   → NixOS module integration
-#   - nix/flakes/home.nix      → standalone homeConfigurations
-#   - nix/hosts/darwin/default.nix → nix-darwin Home Manager integration
+#   - nix/home/darwin.nix → nix-darwin Home Manager integration
+#   - nix/home/linux.nix  → native NixOS Home Manager integration
+#   - nix/home/wsl.nix    → WSL Home Manager integration
+#   - nix/flakes/home.nix → standalone homeConfigurations
 {
   pkgs,
   lib,

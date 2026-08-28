@@ -82,8 +82,9 @@ docker compose -f $HERMES_COMPOSE_FILE config --quiet
 ollama pull qwen3.6:35b
 ollama pull qwen3-embedding:0.6b
 docker compose -f $HINDSIGHT_COMPOSE_FILE config --quiet
+docker compose -f $HINDSIGHT_COMPOSE_FILE pull hindsight
 docker container inspect --format {{.State.Running}} hermes-hindsight
-docker compose -f $HINDSIGHT_COMPOSE_FILE up -d hindsight
+docker compose -f $HINDSIGHT_COMPOSE_FILE up -d --force-recreate --remove-orphans hindsight
 curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8888/health
 docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance probe --api-url http://hindsight:8888 --ollama-url http://host.docker.internal:11434 --strict-probes 20 --timeout 300 --evidence /opt/data/hindsight/acceptance.json
 docker compose -f $HERMES_COMPOSE_FILE exec -T hermes hermes-hindsight-acceptance seed --api-url http://hindsight:8888 --profiles default,rick,hoffman,risarisa,nancy,kuroda,shiraishi --timeout 300 --state /opt/data/hindsight/acceptance-state.json

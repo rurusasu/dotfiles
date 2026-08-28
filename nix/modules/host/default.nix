@@ -12,6 +12,8 @@ let
     mkMerge
     types
     ;
+  configuredUser = builtins.getEnv "DOTFILES_USER";
+  user = if configuredUser == "" then "nixos" else configuredUser;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -94,9 +96,9 @@ in
       };
 
       # docker グループを作成する（Docker Desktop の bind mount が /var/run/docker.sock を
-      # docker グループ所有で作成するため、nixos ユーザーが接続できるように）
+      # docker グループ所有で作成するため、対象ユーザーが接続できるようにする。
       users.groups.docker = { };
-      users.users.nixos.extraGroups = [ "docker" ];
+      users.users.${user}.extraGroups = [ "docker" ];
     })
   ];
 }
