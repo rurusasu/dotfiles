@@ -1,4 +1,10 @@
 { config, pkgs, ... }:
+
+let
+  configuredUser = builtins.getEnv "DOTFILES_USER";
+  user = if configuredUser == "" then "nixos" else configuredUser;
+in
+
 {
   environment = {
     systemPackages = with pkgs; [
@@ -42,7 +48,7 @@
     opWrapper =
       let
         opScript = pkgs.writeShellScript "op-wrapper" ''
-          OP_NATIVE="/etc/profiles/per-user/nixos/bin/op"
+          OP_NATIVE="/etc/profiles/per-user/${user}/bin/op"
           # op run injects secrets into Linux processes — keep on native binary
           if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
             exec "$OP_NATIVE" "$@"
@@ -128,7 +134,7 @@
     insecure-registries = [ "registry.localhost" ];
   };
 
-  users.users.nixos.extraGroups = [ "docker" ];
+  users.users.${user}.extraGroups = [ "docker" ];
 
   # Re-register WSLInterop binfmt entry after systemd clears it on boot.
   # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.

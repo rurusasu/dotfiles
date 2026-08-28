@@ -61,3 +61,11 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$output" = 'task --dir ~/.dotfiles nrs' ]
 }
+
+@test "NixOS evaluates the complete WSL system for a non-default user" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/home/codex DOTFILES_UID=1000 DOTFILES_GID=1000 DOTFILES_GROUP=users \
+		nix eval --impure --raw --no-write-lock-file "path:$REPO_ROOT#nixosConfigurations.nixos.config.system.build.toplevel.drvPath"
+	[ "$status" -eq 0 ]
+	[ -n "$output" ]
+}

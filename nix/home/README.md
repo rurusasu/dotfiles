@@ -12,7 +12,8 @@ caller は対象 OS のファイルだけを読み込み、各 OS ファイル�
 このため `default.nix` と `users.nix` は置きません。どちらも入口を曖昧にし、ユーザー別の
 中継層を作って OS 固有の依存方向を逆転させるためです。ユーザー名とホームディレクトリは
 `DOTFILES_USER` と `DOTFILES_HOME` から取り、NixOS の wiring では `DOTFILES_USER` 未指定時に
-`nixos` を fallback とします。
+`nixos` を fallback とします。WSL では postinstall が同じユーザーを NixOS host と Home
+Manager の両方へ渡すため、host 側の `wsl.defaultUser` と Home Manager の対象も一致します。
 
 ## 所有境界
 

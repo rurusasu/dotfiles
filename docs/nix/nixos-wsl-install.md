@@ -55,9 +55,10 @@ nixos-rebuild switch
 Flake 化と NixOS host の最小構成を作成します。Home Manager の WSL 設定は、リポジトリで管理する
 `nix/home/wsl.nix` を使用し、postinstall では生成しません。
 
-Home Manager のユーザー識別は `DOTFILES_USER` を優先します。未指定の場合は NixOS の
-fallback ユーザー（`nixos`）が使われます。通常の WSL 導入では PowerShell 側が対象ユーザーを
-`DOTFILES_USER` として渡します。
+Home Manager と NixOS host のユーザー識別は、`--user <USER>` の指定または postinstall が
+自動検出したユーザーを `DOTFILES_USER` として共有します。未指定時は NixOS の fallback
+ユーザー（`nixos`）が使われます。postinstall は同じユーザーの home、UID、GID、group も
+`DOTFILES_HOME`、`DOTFILES_UID`、`DOTFILES_GID`、`DOTFILES_GROUP` として rebuild に渡します。
 
 ### 同期の仕組み (図)
 

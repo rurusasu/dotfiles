@@ -99,6 +99,20 @@ if [[ -z $USER_NAME ]]; then
   fi
 fi
 
+USER_HOME="$(getent passwd "$USER_NAME" | cut -d: -f6)"
+if [[ -z $USER_HOME ]]; then
+  echo "Unable to resolve the home directory for $USER_NAME." >&2
+  exit 1
+fi
+
+# Keep the NixOS host account and Home Manager target aligned with the user
+# selected by --user (or the auto-detected account).
+export DOTFILES_USER="$USER_NAME"
+export DOTFILES_HOME="$USER_HOME"
+export DOTFILES_UID="$(id -u "$USER_NAME")"
+export DOTFILES_GID="$(id -g "$USER_NAME")"
+export DOTFILES_GROUP="$(id -gn "$USER_NAME")"
+
 if [[ -z $REPO_DIR ]]; then
   REPO_DIR="/home/$USER_NAME/.dotfiles"
 fi
