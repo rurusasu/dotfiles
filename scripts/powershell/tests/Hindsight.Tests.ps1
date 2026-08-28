@@ -163,13 +163,15 @@ Describe 'Independent Hindsight startup cutover' {
 
         $validateIndex = $script:calls.IndexOf('migrate validate')
         $pullIndex = $script:calls.IndexOf('ollama pull qwen3-embedding:0.6b')
+        $imagePullIndex = $script:calls.IndexOf("docker compose -f $script:composeFile pull hindsight")
         $migrateIndex = $script:calls.IndexOf('migrate')
         $stopIndex = $script:calls.IndexOf('docker stop hermes-hindsight')
-        $upIndex = $script:calls.IndexOf("docker compose -f $script:composeFile up -d hindsight")
+        $upIndex = $script:calls.IndexOf("docker compose -f $script:composeFile up -d --force-recreate --remove-orphans hindsight")
         $waitIndex = $script:calls.IndexOf('wait')
         $retireIndex = $script:calls.IndexOf('docker rm hermes-hindsight')
         $validateIndex | Should -BeLessThan $pullIndex
-        $pullIndex | Should -BeLessThan $migrateIndex
+        $pullIndex | Should -BeLessThan $imagePullIndex
+        $imagePullIndex | Should -BeLessThan $migrateIndex
         $migrateIndex | Should -BeLessThan $stopIndex
         $stopIndex | Should -BeLessThan $upIndex
         $upIndex | Should -BeLessThan $waitIndex

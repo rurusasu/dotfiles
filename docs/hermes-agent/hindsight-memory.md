@@ -44,8 +44,10 @@ native Ollama のモデル存在・readiness を確認するためだけのも�
 
 ## Installation
 
-Windows では `-WithDocker` または `-WithHermes` を指定すると、Ollama、Docker、
-独立 Hindsight が順に有効になります。Hindsight 単体の通常の操作入口は次です。
+Windows のインストーラーはサービス単位のスイッチを受け付けます。`-WithDocker` は
+Docker のみ、`-WithMLflow` は Ollama と Docker に加えて MLflow、`-WithHindsight` は
+さらに Hindsight、`-WithHermes` はさらに Hermes とそのブラウザー依存を有効にします。
+引数なしでは optional service を変更しません。Hindsight 単体の通常の操作入口は次です。
 
 ```text
 task hindsight:up

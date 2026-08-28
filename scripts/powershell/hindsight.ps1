@@ -244,6 +244,7 @@ function Invoke-HindsightMain {
         Move-HindsightLegacyData -DataDir $dataDir -ValidateOnly
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $llmModel)
         $null = Invoke-HindsightCommand -Command 'ollama' -Arguments @('pull', $embeddingModel)
+        $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'pull', 'hindsight')
         New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0'), (Join-Path $dataDir 'cache') -Force | Out-Null
         $migrationStoppedRunningLegacy = [bool](Move-HindsightLegacyData -DataDir $dataDir)
 
@@ -253,7 +254,7 @@ function Invoke-HindsightMain {
             if ($legacyState.Running) {
                 $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('stop', 'hermes-hindsight')
             }
-            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', 'hindsight')
+            $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'up', '-d', '--force-recreate', '--remove-orphans', 'hindsight')
             Wait-HindsightApi
         }
         catch {

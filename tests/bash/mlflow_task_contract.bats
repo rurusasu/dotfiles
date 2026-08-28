@@ -47,7 +47,8 @@ run_task_command_through_shell() {
 
   [ -f "$taskfile" ]
   grep -Fq 'docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services' "$taskfile"
-  grep -Fq 'docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --wait mlflow' "$taskfile"
+  grep -Fq 'docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow' "$taskfile"
+  grep -Fq 'docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --force-recreate --remove-orphans --wait mlflow' "$taskfile"
   down_block="$(awk '
     /^  mlflow:down:/ { in_down = 1; next }
     /^  [^[:space:]][^:]*:/ { in_down = 0 }

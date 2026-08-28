@@ -30,6 +30,8 @@ param(
     [switch]$WingetVerifyCommandOnly,
     [switch]$WithOllama,
     [switch]$WithDocker,
+    [switch]$WithMLflow,
+    [switch]$WithHindsight,
     [switch]$WithHermes,
     [switch]$NoPause
 )
@@ -50,6 +52,8 @@ $Options = Resolve-DotfilesInstallOption `
     -Options $Options `
     -WithOllama:$WithOllama `
     -WithDocker:$WithDocker `
+    -WithMLflow:$WithMLflow `
+    -WithHindsight:$WithHindsight `
     -WithHermes:$WithHermes
 
 if (-not $PSBoundParameters.ContainsKey("InstallDir")) {

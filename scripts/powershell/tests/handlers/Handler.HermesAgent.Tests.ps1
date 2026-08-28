@@ -170,10 +170,10 @@ Describe 'HermesAgentHandler' {
             $browserDir | Should -Exist
             $script:dockerCalls | Should -Be @(
                 "compose -f $script:composeFile config --quiet",
-                "compose -f $script:composeFile build hermes hermes-bootstrap chromium xapi-mcp",
+                "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium browser-mcp xapi-mcp",
                 "compose -f $script:composeFile ps --all --services hermes",
                 "compose -f $script:composeFile stop hermes",
-                "compose -f $script:composeFile up -d --force-recreate hermes chromium browser-mcp xapi-mcp"
+                "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
             )
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
@@ -331,7 +331,7 @@ Describe 'HermesAgentHandler' {
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Match 'startup failure'
-            $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate hermes chromium browser-mcp xapi-mcp"
+            $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
             $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
         }
 
@@ -346,7 +346,7 @@ Describe 'HermesAgentHandler' {
             $result.Success | Should -BeFalse
             $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate hermes chromium browser-mcp xapi-mcp"
+            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
         }
 
         It 'waits through transient API failures before reporting startup success' {
