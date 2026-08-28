@@ -37,6 +37,18 @@
   catalogOverride ? null,
 }:
 let
+  linuxSystems = [
+    "x86_64-linux"
+    "aarch64-linux"
+  ];
+  linuxOnlyPackage =
+    package:
+    if pkgs.stdenv.hostPlatform.isLinux then
+      package
+    else
+      pkgs.runCommand "linux-package-placeholder" {
+        meta.platforms = linuxSystems;
+      } "touch $out";
   rawCatalog =
     if catalogOverride != null then
       catalogOverride
@@ -219,7 +231,7 @@ let
 
         # ── terminal ──────────────────────────────────────────
         wezterm = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;
+          pkg = pkgs.wezterm;
           winget = "wez.wezterm.nightly";
           category = "terminal";
           support = {
@@ -345,7 +357,7 @@ let
           category = "llm";
         };
         chatgpt = {
-          pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;
+          pkg = linuxOnlyPackage (pkgs.callPackage ./chatgpt { });
           msstore = "9NT1R1C2HH7J";
           category = "desktop";
           support = {
@@ -364,7 +376,7 @@ let
           };
         };
         ollama = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
+          pkg = pkgs.ollama;
           winget = "Ollama.Ollama";
           category = "llm";
           installFeature = "WithOllama";
@@ -398,7 +410,7 @@ let
 
         # ── desktop applications ──────────────────────────────
         discord = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;
+          pkg = pkgs.discord;
           winget = "Discord.Discord";
           category = "desktop";
           installFeature = "WithHermes";
@@ -1025,14 +1037,13 @@ let
       "aarch64-darwin"
       "x86_64-darwin"
     ];
-    linux = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
+    linux = linuxSystems;
   };
   providerAllowedFields =
     provider:
-    if provider == "nix" then
+    if provider == null then
+      [ "unsupported" ]
+    else if provider == "nix" then
       [
         "provider"
         "source"
@@ -1122,8 +1133,7 @@ let
           (platformData.source or null) == "nixpkgs" && !hasValue (platformData.nixAttr or null)
         ) "${prefix}source = nixpkgs requires nixAttr"
         ++ lib.optional (
-          provider == "nix"
-          && ((platform == platformKey && package == null) || (package != null && !lib.isDerivation package))
+          provider == "nix" && (package == null || !lib.isDerivation package)
         ) "${prefix}nix provider requires a derivation"
         ++ lib.optional (
           provider == "nix"
@@ -1131,9 +1141,13 @@ let
           && lib.isDerivation package
           && !(lib.any (system: supports package system) platformSystems.${platform})
         ) "${prefix}nix provider derivation does not support ${platform}"
-        ++ map (field: "${prefix}${provider} provider cannot include ${field}") (
-          if provider == null then [ ] else extraFields
-        )
+        ++ map (
+          field:
+          if provider == null then
+            "${prefix}providerless metadata cannot include ${field}"
+          else
+            "${prefix}${provider} provider cannot include ${field}"
+        ) extraFields
         ++ lib.optional (
           provider == "nix" && ((platformData.cask or null) != null || (platformData.formula or null) != null)
         ) "${prefix}catalog ID appears in both Nix and Homebrew resolution"

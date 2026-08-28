@@ -48,6 +48,14 @@ let
           linux = { unsupported = "fixture"; };
         };
       };
+      orphan = {
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { unsupported = "fixture"; cask = "stale"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
       inactive = {
         pkg = "not-a-derivation";
         category = "test";
@@ -55,6 +63,15 @@ let
           windows = { unsupported = "fixture"; };
           darwin = { unsupported = "fixture"; };
           linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive"; nixAttr = "hello"; };
+        };
+      };
+      inactive-null = {
+        pkg = null;
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { unsupported = "fixture"; };
+          linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-null"; nixAttr = "hello"; };
         };
       };
     };
@@ -67,7 +84,9 @@ in sets.providerErrors
             $LASTEXITCODE | Should -Be 0
             $errors | Should -Contain 'extra: darwin: nix provider cannot include cask'
             $errors | Should -Contain 'extra: darwin: catalog ID appears in both Nix and Homebrew resolution'
+            $errors | Should -Contain 'orphan: darwin: providerless metadata cannot include cask'
             $errors | Should -Contain 'inactive: linux: nix provider requires a derivation'
+            $errors | Should -Contain 'inactive-null: linux: nix provider requires a derivation'
         }
     }
 

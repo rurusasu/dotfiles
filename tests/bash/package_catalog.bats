@@ -75,6 +75,14 @@ nix_fixture_errors() {
 				linux = { unsupported = "fixture"; };
 			};
 		};
+		orphan = {
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { unsupported = "fixture"; cask = "stale"; };
+				linux = { unsupported = "fixture"; };
+			};
+		};
 		inactive-invalid = {
 			pkg = "not-a-derivation";
 			category = "test";
@@ -93,6 +101,15 @@ nix_fixture_errors() {
 				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-platform"; nixAttr = "hello"; };
 			};
 		};
+		inactive-null = {
+			pkg = null;
+			category = "test";
+			support = {
+				windows = { unsupported = "fixture"; };
+				darwin = { unsupported = "fixture"; };
+				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-null"; nixAttr = "hello"; };
+			};
+		};
 	}'
 	[ "$status" -eq 0 ]
 	run jq -e '
@@ -102,8 +119,10 @@ nix_fixture_errors() {
 		any(.[]; contains("missing-cask: darwin: homebrew-cask provider requires cask")) and
 		any(.[]; contains("extra: darwin: nix provider cannot include cask")) and
 		any(.[]; contains("extra: darwin: catalog ID appears in both Nix and Homebrew resolution")) and
+		any(.[]; contains("orphan: darwin: providerless metadata cannot include cask")) and
 		any(.[]; contains("inactive-invalid: linux: nix provider requires a derivation")) and
-		any(.[]; contains("inactive-platform: linux: nix provider derivation does not support linux"))
+		any(.[]; contains("inactive-platform: linux: nix provider derivation does not support linux")) and
+		any(.[]; contains("inactive-null: linux: nix provider requires a derivation"))
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
@@ -275,7 +294,7 @@ EOF
 @test "Discord is a cross-platform desktop package" {
 	run grep -n -A12 '^[[:space:]]*discord = {' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;'* ]]
+	[[ "$output" == *'pkg = pkgs.discord;'* ]]
 	[[ "$output" == *'winget = "Discord.Discord";'* ]]
 	[[ "$output" == *'category = "desktop";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]
@@ -304,7 +323,7 @@ EOF
 		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;'* ]]
+	[[ "$output" == *'pkg = pkgs.wezterm;'* ]]
 	[[ "$output" == *'cask = "wezterm@nightly"'* ]]
 	[[ "$output" == *'darwin = {'* ]]
 	[[ "$output" == *'linux = {'* ]]
@@ -319,7 +338,7 @@ EOF
 		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;'* ]]
+	[[ "$output" == *'pkg = pkgs.ollama;'* ]]
 	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
 	[[ "$output" == *'category = "llm";'* ]]
 	[[ "$output" == *'provider = "homebrew-cask";'* ]]
@@ -344,7 +363,7 @@ EOF
 		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;'* ]]
+	[[ "$output" == *'pkg = linuxOnlyPackage (pkgs.callPackage ./chatgpt { });'* ]]
 	[[ "$output" == *'msstore = "9NT1R1C2HH7J";'* ]]
 	[[ "$output" == *'cask = "chatgpt"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
