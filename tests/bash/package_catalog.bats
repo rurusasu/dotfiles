@@ -391,14 +391,67 @@ EOF
 	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
 }
 
-@test "Discord is a cross-platform desktop package" {
-	run grep -n -A12 '^[[:space:]]*discord = {' "$SETS"
+@test "Discord preserves Windows and Linux providers while declaring a Nix Darwin GUI migration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+		in sets.supportReport.discord
+	"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = pkgs.discord;'* ]]
-	[[ "$output" == *'winget = "Discord.Discord";'* ]]
-	[[ "$output" == *'category = "desktop";'* ]]
-	[[ "$output" == *'provider = "homebrew-cask";'* ]]
-	[[ "$output" == *'cask = "discord"'* ]]
+	run jq -e '
+		.installFeature == "WithHermes"
+		and .windows == {
+			"provider": "winget",
+			"source": "winget",
+			"identity": "Discord.Discord"
+		}
+		and .linux == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": "discord",
+			"nixAttr": "discord"
+		}
+		and .darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://discord.com/",
+				"appName": "Discord.app",
+				"bundleId": "com.hnc.Discord",
+				"executable": "Discord"
+			},
+			"nixAttr": "discord"
+		}
+		and .legacyDarwin == {
+			"provider": "homebrew-cask",
+			"name": "discord"
+		}
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Discord keeps staged modules outside its signed application bundle" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v codesign >/dev/null 2>&1 || skip "codesign is not available in this test environment"
+	command -v spctl >/dev/null 2>&1 || skip "spctl is not available in this test environment"
+
+	run --separate-stderr nix build --no-link --print-out-paths .#darwin-discord
+	[ "$status" -eq 0 ]
+	store_path="$output"
+	app="$store_path/Applications/Discord.app"
+
+	[ ! -e "$app/Contents/Resources/modules" ]
+	[ -d "$store_path/share/discord/modules" ]
+	grep -Fq "$store_path/share/discord/modules" "$store_path/bin/Discord"
+	run codesign --verify --deep --strict "$app"
+	[ "$status" -eq 0 ]
+	run spctl --assess --type execute "$app"
+	[ "$status" -eq 0 ]
 }
 
 @test "WSL excludes the native Discord package" {

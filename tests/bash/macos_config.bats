@@ -138,21 +138,82 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Hermes profile includes its complete optional cask set" {
+@test "Darwin Hermes profile installs Discord through system Nix packages instead of a cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
 		nix eval --impure --json --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
-			in config.homebrew.casks
+			in {
+				casks = config.homebrew.casks;
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
 		"
 
 	[ "$status" -eq 0 ]
 	run jq -e '
-		any(.[]; .name == "ollama-app") and
-		any(.[]; .name == "docker-desktop") and
-		any(.[]; .name == "google-chrome") and
-		any(.[]; .name == "discord")
+		any(.casks[]; .name == "ollama-app") and
+		any(.casks[]; .name == "docker-desktop") and
+		any(.casks[]; .name == "google-chrome") and
+		all(.casks[]; .name != "discord") and
+		any(.system[]; test("^discord(-|$)")) and
+		all(.home[]; test("^discord(-|$)") | not)
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin runs Discord staging only when Hermes is enabled" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.script.text
+		"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *'disable-breaking-updates.py'* ]]
+	[[ "$output" != *'discord-stage-modules'* ]]
+	[[ "$output" != *'/share/discord/modules'* ]]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --raw --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.script.text
+		"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'launchctl asuser'* ]]
+	[[ "$output" == *'sudo --user=codex --set-home'* ]]
+	[[ "$output" == *'disable-breaking-updates.py'* ]]
+	[[ "$output" == *'discord-stage-modules'* ]]
+	[[ "$output" == *'/share/discord/modules'* ]]
+}
+
+@test "Darwin Hermes profile creates a user LaunchAgent to restage missing Discord modules" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.hasAttr \"discord-module-staging\" config.launchd.user.agents
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "false" ]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.launchd.user.agents.discord-module-staging.serviceConfig
+		"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.RunAtLoad == true and
+		.KeepAlive.PathState["/Users/codex/Library/Application Support/discord/0.0.408/modules/installed.json"] == false and
+		(.ProgramArguments | length == 2) and
+		(.ProgramArguments[0] | test("^/nix/store/.+-discord-stage-modules$")) and
+		(.ProgramArguments[1] | test("^/nix/store/.+-discord-0\\.0\\.408/share/discord/modules$"))
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }

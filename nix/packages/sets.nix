@@ -49,6 +49,21 @@ let
       pkgs.runCommand "linux-package-placeholder" {
         meta.platforms = linuxSystems;
       } "touch $out";
+  darwinDiscordPackage =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      pkgs.discord.overrideAttrs (old: {
+        dontFixup = true;
+        postInstall = (old.postInstall or "") + ''
+          mkdir -p "$out/share/discord"
+          mv "$out/Applications/Discord.app/Contents/Resources/modules" "$out/share/discord/modules"
+          substituteInPlace "$out/bin/Discord" \
+            --replace-fail \
+            "$out/Applications/Discord.app/Contents/Resources/modules" \
+            "$out/share/discord/modules"
+        '';
+      })
+    else
+      null;
   rawCatalog =
     if catalogOverride != null then
       catalogOverride
@@ -410,16 +425,21 @@ let
 
         # ── desktop applications ──────────────────────────────
         discord = {
-          pkg = pkgs.discord;
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
           winget = "Discord.Discord";
           category = "desktop";
           installFeature = "WithHermes";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "discord";
-              cask = "discord";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "discord";
+              identity = {
+                homepage = "https://discord.com/";
+                appName = "Discord.app";
+                bundleId = "com.hnc.Discord";
+                executable = "Discord";
+              };
             };
             linux = {
               provider = "nix";
@@ -427,6 +447,10 @@ let
               identity = "discord";
               nixAttr = "discord";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "discord";
           };
         };
         _1password-gui = {
@@ -1240,6 +1264,7 @@ lib.mapAttrs (_: resolve) grouped
   inherit
     resolveForInstallFeatures
     supportReport
+    darwinDiscordPackage
     darwinSystemPackagesForInstallFeatures
     darwinHomePackagesForInstallFeatures
     darwinCasks

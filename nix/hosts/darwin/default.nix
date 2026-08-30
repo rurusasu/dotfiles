@@ -10,6 +10,7 @@ let
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
+  discordPackage = sets.darwinDiscordPackage;
   withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
   withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
   withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
@@ -59,6 +60,17 @@ in
         fi
       fi
     '';
+    activationScripts.postActivation.text = lib.mkAfter (
+      lib.optionalString withHermes ''
+        uid="$(id -u -- ${lib.escapeShellArg user})"
+        runAsUser() {
+          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+        }
+
+        runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
+        runAsUser ${discordPackage.passthru.stageModules} ${lib.escapeShellArg "${discordPackage}/share/discord/modules"}
+      ''
+    );
   };
 
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
@@ -115,6 +127,20 @@ in
           393216
         ];
         type = "standard";
+      };
+    };
+  };
+
+  launchd.user.agents.discord-module-staging = lib.mkIf withHermes {
+    serviceConfig = {
+      ProgramArguments = [
+        "${discordPackage.passthru.stageModules}"
+        "${discordPackage}/share/discord/modules"
+      ];
+      RunAtLoad = true;
+      KeepAlive.PathState = {
+        "${home}/Library/Application Support/discord/${discordPackage.version}/modules/installed.json" =
+          false;
       };
     };
   };
