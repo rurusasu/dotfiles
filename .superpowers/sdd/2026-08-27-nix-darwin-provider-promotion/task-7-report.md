@@ -175,3 +175,20 @@ task darwin:verify -- \
 None. Future Discord package-version updates continue to monitor the
 version-derived `installed.json` path. The legacy cask migration is complete
 and did not use `--zap`.
+
+## Review fix round 1/5: artifact bundle identity
+
+- Added direct artifact assertions in
+  `Darwin Discord keeps staged modules outside its signed application bundle`.
+  After realizing `.#darwin-discord`, the test reads
+  `Applications/Discord.app/Contents/Info.plist` with macOS `plutil` and
+  requires `CFBundleIdentifier = com.hnc.Discord` and
+  `CFBundleExecutable = Discord`; this is independent of the support-report
+  metadata and signature/Gatekeeper checks.
+- RED: with a temporary expected identifier of `com.example.WrongDiscord`,
+  `bats --filter 'Darwin Discord keeps staged modules outside its signed
+application bundle' tests/bash/package_catalog.bats` produced 0 passed and
+  1 failed at the new identifier assertion.
+- GREEN: restoring the literal `com.hnc.Discord` made the same focused command
+  pass 1/1. `bats tests/bash/package_catalog.bats tests/bash/macos_config.bats`
+  then passed 63/63 and `PackageCatalog.Tests.ps1` passed 49/49.

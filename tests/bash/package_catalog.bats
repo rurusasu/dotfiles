@@ -438,6 +438,7 @@ EOF
 @test "Darwin Discord keeps staged modules outside its signed application bundle" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v codesign >/dev/null 2>&1 || skip "codesign is not available in this test environment"
+	command -v plutil >/dev/null 2>&1 || skip "plutil is not available in this test environment"
 	command -v spctl >/dev/null 2>&1 || skip "spctl is not available in this test environment"
 
 	run --separate-stderr nix build --no-link --print-out-paths .#darwin-discord
@@ -448,6 +449,12 @@ EOF
 	[ ! -e "$app/Contents/Resources/modules" ]
 	[ -d "$store_path/share/discord/modules" ]
 	grep -Fq "$store_path/share/discord/modules" "$store_path/bin/Discord"
+	run plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist"
+	[ "$status" -eq 0 ]
+	[ "$output" = "com.hnc.Discord" ]
+	run plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist"
+	[ "$status" -eq 0 ]
+	[ "$output" = "Discord" ]
 	run codesign --verify --deep --strict "$app"
 	[ "$status" -eq 0 ]
 	run spctl --assess --type execute "$app"
