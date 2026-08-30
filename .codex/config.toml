@@ -5,12 +5,7 @@ model_reasoning_summary = "auto"
 model_verbosity = "low"
 project_doc_fallback_filenames = [ "copilot-instructions.md" ]
 approval_policy = "never"
-sandbox_mode = "danger-full-access"
-
-[sandbox_workspace_write]
-exclude_slash_tmp = false
-exclude_tmpdir_env_var = false
-network_access = true
+default_permissions = ":danger-full-access"
 web_search = "live"
 mcp_oauth_credentials_store = "auto"
 hide_agent_reasoning = false
