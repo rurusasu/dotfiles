@@ -56,22 +56,31 @@ let
           linux = { unsupported = "fixture"; };
         };
       };
-      inactive = {
+      active-invalid = {
         pkg = "not-a-derivation";
         category = "test";
         support = {
           windows = { unsupported = "fixture"; };
-          darwin = { unsupported = "fixture"; };
-          linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive"; nixAttr = "hello"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-invalid"; nixAttr = "hello"; };
+          linux = { unsupported = "fixture"; };
         };
       };
-      inactive-null = {
-        pkg = null;
+      active-unsupported = {
+        pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "x86_64-linux" ]; });
         category = "test";
         support = {
           windows = { unsupported = "fixture"; };
-          darwin = { unsupported = "fixture"; };
-          linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-null"; nixAttr = "hello"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-unsupported"; nixAttr = "hello"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      host-conditional = {
+        pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; }) else pkgs.hello;
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
+          linux = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
         };
       };
     };
@@ -85,8 +94,9 @@ in sets.providerErrors
             $errors | Should -Contain 'extra: darwin: nix provider cannot include cask'
             $errors | Should -Contain 'extra: darwin: catalog ID appears in both Nix and Homebrew resolution'
             $errors | Should -Contain 'orphan: darwin: providerless metadata cannot include cask'
-            $errors | Should -Contain 'inactive: linux: nix provider requires a derivation'
-            $errors | Should -Contain 'inactive-null: linux: nix provider requires a derivation'
+            $errors | Should -Contain 'active-invalid: darwin: nix provider requires a derivation'
+            $errors | Should -Contain 'active-unsupported: darwin: nix provider derivation does not support darwin'
+            @($errors | Where-Object { $_ -match 'host-conditional' }).Count | Should -Be 0
         }
     }
 

@@ -348,15 +348,20 @@ let
           category = "llm";
         };
         chatgpt = {
-          pkg = linuxOnlyPackage (pkgs.callPackage ./chatgpt { });
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };
           msstore = "9NT1R1C2HH7J";
           category = "desktop";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "chatgpt";
-              cask = "chatgpt";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "chatgpt";
+              identity = {
+                homepage = "https://openai.com/chatgpt/desktop/";
+                appName = "ChatGPT.app";
+                bundleId = "com.openai.codex";
+                executable = "ChatGPT";
+              };
             };
             linux = {
               provider = "nix";
@@ -364,6 +369,10 @@ let
               identity = "chatgpt";
               nixAttr = "chatgpt";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "chatgpt";
           };
         };
         ollama = {
@@ -1063,17 +1072,6 @@ let
   );
 
   hasValue = value: value != null && value != "";
-  platformSystems = {
-    windows = [
-      "x86_64-windows"
-      "aarch64-windows"
-    ];
-    darwin = [
-      "aarch64-darwin"
-      "x86_64-darwin"
-    ];
-    linux = linuxSystems;
-  };
   providerAllowedFields =
     provider:
     if provider == null then
@@ -1143,6 +1141,7 @@ let
           entry = catalog.${name} or { };
           package = entry.pkg or null;
           prefix = "${name}: ${platform}: ";
+          activePlatform = platform == platformKey;
           extraFields = builtins.filter (field: !(builtins.elem field (providerAllowedFields provider))) (
             builtins.attrNames platformData
           );
@@ -1173,13 +1172,14 @@ let
           (platformData.source or null) == "nixpkgs" && !hasValue (platformData.nixAttr or null)
         ) "${prefix}source = nixpkgs requires nixAttr"
         ++ lib.optional (
-          provider == "nix" && (package == null || !lib.isDerivation package)
+          provider == "nix" && activePlatform && (package == null || !lib.isDerivation package)
         ) "${prefix}nix provider requires a derivation"
         ++ lib.optional (
           provider == "nix"
+          && activePlatform
           && package != null
           && lib.isDerivation package
-          && !(lib.any (system: supports package system) platformSystems.${platform})
+          && !supports package pkgs.stdenv.hostPlatform.system
         ) "${prefix}nix provider derivation does not support ${platform}"
         ++ map (
           field:

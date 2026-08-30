@@ -89,7 +89,7 @@ nix_fixture_darwin_package_split() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
-@test "catalog rejects incomplete extra and inactive-platform provider metadata" {
+@test "catalog rejects incomplete metadata and invalid active Nix packages" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
@@ -137,31 +137,31 @@ nix_fixture_darwin_package_split() {
 				linux = { unsupported = "fixture"; };
 			};
 		};
-		inactive-invalid = {
+		active-invalid = {
 			pkg = "not-a-derivation";
 			category = "test";
 			support = {
 				windows = { unsupported = "fixture"; };
-				darwin = { unsupported = "fixture"; };
-				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-invalid"; nixAttr = "hello"; };
+				darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-invalid"; nixAttr = "hello"; };
+				linux = { unsupported = "fixture"; };
 			};
 		};
-		inactive-platform = {
-			pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; });
+		active-unsupported = {
+			pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "x86_64-linux" ]; });
 			category = "test";
 			support = {
 				windows = { unsupported = "fixture"; };
-				darwin = { unsupported = "fixture"; };
-				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-platform"; nixAttr = "hello"; };
+				darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-unsupported"; nixAttr = "hello"; };
+				linux = { unsupported = "fixture"; };
 			};
 		};
-		inactive-null = {
-			pkg = null;
+		host-conditional = {
+			pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; }) else pkgs.hello;
 			category = "test";
 			support = {
 				windows = { unsupported = "fixture"; };
-				darwin = { unsupported = "fixture"; };
-				linux = { provider = "nix"; source = "nixpkgs"; identity = "inactive-null"; nixAttr = "hello"; };
+				darwin = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
+				linux = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
 			};
 		};
 	}'
@@ -174,9 +174,9 @@ nix_fixture_darwin_package_split() {
 		any(.[]; contains("extra: darwin: nix provider cannot include cask")) and
 		any(.[]; contains("extra: darwin: catalog ID appears in both Nix and Homebrew resolution")) and
 		any(.[]; contains("orphan: darwin: providerless metadata cannot include cask")) and
-		any(.[]; contains("inactive-invalid: linux: nix provider requires a derivation")) and
-		any(.[]; contains("inactive-platform: linux: nix provider derivation does not support linux")) and
-		any(.[]; contains("inactive-null: linux: nix provider requires a derivation"))
+		any(.[]; contains("active-invalid: darwin: nix provider requires a derivation")) and
+		any(.[]; contains("active-unsupported: darwin: nix provider derivation does not support darwin")) and
+		all(.[]; contains("host-conditional") | not)
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
@@ -456,17 +456,25 @@ EOF
 	[[ "$output" == *'args = [ "--version" ];'* ]]
 }
 
-@test "ChatGPT desktop has native Linux, Darwin cask, and Microsoft Store providers" {
+@test "ChatGPT uses the nixpkgs Darwin application with legacy cask migration metadata" {
 	run awk '
 		/^[[:space:]]*chatgpt = \{/ { in_entry=1 }
 		in_entry { print }
 		in_entry && /^        };/ { exit }
 	' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = linuxOnlyPackage (pkgs.callPackage ./chatgpt { });'* ]]
+	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };'* ]]
 	[[ "$output" == *'msstore = "9NT1R1C2HH7J";'* ]]
-	[[ "$output" == *'cask = "chatgpt"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "nixpkgs";'* ]]
+	[[ "$output" == *'nixAttr = "chatgpt";'* ]]
+	[[ "$output" == *'homepage = "https://openai.com/chatgpt/desktop/";'* ]]
+	[[ "$output" == *'appName = "ChatGPT.app";'* ]]
+	[[ "$output" == *'bundleId = "com.openai.codex";'* ]]
+	[[ "$output" == *'executable = "ChatGPT";'* ]]
+	[[ "$output" == *'legacyDarwin = {'* ]]
+	[[ "$output" == *'name = "chatgpt";'* ]]
+	[[ "$output" != *'cask = "chatgpt"'* ]]
 }
 
 @test "ChatGPT Linux package is wired as a reproducible Nix derivation" {
