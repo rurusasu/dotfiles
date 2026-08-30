@@ -507,11 +507,20 @@ let
           installFeature = "WithHermes";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "google-chrome";
-              cask = "google-chrome";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "google-chrome";
+              identity = {
+                homepage = "https://www.google.com/chrome/";
+                appName = "Google Chrome.app";
+                bundleId = "com.google.Chrome";
+                executable = "Google Chrome";
+              };
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "google-chrome";
           };
         };
         orca-editor = {

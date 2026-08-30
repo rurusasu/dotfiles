@@ -138,7 +138,7 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Hermes profile installs Discord through system Nix packages instead of a cask" {
+@test "Darwin Hermes profile installs Google Chrome and Discord through system Nix packages instead of casks" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
@@ -156,10 +156,10 @@ setup() {
 	run jq -e '
 		any(.casks[]; .name == "ollama-app") and
 		any(.casks[]; .name == "docker-desktop") and
-		any(.casks[]; .name == "google-chrome") and
-		all(.casks[]; .name != "discord") and
+		all(.casks[]; .name != "google-chrome" and .name != "discord") and
+		any(.system[]; test("^google-chrome(-|$)")) and
 		any(.system[]; test("^discord(-|$)")) and
-		all(.home[]; test("^discord(-|$)") | not)
+		all(.home[]; test("^(google-chrome|discord)(-|$)") | not)
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }

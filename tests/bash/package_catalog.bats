@@ -435,6 +435,56 @@ EOF
 	[ "$status" -eq 0 ]
 }
 
+@test "Google Chrome preserves its Windows provider while declaring a Nix Darwin GUI migration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+		in sets.supportReport.google-chrome
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.installFeature == "WithHermes"
+		and .windows == {
+			"provider": "winget",
+			"source": "winget",
+			"identity": "Google.Chrome"
+		}
+		and .darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://www.google.com/chrome/",
+				"appName": "Google Chrome.app",
+				"bundleId": "com.google.Chrome",
+				"executable": "Google Chrome"
+			},
+			"nixAttr": "google-chrome"
+		}
+		and .legacyDarwin == {
+			"provider": "homebrew-cask",
+			"name": "google-chrome"
+		}
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin flake exposes the Nix-managed Google Chrome application" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
+		packages:
+		builtins.elem "darwin-google-chrome" (builtins.attrNames packages)
+	'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "true" ]
+}
+
 @test "Darwin Discord keeps staged modules outside its signed application bundle" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v codesign >/dev/null 2>&1 || skip "codesign is not available in this test environment"
