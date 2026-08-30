@@ -533,6 +533,21 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'env "ProgramData"' -Because "Docker Desktop backend は ProgramData が無いと起動に失敗する"
         }
 
+        It 'Codex 設定では managed permission profile を使用すること' {
+            $configPaths = @(
+                (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl")
+                (Join-Path $script:repoRoot ".codex/config.toml")
+            )
+
+            foreach ($configPath in $configPaths) {
+                $content = Get-Content -Path $configPath -Raw
+
+                $content | Should -Match '(?m)^default_permissions\s*=\s*":danger-full-access"\s*$' -Because "Deep Security Scan worker は親タスクの managed permission profile を継承する: $configPath"
+                $content | Should -Not -Match '(?m)^sandbox_mode\s*=' -Because "旧 sandbox 設定があると permission profile が無効になる: $configPath"
+                $content | Should -Not -Match '(?m)^\[sandbox_workspace_write\]\s*$' -Because "新旧の権限設定を混在させない: $configPath"
+            }
+        }
+
         It 'should enable Codex apps for plugin-bundled connectors' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
             $content = Get-Content -Path $templatePath -Raw
