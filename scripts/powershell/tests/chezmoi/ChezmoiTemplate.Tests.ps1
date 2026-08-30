@@ -533,7 +533,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $content | Should -Match 'env "ProgramData"' -Because "Docker Desktop backend は ProgramData が無いと起動に失敗する"
         }
 
-        It 'Codex 設定では managed permission profile を使用すること' {
+        It 'should use managed permission profiles in Codex configs' {
             $configPaths = @(
                 (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl")
                 (Join-Path $script:repoRoot ".codex/config.toml")
