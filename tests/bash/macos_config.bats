@@ -136,7 +136,7 @@ setup() {
 				flake = builtins.getFlake (toString $REPO_ROOT);
 				pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
 				sets = import $REPO_ROOT/nix/packages/sets.nix { inherit pkgs; lib = pkgs.lib; };
-			in sets.supportReport
+			in { vscode = sets.supportReport.vscode; }
 		"
 		[ "$status" -eq 0 ]
 		support_report_json="$output"
