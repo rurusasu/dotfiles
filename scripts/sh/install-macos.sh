@@ -9,13 +9,14 @@ export DOTFILES_LOG_PREFIX="macos-install"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/hindsight/compose.yml"
-DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
+DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
-OLLAMA_APP="${DOTFILES_OLLAMA_APP_PATH:-/Applications/Ollama.app}"
-OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/version}"
+DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
+OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
+LAUNCHCTL_COMMAND="${DOTFILES_LAUNCHCTL_COMMAND:-/bin/launchctl}"
+OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
-OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 DARWIN_MIGRATION="${DOTFILES_DARWIN_MIGRATION:-$ROOT/scripts/sh/migrate-darwin-provider.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
@@ -401,6 +402,8 @@ setup_docker_runtime() {
   ensure_docker_desktop_md5_compatibility
 
   if [[ ! -f $DOCKER_SETUP_MARKER ]]; then
+    [[ $DOTFILES_ACCEPT_DOCKER_LICENSE == 1 ]] ||
+      dotfiles_die "Docker Desktop license acceptance requires DOTFILES_ACCEPT_DOCKER_LICENSE=1."
     dotfiles_log "Accepting the Docker Desktop license for personal use..."
     sudo "$installer" --accept-license --user="${SUDO_USER:-$USER}"
     mkdir -p "$(dirname "$DOCKER_SETUP_MARKER")"
@@ -420,8 +423,8 @@ ollama_api_is_ready() {
 }
 
 setup_ollama_runtime() {
-  [[ -d $OLLAMA_APP ]] || dotfiles_die "Ollama was not installed by nix-darwin: $OLLAMA_APP"
-  [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
+  dotfiles_have "$OLLAMA_COMMAND" || dotfiles_die "Ollama is unavailable after nix-darwin activation."
+  [[ -x $LAUNCHCTL_COMMAND ]] || dotfiles_die "macOS launchctl is unavailable: $LAUNCHCTL_COMMAND"
   dotfiles_have curl || dotfiles_die "curl is required to verify Ollama."
 
   if ollama_api_is_ready; then
@@ -429,7 +432,7 @@ setup_ollama_runtime() {
   fi
 
   dotfiles_log "Starting Ollama..."
-  "$OPEN_COMMAND" -gj -a "$OLLAMA_APP"
+  "$LAUNCHCTL_COMMAND" kickstart -k "gui/$(id -u)/com.dotfiles.ollama"
   dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
 }
 

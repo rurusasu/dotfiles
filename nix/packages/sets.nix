@@ -274,14 +274,19 @@ let
           };
         };
         hammerspoon = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./hammerspoon { } else null;
           winget = null;
           category = "terminal";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "hammerspoon";
-              cask = "hammerspoon";
+              provider = "nix";
+              source = "custom";
+              identity = {
+                homepage = "https://www.hammerspoon.org/";
+                appName = "Hammerspoon.app";
+                bundleId = "org.hammerspoon.Hammerspoon";
+                executable = "Hammerspoon";
+              };
             };
             linux = {
               unsupported = "Hammerspoon is only available on macOS";
@@ -289,6 +294,10 @@ let
             windows = {
               unsupported = "Hammerspoon is only available on macOS";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "hammerspoon";
           };
         };
         autohotkey = {
@@ -406,10 +415,14 @@ let
           installFeature = "WithOllama";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "ollama-app";
-              cask = "ollama-app";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "ollama";
+              identity = {
+                homepage = "https://ollama.com/";
+                command = "ollama";
+                versionArgs = [ "--version" ];
+              };
             };
             linux = {
               provider = "nix";
@@ -417,6 +430,10 @@ let
               identity = "ollama";
               nixAttr = "ollama";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "ollama-app";
           };
         };
         workmux = {
@@ -468,11 +485,20 @@ let
           category = "desktop";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "1password";
-              cask = "1password";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "_1password-gui";
+              identity = {
+                homepage = "https://1password.com/";
+                appName = "1Password.app";
+                bundleId = "com.1password.1password";
+                executable = "1Password";
+              };
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "1password";
           };
         };
         arc-browser = {
@@ -493,20 +519,29 @@ let
           };
         };
         dia-browser = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./dia-browser { } else null;
           category = "desktop";
           support = {
             windows = {
               unsupported = "Vendor currently ships Dia for macOS only";
             };
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "thebrowsercompany-dia";
-              cask = "thebrowsercompany-dia";
+              provider = "nix";
+              source = "custom";
+              identity = {
+                homepage = "https://www.diabrowser.com/";
+                appName = "Dia.app";
+                bundleId = "company.thebrowser.dia";
+                executable = "Dia";
+              };
             };
             linux = {
               unsupported = "Vendor currently ships Dia for macOS only";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "thebrowsercompany-dia";
           };
         };
         google-chrome = {
@@ -533,18 +568,27 @@ let
           };
         };
         orca-editor = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./orca-editor { } else null;
           winget = "StablyAI.Orca";
           category = "desktop";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "stablyai/orca/orca";
-              cask = "stablyai/orca/orca";
+              provider = "nix";
+              source = "custom";
+              identity = {
+                homepage = "https://onorca.dev/";
+                appName = "Orca.app";
+                bundleId = "com.stablyai.orca";
+                executable = "Orca";
+              };
             };
             linux = {
               unsupported = "No reviewed Linux desktop package provider is selected";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "stablyai/orca/orca";
           };
         };
         raycast = {
@@ -602,6 +646,7 @@ let
           };
         };
         docker-desktop = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./docker-desktop { } else null;
           winget = "Docker.DockerDesktop";
           category = "system";
           installFeature = "WithDocker";
@@ -612,10 +657,14 @@ let
               identity = "Docker.DockerDesktop";
             };
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "docker-desktop";
-              cask = "docker-desktop";
+              provider = "nix";
+              source = "custom";
+              identity = {
+                homepage = "https://www.docker.com/products/docker-desktop/";
+                appName = "Docker.app";
+                bundleId = "com.docker.docker";
+                executable = "com.docker.backend";
+              };
             };
             linux = {
               provider = "system-manager";
@@ -624,6 +673,10 @@ let
               nixAttr = "docker";
               systemModule = "docker";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "docker-desktop";
           };
         };
 

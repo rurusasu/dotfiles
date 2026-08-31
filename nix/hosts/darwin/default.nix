@@ -72,6 +72,22 @@ in
     );
   };
 
+  launchd.user.agents.com-dotfiles-ollama = lib.mkIf withOllama {
+    serviceConfig = {
+      ProgramArguments = [
+        (lib.getExe pkgs.ollama)
+        "serve"
+      ];
+      RunAtLoad = true;
+      KeepAlive = true;
+      EnvironmentVariables = {
+        HOME = home;
+      };
+      StandardOutPath = "${home}/Library/Logs/Ollama/ollama.log";
+      StandardErrorPath = "${home}/Library/Logs/Ollama/ollama.error.log";
+    };
+  };
+
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
     "60" = {
       enabled = false;

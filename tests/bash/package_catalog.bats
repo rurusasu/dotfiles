@@ -279,7 +279,7 @@ EOF
 	done
 }
 
-@test "Docker declares Darwin cask and Linux system providers" {
+@test "Docker declares a Darwin Nix app and Linux system providers" {
 	run awk '
 		/docker-desktop = \{/ { in_entry=1 }
 		in_entry { print }
@@ -287,7 +287,10 @@ EOF
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'winget = "Docker.DockerDesktop"'* ]]
-	[[ "$output" == *'cask = "docker-desktop"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "custom"'* ]]
+	[[ "$output" == *'appName = "Docker.app"'* ]]
+	[[ "$output" == *'name = "docker-desktop"'* ]]
 	[[ "$output" == *'systemModule = "docker"'* ]]
 }
 
@@ -324,11 +327,13 @@ EOF
 	grep -q 'attachWingetIdMetadata id' "$REPO_ROOT/nix/packages/winget.nix"
 }
 
-@test "macOS desktop casks include Dia and Orca" {
+@test "macOS desktop apps include Dia and Orca migration metadata" {
 	grep -q 'dia-browser = {' "$SETS"
-	grep -q 'cask = "thebrowsercompany-dia"' "$SETS"
+	grep -q 'appName = "Dia.app"' "$SETS"
+	grep -q 'name = "thebrowsercompany-dia"' "$SETS"
 	grep -q 'orca-editor = {' "$SETS"
-	grep -q 'cask = "stablyai/orca/orca"' "$SETS"
+	grep -q 'appName = "Orca.app"' "$SETS"
+	grep -q 'name = "stablyai/orca/orca"' "$SETS"
 }
 
 @test "Visual Studio Code uses the unmodified nixpkgs application with migration metadata" {
@@ -384,9 +389,10 @@ EOF
 	[[ "$output" == *'unsupported = "Use Dia instead of Arc on macOS"'* ]]
 	[[ "$output" != *'cask = "arc"'* ]]
 
-	run grep -n -A12 '^[[:space:]]*dia-browser = {' "$SETS"
+	run grep -n -A25 '^[[:space:]]*dia-browser = {' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'cask = "thebrowsercompany-dia"'* ]]
+	[[ "$output" == *'source = "custom"'* ]]
+	[[ "$output" == *'name = "thebrowsercompany-dia"'* ]]
 }
 
 @test "Discord preserves Windows and Linux providers while declaring a Nix Darwin GUI migration" {
@@ -645,7 +651,7 @@ EOF
 	[[ "$output" == *'provider = "nix"'* ]]
 }
 
-@test "Ollama has native Nix, Homebrew cask, and Winget catalog providers with verification" {
+@test "Ollama uses the Nix Darwin service package with legacy cask migration metadata" {
 	run awk '
 		/^[[:space:]]*ollama = \{/ { in_entry=1 }
 		in_entry { print }
@@ -655,9 +661,13 @@ EOF
 	[[ "$output" == *'pkg = pkgs.ollama;'* ]]
 	[[ "$output" == *'winget = "Ollama.Ollama";'* ]]
 	[[ "$output" == *'category = "llm";'* ]]
-	[[ "$output" == *'provider = "homebrew-cask";'* ]]
-	[[ "$output" == *'cask = "ollama-app";'* ]]
 	[[ "$output" == *'provider = "nix";'* ]]
+	[[ "$output" == *'source = "nixpkgs";'* ]]
+	[[ "$output" == *'nixAttr = "ollama";'* ]]
+	[[ "$output" == *'command = "ollama";'* ]]
+	[[ "$output" == *'versionArgs = [ "--version" ];'* ]]
+	[[ "$output" == *'legacyDarwin = {'* ]]
+	[[ "$output" == *'name = "ollama-app";'* ]]
 
 	run awk '
 		/^  wingetVerify = \{/ { in_section=1 }
@@ -668,6 +678,32 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'command = "ollama";'* ]]
 	[[ "$output" == *'args = [ "--version" ];'* ]]
+}
+
+@test "Darwin GUI promotions use custom products instead of same-named nixpkgs packages" {
+	for id in hammerspoon dia-browser orca-editor docker-desktop; do
+		run awk -v id="$id" '
+			$0 ~ "^[[:space:]]*" id " = \\{" { in_entry=1 }
+			in_entry { print }
+			in_entry && /^        };/ { exit }
+		' "$SETS"
+		[ "$status" -eq 0 ]
+		[[ "$output" == *'provider = "custom"'* ]] || [[ "$output" == *'source = "custom"'* ]]
+		done
+	grep -q 'callPackage ./hammerspoon' "$SETS"
+	grep -q 'callPackage ./dia-browser' "$SETS"
+	grep -q 'callPackage ./orca-editor' "$SETS"
+	grep -q 'callPackage ./docker-desktop' "$SETS"
+	! grep -q 'pkgs.dia' "$SETS"
+	! grep -q 'pkgs.orca' "$SETS"
+}
+
+@test "custom Darwin package derivations preserve vendor bundles" {
+	for package in hammerspoon dia-browser orca-editor docker-desktop; do
+		[ -f "$REPO_ROOT/nix/packages/$package/default.nix" ]
+		grep -q 'dontFixup = true' "$REPO_ROOT/nix/packages/$package/default.nix"
+		grep -q 'github.com\|diabrowser.com\|desktop.docker.com' "$REPO_ROOT/nix/packages/$package/default.nix"
+	done
 }
 
 @test "ChatGPT uses the nixpkgs Darwin application with legacy cask migration metadata" {
@@ -750,8 +786,10 @@ EOF
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'category = "terminal"'* ]]
-	[[ "$output" == *'provider = "homebrew-cask"'* ]]
-	[[ "$output" == *'cask = "hammerspoon"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "custom"'* ]]
+	[[ "$output" == *'appName = "Hammerspoon.app"'* ]]
+	[[ "$output" == *'name = "hammerspoon"'* ]]
 
 	run awk '
 		/^[[:space:]]*autohotkey = \{/ { in_entry=1 }

@@ -75,7 +75,6 @@ in
     ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
       "/opt/homebrew/bin"
       "/opt/homebrew/sbin"
-      "/Applications/Docker.app/Contents/Resources/bin"
     ];
   };
 

@@ -150,7 +150,7 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {
+@test "Darwin Docker profile keeps Ollama and Docker out of Homebrew casks" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_DOCKER=1 \
@@ -160,12 +160,35 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
+	run jq -e 'all(.[]; .name != "ollama-app" and .name != "docker-desktop" and .name != "google-chrome" and .name != "discord")' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Ollama profile uses a nix-darwin launchd agent" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_OLLAMA=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.launchd.user.agents.com-dotfiles-ollama.serviceConfig
+		"
+	[ "$status" -eq 0 ]
 	run jq -e '
-		any(.[]; .name == "ollama-app") and
-		any(.[]; .name == "docker-desktop") and
-		all(.[]; .name != "google-chrome" and .name != "discord")
+		.ProgramArguments[-1] == "serve"
+		and .RunAtLoad == true
+		and .KeepAlive == true
+		and .EnvironmentVariables.HOME == "/Users/codex"
+		and (.StandardOutPath | endswith("/Library/Logs/Ollama/ollama.log"))
+		and (.StandardErrorPath | endswith("/Library/Logs/Ollama/ollama.error.log"))
 	' <<<"$output"
 	[ "$status" -eq 0 ]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.hasAttr \"com-dotfiles-ollama\" config.launchd.user.agents
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "false" ]
 }
 
 @test "Darwin Hermes profile installs Google Chrome and Discord through system Nix packages instead of casks" {
@@ -184,11 +207,11 @@ setup() {
 
 	[ "$status" -eq 0 ]
 	run jq -e '
-		any(.casks[]; .name == "ollama-app") and
-		any(.casks[]; .name == "docker-desktop") and
+		all(.casks[]; .name != "ollama-app" and .name != "docker-desktop") and
 		all(.casks[]; .name != "google-chrome" and .name != "discord") and
 		any(.system[]; test("^google-chrome(-|$)")) and
 		any(.system[]; test("^discord(-|$)")) and
+		any(.home[]; test("^ollama(-|$)")) and
 		all(.home[]; test("^(google-chrome|discord)(-|$)") | not)
 	' <<<"$output"
 	[ "$status" -eq 0 ]
@@ -286,7 +309,7 @@ setup() {
 	[[ "$output" != *'--no-upgrade'* ]]
 }
 
-@test "Darwin generates WezTerm nightly in the Homebrew Bundle" {
+@test "Darwin omits the migrated WezTerm nightly cask from the Homebrew Bundle" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
@@ -296,7 +319,7 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'cask "wezterm@nightly", greedy: true'* ]]
+	[[ "$output" != *'cask "wezterm@nightly", greedy: true'* ]]
 }
 
 @test "Darwin frees Command Space by disabling macOS launcher hotkeys" {
@@ -345,7 +368,7 @@ setup() {
 	[ "$output" = "86400" ]
 }
 
-@test "Darwin Ollama profile uses Homebrew's renamed Ollama cask" {
+@test "Darwin Ollama profile uses the Nix package and launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_OLLAMA=1 \
@@ -355,7 +378,7 @@ setup() {
 			in config.homebrew.casks
 	"
 	[ "$status" -eq 0 ]
-	run jq -e 'any(.[]; .name == "ollama-app") and all(.[]; .name != "ollama")' <<<"$output"
+	run jq -e 'all(.[]; .name != "ollama-app" and .name != "ollama")' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
@@ -403,13 +426,12 @@ setup() {
 	[[ "$output" == *'sudo --user=codex --set-home'* ]]
 }
 
-@test "Home Manager exposes Apple Silicon package manager and Docker paths" {
+@test "Home Manager exposes the Apple Silicon package manager path" {
 	run awk '
 		/sessionPath = \[/ { in_darwin=1 }
 		in_darwin && /"\/opt\/homebrew\/bin"/ { bin=1 }
 		in_darwin && /"\/opt\/homebrew\/sbin"/ { sbin=1 }
-		in_darwin && /"\/Applications\/Docker\.app\/Contents\/Resources\/bin"/ { docker=1 }
-		in_darwin && /\];/ { exit(bin && sbin && docker ? 0 : 1) }
+		in_darwin && /\];/ { exit(bin && sbin ? 0 : 1) }
 		END { if (!in_darwin) exit 1 }
 	' "$REPO_ROOT/nix/home/common.nix"
 	[ "$status" -eq 0 ]
