@@ -31,6 +31,7 @@ services:
         target: /root/.xurl
     environment:
       API_SERVER_HOST: "0.0.0.0"
+      HERMES_HOME: /opt/data
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
       # Rebuild a Discord Gateway on the first failed WebSocket liveness

@@ -102,6 +102,16 @@ EOF
 	[ "$sync_line" -lt "$restart_line" ]
 }
 
+@test "Hermes up applies the transactional bootstrap before starting the gateway" {
+	command -v task >/dev/null || skip "go-task is unavailable"
+
+	run task --dir "$REPO_ROOT" --dry --force hermes:up
+
+	[ "$status" -eq 0 ]
+	bootstrap_line="$(grep -n 'task: \[hermes:bootstrap\]' <<<"$output" | cut -d: -f1)"
+	[ -n "$bootstrap_line" ]
+}
+
 @test "nrs orders rebuild, profile activation, and Hermes bootstrap" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
@@ -124,12 +134,12 @@ EOF
 	grep -Fq 'nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot' "$REPO_ROOT/nix/home/wsl.nix"
 }
 
-@test "Hermes restart reuses the xapi-aware up task" {
+@test "Hermes restart reuses the transactional bootstrap up task" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force hermes:restart
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"task: [hermes:up]"* ]]
-	[[ "$output" == *"scripts/sh/hermes-xapi.sh up"* ]]
+	[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+	[[ "$output" != *"scripts/sh/hermes-xapi.sh up"* ]]
 }

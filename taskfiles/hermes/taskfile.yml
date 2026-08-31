@@ -176,17 +176,12 @@ tasks:
         platforms: [windows]
 
   hermes:up:
-    desc: Start Hermes Agent gateway and dashboard in Docker
+    desc: Bootstrap Hermes memory configuration and start the gateway in Docker
     deps:
-      - task: hindsight:up
+      - task: hermes:bootstrap
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh up
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action up -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
-        platforms: [windows]
 
   hermes:down:
     desc: Stop Hermes Agent Docker container
@@ -249,7 +244,7 @@ tasks:
   hermes:rick:up:
     desc: Start Rick Hermes profile gateway in the Hermes container
     deps:
-      - task: hindsight:up
+      - task: hermes:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -285,7 +280,7 @@ tasks:
   hermes:hoffman:up:
     desc: Start Hoffman Hermes profile gateway in the Hermes container
     deps:
-      - task: hindsight:up
+      - task: hermes:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -321,7 +316,7 @@ tasks:
   hermes:risarisa:up:
     desc: Start RisaRisa Hermes profile gateway in the Hermes container
     deps:
-      - task: hindsight:up
+      - task: hermes:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -357,7 +352,7 @@ tasks:
   hermes:nancy:up:
     desc: Start Nancy Hermes profile gateway in the Hermes container
     deps:
-      - task: hindsight:up
+      - task: hermes:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
