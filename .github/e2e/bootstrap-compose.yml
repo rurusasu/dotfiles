@@ -16,7 +16,7 @@ services:
     volumes:
       - ./hermes-gateway-converge.sh:/usr/local/bin/hermes-gateway-converge:ro
     networks:
-      - memory
+      - local-ai-services
 
   xapi-mcp:
     image: nginx:1.29-alpine
@@ -56,6 +56,6 @@ services:
       - ./hermes-bootstrap-fixture.sh:/fixture/hermes-bootstrap.sh:ro
 
 networks:
-  memory:
-    name: dotfiles-memory
+  local-ai-services:
+    name: local-ai-services
     external: true

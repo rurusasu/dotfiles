@@ -72,7 +72,7 @@ case " $* " in
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-agent/compose.yml"
+    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
     ;;
 esac
 '
@@ -153,12 +153,12 @@ line_of() {
 	[ "$(line_of 'nix flake update --flake')" -lt "$(line_of nixos-rebuild)" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
 	[ "$(line_of 'hermes-bootstrap secret-plan')" -lt "$(line_of 'hermes-bootstrap apply')" ]
-	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate")" -lt "$(line_of 'docker image prune --force')" ]
+	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate")" ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate")" -lt "$(line_of 'docker image prune --force')" ]
 	[ "$(line_of 'docker image prune --force')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
@@ -264,5 +264,5 @@ exit 44
 	grep -q 'host = "0.0.0.0"' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	grep -q 'port = 11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	! grep -Eq 'allowedTCPPorts.*11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
-	grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+	grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }

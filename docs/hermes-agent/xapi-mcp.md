@@ -104,7 +104,7 @@ be exported before bootstrap.
 Check the service and test the same MCP endpoint from each profile:
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml ps xapi-mcp hermes
+docker compose -f docker/hermes-service/compose.yml ps xapi-mcp hermes
 docker exec hermes hermes -p rick mcp test xapi
 docker exec hermes hermes -p hoffman mcp test xapi
 docker exec hermes hermes -p risarisa mcp test xapi

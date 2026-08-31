@@ -239,7 +239,7 @@ hindsight_verify() {
 }
 
 main() {
-  local action="${1:-}" compose_file="${2:-$REPO_ROOT/docker/hindsight/compose.yml}"
+  local action="${1:-}" compose_file="${2:-$REPO_ROOT/docker/local-ai-services/compose.yml}"
   case "$action" in
   up) hindsight_up "$compose_file" ;;
   verify) hindsight_verify "$compose_file" ;;

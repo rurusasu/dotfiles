@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="${DOTFILES_ACCEPTANCE_REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd -P)}"
 FIXTURE_ROOT="${DOTFILES_ACCEPTANCE_FIXTURE_ROOT:-$SCRIPT_DIR}"
-CANONICAL_DIR="$REPO_ROOT/docker/hermes-agent"
-HINDSIGHT_DIR="$REPO_ROOT/docker/hindsight"
+CANONICAL_DIR="$REPO_ROOT/docker/hermes-service"
+HINDSIGHT_DIR="$REPO_ROOT/docker/local-ai-services"
 
 [[ -x $REPO_ROOT/install.sh ]] || {
   printf 'acceptance installer is missing: %s\n' "$REPO_ROOT/install.sh" >&2

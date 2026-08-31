@@ -277,7 +277,7 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 ```bash
 ./scripts/sh/verify-environment.sh --runtime
 systemctl status system-manager.target docker.service docker.socket
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 NixOS では `system-manager.target` の代わりに `readlink /run/current-system` と `nixos-rebuild list-generations` を確認します。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は次を実行します。

@@ -484,7 +484,7 @@ setup() {
 		in_chromium && /^  [A-Za-z0-9_-]+:/ { exit }
 		in_chromium && /platform:/ { found=1 }
 		END { exit(found ? 1 : 0) }
-	' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+	' "$REPO_ROOT/docker/hermes-service/compose.yml"
 	[ "$status" -eq 0 ]
 	run grep -F 'ARG TARGETARCH' "$REPO_ROOT/docker/hermes-browser/Dockerfile"
 	[ "$status" -eq 0 ]

@@ -20,7 +20,8 @@ VERIFIER_COMMAND = (
     "docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py"
 )
 PRE_COMMIT_TRIGGER = (
-    r"^(docker/hermes-agent/.*|docker/hermes-xapi-mcp/.*|docker/hindsight/.*|"
+    r"^(docker/hermes-agent/.*|docker/hermes-service/.*|docker/hermes-xapi-mcp/.*|"
+    r"docker/hindsight/.*|docker/local-ai-services/.*|"
     r"scripts/sh/hermes-agent\.sh|"
     r"scripts/powershell/handlers/Handler\.HermesAgent\.ps1|"
     r"tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|"
@@ -99,7 +100,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         for changed_path in (
             "docker/hermes-agent/Dockerfile",
             "docker/hermes-xapi-mcp/Dockerfile",
-            "docker/hindsight/compose.yml",
+            "docker/local-ai-services/compose.yml",
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",

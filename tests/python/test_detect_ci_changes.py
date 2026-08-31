@@ -75,15 +75,7 @@ CASES = {
         "contract",
         "hermes",
     },
-    "docker/hindsight/compose.yml": {
-        "linux",
-        "darwin",
-        "wsl",
-        "windows",
-        "contract",
-        "hermes",
-    },
-    "docker/mlflow/compose.yml": {
+    "docker/local-ai-services/compose.yml": {
         "linux",
         "darwin",
         "wsl",
@@ -188,14 +180,7 @@ BOOTSTRAP_CASES = {
     },
     "flake.nix": {"linux", "darwin", "wsl", "contract", "nix"},
     "install.sh": {"linux", "darwin", "contract"},
-    "docker/hindsight/compose.yml": {
-        "linux",
-        "darwin",
-        "wsl",
-        "windows",
-        "contract",
-    },
-    "docker/mlflow/compose.yml": {
+    "docker/local-ai-services/compose.yml": {
         "linux",
         "darwin",
         "wsl",

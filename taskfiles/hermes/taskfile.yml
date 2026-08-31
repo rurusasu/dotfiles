@@ -68,7 +68,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f docker/hermes-agent/compose.yml config --quiet
+      - docker compose -f docker/hermes-service/compose.yml config --quiet
 
   hermes:memory:verify:
     desc: Run the complete Hermes Hindsight live acceptance lifecycle

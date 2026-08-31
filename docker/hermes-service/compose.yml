@@ -1,4 +1,4 @@
-name: hermes-agent
+name: hermes-service
 
 services:
   hermes:
@@ -42,7 +42,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - hermes-browser
-      - hermes-memory
+      - local-ai-services
 
   hermes-bootstrap:
     build:
@@ -165,6 +165,6 @@ networks:
   hermes-browser:
     name: hermes-browser
     driver: bridge
-  hermes-memory:
-    name: dotfiles-memory
+  local-ai-services:
+    name: local-ai-services
     external: true

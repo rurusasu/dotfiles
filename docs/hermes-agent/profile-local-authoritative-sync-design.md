@@ -96,8 +96,8 @@ Run the aggregate command from the repository root. These are the supported
 dry-run and real forms:
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
 ```
 
 The command processes every manifest profile in manifest order. `--dry-run`

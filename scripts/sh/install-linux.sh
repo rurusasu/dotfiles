@@ -7,7 +7,7 @@ export DOTFILES_LOG_PREFIX="linux-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
 SYSTEMD_WAIT_ATTEMPTS="${DOTFILES_SYSTEMD_WAIT_ATTEMPTS:-30}"

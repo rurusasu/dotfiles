@@ -14,8 +14,8 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
-HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/hindsight/compose.yml"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
+HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"

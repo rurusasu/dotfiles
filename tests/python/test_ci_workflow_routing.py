@@ -174,6 +174,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn('"scripts/sh/**"', paths)
             self.assertIn('".github/e2e/**"', paths)
             self.assertIn('"docker/hindsight/**"', paths)
+            self.assertIn('"docker/local-ai-services/**"', paths)
             self.assertIn('"docker/mlflow/**"', paths)
             self.assertIn('"docs/mlflow/**"', paths)
 
@@ -182,6 +183,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         push_paths = self._trigger_paths(workflow, "push")
 
         self.assertIn('"docker/mlflow/**"', push_paths)
+        self.assertIn('"docker/local-ai-services/**"', push_paths)
         self.assertIn(
             "python -m unittest docker/mlflow/tests/test_configure.py -v",
             workflow,
@@ -290,10 +292,12 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
         required_paths = (
             "docker/hermes-agent/**",
+            "docker/hermes-service/**",
             "docker/hermes-browser/**",
             "docker/hermes-browser-mcp/**",
             "docker/hermes-xapi-mcp/**",
             "docker/hindsight/**",
+            "docker/local-ai-services/**",
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
@@ -324,7 +328,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "docker/hermes-xapi-mcp/Dockerfile",
-            "docker/hindsight/compose.yml",
+            "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",
         ):
             self.assertIsNotNone(re.fullmatch(pattern, path))

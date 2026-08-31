@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml
+  MLFLOW_COMPOSE_FILE: docker/local-ai-services/compose.yml
 
 tasks:
   mlflow:up:

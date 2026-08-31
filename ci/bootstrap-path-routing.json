@@ -165,10 +165,12 @@
     {
       "patterns": [
         "docker/hermes-agent/**",
+        "docker/hermes-service/**",
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",
         "docker/hermes-xapi-mcp/**",
         "docker/hindsight/**",
+        "docker/local-ai-services/**",
         "docker/mlflow/**"
       ],
       "outputs": ["linux", "darwin", "wsl", "windows"]

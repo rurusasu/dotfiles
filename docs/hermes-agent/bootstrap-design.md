@@ -103,7 +103,7 @@ for RisaRisa.
 
 ## Bootstrap Components
 
-`docker/hermes-agent/compose.yml` defines an explicitly invoked
+`docker/hermes-service/compose.yml` defines an explicitly invoked
 `hermes-bootstrap` service. It uses the gateway image and `/opt/data` bind
 mount, has no published ports, and is not part of normal `compose up`. Its
 command owns manifest and credential validation, profile snapshotting and
@@ -241,8 +241,8 @@ remain valid and are not rolled back.
 Operators use these exact commands:
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
 ```
 
 `sync-profiles` aggregates all manifest profiles. It writes one compact sorted

@@ -187,7 +187,7 @@ case " $* " in
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-agent/compose.yml"
+    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
     ;;
 esac
 '
@@ -512,7 +512,7 @@ exit 0
 		"launchctl kickstart -k gui/$(id -u)/com.dotfiles.ollama" \
 		"docker info" \
 		"task --dir $REPO_ROOT hindsight:up" \
-		"verify-environment compose=$REPO_ROOT/docker/hindsight/compose.yml args=--runtime"
+		"verify-environment compose=$REPO_ROOT/docker/local-ai-services/compose.yml args=--runtime"
 	! grep -q 'task .*hermes:bootstrap' "$COMMAND_LOG"
 }
 
@@ -547,14 +547,14 @@ exit 1
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"docker info" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
-		"verify-environment compose=$REPO_ROOT/docker/hermes-agent/compose.yml args=--runtime"
+		"verify-environment compose=$REPO_ROOT/docker/hermes-service/compose.yml args=--runtime"
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
 	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 2 ]
 	[ -s "$PAYLOAD_CAPTURE" ]
@@ -1107,7 +1107,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
-		"$HOME/.dotfiles/docker/hermes-agent/compose.yml"
+		"$HOME/.dotfiles/docker/hermes-service/compose.yml"
 	INSTALLER="$HOME/.dotfiles/scripts/sh/install-macos.sh"
 
 	run_macos_installer

@@ -45,7 +45,7 @@ function Get-HermesGmailComposeFile {
         return [System.IO.Path]::GetFullPath($env:HERMES_COMPOSE_FILE)
     }
     $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    return Join-Path $root 'docker/hermes-agent/compose.yml'
+    return Join-Path $root 'docker/hermes-service/compose.yml'
 }
 
 function Test-HermesGmailWindows {

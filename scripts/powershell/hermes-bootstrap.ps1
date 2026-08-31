@@ -44,7 +44,7 @@ function Get-HermesBootstrapEntrypointPath {
 
     $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
     $resolvedComposeFile = if ([string]::IsNullOrWhiteSpace($ComposeFile)) {
-        Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'
+        Join-Path $repositoryRoot 'docker/hermes-service/compose.yml'
     }
     else {
         [System.IO.Path]::GetFullPath($ComposeFile)

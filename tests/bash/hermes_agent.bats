@@ -346,8 +346,8 @@ homebrew_cask_link_parent_is_immutable_to_caller() {
 main "$@"
 EOF
 	touch "$MOCK_REPO/flake.nix" \
-		"$MOCK_REPO/docker/hermes-agent/compose.yml" \
-		"$MOCK_REPO/docker/hindsight/compose.yml"
+		"$MOCK_REPO/docker/hermes-service/compose.yml" \
+		"$MOCK_REPO/docker/local-ai-services/compose.yml"
 
 	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
 printf 'selected-installer=%s\n' "${DOTFILES_TEST_SELECTED_INSTALLER:-${BASH_SOURCE[1]}}" >>"$COMMAND_LOG"
@@ -714,7 +714,7 @@ default_app: default
 EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 
-	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml" \
 		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
 
 	[ "$status" -eq 0 ]
@@ -737,7 +737,7 @@ default_app: default
 EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 
-	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml" \
 		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
 
 	[ "$status" -eq 0 ]
