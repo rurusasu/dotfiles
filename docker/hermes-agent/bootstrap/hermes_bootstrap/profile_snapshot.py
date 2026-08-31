@@ -52,9 +52,6 @@ _PRIVATE_KEY_HEADERS = (
 _PRIVATE_KEY_CARRY_BYTES = max(len(header) for header in _PRIVATE_KEY_HEADERS) - 1
 _STRUCTURED_SECRET_PATTERNS = (
     re.compile(rb"(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9])"),
-    re.compile(rb"(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?![A-Za-z0-9])"),
-    re.compile(rb"(?<![A-Za-z0-9])(?:sk-|hf_|xai-)[A-Za-z0-9_-]{20,}(?![A-Za-z0-9])"),
-    re.compile(rb"(?<![A-Za-z0-9])1//[A-Za-z0-9._-]{20,}(?![A-Za-z0-9])"),
 )
 _STRUCTURED_SECRET_CARRY_BYTES = 4096
 _ASCII_ALNUM = frozenset(
@@ -166,6 +163,10 @@ _SLACK_TOKEN_RULES = tuple(
     _TokenRule(prefix, _SLACK_BODY, 1, _SLACK_CONTINUATION)
     for prefix in (b"xoxb-", b"xoxp-", b"xoxa-", b"xoxr-", b"xoxs-", b"xapp-")
 )
+_STRUCTURED_TOKEN_RULES = tuple(
+    _TokenRule(prefix, _ASCII_ALNUM | frozenset(b"_-"), 20, _ASCII_ALNUM)
+    for prefix in (b"sk-", b"hf_", b"xai-")
+) + (_TokenRule(b"1//", _ASCII_ALNUM | frozenset(b"._-"), 20, _ASCII_ALNUM),)
 
 
 @dataclass
@@ -202,8 +203,14 @@ class _RetainedFdBudget:
 
 
 class _IncrementalTokenDetector:
-    def __init__(self, rules: tuple[_TokenRule, ...]) -> None:
+    def __init__(
+        self,
+        rules: tuple[_TokenRule, ...],
+        *,
+        leading_forbidden: frozenset[int] = _ASCII_WORD,
+    ) -> None:
         self._rules = rules
+        self._leading_forbidden = leading_forbidden
         self._start = bytes((rules[0].prefix[0],))
         self._candidates: tuple[_TokenRule, ...] = ()
         self._prefix_index = 0
@@ -228,7 +235,7 @@ class _IncrementalTokenDetector:
             byte = content[candidate]
             self._previous = byte
             index = candidate + 1
-            if previous is None or previous not in _ASCII_WORD:
+            if previous is None or previous not in self._leading_forbidden:
                 self._candidates = self._rules
                 self._prefix_index = 1
 
@@ -255,7 +262,7 @@ class _IncrementalTokenDetector:
             self._prefix_index = 0
             if (
                 byte == self._start[0]
-                and (previous is None or previous not in _ASCII_WORD)
+                and (previous is None or previous not in self._leading_forbidden)
             ):
                 self._candidates = self._rules
                 self._prefix_index = 1
@@ -294,16 +301,111 @@ class _IncrementalTokenDetector:
         return end
 
 
+class _IncrementalJwtDetector:
+    """Detect JWT-shaped credentials without a fixed-size candidate buffer."""
+
+    _BODY = _ASCII_ALNUM | frozenset(b"_-")
+    _MIN_SEGMENT_BYTES = 10
+    _MIN_FIRST_SEGMENT_BYTES = 13
+
+    def __init__(self) -> None:
+        self._recent = b""
+        self._before_recent: int | None = None
+        self._segments: list[int] | None = None
+
+    def feed(self, content: bytes) -> None:
+        for byte in content:
+            if self._segments is None:
+                self._consume_idle(byte)
+            else:
+                self._consume_candidate(byte)
+
+    def finish(self) -> None:
+        if self._valid_candidate:
+            raise ValueError("secret candidate")
+
+    @property
+    def _valid_candidate(self) -> bool:
+        return bool(
+            self._segments is not None
+            and len(self._segments) == 3
+            and self._segments[0] >= self._MIN_FIRST_SEGMENT_BYTES
+            and all(length >= self._MIN_SEGMENT_BYTES for length in self._segments[1:])
+        )
+
+    def _consume_idle(self, byte: int) -> None:
+        window = self._recent + bytes((byte,))
+        if window == b"eyJ" and (
+            self._before_recent is None
+            or self._before_recent not in _ASCII_ALNUM
+        ):
+            self._segments = [3]
+            self._recent = b""
+            self._before_recent = None
+            return
+        if len(self._recent) == 2:
+            self._before_recent = self._recent[0]
+            self._recent = self._recent[1:] + bytes((byte,))
+        elif self._recent:
+            self._recent += bytes((byte,))
+        else:
+            self._recent = bytes((byte,))
+
+    def _consume_candidate(self, byte: int) -> None:
+        assert self._segments is not None
+        if byte in self._BODY:
+            self._segments[-1] += 1
+            return
+        if byte == ord("."):
+            if (
+                len(self._segments) >= 3
+                and self._valid_candidate
+            ):
+                raise ValueError("secret candidate")
+            if (
+                len(self._segments) >= 3
+                or self._segments[-1]
+                < (
+                    self._MIN_FIRST_SEGMENT_BYTES
+                    if len(self._segments) == 1
+                    else self._MIN_SEGMENT_BYTES
+                )
+            ):
+                self._reset()
+            else:
+                self._segments.append(0)
+            return
+        if self._valid_candidate:
+            raise ValueError("secret candidate")
+        self._reset()
+
+    def _reset(self) -> None:
+        self._segments = None
+        self._recent = b""
+        self._before_recent = None
+
+
 class _SensitiveStreamScanner:
     def __init__(self) -> None:
         self._github = _IncrementalTokenDetector(_GITHUB_TOKEN_RULES)
         self._slack = _IncrementalTokenDetector(_SLACK_TOKEN_RULES)
+        self._structured_tokens = tuple(
+            _IncrementalTokenDetector(
+                (rule,),
+                leading_forbidden=_ASCII_ALNUM,
+            )
+            for rule in _STRUCTURED_TOKEN_RULES
+        )
+        self._jwt = _IncrementalJwtDetector()
         self._private_tail = b""
         self._structured_tail = b""
 
     def feed(self, content: bytes) -> None:
         self._github.feed(content)
         self._slack.feed(content)
+        for detector in self._structured_tokens:
+            detector.feed(content)
+        self._jwt.feed(content)
         private_window = self._private_tail + content
         if any(header in private_window for header in _PRIVATE_KEY_HEADERS):
             raise ValueError("secret candidate")
@@ -319,6 +421,9 @@ class _SensitiveStreamScanner:
     def finish(self) -> None:
         self._github.finish()
         self._slack.finish()
+        for detector in self._structured_tokens:
+            detector.finish()
+        self._jwt.finish()
 
 
 def _open_descriptor_count() -> int:

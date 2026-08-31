@@ -661,6 +661,17 @@ class ProfileSnapshotTests(unittest.TestCase):
                 scanner = profile_snapshot._SensitiveStreamScanner()
                 with self.assertRaises(ValueError):
                     scanner.feed(b"safe=" + candidate)
+                    scanner.finish()
+
+    def test_rejects_a_jwt_with_an_arbitrarily_long_segment(self) -> None:
+        candidate = (
+            b"eyJ" + b"A" * 100000 + b"." + b"B" * 20 + b"." + b"C" * 20
+        )
+        scanner = profile_snapshot._SensitiveStreamScanner()
+        with self.assertRaises(ValueError):
+            for start in range(0, len(candidate), 64 * 1024):
+                scanner.feed(candidate[start : start + 64 * 1024])
+            scanner.finish()
 
     def test_rejects_every_supported_private_key_header_at_every_split(self) -> None:
         headers = (

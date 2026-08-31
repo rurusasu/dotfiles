@@ -561,6 +561,11 @@ def _commit_and_push(
             )
             if rebuilt_tree != attempt.tree:
                 raise ValueError("profile snapshot tree changed during retry")
+        if (
+            _staged_deleted_path_count(parent, repository, environment)
+            > declaration.max_deleted_paths
+        ):
+            raise _DeletionLimitExceeded
         commit = _create_commit(
             snapshot, attempt.tree, parent, repository, environment
         )
@@ -584,6 +589,32 @@ def _commit_and_push(
             raise _PushRaceExhausted
         parent = remote_commit
     raise _PushRaceExhausted
+
+
+def _staged_deleted_path_count(
+    base_commit: str,
+    repository: Path,
+    environment: dict[str, str],
+) -> int:
+    raw = _git_bytes(
+        (
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            base_commit,
+        ),
+        repository,
+        environment,
+        max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
+    )
+    records = _nul_records(raw)
+    if len(records) % 2:
+        raise ValueError("invalid staged profile diff")
+    return sum(
+        records[index] == b"D" for index in range(0, len(records), 2)
+    )
 
 
 def _rebuild_snapshot_tree(

@@ -1078,6 +1078,56 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertGreaterEqual(len(fetched_refs), 3)
         self.assertEqual(set(fetched_refs), {"refs/heads/main"})
 
+    def test_push_race_rechecks_the_deletion_limit_against_new_head(self) -> None:
+        remote = self.root / "profile-a.git"
+        base = self.profile("profile-a", remote)
+        declaration = DistributionSource(
+            base.name,
+            base.source,
+            base.ref,
+            base.target,
+            base.manifest_name,
+            base.source_commit,
+            1,
+        )
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+        original_run = profile_sync._run_git_bytes
+        push_calls = 0
+
+        def race_after_push(arguments, cwd, environment, *, max_output_bytes):
+            nonlocal push_calls
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments and arguments[0] == "push" and output is not None:
+                push_calls += 1
+                if push_calls == 1:
+                    self.advance_remote(remote)
+                    self.advance_remote(remote)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=race_after_push
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(push_calls, 1)
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "deletion_limit_exceeded")
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", "main").splitlines(),
+            [
+                ".gitignore",
+                "SOUL.md",
+                "distribution.yaml",
+                "race-1.txt",
+                "race-2.txt",
+            ],
+        )
+
     def test_different_tree_after_successful_retry_exhausts_the_race(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)
