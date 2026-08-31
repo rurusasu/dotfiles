@@ -104,7 +104,11 @@ app)
     die "CFBundleExecutable mismatch for $package_id: expected $expected_executable, got $actual_executable"
 
   "$CODESIGN_COMMAND" --verify --deep --strict "$app"
-  "$SPCTL_COMMAND" --assess --type execute "$app"
+  source="$("$JQ_COMMAND" -r --arg id "$package_id" '.[$id].darwin.source // ""' "$support_json")"
+  signature_details="$("$CODESIGN_COMMAND" --display --verbose=4 "$app" 2>&1 || true)"
+  if [[ $source != "nixpkgs" || $signature_details != *"Signature=adhoc"* ]]; then
+    "$SPCTL_COMMAND" --assess --type execute "$app"
+  fi
   if ((launch == 1)); then
     "$OPEN_COMMAND" "$app"
   fi

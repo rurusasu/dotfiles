@@ -52,6 +52,20 @@ setup() {
     "installFeature": null,
     "legacyDarwin": null
   },
+  "nix-adhoc-app": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "nixAttr": "nix-adhoc-app",
+      "identity": {
+        "appName": "Test App.app",
+        "bundleId": "com.example.test-app",
+        "executable": "Test App"
+      }
+    },
+    "installFeature": null,
+    "legacyDarwin": null
+  },
   "_1password-cli": {
     "darwin": {
       "provider": "nix",
@@ -181,7 +195,12 @@ case "${2:-}" in
   *) exit 2 ;;
 esac
 '
-	write_stub codesign 'log_command codesign "$@"'
+write_stub codesign '
+log_command codesign "$@"
+if [[ ${CODESIGN_ADHOC:-0} == 1 && " $* " == *" --display "* ]]; then
+  printf "Signature=adhoc\\n"
+fi
+'
 	write_stub spctl 'log_command spctl "$@"'
 	write_stub open 'log_command open "$@"'
 	write_stub brew '
@@ -214,6 +233,7 @@ esac
 	export DOTFILES_NIX_COMMAND="$TEST_BIN/nix"
 	export DOTFILES_BREW_COMMAND="$TEST_BIN/brew"
 	export DOTFILES_DARWIN_VERIFY_COMMAND="$TEST_BIN/verify"
+	export CODESIGN_ADHOC=0
 }
 
 write_stub() {
@@ -271,6 +291,20 @@ assert_log_order() {
 		"codesign <--verify> <--deep> <--strict> <$APP_PATH>" \
 		"spctl <--assess> <--type> <execute> <$APP_PATH>" \
 		"open <$APP_PATH>"
+}
+
+@test "Nixpkgs ad-hoc app signatures skip Gatekeeper after codesign verification" {
+	export CODESIGN_ADHOC=1
+
+	run "$BASH_32" "$VERIFIER" \
+		--support-json "$SUPPORT_JSON" \
+		--id nix-adhoc-app \
+		--store-path "$STORE_PATH"
+
+	[ "$status" -eq 0 ]
+	grep -Fq "codesign <--verify> <--deep> <--strict> <$APP_PATH>" "$COMMAND_LOG"
+	grep -Fq 'codesign <--display> <--verbose=4' "$COMMAND_LOG"
+	! grep -q '^spctl ' "$COMMAND_LOG"
 }
 
 @test "command identity runs the declared version arguments" {
