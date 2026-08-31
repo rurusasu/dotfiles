@@ -169,7 +169,7 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string] GetComposeFilePath([SetupContext]$ctx) {
-        return Join-Path $ctx.DotfilesPath 'docker\hermes-agent\compose.yml'
+        return Join-Path $ctx.DotfilesPath 'docker\hermes-service\compose.yml'
     }
 
     hidden [string] GetDataDir() {

@@ -136,12 +136,13 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 0
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         $script:dockerCalls | Should -Be @(
             'info',
             'compose version',
             "compose -f $script:composeFile config --quiet",
             "compose -f $script:composeFile build hermes hermes-bootstrap chromium xapi-mcp",
+            "compose -f $script:composeFile ps --all --services hermes",
             "compose -f $script:composeFile stop hermes",
             "compose -f $script:composeFile up -d --force-recreate"
         )
@@ -150,6 +151,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             'compose version',
             'config',
             'build',
+            'ps',
             'stop',
             'bootstrap',
             'up'
@@ -179,6 +181,35 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Start-Sleep -Times 0 -Exactly
     }
 
+    It 'should recover an existing Hermes runtime after bootstrap failure' {
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments -contains '--services') {
+                $global:LASTEXITCODE = 0
+                return 'hermes'
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+        Mock Invoke-HermesBootstrap {
+            [PSCustomObject]@{
+                Success = $false
+                Changed = $false
+                Message = 'Hermes bootstrap failed.'
+            }
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes bootstrap failed.'
+        $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+    }
+
     It 'should retry readiness until the API returns a successful status' {
         $env:HERMES_API_PORT = '9864'
         $env:HERMES_API_READY_ATTEMPTS = '3'
@@ -205,7 +236,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             $TimeoutSec -eq 1
         }
         Should -Invoke Start-Sleep -Times 2 -Exactly -ParameterFilter { $Seconds -eq 0 }
-        ($script:dockerCalls -join "`n") | Should -Not -Match 'ps --all'
+        $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile ps --all"
     }
 
     It 'should converge gateways after API readiness and before reporting success' {
@@ -225,7 +256,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 0
         $script:eventLog | Should -Be @(
-            'config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up',
+            'config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up',
             'health', 'gateway-convergence', 'success'
         )
         Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly -ParameterFilter {
@@ -271,11 +302,36 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile ps --all"
     }
 
+    It 'should recover an existing Hermes runtime after readiness failure' {
+        $env:HERMES_API_READY_ATTEMPTS = '1'
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments -contains '--services') {
+                $global:LASTEXITCODE = 0
+                return 'hermes'
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+        Mock Invoke-WebRequest { throw 'still starting' }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Match 'Hermes API did not become ready after 1 attempts.'
+        $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+        Should -Invoke Invoke-WebRequest -Times 2 -Exactly
+    }
+
     It 'should make the Windows task use the focused pwsh entrypoint without installer skip gates' {
         $taskfile = Get-Content -LiteralPath $script:taskfilePath -Raw
         $source = Get-Content -LiteralPath $script:entrypointPath -Raw
 
         $taskfile | Should -Match "pwsh -NoProfile -File scripts/powershell/hermes-bootstrap\.ps1"
+        $taskfile | Should -Match 'hermes-bootstrap\.ps1 -ComposeFile "\{\{\.HERMES_COMPOSE_FILE\}\}"'
         $taskfile | Should -Not -Match "cmd\.exe /d /c install\.cmd"
         $source | Should -Not -Match 'SkipHermesAgent|NixRebuildApplied|Test-WslAvailable|install\.cmd'
     }
@@ -438,7 +494,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $result.ExitCode | Should -Be 23
         $result.Message | Should -Be 'Hermes bootstrap failed (exit code 23). [REDACTED]'
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
     }
 
@@ -458,7 +514,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $result.ExitCode | Should -Not -Be 0
         $result.Message | Should -Be 'Hermes bootstrap failed.'
         $result.Message | Should -Not -Match 'secret-bearing'
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
         (Test-Path -LiteralPath Env:\HERMES_DATA_DIR) | Should -BeFalse
         (Test-Path -LiteralPath Env:\HERMES_BROWSER_DATA_DIR) | Should -BeTrue
@@ -484,7 +540,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 29
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up')
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up')
         $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate"
     }
 
@@ -501,7 +557,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 1
         $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
-        $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
     }
 }
