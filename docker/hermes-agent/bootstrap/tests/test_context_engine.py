@@ -7,6 +7,7 @@ import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -114,6 +115,71 @@ class ContextEngineConfigurationTests(unittest.TestCase):
         self.assertEqual((target / "config.yaml").read_bytes(), expected)
         self.assertEqual(second.snapshots, [])
 
+    def test_reserved_profile_swap_cannot_redirect_the_atomic_write(self) -> None:
+        import hermes_bootstrap.context_engine as module
+
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        target = profiles / "nancy"
+        tx = Transaction.begin(self.root)
+        self.assertTrue(tx.reserve_directory(target))
+        config_path = target / "config.yaml"
+        config_path.write_bytes(
+            b"model:\n  name: reserved\nmemory:\n  provider: hindsight\n"
+        )
+        config_path.chmod(0o600)
+        replacement = profiles / ".external-nancy"
+        replacement.mkdir(mode=0o700)
+        external_config = (
+            b"model:\n"
+            b"  name: external\n"
+            b"memory:\n"
+            b"  provider: external\n"
+            b"  keep: untouched\n"
+        )
+        (replacement / "config.yaml").write_bytes(external_config)
+        (replacement / "config.yaml").chmod(0o600)
+        retired = profiles / ".retired-reservation"
+        original_atomic_write = module._atomic_write
+        swapped = False
+
+        def swap_profile_before_atomic_write(
+            path: Path | tuple[int, str],
+            content: bytes,
+            mode: int,
+        ) -> None:
+            nonlocal swapped
+            if not swapped and isinstance(path, tuple):
+                target.rename(retired)
+                replacement.rename(target)
+                swapped = True
+            original_atomic_write(path, content, mode)
+
+        try:
+            with (
+                mock.patch.object(
+                    module,
+                    "_atomic_write",
+                    side_effect=swap_profile_before_atomic_write,
+                ),
+                self.assertRaisesRegex(
+                    ApplyError,
+                    "could not reconcile Hermes context engine configuration",
+                ),
+            ):
+                module.install_context_engine_configurations(
+                    (("nancy", target),),
+                    tx,
+                )
+        finally:
+            tx.rollback()
+
+        external_target = target if swapped else replacement
+        self.assertEqual(
+            (external_target / "config.yaml").read_bytes(),
+            external_config,
+        )
+
     def test_rejects_invalid_plugin_configuration_without_touching_config(self) -> None:
         from hermes_bootstrap.context_engine import (
             install_context_engine_configurations,
@@ -156,7 +222,9 @@ class ContextEngineConfigurationTests(unittest.TestCase):
         ):
             validate_context_engine_installation((("default", target),))
 
-    def test_distribution_comparison_ignores_only_bootstrap_owned_lcm_entries(self) -> None:
+    def test_distribution_comparison_ignores_only_bootstrap_owned_lcm_entries(
+        self,
+    ) -> None:
         from hermes_bootstrap.distributions import without_bootstrap_managed_config
 
         config = {
