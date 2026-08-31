@@ -2,10 +2,10 @@
 
 ## Status
 
-`PASS` — the Hermes-only Nix Discord migration is active and verified. The
-user LaunchAgent restaged modules across two exact GUI launches and the formal
-launch verifier. The former Homebrew cask was removed with a normal uninstall;
-no `--zap` operation was used, and user Discord data was preserved.
+`PASS` — module staging has one owner: the Hermes user LaunchAgent. The
+round-2 re-apply produced clean activation stderr, regenerated modules through
+that agent alone, and kept the exact Nix Discord app alive after updater GC
+restaging. No `NEEDS_CONTEXT` work remains.
 
 ## Changed files
 
@@ -18,10 +18,10 @@ no `--zap` operation was used, and user Discord data was preserved.
   Homebrew `discord` as `legacyDarwin`; `WithHermes` is unchanged.
 - `nix/hosts/darwin/default.nix` — references the catalog-exported Darwin
   Discord derivation in the Hermes-only `postActivation` script, preserving
-  actual-user disable-updates and initial module staging. It additionally
-  declares `launchd.user.agents.discord-module-staging`; its `RunAtLoad` and
-  `KeepAlive.PathState = false` rerun inherited `stageModules` only while the
-  version-derived user `installed.json` is absent.
+  actual-user disable-updates. It additionally declares
+  `launchd.user.agents.discord-module-staging` as the sole staging owner; its
+  `RunAtLoad` and `KeepAlive.PathState = false` run inherited `stageModules`
+  only while the version-derived user `installed.json` is absent.
 - `tests/bash/package_catalog.bats` — evaluates the Discord support report to
   preserve the Windows/Linux contract and assert the Darwin Nix identity and
   legacy cask metadata; realizes the Darwin artifact and verifies its signed
@@ -192,3 +192,55 @@ application bundle' tests/bash/package_catalog.bats` produced 0 passed and
 - GREEN: restoring the literal `com.hnc.Discord` made the same focused command
   pass 1/1. `bats tests/bash/package_catalog.bats tests/bash/macos_config.bats`
   then passed 63/63 and `PackageCatalog.Tests.ps1` passed 49/49.
+
+## Fix round 2/5: single LaunchAgent staging owner
+
+- Root cause: an isolation test ran the upstream stage helper in two parallel
+  processes against one fresh `DISCORD_USER_DATA_DIR` 30 times. No process
+  returned nonzero, but stderr contained 480 `File exists` / `No such file or
+directory` lines because the helper non-atomically removes and recreates the
+  module directory before writing `installed.json`. The former Hermes
+  postActivation invocation raced the `RunAtLoad`/PathState LaunchAgent in the
+  same way.
+- RED: the updated evaluated-config test required Hermes postActivation to
+  contain `disable-breaking-updates.py` but not `discord-stage-modules` or
+  `/share/discord/modules`, while retaining those values in the LaunchAgent.
+  `bats tests/bash/macos_config.bats` produced 30 passed and 1 failed at the
+  activation-script stage-helper absence assertion.
+- GREEN: removing only the postActivation `stageModules` invocation made
+  `bats tests/bash/macos_config.bats` pass 31/31. The LaunchAgent retains
+  `RunAtLoad=true`, false version-derived PathState, its stage helper, and
+  `$out/share/discord/modules` ProgramArguments.
+- Regression: `bats tests/bash/package_catalog.bats tests/bash/macos_config.bats`
+  passed 65/65; `PackageCatalog.Tests.ps1` passed 49/49. `.#darwin-discord`
+  realized at `/nix/store/pris6y62jfs265ffibd7883ndvpk0ffc-discord-0.0.408`;
+  support report
+  `/nix/store/1sx52mdh4jl36scml8w63rp10n7jxx5p-package-support-report` has
+  `errors.json = []`; `git diff --check` passed.
+- Hermes actual-user system build:
+  `/nix/store/nmscjax79nsvdn3pkx50v0d2czkwhjhn-darwin-system-26.11.4cff07d`.
+  Its generated `activate` contains only the actual-user disable-updates
+  helper, while its user LaunchAgent plist contains the stage helper and
+  external modules path. This system is active.
+
+### Controller re-apply acceptance (PASS)
+
+- Activation was captured in `/tmp/task7-race-fix-activation.log` on the new
+  active system. It has zero matches for `ln: failed to create symbolic link`,
+  `No such file or directory`, `File exists`, `discord-stage-modules`, and
+  `share/discord/modules`; the relevant output is only
+  `Activating setupLaunchAgents` and `[Nix] Disabling updates already done`.
+- To prove single ownership in an intentionally artificial recovery state, the
+  controller booted out the existing user agent and moved generated modules to
+  the recoverable `modules.pre-single-owner` backup before apply. Because an
+  unchanged plist is not automatically re-bootstrapped in that condition, the
+  controller explicitly ran
+  `launchctl bootstrap gui/501 ~/Library/LaunchAgents/org.nixos.discord-module-staging.plist`.
+  This is not required for normal first installation.
+- After 12 seconds the agent had `RunAtLoad`, false PathState, `runs = 1`, and
+  last exit 0. It alone regenerated 16 module symlinks and valid 16-entry
+  `installed.json`, including `discord_notifications` and `discord_rpc`.
+- The exact `/Applications/Nix Apps/Discord.app` process (PID 81844,
+  `com.hnc.Discord`) remained alive after 15 seconds. Updater GC/restaging
+  advanced `installed.json` mtime from 1788134228 to 1788134265; the agent
+  reached `runs = 3`, last exit 0, and both critical module links remained.

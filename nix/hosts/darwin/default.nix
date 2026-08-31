@@ -68,7 +68,6 @@ in
         }
 
         runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
-        runAsUser ${discordPackage.passthru.stageModules} ${lib.escapeShellArg "${discordPackage}/share/discord/modules"}
       ''
     );
   };

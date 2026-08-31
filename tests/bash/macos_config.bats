@@ -164,7 +164,7 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin runs Discord staging only when Hermes is enabled" {
+@test "Darwin leaves Discord module staging to the Hermes LaunchAgent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
@@ -186,8 +186,8 @@ setup() {
 	[[ "$output" == *'launchctl asuser'* ]]
 	[[ "$output" == *'sudo --user=codex --set-home'* ]]
 	[[ "$output" == *'disable-breaking-updates.py'* ]]
-	[[ "$output" == *'discord-stage-modules'* ]]
-	[[ "$output" == *'/share/discord/modules'* ]]
+	[[ "$output" != *'discord-stage-modules'* ]]
+	[[ "$output" != *'/share/discord/modules'* ]]
 }
 
 @test "Darwin Hermes profile creates a user LaunchAgent to restage missing Discord modules" {
