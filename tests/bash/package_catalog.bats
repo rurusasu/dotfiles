@@ -624,7 +624,7 @@ EOF
 	[ "$status" -eq 0 ]
 }
 
-@test "WezTerm uses the nightly Homebrew cask on Darwin and Nix on Linux" {
+@test "WezTerm uses the Nix Darwin application and preserves nightly cask migration metadata" {
 	run awk '
 		/wezterm = \{/ { in_entry=1 }
 		in_entry { print }
@@ -632,10 +632,16 @@ EOF
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = pkgs.wezterm;'* ]]
-	[[ "$output" == *'cask = "wezterm@nightly"'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "nixpkgs"'* ]]
+	[[ "$output" == *'nixAttr = "wezterm"'* ]]
+	[[ "$output" == *'appName = "WezTerm.app"'* ]]
+	[[ "$output" == *'bundleId = "com.github.wez.wezterm"'* ]]
+	[[ "$output" == *'executable = "wezterm-gui"'* ]]
+	[[ "$output" == *'legacyDarwin = {'* ]]
+	[[ "$output" == *'name = "wezterm@nightly"'* ]]
 	[[ "$output" == *'darwin = {'* ]]
 	[[ "$output" == *'linux = {'* ]]
-	[[ "$output" == *'provider = "homebrew-cask"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
 }
 
@@ -706,7 +712,7 @@ EOF
 	grep -q 'makeWrapper "\$out/lib/chatgpt/ChatGPT"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 }
 
-@test "Darwin evaluation installs WezTerm nightly and its terminfo" {
+@test "Darwin evaluation installs the Nix WezTerm application and its terminfo" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
@@ -715,15 +721,19 @@ EOF
 		  config = flake.darwinConfigurations.macos.config;
 		  caskNames = builtins.map (cask: if builtins.isString cask then cask else cask.name) config.homebrew.casks;
 		  homePackages = config.home-manager.users.codex.home.packages;
+		  systemPackages = config.environment.systemPackages;
 		in {
 			casks = builtins.filter (name: name == \"wezterm@nightly\") caskNames;
+			systemPackages = builtins.length (
+			  builtins.filter (package: builtins.match \"wezterm.*\" package.name != null) systemPackages
+			);
 		  terminfoPackages = builtins.map (package: package.name) (
 		    builtins.filter (package: package.name == \"wezterm-terminfo\") homePackages
 		  );
 		}
 	"
 	[ "$status" -eq 0 ]
-	[ "$output" = '{"casks":["wezterm@nightly"],"terminfoPackages":["wezterm-terminfo"]}' ]
+	[ "$output" = '{"casks":[],"systemPackages":1,"terminfoPackages":["wezterm-terminfo"]}' ]
 }
 
 @test "Warp is removed from the package catalog" {

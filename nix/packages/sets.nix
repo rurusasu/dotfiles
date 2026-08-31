@@ -251,10 +251,15 @@ let
           category = "terminal";
           support = {
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "wezterm@nightly";
-              cask = "wezterm@nightly";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "wezterm";
+              identity = {
+                homepage = "https://wezterm.org/";
+                appName = "WezTerm.app";
+                bundleId = "com.github.wez.wezterm";
+                executable = "wezterm-gui";
+              };
             };
             linux = {
               provider = "nix";
@@ -262,6 +267,10 @@ let
               identity = "wezterm";
               nixAttr = "wezterm";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "wezterm@nightly";
           };
         };
         hammerspoon = {
