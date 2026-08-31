@@ -37,6 +37,14 @@
   catalogOverride ? null,
 }:
 let
+  darwinProviderCandidates = import ./darwin-provider-candidates.nix;
+  darwinProviderCandidate = name: darwinProviderCandidates.${name};
+  selectDarwinPackage =
+    name: customPackage:
+    let
+      candidate = darwinProviderCandidate name;
+    in
+    if candidate.source == "nixpkgs" then builtins.getAttr candidate.nixAttr pkgs else customPackage;
   linuxSystems = [
     "x86_64-linux"
     "aarch64-linux"
@@ -274,19 +282,26 @@ let
           };
         };
         hammerspoon = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./hammerspoon { } else null;
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "hammerspoon" (pkgs.callPackage ./hammerspoon { })
+            else
+              null;
           winget = null;
           category = "terminal";
           support = {
             darwin = {
               provider = "nix";
-              source = "custom";
+              source = (darwinProviderCandidate "hammerspoon").source;
               identity = {
                 homepage = "https://www.hammerspoon.org/";
                 appName = "Hammerspoon.app";
                 bundleId = "org.hammerspoon.Hammerspoon";
                 executable = "Hammerspoon";
               };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "hammerspoon").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "hammerspoon").nixAttr;
             };
             linux = {
               unsupported = "Hammerspoon is only available on macOS";
@@ -519,7 +534,11 @@ let
           };
         };
         dia-browser = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./dia-browser { } else null;
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "dia-browser" (pkgs.callPackage ./dia-browser { })
+            else
+              null;
           category = "desktop";
           support = {
             windows = {
@@ -527,13 +546,16 @@ let
             };
             darwin = {
               provider = "nix";
-              source = "custom";
+              source = (darwinProviderCandidate "dia-browser").source;
               identity = {
                 homepage = "https://www.diabrowser.com/";
                 appName = "Dia.app";
                 bundleId = "company.thebrowser.dia";
                 executable = "Dia";
               };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "dia-browser").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "dia-browser").nixAttr;
             };
             linux = {
               unsupported = "Vendor currently ships Dia for macOS only";
@@ -568,19 +590,26 @@ let
           };
         };
         orca-editor = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./orca-editor { } else null;
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "orca-editor" (pkgs.callPackage ./orca-editor { })
+            else
+              null;
           winget = "StablyAI.Orca";
           category = "desktop";
           support = {
             darwin = {
               provider = "nix";
-              source = "custom";
+              source = (darwinProviderCandidate "orca-editor").source;
               identity = {
                 homepage = "https://onorca.dev/";
                 appName = "Orca.app";
                 bundleId = "com.stablyai.orca";
                 executable = "Orca";
               };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "orca-editor").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "orca-editor").nixAttr;
             };
             linux = {
               unsupported = "No reviewed Linux desktop package provider is selected";
@@ -646,7 +675,11 @@ let
           };
         };
         docker-desktop = {
-          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.callPackage ./docker-desktop { } else null;
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
+            else
+              null;
           winget = "Docker.DockerDesktop";
           category = "system";
           installFeature = "WithDocker";
@@ -658,13 +691,16 @@ let
             };
             darwin = {
               provider = "nix";
-              source = "custom";
+              source = (darwinProviderCandidate "docker-desktop").source;
               identity = {
                 homepage = "https://www.docker.com/products/docker-desktop/";
                 appName = "Docker.app";
                 bundleId = "com.docker.docker";
                 executable = "com.docker.backend";
               };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "docker-desktop").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "docker-desktop").nixAttr;
             };
             linux = {
               provider = "system-manager";
@@ -1361,6 +1397,7 @@ lib.mapAttrs (_: resolve) grouped
     darwinCasksForInstallFeatures
     darwinBrews
     darwinPackages
+    selectDarwinPackage
     linuxSystemModules
     providerErrors
     windowsOnlySupport

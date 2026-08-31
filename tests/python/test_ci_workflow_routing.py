@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -222,6 +223,58 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_legacy_nix_and_winget_workflows_are_removed(self) -> None:
         for name in ("ci-nix.yml", "ci-winget.yml"):
             self.assertFalse((WORKFLOWS_DIRECTORY / name).exists(), name)
+
+    def test_darwin_provider_update_workflow_is_pinned_and_safe(self) -> None:
+        workflow = self._named_workflow("update-darwin-packages.yml")
+
+        self.assertIn("name: Darwin package updates", workflow)
+        self.assertIn("runs-on: macos-26", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("schedule:", workflow)
+        self.assertNotIn("pull_request_target", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertIn("task darwin:update:check", workflow)
+        self.assertIn("task darwin:update:promote", workflow)
+        self.assertIn("nix build", workflow)
+        self.assertIn("gh pr create", workflow)
+        self.assertIn("matrix", workflow)
+
+        for action in re.findall(r"uses:\s+([^\s]+)", workflow):
+            self.assertRegex(action, r"@[0-9a-f]{40}$", action)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("if: ${{ always() }}", complete)
+        self.assertIn("needs:", complete)
+
+    def test_darwin_update_paths_route_to_darwin_nix_contract_and_catalog(self) -> None:
+        for path in (
+            "nix/packages/darwin-provider-candidates.nix",
+            "scripts/python/update_darwin_packages.py",
+            "tests/python/test_update_darwin_packages.py",
+            ".github/workflows/update-darwin-packages.yml",
+        ):
+            with self.subTest(path=path):
+                routed = self._route(path)
+                for output in ("darwin", "nix", "contract", "package_catalog"):
+                    self.assertTrue(routed[output], f"{path} did not route {output}")
+
+    def _route(self, path: str) -> dict[str, bool]:
+        import json
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPOSITORY_ROOT / "scripts/python/detect_ci_changes.py"),
+                "--paths-file",
+                "-",
+            ],
+            input=path + "\n",
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return json.loads(result.stdout)
 
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")

@@ -288,7 +288,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'winget = "Docker.DockerDesktop"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
-	[[ "$output" == *'source = "custom"'* ]]
+	[[ "$output" == *'source = (darwinProviderCandidate "docker-desktop").source;'* ]]
 	[[ "$output" == *'appName = "Docker.app"'* ]]
 	[[ "$output" == *'name = "docker-desktop"'* ]]
 	[[ "$output" == *'systemModule = "docker"'* ]]
@@ -391,8 +391,8 @@ EOF
 
 	run grep -n -A25 '^[[:space:]]*dia-browser = {' "$SETS"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'source = "custom"'* ]]
-	[[ "$output" == *'name = "thebrowsercompany-dia"'* ]]
+	[[ "$output" == *'source = (darwinProviderCandidate "dia-browser").source;'* ]]
+	grep -q 'name = "thebrowsercompany-dia"' "$SETS"
 }
 
 @test "Discord preserves Windows and Linux providers while declaring a Nix Darwin GUI migration" {
@@ -688,8 +688,9 @@ EOF
 			in_entry && /^        };/ { exit }
 		' "$SETS"
 		[ "$status" -eq 0 ]
-		[[ "$output" == *'provider = "custom"'* ]] || [[ "$output" == *'source = "custom"'* ]]
+		[[ "$output" == *'selectDarwinPackage "'$id'"'* ]]
 		done
+	grep -q 'source = "custom"' "$REPO_ROOT/nix/packages/darwin-provider-candidates.nix"
 	grep -q 'callPackage ./hammerspoon' "$SETS"
 	grep -q 'callPackage ./dia-browser' "$SETS"
 	grep -q 'callPackage ./orca-editor' "$SETS"
@@ -791,7 +792,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'category = "terminal"'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
-	[[ "$output" == *'source = "custom"'* ]]
+	[[ "$output" == *'source = (darwinProviderCandidate "hammerspoon").source;'* ]]
 	[[ "$output" == *'appName = "Hammerspoon.app"'* ]]
 	[[ "$output" == *'name = "hammerspoon"'* ]]
 

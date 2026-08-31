@@ -14,6 +14,8 @@ on:
       - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
+      - "nix/packages/darwin-provider-candidates.nix"
+      - "scripts/python/update_darwin_packages.py"
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
+      - "nix/packages/darwin-provider-candidates.nix"
+      - "scripts/python/update_darwin_packages.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
