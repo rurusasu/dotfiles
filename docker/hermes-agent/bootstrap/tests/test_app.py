@@ -175,6 +175,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_hindsight_configurations = hindsight_patcher.start()
         self.addCleanup(hindsight_patcher.stop)
+        context_engine_patcher = mock.patch.object(
+            app,
+            "install_context_engine_configurations",
+            create=True,
+        )
+        self.install_context_engine_configurations = context_engine_patcher.start()
+        self.addCleanup(context_engine_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -242,6 +249,11 @@ class AppTests(unittest.TestCase):
         calendar_config = (
             "memory:\n"
             "  provider: hindsight\n"
+            "plugins:\n"
+            "  enabled:\n"
+            "    - hermes-lcm\n"
+            "context:\n"
+            "  engine: lcm\n"
             "mcp_servers:\n"
             "  calendar:\n"
             "    command: google-calendar-mcp\n"
@@ -738,6 +750,13 @@ class AppTests(unittest.TestCase):
                 + f":{transaction is tx}"
             )
         )
+        self.install_context_engine_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "context-engine-config:"
+                + ",".join(profile for profile, _target in targets)
+                + f":{transaction is tx}"
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -803,6 +822,7 @@ class AppTests(unittest.TestCase):
                 "calendar-config:data,rick,hoffman,risarisa,nancy:True",
                 "gmail-config:data,rick,hoffman,risarisa,nancy:True",
                 "hindsight-config:default,rick,hoffman,risarisa,nancy:True",
+                "context-engine-config:default,rick,hoffman,risarisa,nancy:True",
                 "onepassword-config",
                 "env:data",
                 "env:rick",
@@ -2395,6 +2415,15 @@ class AppTests(unittest.TestCase):
             ) as validate_hindsight,
             mock.patch.object(
                 app,
+                "validate_context_engine_installation",
+                create=True,
+                side_effect=lambda targets: events.append(
+                    "context-engine:"
+                    + ",".join(profile for profile, _target in targets)
+                ),
+            ) as validate_context_engine,
+            mock.patch.object(
+                app,
                 "_validate_env_file",
                 side_effect=lambda path, _required: events.append(f"env:{path.parent.name}"),
             ),
@@ -2406,7 +2435,18 @@ class AppTests(unittest.TestCase):
         validate_hindsight.assert_called_once_with(
             app._environment_targets(self.manifest)
         )
-        self.assertEqual(events, ["hindsight:default,rick", "env:data", "env:rick"])
+        validate_context_engine.assert_called_once_with(
+            app._environment_targets(self.manifest)
+        )
+        self.assertEqual(
+            events,
+            [
+                "hindsight:default,rick",
+                "context-engine:default,rick",
+                "env:data",
+                "env:rick",
+            ],
+        )
 
     def test_installed_layout_validation_preserves_unmanaged_profile_entries(self) -> None:
         from hermes_bootstrap import app

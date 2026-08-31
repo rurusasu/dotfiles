@@ -146,6 +146,8 @@ def managed_source_config(
     assert isinstance(mcp_servers, dict)
     mcp_servers["gmail"] = GMAIL_CONFIGURATION
     config["memory"] = {"provider": "hindsight"}
+    config["context"] = {"engine": "lcm"}
+    config["plugins"] = {"enabled": ["hermes-lcm"]}
     managed = build_onepassword_config(manifest, profile)
     return (
         yaml.safe_dump(config, sort_keys=False)
