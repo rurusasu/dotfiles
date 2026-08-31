@@ -124,7 +124,11 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$output" = "true" ]
 
-	run nix build --no-link .#packages.aarch64-darwin.darwin-vscode
+	if [[ $(uname -s) == Darwin ]]; then
+		run nix build --no-link .#packages.aarch64-darwin.darwin-vscode
+	else
+		run nix eval --raw .#packages.aarch64-darwin.darwin-vscode.drvPath
+	fi
 	[ "$status" -eq 0 ]
 
 	run --separate-stderr nix build --no-link --print-out-paths .#package-support-report

@@ -74,7 +74,12 @@ function Get-HermesHindsightEnvironmentValue {
 function Get-HermesHindsightEnvironment {
     param([Parameter(Mandatory)][string]$ComposeFile)
 
-    $environmentFile = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
+    $environmentFile = if ($env:HINDSIGHT_ENV_FILE) {
+        $env:HINDSIGHT_ENV_FILE
+    } else {
+        $candidate = Join-Path (Split-Path -Parent $ComposeFile) 'hindsight.env'
+        if (Test-Path -LiteralPath $candidate) { $candidate } else { Join-Path $PSScriptRoot '../../../docker/hindsight/hindsight.env' }
+    }
     $llmModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_OLLAMA_LLM_MODEL'
     $embeddingModel = Get-HermesHindsightEnvironmentValue -EnvironmentFile $environmentFile -Key 'HINDSIGHT_OLLAMA_EMBEDDING_MODEL'
     return [PSCustomObject]@{
