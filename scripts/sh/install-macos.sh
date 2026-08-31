@@ -4,19 +4,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
+# The native macOS CLI uses the desktop app integration for biometric sign-in.
+# Keep an explicit opt-out for troubleshooting, but make the integration
+# available to chezmoi deploy scripts by default.
+if [[ -z ${OP_BIOMETRIC_UNLOCK_ENABLED+x} ]]; then
+  OP_BIOMETRIC_UNLOCK_ENABLED="${DOTFILES_OP_BIOMETRIC_UNLOCK_ENABLED:-true}"
+fi
+export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
-HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/hindsight/compose.yml"
-DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
+HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
+DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
-OLLAMA_APP="${DOTFILES_OLLAMA_APP_PATH:-/Applications/Ollama.app}"
-OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/version}"
+DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
+OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
+LAUNCHCTL_COMMAND="${DOTFILES_LAUNCHCTL_COMMAND:-/bin/launchctl}"
+OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
-OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
+DARWIN_MIGRATION="${DOTFILES_DARWIN_MIGRATION:-$ROOT/scripts/sh/migrate-darwin-provider.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
 readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
@@ -86,6 +95,7 @@ preflight() {
     "$ROOT/flake.nix"
     "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
+    "$DARWIN_MIGRATION"
   )
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
@@ -191,7 +201,7 @@ apply_darwin_system() {
       "$nix_bin" run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
-  export PATH="/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$DOCKER_APP/Contents/Resources/bin:$PATH"
+  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   hash -r
 }
 
@@ -399,6 +409,8 @@ setup_docker_runtime() {
   ensure_docker_desktop_md5_compatibility
 
   if [[ ! -f $DOCKER_SETUP_MARKER ]]; then
+    [[ $DOTFILES_ACCEPT_DOCKER_LICENSE == 1 ]] ||
+      dotfiles_die "Docker Desktop license acceptance requires DOTFILES_ACCEPT_DOCKER_LICENSE=1."
     dotfiles_log "Accepting the Docker Desktop license for personal use..."
     sudo "$installer" --accept-license --user="${SUDO_USER:-$USER}"
     mkdir -p "$(dirname "$DOCKER_SETUP_MARKER")"
@@ -407,7 +419,7 @@ setup_docker_runtime() {
 
   dotfiles_have docker || dotfiles_die "Docker CLI is unavailable after nix-darwin activation."
   if ! docker info >/dev/null 2>&1; then
-    docker desktop start --timeout 120
+    docker desktop start
     dotfiles_wait_for "$DOCKER_WAIT_ATTEMPTS" "Docker Desktop engine" docker info
   fi
   docker compose version >/dev/null
@@ -418,8 +430,8 @@ ollama_api_is_ready() {
 }
 
 setup_ollama_runtime() {
-  [[ -d $OLLAMA_APP ]] || dotfiles_die "Ollama was not installed by nix-darwin: $OLLAMA_APP"
-  [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
+  dotfiles_have "$OLLAMA_COMMAND" || dotfiles_die "Ollama is unavailable after nix-darwin activation."
+  [[ -x $LAUNCHCTL_COMMAND ]] || dotfiles_die "macOS launchctl is unavailable: $LAUNCHCTL_COMMAND"
   dotfiles_have curl || dotfiles_die "curl is required to verify Ollama."
 
   if ollama_api_is_ready; then
@@ -427,7 +439,7 @@ setup_ollama_runtime() {
   fi
 
   dotfiles_log "Starting Ollama..."
-  "$OPEN_COMMAND" -gj -a "$OLLAMA_APP"
+  "$LAUNCHCTL_COMMAND" kickstart -k "gui/$(id -u)/com-dotfiles-ollama"
   dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
 }
 
@@ -435,6 +447,20 @@ apply_chezmoi() {
   dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after nix-darwin activation."
   chezmoi init --source "$ROOT/chezmoi"
   chezmoi apply --force
+}
+
+migrate_darwin_providers() {
+  local -a migration_args=(--all)
+  if ((DOTFILES_WITH_OLLAMA == 1)); then
+    migration_args+=(--feature WithOllama)
+  fi
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    migration_args+=(--feature WithDocker)
+  fi
+  if ((DOTFILES_WITH_HERMES == 1)); then
+    migration_args+=(--feature WithHermes)
+  fi
+  "$DARWIN_MIGRATION" "${migration_args[@]}"
 }
 
 main() {
@@ -451,6 +477,7 @@ main() {
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install
   apply_darwin_system
+  migrate_darwin_providers
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   apply_chezmoi

@@ -143,7 +143,7 @@ From the dotfiles repository, an operator may invoke the same command through
 Compose:
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-repository lifelog
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-repository lifelog
 ```
 
 It resolves the token as process `GH_TOKEN`, then the safe active
@@ -164,8 +164,8 @@ only the truly missing first-install case.
 Use the aggregate profile command before and after a local declarative repair:
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
 ```
 
 It processes every profile declared in

@@ -10,7 +10,7 @@ setup() {
 
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG
-	export DOTFILES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml"
+	export DOTFILES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml"
 	export DOTFILES_VERIFY_PLATFORM=darwin
 
 	for command_name in \

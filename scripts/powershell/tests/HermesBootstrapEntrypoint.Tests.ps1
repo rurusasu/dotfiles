@@ -291,7 +291,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
             $paths = Get-HermesBootstrapEntrypointPath
 
-            $paths.ComposeFile | Should -Be (Join-Path $script:repositoryRoot 'docker/hermes-agent/compose.yml')
+            $paths.ComposeFile | Should -Be (Join-Path $script:repositoryRoot 'docker/hermes-service/compose.yml')
             $paths.DataDir | Should -Be (Join-Path $TestDrive '.hermes')
             $paths.BrowserDataDir | Should -Be (Join-Path $TestDrive '.hermes/.browser')
         }

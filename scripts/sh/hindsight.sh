@@ -8,7 +8,12 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 
 hindsight_env_value() {
   local compose_file="$1" key="$2" env_file line value found=0
-  env_file="$(dirname "$compose_file")/hindsight.env"
+  if [[ -n ${HINDSIGHT_ENV_FILE:-} ]]; then
+    env_file="$HINDSIGHT_ENV_FILE"
+  else
+    env_file="$(dirname "$compose_file")/hindsight.env"
+    [[ -f $env_file ]] || env_file="$REPO_ROOT/docker/hindsight/hindsight.env"
+  fi
   [[ -f $env_file && ! -L $env_file ]] || dotfiles_die "Hindsight environment file is unavailable: $env_file"
 
   while IFS= read -r line || [[ -n $line ]]; do
@@ -239,7 +244,7 @@ hindsight_verify() {
 }
 
 main() {
-  local action="${1:-}" compose_file="${2:-$REPO_ROOT/docker/hindsight/compose.yml}"
+  local action="${1:-}" compose_file="${2:-$REPO_ROOT/docker/local-ai-services/compose.yml}"
   case "$action" in
   up) hindsight_up "$compose_file" ;;
   verify) hindsight_verify "$compose_file" ;;

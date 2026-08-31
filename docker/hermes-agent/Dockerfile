@@ -141,8 +141,8 @@ FROM hermes-bootstrap-runtime AS hermes-bootstrap-test
 WORKDIR /workspace
 
 COPY hermes-agent/Dockerfile /workspace/docker/hermes-agent/Dockerfile
-COPY hermes-agent/compose.yml /workspace/docker/hermes-agent/compose.yml
-COPY hindsight/compose.yml /workspace/docker/hindsight/compose.yml
+COPY hermes-service/compose.yml /workspace/docker/hermes-service/compose.yml
+COPY local-ai-services/compose.yml /workspace/docker/local-ai-services/compose.yml
 COPY hindsight/hindsight.env /workspace/docker/hindsight/hindsight.env
 COPY hermes-agent/bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
 COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py

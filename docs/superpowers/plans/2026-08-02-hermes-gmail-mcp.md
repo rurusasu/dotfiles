@@ -155,7 +155,7 @@
 
 - [ ] **Step 1: Run repository validation before live auth**
 
-  Run `bats tests/bash/hermes_gmail_mcp.bats tests/bash/hermes_gmail_auth.bats tests/bash/bootstrap_acceptance.bats`, the full bootstrap unittest discovery, `docker compose -f docker/hermes-agent/compose.yml config --quiet`, and `pre-commit run --all-files`.
+  Run `bats tests/bash/hermes_gmail_mcp.bats tests/bash/hermes_gmail_auth.bats tests/bash/bootstrap_acceptance.bats`, the full bootstrap unittest discovery, `docker compose -f docker/hermes-service/compose.yml config --quiet`, and `pre-commit run --all-files`.
 
 - [ ] **Step 2: Rebuild and apply the Hermes stack**
 

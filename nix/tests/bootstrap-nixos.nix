@@ -102,6 +102,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed(install)
     machine.succeed(install)
     machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd /home/nixos/dotfiles; DOTFILES_VERIFY_SYSTEM_LAYER=nixos ./scripts/sh/verify-environment.sh --runtime'")
-    machine.succeed("docker compose -f /home/nixos/dotfiles/docker/hermes-agent/compose.yml ps --status running --services | grep acceptance")
+    machine.succeed("docker compose -f /home/nixos/dotfiles/docker/hermes-service/compose.yml ps --status running --services | grep acceptance")
   '';
 }

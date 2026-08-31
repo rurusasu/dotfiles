@@ -10,6 +10,7 @@ let
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
+  discordPackage = sets.darwinDiscordPackage;
   withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
   withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
   withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
@@ -59,6 +60,32 @@ in
         fi
       fi
     '';
+    activationScripts.postActivation.text = lib.mkAfter (
+      lib.optionalString withHermes ''
+        uid="$(id -u -- ${lib.escapeShellArg user})"
+        runAsUser() {
+          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+        }
+
+        runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
+      ''
+    );
+  };
+
+  launchd.user.agents.com-dotfiles-ollama = lib.mkIf withOllama {
+    serviceConfig = {
+      ProgramArguments = [
+        (lib.getExe pkgs.ollama)
+        "serve"
+      ];
+      RunAtLoad = true;
+      KeepAlive = true;
+      EnvironmentVariables = {
+        HOME = home;
+      };
+      StandardOutPath = "${home}/Library/Logs/Ollama/ollama.log";
+      StandardErrorPath = "${home}/Library/Logs/Ollama/ollama.error.log";
+    };
   };
 
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
@@ -119,6 +146,20 @@ in
     };
   };
 
+  launchd.user.agents.discord-module-staging = lib.mkIf withHermes {
+    serviceConfig = {
+      ProgramArguments = [
+        "${discordPackage.passthru.stageModules}"
+        "${discordPackage}/share/discord/modules"
+      ];
+      RunAtLoad = true;
+      KeepAlive.PathState = {
+        "${home}/Library/Application Support/discord/${discordPackage.version}/modules/installed.json" =
+          false;
+      };
+    };
+  };
+
   nix.settings.experimental-features = [
     "nix-command"
     "flakes"
@@ -155,6 +196,8 @@ in
 
   users.users.${user}.home = home;
 
+  environment.systemPackages = sets.darwinSystemPackagesForInstallFeatures installFeatures;
+
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
@@ -163,7 +206,7 @@ in
       imports = [ ../../home/darwin.nix ];
     };
     extraSpecialArgs = {
-      inherit inputs;
+      inherit inputs installFeatures;
       isWSL = false;
     };
   };

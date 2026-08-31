@@ -28,7 +28,7 @@
 
 **Interfaces:**
 
-- Consumes: current `docker/hermes-agent/compose.yml` and `Taskfile.yml`.
+- Consumes: current `docker/hermes-service/compose.yml` and `Taskfile.yml`.
 - Produces: executable contracts for the `xapi-mcp` service and its task entry points.
 
 - [ ] **Step 1: Write the failing Compose service test**
@@ -168,7 +168,7 @@ git commit -m "feat: add isolated X MCP bridge image"
 
 **Files:**
 
-- Modify: `docker/hermes-agent/compose.yml`
+- Modify: `docker/hermes-service/compose.yml`
 - Modify: `Taskfile.yml`
 - Modify: `scripts/sh/hermes-agent.sh`
 - Modify: `scripts/powershell/hermes-bootstrap.ps1`
@@ -261,7 +261,7 @@ Run:
 ```bash
 python -m unittest docker/hermes-agent/bootstrap/tests/test_compose_contract.py
 python -m unittest tests/python/test_taskfile_contract.py
-docker compose -f docker/hermes-agent/compose.yml config --quiet
+docker compose -f docker/hermes-service/compose.yml config --quiet
 ```
 
 Expected: all focused tests pass and Compose exits successfully.
@@ -269,7 +269,7 @@ Expected: all focused tests pass and Compose exits successfully.
 - [ ] **Step 4: Commit the runtime wiring**
 
 ```bash
-git add docker/hermes-agent/compose.yml Taskfile.yml scripts/sh/hermes-agent.sh scripts/powershell/hermes-bootstrap.ps1
+git add docker/hermes-service/compose.yml Taskfile.yml scripts/sh/hermes-agent.sh scripts/powershell/hermes-bootstrap.ps1
 git commit -m "feat: run X MCP as a Hermes compose service"
 ```
 
@@ -341,7 +341,7 @@ Document that `task hermes:xapi:auth` is required once with
 verification commands:
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml ps xapi-mcp hermes
+docker compose -f docker/hermes-service/compose.yml ps xapi-mcp hermes
 docker exec hermes hermes -p rick mcp test xapi
 docker exec hermes hermes -p hoffman mcp test xapi
 docker exec hermes hermes -p risarisa mcp test xapi
@@ -374,7 +374,7 @@ Expected: all tests pass with no new warnings or failures.
 
 ```bash
 git diff --check
-docker compose -f docker/hermes-agent/compose.yml config --quiet
+docker compose -f docker/hermes-service/compose.yml config --quiet
 task hermes:bootstrap:config
 ```
 

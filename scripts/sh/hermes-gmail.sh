@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 
-compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-agent/compose.yml}"
+compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-service/compose.yml}"
 data_dir="${HERMES_DATA_DIR:-${USERPROFILE:-$HOME}/.hermes}"
 action="${1:-}"
 profile="${2:-}"

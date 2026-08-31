@@ -80,9 +80,9 @@ The following Task 5 commands were not executed because verification stopped at 
 
 - focused `Handler.HermesAgent` Pester
 - focused `ChezmoiTemplate` Pester
-- `docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp`
-- `docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp`
-- `docker compose -f docker/hermes-agent/compose.yml ps`
+- `docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp`
+- `docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp`
+- `docker compose -f docker/hermes-service/compose.yml ps`
 - internal CDP reachability checks from `chromium` and `browser-mcp`
 - Hermes startup, log inspection, config inspection, and MCP endpoint/tool-list handshake
 - profile persistence `down` / `up` check
@@ -207,7 +207,7 @@ Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
 ```
 
 Exit status: 0
@@ -222,7 +222,7 @@ Image local/hermes-browser:latest Built
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 1
@@ -246,7 +246,7 @@ dependency failed to start: container hermes-chromium is unhealthy
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -264,7 +264,7 @@ Interpretation: an existing `hermes` compose container was already running from 
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=120 chromium
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=120 chromium
 ```
 
 Exit status: 0
@@ -302,10 +302,10 @@ docker/hermes-browser/entrypoint.sh starts /usr/bin/chromium without --no-sandbo
 
 The following Task 5 commands were not executed because `docker compose up -d chromium browser-mcp` failed before Browser MCP could start:
 
-- `docker compose -f docker/hermes-agent/compose.yml ps` healthy/no-host-port acceptance check beyond the failure snapshot above
+- `docker compose -f docker/hermes-service/compose.yml ps` healthy/no-host-port acceptance check beyond the failure snapshot above
 - internal CDP reachability from `chromium`
 - internal CDP reachability from `browser-mcp`
-- `docker compose -f docker/hermes-agent/compose.yml up -d hermes`
+- `docker compose -f docker/hermes-service/compose.yml up -d hermes`
 - Hermes log inspection for the new startup path
 - root/profile config verification for internal browser URL
 - MCP endpoint/tool-list handshake
@@ -338,7 +338,7 @@ Verification:
 
 - RED: focused Pester failed before the Dockerfile fix with 52 passed, 1 failed because `chromium-sandbox` was absent.
 - GREEN: `pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Detailed"` exited 0 with 53 passed, 0 failed.
-- Build: `docker compose -f docker/hermes-agent/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
+- Build: `docker compose -f docker/hermes-service/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
 
 Not run: the full Task 5 runtime sequence, by request.
 
@@ -413,7 +413,7 @@ Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
 ```
 
 Exit status: 0
@@ -434,7 +434,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends chromium chromi
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 1
@@ -452,7 +452,7 @@ dependency failed to start: container hermes-chromium is unhealthy
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -470,7 +470,7 @@ The `chromium` service did not publish host ports 9222 or 8080. Browser MCP did 
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=160 chromium
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=160 chromium
 ```
 
 Exit status: 0
@@ -501,7 +501,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=80 browser-mcp
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=80 browser-mcp
 ```
 
 Exit status: 0
@@ -511,7 +511,7 @@ Key output: no output.
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml stop chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml stop chromium browser-mcp
 ```
 
 Exit status: 0
@@ -532,7 +532,7 @@ The following Task 5 commands were not executed because `docker compose up -d ch
 - full healthy/no-host-port acceptance check beyond the failure snapshot above
 - internal CDP reachability from `chromium`
 - internal CDP reachability from `browser-mcp`
-- `docker compose -f docker/hermes-agent/compose.yml up -d hermes`
+- `docker compose -f docker/hermes-service/compose.yml up -d hermes`
 - Hermes log inspection for the new startup path
 - root/profile config verification for internal browser URL
 - MCP endpoint/tool-list handshake
@@ -589,11 +589,11 @@ Commands and results:
 
 - RED focused Pester before Compose fix: `Handler.HermesAgent.Tests.ps1` reported 52 passed, 1 failed because `chromium` lacked `cap_add: - SYS_ADMIN`.
 - GREEN focused Pester after Compose fix: `pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Detailed"` reported 53 passed, 0 failed.
-- Build: `docker compose -f docker/hermes-agent/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
-- Runtime: `docker compose -f docker/hermes-agent/compose.yml up -d chromium` exited 0 and recreated/started `hermes-chromium`.
-- Health: `docker compose -f docker/hermes-agent/compose.yml ps chromium` showed `hermes-chromium` as `Up ... (healthy)` with no host ports listed.
-- CDP smoke: `docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 `/json/version` metadata.
-- Cleanup: `docker compose -f docker/hermes-agent/compose.yml stop chromium` stopped `hermes-chromium`, because Chromium was not running before this smoke test.
+- Build: `docker compose -f docker/hermes-service/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
+- Runtime: `docker compose -f docker/hermes-service/compose.yml up -d chromium` exited 0 and recreated/started `hermes-chromium`.
+- Health: `docker compose -f docker/hermes-service/compose.yml ps chromium` showed `hermes-chromium` as `Up ... (healthy)` with no host ports listed.
+- CDP smoke: `docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 `/json/version` metadata.
+- Cleanup: `docker compose -f docker/hermes-service/compose.yml stop chromium` stopped `hermes-chromium`, because Chromium was not running before this smoke test.
 
 Security note: this does not add `privileged: true`, does not publish Chromium CDP port 9222 or Browser MCP port 8080 to the host, and does not add `--no-sandbox`. The added runtime capability is scoped to the internal `chromium` service.
 
@@ -662,7 +662,7 @@ Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
 ```
 
 Exit status: 0
@@ -677,7 +677,7 @@ Image local/hermes-browser-mcp:latest Built
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 1
@@ -699,7 +699,7 @@ dependency failed to start: container hermes-chromium is unhealthy
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -744,7 +744,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=120 chromium
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=120 chromium
 ```
 
 Exit status: 0
@@ -761,7 +761,7 @@ The same profile-lock error repeated across restart attempts.
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=80 browser-mcp
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=80 browser-mcp
 ```
 
 Exit status: 0
@@ -792,7 +792,7 @@ hermes               local/hermes-agent-gh:latest      Up 5 days                
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml down
+docker compose -f docker/hermes-service/compose.yml down
 ```
 
 Exit status: 0
@@ -819,7 +819,7 @@ Network hermes-browser Removed
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 1
@@ -843,7 +843,7 @@ dependency failed to start: container hermes-chromium is unhealthy
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -885,7 +885,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=80 chromium
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=80 chromium
 ```
 
 Exit status: 0
@@ -902,7 +902,7 @@ The clean retry reproduced the same profile-lock failure. Chromium still did not
 Cleanup command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml stop chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml stop chromium browser-mcp
 ```
 
 Exit status: 0
@@ -922,7 +922,7 @@ The following commands/checks were not executed because `docker compose up -d ch
 
 - internal CDP reachability from `chromium`
 - internal CDP reachability from `browser-mcp`
-- `docker compose -f docker/hermes-agent/compose.yml up -d hermes`
+- `docker compose -f docker/hermes-service/compose.yml up -d hermes`
 - Hermes log inspection for the new startup path
 - root/profile config verification for the internal browser URL
 - MCP endpoint/tool-list handshake
@@ -967,7 +967,7 @@ Key output: no output.
 
 Status: NEEDS_FIX / BLOCKED.
 
-Concrete defect: after the namespace/capability fixes, Chromium now fails earlier Task 5 smoke startup because the persisted browser profile is locked by another Chromium process marker. The failure reproduces even after `docker compose -f docker/hermes-agent/compose.yml down` stops/removes the existing Hermes compose project and a clean `up -d chromium browser-mcp` is attempted. This prevents internal CDP verification, Browser MCP startup, Hermes startup, the MCP tool-list handshake, profile persistence verification, and full `task test`.
+Concrete defect: after the namespace/capability fixes, Chromium now fails earlier Task 5 smoke startup because the persisted browser profile is locked by another Chromium process marker. The failure reproduces even after `docker compose -f docker/hermes-service/compose.yml down` stops/removes the existing Hermes compose project and a clean `up -d chromium browser-mcp` is attempted. This prevents internal CDP verification, Browser MCP startup, Hermes startup, the MCP tool-list handshake, profile persistence verification, and full `task test`.
 
 ## Fix applied for stale Chromium profile singleton markers - 2026-07-14
 
@@ -983,11 +983,11 @@ Commands and results:
 
 - RED focused Pester before entrypoint fix: `Handler.HermesAgent.Tests.ps1` reported 52 passed, 1 failed because `SingletonLock` cleanup was absent.
 - GREEN focused Pester after entrypoint fix: `pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Detailed"` exited 0 with 53 passed, 0 failed.
-- Build: `docker compose -f docker/hermes-agent/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
-- Runtime: `docker compose -f docker/hermes-agent/compose.yml up -d chromium` exited 0 and started `hermes-chromium`.
-- Health: `docker compose -f docker/hermes-agent/compose.yml ps chromium` showed `hermes-chromium` as `Up ... (healthy)` with no host ports listed.
-- CDP smoke: `docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 `/json/version` metadata.
-- Cleanup: `docker compose -f docker/hermes-agent/compose.yml stop chromium` stopped `hermes-chromium`, because Chromium was not running before this smoke test.
+- Build: `docker compose -f docker/hermes-service/compose.yml build chromium` exited 0 and built `local/hermes-browser:latest`.
+- Runtime: `docker compose -f docker/hermes-service/compose.yml up -d chromium` exited 0 and started `hermes-chromium`.
+- Health: `docker compose -f docker/hermes-service/compose.yml ps chromium` showed `hermes-chromium` as `Up ... (healthy)` with no host ports listed.
+- CDP smoke: `docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 `/json/version` metadata.
+- Cleanup: `docker compose -f docker/hermes-service/compose.yml stop chromium` stopped `hermes-chromium`, because Chromium was not running before this smoke test.
 
 Scope note: stale lock cleanup is intentionally limited to the dedicated `/data` container profile root and does not touch the user's normal browser profile.
 
@@ -1065,7 +1065,7 @@ Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1080,7 +1080,7 @@ Image local/hermes-browser:latest Built
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1102,7 +1102,7 @@ Effect note: this did not run `docker compose down`, but it did recreate the exi
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -1130,7 +1130,7 @@ Key output: no output, confirming no host port bindings were published for 9222 
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
+docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
 ```
 
 Exit status: 0
@@ -1149,7 +1149,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 ```
 
 Exit status: 1
@@ -1159,7 +1159,7 @@ Key output: no output.
 Follow-up diagnostic command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 200)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 200)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"
 ```
 
 Exit status: 1
@@ -1175,7 +1175,7 @@ TypeError: fetch failed
 Follow-up diagnostic command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp getent hosts chromium
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp getent hosts chromium
 ```
 
 Exit status: 0
@@ -1189,7 +1189,7 @@ Key output:
 Follow-up diagnostic command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=80 chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=80 chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1207,7 +1207,7 @@ The remaining Chromium DBus and GCM log lines were local container/runtime noise
 
 The following commands/checks were not executed because internal CDP reachability from `browser-mcp` to `chromium:9222` failed:
 
-- `docker compose -f docker/hermes-agent/compose.yml up -d hermes`
+- `docker compose -f docker/hermes-service/compose.yml up -d hermes`
 - Hermes log inspection for the startup path
 - root/profile config verification for the internal browser URL
 - MCP endpoint/tool-list handshake
@@ -1241,10 +1241,10 @@ Verification:
 
 - RED focused Pester before the forwarder fix: 52 passed, 1 failed on the expected upstream Host rewrite assertion.
 - GREEN focused Pester after the fix: `pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Normal"` exited 0 with 53 passed, 0 failed.
-- `docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp` exited 0 and rebuilt `local/hermes-browser:latest`.
-- `docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp` exited 0; `chromium` became healthy and `browser-mcp` started.
-- `docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 CDP metadata.
-- `docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"` exited 0 with `status=200`.
+- `docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp` exited 0 and rebuilt `local/hermes-browser:latest`.
+- `docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp` exited 0; `chromium` became healthy and `browser-mcp` started.
+- `docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version` exited 0 and returned Chrome/150 CDP metadata.
+- `docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(async r => { console.log('status=' + r.status); console.log((await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e && (e.stack || e.message || String(e))); process.exit(1); })"` exited 0 with `status=200`.
 - Additional scoped response check from `browser-mcp` printed `ws://chromium:9222/devtools/browser/882e7a0b-8aa1-4b16-9b53-dc73fdd25978`, confirming external Host rewrite in the WebSocket URL.
 
 ## Full Task 5 verification rerun after 58a1543 - 2026-07-14
@@ -1314,7 +1314,7 @@ Tests Passed: 42, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1329,7 +1329,7 @@ Image local/hermes-browser:latest Built
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1344,7 +1344,7 @@ Container hermes-browser-mcp Started
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -1379,7 +1379,7 @@ This confirms no host port binding was published for 9222 or 8080.
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
+docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
 ```
 
 Exit status: 0
@@ -1397,7 +1397,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 ```
 
 Exit status: 0
@@ -1409,7 +1409,7 @@ Key output: no output.
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d hermes
+docker compose -f docker/hermes-service/compose.yml up -d hermes
 ```
 
 Exit status: 0
@@ -1425,7 +1425,7 @@ Container hermes Started
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -1442,7 +1442,7 @@ hermes-chromium      local/hermes-browser:latest       chromium      Up About a 
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml logs --no-color --tail=200 hermes | Select-String -Pattern 'error|fail|started|listening|gateway|mcp|browser|config|success|running' -CaseSensitive:$false
+docker compose -f docker/hermes-service/compose.yml logs --no-color --tail=200 hermes | Select-String -Pattern 'error|fail|started|listening|gateway|mcp|browser|config|success|running' -CaseSensitive:$false
 ```
 
 Exit status: 0
@@ -1534,7 +1534,7 @@ The following commands/checks were not executed because Task 5 Step 4 expected r
 
 Status: NEEDS_FIX / BLOCKED.
 
-Concrete defect: after `docker compose -f docker/hermes-agent/compose.yml up -d hermes`, Hermes and the browser services are running, and internal CDP reachability from `browser-mcp` to `chromium:9222` now passes. However, the effective root/profile runtime configs under `C:\Users\KoheiMiki\.hermes` do not contain the required internal browser MCP URL `http://browser-mcp:8080/mcp`. Because Task 5 explicitly requires verifying that root/profile configs contain that browser URL, verification stopped here and no code changes were made.
+Concrete defect: after `docker compose -f docker/hermes-service/compose.yml up -d hermes`, Hermes and the browser services are running, and internal CDP reachability from `browser-mcp` to `chromium:9222` now passes. However, the effective root/profile runtime configs under `C:\Users\KoheiMiki\.hermes` do not contain the required internal browser MCP URL `http://browser-mcp:8080/mcp`. Because Task 5 explicitly requires verifying that root/profile configs contain that browser URL, verification stopped here and no code changes were made.
 
 ## Runtime config reapplied verification - 2026-07-14
 
@@ -1586,7 +1586,7 @@ The root config and rick/hoffman/risarisa profile configs now contain the requir
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp hermes
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp hermes
 ```
 
 Exit status: 0
@@ -1604,7 +1604,7 @@ Container hermes-browser-mcp Healthy
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0
@@ -1638,7 +1638,7 @@ This verifies that browser-mcp's internal 8080/tcp is not published to the host 
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version')..."
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version')..."
 ```
 
 Exit status: 0
@@ -1658,7 +1658,7 @@ No dedicated Hermes-configured MCP tool-list command was found in the repository
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "<Streamable HTTP initialize, notifications/initialized, tools/list>"
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "<Streamable HTTP initialize, notifications/initialized, tools/list>"
 ```
 
 Exit status: 0
@@ -1681,7 +1681,7 @@ data: {"result":{"tools":[{"name":"click",...
 Follow-up count command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "<parse Streamable HTTP SSE and count tools>"
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "<parse Streamable HTTP SSE and count tools>"
 ```
 
 Exit status: 0
@@ -1717,7 +1717,7 @@ Key output:
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml down
+docker compose -f docker/hermes-service/compose.yml down
 ```
 
 Exit status: 0
@@ -1734,7 +1734,7 @@ Network hermes-browser Removed
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
 ```
 
 Exit status: 0
@@ -1751,7 +1751,7 @@ Container hermes-browser-mcp Started
 Command:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Exit status: 0

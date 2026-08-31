@@ -20,7 +20,7 @@ gateway lifecycle separate.
 
 ## Decision
 
-Add an `xapi-mcp` service to `docker/hermes-agent/compose.yml`. The service
+Add an `xapi-mcp` service to `docker/hermes-service/compose.yml`. The service
 will use a small Node image containing pinned `@xdevplatform/xurl` and
 `mcp-proxy` dependencies. Its command will expose the xurl stdio bridge as
 Streamable HTTP on `0.0.0.0:8080`; the service will not publish that port to
@@ -86,7 +86,7 @@ task hermes:bootstrap / task hermes:up
 
 - Unit/contract tests cover the Compose service, dependency, mount, healthcheck,
   command, and all-profile source contract.
-- `docker compose -f docker/hermes-agent/compose.yml config --quiet` validates
+- `docker compose -f docker/hermes-service/compose.yml config --quiet` validates
   interpolation and Compose syntax.
 - The pinned bootstrap test stage remains green.
 - With Docker and valid X credentials available, `task hermes:xapi:auth`,

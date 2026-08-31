@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($ComposeFile)) {
-    $ComposeFile = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path 'docker/hindsight/compose.yml'
+    $ComposeFile = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path 'docker/local-ai-services/compose.yml'
 }
 
 function Invoke-HindsightCommand {
@@ -237,7 +237,13 @@ function Invoke-HindsightMain {
     $null = Invoke-HindsightCommand -Command 'docker' -Arguments @('compose', '-f', $RequestedComposeFile, 'config', '--quiet')
 
     if ($RequestedAction -eq 'up') {
-        $environmentFile = Join-Path (Split-Path -Parent $RequestedComposeFile) 'hindsight.env'
+        $environmentFile = if ($env:HINDSIGHT_ENV_FILE) {
+            $env:HINDSIGHT_ENV_FILE
+        }
+        else {
+            $candidate = Join-Path (Split-Path -Parent $RequestedComposeFile) 'hindsight.env'
+            if (Test-Path -LiteralPath $candidate) { $candidate } else { Join-Path $PSScriptRoot '../../docker/hindsight/hindsight.env' }
+        }
         $llmModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_LLM_MODEL=(.+)$').Matches.Groups[1].Value
         $embeddingModel = (Select-String -LiteralPath $environmentFile -Pattern '^HINDSIGHT_OLLAMA_EMBEDDING_MODEL=(.+)$').Matches.Groups[1].Value
         $dataDir = if ($env:HINDSIGHT_DATA_DIR) { $env:HINDSIGHT_DATA_DIR } else { Join-Path $env:USERPROFILE '.local/share/hindsight' }

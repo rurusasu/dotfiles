@@ -48,7 +48,7 @@ setup() {
   grep -q 'ip -4 -o addr show dev docker0' "$REPO_ROOT/nix/system-manager/ollama.nix"
   grep -q 'OLLAMA_HOST="$docker_gateway:11434"' "$REPO_ROOT/nix/system-manager/ollama.nix"
   ! grep -q '0.0.0.0:11434' "$REPO_ROOT/nix/system-manager/ollama.nix"
-  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }
 
 @test "native NixOS rebuild alias keeps the hardware-safe installer path" {

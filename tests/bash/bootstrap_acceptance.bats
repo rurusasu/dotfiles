@@ -19,11 +19,11 @@ setup() {
 @test "production Linux installers keep the canonical Hermes Compose path" {
 	for installer in install-linux.sh install-nixos.sh; do
 		file="$REPO_ROOT/scripts/sh/$installer"
-		grep -Fq 'COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"' "$file"
+		grep -Fq 'COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"' "$file"
 		grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$file"
 		! grep -q 'DOTFILES_COMPOSE_FILE' "$file"
 	done
-	grep -Fq 'docker/hermes-agent/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
+	grep -Fq 'docker/hermes-service/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 
 @test "NixOS bootstrap VM provides task before Hermes bootstrap" {
@@ -34,7 +34,7 @@ setup() {
 
 @test "acceptance runner installs only fixture plumbing before invoking install.sh" {
 	test_root="$BATS_TEST_TMPDIR/repo"
-	mkdir -p "$test_root/docker/hermes-agent" "$test_root/docker/hindsight" "$test_root/activated/bin"
+	mkdir -p "$test_root/docker/hermes-service" "$test_root/docker/local-ai-services" "$test_root/activated/bin"
 	cat >"$test_root/activated/bin/op" <<'EOF'
 #!/usr/bin/env bash
 exit 99
@@ -49,12 +49,12 @@ export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 . "$DOTFILES_ACCEPTANCE_REPO_ROOT/scripts/sh/hermes-agent.sh"
 [[ $(dotfiles_hermes_op_command) == "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/op" ]]
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/compose.yml"
-test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-agent/hermes-bootstrap-fixture.sh"
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/compose.yml"
+test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/hermes-bootstrap-fixture.sh"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/hindsight-health.json"
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/local-ai-services/hindsight-health.json"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-compose.yml" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hindsight/compose.yml"
+	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/local-ai-services/compose.yml"
 [ "${DOTFILES_ACCEPTANCE_SKIP_MLFLOW:-}" = 1 ]
 test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
 test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
@@ -150,7 +150,7 @@ EOF
 	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
 	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
-	grep -Fq 'name: dotfiles-memory' "$compose"
+	grep -Fq 'name: local-ai-services' "$compose"
 	grep -Fq 'external: true' "$compose"
 	grep -Fq 'condition: service_started' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"

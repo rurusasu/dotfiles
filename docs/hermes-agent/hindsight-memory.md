@@ -4,7 +4,7 @@
 
 Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。Compose の
 `hindsight` サービスが埋め込み PostgreSQL、ローカル reranker、メモリ API を提供し、
-`dotfiles-memory` ネットワークを所有します。Hermes は external network として接続して
+`local-ai-services` ネットワークを所有します。Hermes は external network として接続して
 `http://hindsight:8888` を使います。推論・埋め込みは MLflow Gateway の論理 endpoint
 `ollama-chat-default` と `ollama-embedding-default` を `local-ai-services` 経由で使い、
 MLflow だけが設定済み provider として native host Ollama に接続します。

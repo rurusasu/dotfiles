@@ -34,655 +34,869 @@
 {
   pkgs,
   lib,
+  catalogOverride ? null,
 }:
 let
-  rawCatalog = {
-    # ── core ──────────────────────────────────────────────
-    chezmoi = {
-      pkg = pkgs.chezmoi;
-      winget = "twpayne.chezmoi";
-      category = "core";
-    };
-    git = {
-      pkg = pkgs.git;
-      winget = "Git.Git";
-      category = "core";
-    };
-    gh = {
-      pkg = pkgs.gh;
-      winget = "GitHub.cli";
-      category = "core";
-    };
-    fd = {
-      pkg = pkgs.fd;
-      winget = "sharkdp.fd";
-      category = "core";
-    };
-    ripgrep = {
-      pkg = pkgs.ripgrep;
-      winget = "BurntSushi.ripgrep.MSVC";
-      category = "core";
-    };
-    bat = {
-      pkg = pkgs.bat;
-      winget = null;
-      category = "core";
-    };
-    jq = {
-      pkg = pkgs.jq;
-      winget = "jqlang.jq";
-      category = "core";
-    };
-    netcat = {
-      pkg = pkgs.netcat;
-      winget = null;
-      category = "core";
-    };
-    eza = {
-      pkg = pkgs.eza;
-      winget = "eza-community.eza";
-      category = "core";
-    };
-    zoxide = {
-      pkg = pkgs.zoxide;
-      winget = "ajeetdsouza.zoxide";
-      category = "core";
-    };
-    fzf = {
-      pkg = pkgs.fzf;
-      winget = "junegunn.fzf";
-      category = "core";
-    };
-    direnv = {
-      pkg = pkgs.direnv;
-      winget = "direnv.direnv";
-      category = "core";
-    };
-    unzip = {
-      pkg = pkgs.unzip;
-      winget = null;
-      category = "core";
-    };
-    p7zip = {
-      pkg = pkgs.p7zip;
-      winget = null;
-      category = "core";
-    };
+  darwinProviderCandidates = import ./darwin-provider-candidates.nix;
+  darwinProviderCandidate = name: darwinProviderCandidates.${name};
+  selectDarwinPackage =
+    name: customPackage:
+    let
+      candidate = darwinProviderCandidate name;
+    in
+    if candidate.source == "nixpkgs" then builtins.getAttr candidate.nixAttr pkgs else customPackage;
+  linuxSystems = [
+    "x86_64-linux"
+    "aarch64-linux"
+  ];
+  linuxOnlyPackage =
+    package:
+    if pkgs.stdenv.hostPlatform.isLinux then
+      package
+    else
+      pkgs.runCommand "linux-package-placeholder" {
+        meta.platforms = linuxSystems;
+      } "touch $out";
+  darwinDiscordPackage =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      pkgs.discord.overrideAttrs (old: {
+        dontFixup = true;
+        postInstall = (old.postInstall or "") + ''
+          mkdir -p "$out/share/discord"
+          mv "$out/Applications/Discord.app/Contents/Resources/modules" "$out/share/discord/modules"
+          substituteInPlace "$out/bin/Discord" \
+            --replace-fail \
+            "$out/Applications/Discord.app/Contents/Resources/modules" \
+            "$out/share/discord/modules"
+        '';
+      })
+    else
+      null;
+  rawCatalog =
+    if catalogOverride != null then
+      catalogOverride
+    else
+      {
+        # ── core ──────────────────────────────────────────────
+        chezmoi = {
+          pkg = pkgs.chezmoi;
+          winget = "twpayne.chezmoi";
+          category = "core";
+        };
+        git = {
+          pkg = pkgs.git;
+          winget = "Git.Git";
+          category = "core";
+        };
+        gh = {
+          pkg = pkgs.gh;
+          winget = "GitHub.cli";
+          category = "core";
+        };
+        fd = {
+          pkg = pkgs.fd;
+          winget = "sharkdp.fd";
+          category = "core";
+        };
+        ripgrep = {
+          pkg = pkgs.ripgrep;
+          winget = "BurntSushi.ripgrep.MSVC";
+          category = "core";
+        };
+        bat = {
+          pkg = pkgs.bat;
+          winget = null;
+          category = "core";
+        };
+        jq = {
+          pkg = pkgs.jq;
+          winget = "jqlang.jq";
+          category = "core";
+        };
+        netcat = {
+          pkg = pkgs.netcat;
+          winget = null;
+          category = "core";
+        };
+        eza = {
+          pkg = pkgs.eza;
+          winget = "eza-community.eza";
+          category = "core";
+        };
+        zoxide = {
+          pkg = pkgs.zoxide;
+          winget = "ajeetdsouza.zoxide";
+          category = "core";
+        };
+        fzf = {
+          pkg = pkgs.fzf;
+          winget = "junegunn.fzf";
+          category = "core";
+        };
+        direnv = {
+          pkg = pkgs.direnv;
+          winget = "direnv.direnv";
+          category = "core";
+        };
+        unzip = {
+          pkg = pkgs.unzip;
+          winget = null;
+          category = "core";
+        };
+        p7zip = {
+          pkg = pkgs.p7zip;
+          winget = null;
+          category = "core";
+        };
 
-    # ── dev ───────────────────────────────────────────────
-    nodejs = {
-      pkg = pkgs.nodejs;
-      winget = "OpenJS.NodeJS.LTS";
-      category = "dev";
-    };
-    python3 = {
-      pkg = pkgs.python3;
-      winget = null;
-      category = "dev";
-    };
-    go = {
-      pkg = pkgs.go;
-      winget = "GoLang.Go";
-      category = "dev";
-    };
-    rustup = {
-      pkg = pkgs.rustup;
-      winget = "Rustlang.Rustup";
-      category = "dev";
-    };
-    gnumake = {
-      pkg = pkgs.gnumake;
-      winget = null;
-      category = "dev";
-    };
-    cmake = {
-      pkg = pkgs.cmake;
-      winget = null;
-      category = "dev";
-    };
-    ghq = {
-      pkg = pkgs.ghq;
-      winget = "x-motemen.ghq";
-      category = "dev";
-    };
-    gwq = {
-      pkg = pkgs.gwq;
-      winget = null;
-      category = "dev";
-    };
-    uv = {
-      pkg = pkgs.uv;
-      winget = "astral-sh.uv";
-      category = "dev";
-    };
-    pnpm = {
-      pkg = pkgs.pnpm;
-      winget = null;
-      category = "dev";
-    };
-    devcontainer = {
-      pkg = pkgs.devcontainer;
-      winget = null;
-      npm = "@devcontainers/cli";
-      category = "dev";
-    };
-    lazygit = {
-      pkg = pkgs.lazygit;
-      winget = "JesseDuffield.lazygit";
-      category = "dev";
-    };
-    bats = {
-      pkg = pkgs.bats;
-      winget = null; # Windows 対応せず (NixOS/WSL のみ)
-      category = "dev";
-    };
-    imagemagick = {
-      pkg = pkgs.imagemagick;
-      winget = "ImageMagick.ImageMagick";
-      category = "dev";
-    };
-    ghostscript = {
-      pkg = pkgs.ghostscript;
-      winget = null; # winget カタログ未収録 — Windows は https://ghostscript.com から手動インストール
-      category = "dev";
-    };
-    poppler-utils = {
-      pkg = pkgs.poppler-utils;
-      winget = "oschwartz10612.Poppler";
-      category = "dev";
-    };
-    dprint = {
-      pkg = pkgs.dprint;
-      winget = "dprint.dprint";
-      category = "dev";
-    };
-    hadolint = {
-      pkg = pkgs.hadolint;
-      winget = "hadolint.hadolint";
-      category = "dev";
-    };
-    bun = {
-      pkg = pkgs.bun;
-      winget = "Oven-sh.Bun";
-      category = "dev";
-    };
-    zig = {
-      pkg = pkgs.zig;
-      winget = "zig.zig";
-      category = "dev";
-    };
+        # ── dev ───────────────────────────────────────────────
+        nodejs = {
+          pkg = pkgs.nodejs;
+          winget = "OpenJS.NodeJS.LTS";
+          category = "dev";
+        };
+        python3 = {
+          pkg = pkgs.python3;
+          winget = null;
+          category = "dev";
+        };
+        go = {
+          pkg = pkgs.go;
+          winget = "GoLang.Go";
+          category = "dev";
+        };
+        rustup = {
+          pkg = pkgs.rustup;
+          winget = "Rustlang.Rustup";
+          category = "dev";
+        };
+        gnumake = {
+          pkg = pkgs.gnumake;
+          winget = null;
+          category = "dev";
+        };
+        cmake = {
+          pkg = pkgs.cmake;
+          winget = null;
+          category = "dev";
+        };
+        ghq = {
+          pkg = pkgs.ghq;
+          winget = "x-motemen.ghq";
+          category = "dev";
+        };
+        gwq = {
+          pkg = pkgs.gwq;
+          winget = null;
+          category = "dev";
+        };
+        uv = {
+          pkg = pkgs.uv;
+          winget = "astral-sh.uv";
+          category = "dev";
+        };
+        pnpm = {
+          pkg = pkgs.pnpm;
+          winget = null;
+          category = "dev";
+        };
+        devcontainer = {
+          pkg = pkgs.devcontainer;
+          winget = null;
+          npm = "@devcontainers/cli";
+          category = "dev";
+        };
+        lazygit = {
+          pkg = pkgs.lazygit;
+          winget = "JesseDuffield.lazygit";
+          category = "dev";
+        };
+        bats = {
+          pkg = pkgs.bats;
+          winget = null; # Windows 対応せず (NixOS/WSL のみ)
+          category = "dev";
+        };
+        imagemagick = {
+          pkg = pkgs.imagemagick;
+          winget = "ImageMagick.ImageMagick";
+          category = "dev";
+        };
+        ghostscript = {
+          pkg = pkgs.ghostscript;
+          winget = null; # winget カタログ未収録 — Windows は https://ghostscript.com から手動インストール
+          category = "dev";
+        };
+        poppler-utils = {
+          pkg = pkgs.poppler-utils;
+          winget = "oschwartz10612.Poppler";
+          category = "dev";
+        };
+        dprint = {
+          pkg = pkgs.dprint;
+          winget = "dprint.dprint";
+          category = "dev";
+        };
+        hadolint = {
+          pkg = pkgs.hadolint;
+          winget = "hadolint.hadolint";
+          category = "dev";
+        };
+        bun = {
+          pkg = pkgs.bun;
+          winget = "Oven-sh.Bun";
+          category = "dev";
+        };
+        zig = {
+          pkg = pkgs.zig;
+          winget = "zig.zig";
+          category = "dev";
+        };
 
-    # ── terminal ──────────────────────────────────────────
-    wezterm = {
-      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.wezterm;
-      winget = "wez.wezterm.nightly";
-      category = "terminal";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "wezterm@nightly";
+        # ── terminal ──────────────────────────────────────────
+        wezterm = {
+          pkg = pkgs.wezterm;
+          winget = "wez.wezterm.nightly";
+          category = "terminal";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "wezterm";
+              identity = {
+                homepage = "https://wezterm.org/";
+                appName = "WezTerm.app";
+                bundleId = "com.github.wez.wezterm";
+                executable = "wezterm-gui";
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "nixpkgs";
+              identity = "wezterm";
+              nixAttr = "wezterm";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "wezterm@nightly";
+          };
         };
-        linux = {
-          provider = "nix";
+        hammerspoon = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "hammerspoon" (pkgs.callPackage ./hammerspoon { })
+            else
+              null;
+          winget = null;
+          category = "terminal";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = (darwinProviderCandidate "hammerspoon").source;
+              identity = {
+                homepage = "https://www.hammerspoon.org/";
+                appName = "Hammerspoon.app";
+                bundleId = "org.hammerspoon.Hammerspoon";
+                executable = "Hammerspoon";
+              };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "hammerspoon").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "hammerspoon").nixAttr;
+            };
+            linux = {
+              unsupported = "Hammerspoon is only available on macOS";
+            };
+            windows = {
+              unsupported = "Hammerspoon is only available on macOS";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "hammerspoon";
+          };
         };
-      };
-    };
-    hammerspoon = {
-      winget = null;
-      category = "terminal";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "hammerspoon";
+        autohotkey = {
+          winget = "AutoHotkey.AutoHotkey";
+          category = "terminal";
+          support = {
+            darwin = {
+              unsupported = "AutoHotkey is only available on Windows";
+            };
+            linux = {
+              unsupported = "AutoHotkey is only available on Windows";
+            };
+            windows = {
+              provider = "winget";
+              source = "winget";
+              identity = "AutoHotkey.AutoHotkey";
+            };
+          };
         };
-        linux = {
-          unsupported = "Hammerspoon is only available on macOS";
+        tmux = {
+          pkg = pkgs.tmux;
+          winget = null;
+          category = "terminal";
         };
-        windows = {
-          unsupported = "Hammerspoon is only available on macOS";
+        starship = {
+          pkg = pkgs.starship;
+          winget = "Starship.Starship";
+          category = "terminal";
         };
-      };
-    };
-    autohotkey = {
-      winget = "AutoHotkey.AutoHotkey";
-      category = "terminal";
-      support = {
-        darwin = {
-          unsupported = "AutoHotkey is only available on Windows";
-        };
-        linux = {
-          unsupported = "AutoHotkey is only available on Windows";
-        };
-        windows = {
-          provider = "winget";
-        };
-      };
-    };
-    tmux = {
-      pkg = pkgs.tmux;
-      winget = null;
-      category = "terminal";
-    };
-    starship = {
-      pkg = pkgs.starship;
-      winget = "Starship.Starship";
-      category = "terminal";
-    };
 
-    # ── editors ───────────────────────────────────────────
-    neovim = {
-      pkg = pkgs.neovim;
-      winget = "Neovim.Neovim";
-      category = "editors";
-    };
-    neovim-remote = {
-      pkg = pkgs.neovim-remote;
-      winget = null;
-      category = "editors";
-    };
-    obsidian = {
-      pkg = pkgs.obsidian;
-      winget = "Obsidian.Obsidian";
-      category = "editors";
-    };
-    vscode = {
-      # VS Code 1.129.1's macOS arm64 archive omits the bundled ripgrep
-      # binary, so use the separately packaged ripgrep instead.
-      pkg = (pkgs.vscode.override { useVSCodeRipgrep = false; }).overrideAttrs (
-        old:
-        if pkgs.stdenv.hostPlatform.isDarwin then
-          {
-            postPatch =
-              lib.replaceStrings
-                [
-                  "rm Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nln -s"
-                ]
-                [
-                  "rm -f Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64/rg\nmkdir -p Contents/Resources/app/node_modules/@vscode/ripgrep-universal/bin/darwin-arm64\nln -s"
-                ]
-                old.postPatch;
-          }
-        else
-          { }
-      );
-      winget = "Microsoft.VisualStudioCode";
-      category = "editors";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "visual-studio-code";
+        # ── editors ───────────────────────────────────────────
+        neovim = {
+          pkg = pkgs.neovim;
+          winget = "Neovim.Neovim";
+          category = "editors";
         };
-      };
-    };
+        neovim-remote = {
+          pkg = pkgs.neovim-remote;
+          winget = null;
+          category = "editors";
+        };
+        obsidian = {
+          pkg = pkgs.obsidian;
+          winget = "Obsidian.Obsidian";
+          category = "editors";
+        };
+        vscode = {
+          pkg = pkgs.vscode;
+          winget = "Microsoft.VisualStudioCode";
+          category = "editors";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "vscode";
+              identity = {
+                homepage = "https://code.visualstudio.com/";
+                appName = "Visual Studio Code.app";
+                bundleId = "com.microsoft.VSCode";
+                executable = "Code";
+              };
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "visual-studio-code";
+          };
+        };
 
-    # ── fonts ─────────────────────────────────────────────
-    udev-gothic-nf = {
-      pkg = pkgs.udev-gothic-nf;
-      winget = null;
-      category = "fonts";
-    };
+        # ── fonts ─────────────────────────────────────────────
+        udev-gothic-nf = {
+          pkg = pkgs.udev-gothic-nf;
+          winget = null;
+          category = "fonts";
+        };
 
-    # ── llm ───────────────────────────────────────────────
-    codex = {
-      pkg = pkgs.codex;
-      winget = "OpenAI.Codex";
-      category = "llm";
-    };
-    chatgpt = {
-      pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.callPackage ./chatgpt { } else null;
-      msstore = "9NT1R1C2HH7J";
-      category = "desktop";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "chatgpt";
+        # ── llm ───────────────────────────────────────────────
+        codex = {
+          pkg = pkgs.codex;
+          winget = "OpenAI.Codex";
+          category = "llm";
         };
-        linux = {
-          provider = "nix";
+        chatgpt = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };
+          msstore = "9NT1R1C2HH7J";
+          category = "desktop";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "chatgpt";
+              identity = {
+                homepage = "https://openai.com/chatgpt/desktop/";
+                appName = "ChatGPT.app";
+                bundleId = "com.openai.codex";
+                executable = "ChatGPT";
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "dotfiles";
+              identity = "chatgpt";
+              nixAttr = "chatgpt";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "chatgpt";
+          };
         };
-      };
-    };
-    ollama = {
-      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.ollama;
-      winget = "Ollama.Ollama";
-      category = "llm";
-      installFeature = "WithOllama";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "ollama-app";
+        ollama = {
+          pkg = pkgs.ollama;
+          winget = "Ollama.Ollama";
+          category = "llm";
+          installFeature = "WithOllama";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "ollama";
+              identity = {
+                homepage = "https://ollama.com/";
+                command = "ollama";
+                versionArgs = [ "--version" ];
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "nixpkgs";
+              identity = "ollama";
+              nixAttr = "ollama";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "ollama-app";
+          };
         };
-        linux = {
-          provider = "nix";
+        workmux = {
+          pkg = pkgs.workmux;
+          winget = null;
+          category = "llm";
         };
-      };
-    };
-    workmux = {
-      pkg = pkgs.workmux;
-      winget = null;
-      category = "llm";
-    };
 
-    # ── communication ─────────────────────────────────────
-    slack = {
-      pkg = pkgs.slack;
-      winget = "SlackTechnologies.Slack";
-      category = "communication";
-    };
+        # ── communication ─────────────────────────────────────
+        slack = {
+          pkg = pkgs.slack;
+          winget = "SlackTechnologies.Slack";
+          category = "communication";
+        };
 
-    # ── desktop applications ──────────────────────────────
-    discord = {
-      pkg = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.discord;
-      winget = "Discord.Discord";
-      category = "desktop";
-      installFeature = "WithHermes";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "discord";
+        # ── desktop applications ──────────────────────────────
+        discord = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
+          winget = "Discord.Discord";
+          category = "desktop";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "discord";
+              identity = {
+                homepage = "https://discord.com/";
+                appName = "Discord.app";
+                bundleId = "com.hnc.Discord";
+                executable = "Discord";
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "nixpkgs";
+              identity = "discord";
+              nixAttr = "discord";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "discord";
+          };
         };
-        linux = {
-          provider = "nix";
+        _1password-gui = {
+          pkg = pkgs._1password-gui;
+          winget = "AgileBits.1Password";
+          category = "desktop";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "_1password-gui";
+              identity = {
+                homepage = "https://1password.com/";
+                appName = "1Password.app";
+                bundleId = "com.1password.1password";
+                executable = "1Password";
+              };
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "1password";
+          };
         };
-      };
-    };
-    _1password-gui = {
-      pkg = pkgs._1password-gui;
-      winget = "AgileBits.1Password";
-      category = "desktop";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "1password";
+        arc-browser = {
+          winget = "TheBrowserCompany.Arc";
+          category = "desktop";
+          support = {
+            windows = {
+              provider = "winget";
+              source = "winget";
+              identity = "TheBrowserCompany.Arc";
+            };
+            darwin = {
+              unsupported = "Use Dia instead of Arc on macOS";
+            };
+            linux = {
+              unsupported = "Vendor does not publish a Linux build";
+            };
+          };
         };
-      };
-    };
-    arc-browser = {
-      winget = "TheBrowserCompany.Arc";
-      category = "desktop";
-      support = {
-        windows = {
-          provider = "winget";
+        dia-browser = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "dia-browser" (pkgs.callPackage ./dia-browser { })
+            else
+              null;
+          category = "desktop";
+          support = {
+            windows = {
+              unsupported = "Vendor currently ships Dia for macOS only";
+            };
+            darwin = {
+              provider = "nix";
+              source = (darwinProviderCandidate "dia-browser").source;
+              identity = {
+                homepage = "https://www.diabrowser.com/";
+                appName = "Dia.app";
+                bundleId = "company.thebrowser.dia";
+                executable = "Dia";
+              };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "dia-browser").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "dia-browser").nixAttr;
+            };
+            linux = {
+              unsupported = "Vendor currently ships Dia for macOS only";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "thebrowsercompany-dia";
+          };
         };
-        darwin = {
-          unsupported = "Use Dia instead of Arc on macOS";
+        google-chrome = {
+          pkg = pkgs.google-chrome;
+          winget = "Google.Chrome";
+          category = "desktop";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "google-chrome";
+              identity = {
+                homepage = "https://www.google.com/chrome/";
+                appName = "Google Chrome.app";
+                bundleId = "com.google.Chrome";
+                executable = "Google Chrome";
+              };
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "google-chrome";
+          };
         };
-        linux = {
-          unsupported = "Vendor does not publish a Linux build";
+        orca-editor = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "orca-editor" (pkgs.callPackage ./orca-editor { })
+            else
+              null;
+          winget = "StablyAI.Orca";
+          category = "desktop";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = (darwinProviderCandidate "orca-editor").source;
+              identity = {
+                homepage = "https://onorca.dev/";
+                appName = "Orca.app";
+                bundleId = "com.stablyai.orca";
+                executable = "Orca";
+              };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "orca-editor").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "orca-editor").nixAttr;
+            };
+            linux = {
+              unsupported = "No reviewed Linux desktop package provider is selected";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "stablyai/orca/orca";
+          };
         };
-      };
-    };
-    dia-browser = {
-      category = "desktop";
-      support = {
-        windows = {
-          unsupported = "Vendor currently ships Dia for macOS only";
+        raycast = {
+          pkg = pkgs.raycast;
+          category = "desktop";
+          support = {
+            windows = {
+              unsupported = "Managed only on macOS in this dotfiles profile";
+            };
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "raycast";
+              identity = {
+                homepage = "https://raycast.com/";
+                appName = "Raycast.app";
+                bundleId = "com.raycast.macos";
+                executable = "Raycast";
+              };
+            };
+            linux = {
+              unsupported = "Vendor does not publish a Linux build";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "raycast";
+          };
         };
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "thebrowsercompany-dia";
+        # ── system capabilities ───────────────────────────────
+        tart = {
+          pkg = pkgs.tart;
+          category = "system";
+          support = {
+            windows = {
+              unsupported = "Tart requires Apple Silicon macOS";
+            };
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "tart";
+              identity = {
+                homepage = "https://tart.run/";
+                command = "tart";
+                versionArgs = [ "--version" ];
+              };
+            };
+            linux = {
+              unsupported = "Tart requires Apple Silicon macOS";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-formula";
+            name = "openai/tools/tart";
+          };
         };
-        linux = {
-          unsupported = "Vendor currently ships Dia for macOS only";
+        docker-desktop = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
+            else
+              null;
+          winget = "Docker.DockerDesktop";
+          category = "system";
+          installFeature = "WithDocker";
+          support = {
+            windows = {
+              provider = "winget";
+              source = "winget";
+              identity = "Docker.DockerDesktop";
+            };
+            darwin = {
+              provider = "nix";
+              source = (darwinProviderCandidate "docker-desktop").source;
+              identity = {
+                homepage = "https://www.docker.com/products/docker-desktop/";
+                appName = "Docker.app";
+                bundleId = "com.docker.docker";
+                executable = "com.docker.backend";
+              };
+            }
+            // lib.optionalAttrs ((darwinProviderCandidate "docker-desktop").nixAttr != null) {
+              nixAttr = (darwinProviderCandidate "docker-desktop").nixAttr;
+            };
+            linux = {
+              provider = "system-manager";
+              source = "nixpkgs";
+              identity = "docker";
+              nixAttr = "docker";
+              systemModule = "docker";
+            };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "docker-desktop";
+          };
         };
-      };
-    };
-    google-chrome = {
-      pkg = pkgs.google-chrome;
-      winget = "Google.Chrome";
-      category = "desktop";
-      installFeature = "WithHermes";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "google-chrome";
-        };
-      };
-    };
-    orca-editor = {
-      winget = "StablyAI.Orca";
-      category = "desktop";
-      support = {
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "stablyai/orca/orca";
-        };
-        linux = {
-          unsupported = "No reviewed Linux desktop package provider is selected";
-        };
-      };
-    };
-    raycast = {
-      category = "desktop";
-      support = {
-        windows = {
-          unsupported = "Managed only on macOS in this dotfiles profile";
-        };
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "raycast";
-        };
-        linux = {
-          unsupported = "Vendor does not publish a Linux build";
-        };
-      };
-    };
-    # ── system capabilities ───────────────────────────────
-    tart = {
-      category = "system";
-      support = {
-        windows = {
-          unsupported = "Tart requires Apple Silicon macOS";
-        };
-        darwin = {
-          provider = "homebrew-formula";
-          formula = "openai/tools/tart";
-        };
-        linux = {
-          unsupported = "Tart requires Apple Silicon macOS";
-        };
-      };
-    };
-    docker-desktop = {
-      winget = "Docker.DockerDesktop";
-      category = "system";
-      installFeature = "WithDocker";
-      support = {
-        windows = {
-          provider = "winget";
-        };
-        darwin = {
-          provider = "homebrew-cask";
-          cask = "docker-desktop";
-        };
-        linux = {
-          provider = "system-manager";
-          systemModule = "docker";
-        };
-      };
-    };
 
-    # ── k8s ───────────────────────────────────────────────
-    kind = {
-      pkg = pkgs.kind;
-      winget = null;
-      category = "k8s";
-    };
-    kubectl = {
-      pkg = pkgs.kubectl;
-      winget = null;
-      category = "k8s";
-    };
-    kubernetes-helm = {
-      pkg = pkgs.kubernetes-helm;
-      winget = null;
-      category = "k8s";
-    };
-    k9s = {
-      pkg = pkgs.k9s;
-      winget = null;
-      category = "k8s";
-    };
-    kubectx = {
-      pkg = pkgs.kubectx;
-      winget = null;
-      category = "k8s";
-    };
-    kustomize = {
-      pkg = pkgs.kustomize;
-      winget = null;
-      category = "k8s";
-    };
-    stern = {
-      pkg = pkgs.stern;
-      winget = null;
-      category = "k8s";
-    };
-    argocd = {
-      pkg = pkgs.argocd;
-      winget = null;
-      category = "k8s";
-    };
-    cilium-cli = {
-      pkg = pkgs.cilium-cli;
-      winget = null;
-      category = "k8s";
-    };
-    kubeseal = {
-      pkg = pkgs.kubeseal;
-      winget = null;
-      category = "k8s";
-    };
-    sops = {
-      pkg = pkgs.sops;
-      winget = null;
-      category = "k8s";
-    };
-    trivy = {
-      pkg = pkgs.trivy;
-      winget = null;
-      category = "k8s";
-    };
-    dive = {
-      pkg = pkgs.dive;
-      winget = null;
-      category = "k8s";
-    };
+        # ── k8s ───────────────────────────────────────────────
+        kind = {
+          pkg = pkgs.kind;
+          winget = null;
+          category = "k8s";
+        };
+        kubectl = {
+          pkg = pkgs.kubectl;
+          winget = null;
+          category = "k8s";
+        };
+        kubernetes-helm = {
+          pkg = pkgs.kubernetes-helm;
+          winget = null;
+          category = "k8s";
+        };
+        k9s = {
+          pkg = pkgs.k9s;
+          winget = null;
+          category = "k8s";
+        };
+        kubectx = {
+          pkg = pkgs.kubectx;
+          winget = null;
+          category = "k8s";
+        };
+        kustomize = {
+          pkg = pkgs.kustomize;
+          winget = null;
+          category = "k8s";
+        };
+        stern = {
+          pkg = pkgs.stern;
+          winget = null;
+          category = "k8s";
+        };
+        argocd = {
+          pkg = pkgs.argocd;
+          winget = null;
+          category = "k8s";
+        };
+        cilium-cli = {
+          pkg = pkgs.cilium-cli;
+          winget = null;
+          category = "k8s";
+        };
+        kubeseal = {
+          pkg = pkgs.kubeseal;
+          winget = null;
+          category = "k8s";
+        };
+        sops = {
+          pkg = pkgs.sops;
+          winget = null;
+          category = "k8s";
+        };
+        trivy = {
+          pkg = pkgs.trivy;
+          winget = null;
+          category = "k8s";
+        };
+        dive = {
+          pkg = pkgs.dive;
+          winget = null;
+          category = "k8s";
+        };
 
-    # ── infra ─────────────────────────────────────────────
-    go-task = {
-      pkg = pkgs.go-task;
-      winget = "Task.Task";
-      category = "infra";
-    };
-    treefmt = {
-      pkg = pkgs.treefmt;
-      winget = null;
-      category = "infra";
-    };
-    pre-commit = {
-      pkg = pkgs.pre-commit;
-      winget = null;
-      category = "infra";
-    };
-    powershell = {
-      pkg = pkgs.powershell;
-      winget = "Microsoft.PowerShell";
-      category = "infra";
-    };
-    _1password-cli = {
-      pkg = pkgs._1password-cli;
-      winget = "AgileBits.1Password.CLI";
-      category = "infra";
-    };
-    opencode = {
-      pkg = pkgs.opencode;
-      winget = "SST.opencode";
-      category = "infra";
-    };
-    google-cloud-sdk = {
-      pkg = pkgs.google-cloud-sdk;
-      winget = "Google.CloudSDK";
-      category = "infra";
-    };
+        # ── infra ─────────────────────────────────────────────
+        go-task = {
+          pkg = pkgs.go-task;
+          winget = "Task.Task";
+          category = "infra";
+        };
+        treefmt = {
+          pkg = pkgs.treefmt;
+          winget = null;
+          category = "infra";
+        };
+        pre-commit = {
+          pkg = pkgs.pre-commit;
+          winget = null;
+          category = "infra";
+        };
+        powershell = {
+          pkg = pkgs.powershell;
+          winget = "Microsoft.PowerShell";
+          category = "infra";
+        };
+        _1password-cli = {
+          pkg = pkgs._1password-cli;
+          winget = "AgileBits.1Password.CLI";
+          category = "infra";
+        };
+        opencode = {
+          pkg = pkgs.opencode;
+          winget = "SST.opencode";
+          category = "infra";
+        };
+        google-cloud-sdk = {
+          pkg = pkgs.google-cloud-sdk;
+          winget = "Google.CloudSDK";
+          category = "infra";
+        };
 
-    # ── lsp ───────────────────────────────────────────────
-    nixd = {
-      pkg = pkgs.nixd;
-      winget = null;
-      category = "lsp";
-    };
-    ty = {
-      pkg = pkgs.ty;
-      winget = "astral-sh.ty";
-      category = "lsp";
-    };
-    ruff = {
-      pkg = pkgs.ruff;
-      winget = "astral-sh.ruff";
-      category = "lsp";
-    };
-    yaml-language-server = {
-      pkg = pkgs.yaml-language-server;
-      winget = null;
-      category = "lsp";
-    };
-    taplo = {
-      pkg = pkgs.taplo;
-      winget = "tamasfe.taplo";
-      category = "lsp";
-    };
-    bash-language-server = {
-      pkg = pkgs.bash-language-server;
-      winget = null;
-      category = "lsp";
-    };
-    lua-language-server = {
-      pkg = pkgs.lua-language-server;
-      winget = "LuaLS.lua-language-server";
-      category = "lsp";
-    };
-    stylua = {
-      pkg = pkgs.stylua;
-      winget = "JohnnyMorganz.StyLua";
-      category = "lsp";
-    };
-    marksman = {
-      pkg = pkgs.marksman;
-      winget = null;
-      category = "lsp";
-    };
-    gopls = {
-      pkg = pkgs.gopls;
-      winget = null;
-      category = "lsp";
-    };
-    rust-analyzer = {
-      pkg = lib.hiPrio pkgs.rust-analyzer;
-      winget = "Rustlang.rust-analyzer";
-      category = "lsp";
-    };
-    rustfmt = {
-      pkg = lib.hiPrio pkgs.rustfmt;
-      winget = null;
-      category = "lsp";
-    };
-    astro-language-server = {
-      pkg = pkgs.astro-language-server;
-      winget = null;
-      category = "lsp";
-    };
-    oxlint = {
-      pkg = pkgs.oxlint;
-      winget = "oxc-project.oxlint";
-      category = "lsp";
-    };
-    typescript-language-server = {
-      pkg = pkgs.typescript-language-server;
-      winget = null;
-      category = "lsp";
-    };
-  };
+        # ── lsp ───────────────────────────────────────────────
+        nixd = {
+          pkg = pkgs.nixd;
+          winget = null;
+          category = "lsp";
+        };
+        ty = {
+          pkg = pkgs.ty;
+          winget = "astral-sh.ty";
+          category = "lsp";
+        };
+        ruff = {
+          pkg = pkgs.ruff;
+          winget = "astral-sh.ruff";
+          category = "lsp";
+        };
+        yaml-language-server = {
+          pkg = pkgs.yaml-language-server;
+          winget = null;
+          category = "lsp";
+        };
+        taplo = {
+          pkg = pkgs.taplo;
+          winget = "tamasfe.taplo";
+          category = "lsp";
+        };
+        bash-language-server = {
+          pkg = pkgs.bash-language-server;
+          winget = null;
+          category = "lsp";
+        };
+        lua-language-server = {
+          pkg = pkgs.lua-language-server;
+          winget = "LuaLS.lua-language-server";
+          category = "lsp";
+        };
+        stylua = {
+          pkg = pkgs.stylua;
+          winget = "JohnnyMorganz.StyLua";
+          category = "lsp";
+        };
+        marksman = {
+          pkg = pkgs.marksman;
+          winget = null;
+          category = "lsp";
+        };
+        gopls = {
+          pkg = pkgs.gopls;
+          winget = null;
+          category = "lsp";
+        };
+        rust-analyzer = {
+          pkg = lib.hiPrio pkgs.rust-analyzer;
+          winget = "Rustlang.rust-analyzer";
+          category = "lsp";
+        };
+        rustfmt = {
+          pkg = lib.hiPrio pkgs.rustfmt;
+          winget = null;
+          category = "lsp";
+        };
+        astro-language-server = {
+          pkg = pkgs.astro-language-server;
+          winget = null;
+          category = "lsp";
+        };
+        oxlint = {
+          pkg = pkgs.oxlint;
+          winget = "oxc-project.oxlint";
+          category = "lsp";
+        };
+        typescript-language-server = {
+          pkg = pkgs.typescript-language-server;
+          winget = null;
+          category = "lsp";
+        };
+      };
 
   supports =
     package: system:
@@ -746,11 +960,23 @@ let
     {
       windows =
         if (entry.winget or null) != null then
-          { provider = "winget"; }
+          {
+            provider = "winget";
+            source = "winget";
+            identity = entry.winget;
+          }
         else if (entry.msstore or null) != null then
-          { provider = "msstore"; }
+          {
+            provider = "msstore";
+            source = "msstore";
+            identity = entry.msstore;
+          }
         else if (entry.npm or null) != null then
-          { provider = "npm"; }
+          {
+            provider = "npm";
+            source = "npm";
+            identity = entry.npm;
+          }
         else
           let
             reason = unsupported "windows";
@@ -758,7 +984,12 @@ let
           if reason == null then { } else { unsupported = reason; };
       darwin =
         if supports package "aarch64-darwin" || supports package "x86_64-darwin" then
-          { provider = "nix"; }
+          {
+            provider = "nix";
+            source = "nixpkgs";
+            identity = name;
+            nixAttr = name;
+          }
         else
           let
             reason = unsupported "darwin";
@@ -766,13 +997,31 @@ let
           if reason == null then { } else { unsupported = reason; };
       linux =
         if supports package "x86_64-linux" || supports package "aarch64-linux" then
-          { provider = "nix"; }
+          {
+            provider = "nix";
+            source = "nixpkgs";
+            identity = name;
+            nixAttr = name;
+          }
         else
           let
             reason = unsupported "linux";
           in
           if reason == null then { } else { unsupported = reason; };
     };
+
+  providerSource =
+    provider:
+    {
+      nix = "nixpkgs";
+      "homebrew-cask" = "homebrew";
+      "homebrew-formula" = "homebrew";
+      winget = "winget";
+      msstore = "msstore";
+      npm = "npm";
+      "system-manager" = "nixpkgs";
+    }
+    .${provider} or null;
 
   catalog = lib.mapAttrs (
     name: entry:
@@ -782,8 +1031,11 @@ let
     }
   ) rawCatalog;
 
-  mkWindowsOnlySupport = provider: reason: {
-    windows = { inherit provider; };
+  mkWindowsOnlySupport = provider: identity: reason: {
+    windows = {
+      inherit provider identity;
+      source = providerSource provider;
+    };
     darwin = {
       unsupported = reason;
     };
@@ -793,31 +1045,93 @@ let
   };
 
   windowsOnlySupport = {
-    "GitHub.Copilot" = mkWindowsOnlySupport "winget" "Windows application package";
-    "Microsoft.PowerToys" = mkWindowsOnlySupport "winget" "Windows system utility";
-    "Microsoft.VCRedist.2015+.x64" = mkWindowsOnlySupport "winget" "Windows runtime component";
+    "GitHub.Copilot" = mkWindowsOnlySupport "winget" "GitHub.Copilot" "Windows application package";
+    "Microsoft.PowerToys" =
+      mkWindowsOnlySupport "winget" "Microsoft.PowerToys"
+        "Windows system utility";
+    "Microsoft.VCRedist.2015+.x64" =
+      mkWindowsOnlySupport "winget" "Microsoft.VCRedist.2015+.x64"
+        "Windows runtime component";
     "Microsoft.VisualStudio.2022.BuildTools" =
-      mkWindowsOnlySupport "winget" "Windows compiler toolchain";
-    "Microsoft.WindowsTerminal" = mkWindowsOnlySupport "winget" "Windows shell host";
-    "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Windows subsystem component";
-    "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "Windows Store desktop application";
+      mkWindowsOnlySupport "winget" "Microsoft.VisualStudio.2022.BuildTools"
+        "Windows compiler toolchain";
+    "Microsoft.WindowsTerminal" =
+      mkWindowsOnlySupport "winget" "Microsoft.WindowsTerminal"
+        "Windows shell host";
+    "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Microsoft.WSL" "Windows subsystem component";
+    "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "9PLM9XGG6VKS" "Windows Store desktop application";
   };
 
   # Group package names by category
   grouped = lib.groupBy (name: catalog.${name}.category) (lib.attrNames catalog);
 
-  # Resolve attr names to derivations, filtering by platform availability
-  resolve =
-    names:
+  platformKey =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      "darwin"
+    else if pkgs.stdenv.hostPlatform.isLinux then
+      "linux"
+    else
+      "windows";
+
+  featureEnabled =
+    enabledFeatures: entry:
+    !(entry ? installFeature)
+    || entry.installFeature == null
+    || enabledFeatures == null
+    || builtins.elem entry.installFeature enabledFeatures;
+
+  isDarwinGuiNixPackage =
+    entry:
+    let
+      darwinSupport = entry.support.darwin or { };
+      identity = darwinSupport.identity or null;
+    in
+    (darwinSupport.provider or null) == "nix" && builtins.isAttrs identity && identity ? appName;
+
+  # Resolve catalog IDs to Nix derivations selected for the current platform.
+  resolveForInstallFeaturesWhere =
+    enabledFeatures: predicate: names:
     builtins.filter (p: p != null) (
       map (
-        n:
+        name:
         let
-          p = catalog.${n}.pkg or null;
+          entry = catalog.${name};
+          package = entry.pkg or null;
+          provider = entry.support.${platformKey}.provider or null;
         in
-        if p != null && supports p pkgs.stdenv.hostPlatform.system then p else null
+        if
+          provider == "nix"
+          && featureEnabled enabledFeatures entry
+          && predicate entry
+          && package != null
+          && supports package pkgs.stdenv.hostPlatform.system
+        then
+          package
+        else
+          null
       ) names
     );
+
+  resolveForInstallFeatures =
+    enabledFeatures: resolveForInstallFeaturesWhere enabledFeatures (_: true);
+
+  resolve = resolveForInstallFeatures null;
+
+  darwinSystemPackagesForInstallFeatures =
+    enabledFeatures:
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      resolveForInstallFeaturesWhere enabledFeatures isDarwinGuiNixPackage (lib.attrNames catalog)
+    else
+      [ ];
+
+  darwinHomePackagesForInstallFeatures =
+    enabledFeatures:
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      resolveForInstallFeaturesWhere enabledFeatures (entry: !isDarwinGuiNixPackage entry) (
+        lib.attrNames catalog
+      )
+    else
+      [ ];
 
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
@@ -827,48 +1141,217 @@ let
   msstoreMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.msstore or null) catalog);
   npmMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.npm or null) catalog);
 
-  supportReport = lib.mapAttrs (_: entry: entry.support) catalog // windowsOnlySupport;
-  darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
-    lib.filterAttrs (_: entry: entry.support.darwin ? cask) catalog
+  supportReport =
+    lib.mapAttrs (
+      _: entry:
+      entry.support
+      // {
+        installFeature = entry.installFeature or null;
+        legacyDarwin = entry.legacyDarwin or null;
+      }
+    ) catalog
+    // lib.mapAttrs (
+      _: support:
+      support
+      // {
+        installFeature = null;
+        legacyDarwin = null;
+      }
+    ) windowsOnlySupport;
+  darwinCasks = lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.darwin.provider or null) == "homebrew-cask"
+      && (entry.support.darwin.cask or null) != null
+    ) catalog
   );
   darwinCasksForInstallFeatures =
     enabledFeatures:
-    lib.mapAttrsToList (_: entry: entry.support.darwin.cask) (
+    lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
       lib.filterAttrs (
         _: entry:
-        entry.support.darwin ? cask
-        && (
-          !(entry ? installFeature)
-          || entry.installFeature == null
-          || builtins.elem entry.installFeature enabledFeatures
-        )
+        (entry.support.darwin.provider or null) == "homebrew-cask"
+        && (entry.support.darwin.cask or null) != null
+        && featureEnabled enabledFeatures entry
       ) catalog
     );
-  darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula) (
-    lib.filterAttrs (_: entry: entry.support.darwin ? formula) catalog
+  darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.darwin.provider or null) == "homebrew-formula"
+      && (entry.support.darwin.formula or null) != null
+    ) catalog
   );
-  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule) (
-    lib.filterAttrs (_: entry: entry.support.linux ? systemModule) catalog
+  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule or null) (
+    lib.filterAttrs (
+      _: entry:
+      (entry.support.linux.provider or null) == "system-manager"
+      && (entry.support.linux.systemModule or null) != null
+    ) catalog
   );
-  providerErrors = lib.concatMap (
-    name:
+  darwinPackage =
+    name: entry:
+    let
+      support = entry.support.darwin;
+      provider = support.provider;
+    in
+    if provider == "nix" then
+      entry.pkg
+    else
+      pkgs.writeText "darwin-${name}-provider.json" (
+        builtins.toJSON {
+          inherit provider;
+          source = support.source;
+          identity = support.identity;
+        }
+      );
+  darwinPackages = lib.mapAttrs darwinPackage (
+    lib.filterAttrs (
+      _: entry:
+      let
+        provider = entry.support.darwin.provider or null;
+      in
+      if provider == "nix" then
+        (entry.pkg or null) != null && supports entry.pkg pkgs.stdenv.hostPlatform.system
+      else
+        builtins.elem provider [
+          "homebrew-cask"
+          "homebrew-formula"
+        ]
+    ) catalog
+  );
+
+  hasValue = value: value != null && value != "";
+  providerAllowedFields =
+    provider:
+    if provider == null then
+      [ "unsupported" ]
+    else if provider == "nix" then
+      [
+        "provider"
+        "source"
+        "identity"
+        "nixAttr"
+        "appName"
+        "bundleId"
+        "executable"
+        "command"
+        "versionArgs"
+      ]
+    else if provider == "homebrew-cask" then
+      [
+        "provider"
+        "source"
+        "identity"
+        "cask"
+      ]
+    else if provider == "homebrew-formula" then
+      [
+        "provider"
+        "source"
+        "identity"
+        "formula"
+      ]
+    else if
+      builtins.elem provider [
+        "winget"
+        "msstore"
+        "npm"
+      ]
+    then
+      [
+        "provider"
+        "source"
+        "identity"
+      ]
+    else if provider == "system-manager" then
+      [
+        "provider"
+        "source"
+        "identity"
+        "nixAttr"
+        "systemModule"
+      ]
+    else
+      [
+        "provider"
+        "source"
+        "identity"
+      ];
+
+  providerErrorsFor =
+    name: support:
     lib.concatMap
       (
         platform:
         let
-          hasPlatform = builtins.hasAttr platform supportReport.${name};
-          platformData = if hasPlatform then supportReport.${name}.${platform} else { };
-          resolved =
-            (platformData ? provider) || ((platformData ? unsupported) && platformData.unsupported != "");
+          platformData = support.${platform} or { };
+          provider = platformData.provider or null;
+          unsupported = platformData.unsupported or null;
+          entry = catalog.${name} or { };
+          package = entry.pkg or null;
+          prefix = "${name}: ${platform}: ";
+          activePlatform = platform == platformKey;
+          extraFields = builtins.filter (field: !(builtins.elem field (providerAllowedFields provider))) (
+            builtins.attrNames platformData
+          );
+          providerSpecificErrors =
+            lib.optional (
+              provider == "homebrew-cask" && !hasValue (platformData.cask or null)
+            ) "${prefix}homebrew-cask provider requires cask"
+            ++ lib.optional (
+              provider == "homebrew-formula" && !hasValue (platformData.formula or null)
+            ) "${prefix}homebrew-formula provider requires formula"
+            ++ lib.optional (
+              provider == "system-manager" && !hasValue (platformData.systemModule or null)
+            ) "${prefix}system-manager provider requires systemModule";
         in
-        lib.optional (!resolved) "${name}: missing ${platform} provider or reviewed unsupported reason"
+        lib.optional (
+          provider == null && (unsupported == null || unsupported == "")
+        ) "${prefix}missing provider or reviewed unsupported reason"
+        ++ lib.optional (
+          provider != null && unsupported != null
+        ) "${prefix}provider and unsupported cannot coexist"
+        ++ lib.optional (
+          provider != null && !hasValue (platformData.source or null)
+        ) "${prefix}provider requires source"
+        ++ lib.optional (
+          provider != null && !hasValue (platformData.identity or null)
+        ) "${prefix}provider requires identity"
+        ++ lib.optional (
+          (platformData.source or null) == "nixpkgs" && !hasValue (platformData.nixAttr or null)
+        ) "${prefix}source = nixpkgs requires nixAttr"
+        ++ lib.optional (
+          provider == "nix" && activePlatform && (package == null || !lib.isDerivation package)
+        ) "${prefix}nix provider requires a derivation"
+        ++ lib.optional (
+          provider == "nix"
+          && activePlatform
+          && package != null
+          && lib.isDerivation package
+          && !supports package pkgs.stdenv.hostPlatform.system
+        ) "${prefix}nix provider derivation does not support ${platform}"
+        ++ map (
+          field:
+          if provider == null then
+            "${prefix}providerless metadata cannot include ${field}"
+          else
+            "${prefix}${provider} provider cannot include ${field}"
+        ) extraFields
+        ++ lib.optional (
+          provider == "nix" && ((platformData.cask or null) != null || (platformData.formula or null) != null)
+        ) "${prefix}catalog ID appears in both Nix and Homebrew resolution"
+        ++ providerSpecificErrors
       )
       [
         "windows"
         "darwin"
         "linux"
-      ]
-  ) (lib.attrNames supportReport);
+      ];
+
+  providerErrors = lib.concatMap (name: providerErrorsFor name supportReport.${name}) (
+    lib.attrNames supportReport
+  );
 
 in
 # Category-resolved package lists (auto-derived from catalog)
@@ -885,9 +1368,16 @@ lib.mapAttrs (_: resolve) grouped
 
   # All packages (flat list)
   all = resolve (lib.attrNames catalog);
+  allForInstallFeatures =
+    enabledFeatures: resolveForInstallFeatures enabledFeatures (lib.attrNames catalog);
   allWithout =
     excludedNames:
     resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
+  allWithoutForInstallFeatures =
+    enabledFeatures: excludedNames:
+    resolveForInstallFeatures enabledFeatures (
+      builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
+    );
 
   # Windows: nix attr name → winget PackageIdentifier
   inherit
@@ -898,10 +1388,16 @@ lib.mapAttrs (_: resolve) grouped
     ;
 
   inherit
+    resolveForInstallFeatures
     supportReport
+    darwinDiscordPackage
+    darwinSystemPackagesForInstallFeatures
+    darwinHomePackagesForInstallFeatures
     darwinCasks
     darwinCasksForInstallFeatures
     darwinBrews
+    darwinPackages
+    selectDarwinPackage
     linuxSystemModules
     providerErrors
     windowsOnlySupport

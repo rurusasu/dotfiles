@@ -87,7 +87,7 @@ case " $* " in
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-agent/compose.yml"
+    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
     ;;
 esac
 '
@@ -193,12 +193,12 @@ assert_log_order() {
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml stop hermes" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
 		"verify-environment --runtime"
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]

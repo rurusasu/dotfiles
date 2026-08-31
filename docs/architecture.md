@@ -111,9 +111,8 @@ traces.
 
 Hindsight remains an independent local-only memory provider. Its API and UI
 are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
-its embedded PostgreSQL is not published. Hermes and Hindsight continue to
-use the `dotfiles-memory` bridge network; `local-ai-services` is additive and
-does not replace it. Public Hermes startup prepares the memory network and
+its embedded PostgreSQL is not published. Hermes and Hindsight use the shared
+`local-ai-services` bridge network. Public Hermes startup prepares the memory network and
 service first, but the Compose lifecycles remain independent. If Hindsight is
 unavailable, memory recall/retain may be unavailable while the Hermes gateway
 continues running.

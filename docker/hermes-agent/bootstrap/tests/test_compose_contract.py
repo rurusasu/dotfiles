@@ -12,8 +12,8 @@ import yaml
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-agent/compose.yml"
-HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/hindsight/compose.yml"
+COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-service/compose.yml"
+HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/local-ai-services/compose.yml"
 HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hindsight/hindsight.env"
 HINDSIGHT_SHELL_SCRIPT = REPOSITORY_ROOT / "scripts/sh/hindsight.sh"
 HINDSIGHT_POWERSHELL_SCRIPT = REPOSITORY_ROOT / "scripts/powershell/hindsight.ps1"
@@ -127,10 +127,10 @@ class ComposeContractTests(unittest.TestCase):
 
         self.assertEqual(hindsight["image"], HINDSIGHT_IMAGE)
         self.assertNotIn("platform", hindsight)
-        self.assertEqual(hindsight["container_name"], "hindsight")
+        self.assertEqual(hindsight["container_name"], "local-ai-services-hindsight")
         self.assertEqual(hindsight["restart"], "unless-stopped")
         self.assertEqual(
-            hindsight["env_file"], [{"path": "./hindsight.env", "required": True}],
+            hindsight["env_file"], [{"path": "../hindsight/hindsight.env", "required": True}],
         )
         self.assertNotIn("extra_hosts", hindsight)
         self.assertEqual(
@@ -145,7 +145,16 @@ class ComposeContractTests(unittest.TestCase):
             hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
         )
         self.assertEqual(hindsight["shm_size"], "1g")
-        self.assertEqual(hindsight["networks"], ["memory", "local-ai-services"])
+        self.assertEqual(
+            hindsight["networks"],
+            {"local-ai-services": {"aliases": ["hindsight"]}},
+        )
+
+        mlflow = self.hindsight_services.get("mlflow")
+        self.assertIsNotNone(mlflow)
+        assert mlflow is not None
+        self.assertEqual(mlflow["container_name"], "local-ai-services-mlflow")
+        self.assertEqual(mlflow["networks"], ["local-ai-services"])
 
     def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
         hindsight = self.hindsight_services.get("hindsight")
@@ -164,23 +173,17 @@ class ComposeContractTests(unittest.TestCase):
         )
 
     def test_hermes_can_reach_memory_without_waiting_for_its_runtime(self) -> None:
-        self.assertEqual(self.hermes["networks"], ["hermes-browser", "hermes-memory"])
+        self.assertEqual(self.hermes["networks"], ["hermes-browser", "local-ai-services"])
         self.assertEqual(
             self.hermes["extra_hosts"], ["host.docker.internal:host-gateway"]
         )
         self.assertNotIn("hindsight", self.hermes["depends_on"])
         self.assertEqual(
-            self.compose["networks"]["hermes-memory"],
-            {"name": "dotfiles-memory", "external": True},
-        )
-        self.assertEqual(
-            self.hindsight_compose["networks"]["memory"],
-            {"name": "dotfiles-memory", "driver": "bridge"},
-        )
-        self.assertEqual(
             self.hindsight_compose["networks"]["local-ai-services"],
             {"name": "local-ai-services", "external": True},
         )
+        self.assertNotIn("dotfiles-memory", str(self.compose))
+        self.assertNotIn("dotfiles-memory", str(self.hindsight_compose))
 
     def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
         environment = {}

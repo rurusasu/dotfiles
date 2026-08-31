@@ -88,7 +88,10 @@
           inherit pkgs lib;
         };
         package-support-report = packageSupportReport;
-      };
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin (
+        lib.mapAttrs' (name: package: lib.nameValuePair "darwin-${name}" package) unfreeSets.darwinPackages
+      );
 
       checks = {
         package-provider-coverage = packageSupportReport;

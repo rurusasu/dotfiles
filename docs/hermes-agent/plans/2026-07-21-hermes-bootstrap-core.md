@@ -423,7 +423,7 @@ hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-boot
 **Files:**
 
 - Modify: `docker/hermes-agent/Dockerfile`
-- Modify: `docker/hermes-agent/compose.yml`
+- Modify: `docker/hermes-service/compose.yml`
 - Create: `docker/hermes-agent/bootstrap/tests/test_compose_contract.py`
 
 - [ ] Refactor the Dockerfile into `hermes-bootstrap-runtime`, `hermes-bootstrap-test`, and final stages without changing the final image tag. Copy the package to `/usr/local/lib/hermes-bootstrap`, the manifest to `/usr/local/share/hermes-bootstrap/`, and the launcher to `/usr/local/bin/hermes-bootstrap`.
@@ -442,8 +442,8 @@ hermes-bootstrap sync-repository lifelog --manifest /usr/local/share/hermes-boot
 
 ```bash
 docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
-docker compose -f docker/hermes-agent/compose.yml config --quiet
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan
+docker compose -f docker/hermes-service/compose.yml config --quiet
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan
 ```
 
 Expected: image tests pass, Compose is valid, and `secret-plan` prints item metadata without values.
@@ -487,7 +487,7 @@ hermes:bootstrap:test:
 
 hermes:bootstrap:config:
   cmds:
-    - docker compose -f docker/hermes-agent/compose.yml config --quiet
+    - docker compose -f docker/hermes-service/compose.yml config --quiet
 ```
 
 - [ ] Remove or replace `hermes:profile:init`, because named profile homes are no longer Git repositories. Keep profile gateway lifecycle tasks.

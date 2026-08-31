@@ -7,7 +7,7 @@ Apple Silicon Mac の新規環境で、リポジトリを clone した後に `./
 chezmoi、Hermes Docker Compose stack までセットアップする。
 
 Windows と Linux では既存の Docker Compose 構成を維持し、macOS でも同じ
-`docker/hermes-agent/compose.yml` を利用して実行環境の互換性を優先する。
+`docker/hermes-service/compose.yml` を利用して実行環境の互換性を優先する。
 
 ## Supported environment
 
@@ -44,7 +44,7 @@ macOS セットアップ全体を順序制御する。各フェーズは独立�
 - 未導入の場合は `xcode-select --install` を起動し、完了後の再実行を案内して
   終了する。GUI インストール完了を無期限に待たない。
 - リポジトリルート、`flake.nix`、`chezmoi/`、
-  `docker/hermes-agent/compose.yml` の存在を確認する。
+  `docker/hermes-service/compose.yml` の存在を確認する。
 
 ### 2. Homebrew
 
@@ -112,14 +112,14 @@ Docker Desktop の利用条件は実行前に README とスクリプト出力で
 
 ### 8. Docker Compose build and startup
 
-- `docker compose -f docker/hermes-agent/compose.yml config` を最初に実行する。
+- `docker compose -f docker/hermes-service/compose.yml config` を最初に実行する。
 - Chromium service に `platform: linux/amd64` を明示し、Apple Silicon 上でも
   Google Chrome amd64 image を Rosetta 経由で再現可能にする。
 - 次の順で実行する。
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml build --pull
-docker compose -f docker/hermes-agent/compose.yml up -d --force-recreate --wait
+docker compose -f docker/hermes-service/compose.yml build --pull
+docker compose -f docker/hermes-service/compose.yml up -d --force-recreate --wait
 ```
 
 - Compose project 名、service 名、network、volume、healthcheck、port mapping は
@@ -160,7 +160,7 @@ docker compose -f docker/hermes-agent/compose.yml up -d --force-recreate --wait
 
 - `bash -n install.sh scripts/sh/install-macos.sh`
 - `bats tests/bash`
-- `docker compose -f docker/hermes-agent/compose.yml config`
+- `docker compose -f docker/hermes-service/compose.yml config`
 - `nix flake check --no-build`
 - `git diff --check`
 

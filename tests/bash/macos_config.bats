@@ -39,7 +39,129 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Docker profile includes Ollama and Docker but not Hermes desktop casks" {
+@test "Darwin default profile excludes optional Nix packages" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in {
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		all(.system[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
+		and all(.home[]; test("^(ollama|docker-desktop|google-chrome|discord)(-|$)") | not)
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin installs Nix GUI apps system-wide and command-only packages through Home Manager" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in {
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.system[]; test("^vscode(-|$)"))
+		and any(.system[]; test("^raycast(-|$)"))
+		and all(.home[]; test("^vscode(-|$)") | not)
+		and all(.home[]; test("^raycast(-|$)") | not)
+		and any(.home[]; test("^git(-|$)"))
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin default and Hermes profiles route Raycast system-wide without a cask" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	for profile in default hermes; do
+		case "$profile" in
+		default) profile_env=() ;;
+		hermes) profile_env=(DOTFILES_WITH_HERMES=1) ;;
+		esac
+		run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex "${profile_env[@]}" \
+			nix eval --impure --json --expr "
+				let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+				in {
+					casks = config.homebrew.casks;
+					system = builtins.map (package: package.name) config.environment.systemPackages;
+					home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+				}
+			"
+		[ "$status" -eq 0 ]
+		run jq -e '
+			all(.casks[]; .name != "raycast") and
+			any(.system[]; test("^raycast(-|$)")) and
+			all(.home[]; test("^raycast(-|$)") | not)
+		' <<<"$output"
+		[ "$status" -eq 0 ]
+	done
+}
+
+@test "Darwin flake exposes the Nix-managed Visual Studio Code application and legacy migration metadata" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.map (package: package.name) config.environment.systemPackages
+		"
+	[ "$status" -eq 0 ]
+	run jq -e 'any(.[]; test("^vscode(-|$)"))' <<<"$output"
+	[ "$status" -eq 0 ]
+
+	if [[ $(uname -s) == Darwin ]]; then
+		run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
+		[ "$status" -eq 0 ]
+		[ -f "$output/support.json" ]
+		support_report_json="$(<"$output/support.json")"
+	else
+		run --separate-stderr nix eval --impure --json --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+				pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+				sets = import $REPO_ROOT/nix/packages/sets.nix { inherit pkgs; lib = pkgs.lib; };
+			in { vscode = sets.supportReport.vscode; }
+		"
+		[ "$status" -eq 0 ]
+		support_report_json="$output"
+	fi
+	run jq -e '
+		.vscode.darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://code.visualstudio.com/",
+				"appName": "Visual Studio Code.app",
+				"bundleId": "com.microsoft.VSCode",
+				"executable": "Code"
+			},
+			"nixAttr": "vscode"
+		}
+		and .vscode.legacyDarwin == {
+			"provider": "homebrew-cask",
+			"name": "visual-studio-code"
+		}
+	' <<<"$support_report_json"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Docker profile keeps Ollama and Docker out of Homebrew casks" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_DOCKER=1 \
@@ -49,29 +171,113 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
-	run jq -e '
-		any(.[]; .name == "ollama-app") and
-		any(.[]; .name == "docker-desktop") and
-		all(.[]; .name != "google-chrome" and .name != "discord")
-	' <<<"$output"
+	run jq -e 'all(.[]; .name != "ollama-app" and .name != "docker-desktop" and .name != "google-chrome" and .name != "discord")' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Hermes profile includes its complete optional cask set" {
+@test "Darwin Ollama profile uses a nix-darwin launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_OLLAMA=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.launchd.user.agents.com-dotfiles-ollama.serviceConfig
+		"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.ProgramArguments[-1] == "serve"
+		and .RunAtLoad == true
+		and .KeepAlive == true
+		and .EnvironmentVariables.HOME == "/Users/codex"
+		and (.StandardOutPath | endswith("/Library/Logs/Ollama/ollama.log"))
+		and (.StandardErrorPath | endswith("/Library/Logs/Ollama/ollama.error.log"))
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.hasAttr \"com-dotfiles-ollama\" config.launchd.user.agents
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "false" ]
+}
+
+@test "Darwin Hermes profile installs Google Chrome and Discord through system Nix packages instead of casks" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
 		nix eval --impure --json --expr "
 			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
-			in config.homebrew.casks
+			in {
+				casks = config.homebrew.casks;
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+			}
 		"
 
 	[ "$status" -eq 0 ]
 	run jq -e '
-		any(.[]; .name == "ollama-app") and
-		any(.[]; .name == "docker-desktop") and
-		any(.[]; .name == "google-chrome") and
-		any(.[]; .name == "discord")
+		all(.casks[]; .name != "ollama-app" and .name != "docker-desktop") and
+		all(.casks[]; .name != "google-chrome" and .name != "discord") and
+		any(.system[]; test("^google-chrome(-|$)")) and
+		any(.system[]; test("^discord(-|$)")) and
+		any(.home[]; test("^ollama(-|$)")) and
+		all(.home[]; test("^(google-chrome|discord)(-|$)") | not)
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin leaves Discord module staging to the Hermes LaunchAgent" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.script.text
+		"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *'disable-breaking-updates.py'* ]]
+	[[ "$output" != *'discord-stage-modules'* ]]
+	[[ "$output" != *'/share/discord/modules'* ]]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --raw --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.system.activationScripts.script.text
+		"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'launchctl asuser'* ]]
+	[[ "$output" == *'sudo --user=codex --set-home'* ]]
+	[[ "$output" == *'disable-breaking-updates.py'* ]]
+	[[ "$output" != *'discord-stage-modules'* ]]
+	[[ "$output" != *'/share/discord/modules'* ]]
+}
+
+@test "Darwin Hermes profile creates a user LaunchAgent to restage missing Discord modules" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.hasAttr \"discord-module-staging\" config.launchd.user.agents
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "false" ]
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.launchd.user.agents.discord-module-staging.serviceConfig
+		"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.RunAtLoad == true and
+		.KeepAlive.PathState["/Users/codex/Library/Application Support/discord/0.0.408/modules/installed.json"] == false and
+		(.ProgramArguments | length == 2) and
+		(.ProgramArguments[0] | test("^/nix/store/.+-discord-stage-modules$")) and
+		(.ProgramArguments[1] | test("^/nix/store/.+-discord-0\\.0\\.408/share/discord/modules$"))
 	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
@@ -114,7 +320,7 @@ setup() {
 	[[ "$output" != *'--no-upgrade'* ]]
 }
 
-@test "Darwin generates WezTerm nightly in the Homebrew Bundle" {
+@test "Darwin omits the migrated WezTerm nightly cask from the Homebrew Bundle" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
@@ -124,7 +330,7 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'cask "wezterm@nightly", greedy: true'* ]]
+	[[ "$output" != *'cask "wezterm@nightly", greedy: true'* ]]
 }
 
 @test "Darwin frees Command Space by disabling macOS launcher hotkeys" {
@@ -173,7 +379,20 @@ setup() {
 	[ "$output" = "86400" ]
 }
 
-@test "Darwin Ollama profile uses Homebrew's renamed Ollama cask" {
+@test "Darwin enables the 1Password desktop CLI integration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+			in flake.darwinConfigurations.macos.config.home-manager.users.codex.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "true" ]
+}
+
+@test "Darwin Ollama profile uses the Nix package and launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_OLLAMA=1 \
@@ -183,7 +402,7 @@ setup() {
 			in config.homebrew.casks
 	"
 	[ "$status" -eq 0 ]
-	run jq -e 'any(.[]; .name == "ollama-app") and all(.[]; .name != "ollama")' <<<"$output"
+	run jq -e 'all(.[]; .name != "ollama-app" and .name != "ollama")' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
@@ -231,13 +450,12 @@ setup() {
 	[[ "$output" == *'sudo --user=codex --set-home'* ]]
 }
 
-@test "Home Manager exposes Apple Silicon package manager and Docker paths" {
+@test "Home Manager exposes the Apple Silicon package manager path" {
 	run awk '
 		/sessionPath = \[/ { in_darwin=1 }
 		in_darwin && /"\/opt\/homebrew\/bin"/ { bin=1 }
 		in_darwin && /"\/opt\/homebrew\/sbin"/ { sbin=1 }
-		in_darwin && /"\/Applications\/Docker\.app\/Contents\/Resources\/bin"/ { docker=1 }
-		in_darwin && /\];/ { exit(bin && sbin && docker ? 0 : 1) }
+		in_darwin && /\];/ { exit(bin && sbin ? 0 : 1) }
 		END { if (!in_darwin) exit 1 }
 	' "$REPO_ROOT/nix/home/common.nix"
 	[ "$status" -eq 0 ]
@@ -277,7 +495,7 @@ setup() {
 		in_chromium && /^  [A-Za-z0-9_-]+:/ { exit }
 		in_chromium && /platform:/ { found=1 }
 		END { exit(found ? 1 : 0) }
-	' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+	' "$REPO_ROOT/docker/hermes-service/compose.yml"
 	[ "$status" -eq 0 ]
 	run grep -F 'ARG TARGETARCH' "$REPO_ROOT/docker/hermes-browser/Dockerfile"
 	[ "$status" -eq 0 ]
