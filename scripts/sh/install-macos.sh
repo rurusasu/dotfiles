@@ -51,7 +51,8 @@ Usage: ./install.sh [--with-ollama | --with-docker | --with-hermes]
 
   --with-ollama  Install and update Ollama.
   --with-docker  Include Ollama, Docker Desktop, and independent Hindsight.
-  --with-hermes  Include the Docker profile, Hermes, Chrome, and Discord.
+  --with-hermes  Include native Hermes Desktop, the Docker Agent/Dashboard,
+                  Chrome, and Discord (Dashboard: http://127.0.0.1:9119).
 EOF
 }
 

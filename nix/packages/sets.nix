@@ -35,6 +35,7 @@
   pkgs,
   lib,
   catalogOverride ? null,
+  hermesDesktopPackage ? null,
 }:
 let
   darwinProviderCandidates = import ./darwin-provider-candidates.nix;
@@ -713,6 +714,28 @@ let
           legacyDarwin = {
             provider = "homebrew-cask";
             name = "docker-desktop";
+          };
+        };
+        hermes-desktop = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then hermesDesktopPackage else null;
+          winget = null;
+          category = "terminal";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "hermes-agent";
+              identity = {
+                command = "hermes-desktop";
+                versionArgs = [ "--version" ];
+              };
+            };
+            linux = {
+              unsupported = "Hermes Desktop is provisioned by the native macOS profile";
+            };
+            windows = {
+              unsupported = "Hermes Desktop is provisioned by the native macOS profile";
+            };
           };
         };
 

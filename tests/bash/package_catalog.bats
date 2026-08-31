@@ -89,6 +89,21 @@ nix_fixture_darwin_package_split() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
+@test "Hermes Desktop uses the official Nix output only with the Hermes profile" {
+	run awk '
+		/^[[:space:]]*hermes-desktop = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^        };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'hermesDesktopPackage'* ]]
+	[[ "$output" == *'installFeature = "WithHermes";'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "hermes-agent";'* ]]
+	[[ "$output" == *'command = "hermes-desktop";'* ]]
+	[[ "$output" != *'appName = '* ]]
+}
+
 @test "catalog rejects incomplete metadata and invalid active Nix packages" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
