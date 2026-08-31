@@ -116,11 +116,13 @@ setup() {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
-	if [[ $(uname -s) == Darwin ]]; then
-		run nix build --no-link .#packages.aarch64-darwin.darwin-vscode
-	else
-		run nix eval --raw .#packages.aarch64-darwin.darwin-vscode.drvPath
-	fi
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.map (package: package.name) config.environment.systemPackages
+		"
+	[ "$status" -eq 0 ]
+	run jq -e 'any(.[]; test("^vscode(-|$)"))' <<<"$output"
 	[ "$status" -eq 0 ]
 
 	run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
