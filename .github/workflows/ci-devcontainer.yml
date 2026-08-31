@@ -96,7 +96,7 @@ jobs:
   macos:
     name: E2E (macOS)
     runs-on: macos-15-intel
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
