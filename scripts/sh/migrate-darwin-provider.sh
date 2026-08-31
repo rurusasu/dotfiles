@@ -99,7 +99,7 @@ legacy_package_is_installed() {
 
 migrate_id() {
   local package_id="$1" legacy_json legacy_provider legacy_name install_feature store_path
-  [[ $package_id =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || die "invalid catalog ID: $package_id"
+  [[ $package_id =~ ^[A-Za-z_][A-Za-z0-9._+-]*$ ]] || die "invalid catalog ID: $package_id"
 
   "$JQ_COMMAND" -e --arg id "$package_id" '.[$id] != null' "$support_json" >/dev/null ||
     die "catalog ID is missing from support report: $package_id"

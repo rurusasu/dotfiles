@@ -52,6 +52,19 @@ setup() {
     "installFeature": null,
     "legacyDarwin": null
   },
+  "_1password-cli": {
+    "darwin": {
+      "provider": "nix",
+      "source": "nixpkgs",
+      "nixAttr": "_1password-cli",
+      "identity": {
+        "command": "op",
+        "versionArgs": ["--version"]
+      }
+    },
+    "installFeature": null,
+    "legacyDarwin": null
+  },
   "traversal-app-name": {
     "darwin": {
       "provider": "nix",
@@ -269,6 +282,13 @@ assert_log_order() {
 	[ "$status" -eq 0 ]
 	grep -Fqx "test-command <version> <--json>" "$COMMAND_LOG"
 	! grep -q '^plistbuddy ' "$COMMAND_LOG"
+}
+
+@test "catalog IDs may start with an underscore" {
+	run "$BASH_32" "$MIGRATOR" --id _1password-cli
+
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"invalid catalog ID"* ]]
 }
 
 @test "flat-only verification metadata is rejected instead of bypassing nested identity" {
