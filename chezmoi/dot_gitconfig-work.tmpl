@@ -1,6 +1,5 @@
-# Loaded by ~/.gitconfig via:
-#   - [includeIf "hasconfig:remote.*.url:git@github-work:**"] (SSH work repos)
-#   - [includeIf "gitdir/i:D:/my_programing/"] (Windows work repos by directory)
+# Loaded by ~/.gitconfig via [includeIf "gitdir/i:D:/my_programing/"]
+# for Windows work repositories.
 # Overrides [user.*] and [credential.*] fields for work repos.
 #
 # Identity source: chezmoi/.chezmoidata/personal.yaml (git.work).
@@ -9,7 +8,6 @@
 [user]
   name = {{ get $work "name" | default "Work User" | quote }}
   email = {{ get $work "email" | default "work@example.com" | quote }}
-  signingkey = {{ get $work "signingkey" | default "~/.ssh/github_work.pub" | quote }}
 
 {{- if eq .chezmoi.os "windows" }}
 [credential "https://github.com"]
