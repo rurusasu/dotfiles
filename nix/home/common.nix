@@ -64,6 +64,8 @@ in
       # Homebrew's default is already 24 hours; keep that interval explicit
       # for interactive shells and tools launched from the Home Manager session.
       HOMEBREW_AUTO_UPDATE_SECS = "86400";
+      # Let native op use the unlocked 1Password desktop app integration.
+      OP_BIOMETRIC_UNLOCK_ENABLED = "true";
     };
 
     # PATH: bun and pnpm global binaries

@@ -368,6 +368,19 @@ setup() {
 	[ "$output" = "86400" ]
 }
 
+@test "Darwin enables the 1Password desktop CLI integration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --raw --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+			in flake.darwinConfigurations.macos.config.home-manager.users.codex.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED
+		"
+	[ "$status" -eq 0 ]
+	[ "$output" = "true" ]
+}
+
 @test "Darwin Ollama profile uses the Nix package and launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

@@ -1083,6 +1083,11 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	! grep -q 'desktop.docker.com/mac' "$INSTALLER"
 }
 
+@test "macOS installer enables 1Password desktop CLI integration" {
+	grep -q 'OP_BIOMETRIC_UNLOCK_ENABLED' "$INSTALLER"
+	grep -q 'export OP_BIOMETRIC_UNLOCK_ENABLED' "$INSTALLER"
+}
+
 @test "Docker runtime uses the Nix app and requires explicit license acceptance" {
 	grep -q '/Applications/Nix Apps/Docker.app' "$INSTALLER"
 	grep -q 'DOTFILES_ACCEPT_DOCKER_LICENSE' "$INSTALLER"
@@ -1144,4 +1149,6 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]
 	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 3 ]
+	grep -Fq 'docker desktop start' "$COMMAND_LOG"
+	! grep -Fq 'docker desktop start --timeout' "$COMMAND_LOG"
 }

@@ -34,6 +34,10 @@ stdenvNoCC.mkDerivation {
       ln -s "$out/Applications/Docker.app/Contents/Resources/cli-plugins/docker-compose" \
         "$out/libexec/docker/cli-plugins/docker-compose"
     fi
+    if [ -e "$out/Applications/Docker.app/Contents/Resources/cli-plugins/docker-desktop" ]; then
+      ln -s "$out/Applications/Docker.app/Contents/Resources/cli-plugins/docker-desktop" \
+        "$out/libexec/docker/cli-plugins/docker-desktop"
+    fi
   '';
 
   meta = {

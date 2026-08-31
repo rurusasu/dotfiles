@@ -706,6 +706,10 @@ EOF
 	done
 }
 
+@test "Nix Docker Desktop exposes its bundled CLI plugin" {
+	grep -q 'cli-plugins/docker-desktop' "$REPO_ROOT/nix/packages/docker-desktop/default.nix"
+}
+
 @test "ChatGPT uses the nixpkgs Darwin application with legacy cask migration metadata" {
 	run awk '
 		/^[[:space:]]*chatgpt = \{/ { in_entry=1 }

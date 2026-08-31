@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
+# The native macOS CLI uses the desktop app integration for biometric sign-in.
+# Keep an explicit opt-out for troubleshooting, but make the integration
+# available to chezmoi deploy scripts by default.
+if [[ -z ${OP_BIOMETRIC_UNLOCK_ENABLED+x} ]]; then
+  OP_BIOMETRIC_UNLOCK_ENABLED="${DOTFILES_OP_BIOMETRIC_UNLOCK_ENABLED:-true}"
+fi
+export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
@@ -194,7 +201,7 @@ apply_darwin_system() {
       "$nix_bin" run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
-  export PATH="/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$DOCKER_APP/Contents/Resources/bin:$PATH"
+  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   hash -r
 }
 
@@ -412,7 +419,7 @@ setup_docker_runtime() {
 
   dotfiles_have docker || dotfiles_die "Docker CLI is unavailable after nix-darwin activation."
   if ! docker info >/dev/null 2>&1; then
-    docker desktop start --timeout 120
+    docker desktop start
     dotfiles_wait_for "$DOCKER_WAIT_ATTEMPTS" "Docker Desktop engine" docker info
   fi
   docker compose version >/dev/null
