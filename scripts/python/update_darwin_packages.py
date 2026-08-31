@@ -296,7 +296,13 @@ def try_promote(
         runner.evaluate_candidate(nix_attr)
         runner.build_candidate(nix_attr)
         runner.verify_identity(nix_attr)
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ) as error:
         return PromotionResult(current, False, str(error), None)
     return PromotionResult(
         RegistryEntry("nixpkgs", nix_attr, current.candidates),
@@ -437,10 +443,13 @@ def prefetch_hash(url: str) -> str:
         check=True,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     data = json.loads(result.stdout)
-    return str(data.get("hash", data.get("hashAlgo", "")))
+    hash_value = str(data.get("hash", ""))
+    if not hash_value:
+        raise ValueError(f"nix store prefetch returned no hash for {url}")
+    return hash_value
 
 
 def current_literals(path: Path) -> tuple[str, str, str]:
@@ -475,6 +484,7 @@ def collect_updates(
             subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
             json.JSONDecodeError,
+            ValueError,
         ) as error:
             updates.append({"package": package_id, "status": "error", "reason": str(error)})
             continue
