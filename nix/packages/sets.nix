@@ -567,20 +567,29 @@ let
         };
         # ── system capabilities ───────────────────────────────
         tart = {
+          pkg = pkgs.tart;
           category = "system";
           support = {
             windows = {
               unsupported = "Tart requires Apple Silicon macOS";
             };
             darwin = {
-              provider = "homebrew-formula";
-              source = "homebrew";
-              identity = "openai/tools/tart";
-              formula = "openai/tools/tart";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "tart";
+              identity = {
+                homepage = "https://tart.run/";
+                command = "tart";
+                versionArgs = [ "--version" ];
+              };
             };
             linux = {
               unsupported = "Tart requires Apple Silicon macOS";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-formula";
+            name = "openai/tools/tart";
           };
         };
         docker-desktop = {

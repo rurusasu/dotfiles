@@ -522,6 +522,44 @@ EOF
 	[ "$status" -eq 0 ]
 }
 
+@test "Tart preserves Apple Silicon-only unsupported reasons while declaring a Nix command migration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+		in sets.supportReport.tart
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.installFeature == null
+		and .windows == {
+			"unsupported": "Tart requires Apple Silicon macOS"
+		}
+		and .linux == {
+			"unsupported": "Tart requires Apple Silicon macOS"
+		}
+		and .darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://tart.run/",
+				"command": "tart",
+				"versionArgs": ["--version"]
+			},
+			"nixAttr": "tart"
+		}
+		and .legacyDarwin == {
+			"provider": "homebrew-formula",
+			"name": "openai/tools/tart"
+		}
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Darwin Raycast artifact has the declared identity and trusted signature" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v codesign >/dev/null 2>&1 || skip "codesign is not available in this test environment"
