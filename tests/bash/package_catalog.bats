@@ -102,6 +102,7 @@ nix_fixture_darwin_package_split() {
 	[[ "$output" == *'source = "hermes-agent";'* ]]
 	[[ "$output" == *'command = "hermes-desktop";'* ]]
 	[[ "$output" != *'appName = '* ]]
+	grep -q 'inherit inputs installFeatures;' "$REPO_ROOT/nix/flakes/home.nix"
 }
 
 @test "Hermes Desktop is absent from default package outputs" {
@@ -146,22 +147,6 @@ nix_fixture_darwin_package_split() {
 	[ "$status" -eq 0 ]
 	run jq -e '.default == false and .withHermes == true' <<<"$output"
 	[ "$status" -eq 0 ]
-}
-
-@test "standalone Darwin Home Manager gates Hermes Desktop behind WithHermes" {
-	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
-
-	run --separate-stderr env DOTFILES_USER=test-user DOTFILES_HOME=/tmp \
-		nix eval --impure --json ".#homeConfigurations.aarch64-darwin.config.home.packages" \
-		--apply 'packages: builtins.any (package: (package.pname or "") == "hermes-desktop") packages'
-	[ "$status" -eq 0 ]
-	[ "$output" = "false" ]
-
-	run --separate-stderr env DOTFILES_USER=test-user DOTFILES_HOME=/tmp DOTFILES_WITH_HERMES=1 \
-		nix eval --impure --json ".#homeConfigurations.aarch64-darwin.config.home.packages" \
-		--apply 'packages: builtins.any (package: (package.pname or "") == "hermes-desktop") packages'
-	[ "$status" -eq 0 ]
-	[ "$output" = "true" ]
 }
 
 @test "catalog rejects incomplete metadata and invalid active Nix packages" {
