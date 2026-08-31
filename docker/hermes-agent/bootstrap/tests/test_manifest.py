@@ -104,6 +104,10 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest.root_distribution.name, "default")
         self.assertEqual(manifest.root_distribution.target, Path("/opt/data"))
         self.assertEqual(
+            manifest.root_distribution.source_commit,
+            "6821e5dfa23a098ef4a5332780ca8c5cb832e2d4",
+        )
+        self.assertEqual(
             tuple(profile.name for profile in manifest.profiles),
             ("rick", "hoffman", "risarisa", "nancy", "kuroda", "shiraishi"),
         )
@@ -138,6 +142,33 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest.shared_repositories[0].legacy_target, Path("/opt/data/core/lifelog"))
         with self.assertRaises(FrozenInstanceError):
             manifest.schema_version = 2
+
+    def test_distribution_commit_and_deletion_limit_are_validated(self) -> None:
+        data = manifest_data()
+        data["root_distribution"]["commit"] = "A" * 40
+        data["profiles"][0]["commit"] = "b" * 40
+        data["profiles"][0]["max_deleted_paths"] = 3
+
+        manifest = self.load_data(data)
+
+        self.assertEqual(manifest.root_distribution.source_commit, "a" * 40)
+        self.assertEqual(manifest.profiles[0].source_commit, "b" * 40)
+        self.assertEqual(manifest.profiles[0].max_deleted_paths, 3)
+
+    def test_invalid_source_commit_and_deletion_limit_are_rejected(self) -> None:
+        for commit in ("short", "g" * 40, "a" * 39):
+            with self.subTest(commit=commit):
+                data = manifest_data()
+                data["root_distribution"]["commit"] = commit
+                self.assert_validation_error(data)
+
+        data = manifest_data()
+        data["profiles"][0]["max_deleted_paths"] = -1
+        self.assert_validation_error(data)
+
+        data = manifest_data()
+        data["shared_repositories"][0]["commit"] = "c" * 40
+        self.assert_validation_error(data)
 
     def test_target_outside_data_root_is_rejected(self) -> None:
         data = manifest_data()

@@ -431,6 +431,13 @@ class ProfileSnapshotTests(unittest.TestCase):
 
     def test_rejects_credential_stems_in_every_path_component(self) -> None:
         unsafe_paths = (
+            "api-key.json/payload.txt",
+            "apikey.txt/payload.txt",
+            "client-secret.json/payload.txt",
+            "password.txt/payload.txt",
+            "private-key.pem/payload.txt",
+            "refresh-token.json/payload.txt",
+            "certificate.pem/payload.txt",
             "token.json/payload.txt",
             "credentials.pem/nested/data.txt",
             "secret.txt/archive/payload.txt",
@@ -638,6 +645,22 @@ class ProfileSnapshotTests(unittest.TestCase):
 
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_rejects_common_structured_credentials(self) -> None:
+        candidates = (
+            b"AKIAIOSFODNN7EXAMPLE",
+            b"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature-value-long",
+            b"sk-abcdefghijklmnopqrstuvwxyz",
+            b"hf_abcdefghijklmnopqrstuvwxyz",
+            b"xai-abcdefghijklmnopqrstuvwxyz",
+            b"1//abcdefghijklmnopqrstuvwxyz",
+            b"-----BEGIN CERTIFICATE-----",
+        )
+        for index, candidate in enumerate(candidates):
+            with self.subTest(candidate=candidate[:8]):
+                scanner = profile_snapshot._SensitiveStreamScanner()
+                with self.assertRaises(ValueError):
+                    scanner.feed(b"safe=" + candidate)
 
     def test_rejects_every_supported_private_key_header_at_every_split(self) -> None:
         headers = (

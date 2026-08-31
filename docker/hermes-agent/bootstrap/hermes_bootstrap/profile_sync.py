@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import stat
+import tempfile
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -117,6 +118,10 @@ class _PushRaceExhausted(Exception):
     pass
 
 
+class _DeletionLimitExceeded(Exception):
+    pass
+
+
 def failed_profile_report(
     profiles: tuple[DistributionSource, ...],
     *,
@@ -185,7 +190,7 @@ def synchronize_profiles(
     try:
         _validate_manifest_profiles(manifest)
         scratch = create_private_directory(
-            manifest.data_root,
+            Path(tempfile.gettempdir()),
             prefix=".hermes-profile-snapshots-",
         )
         prepared = prepare_profile_snapshots(
@@ -281,11 +286,11 @@ def _synchronize_one_boundary(
         with _RepositoryLock(lock_path, data_root) as repository_lock:
             repository_lock.require_held()
             repository = create_private_directory(
-                data_root,
+                Path(tempfile.gettempdir()),
                 prefix=".hermes-profile-sync-",
             )
             repository_path = repository.path
-            askpass = _create_askpass(data_root)
+            askpass = _create_askpass(Path(tempfile.gettempdir()))
             environment = _git_environment(auth, askpass)
             attempt = _exact_tree_attempt(
                 snapshot,
@@ -338,6 +343,8 @@ def _synchronize_one_boundary(
                     category = "dry_run"
                     message = "profile snapshot changes detected"
                 else:
+                    if len(diff.deleted) > declaration.max_deleted_paths:
+                        raise _DeletionLimitExceeded
                     commit, final_parent = _commit_and_push(
                         snapshot,
                         attempt,
@@ -375,6 +382,13 @@ def _synchronize_one_boundary(
             snapshot,
             "push_race_exhausted",
             "profile publication changed repeatedly",
+        )
+    except _DeletionLimitExceeded as error:
+        error = _scrub_exception_graph(error)
+        outcome = _failed(
+            snapshot,
+            "deletion_limit_exceeded",
+            "profile publication exceeded the configured deletion limit",
         )
     except Exception as error:
         error = _scrub_exception_graph(error)

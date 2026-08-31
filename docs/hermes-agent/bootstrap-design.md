@@ -53,7 +53,9 @@ host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
 │   ├── rick/                      official Hermes target; local-authoritative when present
 │   ├── hoffman/
 │   ├── risarisa/
-│   └── nancy/
+│   ├── nancy/
+│   ├── kuroda/
+│   └── shiraishi/
 ├── shared/
 │   └── lifelog/                   writable independent Git repository
 ├── memories/                      root runtime state
@@ -161,13 +163,13 @@ commit/rebase/push workflow. All profiles continue to use
    validated.
 3. Read the secret payload without logging it, then validate required fields,
    GitHub credentials, remote identities, and access.
-4. Snapshot every existing named profile, complete aggregate preflight, and
-   synchronize each exact local snapshot to its configured remote before any
-   staging or local transaction.
+4. Snapshot every existing named profile and validate the local-authoritative
+   boundary. Existing profiles are preserved; only truly missing profiles are
+   staged from their configured, optionally pinned first-install source.
 5. Stage the remote-authoritative root distribution.
-6. In manifest order, stage each named profile: use the exact commit reported by
-   publication for an existing profile, or the configured branch only for a
-   truly missing first install.
+6. In manifest order, stage each missing named profile from its configured
+   branch and verify its pinned commit when one is declared. Existing profiles
+   are not staged or replaced by `apply`.
 7. Validate the staged root and every named profile against the required Chrome
    MCP source contract, then install the canonical X API entry.
 8. Synchronize each shared repository remote, including lifelog under its
@@ -177,7 +179,9 @@ commit/rebase/push workflow. All profiles continue to use
    working trees, install the Google Calendar MCP entry and shared credentials,
    and merge private `.env` files with mode `0600`.
 10. Validate the installed layout, commit the transaction, report the
-    `profile_sync` summary, then recreate and health-check the gateway.
+    `profile_sync` summary (`installed` or `preserved`), then recreate and
+    health-check the gateway. Run `sync-profiles` separately to publish local
+    profile snapshots.
 
 Before step 9, apply creates a second full local snapshot and compares it to
 the published snapshot by target set, canonical manifests, generated
@@ -193,40 +197,32 @@ user-owned paths. The pinned runtime restricts direct profile installation to
 the manifest's top-level `distribution_owned` roots, so repository workflows,
 tests, and validator tooling are not copied into the profile.
 
-If aggregate profile preflight or publication fails, bootstrap stops before
-root/profile staging, shared synchronization, or the local transaction.
-Snapshot-preflight rejection happens before `profile_report` exists; public
-`apply` stderr is `profile snapshot rejected (<category>)`, with no profile
-name or report. Standalone `sync-profiles --dry-run` repeats aggregate
-preflight and identifies the invalid profile and category in its JSON. A
-nonzero post-preflight publication report instead produces
-`named profile repository sync failed: <failed names>`; the Python exception
-retains that report internally, but the CLI does not serialize its categories.
-In both cases `apply` stdout is empty. By default stderr is one safe message.
-With `HERMES_BOOTSTRAP_DEBUG=1`, the CLI may append a sanitized traceback from
-its public boundary; it does not retain tokens or the raw internal exception
-graph.
+If local profile snapshot preflight fails, bootstrap stops before root/profile
+staging, shared synchronization, or the local transaction. Existing profiles
+are not published by `apply`; profile publication is the explicit
+`sync-profiles` operation. Snapshot rejection reports
+`profile snapshot rejected (<category>)` without a profile name in `apply`.
+Standalone `sync-profiles --dry-run` identifies the invalid profile and
+category in its JSON. In both cases `apply` stdout is empty. By default stderr
+is one safe message. With `HERMES_BOOTSTRAP_DEBUG=1`, the CLI may append a
+sanitized traceback from its public boundary; it does not retain tokens or the
+raw internal exception graph.
 
-Because a post-preflight `named profile repository sync failed: <failed names>`
-message hides its category, every such apply failure triggers guarded
-inventories of both profile scratch and outer apply scratch before retry or
-closure. Reliably empty inventories follow ordinary push recovery; any
-candidate or indeterminate check activates the full quiescent quarantine path.
-Later successful dry-run/real commands do not replace the required inventories
-because they do not revisit old artifacts.
+Because profile publication spans independent repositories, a partial
+`sync-profiles` result is eventual consistency rather than an atomic
+transaction. Completed pushes remain valid; repair the failed profile and retry
+it after checking the cleanup inventory. Profile snapshot, revalidation, Git
+staging, and askpass artifacts are private `/tmp` children rather than files in
+the `/opt/data` bind mount. Later successful dry-run/real commands do not
+replace required cleanup checks because they do not revisit old artifacts.
 
-Snapshot-preflight rejection is not this hidden-category trigger. Its category
-is public and publication has not started. If final outer apply scratch cleanup
-also fails, the CLI reports `could not clean bootstrap staging resources`
-instead of the snapshot rejection. That outer message can also replace a
-post-preflight publication or later primary failure and can retain a hidden
-profile report internally, so it is an indeterminate trigger. Inventory both
-`.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, and `askpass-*` profile
-artifacts and `.hermes-bootstrap-*` outer artifacts. A candidate or
-indeterminate determination uses the same full-window, mount-aware, atomic
-quarantine procedure. An exact `profile snapshot rejected (cleanup_failed)`
-message means the final outer scratch cleanup did not replace it and does not
-by itself trigger the direct-child publication inventory.
+Snapshot-preflight rejection is not a publication cleanup trigger because
+publication has not started. If final cleanup fails, the CLI reports
+`could not clean bootstrap staging resources` and the operator must inspect
+`/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`,
+`/tmp/askpass-*`, `/tmp/.hermes-bootstrap-*`, and private
+`/opt/data/shared/.hermes-repository-*` stages using the same full-window,
+mount-aware, atomic quarantine procedure.
 
 Dry-run is limited to preflight and diff inspection. It never pushes, so a
 changed entry has category `dry_run` and cannot reproduce push-only categories
@@ -325,8 +321,8 @@ this model, so cleanup makes no unsupported claim to defeat that actor.
 
 ## Verification
 
-`task hermes:bootstrap:test` covers manifest-generic four-profile sequencing,
-including Nancy; existing-local snapshots; missing-only first install; invalid
+`task hermes:bootstrap:test` covers manifest-generic six-profile sequencing,
+including Nancy, Kuroda, and Shiraishi; existing-local snapshots; missing-only first install; invalid
 existing profiles; exact remote deletion; local immutability; aggregate
 preflight; sequential continuation; retry and same-tree descendant acceptance;
 compact JSON; exit codes; and redaction.

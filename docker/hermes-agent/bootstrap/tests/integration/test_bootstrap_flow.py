@@ -408,11 +408,21 @@ class BootstrapFlowTests(unittest.TestCase):
 
     def _local_manifest(self) -> BootstrapManifest:
         parsed = load_manifest(PRODUCTION_MANIFEST)
-        root = replace(parsed.root_distribution, target=self.data_root)
+        root = replace(
+            parsed.root_distribution,
+            target=self.data_root,
+            source_commit=run_git("--git-dir", str(self.source_remotes["root"]), "rev-parse", "main"),
+        )
         profiles = tuple(
             replace(
                 source,
                 target=self.data_root / "profiles" / source.name,
+                source_commit=run_git(
+                    "--git-dir",
+                    str(self.source_remotes[source.name]),
+                    "rev-parse",
+                    "main",
+                ),
             )
             for source in parsed.profiles
         )
@@ -530,7 +540,26 @@ class BootstrapFlowTests(unittest.TestCase):
         run_git("add", "-A", cwd=seed)
         run_git("commit", "-m", message, cwd=seed)
         run_git("push", "origin", "main", cwd=seed)
-        return run_git("rev-parse", "HEAD", cwd=seed)
+        commit = run_git("rev-parse", "HEAD", cwd=seed)
+        if name == "root":
+            self.manifest = replace(
+                self.manifest,
+                root_distribution=replace(
+                    self.manifest.root_distribution,
+                    source_commit=commit,
+                ),
+            )
+        else:
+            self.manifest = replace(
+                self.manifest,
+                profiles=tuple(
+                    replace(profile, source_commit=commit)
+                    if profile.name == name
+                    else profile
+                    for profile in self.manifest.profiles
+                ),
+            )
+        return commit
 
     def _payload(self, token: str = FIXTURE_TOKEN) -> io.StringIO:
         records: list[dict[str, object]] = [{"type": "header", "schema_version": SCHEMA_VERSION}]
@@ -951,9 +980,9 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             command_stdout.getvalue(),
-            '{"profile_sync":{"hoffman":"unchanged","kuroda":"unchanged",'
-            '"nancy":"unchanged","rick":"unchanged","risarisa":"unchanged",'
-            '"shiraishi":"unchanged"},'
+            '{"profile_sync":{"hoffman":"preserved","kuroda":"preserved",'
+            '"nancy":"preserved","rick":"preserved","risarisa":"preserved",'
+            '"shiraishi":"preserved"},'
             '"profiles":["rick","hoffman","risarisa","nancy","kuroda","shiraishi"],'
             '"repositories":["lifelog"],"status":"applied"}\n',
         )
@@ -962,9 +991,10 @@ class BootstrapFlowTests(unittest.TestCase):
         # The pinned hermes_cli emits deprecation warnings here; the leak scan
         # above still treats ambient stderr as protected output.
 
+        # Existing profiles are local-authoritative during apply, so their
+        # remotes must not be accessed until the explicit sync-profiles route.
         declared_sources = (
             self.manifest.root_distribution,
-            *self.manifest.profiles,
             *self.manifest.shared_repositories,
         )
         visible_arguments = {
@@ -977,26 +1007,7 @@ class BootstrapFlowTests(unittest.TestCase):
         for remote in self.source_remotes.values():
             self.assertNotIn(str(remote), visible_arguments)
 
-        self.assertEqual(
-            [
-                name
-                for name, _source, _ref, _staged_commit, _head
-                in self.profile_stage_refs
-            ],
-            list(PROFILE_NAMES),
-        )
-        for (
-            name,
-            source,
-            ref,
-            staged_commit,
-            remote_head,
-        ) in self.profile_stage_refs:
-            with self.subTest(staged_profile=name):
-                self.assertEqual(source, production_profiles[name].source)
-                self.assertEqual(ref, remote_head)
-                self.assertEqual(staged_commit, ref)
-                self.assertRegex(ref, r"\A[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
+        self.assertEqual(self.profile_stage_refs, [])
 
         for name, expected in PROFILE_IDENTITIES.items():
             with self.subTest(profile=name):
@@ -1161,7 +1172,7 @@ class BootstrapFlowTests(unittest.TestCase):
             runtime_before,
         )
         self.assertEqual((target / "sessions" / "runtime.txt").read_text(encoding="utf-8"), "rick session\n")
-        self.assertNotEqual(
+        self.assertEqual(
             run_git(
                 "--git-dir",
                 str(self.source_remotes["rick"]),
@@ -1480,16 +1491,10 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(self._snapshot_managed_tree(), before)
         self.assertFalse(future_source.target.exists())
 
-    def test_runtime_failpoints_rollback_each_mutation_phase_without_reversing_remote_pushes(self) -> None:
+    def test_runtime_failpoints_rollback_each_mutation_phase_without_changing_remote_profiles(self) -> None:
         self._initial_apply()
         phases = (
             "root-apply",
-            "profile-apply:rick",
-            "profile-apply:hoffman",
-            "profile-apply:risarisa",
-            "profile-apply:nancy",
-            "profile-apply:kuroda",
-            "profile-apply:shiraishi",
             "shared-apply:lifelog",
             "env-merge:default",
             "env-merge:rick",
@@ -1817,7 +1822,7 @@ class BootstrapFlowTests(unittest.TestCase):
                     self.assertNotEqual(transaction_remote, remote_before)
                     self.assertEqual(remote_after, transaction_remote)
                     for profile in PROFILE_NAMES:
-                        self.assertNotEqual(
+                        self.assertEqual(
                             run_git(
                                 "--git-dir",
                                 str(self.source_remotes[profile]),

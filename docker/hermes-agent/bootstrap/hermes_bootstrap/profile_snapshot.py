@@ -50,6 +50,13 @@ _PRIVATE_KEY_HEADERS = (
     b"-----BEGIN OPENSSH PRIVATE KEY-----",
 )
 _PRIVATE_KEY_CARRY_BYTES = max(len(header) for header in _PRIVATE_KEY_HEADERS) - 1
+_STRUCTURED_SECRET_PATTERNS = (
+    re.compile(rb"(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9])"),
+    re.compile(rb"(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?![A-Za-z0-9])"),
+    re.compile(rb"(?<![A-Za-z0-9])(?:sk-|hf_|xai-)[A-Za-z0-9_-]{20,}(?![A-Za-z0-9])"),
+    re.compile(rb"(?<![A-Za-z0-9])1//[A-Za-z0-9._-]{20,}(?![A-Za-z0-9])"),
+)
+_STRUCTURED_SECRET_CARRY_BYTES = 4096
 _ASCII_ALNUM = frozenset(
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 )
@@ -66,7 +73,11 @@ _RESERVED_COMPONENTS = frozenset(
     }
 )
 _CREDENTIAL_STEMS = frozenset(
-    {"auth", "credential", "credentials", "secret", "secrets", "token", "tokens"}
+    {
+        "api-key", "apikey", "auth", "certificate", "client-secret", "credential",
+        "credentials", "password", "passwd", "private-key", "refresh-token",
+        "secret", "secrets", "token", "tokens",
+    }
 )
 _ENV_TEMPLATE = PurePosixPath(".env.template")
 _INSTALLED_ENV_EXAMPLE = PurePosixPath(".env.EXAMPLE")
@@ -288,6 +299,7 @@ class _SensitiveStreamScanner:
         self._github = _IncrementalTokenDetector(_GITHUB_TOKEN_RULES)
         self._slack = _IncrementalTokenDetector(_SLACK_TOKEN_RULES)
         self._private_tail = b""
+        self._structured_tail = b""
 
     def feed(self, content: bytes) -> None:
         self._github.feed(content)
@@ -296,6 +308,13 @@ class _SensitiveStreamScanner:
         if any(header in private_window for header in _PRIVATE_KEY_HEADERS):
             raise ValueError("secret candidate")
         self._private_tail = private_window[-_PRIVATE_KEY_CARRY_BYTES:]
+        structured_window = self._structured_tail + content
+        if any(
+            pattern.search(structured_window)
+            for pattern in _STRUCTURED_SECRET_PATTERNS
+        ) or b"-----BEGIN CERTIFICATE-----" in structured_window:
+            raise ValueError("secret candidate")
+        self._structured_tail = structured_window[-_STRUCTURED_SECRET_CARRY_BYTES:]
 
     def finish(self) -> None:
         self._github.finish()

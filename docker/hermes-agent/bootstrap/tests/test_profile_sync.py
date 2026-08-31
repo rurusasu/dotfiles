@@ -689,6 +689,41 @@ class ProfileSyncTests(unittest.TestCase):
             [".gitignore", "SOUL.md", "distribution.yaml"],
         )
 
+    def test_real_publication_rejects_bulk_deletion_above_manifest_limit(self) -> None:
+        remote = self.root / "profile-a.git"
+        base = self.profile("profile-a", remote)
+        declaration = DistributionSource(
+            base.name,
+            base.source,
+            base.ref,
+            base.target,
+            base.manifest_name,
+            base.source_commit,
+            1,
+        )
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"safe local profile\n"})
+        self.seed_remote_files(
+            remote,
+            declaration.name,
+            {"old-a.md": b"old\n", "old-b.md": b"old\n"},
+        )
+
+        dry_run = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=True
+        )
+        self.assertEqual(dry_run.exit_code, 0)
+        self.assertEqual(len(dry_run.profiles[0].diff.deleted), 2)
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "deletion_limit_exceeded")
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", "main").splitlines(),
+            ["old-a.md", "old-b.md"],
+        )
+
     def test_unsafe_raw_paths_use_non_reversible_digest_identifiers(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)

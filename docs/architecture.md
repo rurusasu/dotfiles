@@ -86,14 +86,17 @@ runtime mount is `/opt/data`, not a Git checkout. The root and named profile
 homes are applied from source repositories, while live secrets, memories,
 sessions, logs, and browser state remain local runtime data.
 
-| Owner                 | Source                                                                                  | Responsibility                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Dotfiles              | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                               | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
-| Root distribution     | [rurusasu/hermes-home](https://github.com/rurusasu/hermes-home)                         | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
-| Rick distribution     | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)         | Official `distribution.yaml` and Rick declarative content                                   |
-| Hoffman distribution  | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)   | Official `distribution.yaml` and Hoffman declarative content                                |
-| Risarisa distribution | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa) | Official `distribution.yaml` and Risarisa declarative content                               |
-| Shared data           | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                 | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
+| Owner                  | Source                                                                                    | Responsibility                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
+| Root distribution      | [rurusasu/hermes-home](https://github.com/rurusasu/hermes-home)                           | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
+| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                   |
+| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                |
+| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                               |
+| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                  |
+| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                 |
+| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                              |
+| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
 
 `/opt/data/core/lifelog` is migration-only and is absent after bootstrap;
 profile homes are never Git repositories. The default profile owns
