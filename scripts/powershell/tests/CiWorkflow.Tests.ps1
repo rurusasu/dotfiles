@@ -320,7 +320,7 @@ Describe 'CI workflow configuration' {
         $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
-        $test | Should -Match 'docker/hermes-agent/compose\.yml'
+        $test | Should -Match 'docker/hermes-service/compose\.yml'
     }
 
     It 'should keep hosted Windows and Darwin contracts in the unified workflow' {
