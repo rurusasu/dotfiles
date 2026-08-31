@@ -125,9 +125,22 @@ setup() {
 	run jq -e 'any(.[]; test("^vscode(-|$)"))' <<<"$output"
 	[ "$status" -eq 0 ]
 
-	run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
-	[ "$status" -eq 0 ]
-	[ -f "$output/support.json" ]
+	if [[ $(uname -s) == Darwin ]]; then
+		run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
+		[ "$status" -eq 0 ]
+		[ -f "$output/support.json" ]
+		support_report_json="$(<"$output/support.json")"
+	else
+		run --separate-stderr nix eval --impure --json --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+				pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+				sets = import $REPO_ROOT/nix/packages/sets.nix { inherit pkgs; lib = pkgs.lib; };
+			in sets.supportReport
+		"
+		[ "$status" -eq 0 ]
+		support_report_json="$output"
+	fi
 	run jq -e '
 		.vscode.darwin == {
 			"provider": "nix",
@@ -144,7 +157,7 @@ setup() {
 			"provider": "homebrew-cask",
 			"name": "visual-studio-code"
 		}
-	' "$output/support.json"
+	' <<<"$support_report_json"
 	[ "$status" -eq 0 ]
 }
 
