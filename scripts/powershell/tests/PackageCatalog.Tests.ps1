@@ -188,7 +188,8 @@ in sets.providerErrors
             $raycast.Groups['body'].Value | Should -Match 'executable\s*=\s*"Raycast";'
             $raycast.Groups['body'].Value | Should -Match 'legacyDarwin\s*=\s*\{\s*provider\s*=\s*"homebrew-cask";\s*name\s*=\s*"raycast";'
             $raycast.Groups['body'].Value | Should -Not -Match 'cask\s*='
-            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"thebrowsercompany-dia"'
+            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"dia-browser"\)'
+            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"thebrowsercompany-dia"'
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Raycast.Raycast' }).Count | Should -Be 0
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
         }
@@ -460,7 +461,8 @@ in sets.providerErrors
         It 'should manage Orca as a desktop catalog package with macOS cask and avoid native Python winget installs in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?cask\s*=\s*"stablyai/orca/orca"'
+            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"orca-editor"\)'
+            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"stablyai/orca/orca"'
             $sets | Should -Not -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
             $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"StablyAI\.Orca"\s*=\s*true;'
             $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
@@ -578,7 +580,7 @@ in sets.providerErrors
         It 'should map Docker to Winget Homebrew cask and Linux system module providers' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?cask\s*=\s*"docker-desktop".*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
+            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"docker-desktop"\).*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
         }
 
         It 'should keep true Windows-only components with explicit unsupported reasons' {
