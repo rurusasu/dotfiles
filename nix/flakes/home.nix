@@ -5,6 +5,13 @@
 #   home-manager switch --flake .#aarch64-linux
 { inputs, ... }:
 let
+  withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
+  withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
+  withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
+  installFeatures =
+    inputs.nixpkgs.lib.optionals withOllama [ "WithOllama" ]
+    ++ inputs.nixpkgs.lib.optionals withDocker [ "WithDocker" ]
+    ++ inputs.nixpkgs.lib.optionals withHermes [ "WithHermes" ];
   Workmux = import ./lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
   mkHome = system: {
@@ -14,7 +21,13 @@ let
       overlays = [ workmuxOverlay ];
     };
     extraSpecialArgs = {
-      inherit inputs;
+      inherit inputs installFeatures;
+      hermesDesktopPackage = inputs.nixpkgs.lib.attrByPath [
+        "hermes-agent"
+        "packages"
+        system
+        "desktop"
+      ] null inputs;
       isWSL = false;
     };
   };

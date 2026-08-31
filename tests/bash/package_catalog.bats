@@ -89,6 +89,66 @@ nix_fixture_darwin_package_split() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
+@test "Hermes Desktop uses the official Nix output only with the Hermes profile" {
+	run awk '
+		/^[[:space:]]*hermes-desktop = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^        };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'hermesDesktopPackage'* ]]
+	[[ "$output" == *'installFeature = "WithHermes";'* ]]
+	[[ "$output" == *'provider = "nix"'* ]]
+	[[ "$output" == *'source = "hermes-agent";'* ]]
+	[[ "$output" == *'command = "hermes-desktop";'* ]]
+	[[ "$output" != *'appName = '* ]]
+	grep -q 'inherit inputs installFeatures;' "$REPO_ROOT/nix/flakes/home.nix"
+}
+
+@test "Hermes Desktop is absent from default package outputs" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				catalogOverride = {
+					hermes-desktop = {
+						pkg = pkgs.hello;
+						category = \"terminal\";
+						installFeature = \"WithHermes\";
+						support.darwin = {
+							provider = \"nix\";
+							source = \"hermes-agent\";
+							identity.command = \"hermes-desktop\";
+						};
+					};
+					base = {
+						pkg = pkgs.cowsay;
+						category = \"terminal\";
+						support.darwin = {
+							provider = \"nix\";
+							source = \"nixpkgs\";
+							identity = \"cowsay\";
+						};
+					};
+				};
+			};
+			contains = package: packages: builtins.elem package packages;
+		in {
+			default = contains pkgs.hello sets.terminal;
+			withHermes = contains pkgs.hello (sets.allForInstallFeatures [ \"WithHermes\" ]);
+		}
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '.default == false and .withHermes == true' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "catalog rejects incomplete metadata and invalid active Nix packages" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"

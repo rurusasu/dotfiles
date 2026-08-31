@@ -563,6 +563,14 @@ exit 1
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
+@test "WithHermes help documents the native Desktop and container dashboard" {
+	run "$INSTALLER" --help
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Hermes Desktop"* ]]
+	[[ "$output" == *"127.0.0.1:9119"* ]]
+}
+
 @test "unknown install profile stops before mutation" {
 	write_installed_stubs
 

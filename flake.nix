@@ -36,6 +36,11 @@
       url = "github:raine/workmux";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    hermes-agent = {
+      url = "https://codeload.github.com/NousResearch/hermes-agent/tar.gz/a071fc80da30ffc4311ae1a6fb4f86f6947cf655";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "flake-parts";
+    };
   };
 
   outputs =

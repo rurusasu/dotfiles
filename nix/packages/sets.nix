@@ -35,6 +35,7 @@
   pkgs,
   lib,
   catalogOverride ? null,
+  hermesDesktopPackage ? null,
 }:
 let
   darwinProviderCandidates = import ./darwin-provider-candidates.nix;
@@ -715,6 +716,28 @@ let
             name = "docker-desktop";
           };
         };
+        hermes-desktop = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then hermesDesktopPackage else null;
+          winget = null;
+          category = "terminal";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "hermes-agent";
+              identity = {
+                command = "hermes-desktop";
+                versionArgs = [ "--version" ];
+              };
+            };
+            linux = {
+              unsupported = "Hermes Desktop is provisioned by the native macOS profile";
+            };
+            windows = {
+              unsupported = "Hermes Desktop is provisioned by the native macOS profile";
+            };
+          };
+        };
 
         # ── k8s ───────────────────────────────────────────────
         kind = {
@@ -1115,7 +1138,10 @@ let
   resolveForInstallFeatures =
     enabledFeatures: resolveForInstallFeaturesWhere enabledFeatures (_: true);
 
-  resolve = resolveForInstallFeatures null;
+  # Default package outputs contain only packages without an opt-in feature.
+  # Feature profiles use allForInstallFeatures or the platform-specific
+  # resolvers below with an explicit feature list.
+  resolve = resolveForInstallFeatures [ ];
 
   darwinSystemPackagesForInstallFeatures =
     enabledFeatures:
@@ -1367,12 +1393,14 @@ lib.mapAttrs (_: resolve) grouped
   ];
 
   # All packages (flat list)
-  all = resolve (lib.attrNames catalog);
+  all = resolveForInstallFeatures null (lib.attrNames catalog);
   allForInstallFeatures =
     enabledFeatures: resolveForInstallFeatures enabledFeatures (lib.attrNames catalog);
   allWithout =
     excludedNames:
-    resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
+    resolveForInstallFeatures null (
+      builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
+    );
   allWithoutForInstallFeatures =
     enabledFeatures: excludedNames:
     resolveForInstallFeatures enabledFeatures (
