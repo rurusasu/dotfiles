@@ -1101,7 +1101,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	mkdir -p \
 		"$HOME/.dotfiles/scripts/sh" \
 		"$HOME/.dotfiles/chezmoi" \
-		"$HOME/.dotfiles/docker/hermes-agent"
+		"$HOME/.dotfiles/docker/hermes-service"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
