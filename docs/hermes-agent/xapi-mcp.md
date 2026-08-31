@@ -82,14 +82,17 @@ xurl is not overwritten by an older 1Password value. To intentionally
 re-materialize the cache, set `DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC=1` for
 that run.
 
-Start or recreate the stack manually when using the atomic tasks:
+Start or recreate the stack through the atomic bootstrap task:
 
 ```bash
 task hermes:up
 task hermes:xapi:logs
 ```
 
-The normal bootstrap path also builds and starts `xapi-mcp`:
+`task hermes:up` first runs the transactional Hermes bootstrap, which
+reconciles Hindsight memory configuration for every managed profile, then
+builds and starts `xapi-mcp` and the Hermes stack. The explicit bootstrap
+task remains available for the same operation:
 
 ```bash
 task hermes:bootstrap

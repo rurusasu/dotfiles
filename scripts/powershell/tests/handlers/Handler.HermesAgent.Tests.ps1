@@ -16,7 +16,7 @@ Describe 'HermesAgentHandler' {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
         $script:ctx.Options['WithHermes'] = $true
-        $script:composeDir = Join-Path $TestDrive 'docker/hermes-agent'
+        $script:composeDir = Join-Path $TestDrive 'docker/hermes-service'
         $script:composeFile = Join-Path $script:composeDir 'compose.yml'
         $script:userProfile = Join-Path $TestDrive 'user'
         $script:oldUserProfile = $env:USERPROFILE
@@ -100,6 +100,10 @@ Describe 'HermesAgentHandler' {
     }
 
     Context 'constructor and prerequisites' {
+        It 'resolves the current Hermes service Compose path' {
+            $handler.CanApply($ctx) | Should -BeTrue
+        }
+
         It 'is disabled by default without WithHermes' {
             $ctx.Options.Remove('WithHermes')
 

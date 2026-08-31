@@ -54,11 +54,9 @@ class TaskfileContractTests(unittest.TestCase):
             "scripts/powershell/hermes-xapi.ps1 -Action restart",
             self._command_text("hermes:xapi:restart"),
         )
-        self.assertIn(
-            "scripts/sh/hermes-xapi.sh up",
-            self._command_text("hermes:up"),
-        )
-        self.assertIn(
+        self.assertIn("task: hermes:bootstrap", self._task_block("hermes:up"))
+        self.assertNotIn("scripts/sh/hermes-xapi.sh up", self._command_text("hermes:up"))
+        self.assertNotIn(
             "scripts/powershell/hermes-xapi.ps1 -Action up",
             self._command_text("hermes:up"),
         )
@@ -85,17 +83,16 @@ class TaskfileContractTests(unittest.TestCase):
         )
 
     def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
+        self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
+        self.assertIn("task: hindsight:up", self._task_block("hermes:bootstrap"))
         for task_name in (
-            "hermes:setup",
-            "hermes:bootstrap",
-            "hermes:up",
             "hermes:rick:up",
             "hermes:hoffman:up",
             "hermes:risarisa:up",
             "hermes:nancy:up",
         ):
             with self.subTest(task_name=task_name):
-                self.assertIn("task: hindsight:up", self._task_block(task_name))
+                self.assertIn("task: hermes:up", self._task_block(task_name))
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
