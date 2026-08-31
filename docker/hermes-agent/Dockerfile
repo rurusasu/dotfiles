@@ -6,6 +6,8 @@ ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
 ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
 ARG HINDSIGHT_CLIENT_VERSION=0.6.1
+ARG HERMES_LCM_VERSION=v0.20.0
+ARG HERMES_LCM_COMMIT=49e99a272d2d461e5c90732e7ef2bc20e96f0826
 
 COPY hermes-agent/xapi-mcp.sh /usr/local/bin/hermes-xapi-mcp
 COPY hermes-agent/gh-wrapper.sh /usr/local/bin/gh
@@ -97,7 +99,7 @@ replace_once(
 PY
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl gh gnupg \
+  && apt-get install -y --no-install-recommends ca-certificates curl git gh gnupg \
   && arch="$(dpkg --print-architecture)" \
   && case "$arch" in \
     amd64|arm64) ;; \
@@ -135,6 +137,17 @@ RUN apt-get update \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \
   && chmod 0755 /usr/local/bin/hermes-bootstrap \
   && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --quiet --depth 1 --branch "${HERMES_LCM_VERSION}" \
+    https://github.com/stephenschoettler/hermes-lcm \
+    /opt/hermes/plugins/hermes-lcm \
+  && test "$(git -C /opt/hermes/plugins/hermes-lcm rev-parse HEAD)" = "${HERMES_LCM_COMMIT}" \
+  && /opt/hermes/.venv/bin/python -m py_compile /opt/hermes/plugins/hermes-lcm/__init__.py \
+  && rm -rf /opt/hermes/plugins/hermes-lcm/.git
+
+RUN /opt/hermes/.venv/bin/python -c \
+      'import os; os.environ["HERMES_HOME"] = "/tmp/hermes-lcm-build-check"; from pathlib import Path; home = Path(os.environ["HERMES_HOME"]); home.mkdir(parents=True, exist_ok=True); (home / "config.yaml").write_text("plugins:\n  enabled:\n    - hermes-lcm\ncontext:\n  engine: lcm\n", encoding="utf-8"); from hermes_cli.plugins import discover_plugins, get_plugin_context_engine; discover_plugins(force=True); engine = get_plugin_context_engine(); assert engine is not None and engine.name == "lcm"' \
+  && rm -rf /tmp/hermes-lcm-build-check
 
 FROM hermes-bootstrap-runtime AS hermes-bootstrap-test
 

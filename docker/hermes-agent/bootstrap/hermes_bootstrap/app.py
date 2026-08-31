@@ -16,6 +16,11 @@ from typing import Callable, TextIO
 from dotenv.parser import parse_stream
 
 from . import profile_sync
+from .configfiles import reconcile_onepassword_configurations
+from .context_engine import (
+    install_context_engine_configurations,
+    validate_context_engine_installation,
+)
 from .distributions import (
     _normalize_owned_paths,
     _read_profile_manifest_at,
@@ -65,7 +70,6 @@ from .hindsight import (
     install_hindsight_configurations,
     validate_hindsight_installation,
 )
-from .configfiles import reconcile_onepassword_configurations
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
@@ -259,6 +263,7 @@ def _apply_sensitive(
             tx,
         )
         install_hindsight_configurations(_environment_targets(manifest), tx)
+        install_context_engine_configurations(_environment_targets(manifest), tx)
         install_google_calendar_credentials(
             manifest.data_root,
             secrets.google_calendar,
@@ -605,6 +610,7 @@ def _validate_installed_layout(
             [target for _profile, target in _environment_targets(manifest)],
         )
         validate_hindsight_installation(_environment_targets(manifest))
+        validate_context_engine_installation(_environment_targets(manifest))
         for profile, target in _environment_targets(manifest):
             required = (
                 _MANAGED_ENV_KEYS
