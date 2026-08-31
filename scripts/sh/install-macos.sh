@@ -439,7 +439,7 @@ setup_ollama_runtime() {
   fi
 
   dotfiles_log "Starting Ollama..."
-  "$LAUNCHCTL_COMMAND" kickstart -k "gui/$(id -u)/com.dotfiles.ollama"
+  "$LAUNCHCTL_COMMAND" kickstart -k "gui/$(id -u)/com-dotfiles-ollama"
   dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
 }
 

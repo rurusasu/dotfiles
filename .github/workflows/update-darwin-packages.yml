@@ -106,7 +106,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           task commit -- "chore(macos): update Darwin package providers"
-          git push --set-upstream origin "$branch"
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.extraheader=Authorization: Basic ${auth_header}" \
+            push --set-upstream origin "$branch"
+          unset auth_header
           gh pr create \
             --base main \
             --head "$branch" \

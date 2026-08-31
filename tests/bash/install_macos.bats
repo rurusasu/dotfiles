@@ -481,10 +481,10 @@ exit 0
 	assert_log_order \
 		"migrate-darwin-provider --all --feature WithOllama" \
 		"chezmoi apply --force" \
-		"launchctl kickstart -k gui/$(id -u)/com.dotfiles.ollama" \
+		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"verify-environment compose= args="
 	[ "$(grep -Fc 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags' "$COMMAND_LOG")" -eq 2 ]
-	[ "$(grep -nF "launchctl kickstart -k gui/$(id -u)/com.dotfiles.ollama" "$COMMAND_LOG" | cut -d: -f1)" -lt \
+	[ "$(grep -nF "launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" "$COMMAND_LOG" | cut -d: -f1)" -lt \
 		"$(grep -nF 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags' "$COMMAND_LOG" | tail -1 | cut -d: -f1)" ]
 	! grep -q '^docker ' "$COMMAND_LOG"
 }
@@ -509,7 +509,7 @@ exit 0
 	assert_log_order \
 		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker" \
 		"chezmoi apply --force" \
-		"launchctl kickstart -k gui/$(id -u)/com.dotfiles.ollama" \
+		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"docker info" \
 		"task --dir $REPO_ROOT hindsight:up" \
 		"verify-environment compose=$REPO_ROOT/docker/local-ai-services/compose.yml args=--runtime"
@@ -528,7 +528,7 @@ exit 1
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Ollama API after 2 attempts."* ]]
-	grep -Fq "launchctl kickstart -k gui/$(id -u)/com.dotfiles.ollama" "$COMMAND_LOG"
+	grep -Fq "launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" "$COMMAND_LOG"
 	! grep -q '^docker info$' "$COMMAND_LOG"
 	! grep -q 'task .*hindsight:up' "$COMMAND_LOG"
 }
