@@ -156,7 +156,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         devcontainer = self._named_workflow("ci-devcontainer.yml")
         self.assertIn(
-            "uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4",
+            "uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1",
             devcontainer,
         )
         self.assertEqual(
