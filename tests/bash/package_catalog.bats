@@ -480,13 +480,12 @@ EOF
 @test "Darwin flake exposes the Nix-managed Google Chrome application" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
-	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
-		packages:
-		builtins.elem "darwin-google-chrome" (builtins.attrNames packages)
-	'
-
+	if [[ $(uname -s) == Darwin ]]; then
+		run nix build --no-link .#packages.aarch64-darwin.darwin-google-chrome
+	else
+		run nix eval --raw .#packages.aarch64-darwin.darwin-google-chrome.drvPath
+	fi
 	[ "$status" -eq 0 ]
-	[ "$output" = "true" ]
 }
 
 @test "Raycast preserves reviewed Windows and Linux unsupported reasons while declaring a Nix Darwin GUI migration" {

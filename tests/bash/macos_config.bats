@@ -116,14 +116,6 @@ setup() {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
-	run --separate-stderr nix eval --impure --json ".#packages.aarch64-darwin" --apply '
-		packages:
-		builtins.elem "darwin-vscode" (builtins.attrNames packages)
-	'
-
-	[ "$status" -eq 0 ]
-	[ "$output" = "true" ]
-
 	if [[ $(uname -s) == Darwin ]]; then
 		run nix build --no-link .#packages.aarch64-darwin.darwin-vscode
 	else
