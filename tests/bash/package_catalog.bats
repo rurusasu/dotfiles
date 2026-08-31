@@ -324,9 +324,7 @@ EOF
 	grep -q 'attachWingetIdMetadata id' "$REPO_ROOT/nix/packages/winget.nix"
 }
 
-@test "macOS desktop casks include Raycast Dia and Orca" {
-	grep -q 'raycast = {' "$SETS"
-	grep -q 'cask = "raycast"' "$SETS"
+@test "macOS desktop casks include Dia and Orca" {
 	grep -q 'dia-browser = {' "$SETS"
 	grep -q 'cask = "thebrowsercompany-dia"' "$SETS"
 	grep -q 'orca-editor = {' "$SETS"
@@ -483,6 +481,68 @@ EOF
 
 	[ "$status" -eq 0 ]
 	[ "$output" = "true" ]
+}
+
+@test "Raycast preserves reviewed Windows and Linux unsupported reasons while declaring a Nix Darwin GUI migration" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+		in sets.supportReport.raycast
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.installFeature == null
+		and .windows == {
+			"unsupported": "Managed only on macOS in this dotfiles profile"
+		}
+		and .linux == {
+			"unsupported": "Vendor does not publish a Linux build"
+		}
+		and .darwin == {
+			"provider": "nix",
+			"source": "nixpkgs",
+			"identity": {
+				"homepage": "https://raycast.com/",
+				"appName": "Raycast.app",
+				"bundleId": "com.raycast.macos",
+				"executable": "Raycast"
+			},
+			"nixAttr": "raycast"
+		}
+		and .legacyDarwin == {
+			"provider": "homebrew-cask",
+			"name": "raycast"
+		}
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Darwin Raycast artifact has the declared identity and trusted signature" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v codesign >/dev/null 2>&1 || skip "codesign is not available in this test environment"
+	command -v plutil >/dev/null 2>&1 || skip "plutil is not available in this test environment"
+	command -v spctl >/dev/null 2>&1 || skip "spctl is not available in this test environment"
+
+	run --separate-stderr nix build --no-link --print-out-paths .#darwin-raycast
+	[ "$status" -eq 0 ]
+	store_path="$output"
+	app="$store_path/Applications/Raycast.app"
+
+	run plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist"
+	[ "$status" -eq 0 ]
+	[ "$output" = "com.raycast.macos" ]
+	run plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist"
+	[ "$status" -eq 0 ]
+	[ "$output" = "Raycast" ]
+	run codesign --verify --deep --strict "$app"
+	[ "$status" -eq 0 ]
+	run spctl --assess --type execute "$app"
+	[ "$status" -eq 0 ]
 }
 
 @test "Darwin Discord keeps staged modules outside its signed application bundle" {

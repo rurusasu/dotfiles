@@ -539,20 +539,30 @@ let
           };
         };
         raycast = {
+          pkg = pkgs.raycast;
           category = "desktop";
           support = {
             windows = {
               unsupported = "Managed only on macOS in this dotfiles profile";
             };
             darwin = {
-              provider = "homebrew-cask";
-              source = "homebrew";
-              identity = "raycast";
-              cask = "raycast";
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "raycast";
+              identity = {
+                homepage = "https://raycast.com/";
+                appName = "Raycast.app";
+                bundleId = "com.raycast.macos";
+                executable = "Raycast";
+              };
             };
             linux = {
               unsupported = "Vendor does not publish a Linux build";
             };
+          };
+          legacyDarwin = {
+            provider = "homebrew-cask";
+            name = "raycast";
           };
         };
         # ── system capabilities ───────────────────────────────

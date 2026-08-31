@@ -76,10 +76,40 @@ setup() {
 	[ "$status" -eq 0 ]
 	run jq -e '
 		any(.system[]; test("^vscode(-|$)"))
+		and any(.system[]; test("^raycast(-|$)"))
 		and all(.home[]; test("^vscode(-|$)") | not)
+		and all(.home[]; test("^raycast(-|$)") | not)
 		and any(.home[]; test("^git(-|$)"))
 	' <<<"$output"
 	[ "$status" -eq 0 ]
+}
+
+@test "Darwin default and Hermes profiles route Raycast system-wide without a cask" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	for profile in default hermes; do
+		case "$profile" in
+		default) profile_env=() ;;
+		hermes) profile_env=(DOTFILES_WITH_HERMES=1) ;;
+		esac
+		run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex "${profile_env[@]}" \
+			nix eval --impure --json --expr "
+				let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+				in {
+					casks = config.homebrew.casks;
+					system = builtins.map (package: package.name) config.environment.systemPackages;
+					home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+				}
+			"
+		[ "$status" -eq 0 ]
+		run jq -e '
+			all(.casks[]; .name != "raycast") and
+			any(.system[]; test("^raycast(-|$)")) and
+			all(.home[]; test("^raycast(-|$)") | not)
+		' <<<"$output"
+		[ "$status" -eq 0 ]
+	done
 }
 
 @test "Darwin flake exposes the Nix-managed Visual Studio Code application and legacy migration metadata" {

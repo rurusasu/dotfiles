@@ -172,12 +172,22 @@ in sets.providerErrors
             $warp | Should -BeNullOrEmpty
         }
 
-        It 'should manage Raycast and Dia as macOS-only Homebrew casks' {
+        It 'should manage Raycast as a Nix Darwin app and Dia as a macOS-only Homebrew cask' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $raycast = [regex]::Match($sets, '(?ms)raycast\s*=\s*\{(?<body>.*?)(?=^\s*# ── system capabilities)')
 
-            $sets | Should -Match '(?s)raycast\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"raycast"'
+            $raycast.Success | Should -BeTrue
+            $raycast.Groups['body'].Value | Should -Match 'pkg\s*=\s*pkgs\.raycast;'
+            $raycast.Groups['body'].Value | Should -Match 'provider\s*=\s*"nix";'
+            $raycast.Groups['body'].Value | Should -Match 'source\s*=\s*"nixpkgs";'
+            $raycast.Groups['body'].Value | Should -Match 'nixAttr\s*=\s*"raycast";'
+            $raycast.Groups['body'].Value | Should -Match 'appName\s*=\s*"Raycast\.app";'
+            $raycast.Groups['body'].Value | Should -Match 'bundleId\s*=\s*"com\.raycast\.macos";'
+            $raycast.Groups['body'].Value | Should -Match 'executable\s*=\s*"Raycast";'
+            $raycast.Groups['body'].Value | Should -Match 'legacyDarwin\s*=\s*\{\s*provider\s*=\s*"homebrew-cask";\s*name\s*=\s*"raycast";'
+            $raycast.Groups['body'].Value | Should -Not -Match 'cask\s*='
             $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"thebrowsercompany-dia"'
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Raycast.Raycast' }).Count | Should -Be 0
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
