@@ -71,37 +71,50 @@ root_distribution:
   name: default
   source: https://github.com/rurusasu/hermes-home.git
   ref: main
+  commit: 6821e5dfa23a098ef4a5332780ca8c5cb832e2d4
   target: /opt/data
   manifest: root-distribution.yaml
 profiles:
   - name: rick
     source: https://github.com/rurusasu/hermes-profile-rick.git
     ref: main
+    commit: c32fcd55a884b5fe3ae17f51f02b75f15ffcce12
+    max_deleted_paths: 10
     target: /opt/data/profiles/rick
     manifest: distribution.yaml
   - name: hoffman
     source: https://github.com/rurusasu/hermes-profile-hoffman.git
     ref: main
+    commit: 57386d922b5bc75ec385fc01eccc3b2958df9f58
+    max_deleted_paths: 10
     target: /opt/data/profiles/hoffman
     manifest: distribution.yaml
   - name: risarisa
     source: https://github.com/rurusasu/hermes-profile-risarisa.git
     ref: main
+    commit: c5f459f04e5c680af37e3eaefc51316c83b89e3a
+    max_deleted_paths: 10
     target: /opt/data/profiles/risarisa
     manifest: distribution.yaml
   - name: nancy
     source: https://github.com/rurusasu/hermes-profile-nancy.git
     ref: main
+    commit: 7df0a12cd312b79503b8c33e3e1b3327b7d256d4
+    max_deleted_paths: 10
     target: /opt/data/profiles/nancy
     manifest: distribution.yaml
   - name: kuroda
     source: https://github.com/rurusasu/hermes-profile-kuroda.git
     ref: main
+    commit: d3f97b3d77574497046596063c06c74b9409a197
+    max_deleted_paths: 10
     target: /opt/data/profiles/kuroda
     manifest: distribution.yaml
   - name: shiraishi
     source: https://github.com/rurusasu/hermes-profile-shiraishi.git
     ref: main
+    commit: 9be096ac23741e3cb1816e1e6f1bdced09d3cb44
+    max_deleted_paths: 10
     target: /opt/data/profiles/shiraishi
     manifest: distribution.yaml
 shared_repositories:

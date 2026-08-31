@@ -17,11 +17,11 @@ The three managed content classes deliberately use different authority models:
 | Root/default   | `rurusasu/hermes-home`                                     | remote distribution to local runtime                                            |
 | Shared lifelog | `/opt/data/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
-`docker/hermes-agent/bootstrap-manifest.yaml` currently declares four named
+`docker/hermes-agent/bootstrap-manifest.yaml` currently declares six named
 profiles: `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`.
-The manifest is the
-configuration source for their name, remote, branch, and target; operations and
-tests must not assume a fixed three-profile set.
+The manifest is the configuration source for their name, remote, branch,
+optional pinned first-install commit, deletion safety limit, and target;
+operations and tests must not assume a fixed profile set.
 
 For an existing valid named profile, the local `distribution.yaml` and its
 `distribution_owned` allowlist are authoritative. Remote changes never flow
@@ -241,23 +241,26 @@ mixing versions in a commit and keeps local profile bytes and modes immutable.
 After preflight, profiles run sequentially under per-profile repository locks.
 A post-preflight Git failure for one profile is recorded but does not stop
 later profiles from being attempted. Earlier successful pushes remain valid
-and are not rolled back. A normal push race gets one retry: the synchronizer
-fetches the new remote head, rebuilds the same expected tree, and retries. It
-accepts a remote descendant when that descendant has the same expected tree;
-a second race failure is reported as `push_race_exhausted`.
+and are not rolled back: publication across the independent profile
+repositories is intentionally not a cross-repository atomic transaction.
+Operators must treat a partial report as eventual consistency and retry only
+the failed profile after its local boundary is repaired. A normal push race
+gets one retry: the synchronizer fetches the new remote head, rebuilds the
+same expected tree, and retries. It accepts a remote descendant when that
+descendant has the same expected tree; a second race failure is reported as
+`push_race_exhausted`.
 
 After any crash-journal recovery, bootstrap validates credentials and
-repositories, then runs the same snapshot-and-publication phase before staging
-or starting a new local transaction. It then stages root, stages profiles in
-manifest order using either the reported exact commit or the configured branch
-for a truly missing target, runs `validate_chrome_mcp_sources` over the staged
-root and profiles, synchronizes shared repositories, and only then begins the
-transaction. Existing named-profile publication has already completed before
-this staged Chrome gate. Its reported remote commits remain valid and are not
-rolled back if Chrome validation fails; apply stops before shared-repository
-synchronization or `Transaction.begin`. The successful `apply` result includes
-a `profile_sync` summary whose entries are `changed`, `unchanged`, or
-`installed`.
+repositories, stages the remote-authoritative root, and stages only a truly
+missing named profile in manifest order. Existing named profiles are preserved
+as local-authoritative runtime state; `apply` does not publish or replace them.
+The explicit `sync-profiles` command owns publication. A configured `commit`
+pins each first-install source to a full Git object ID; it is not a moving-branch
+pin for an existing local profile. Explicit profile publication reads the
+current configured branch and returns the resulting commit for that run.
+Bootstrap then validates the staged root and missing profiles, synchronizes shared
+repositories, and begins the local transaction. The successful `apply` result
+maps each profile to `installed` or `preserved`.
 
 Immediately before `Transaction.begin`, `apply` repeats the full profile
 snapshot and compares the existing/missing target set, canonical manifest and
@@ -287,29 +290,28 @@ exception graph. The publication message has failed names but no categories.
 Root staging stays remote-authoritative and shared lifelog continues its
 ordinary locked read-write Git synchronization.
 
-Every post-preflight apply publication message is therefore a cleanup inventory
-trigger before retry or closure: its hidden category could be
-`cleanup_failed`. Inventory profile scratch and outer apply scratch directly
-under `/opt/data`, plus private shared-repository stages matching
-`/opt/data/shared/.hermes-repository-*`. If all guarded inventories are reliably
-empty, continue ordinary push-failure recovery. A candidate or indeterminate
-check activates the full quiescent, mount-aware, atomic-quarantine procedure.
-Later successful dry-run/real results do not waive the earlier inventories.
+Every profile publication failure is therefore a cleanup inventory trigger
+before retry or closure: its category could be `cleanup_failed`. Profile
+snapshot, revalidation, Git staging, and askpass artifacts are created beneath
+the container's private `/tmp` rather than the `/opt/data` bind mount. Inventory
+`/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`, and
+`/tmp/askpass-*`, plus private shared-repository stages under
+`/opt/data/shared/.hermes-repository-*`. If all guarded inventories are
+reliably empty, continue ordinary push-failure recovery. A candidate or
+indeterminate check activates the full quiescent, mount-aware,
+atomic-quarantine procedure. Later successful dry-run/real results do not waive
+the earlier inventories.
 
 Snapshot-preflight rejection remains separate because its category is public
-and publication has not started. If final outer apply scratch cleanup fails,
-`could not clean bootstrap staging resources` replaces the snapshot rejection;
-that outer error can also replace a post-preflight publication or later primary
-failure and can retain an internal profile report that the CLI does not expose.
-It is therefore an indeterminate trigger requiring both the direct-child
-profile inventory for `.hermes-profile-snapshots-*`,
-`.hermes-profile-sync-*`, and `askpass-*` and the outer inventory for
-`.hermes-bootstrap-*` under `/opt/data`, plus the direct-child private
-shared-repository stage inventory for `.hermes-repository-*` under
-`/opt/data/shared`. A candidate or indeterminate determination activates the
-same full recovery procedure. An exact
-`profile snapshot rejected (cleanup_failed)` message means final outer scratch
-cleanup did not replace it and does not alone trigger these inventories.
+and publication has not started. If final cleanup fails, the CLI reports
+`could not clean bootstrap staging resources`; inspect
+`/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`,
+`/tmp/askpass-*`, `/tmp/.hermes-bootstrap-*`, and private
+`.hermes-repository-*` stages under `/opt/data/shared`. A candidate or
+indeterminate determination activates the same full recovery procedure. An
+exact `profile snapshot rejected (cleanup_failed)` message means final outer
+scratch cleanup did not replace it and does not alone trigger these
+inventories.
 
 ## Repair Handoff
 

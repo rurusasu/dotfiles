@@ -27,6 +27,7 @@ _GITHUB_SOURCE_PATTERN = re.compile(
     r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\.git\Z"
 )
+_OBJECT_ID_PATTERN = re.compile(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\Z")
 _T = TypeVar("_T")
 
 
@@ -188,14 +189,33 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
 
 def _distribution(value: object, context: str, data_root: Path) -> DistributionSource:
     source = _mapping(value, context)
-    _keys(source, {"name", "source", "ref", "target", "manifest"}, context)
+    _keys(
+        source,
+        {"name", "source", "ref", "target", "manifest"},
+        context,
+        optional={"commit", "max_deleted_paths"},
+    )
     name = _name(source["name"], f"{context}.name")
+    source_commit = (
+        _commit(source["commit"], f"{context}.commit")
+        if "commit" in source
+        else None
+    )
+    max_deleted_paths = (
+        _integer(source["max_deleted_paths"], f"{context}.max_deleted_paths")
+        if "max_deleted_paths" in source
+        else 10
+    )
+    if max_deleted_paths < 0:
+        _invalid(f"{context}.max_deleted_paths must not be negative")
     return DistributionSource(
         name=name,
         source=_github_source(source["source"], f"{context}.source"),
         ref=_ref(source["ref"], f"{context}.ref"),
         target=_managed_path(source["target"], f"{context}.target", data_root),
         manifest_name=_manifest_name(source["manifest"], f"{context}.manifest"),
+        source_commit=source_commit,
+        max_deleted_paths=max_deleted_paths,
     )
 
 
@@ -205,7 +225,7 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
         repository,
         {"name", "source", "ref", "target", "mode"},
         context,
-        optional={"sync_owner", "legacy_target"},
+        optional={"sync_owner", "legacy_target", "commit"},
     )
     name = _name(repository["name"], f"{context}.name")
     mode = _text(repository["mode"], f"{context}.mode")
@@ -217,6 +237,8 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
         sync_owner = _name(repository["sync_owner"], f"{context}.sync_owner")
     if mode == "read-write" and sync_owner is None:
         _invalid(f"{context}.sync_owner is required for read-write repositories")
+    if mode == "read-write" and "commit" in repository:
+        _invalid(f"{context}.commit is only valid for read-only repositories")
 
     legacy_target = None
     if "legacy_target" in repository and repository["legacy_target"] is not None:
@@ -232,6 +254,11 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
         mode=mode,
         sync_owner=sync_owner,
         legacy_target=legacy_target,
+        source_commit=(
+            _commit(repository["commit"], f"{context}.commit")
+            if "commit" in repository
+            else None
+        ),
     )
 
 
@@ -355,6 +382,13 @@ def _ref(value: object, context: str) -> str:
     if invalid:
         _invalid(f"{context} is not a valid Git ref")
     return ref
+
+
+def _commit(value: object, context: str) -> str:
+    commit = _text(value, context)
+    if _OBJECT_ID_PATTERN.fullmatch(commit) is None:
+        _invalid(f"{context} must be a full Git object ID")
+    return commit.lower()
 
 
 def _manifest_name(value: object, context: str) -> str:

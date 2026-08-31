@@ -67,7 +67,7 @@ host adapter
   -> docker compose run --rm --no-deps -T hermes-bootstrap apply
   -> load manifest and recover any crash journal
   -> validate payload, credentials, and source access
-  -> publish existing profiles, stage sources, and sync shared remotes
+  -> validate existing local profiles, stage missing sources, and sync shared remotes
   -> reconcile Hermes onepassword references in root and profile config.yaml files
   -> transactional install under /opt/data
   -> docker compose up -d --force-recreate only after success
@@ -154,10 +154,11 @@ sources fail closed. The command validates the canonical repository, acquires
 commit/rebase/push workflow. Its success JSON reports `status`, `name`,
 `commit`, and `pushed`.
 
-The successful bootstrap JSON contains `status: "applied"`, the four profile
+The successful bootstrap JSON contains `status: "applied"`, the six profile
 names, `repositories: ["lifelog"]`, and `profile_sync`. `profile_sync` maps
-each named profile to `changed`, `unchanged`, or `installed`; `installed` is
-only the truly missing first-install case.
+each named profile to `preserved` or `installed`; `installed` is only the
+truly missing first-install case. Existing profile publication is explicit:
+run `sync-profiles` separately.
 
 ## Sync Existing Named Profiles
 
@@ -214,18 +215,17 @@ Task 5 fixtures cover declared assets for Rick, Hoffman, and Nancy and no
 ## First Install And Bootstrap Ordering
 
 Bootstrap validates credentials and repository access, snapshots all existing
-profiles, and completes their exact local-to-remote publication before staging.
-It then stages the remote-authoritative root distribution; stages every profile
-in manifest order using the exact returned commit for an existing profile or
-the configured branch for a truly missing profile; runs
-`validate_chrome_mcp_sources` over the staged root and profiles; synchronizes
-shared repositories, including lifelog; and only then calls
-`Transaction.begin`. Inside the transaction it applies root, named profiles in
-manifest order, shared working trees, and managed environment files. Existing
-named-profile publication has already completed before the staged Chrome gate.
-If that validation fails, its reported remote commits remain valid and are not
-rolled back; bootstrap fails before shared-repository synchronization or local
-transaction mutation.
+profiles, and stages only truly missing profiles. Existing named profiles remain
+local-authoritative and are not published or replaced by `apply`; publication is
+owned by the explicit `sync-profiles` command. Bootstrap then stages the
+remote-authoritative root distribution, stages each missing profile in manifest
+order using its configured branch and optional pinned commit, runs
+`validate_chrome_mcp_sources` over the staged root and profiles, synchronizes
+shared repositories including lifelog, and only then calls `Transaction.begin`.
+Inside the transaction it applies root, missing profiles in manifest order,
+shared working trees, and managed environment files. If a staged validation
+fails, no profile publication has occurred and bootstrap fails before
+shared-repository synchronization or local transaction mutation.
 
 `apply` holds the canonical nonblocking `EngineLock` at
 `/opt/data/locks/bootstrap-engine.lock` from before crash-journal recovery
@@ -250,8 +250,12 @@ for the first official Hermes install. An existing malformed or incomplete
 profile is not absent: bootstrap fails before its transaction and never falls
 back to a remote overwrite.
 
-If synchronization fails, bootstrap does not begin its local transaction or
-restart Hermes. There are two public diagnostics:
+If explicit synchronization fails, the report contains per-profile failures;
+completed pushes remain valid because independent profile repositories are not
+cross-repository atomic. Repair the failed local boundary and retry it. A
+normal `apply` does not publish existing profiles and therefore does not fail
+because a profile push failed. There are two public diagnostics for the
+explicit synchronization command:
 
 - Snapshot preflight can fail before a `profile_report` is created. `apply`
   writes `profile snapshot rejected (<category>)` to stderr, without a profile
@@ -261,11 +265,13 @@ restart Hermes. There are two public diagnostics:
   `named profile repository sync failed: <failed names>` to stderr. The Python
   exception can retain the report internally.
 
-Every `named profile repository sync failed: <failed names>` message requires
-the guarded profile, outer-bootstrap, and private shared-repository stage
-artifact inventories in the cleanup runbook before any retry or closure. The
-CLI-hidden category could be `cleanup_failed`; neither an expected push
-diagnosis nor a later successful sync excludes that possibility.
+Every cleanup failure requires the guarded profile and private
+shared-repository stage artifact inventories in the cleanup runbook before any
+retry or closure. Profile snapshot, revalidation, Git staging, and askpass
+artifacts are under the container's private `/tmp` (for example,
+`/tmp/.hermes-profile-sync-*`), not the `/opt/data` bind mount. The CLI-hidden
+category could be `cleanup_failed`; neither an expected push diagnosis nor a
+later successful sync excludes that possibility.
 
 Snapshot-preflight rejection is a different trigger. Publication has not begun,
 and `profile snapshot rejected (<category>)` exposes its category. If the inner
@@ -279,27 +285,26 @@ trigger.
 
 `could not clean bootstrap staging resources` is itself an indeterminate
 cleanup trigger. Final outer cleanup can replace a snapshot-preflight,
-publication, staging, transaction, validation, or other primary failure. If a
-profile report had already been created, it can remain attached internally, but
-the CLI exposes neither that report nor the replaced primary failure. Before
-retry or closure, inventory both the profile scratch prefixes and the outer
-`.hermes-bootstrap-*` prefix below, plus private
+staging, transaction, validation, or other primary failure. Before retry or
+closure, inventory `/tmp/.hermes-profile-snapshots-*`,
+`/tmp/.hermes-profile-sync-*`, `/tmp/askpass-*`, and private
 `/opt/data/shared/.hermes-repository-*` stages. A candidate or indeterminate
 determination activates the same full-window quiescent quarantine procedure; a
 later successful command does not waive any inventory.
 
-Once synchronization has created `profile_report`, later staging, transaction,
-installed-layout validation, cleanup, or rollback failures can also retain that
-report on the internal Python exception. The CLI never serializes this
-attribute. By default every failed `apply` has empty stdout and exactly one safe
-error message on stderr. With `HERMES_BOOTSTRAP_DEBUG=1`, a sanitized traceback
-from the public CLI boundary may follow that message; it contains neither
-tokens nor the raw internal exception graph.
+The `apply` command does not create a profile publication report because it
+does not publish existing profiles. By default every failed `apply` has empty
+stdout and exactly one safe error message on stderr. With
+`HERMES_BOOTSTRAP_DEBUG=1`, a sanitized traceback from the public CLI boundary
+may follow that message; it contains neither tokens nor the raw internal
+exception graph.
 
 Use dry-run only for aggregate preflight and diff inspection. It never pushes,
 so a changed entry reports category `dry_run`; it cannot reproduce
 `push_rejected`, `push_race_exhausted`, or another push-only failure. To obtain
 a push-only category, run standalone real `sync-profiles` and inspect its JSON.
+The real synchronizer also enforces each profile's `max_deleted_paths` limit;
+an over-limit result uses category `deletion_limit_exceeded` and does not push.
 The real aggregate processes every manifest profile and may push changes for
 profiles other than the original failure. Successful pushes remain valid and
 cannot be rolled back; a subsequent run reports them as `unchanged` when the
@@ -399,11 +404,9 @@ bypasses `EngineLock` is outside this model; cleanup does not claim an atomic
 identity-check-and-delete guarantee against that actor.
 
 The full procedure is mandatory for an explicit standalone `cleanup_failed`
-report. A post-preflight apply publication message has a hidden category, and
-`could not clean bootstrap staging resources` can replace an earlier hidden
-profile report or another primary failure. Both messages must complete the
-unified quiescent inventory and decision steps below even when the suspected
-cause is an ordinary push failure.
+report or `could not clean bootstrap staging resources`. These messages must
+complete the unified quiescent inventory and decision steps below even when
+the suspected cause is an ordinary push failure.
 
 1. Establish one named maintenance owner. Stop and disable every launch path
    for the entire recovery window: the Hermes gateway and scheduler, any
@@ -413,28 +416,25 @@ cause is an ordinary push failure.
    transaction or repository lock has an owner. Lock files may persist while
    unlocked. Do not re-enable any launcher until the final step; only the
    maintenance owner may run the controlled verification commands below.
-2. From a maintenance environment that sees the same `/opt/data` mount
-   namespace, inventory only direct children whose complete names match
-   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`, `askpass-*`, or
-   `.hermes-bootstrap-*` under canonical `/opt/data`. Separately inventory only
-   direct children of canonical `/opt/data/shared` whose complete names match
-   `.hermes-repository-*`; `repositories.py` creates these private first-clone
-   stages in the shared repository target's parent. Always inventory the
-   profile-scratch, outer-bootstrap, and private shared-repository stage groups,
-   even when the public error names only one phase. Separately inventory any
-   prior `.hermes-profile-cleanup-quarantine-*` directory. An existing
-   quarantine is unresolved recovery evidence: do not reuse or remove it; stop
-   and escalate.
-3. Inspect every candidate individually with no symlink following. Both
-   `.hermes-profile-*` forms and `.hermes-bootstrap-*` must be real directories
-   directly under canonical `/opt/data`, owned by the maintenance service
-   UID/GID, with mode `0700` and the exact expected prefix. A
+2. From a maintenance environment that sees the same `/opt/data` and `/tmp`
+   mount namespaces, inventory only direct children whose complete names match
+   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`,
+   `.hermes-bootstrap-*`, or `askpass-*` under canonical `/tmp`. Separately
+   inventory only direct children of canonical `/opt/data/shared` whose
+   complete names match `.hermes-repository-*`; `repositories.py` creates
+   these private first-clone stages in the shared repository target's parent.
+   Always inventory both groups, even when the public error names only one
+   phase. Separately inventory any prior quarantine in each relevant parent.
+   An existing quarantine is unresolved recovery evidence: do not reuse or
+   remove it; stop and escalate.
+3. Inspect every candidate individually with no symlink following. All
+   `.hermes-profile-*`, `.hermes-bootstrap-*`, and `askpass-*` candidates must
+   be directly beneath `/tmp`, owned by the maintenance service UID/GID, and
+   use the expected type, mode, link count, and prefix. A
    `.hermes-repository-*` candidate must meet the same directory, owner, and
-   mode checks directly under canonical `/opt/data/shared`. An `askpass-*`
-   candidate must be a real regular file directly under `/opt/data`, with the
-   same owner, mode `0700`, link count `1`, and exact prefix. Any unexpected
-   path, descendant mount, type, owner, mode, link count, prefix, or location is
-   an escalation, not a deletion candidate.
+   mode checks directly under canonical `/opt/data/shared`. Any unexpected
+   path, descendant mount, type, owner, mode, link count, prefix, or location
+   is an escalation, not a deletion candidate.
 4. Capture an authoritative mount inventory for that maintenance namespace,
    such as Linux `/proc/self/mountinfo` or reliable mountpoint tooling. Compare
    its canonical mount targets against each canonical candidate subtree.
@@ -457,12 +457,14 @@ cause is an ordinary push failure.
    aggregate exit `0` never substitutes for this pre-retry inventory because
    old artifacts are not revisited.
 6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
-   directly under `/opt/data`. Verify that it is owner-created, non-symlink,
-   mode `0700`, contains no mountpoint, and has the same filesystem device as
-   every candidate. Revalidate each candidate immediately before moving it,
-   then atomically rename each exact candidate into quarantine without using
-   globs. Any rename failure, including `EXDEV` or `EBUSY`, aborts the operation;
-   leave the quarantine untouched and escalate.
+   in `/tmp` for `/tmp` candidates and a separate quarantine in the candidate's
+   `/opt/data/shared` parent for shared-repository candidates. Verify each is
+   owner-created, non-symlink, mode `0700`, contains no mountpoint, and has the
+   same filesystem device as the candidates it receives. Revalidate each
+   candidate immediately before moving it, then atomically rename each exact
+   candidate into its same-parent quarantine without using globs. Any rename
+   failure, including `EXDEV` or `EBUSY`, aborts the operation; leave the
+   quarantine untouched and escalate.
 7. After every candidate is isolated, refresh the mount inventory and recheck
    the quarantine and every descendant. Confirm the quarantined entries match
    the reviewed candidate set and remain mount-free. Only then remove the
@@ -470,7 +472,7 @@ cause is an ordinary push failure.
    crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
    pattern, or `find -delete`.
 8. While all ordinary launch paths remain disabled, require zero direct
-   profile-scratch and outer-bootstrap names under `/opt/data`, zero private
+   profile-scratch and outer-bootstrap names under `/tmp`, zero private
    `.hermes-repository-*` stage names under `/opt/data/shared`, zero quarantine
    names, and no related mount issue. The maintenance owner then runs
    standalone dry-run and real `sync-profiles`, consumes both JSON reports
@@ -497,12 +499,12 @@ two local applies from mutating managed paths concurrently. Recovery may restore
 or remove previously journaled managed paths; it is intentionally not covered
 by validation-before-new-write claims.
 
-After recovery completes, credential validation, profile publication,
-root/profile staging, staged `validate_chrome_mcp_sources`, and shared remote
-synchronization finish before `Transaction.begin` because remote pushes cannot
-be rolled back. Existing named-profile publication is already complete when
-the staged Chrome gate runs and remains valid if that gate fails. Inside the
-new transaction, bootstrap snapshots root-owned paths, named profile targets,
+After recovery completes, credential validation, root/profile staging, staged
+`validate_chrome_mcp_sources`, and shared remote synchronization finish before
+`Transaction.begin`. `apply` does not publish existing named profiles: those
+local-authoritative snapshots are published only by the explicit
+`sync-profiles` command. Inside the new transaction, bootstrap snapshots
+root-owned paths, named profile targets,
 shared working-tree publication, deprecated-path cleanup, and managed `.env`
 files before replacement. Environment files use atomic rename and mode `0600`,
 preserve unmanaged keys, and replace only managed keys.
@@ -645,7 +647,7 @@ operations docs:
 task hermes:bootstrap:test
 ```
 
-The suite covers four-profile bootstrap sequencing, first-install seeding,
+The suite covers six-profile bootstrap sequencing, first-install seeding,
 invalid-existing failure without fallback, aggregate preflight, exact remote
 tree deletion, local immutability, retry behavior, compact JSON, exit status,
 and redaction.

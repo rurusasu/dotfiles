@@ -6,8 +6,9 @@ import json
 import os
 import re
 import stat
+import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path, PurePosixPath
 from typing import Callable, TextIO
@@ -188,44 +189,14 @@ def _apply_sensitive(
             allow_missing=True,
         )
         missing_names = frozenset(source.name for source in prepared.missing)
-        sync_prepared = replace(prepared, missing=())
-        profile_report = profile_sync.synchronize_prepared_profiles(
-            sync_prepared, auth, dry_run=False
-        )
-        if profile_report.exit_code != 0:
-            failed = ",".join(
-                item.name
-                for item in profile_report.profiles
-                if item.status == "failed"
-            )
-            raise RepositoryError(
-                f"named profile repository sync failed: {failed}"
-            )
-
-        commit_by_name = {
-            item.name: item.commit
-            for item in profile_report.profiles
-            if item.commit is not None
-        }
-        status_by_name = {
-            item.name: item.status for item in profile_report.profiles
-        }
         profile_sync_summary: dict[str, str] = {}
         profile_sources: list[DistributionSource] = []
         for source in manifest.profiles:
             if source.name in missing_names:
-                exact = source
                 profile_sync_summary[source.name] = "installed"
+                profile_sources.append(source)
             else:
-                commit = commit_by_name.get(source.name)
-                status = status_by_name.get(source.name)
-                if commit is None or status is None:
-                    raise RepositoryError(
-                        f"named profile repository sync failed: {source.name}"
-                    )
-                exact = replace(source, ref=commit)
-                profile_sync_summary[source.name] = status
-            profile_sources.append(exact)
+                profile_sync_summary[source.name] = "preserved"
 
         root_stage = stage_distribution(
             manifest.root_distribution,
@@ -501,7 +472,7 @@ def _private_scratch(data_root: Path) -> PrivateDirectory:
     _require_safe_directory(data_root)
     try:
         return create_private_directory(
-            data_root,
+            Path(tempfile.gettempdir()),
             prefix=".hermes-bootstrap-",
         )
     except (OSError, ValueError):
