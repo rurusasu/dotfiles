@@ -314,12 +314,18 @@ create_mocked_installer_fixture() {
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
 	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
-		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hindsight" \
+		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hermes-service" \
+		"$MOCK_REPO/docker/hindsight" "$MOCK_REPO/docker/local-ai-services" \
 		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'migrate-darwin-provider %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh"
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done
@@ -450,6 +456,8 @@ exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub ollama 'printf "ollama %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -526,6 +534,8 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
+		DOTFILES_LAUNCHCTL_COMMAND="$MOCK_BIN/launchctl" \
+		DOTFILES_ACCEPT_DOCKER_LICENSE=1 \
 		DOTFILES_OPEN_COMMAND="$MOCK_BIN/open" \
 		DOTFILES_TASK_COMMAND="$MOCK_BIN/task" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \

@@ -124,7 +124,7 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$output" = "true" ]
 
-	run nix build --no-link .#darwin-vscode
+	run nix build --no-link .#packages.aarch64-darwin.darwin-vscode
 	[ "$status" -eq 0 ]
 
 	run --separate-stderr nix build --no-link --print-out-paths .#package-support-report
