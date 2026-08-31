@@ -10,7 +10,7 @@
   pkgs,
   lib,
   inputs ? null,
-  installFeatures ? null,
+  installFeatures ? [ ],
   hermesDesktopPackage ? null,
   isWSL,
   ...
