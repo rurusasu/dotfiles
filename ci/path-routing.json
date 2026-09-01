@@ -52,6 +52,14 @@
       ]
     },
     {
+      "patterns": [
+        "scripts/python/update_darwin_packages.py",
+        "tests/python/test_update_darwin_packages.py",
+        ".github/workflows/update-darwin-packages.yml"
+      ],
+      "outputs": ["darwin", "contract", "nix", "package_catalog"]
+    },
+    {
       "patterns": ["windows/winget/packages.json", "windows/npm/packages.json"],
       "outputs": ["windows", "contract", "package_catalog"]
     },

@@ -1756,18 +1756,37 @@ class ProfileSyncTests(unittest.TestCase):
         self.seed_remote(remote_b, snapshot_b)
         manifest = self.manifest(profile_a, profile_b)
         observed_scratch: list[Path] = []
+        observed_private_parents: list[Path] = []
+
+        original_create_private_directory = profile_sync.create_private_directory
+
+        def create_private_directory(parent, *, prefix):
+            observed_private_parents.append(parent)
+            return original_create_private_directory(parent, prefix=prefix)
 
         def prepared(_manifest, scratch, *, allow_missing):
             self.assertIs(_manifest, manifest)
             self.assertFalse(allow_missing)
             self.assertEqual(stat.S_IMODE(scratch.stat().st_mode), 0o700)
+            self.assertEqual(scratch.parent, Path(tempfile.gettempdir()))
             observed_scratch.append(scratch)
             return PreparedProfiles((snapshot_a, snapshot_b), ())
 
-        with mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared):
+        with (
+            mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared),
+            mock.patch.object(
+                profile_sync,
+                "create_private_directory",
+                side_effect=create_private_directory,
+            ),
+        ):
             report = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertEqual([item.status for item in report.profiles], ["unchanged", "unchanged"])
         self.assertTrue(observed_scratch)
+        self.assertTrue(observed_private_parents)
+        self.assertTrue(
+            all(parent == Path(tempfile.gettempdir()) for parent in observed_private_parents)
+        )
         self.assertFalse(observed_scratch[0].exists())
 
         with mock.patch.object(

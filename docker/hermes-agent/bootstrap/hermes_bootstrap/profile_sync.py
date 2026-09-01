@@ -189,6 +189,10 @@ def synchronize_profiles(
     report: ProfileSyncReport
     try:
         _validate_manifest_profiles(manifest)
+        # Keep the read-only publication snapshot off the bind-mounted Hermes
+        # home. Docker Desktop can remap ownership on that mount while a
+        # profile gateway is active, which makes the descriptor-backed
+        # snapshot fail its ownership attestation.
         scratch = create_private_directory(
             Path(tempfile.gettempdir()),
             prefix=".hermes-profile-snapshots-",

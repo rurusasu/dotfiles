@@ -101,6 +101,7 @@ in
       shellAliases = {
         find = "fd";
         grep = "rg";
+        lg = "lazygit";
         l = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
         la = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
         ll = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
