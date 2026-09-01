@@ -89,7 +89,7 @@
       "outputs": ["darwin", "contract", "nix"]
     },
     {
-      "patterns": ["nix/home/README.md"],
+      "patterns": ["nix/README.md", "nix/home/README.md"],
       "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
     },
     {

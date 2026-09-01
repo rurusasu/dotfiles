@@ -1756,18 +1756,40 @@ class ProfileSyncTests(unittest.TestCase):
         self.seed_remote(remote_b, snapshot_b)
         manifest = self.manifest(profile_a, profile_b)
         observed_scratch: list[Path] = []
+        observed_private_parents: list[Path] = []
+
+        original_create_private_directory = profile_sync.create_private_directory
+
+        def create_private_directory(parent, *, prefix):
+            observed_private_parents.append(parent)
+            return original_create_private_directory(parent, prefix=prefix)
 
         def prepared(_manifest, scratch, *, allow_missing):
             self.assertIs(_manifest, manifest)
             self.assertFalse(allow_missing)
             self.assertEqual(stat.S_IMODE(scratch.stat().st_mode), 0o700)
+            self.assertEqual(scratch.parent, Path(tempfile.gettempdir()).resolve())
             observed_scratch.append(scratch)
             return PreparedProfiles((snapshot_a, snapshot_b), ())
 
-        with mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared):
+        with (
+            mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared),
+            mock.patch.object(
+                profile_sync,
+                "create_private_directory",
+                side_effect=create_private_directory,
+            ),
+        ):
             report = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertEqual([item.status for item in report.profiles], ["unchanged", "unchanged"])
         self.assertTrue(observed_scratch)
+        self.assertTrue(observed_private_parents)
+        self.assertTrue(
+            all(
+                parent == Path(tempfile.gettempdir()).resolve()
+                for parent in observed_private_parents
+            )
+        )
         self.assertFalse(observed_scratch[0].exists())
 
         with mock.patch.object(
@@ -1789,6 +1811,27 @@ class ProfileSyncTests(unittest.TestCase):
         ):
             cleanup = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertTrue(all(item.category == "cleanup_failed" for item in cleanup.profiles))
+
+    def test_scratch_inside_data_root_is_rejected_before_creation(self) -> None:
+        profile = self.profile("profile-a", self.root / "profile-a.git")
+        manifest = self.manifest(profile)
+
+        with (
+            mock.patch.object(
+                profile_sync.tempfile,
+                "gettempdir",
+                return_value=str(self.data_root),
+            ),
+            mock.patch.object(profile_sync, "create_private_directory") as create_private,
+            mock.patch.object(profile_sync, "prepare_profile_snapshots") as prepare,
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "aggregate_preflight_blocked")
+        create_private.assert_not_called()
+        prepare.assert_not_called()
+        self.assertEqual(list(self.data_root.glob(".hermes-profile-snapshots-*")), [])
 
 
 if __name__ == "__main__":

@@ -189,8 +189,12 @@ def synchronize_profiles(
     report: ProfileSyncReport
     try:
         _validate_manifest_profiles(manifest)
+        # Keep the read-only publication snapshot off the bind-mounted Hermes
+        # home. Docker Desktop can remap ownership on that mount while a
+        # profile gateway is active, which makes the descriptor-backed
+        # snapshot fail its ownership attestation.
         scratch = create_private_directory(
-            Path(tempfile.gettempdir()),
+            _profile_snapshot_scratch_parent(manifest.data_root),
             prefix=".hermes-profile-snapshots-",
         )
         prepared = prepare_profile_snapshots(
@@ -241,6 +245,21 @@ def _validate_manifest_profiles(manifest: BootstrapManifest) -> None:
         )
     ):
         raise ValueError("invalid profile manifest")
+
+
+def _profile_snapshot_scratch_parent(data_root: Path) -> Path:
+    """Return a real temporary parent that is outside the Hermes data root."""
+
+    try:
+        scratch_parent = Path(tempfile.gettempdir()).resolve(strict=True)
+        resolved_data_root = data_root.resolve(strict=True)
+    except OSError as error:
+        raise ValueError("invalid profile snapshot scratch parent") from error
+    if scratch_parent == resolved_data_root or scratch_parent.is_relative_to(
+        resolved_data_root
+    ):
+        raise ValueError("profile snapshot scratch parent is inside Hermes data root")
+    return scratch_parent
 
 
 def _profile_preflight_failure(
