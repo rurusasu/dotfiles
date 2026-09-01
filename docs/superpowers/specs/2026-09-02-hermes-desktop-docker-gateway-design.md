@@ -16,13 +16,11 @@ Hermes Desktop の `connections.json` と暗号化された token は Desktop �
 
 `WithHermes` プロファイルに `hermes-desktop-docker` を追加する。ラッパーは以下を実行する。
 
-1. 既存の `${HERMES_DATA_DIR:-$HOME/.hermes}/.env` を読み取る。
-2. Hermes bootstrap が管理する root の `API_SERVER_KEY` を、許可された形式として検証する。
-3. `http://127.0.0.1:9119/api/health` に到達できることを確認する。
-4. `HERMES_DESKTOP_REMOTE_URL` と `HERMES_DESKTOP_REMOTE_TOKEN` をプロセス環境へ設定する。
-5. upstream の `hermes-desktop` を `exec` する。
+1. `http://127.0.0.1:9119/api/health` に到達できることを確認する。
+2. Hermes Desktop の app-owned `connections.json` に、同 URL の primary remote 接続と暗号化 token があることを確認する。
+3. upstream の `hermes-desktop` を `exec` する。Desktop が保存 token を Keychain から読み込み、API/WS の認証を担当する。
 
-Token は標準出力・標準エラー・プロセス引数・Git 管理対象・Nix store に出さない。token がない、env ファイルが不正、gateway が停止中の場合は、既存の Desktop や Docker を変更せず、復旧方法を示して終了する。
+Token はラッパーが読み取らず、標準出力・標準エラー・プロセス引数・Git 管理対象・Nix store に出さない。接続設定がない、registry が不正、gateway が停止中の場合は、既存の Desktop や Docker を変更せず、復旧方法を示して終了する。
 
 ### 3. Docker 公開ポートと Compose は変更しない
 
@@ -39,7 +37,7 @@ Windows、Linux、Hermes Desktop 本体、Docker 認証方式、1Password の it
 
 ## テスト方針
 
-- ラッパー単体テストで、正常な env の環境変数引き渡し、token 非露出、欠損/不正 env、権限不備、gateway 不到達を検証する。
+- ラッパー単体テストで、保存済み primary remote 接続の検証、token 非露出、registry 欠損/不正、gateway 不到達を検証する。
 - パッケージカタログと Darwin profile の評価で、`WithHermes` のみラッパーが導入されることを検証する。
 - Taskfile 契約テストで、Desktop 起動がラッパーを経由し、Compose の MCP 公開ポートを増やしていないことを検証する。
 - 実機では token の値を表示せず、9119 の `/api/health`、Docker gateway の状態、ラッパーから起動された Desktop の remote 接続を確認する。

@@ -738,6 +738,36 @@ let
             };
           };
         };
+        hermes-desktop-docker = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              pkgs.writeShellApplication {
+                name = "hermes-desktop-docker";
+                runtimeInputs = [
+                  pkgs.curl
+                  pkgs.jq
+                ];
+                text = builtins.readFile ../../scripts/sh/hermes-desktop-docker.sh;
+              }
+            else
+              null;
+          winget = null;
+          category = "terminal";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "dotfiles";
+              identity.command = "hermes-desktop-docker";
+            };
+            linux = {
+              unsupported = "Hermes Desktop Docker launcher is provisioned by the native macOS profile";
+            };
+            windows = {
+              unsupported = "Hermes Desktop Docker launcher is provisioned by the native macOS profile";
+            };
+          };
+        };
 
         # ── k8s ───────────────────────────────────────────────
         kind = {
