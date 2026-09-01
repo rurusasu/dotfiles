@@ -1809,6 +1809,27 @@ class ProfileSyncTests(unittest.TestCase):
             cleanup = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertTrue(all(item.category == "cleanup_failed" for item in cleanup.profiles))
 
+    def test_scratch_inside_data_root_is_rejected_before_creation(self) -> None:
+        profile = self.profile("profile-a", self.root / "profile-a.git")
+        manifest = self.manifest(profile)
+
+        with (
+            mock.patch.object(
+                profile_sync.tempfile,
+                "gettempdir",
+                return_value=str(self.data_root),
+            ),
+            mock.patch.object(profile_sync, "create_private_directory") as create_private,
+            mock.patch.object(profile_sync, "prepare_profile_snapshots") as prepare,
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "aggregate_preflight_blocked")
+        create_private.assert_not_called()
+        prepare.assert_not_called()
+        self.assertEqual(list(self.data_root.glob(".hermes-profile-snapshots-*")), [])
+
 
 if __name__ == "__main__":
     unittest.main()
