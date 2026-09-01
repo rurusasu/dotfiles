@@ -34,4 +34,4 @@
 - [x] 関連 Bats、Python 契約テスト、Nix formatter/eval、Taskfile config を実行する。
 - [x] 実機で secret を表示せず、9119 gateway health と wrapper の fake/live 起動境界を確認する。
 - [x] `git diff --check`、最終差分、git status、Issue #545 の受け入れ条件をレビューする。
-- [ ] `task commit -- "feat: connect Hermes Desktop to Docker gateway"` で専用ブランチへコミットする。
+- [x] `task commit -- "feat: connect Hermes Desktop to Docker gateway"` で専用ブランチへコミットする。
