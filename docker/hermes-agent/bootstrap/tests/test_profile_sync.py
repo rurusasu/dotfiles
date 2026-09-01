@@ -1768,7 +1768,7 @@ class ProfileSyncTests(unittest.TestCase):
             self.assertIs(_manifest, manifest)
             self.assertFalse(allow_missing)
             self.assertEqual(stat.S_IMODE(scratch.stat().st_mode), 0o700)
-            self.assertEqual(scratch.parent, Path(tempfile.gettempdir()))
+            self.assertEqual(scratch.parent, Path(tempfile.gettempdir()).resolve())
             observed_scratch.append(scratch)
             return PreparedProfiles((snapshot_a, snapshot_b), ())
 
@@ -1785,7 +1785,10 @@ class ProfileSyncTests(unittest.TestCase):
         self.assertTrue(observed_scratch)
         self.assertTrue(observed_private_parents)
         self.assertTrue(
-            all(parent == Path(tempfile.gettempdir()) for parent in observed_private_parents)
+            all(
+                parent == Path(tempfile.gettempdir()).resolve()
+                for parent in observed_private_parents
+            )
         )
         self.assertFalse(observed_scratch[0].exists())
 
