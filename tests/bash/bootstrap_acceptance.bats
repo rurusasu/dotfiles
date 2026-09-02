@@ -89,6 +89,10 @@ EOF
 	grep -Fq -- '-f "$REPO_ROOT/docker/hermes-agent/Dockerfile" "$REPO_ROOT/docker"' "$RUNNER"
 }
 
+@test "acceptance runner can use a preloaded offline storage seed image" {
+	grep -Fq 'DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE' "$RUNNER"
+}
+
 @test "acceptance secret fixtures are deterministic and reject unapproved lookups" {
 	bootstrap="$FIXTURE_ROOT/hermes-bootstrap-fixture.sh"
 	op="$FIXTURE_ROOT/bin/op"
