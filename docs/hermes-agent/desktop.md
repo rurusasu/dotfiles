@@ -47,9 +47,10 @@ curl -fsS http://127.0.0.1:8642/health
 
 `9119` は Desktop の Remote Gateway/Dashboard 接続先、`8642` は gateway 内部 API
 の health 確認用です。`hermes-desktop-docker` は Desktop の app-owned
-`connections.json` に保存された暗号化 token を読み出したり表示したりせず、
-gateway URL と primary remote 接続の存在だけを検証します。token は Desktop/OS
-Keychain の管理境界に残り、Git、Nix store、通常ログ、プロセス引数へコピーされません。
+`connections.json` に保存された remote 接続を検証します。OAuth 接続の token は
+Desktop の native token store、token 接続の envelope は Desktop/OS Keychain の
+管理境界に残り、launcher はいずれも読み出しません。秘密情報は Git、Nix store、
+通常ログ、プロセス引数へコピーされません。
 接続が未設定、gateway が停止中の場合は、Desktop を起動せず終了します。
 
 公式の Desktop 操作と remote backend の設定は、[Hermes Desktop

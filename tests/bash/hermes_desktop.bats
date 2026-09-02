@@ -16,6 +16,7 @@ setup() {
 printf "%s\n" "$*" >"$CURL_CAPTURE"
 '
 	write_stub hermes-desktop '
+	: >"$DESKTOP_CAPTURE"
 printf "%s\n" "$*" >"$DESKTOP_ARGS"
 '
 	write_stub jq 'exec "$REAL_JQ" "$@"'
@@ -23,7 +24,7 @@ printf "%s\n" "$*" >"$DESKTOP_ARGS"
 	export HERMES_DATA_DIR="$TEST_HOME/.hermes"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export DESKTOP_CAPTURE DESKTOP_ARGS CURL_CAPTURE REAL_JQ
-	printf '%s\n' '{"version":2,"primary":"docker","connections":[{"id":"docker","kind":"remote","url":"http://127.0.0.1:9119","authMode":"oauth","token":{"encoding":"encrypted","value":"opaque"}}]}' >"$TEST_HOME/Library/Application Support/Hermes/connections.json"
+	printf '%s\n' '{"version":2,"primary":"docker","connections":[{"id":"docker","kind":"remote","url":"http://127.0.0.1:9119/","authMode":"oauth"}]}' >"$TEST_HOME/Library/Application Support/Hermes/connections.json"
 }
 
 write_stub() {
@@ -59,7 +60,17 @@ write_stub() {
 }
 
 @test "Docker gateway launcher rejects a non-primary or wrong-url remote connection" {
-	printf '%s\n' '{"version":2,"primary":"local","connections":[{"id":"local","kind":"local"},{"id":"docker","kind":"remote","url":"http://127.0.0.1:8642","authMode":"oauth","token":{"encoding":"encrypted","value":"opaque"}}]}' >"$TEST_HOME/Library/Application Support/Hermes/connections.json"
+	printf '%s\n' '{"version":2,"primary":"local","connections":[{"id":"local","kind":"local"},{"id":"docker","kind":"remote","url":"http://127.0.0.1:8642","authMode":"oauth"}]}' >"$TEST_HOME/Library/Application Support/Hermes/connections.json"
+
+	run "$REPO_ROOT/scripts/sh/hermes-desktop-docker.sh"
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"primary remote connection"* ]]
+	[ ! -e "$DESKTOP_CAPTURE" ]
+}
+
+@test "Docker gateway launcher rejects a malformed token-auth envelope" {
+	printf '%s\n' '{"version":2,"primary":"docker","connections":[{"id":"docker","kind":"remote","url":"http://127.0.0.1:9119","authMode":"token","token":{}}]}' >"$TEST_HOME/Library/Application Support/Hermes/connections.json"
 
 	run "$REPO_ROOT/scripts/sh/hermes-desktop-docker.sh"
 

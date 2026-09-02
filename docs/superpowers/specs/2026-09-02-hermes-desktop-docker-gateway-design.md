@@ -17,7 +17,7 @@ Hermes Desktop の `connections.json` と暗号化された token は Desktop �
 `WithHermes` プロファイルに `hermes-desktop-docker` を追加する。ラッパーは以下を実行する。
 
 1. `http://127.0.0.1:9119/api/health` に到達できることを確認する。
-2. Hermes Desktop の app-owned `connections.json` に、同 URL の primary remote 接続と暗号化 token があることを確認する。
+2. Hermes Desktop の app-owned `connections.json` に、同 URL の primary remote 接続があることを確認する。token 認証の場合だけ、保存 token envelope の形式も検証する。
 3. upstream の `hermes-desktop` を `exec` する。Desktop が保存 token を Keychain から読み込み、API/WS の認証を担当する。
 
 Token はラッパーが読み取らず、標準出力・標準エラー・プロセス引数・Git 管理対象・Nix store に出さない。接続設定がない、registry が不正、gateway が停止中の場合は、既存の Desktop や Docker を変更せず、復旧方法を示して終了する。

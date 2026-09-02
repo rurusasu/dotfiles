@@ -23,9 +23,18 @@ if ! jq -e --arg url "$remote_url" '
 	| any(.connections[]?;
 		.id == $primary
 		and .kind == "remote"
-		and .url == $url
+		and ((.url? | strings | sub("/+$"; "")) == ($url | sub("/+$"; "")))
 		and (.authMode == "oauth" or .authMode == "token")
-		and (.token? != null)
+		and (
+			.authMode == "oauth"
+			or (
+				.token? | type == "object"
+				and (.encoding | type == "string")
+				and (.encoding == "safeStorage" or .encoding == "plain")
+				and (.value | type == "string")
+				and (.value | length > 0)
+			)
+		)
 	)
 ' "$registry_file" >/dev/null 2>&1; then
   hermes_desktop_docker_die "Desktop primary remote connection for $remote_url is not configured; open Hermes Settings > Gateway and sign in once"

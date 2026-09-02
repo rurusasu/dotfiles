@@ -11,7 +11,7 @@
 ## 2. ランチャーの失敗テストを追加
 
 - [x] `tests/bash/hermes_desktop.bats` を追加し、fixture の HOME/HERMES_DATA_DIR と fake `hermes-desktop`/`curl` を用意する。
-- [x] 正常系で保存済み primary remote 接続の URL/token envelope を検証し、token を fake Desktop の引数・出力へ渡さないことを確認する。
+- [x] 正常系で保存済み primary remote 接続（OAuth と token envelope）を検証し、token を fake Desktop の引数・出力へ渡さないことを確認する。
 - [x] remote registry の欠損/不正、別 URL、remote 以外の primary 接続を拒否するテストを書く。
 - [x] gateway 不到達時に Desktop を実行せず、`task hermes:up` を案内するテストを書く。
 - [x] 先にテストを実行して失敗することを確認する。
