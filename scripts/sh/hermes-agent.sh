@@ -47,10 +47,11 @@ dotfiles_hermes_initialize_storage_volume() {
 
   "$docker_runner" volume create "$volume_name" >/dev/null || return $?
   if "$docker_runner" run --rm \
+    --entrypoint /usr/local/bin/hermes-storage-seed \
     --mount "type=bind,src=$data_dir,dst=/source,readonly" \
     --mount "type=volume,src=$volume_name,dst=/target" \
     local/hermes-agent-gh:latest \
-    /usr/local/bin/hermes-storage-seed --source /source --destination /target; then
+    --source /source --destination /target; then
     printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
     return 0
   else

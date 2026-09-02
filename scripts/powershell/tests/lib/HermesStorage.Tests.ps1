@@ -56,7 +56,7 @@ Describe 'Hermes Docker storage initialization' {
         $result.Existing | Should -BeFalse
         $script:dockerCalls[0] | Should -Be 'volume inspect hermes-data'
         $script:dockerCalls[1] | Should -Be 'volume create hermes-data'
-        $script:dockerCalls[2] | Should -Match 'run --rm --mount .*local/hermes-agent-gh:latest'
+        $script:dockerCalls[2] | Should -Match 'run --rm --entrypoint /usr/local/bin/hermes-storage-seed --mount .*local/hermes-agent-gh:latest'
         $script:dockerCalls | Should -Not -Contain 'volume rm hermes-data'
     }
 

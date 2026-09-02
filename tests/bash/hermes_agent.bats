@@ -229,6 +229,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 
 	[ "$status" -eq 0 ]
 	assert_log_order '<stop> <hermes>' '<volume> <inspect> <hermes-data>' '<volume> <create> <hermes-data>' '<run> <--rm>' '<secret-plan>'
+	grep -Fq '<run> <--rm> <--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
 }
 
 @test "removes only a newly created volume when storage seeding fails" {

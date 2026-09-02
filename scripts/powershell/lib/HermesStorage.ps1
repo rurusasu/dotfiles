@@ -42,10 +42,10 @@ function Initialize-HermesStorageVolume {
 
     $seedArguments = @(
         'run', '--rm',
+        '--entrypoint', '/usr/local/bin/hermes-storage-seed',
         '--mount', "type=bind,source=$DataDir,target=/source,readonly",
         '--mount', "type=volume,source=$volumeName,target=/target",
         'local/hermes-agent-gh:latest',
-        '/usr/local/bin/hermes-storage-seed',
         '--source', '/source',
         '--destination', '/target'
     )
