@@ -21,6 +21,48 @@ dotfiles_hermes_browser_data_dir() {
   fi
 }
 
+dotfiles_hermes_storage_volume_name() {
+  local volume_name="${HERMES_DATA_VOLUME:-hermes-data}"
+
+  [[ $volume_name =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || return 1
+  printf '%s\n' "$volume_name"
+}
+
+dotfiles_hermes_initialize_storage_volume() {
+  local docker_runner="$1"
+  local volume_name data_dir
+  local volume_status create_status
+
+  volume_name="$(dotfiles_hermes_storage_volume_name)" ||
+    dotfiles_die "HERMES_DATA_VOLUME contains an invalid Docker volume name."
+  data_dir="$(dotfiles_hermes_data_dir)"
+
+  if "$docker_runner" volume inspect "$volume_name" >/dev/null 2>&1; then
+    printf 'Hermes Docker data volume already exists; leaving it untouched: %s\n' "$volume_name" >&2
+    return 0
+  else
+    volume_status=$?
+    ((volume_status == 1)) || return "$volume_status"
+  fi
+
+  "$docker_runner" volume create "$volume_name" >/dev/null || return $?
+  if "$docker_runner" run --rm \
+    --entrypoint /usr/local/bin/hermes-storage-seed \
+    --mount "type=bind,src=$data_dir,dst=/source,readonly" \
+    --mount "type=volume,src=$volume_name,dst=/target" \
+    local/hermes-agent-gh:latest \
+    --source /source --destination /target; then
+    printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
+    return 0
+  else
+    create_status=$?
+    # The volume was created by this invocation and is still empty or partial.
+    # Do not touch an existing volume; only remove this new initialization.
+    "$docker_runner" volume rm "$volume_name" >/dev/null 2>&1 || true
+    return "$create_status"
+  fi
+}
+
 dotfiles_hermes_prepare_runtime_home() {
   local data_dir browser_data_dir mode op_env_path
   data_dir="$(dotfiles_hermes_data_dir)"
@@ -588,6 +630,13 @@ dotfiles_hermes_start_stack() {
     esac
   fi
   if "$docker_runner" compose -f "$compose_file" stop hermes; then
+    :
+  else
+    status=$?
+    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    return "$status"
+  fi
+  if dotfiles_hermes_initialize_storage_volume "$docker_runner"; then
     :
   else
     status=$?

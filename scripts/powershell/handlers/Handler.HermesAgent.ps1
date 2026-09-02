@@ -8,6 +8,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\HermesBootstrap.ps1')
 . (Join-Path $libPath 'lib\HermesXApi.ps1')
 . (Join-Path $libPath 'lib\HermesGateway.ps1')
+. (Join-Path $libPath 'lib\HermesStorage.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
     [int]$DockerCheckTimeoutSeconds = 15
@@ -86,6 +87,16 @@ class HermesAgentHandler : SetupHandlerBase {
             $stop = $this.InvokeCompose($composeFile, @('stop', 'hermes'))
             if (-not $stop.Success) {
                 return $this.CreateFailureResult("Hermes Agent stop failed: $($stop.Message)")
+            }
+
+            try {
+                $storage = Initialize-HermesStorageVolume -DataDir $dataDir
+            }
+            catch {
+                return $this.CreateFailureResult('Hermes data volume configuration failed.')
+            }
+            if (-not $storage.Success) {
+                return $this.CreateFailureResult($storage.Message)
             }
 
             try {

@@ -40,6 +40,11 @@ setup() {
 exit 99
 EOF
 	chmod +x "$test_root/activated/bin/op"
+	cat >"$test_root/activated/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	chmod +x "$test_root/activated/bin/docker"
 	cat >"$test_root/install.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -72,10 +77,20 @@ EOF
 	run env \
 		DOTFILES_ACCEPTANCE_REPO_ROOT="$test_root" \
 		DOTFILES_ACCEPTANCE_FIXTURE_ROOT="$FIXTURE_ROOT" \
+		PATH="$test_root/activated/bin:$PATH" \
 		"$RUNNER"
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == "$FIXTURE_ROOT/bin/op" ]]
+}
+
+@test "acceptance runner builds the Hermes image used by storage seeding" {
+	grep -Fq 'docker build -t local/hermes-agent-gh:latest' "$RUNNER"
+	grep -Fq -- '-f "$REPO_ROOT/docker/hermes-agent/Dockerfile" "$REPO_ROOT/docker"' "$RUNNER"
+}
+
+@test "acceptance runner can use a preloaded offline storage seed image" {
+	grep -Fq 'DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE' "$RUNNER"
 }
 
 @test "acceptance secret fixtures are deterministic and reject unapproved lookups" {

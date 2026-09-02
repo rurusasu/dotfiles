@@ -16,8 +16,10 @@ COPY hermes-agent/bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/boot
 COPY hermes-agent/hermes-bootstrap /usr/local/bin/hermes-bootstrap
 COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
 COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge
+COPY hermes-agent/hermes_storage_seed.py /usr/local/bin/hermes-storage-seed
 RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
 RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
+RUN chmod 0755 /usr/local/bin/hermes-storage-seed
 
 RUN python3 - <<'PY'
 import re
@@ -160,11 +162,16 @@ COPY hindsight/hindsight.env /workspace/docker/hindsight/hindsight.env
 COPY hermes-agent/bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
 COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
 COPY hermes-agent/gateway_convergence.py /workspace/docker/hermes-agent/gateway_convergence.py
+COPY hermes-agent/hermes_storage_seed.py /workspace/docker/hermes-agent/hermes_storage_seed.py
+COPY hermes-agent/tests /workspace/docker/hermes-agent/tests
 COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests \
   -p 'test_[!t]*.py'
+
+RUN PYTHONPATH=/workspace/docker/hermes-agent /opt/hermes/.venv/bin/python -m unittest \
+  /workspace/docker/hermes-agent/tests/test_hermes_storage_seed.py
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests \

@@ -12,6 +12,17 @@ HINDSIGHT_DIR="$REPO_ROOT/docker/local-ai-services"
   exit 1
 }
 
+# The acceptance Compose file deliberately replaces the production service
+# image with lightweight fixtures. Build the production image separately so
+# Hermes storage seeding still exercises the same helper used in real runs.
+# Offline NixOS tests preload a small equivalent image instead.
+if [[ -n ${DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE:-} ]]; then
+  docker image inspect "$DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE" >/dev/null
+else
+  docker build -t local/hermes-agent-gh:latest \
+    -f "$REPO_ROOT/docker/hermes-agent/Dockerfile" "$REPO_ROOT/docker"
+fi
+
 install -m 0644 "$FIXTURE_ROOT/bootstrap-compose.yml" "$CANONICAL_DIR/compose.yml"
 install -m 0644 "$FIXTURE_ROOT/hindsight-compose.yml" "$HINDSIGHT_DIR/compose.yml"
 install -m 0755 "$FIXTURE_ROOT/hermes-bootstrap-fixture.sh" \

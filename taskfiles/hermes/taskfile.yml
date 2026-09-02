@@ -17,7 +17,7 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
   hermes:bootstrap:
-    desc: Bootstrap the Hermes runtime through the supported host adapter
+    desc: Initialize the Docker data volume and bootstrap Hermes through the supported host adapter
     interactive: true
     deps:
       - task: hindsight:up
@@ -30,6 +30,17 @@ tasks:
       - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
         platforms: [linux, darwin]
       - cmd: pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1 -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+        platforms: [windows]
+
+  hermes:storage:inspect:
+    desc: Inspect the Docker-managed Hermes runtime data volume
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - cmd: bash -lc 'docker volume inspect "${HERMES_DATA_VOLUME:-hermes-data}"'
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -Command '$name = if ([string]::IsNullOrWhiteSpace($env:HERMES_DATA_VOLUME)) { "hermes-data" } else { $env:HERMES_DATA_VOLUME }; docker volume inspect $name'
         platforms: [windows]
 
   hermes:bootstrap:test:

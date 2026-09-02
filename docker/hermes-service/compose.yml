@@ -23,8 +23,8 @@ services:
       - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
       - "127.0.0.1:3500-3505:3500-3505"
     volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+      - type: volume
+        source: hermes-data
         target: /opt/data
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
@@ -58,8 +58,8 @@ services:
       - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
         required: false
     volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+      - type: volume
+        source: hermes-data
         target: /opt/data
     environment:
       HERMES_HOME: /opt/data
@@ -169,3 +169,7 @@ networks:
   local-ai-services:
     name: local-ai-services
     external: true
+
+volumes:
+  hermes-data:
+    name: ${HERMES_DATA_VOLUME:-hermes-data}
