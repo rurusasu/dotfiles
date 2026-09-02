@@ -183,6 +183,15 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
 
+  hermes:desktop:
+    desc: Launch Hermes Desktop connected to the Docker gateway
+    preconditions:
+      - sh: command -v hermes-desktop-docker
+        msg: "Hermes Desktop Docker launcher is not installed. Apply the WithHermes profile."
+    cmds:
+      - cmd: hermes-desktop-docker
+        platforms: [darwin]
+
   hermes:down:
     desc: Stop Hermes Agent Docker container
     preconditions:

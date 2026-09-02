@@ -12,6 +12,7 @@ HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
 XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
 HINDSIGHT_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-hindsight-verify.sh"
+HERMES_DESKTOP_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-desktop-docker.sh"
 HINDSIGHT_WINDOWS_WRAPPER = (
     REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-hindsight-verify.ps1"
 )
@@ -93,6 +94,17 @@ class TaskfileContractTests(unittest.TestCase):
         ):
             with self.subTest(task_name=task_name):
                 self.assertIn("task: hermes:up", self._task_block(task_name))
+
+    def test_desktop_entrypoint_uses_the_docker_gateway_launcher(self) -> None:
+        task = self._task_block("hermes:desktop")
+
+        self.assertIn("hermes-desktop-docker", task)
+        self.assertIn("platforms: [darwin]", task)
+        wrapper = HERMES_DESKTOP_WRAPPER.read_text(encoding="utf-8")
+        self.assertIn("connections.json", wrapper)
+        self.assertIn("127.0.0.1:9119", wrapper)
+        self.assertNotIn("API_SERVER_KEY", wrapper)
+        self.assertIn("unset HERMES_DESKTOP_REMOTE_URL HERMES_DESKTOP_REMOTE_TOKEN", wrapper)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")

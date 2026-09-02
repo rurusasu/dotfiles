@@ -24,8 +24,11 @@ Compose は Dashboard をホストの次の loopback ポートへ公開します
 http://127.0.0.1:9119
 ```
 
-Desktop の remote backend 設定でこの URL を指定し、Dashboard の認証を通過して
-ください。別のマシンから接続する場合は loopback 公開のままでは到達できないため、
+Desktop の Remote Gateway には、この URL を指定します。dotfiles の `WithHermes`
+プロファイルを適用済みなら、保存済みの Desktop remote 接続と gateway health を
+検証する `hermes-desktop-docker` を使って起動できます。初回だけ Desktop の
+Settings > Gateway でこの URL を登録し、システムブラウザで認証してください。
+Docker gateway は先に `task hermes:up` で起動してください。別のマシンから接続する場合は loopback 公開のままでは到達できないため、
 認証、TLS、ファイアウォールを含む別の公開設計が必要です。
 
 ## 状態と秘密情報
@@ -37,10 +40,18 @@ store に runtime state を生成したりしないでください。
 ## 手動確認
 
 ```bash
-hermes-desktop
+task hermes:desktop
 docker compose -f docker/hermes-service/compose.yml ps
 curl -fsS http://127.0.0.1:8642/health
 ```
+
+`9119` は Desktop の Remote Gateway/Dashboard 接続先、`8642` は gateway 内部 API
+の health 確認用です。`hermes-desktop-docker` は Desktop の app-owned
+`connections.json` に保存された remote 接続を検証します。OAuth 接続の token は
+Desktop の native token store、token 接続の envelope は Desktop/OS Keychain の
+管理境界に残り、launcher はいずれも読み出しません。秘密情報は Git、Nix store、
+通常ログ、プロセス引数へコピーされません。
+接続が未設定、gateway が停止中の場合は、Desktop を起動せず終了します。
 
 公式の Desktop 操作と remote backend の設定は、[Hermes Desktop
 documentation](https://hermes-agent.nousresearch.com/docs/user-guide/desktop) と
