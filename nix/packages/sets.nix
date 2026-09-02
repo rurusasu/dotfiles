@@ -73,6 +73,11 @@ let
       })
     else
       null;
+  dockerDesktopPackage =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
+    else
+      null;
   rawCatalog =
     if catalogOverride != null then
       catalogOverride
@@ -676,11 +681,7 @@ let
           };
         };
         docker-desktop = {
-          pkg =
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
-            else
-              null;
+          pkg = dockerDesktopPackage;
           winget = "Docker.DockerDesktop";
           category = "system";
           installFeature = "WithDocker";
@@ -765,6 +766,33 @@ let
             };
             windows = {
               unsupported = "Hermes Desktop Docker launcher is provisioned by the native macOS profile";
+            };
+          };
+        };
+        hermes-docker = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              pkgs.writeShellApplication {
+                name = "hermes-docker";
+                runtimeInputs = [ dockerDesktopPackage ];
+                text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
+              }
+            else
+              null;
+          winget = null;
+          category = "terminal";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "dotfiles";
+              identity.command = "hermes-docker";
+            };
+            linux = {
+              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
+            };
+            windows = {
+              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
             };
           };
         };

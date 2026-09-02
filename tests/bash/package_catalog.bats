@@ -118,6 +118,20 @@ nix_fixture_darwin_package_split() {
 	[[ "$output" == *'command = "hermes-desktop-docker";'* ]]
 }
 
+@test "Hermes Docker CLI is a Darwin Hermes package" {
+	run awk '
+		/^[[:space:]]*hermes-docker = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^        };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'writeShellApplication'* ]]
+	[[ "$output" == *'dockerDesktopPackage'* ]]
+	[[ "$output" == *'installFeature = "WithHermes";'* ]]
+	[[ "$output" == *'source = "dotfiles";'* ]]
+	[[ "$output" == *'command = "hermes-docker";'* ]]
+}
+
 @test "Hermes Desktop is absent from default package outputs" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
@@ -756,7 +770,7 @@ EOF
 }
 
 @test "Darwin GUI promotions use custom products instead of same-named nixpkgs packages" {
-	for id in hammerspoon dia-browser orca-editor docker-desktop; do
+	for id in hammerspoon dia-browser orca-editor; do
 		run awk -v id="$id" '
 			$0 ~ "^[[:space:]]*" id " = \\{" { in_entry=1 }
 			in_entry { print }
@@ -765,6 +779,8 @@ EOF
 		[ "$status" -eq 0 ]
 		[[ "$output" == *'selectDarwinPackage "'$id'"'* ]]
 		done
+	grep -q 'dockerDesktopPackage =' "$SETS"
+	grep -q 'selectDarwinPackage "docker-desktop"' "$SETS"
 	grep -q 'source = "custom"' "$REPO_ROOT/nix/packages/darwin-provider-candidates.nix"
 	grep -q 'callPackage ./hammerspoon' "$SETS"
 	grep -q 'callPackage ./dia-browser' "$SETS"
