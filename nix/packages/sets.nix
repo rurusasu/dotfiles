@@ -73,6 +73,11 @@ let
       })
     else
       null;
+  dockerDesktopPackage =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
+    else
+      null;
   rawCatalog =
     if catalogOverride != null then
       catalogOverride
@@ -676,11 +681,7 @@ let
           };
         };
         docker-desktop = {
-          pkg =
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
-            else
-              null;
+          pkg = dockerDesktopPackage;
           winget = "Docker.DockerDesktop";
           category = "system";
           installFeature = "WithDocker";
@@ -773,7 +774,7 @@ let
             if pkgs.stdenv.hostPlatform.isDarwin then
               pkgs.writeShellApplication {
                 name = "hermes-docker";
-                runtimeInputs = [ pkgs.docker ];
+                runtimeInputs = [ dockerDesktopPackage ];
                 text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
               }
             else

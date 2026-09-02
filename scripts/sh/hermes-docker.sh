@@ -23,7 +23,7 @@ fi
   hermes_docker_die "compose file not found; set HERMES_COMPOSE_FILE or run from the dotfiles repository"
 
 if [[ -t 0 && -t 1 ]]; then
-  exec docker compose -f "$compose_file" exec hermes /opt/hermes/bin/hermes "$@"
+  exec docker-compose -f "$compose_file" exec hermes /opt/hermes/bin/hermes "$@"
 else
-  exec docker compose -f "$compose_file" exec -T hermes /opt/hermes/bin/hermes "$@"
+  exec docker-compose -f "$compose_file" exec -T hermes /opt/hermes/bin/hermes "$@"
 fi
