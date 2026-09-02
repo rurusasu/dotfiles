@@ -44,6 +44,7 @@ EOF
 	export OP_READ_COMPLETION_FILE=""
 	export BOOTSTRAP_EXIT_EARLY=0
 	export HERMES_RUNTIME_EXISTS=1
+	export HERMES_VOLUME_EXISTS=1
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -107,6 +108,25 @@ printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
 if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
 	exit "$IMAGE_PRUNE_STATUS"
+fi
+if [ "${1:-}" = "volume" ]; then
+  case "${2:-}" in
+    inspect)
+      [[ ${HERMES_VOLUME_EXISTS:-1} == 1 ]] && printf '[{}]\n' || exit 1
+      ;;
+    create)
+      printf 'hermes-data\n'
+      ;;
+    rm)
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+if [ "${1:-}" = "run" ]; then
+  exit "${HERMES_STORAGE_SEED_STATUS:-0}"
 fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
@@ -200,6 +220,26 @@ shift
 	write_stub sleep '
 printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 '
+}
+
+@test "initializes a missing Hermes Docker data volume before bootstrap" {
+	export HERMES_VOLUME_EXISTS=0
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order '<stop> <hermes>' '<volume> <inspect> <hermes-data>' '<volume> <create> <hermes-data>' '<run> <--rm>' '<secret-plan>'
+}
+
+@test "removes only a newly created volume when storage seeding fails" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_STORAGE_SEED_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	grep -Fq '<volume> <rm> <hermes-data>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
 }
 
 write_stub() {

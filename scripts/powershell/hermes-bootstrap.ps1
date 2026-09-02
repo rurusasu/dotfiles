@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/HermesBootstrap.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesXApi.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesGateway.ps1')
+. (Join-Path $PSScriptRoot 'lib/HermesStorage.ps1')
 
 function New-HermesBootstrapEntrypointResult {
     [CmdletBinding()]
@@ -378,6 +379,22 @@ function Invoke-HermesBootstrapEntrypoint {
                 -FailureMessage 'Hermes gateway stop failed.'
             if ($stop.ExitCode -ne 0) { return $stop }
             $runtimeStopped = $true
+
+            try {
+                $storage = Initialize-HermesStorageVolume -DataDir $paths.DataDir
+            }
+            catch {
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage 'Hermes data volume configuration failed.'
+            }
+            if (-not $storage.Success) {
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage $storage.Message
+            }
 
             try {
                 $global:LASTEXITCODE = 0
