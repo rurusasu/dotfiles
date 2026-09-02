@@ -114,10 +114,24 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("docker info", task)
         self.assertIn("test -f {{.HERMES_COMPOSE_FILE}}", task)
         self.assertIn("hermes-docker", task)
+        self.assertIn("CLI_ARGS_LIST", task)
+        self.assertIn("shellQuote", task)
         self.assertIn("platforms: [darwin]", task)
         wrapper = HERMES_DOCKER_WRAPPER.read_text(encoding="utf-8")
         self.assertIn("HERMES_COMPOSE_FILE", wrapper)
         self.assertIn("/opt/hermes/bin/hermes", wrapper)
+
+    def test_profile_gateway_entrypoints_are_explicit_and_shell_safe(self) -> None:
+        for task_name, action in (
+            ("hermes:profile:status", "gateway status"),
+            ("hermes:profile:up", "gateway start"),
+        ):
+            with self.subTest(task_name=task_name):
+                task = self._task_block(task_name)
+                self.assertIn("PROFILE", task)
+                self.assertIn("shellQuote", task)
+                self.assertIn(action, task)
+                self.assertIn("docker info", task)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")

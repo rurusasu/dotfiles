@@ -27,6 +27,20 @@ task hermes:cli -- -p personal-ops config check
 task hermes:cli -- profile list
 ```
 
+Profile gateway の状態確認と起動も、対象Profileを明示して実行できます。
+
+```bash
+PROFILE=personal-ops task hermes:profile:status
+PROFILE=personal-ops task hermes:profile:up
+PROFILE=career-ops task hermes:profile:status
+PROFILE=dev-lab task hermes:profile:status
+```
+
+`hermes:profile:up` は明示的に指定したProfileだけを起動します。Profile名は
+Taskfile側でshell-safeにargv化されます。CLIの既定Composeファイルは既存の
+`docker/hermes-service/compose.yml`に固定され、別ファイルを使う場合だけ
+`HERMES_COMPOSE_FILE`で明示指定します。
+
 リポジトリ外から直接実行する場合は、Compose ファイルを明示します。
 
 ```bash

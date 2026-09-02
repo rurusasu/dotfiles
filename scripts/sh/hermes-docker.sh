@@ -7,17 +7,7 @@ hermes_docker_die() {
   exit 1
 }
 
-compose_file="${HERMES_COMPOSE_FILE:-}"
-if [[ -z $compose_file ]]; then
-  for candidate in \
-    "docker/hermes-service/compose.yml" \
-    "${HOME}/.dotfiles/docker/hermes-service/compose.yml"; do
-    if [[ -f $candidate ]]; then
-      compose_file="$candidate"
-      break
-    fi
-  done
-fi
+compose_file="${HERMES_COMPOSE_FILE:-${HOME}/.dotfiles/docker/hermes-service/compose.yml}"
 
 [[ -n $compose_file && -f $compose_file ]] ||
   hermes_docker_die "compose file not found; set HERMES_COMPOSE_FILE or run from the dotfiles repository"

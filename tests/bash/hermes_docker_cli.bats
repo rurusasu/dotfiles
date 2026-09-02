@@ -28,7 +28,7 @@ write_stub() {
 	chmod +x "$STUB_BIN/$name"
 }
 
-@test "Docker CLI uses the default dotfiles compose file and forwards arguments" {
+@test "Docker CLI uses the trusted dotfiles compose file and forwards arguments" {
 	cd "$TEST_HOME"
 	run "$REPO_ROOT/scripts/sh/hermes-docker.sh" -p personal-ops config check
 

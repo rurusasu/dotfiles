@@ -214,8 +214,36 @@ tasks:
       - sh: command -v hermes-docker
         msg: "Hermes Docker CLI adapter is not installed. Apply the WithHermes profile."
     cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} hermes-docker {{.CLI_ARGS}}
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE | shellQuote}} hermes-docker {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
         platforms: [darwin]
+
+  hermes:profile:status:
+    desc: Show the gateway status for a Hermes profile
+    vars:
+      PROFILE: '{{.PROFILE | default ""}}'
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -n {{.PROFILE | shellQuote}}
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - cmd: docker exec hermes /opt/hermes/.venv/bin/hermes -p {{.PROFILE | shellQuote}} gateway status
+        platforms: [darwin, linux]
+
+  hermes:profile:up:
+    desc: Start the gateway for a Hermes profile
+    vars:
+      PROFILE: '{{.PROFILE | default ""}}'
+    deps:
+      - task: hermes:up
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -n {{.PROFILE | shellQuote}}
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - cmd: docker exec hermes /opt/hermes/.venv/bin/hermes -p {{.PROFILE | shellQuote}} gateway start
+        platforms: [darwin, linux]
 
   hermes:down:
     desc: Stop Hermes Agent Docker container
