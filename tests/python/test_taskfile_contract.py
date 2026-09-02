@@ -13,6 +13,7 @@ XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
 XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
 HINDSIGHT_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-hindsight-verify.sh"
 HERMES_DESKTOP_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-desktop-docker.sh"
+HERMES_DOCKER_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-docker.sh"
 HINDSIGHT_WINDOWS_WRAPPER = (
     REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-hindsight-verify.ps1"
 )
@@ -105,6 +106,18 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("127.0.0.1:9119", wrapper)
         self.assertNotIn("API_SERVER_KEY", wrapper)
         self.assertIn("unset HERMES_DESKTOP_REMOTE_URL HERMES_DESKTOP_REMOTE_TOKEN", wrapper)
+
+    def test_cli_entrypoint_uses_the_docker_cli_adapter(self) -> None:
+        task = self._task_block("hermes:cli")
+
+        self.assertIn("interactive: true", task)
+        self.assertIn("docker info", task)
+        self.assertIn("test -f {{.HERMES_COMPOSE_FILE}}", task)
+        self.assertIn("hermes-docker", task)
+        self.assertIn("platforms: [darwin]", task)
+        wrapper = HERMES_DOCKER_WRAPPER.read_text(encoding="utf-8")
+        self.assertIn("HERMES_COMPOSE_FILE", wrapper)
+        self.assertIn("/opt/hermes/bin/hermes", wrapper)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")

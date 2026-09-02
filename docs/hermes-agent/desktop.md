@@ -12,6 +12,33 @@ macOS の `./install.sh --with-hermes` は、次の2つを別々に管理しま�
 Desktop の GUI を Agent コンテナに入れる必要はありません。コンテナは GUI を
 提供するイメージではなく、Agent の実行環境と Dashboard/API を提供します。
 
+## CLI の実行
+
+Hermes Desktop は GUI フロントエンドであり、macOS ホストのシェルで CLI を
+実行する機能はありません。また、この構成では公式の CLI は Docker コンテナ内に
+だけ存在します。そのため `WithHermes` プロファイルでは、ホストの
+`hermes-docker` が既存の `hermes` サービスへコマンドを転送します。
+
+リポジトリからは、次のように実行できます。引数はコンテナ内の CLI へそのまま
+渡されます。
+
+```bash
+task hermes:cli -- -p personal-ops config check
+task hermes:cli -- profile list
+```
+
+リポジトリ外から直接実行する場合は、Compose ファイルを明示します。
+
+```bash
+HERMES_COMPOSE_FILE="$HOME/.dotfiles/docker/hermes-service/compose.yml" \
+  hermes-docker -p personal-ops chat
+```
+
+このアダプターはサービスを自動起動・停止しません。先に `task hermes:up` を
+実行し、Docker Desktop と Hermes コンテナが起動していることを確認してください。
+対話端末ではTTYを維持し、パイプやCIではTTY割り当てを無効にするため、チャットと
+設定検証の両方を同じコマンドで扱えます。
+
 公式ドキュメントでも Desktop App、CLI/TUI、Web Dashboard は同じ Agent に接続
 する別のフロントエンドとして説明されています。Desktop は `hermes-desktop`
 で起動し、Web Dashboard は `hermes dashboard` が提供します。

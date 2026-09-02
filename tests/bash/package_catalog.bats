@@ -118,6 +118,20 @@ nix_fixture_darwin_package_split() {
 	[[ "$output" == *'command = "hermes-desktop-docker";'* ]]
 }
 
+@test "Hermes Docker CLI is a Darwin Hermes package" {
+	run awk '
+		/^[[:space:]]*hermes-docker = \{/ { in_entry=1 }
+		in_entry { print }
+		in_entry && /^        };/ { exit }
+	' "$SETS"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'writeShellApplication'* ]]
+	[[ "$output" == *'pkgs.docker'* ]]
+	[[ "$output" == *'installFeature = "WithHermes";'* ]]
+	[[ "$output" == *'source = "dotfiles";'* ]]
+	[[ "$output" == *'command = "hermes-docker";'* ]]
+}
+
 @test "Hermes Desktop is absent from default package outputs" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"

@@ -768,6 +768,33 @@ let
             };
           };
         };
+        hermes-docker = {
+          pkg =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              pkgs.writeShellApplication {
+                name = "hermes-docker";
+                runtimeInputs = [ pkgs.docker ];
+                text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
+              }
+            else
+              null;
+          winget = null;
+          category = "terminal";
+          installFeature = "WithHermes";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "dotfiles";
+              identity.command = "hermes-docker";
+            };
+            linux = {
+              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
+            };
+            windows = {
+              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
+            };
+          };
+        };
 
         # ── k8s ───────────────────────────────────────────────
         kind = {

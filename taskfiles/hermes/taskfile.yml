@@ -203,6 +203,20 @@ tasks:
       - cmd: hermes-desktop-docker
         platforms: [darwin]
 
+  hermes:cli:
+    desc: Run the Hermes CLI inside the Docker Agent container
+    interactive: true
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -f {{.HERMES_COMPOSE_FILE}}
+        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+      - sh: command -v hermes-docker
+        msg: "Hermes Docker CLI adapter is not installed. Apply the WithHermes profile."
+    cmds:
+      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} hermes-docker {{.CLI_ARGS}}
+        platforms: [darwin]
+
   hermes:down:
     desc: Stop Hermes Agent Docker container
     preconditions:
