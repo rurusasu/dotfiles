@@ -127,6 +127,7 @@ nix_fixture_darwin_package_split() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'writeShellApplication'* ]]
 	[[ "$output" == *'dockerDesktopPackage'* ]]
+	[[ "$output" == *'HERMES_DOCKER_COMPOSE_PLUGIN'* ]]
 	[[ "$output" == *'installFeature = "WithHermes";'* ]]
 	[[ "$output" == *'source = "dotfiles";'* ]]
 	[[ "$output" == *'command = "hermes-docker";'* ]]

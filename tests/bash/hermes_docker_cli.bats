@@ -9,7 +9,7 @@ setup() {
 	DOCKER_CAPTURE="$BATS_TEST_TMPDIR/docker.args"
 	mkdir -p "$TEST_HOME/.dotfiles/docker/hermes-service" "$STUB_BIN"
 	touch "$TEST_HOME/.dotfiles/docker/hermes-service/compose.yml"
-	write_stub docker-compose '
+	write_stub docker '
 printf "%s\n" "$*" >"$DOCKER_CAPTURE"
 '
 	export HOME="$TEST_HOME"
@@ -33,7 +33,7 @@ write_stub() {
 	run "$REPO_ROOT/scripts/sh/hermes-docker.sh" -p personal-ops config check
 
 	[ "$status" -eq 0 ]
-	[ "$(<"$DOCKER_CAPTURE")" = "-f $TEST_HOME/.dotfiles/docker/hermes-service/compose.yml exec -T hermes /opt/hermes/bin/hermes -p personal-ops config check" ]
+	[ "$(<"$DOCKER_CAPTURE")" = "compose -f $TEST_HOME/.dotfiles/docker/hermes-service/compose.yml exec -T hermes /opt/hermes/bin/hermes -p personal-ops config check" ]
 }
 
 @test "Docker CLI honors an explicit compose file" {
@@ -43,7 +43,7 @@ write_stub() {
 	run env HERMES_COMPOSE_FILE="$compose_file" "$REPO_ROOT/scripts/sh/hermes-docker.sh" --version
 
 	[ "$status" -eq 0 ]
-	[ "$(<"$DOCKER_CAPTURE")" = "-f $compose_file exec -T hermes /opt/hermes/bin/hermes --version" ]
+	[ "$(<"$DOCKER_CAPTURE")" = "compose -f $compose_file exec -T hermes /opt/hermes/bin/hermes --version" ]
 }
 
 @test "Docker CLI reports how to configure a missing compose file" {

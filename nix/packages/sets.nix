@@ -775,7 +775,10 @@ let
               pkgs.writeShellApplication {
                 name = "hermes-docker";
                 runtimeInputs = [ dockerDesktopPackage ];
-                text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
+                text = ''
+                  export HERMES_DOCKER_COMPOSE_PLUGIN="${dockerDesktopPackage}/libexec/docker/cli-plugins/docker-compose"
+                  ${builtins.readFile ../../scripts/sh/hermes-docker.sh}
+                '';
               }
             else
               null;
