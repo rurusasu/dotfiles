@@ -77,9 +77,10 @@ Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が�
 Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
-`--with-hermes` の macOS 構成では、Hermes Desktop は公式 Hermes flake の Nix
-パッケージとしてホストに導入されます。Agent/gateway と Web Dashboard は既存の
-Docker Compose 側で起動し、Desktop から `http://127.0.0.1:9119` に接続します。
+`--with-hermes` の macOS 構成では、Hermes Desktop はパッケージカタログで選択した
+公式 Homebrew Cask `hermes-desktop` として nix-homebrew からホストに導入されます。
+Agent/gateway と Web Dashboard は既存の Docker Compose 側で起動し、Desktop から
+`http://127.0.0.1:9119` に接続します。
 Dashboard の認証情報、セッション、モデル、その他の runtime state は Nix store
 に保存しません。Desktop を Agent コンテナへインストールする構成ではありません。
 

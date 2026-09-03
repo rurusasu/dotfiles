@@ -1,5 +1,9 @@
 # Hermes Desktop Nix 管理設計
 
+> **廃止済み:** 2026-09-03 に [#554](https://github.com/rurusasu/dotfiles/issues/554)
+> で Homebrew Cask 管理へ移行しました。現行構成は
+> [Hermes Desktop の運用](../../hermes-agent/desktop.md) を参照してください。
+
 ## 目的
 
 `--with-hermes` を選んだ macOS 環境で、Hermes Desktop をホスト側の Nix

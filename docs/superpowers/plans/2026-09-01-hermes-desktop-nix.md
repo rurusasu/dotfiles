@@ -1,5 +1,10 @@
 # Hermes Desktop Nix Integration Implementation Plan
 
+> **Superseded:** This plan was replaced on 2026-09-03 by
+> [#554](https://github.com/rurusasu/dotfiles/issues/554), which manages Hermes
+> Desktop through the official Homebrew Cask. See the
+> [current operations guide](../../hermes-agent/desktop.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add the official Hermes Desktop Nix output to the `WithHermes` macOS
