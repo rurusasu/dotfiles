@@ -4,8 +4,8 @@
 
 macOS の `./install.sh --with-hermes` は、次の2つを別々に管理します。
 
-- ホスト: 公式 `NousResearch/hermes-agent` flake の `desktop` 出力を Nix/Home
-  Manager で導入し、`hermes-desktop` コマンドを提供する。
+- ホスト: 公式 Homebrew Cask `hermes-desktop` を nix-homebrew で宣言し、
+  `/Applications/Hermes.app` にベンダー配布版を導入する。
 - Docker: `docker/hermes-service/compose.yml` の Hermes Agent、gateway、Web
   Dashboard、Browser/MCP サービスを起動する。
 
@@ -54,8 +54,9 @@ HERMES_COMPOSE_FILE="$HOME/.dotfiles/docker/hermes-service/compose.yml" \
 設定検証の両方を同じコマンドで扱えます。
 
 公式ドキュメントでも Desktop App、CLI/TUI、Web Dashboard は同じ Agent に接続
-する別のフロントエンドとして説明されています。Desktop は `hermes-desktop`
-で起動し、Web Dashboard は `hermes dashboard` が提供します。
+する別のフロントエンドとして説明されています。Desktop は
+`hermes-desktop-docker` が macOS の `open /Applications/Hermes.app` を通して起動し、Web
+Dashboard は `hermes dashboard` が提供します。
 
 ## 接続先
 

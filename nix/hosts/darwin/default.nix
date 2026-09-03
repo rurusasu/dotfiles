@@ -7,10 +7,8 @@
 let
   user = builtins.getEnv "DOTFILES_USER";
   home = builtins.getEnv "DOTFILES_HOME";
-  hermesDesktopPackage = inputs.hermes-agent.packages.${pkgs.system}.desktop;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
-    inherit hermesDesktopPackage;
   };
   discordPackage = sets.darwinDiscordPackage;
   withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
@@ -208,7 +206,7 @@ in
       imports = [ ../../home/darwin.nix ];
     };
     extraSpecialArgs = {
-      inherit inputs installFeatures hermesDesktopPackage;
+      inherit inputs installFeatures;
       isWSL = false;
     };
   };

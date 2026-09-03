@@ -15,8 +15,8 @@ setup() {
 	write_stub curl '
 printf "%s\n" "$*" >"$CURL_CAPTURE"
 '
-	write_stub hermes-desktop '
-	: >"$DESKTOP_CAPTURE"
+	write_stub open '
+: >"$DESKTOP_CAPTURE"
 printf "%s\n" "$*" >"$DESKTOP_ARGS"
 '
 	write_stub jq 'exec "$REAL_JQ" "$@"'
@@ -42,7 +42,7 @@ write_stub() {
 	run "$REPO_ROOT/scripts/sh/hermes-desktop-docker.sh" --profile default
 
 	[ "$status" -eq 0 ]
-	[ "$(<"$DESKTOP_ARGS")" = "--profile default" ]
+	[ "$(<"$DESKTOP_ARGS")" = "/Applications/Hermes.app --args --profile default" ]
 	! grep -Fq 'HERMES_DESKTOP_REMOTE_TOKEN' "$DESKTOP_ARGS"
 	! grep -Fq 'hermes-bootstrap-v1_' "$DESKTOP_ARGS"
 	! grep -Fq 'opaque' <<<"$output"

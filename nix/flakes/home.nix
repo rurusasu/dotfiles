@@ -22,12 +22,6 @@ let
     };
     extraSpecialArgs = {
       inherit inputs installFeatures;
-      hermesDesktopPackage = inputs.nixpkgs.lib.attrByPath [
-        "hermes-agent"
-        "packages"
-        system
-        "desktop"
-      ] null inputs;
       isWSL = false;
     };
   };
