@@ -202,6 +202,17 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "standalone Darwin Home Manager rejects Hermes without nix-homebrew" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --raw \
+		"$REPO_ROOT#homeConfigurations.aarch64-darwin.config.home.username"
+
+	[ "$status" -ne 0 ]
+	[[ "$stderr" == *"Hermes Desktop requires the nix-darwin installer"* ]]
+}
+
 @test "Darwin Ollama profile uses a nix-darwin launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
