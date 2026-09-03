@@ -27,32 +27,14 @@
       sets = import ../packages/sets.nix {
         pkgs = pkgs.extend workmuxOverlay;
         inherit lib;
-        hermesDesktopPackage = lib.attrByPath [
-          "hermes-agent"
-          "packages"
-          pkgs.system
-          "desktop"
-        ] null inputs;
       };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        hermesDesktopPackage = lib.attrByPath [
-          "hermes-agent"
-          "packages"
-          pkgs.system
-          "desktop"
-        ] null inputs;
       };
       packageSupportReport = import ../packages/support-report.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        hermesDesktopPackage = lib.attrByPath [
-          "hermes-agent"
-          "packages"
-          pkgs.system
-          "desktop"
-        ] null inputs;
       };
     in
     {

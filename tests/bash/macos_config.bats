@@ -175,6 +175,44 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin Hermes profile installs Hermes Desktop only through Homebrew" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --json --expr "
+			let
+				flake = builtins.getFlake (toString $REPO_ROOT);
+				config = flake.darwinConfigurations.macos.config;
+			in {
+				casks = config.homebrew.casks;
+				system = builtins.map (package: package.name) config.environment.systemPackages;
+				home = builtins.map (package: package.name) config.home-manager.users.codex.home.packages;
+				hasHermesFlakeInput = builtins.hasAttr \"hermes-agent\" flake.inputs;
+			}
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e '
+		any(.casks[]; .name == "hermes-desktop")
+		and all(.system[]; test("^hermes-desktop($|-[0-9])") | not)
+		and all(.home[]; test("^hermes-desktop($|-[0-9])") | not)
+		and .hasHermesFlakeInput == false
+	' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "standalone Darwin Home Manager rejects Hermes without nix-homebrew" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
+		nix eval --impure --raw \
+		"$REPO_ROOT#homeConfigurations.aarch64-darwin.config.home.username"
+
+	[ "$status" -ne 0 ]
+	[[ "$stderr" == *"Hermes Desktop requires the nix-darwin installer"* ]]
+}
+
 @test "Darwin Ollama profile uses a nix-darwin launchd agent" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 

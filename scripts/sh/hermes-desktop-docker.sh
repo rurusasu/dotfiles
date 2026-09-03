@@ -41,5 +41,5 @@ if ! jq -e --arg url "$remote_url" '
 fi
 
 unset HERMES_DESKTOP_REMOTE_URL HERMES_DESKTOP_REMOTE_TOKEN
-command -v hermes-desktop >/dev/null 2>&1 || hermes_desktop_docker_die "hermes-desktop is not installed; apply the WithHermes profile"
-exec hermes-desktop "$@"
+command -v open >/dev/null 2>&1 || hermes_desktop_docker_die "macOS open command is unavailable"
+exec open /Applications/Hermes.app --args "$@"

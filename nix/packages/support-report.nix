@@ -1,10 +1,9 @@
 {
   pkgs,
   lib,
-  hermesDesktopPackage ? null,
 }:
 let
-  sets = import ./sets.nix { inherit pkgs lib hermesDesktopPackage; };
+  sets = import ./sets.nix { inherit pkgs lib; };
   reportFile = pkgs.writeText "package-support.json" (builtins.toJSON sets.supportReport);
   darwinPackagesFile = pkgs.writeText "darwin-packages.json" (
     builtins.toJSON (builtins.attrNames sets.darwinPackages)

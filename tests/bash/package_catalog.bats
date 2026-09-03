@@ -89,20 +89,38 @@ nix_fixture_darwin_package_split() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
-@test "Hermes Desktop uses the official Nix output only with the Hermes profile" {
-	run awk '
-		/^[[:space:]]*hermes-desktop = \{/ { in_entry=1 }
-		in_entry { print }
-		in_entry && /^        };/ { exit }
-	' "$SETS"
+@test "Hermes Desktop uses the official Homebrew cask only with the Hermes profile" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
+			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+		in {
+			support = sets.supportReport.hermes-desktop;
+			defaultCasks = sets.darwinCasksForInstallFeatures [ ];
+			hermesCasks = sets.darwinCasksForInstallFeatures [ \"WithHermes\" ];
+		}
+	"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'hermesDesktopPackage'* ]]
-	[[ "$output" == *'installFeature = "WithHermes";'* ]]
-	[[ "$output" == *'provider = "nix"'* ]]
-	[[ "$output" == *'source = "hermes-agent";'* ]]
-	[[ "$output" == *'command = "hermes-desktop";'* ]]
-	[[ "$output" != *'appName = '* ]]
-	grep -q 'inherit inputs installFeatures;' "$REPO_ROOT/nix/flakes/home.nix"
+	run jq -e '
+		.support.installFeature == "WithHermes"
+		and .support.darwin == {
+			"provider": "homebrew-cask",
+			"source": "homebrew",
+			"identity": "hermes-desktop",
+			"cask": "hermes-desktop"
+		}
+		and (.defaultCasks | index("hermes-desktop")) == null
+		and (.hermesCasks | index("hermes-desktop")) != null
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "Hermes Desktop Docker launcher is a Darwin Hermes package" {

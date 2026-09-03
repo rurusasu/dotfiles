@@ -11,13 +11,12 @@
   lib,
   inputs ? null,
   installFeatures ? [ ],
-  hermesDesktopPackage ? null,
   isWSL,
   ...
 }:
 let
   sets = import ../packages/sets.nix {
-    inherit pkgs lib hermesDesktopPackage;
+    inherit pkgs lib;
   };
   bootstrapUser = builtins.getEnv "DOTFILES_USER";
   bootstrapHome = builtins.getEnv "DOTFILES_HOME";
