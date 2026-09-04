@@ -10,6 +10,8 @@ setup() {
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
+	VOLUME_SCHEMA_FILE="$BATS_TEST_TMPDIR/hermes-volume-schema"
+	VOLUME_TOKEN_FILE="$BATS_TEST_TMPDIR/hermes-volume-token"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
@@ -17,6 +19,8 @@ setup() {
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
+	: >"$VOLUME_SCHEMA_FILE"
+	: >"$VOLUME_TOKEN_FILE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
@@ -30,7 +34,7 @@ EOF
 	unset DOTFILES_USER SUDO_USER
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -45,6 +49,11 @@ EOF
 	export BOOTSTRAP_EXIT_EARLY=0
 	export HERMES_RUNTIME_EXISTS=1
 	export HERMES_VOLUME_EXISTS=1
+	export HERMES_VOLUME_SCHEMA_LABEL=""
+	export HERMES_VOLUME_TOKEN_LABEL=""
+	export HERMES_VOLUME_READY=1
+	export HERMES_CREATE_RACE_TOKEN=""
+	export HERMES_VOLUME_RM_STATUS=0
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -112,12 +121,33 @@ fi
 if [ "${1:-}" = "volume" ]; then
   case "${2:-}" in
     inspect)
-      [[ ${HERMES_VOLUME_EXISTS:-1} == 1 ]] && printf '[{}]\n' || exit 1
+	  if [[ ${HERMES_VOLUME_EXISTS:-1} != 1 && ! -s $VOLUME_SCHEMA_FILE && ! -s $VOLUME_TOKEN_FILE ]]; then
+	    exit 1
+	  fi
+	  case " $* " in
+	    *"com.rurusasu.dotfiles.hermes-storage.schema"*)
+	      if [[ -s $VOLUME_SCHEMA_FILE ]]; then cat "$VOLUME_SCHEMA_FILE"; else printf "%s\n" "${HERMES_VOLUME_SCHEMA_LABEL:-}"; fi
+	      ;;
+	    *"com.rurusasu.dotfiles.hermes-storage.init-token"*)
+	      if [[ -s $VOLUME_TOKEN_FILE ]]; then cat "$VOLUME_TOKEN_FILE"; else printf "%s\n" "${HERMES_VOLUME_TOKEN_LABEL:-}"; fi
+	      ;;
+	    *) printf "[{}]\n" ;;
+	  esac
       ;;
     create)
-      printf 'hermes-data\n'
+	  token=""
+	  for argument in "$@"; do
+	    case "$argument" in
+	      com.rurusasu.dotfiles.hermes-storage.schema=*) printf "%s\n" "${argument#*=}" >"$VOLUME_SCHEMA_FILE" ;;
+	      com.rurusasu.dotfiles.hermes-storage.init-token=*) token="${argument#*=}" ;;
+	    esac
+	  done
+	  if [[ -n ${HERMES_CREATE_RACE_TOKEN:-} ]]; then token="$HERMES_CREATE_RACE_TOKEN"; fi
+	  if [[ -n $token ]]; then printf "%s\n" "$token" >"$VOLUME_TOKEN_FILE"; fi
+      printf "hermes-data\n"
       ;;
     rm)
+	  exit "${HERMES_VOLUME_RM_STATUS:-0}"
       ;;
     *)
       exit 1
@@ -126,6 +156,13 @@ if [ "${1:-}" = "volume" ]; then
   exit 0
 fi
 if [ "${1:-}" = "run" ]; then
+	previous=""
+	for argument in "$@"; do
+	  if [[ $previous == --entrypoint && $argument == test ]]; then
+	    exit "$((HERMES_VOLUME_READY == 1 ? 0 : 1))"
+	  fi
+	  previous="$argument"
+	done
   exit "${HERMES_STORAGE_SEED_STATUS:-0}"
 fi
 if [ "${1:-}" != "compose" ]; then
@@ -228,7 +265,9 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<stop> <hermes>' '<volume> <inspect> <hermes-data>' '<volume> <create> <hermes-data>' '<run> <--rm>' '<secret-plan>'
+	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<run> <--rm>' '<secret-plan>'
+	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.schema=1>' "$COMMAND_LOG"
+	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.init-token=' "$COMMAND_LOG"
 	grep -Fq '<run> <--rm> <--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
 }
 
@@ -239,6 +278,70 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 42 ]
+	grep -Fq '<volume> <rm> <hermes-data>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "does not seed or remove a volume won by a concurrent creator" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_CREATE_RACE_TOKEN=another-initializer
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"created concurrently"* ]]
+	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
+	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "rejects a managed volume without the ready marker" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=previous-initializer
+	export HERMES_VOLUME_READY=0
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"incomplete"* ]]
+	grep -Fq '<--entrypoint> <test>' "$COMMAND_LOG"
+	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "accepts a managed volume with the ready marker" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=previous-initializer
+	export HERMES_VOLUME_READY=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<--entrypoint> <test>' "$COMMAND_LOG"
+	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
+}
+
+@test "surfaces failure to remove an owned partial volume" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_STORAGE_SEED_STATUS=42
+	export HERMES_VOLUME_RM_STATUS=17
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"could not be removed"* ]]
+	grep -Fq '<volume> <rm> <hermes-data>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "removes an owned volume when seed returns without a ready marker" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_VOLUME_READY=0
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"ready marker"* ]]
 	grep -Fq '<volume> <rm> <hermes-data>' "$COMMAND_LOG"
 	! grep -q '<secret-plan>' "$COMMAND_LOG"
 }
@@ -926,6 +1029,14 @@ esac
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"jq is required"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "fails preflight before Compose when python3 is unavailable" {
+	run_start_stack python3
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"python3 is required"* ]]
 	[ ! -s "$COMMAND_LOG" ]
 }
 

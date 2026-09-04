@@ -12,7 +12,8 @@ from pathlib import Path
 
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
-EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl"}
+READY_MARKER_NAME = ".dotfiles-hermes-storage-ready-v1"
+EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", READY_MARKER_NAME}
 ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
 
 
@@ -59,10 +60,23 @@ def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
         if not _is_within(normalized_target, ALLOWED_ABSOLUTE_SYMLINK_ROOT):
             raise ValueError(f"absolute symlink target must be below /opt/data: {source} -> {target_text}")
     else:
+        relative_parent = source.parent.relative_to(source_root)
+        relocated_target = Path(os.path.normpath(relative_parent / target))
+        if relocated_target.parts and relocated_target.parts[0] == "..":
+            raise ValueError(f"relative symlink target escapes Hermes data after relocation: {source} -> {target_text}")
         resolved_target = (source.parent / target).resolve(strict=False)
         if not _is_within(resolved_target, source_root.resolve()):
             raise ValueError(f"relative symlink target escapes Hermes data: {source} -> {target_text}")
     destination.symlink_to(target_text)
+
+
+def _write_ready_marker(destination: Path) -> None:
+    temporary = destination / f"{READY_MARKER_NAME}.tmp-{os.getpid()}"
+    with temporary.open("x", encoding="utf-8") as handle:
+        handle.write("version=1\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, destination / READY_MARKER_NAME)
 
 
 def _validate_paths(source: Path, destination: Path) -> None:
@@ -114,6 +128,8 @@ def seed(source: Path, destination: Path) -> None:
                 destination_path.chmod(stat.S_IMODE(source_path.stat().st_mode))
             else:
                 _copy_file(source_path, destination_path)
+
+    _write_ready_marker(destination)
 
 
 def main() -> int:
