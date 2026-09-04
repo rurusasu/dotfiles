@@ -51,6 +51,84 @@ def _run_seed_without_source_write_access(source: Path, destination: Path) -> su
 
 
 class HermesStorageSeedTests(unittest.TestCase):
+    def test_rejects_unfinished_root_bootstrap_transaction_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            transaction = source / ".bootstrap" / "transactions"
+            transaction.mkdir(parents=True)
+            destination.mkdir()
+            sentinel = destination / "existing.txt"
+            sentinel.write_text("preserved\n", encoding="utf-8")
+            (source / "config.yaml").write_text("gateway: docker\n", encoding="utf-8")
+            state = source / ".bootstrap" / "root-distribution-state.json"
+            state.write_text('{"version": 1}\n', encoding="utf-8")
+            state.chmod(0o600)
+            (transaction / "unsafe").symlink_to("/outside-hermes-data")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "source contains bootstrap transaction recovery state",
+            ):
+                seed(source, destination, TEST_TOKEN, replace_incomplete=True)
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserved\n")
+            self.assertFalse((destination / ".dotfiles-hermes-storage-ready-v1").exists())
+
+    def test_skips_idle_root_bootstrap_transaction_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            transaction = source / ".bootstrap" / "transactions"
+            transaction.mkdir(parents=True)
+            destination.mkdir()
+            (source / "config.yaml").write_text("gateway: docker\n", encoding="utf-8")
+            state = source / ".bootstrap" / "root-distribution-state.json"
+            state.write_text('{"version": 1}\n', encoding="utf-8")
+            state.chmod(0o600)
+            (transaction / ".lock").write_text("", encoding="utf-8")
+
+            seed(source, destination, TEST_TOKEN)
+
+            copied_bootstrap = destination / ".bootstrap"
+            self.assertEqual(copied_bootstrap.stat().st_mode & 0o777, 0o700)
+            self.assertFalse((copied_bootstrap / "transactions").exists())
+            self.assertEqual(
+                (copied_bootstrap / "root-distribution-state.json").read_text(encoding="utf-8"),
+                '{"version": 1}\n',
+            )
+            self.assertEqual(
+                (destination / "config.yaml").read_text(encoding="utf-8"),
+                "gateway: docker\n",
+            )
+
+    def test_skips_root_bootstrap_transactions_before_lstat(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            destination.mkdir()
+            bootstrap = source / ".bootstrap"
+            bootstrap.mkdir()
+            transactions = bootstrap / "transactions"
+            transactions.mkdir()
+            (transactions / ".lock").touch()
+            original_lstat = Path.lstat
+
+            def docker_desktop_lstat(path: Path) -> os.stat_result:
+                if path == transactions:
+                    raise OSError(errno.ENOTSUP, "Operation not supported", str(path))
+                return original_lstat(path)
+
+            with mock.patch.object(Path, "lstat", docker_desktop_lstat):
+                seed(source, destination, TEST_TOKEN)
+
+            self.assertTrue((destination / ".bootstrap").is_dir())
+            self.assertFalse((destination / ".bootstrap" / "transactions").exists())
+
     def test_skips_nested_cache_directories_with_external_symlinks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -17,8 +17,16 @@ from typing import Iterator
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
 READY_MARKER_NAME = ".dotfiles-hermes-storage-ready-v1"
-EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", "gateway.sock", READY_MARKER_NAME}
+EXCLUDED_ROOT_ENTRIES = {
+    ".browser",
+    ".op.env",
+    ".xurl",
+    "gateway.sock",
+    READY_MARKER_NAME,
+}
 EXCLUDED_DIRECTORY_NAMES = {".cache"}
+EXCLUDED_RELATIVE_PATHS = {Path(".bootstrap/transactions")}
+PRIVATE_RELATIVE_DIRECTORIES = {Path(".bootstrap")}
 ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
 READY_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
@@ -82,8 +90,12 @@ def _is_within(path: Path, root: Path) -> bool:
     return True
 
 
-def _is_excluded_entry(name: str, *, is_root: bool) -> bool:
-    return name in EXCLUDED_DIRECTORY_NAMES or (is_root and name in EXCLUDED_ROOT_ENTRIES)
+def _is_excluded_entry(relative_path: Path, *, is_root: bool) -> bool:
+    return (
+        relative_path in EXCLUDED_RELATIVE_PATHS
+        or relative_path.name in EXCLUDED_DIRECTORY_NAMES
+        or (is_root and relative_path.name in EXCLUDED_ROOT_ENTRIES)
+    )
 
 
 def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
@@ -150,6 +162,33 @@ def _validate_paths(source: Path, destination: Path, ready_token: str) -> None:
         raise ValueError(f"destination must be a real directory: {destination}")
 
 
+def _validate_source_transaction_state(source: Path) -> None:
+    store = source / ".bootstrap" / "transactions"
+    descriptor: int | None = None
+    try:
+        flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(store, flags)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISDIR(opened.st_mode):
+            raise OSError
+        with os.scandir(descriptor) as entries:
+            if any(entry.name != ".lock" for entry in entries):
+                raise ValueError(
+                    "source contains bootstrap transaction recovery state; "
+                    "recover the source before seeding"
+                )
+    except FileNotFoundError:
+        return
+    except ValueError:
+        raise
+    except OSError:
+        raise ValueError(f"source bootstrap transaction store is unsafe: {store}") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _clear_destination(destination: Path) -> None:
     for path in destination.iterdir():
         if path.is_dir() and not path.is_symlink():
@@ -162,6 +201,7 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
     """Copy a stopped Hermes home into a destination and publish readiness."""
 
     _validate_paths(source, destination, ready_token)
+    _validate_source_transaction_state(source)
     if replace_incomplete:
         _clear_destination(destination)
     elif any(destination.iterdir()):
@@ -172,11 +212,13 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         is_root = relative_directory == Path(".")
         destination_directory = destination / relative_directory
         destination_directory.mkdir(parents=True, exist_ok=True)
+        if relative_directory in PRIVATE_RELATIVE_DIRECTORIES:
+            destination_directory.chmod(0o700)
 
         retained_directories: list[str] = []
         for directory_name in directory_names:
             relative_path = relative_directory / directory_name
-            if _is_excluded_entry(directory_name, is_root=is_root):
+            if _is_excluded_entry(relative_path, is_root=is_root):
                 continue
             source_path = source / relative_path
             if source_path.is_symlink():
@@ -189,9 +231,9 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         for file_name in file_names:
             if file_name.endswith(TRANSIENT_SQLITE_SUFFIXES):
                 continue
-            if _is_excluded_entry(file_name, is_root=is_root):
-                continue
             relative_path = relative_directory / file_name
+            if _is_excluded_entry(relative_path, is_root=is_root):
+                continue
             source_path = source / relative_path
             source_metadata = source_path.lstat()
             if stat.S_ISLNK(source_metadata.st_mode):
