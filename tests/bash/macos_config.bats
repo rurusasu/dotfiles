@@ -207,7 +207,7 @@ setup() {
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
 		nix eval --impure --raw \
-		"$REPO_ROOT#homeConfigurations.aarch64-darwin.config.home.username"
+		"path:$REPO_ROOT#homeConfigurations.aarch64-darwin.config.home.username"
 
 	[ "$status" -ne 0 ]
 	[[ "$stderr" == *"Hermes Desktop requires the nix-darwin installer"* ]]
