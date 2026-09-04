@@ -13,6 +13,7 @@ from pathlib import Path
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
 EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl"}
+ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
 
 
 def _is_sqlite_database(path: Path) -> bool:
@@ -24,7 +25,9 @@ def _is_sqlite_database(path: Path) -> bool:
 
 
 def _copy_sqlite_database(source: Path, destination: Path) -> None:
-    source_uri = f"file:{source.as_posix()}?mode=ro"
+    has_sidecar = any(Path(f"{source}{suffix}").exists() for suffix in TRANSIENT_SQLITE_SUFFIXES)
+    query = "mode=ro" if has_sidecar else "mode=ro&immutable=1"
+    source_uri = f"file:{source.as_posix()}?{query}"
     source_connection = sqlite3.connect(source_uri, uri=True)
     destination_connection = sqlite3.connect(destination)
     try:
@@ -38,6 +41,28 @@ def _copy_file(source: Path, destination: Path) -> None:
     source_mode = stat.S_IMODE(source.stat().st_mode)
     shutil.copy2(source, destination)
     destination.chmod(source_mode)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
+    target_text = os.readlink(source)
+    target = Path(target_text)
+    if target.is_absolute():
+        normalized_target = Path(os.path.normpath(target))
+        if not _is_within(normalized_target, ALLOWED_ABSOLUTE_SYMLINK_ROOT):
+            raise ValueError(f"absolute symlink target must be below /opt/data: {source} -> {target_text}")
+    else:
+        resolved_target = (source.parent / target).resolve(strict=False)
+        if not _is_within(resolved_target, source_root.resolve()):
+            raise ValueError(f"relative symlink target escapes Hermes data: {source} -> {target_text}")
+    destination.symlink_to(target_text)
 
 
 def _validate_paths(source: Path, destination: Path) -> None:
@@ -67,7 +92,8 @@ def seed(source: Path, destination: Path) -> None:
                 continue
             source_path = source / relative_path
             if source_path.is_symlink():
-                raise ValueError(f"symlinks are not supported in Hermes data: {source_path}")
+                _copy_symlink(source, source_path, destination / relative_path)
+                continue
             retained_directories.append(directory_name)
             (destination / relative_path).mkdir(exist_ok=True)
         directory_names[:] = retained_directories
@@ -80,7 +106,8 @@ def seed(source: Path, destination: Path) -> None:
             relative_path = relative_directory / file_name
             source_path = source / relative_path
             if source_path.is_symlink():
-                raise ValueError(f"symlinks are not supported in Hermes data: {source_path}")
+                _copy_symlink(source, source_path, destination / relative_path)
+                continue
             destination_path = destination / relative_path
             if source_path.suffix == ".db" and _is_sqlite_database(source_path):
                 _copy_sqlite_database(source_path, destination_path)
