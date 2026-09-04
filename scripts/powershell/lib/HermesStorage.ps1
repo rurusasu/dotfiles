@@ -40,18 +40,53 @@ function Test-HermesStorageVolumeReady {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$VolumeName
+        [string]$VolumeName,
+
+        [Parameter(Mandatory)]
+        [string]$VolumeToken
     )
 
     $arguments = @(
         'run', '--rm',
-        '--entrypoint', 'test',
+        '--entrypoint', 'python',
         '--mount', "type=volume,source=$VolumeName,target=/target,readonly",
         'local/hermes-agent-gh:latest',
-        '-f', '/target/.dotfiles-hermes-storage-ready-v1'
+        '-c', 'import pathlib, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n"; raise SystemExit(0 if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding="utf-8") == expected else 1)',
+        $VolumeToken
     )
     $null = @(Invoke-Docker -Arguments $arguments 2>$null)
     return $LASTEXITCODE -eq 0
+}
+
+function Get-HermesStorageLockName {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VolumeName
+    )
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($VolumeName)
+    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+    $hex = [System.Convert]::ToHexString($hash).ToLowerInvariant()
+    return 'dotfiles-hermes-storage-' + $hex.Substring(0, 20)
+}
+
+function Get-HermesStorageLockState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$LockName,
+
+        [Parameter(Mandatory)]
+        [string]$LockLabel,
+
+        [Parameter(Mandatory)]
+        [string]$TokenLabel
+    )
+
+    $format = '{{ index .Config.Labels "' + $LockLabel + '" }}|{{ index .Config.Labels "' + $TokenLabel + '" }}|{{ .State.Status }}'
+    $output = @(Invoke-Docker -Arguments @('inspect', '--format', $format, $LockName) 2>$null)
+    return [PSCustomObject]@{ Status = $LASTEXITCODE; Value = (($output -join "`n").Trim()) }
 }
 
 function Initialize-HermesStorageVolume {
@@ -64,94 +99,119 @@ function Initialize-HermesStorageVolume {
     $volumeName = Get-HermesStorageVolumeName
     $schemaLabel = 'com.rurusasu.dotfiles.hermes-storage.schema'
     $tokenLabel = 'com.rurusasu.dotfiles.hermes-storage.init-token'
+    $lockLabel = 'com.rurusasu.dotfiles.hermes-storage.lock'
+    $existing = $true
     $schema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
     if ($schema.Status -eq 0) {
         if ($schema.Value -ne '1') {
             return [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
         }
-        if (Test-HermesStorageVolumeReady -VolumeName $volumeName) {
-            return [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+        $owner = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $tokenLabel
+        if ($owner.Status -ne 0) {
+            return [PSCustomObject]@{ Success = $false; Existing = $true; Message = 'Hermes data volume token inspection failed.' }
         }
-        return [PSCustomObject]@{
-            Success  = $false
-            Existing = $true
-            Message  = 'Hermes Docker data volume is managed but incomplete.'
-        }
+        $volumeToken = $owner.Value
     }
-    if ($schema.Status -ne 1) {
+    elseif ($schema.Status -ne 1) {
         return [PSCustomObject]@{ Success = $false; Existing = $false; Message = 'Hermes data volume inspection failed.' }
     }
-
-    $initToken = [guid]::NewGuid().ToString('N')
-    $createArguments = @(
-        'volume', 'create',
-        '--label', "$schemaLabel=1",
-        '--label', "$tokenLabel=$initToken",
-        $volumeName
-    )
-    $null = @(Invoke-Docker -Arguments $createArguments 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        return [PSCustomObject]@{ Success = $false; Existing = $false; Message = 'Hermes data volume creation failed.' }
-    }
-    $owner = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $tokenLabel
-    if ($owner.Status -ne 0) {
-        return [PSCustomObject]@{
-            Success  = $false
-            Existing = $true
-            Message  = 'Hermes Docker data volume ownership could not be verified.'
-        }
-    }
-    if ($owner.Value -ne $initToken) {
-        return [PSCustomObject]@{
-            Success  = $false
-            Existing = $true
-            Message  = 'Hermes Docker data volume was created concurrently; refusing to seed or remove it.'
+    else {
+        $existing = $false
+        $volumeToken = [guid]::NewGuid().ToString('N')
+        $createArguments = @(
+            'volume', 'create',
+            '--label', "$schemaLabel=1",
+            '--label', "$tokenLabel=$volumeToken",
+            $volumeName
+        )
+        $null = @(Invoke-Docker -Arguments $createArguments 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            return [PSCustomObject]@{ Success = $false; Existing = $false; Message = 'Hermes data volume creation failed.' }
         }
     }
 
+    if ($volumeToken -notmatch '^[0-9a-f]{32}$') {
+        return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume has an invalid initialization token.' }
+    }
+
+    $lockName = Get-HermesStorageLockName -VolumeName $volumeName
     $seedArguments = @(
-        'run', '--rm',
+        'create',
+        '--name', $lockName,
+        '--label', "$lockLabel=1",
+        '--label', "$tokenLabel=$volumeToken",
         '--entrypoint', '/usr/local/bin/hermes-storage-seed',
         '--mount', "type=bind,source=$DataDir,target=/source,readonly",
         '--mount', "type=volume,source=$volumeName,target=/target",
         'local/hermes-agent-gh:latest',
         '--source', '/source',
-        '--destination', '/target'
+        '--destination', '/target',
+        '--ready-token', $volumeToken,
+        '--replace-incomplete'
     )
     $null = @(Invoke-Docker -Arguments $seedArguments 2>$null)
-    $seedStatus = $LASTEXITCODE
-    $failureMessage = 'Hermes data volume initialization failed.'
-    if ($seedStatus -eq 0) {
-        if (Test-HermesStorageVolumeReady -VolumeName $volumeName) {
-            return [PSCustomObject]@{ Success = $true; Existing = $false; Message = '' }
+    if ($LASTEXITCODE -ne 0) {
+        $lockState = Get-HermesStorageLockState -LockName $lockName -LockLabel $lockLabel -TokenLabel $tokenLabel
+        if ($lockState.Status -eq 0 -and
+            $lockState.Value -match ('^1\|' + [regex]::Escape($volumeToken) + '\|(exited|dead)$')) {
+            $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockName) 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+                return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume stale lock could not be reclaimed.' }
+            }
+            $null = @(Invoke-Docker -Arguments $seedArguments 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+                return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock could not be acquired after stale-lock cleanup.' }
+            }
         }
-        $seedStatus = 1
-        $failureMessage = 'Hermes Docker data volume seed completed without its ready marker.'
+        else {
+            return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume initialization is already locked.' }
+        }
     }
 
-    $owner = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $tokenLabel
-    if ($owner.Status -ne 0) {
-        return [PSCustomObject]@{
+    $lockedSchema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
+    $lockedOwner = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $tokenLabel
+    if ($lockedSchema.Status -ne 0 -or $lockedOwner.Status -ne 0 -or
+        $lockedSchema.Value -ne '1' -or $lockedOwner.Value -ne $volumeToken) {
+        $result = [PSCustomObject]@{
             Success  = $false
-            Existing = $true
-            Message  = "$failureMessage Ownership could not be reverified; refusing removal."
+            Existing = $existing
+            Message  = 'Hermes data volume changed before its lock was acquired; refusing access.'
         }
     }
-    if ($owner.Value -ne $initToken) {
-        return [PSCustomObject]@{
-            Success  = $false
-            Existing = $true
-            Message  = "$failureMessage Ownership changed; refusing removal."
+    elseif (Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken) {
+        $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+    }
+    else {
+        $null = @(Invoke-Docker -Arguments @('start', '-a', $lockName) 2>$null)
+        $seedStatus = $LASTEXITCODE
+        if ($seedStatus -eq 0 -and
+            (Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken)) {
+            $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+        }
+        elseif ($seedStatus -eq 0) {
+            $result = [PSCustomObject]@{
+                Success  = $false
+                Existing = $existing
+                Message  = 'Hermes data volume seed completed without its valid ready marker.'
+            }
+        }
+        else {
+            $result = [PSCustomObject]@{
+                Success  = $false
+                Existing = $existing
+                Message  = "Hermes data volume initialization failed with status $seedStatus; it remains incomplete for a safe retry."
+            }
         }
     }
-    $null = @(Invoke-Docker -Arguments @('volume', 'rm', $volumeName) 2>$null)
-    $cleanupStatus = $LASTEXITCODE
-    if ($cleanupStatus -ne 0) {
+
+    $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockName) 2>$null)
+    $releaseStatus = $LASTEXITCODE
+    if ($releaseStatus -ne 0) {
         return [PSCustomObject]@{
             Success  = $false
-            Existing = $true
-            Message  = "$failureMessage The owned partial volume could not be removed (seed status $seedStatus, cleanup status $cleanupStatus)."
+            Existing = $existing
+            Message  = "Hermes data volume operation completed but its lock could not be released (status $releaseStatus)."
         }
     }
-    return [PSCustomObject]@{ Success = $false; Existing = $false; Message = $failureMessage }
+    return $result
 }

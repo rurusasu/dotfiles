@@ -64,6 +64,12 @@ jobs:
       - name: Run the pinned container suite
         run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
 
+      - name: Build the Hermes storage integration image
+        run: docker build --target hermes-bootstrap-runtime -t local/hermes-agent-gh:latest -f docker/hermes-agent/Dockerfile docker
+
+      - name: Run the Hermes storage volume integration
+        run: docker/hermes-agent/tests/test_storage_volume_integration.sh
+
       - name: Run Hermes browser runtime contracts
         run: docker/hermes-browser/tests/test_runtime_contract.sh
 

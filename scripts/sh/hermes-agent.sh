@@ -34,22 +34,45 @@ dotfiles_hermes_storage_volume_label() {
   "$docker_runner" volume inspect --format "{{ index .Labels \"$label\" }}" "$volume_name"
 }
 
+dotfiles_hermes_storage_lock_name() {
+  local volume_name="$1"
+
+  python3 -c 'import hashlib, sys; print("dotfiles-hermes-storage-" + hashlib.sha256(sys.argv[1].encode()).hexdigest()[:20])' "$volume_name"
+}
+
 dotfiles_hermes_storage_volume_ready() {
-  local docker_runner="$1" volume_name="$2"
+  local docker_runner="$1" volume_name="$2" volume_token="$3"
 
   "$docker_runner" run --rm \
-    --entrypoint test \
+    --entrypoint python \
     --mount "type=volume,src=$volume_name,dst=/target,readonly" \
     local/hermes-agent-gh:latest \
-    -f /target/.dotfiles-hermes-storage-ready-v1
+    -c 'import pathlib, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n"; raise SystemExit(0 if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding="utf-8") == expected else 1)' \
+    "$volume_token"
+}
+
+dotfiles_hermes_release_storage_lock() {
+  local docker_runner="$1" lock_name="$2"
+
+  "$docker_runner" rm -f "$lock_name" >/dev/null 2>&1
+}
+
+dotfiles_hermes_storage_lock_state() {
+  local docker_runner="$1" lock_name="$2" lock_label="$3" token_label="$4"
+
+  "$docker_runner" inspect --format \
+    "{{ index .Config.Labels \"$lock_label\" }}|{{ index .Config.Labels \"$token_label\" }}|{{ .State.Status }}" \
+    "$lock_name"
 }
 
 dotfiles_hermes_initialize_storage_volume() {
   local docker_runner="$1"
-  local volume_name data_dir volume_schema init_token actual_token
-  local volume_status seed_status cleanup_status
+  local volume_name data_dir volume_schema volume_token actual_schema actual_token lock_name
+  local volume_status seed_status release_status
   local schema_label="com.rurusasu.dotfiles.hermes-storage.schema"
   local token_label="com.rurusasu.dotfiles.hermes-storage.init-token"
+  local lock_label="com.rurusasu.dotfiles.hermes-storage.lock"
+  local lock_state
 
   volume_name="$(dotfiles_hermes_storage_volume_name)" ||
     dotfiles_die "HERMES_DATA_VOLUME contains an invalid Docker volume name."
@@ -60,38 +83,79 @@ dotfiles_hermes_initialize_storage_volume() {
       printf 'Legacy Hermes Docker data volume already exists; leaving it untouched: %s\n' "$volume_name" >&2
       return 0
     fi
-    if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name"; then
-      printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
-      return 0
-    fi
-    printf 'Hermes Docker data volume is managed but incomplete; remove it after confirming no initialization is active: %s\n' "$volume_name" >&2
-    return 1
+    volume_token="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$token_label" 2>/dev/null)" || return $?
   else
     volume_status=$?
     ((volume_status == 1)) || return "$volume_status"
+    volume_token="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')" || return $?
+    "$docker_runner" volume create \
+      --label "$schema_label=1" \
+      --label "$token_label=$volume_token" \
+      "$volume_name" >/dev/null || return $?
   fi
 
-  init_token="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')" || return $?
-  "$docker_runner" volume create \
-    --label "$schema_label=1" \
-    --label "$token_label=$init_token" \
-    "$volume_name" >/dev/null || return $?
-  actual_token="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$token_label" 2>/dev/null)" || {
-    printf 'Hermes Docker data volume ownership could not be verified: %s\n' "$volume_name" >&2
+  [[ $volume_token =~ ^[0-9a-f]{32}$ ]] || {
+    printf 'Hermes Docker data volume has an invalid initialization token: %s\n' "$volume_name" >&2
     return 1
   }
-  if [[ $actual_token != "$init_token" ]]; then
-    printf 'Hermes Docker data volume was created concurrently; refusing to seed or remove it: %s\n' "$volume_name" >&2
-    return 1
-  fi
-
-  if "$docker_runner" run --rm \
+  lock_name="$(dotfiles_hermes_storage_lock_name "$volume_name")" || return $?
+  if ! "$docker_runner" create \
+    --name "$lock_name" \
+    --label "$lock_label=1" \
+    --label "$token_label=$volume_token" \
     --entrypoint /usr/local/bin/hermes-storage-seed \
     --mount "type=bind,src=$data_dir,dst=/source,readonly" \
     --mount "type=volume,src=$volume_name,dst=/target" \
     local/hermes-agent-gh:latest \
-    --source /source --destination /target; then
-    if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name"; then
+    --source /source --destination /target \
+    --ready-token "$volume_token" --replace-incomplete >/dev/null 2>&1; then
+    lock_state="$(dotfiles_hermes_storage_lock_state "$docker_runner" "$lock_name" "$lock_label" "$token_label" 2>/dev/null)" || lock_state=""
+    case "$lock_state" in
+    "1|$volume_token|exited" | "1|$volume_token|dead")
+      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || return $?
+      "$docker_runner" create \
+        --name "$lock_name" \
+        --label "$lock_label=1" \
+        --label "$token_label=$volume_token" \
+        --entrypoint /usr/local/bin/hermes-storage-seed \
+        --mount "type=bind,src=$data_dir,dst=/source,readonly" \
+        --mount "type=volume,src=$volume_name,dst=/target" \
+        local/hermes-agent-gh:latest \
+        --source /source --destination /target \
+        --ready-token "$volume_token" --replace-incomplete >/dev/null || return $?
+      ;;
+    *)
+      printf 'Hermes Docker data volume initialization is already locked: %s\n' "$volume_name" >&2
+      return 1
+      ;;
+    esac
+  fi
+
+  actual_schema="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$schema_label" 2>/dev/null)" || {
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || true
+    printf 'Hermes Docker data volume identity could not be verified while locked: %s\n' "$volume_name" >&2
+    return 1
+  }
+  actual_token="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$token_label" 2>/dev/null)" || {
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || true
+    printf 'Hermes Docker data volume identity could not be verified while locked: %s\n' "$volume_name" >&2
+    return 1
+  }
+  if [[ $actual_schema != 1 || $actual_token != "$volume_token" ]]; then
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || true
+    printf 'Hermes Docker data volume changed before its lock was acquired; refusing to access it: %s\n' "$volume_name" >&2
+    return 1
+  fi
+
+  if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || return $?
+    printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
+    return 0
+  fi
+
+  if "$docker_runner" start -a "$lock_name"; then
+    if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
+      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name" || return $?
       printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
       return 0
     fi
@@ -101,22 +165,15 @@ dotfiles_hermes_initialize_storage_volume() {
     seed_status=$?
   fi
 
-  actual_token="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$token_label" 2>/dev/null)" || {
-    printf 'Hermes Docker data volume initialization failed and ownership could not be reverified: %s\n' "$volume_name" >&2
-    return "$seed_status"
-  }
-  if [[ $actual_token != "$init_token" ]]; then
-    printf 'Hermes Docker data volume initialization failed after ownership changed; refusing removal: %s\n' "$volume_name" >&2
-    return "$seed_status"
-  fi
-  if "$docker_runner" volume rm "$volume_name" >/dev/null 2>&1; then
+  if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_name"; then
+    printf 'Hermes Docker data volume remains incomplete and will be safely replaced on retry: %s\n' "$volume_name" >&2
     return "$seed_status"
   else
-    cleanup_status=$?
+    release_status=$?
   fi
-  printf 'Hermes Docker data volume initialization failed and the owned partial volume could not be removed: %s (seed status %s, cleanup status %s)\n' \
-    "$volume_name" "$seed_status" "$cleanup_status" >&2
-  return "$cleanup_status"
+  printf 'Hermes Docker data volume initialization failed and its lock could not be released: %s (seed status %s, release status %s)\n' \
+    "$volume_name" "$seed_status" "$release_status" >&2
+  return "$release_status"
 }
 
 dotfiles_hermes_prepare_runtime_home() {
