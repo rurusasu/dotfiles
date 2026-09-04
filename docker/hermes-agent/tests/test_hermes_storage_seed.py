@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -48,6 +49,47 @@ def _run_seed_without_source_write_access(source: Path, destination: Path) -> su
 
 
 class HermesStorageSeedTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "requires Unix domain sockets")
+    def test_skips_unix_socket_and_publishes_ready_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            destination.mkdir()
+            (source / "config.yaml").write_text("gateway: docker\n", encoding="utf-8")
+            socket_path = source / "gateway.sock"
+
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as gateway:
+                gateway.bind(str(socket_path))
+                seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / "gateway.sock").exists())
+            self.assertEqual((destination / "config.yaml").read_text(encoding="utf-8"), "gateway: docker\n")
+            self.assertEqual(
+                (destination / ".dotfiles-hermes-storage-ready-v1").read_text(encoding="utf-8"),
+                f"version=1\nvolume_token={TEST_TOKEN}\n",
+            )
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFOs")
+    def test_skips_nested_fifo(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            runtime = source / "runtime"
+            runtime.mkdir(parents=True)
+            destination.mkdir()
+            (runtime / "state.txt").write_text("persistent\n", encoding="utf-8")
+            os.mkfifo(runtime / "events.fifo")
+
+            seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / "runtime" / "events.fifo").exists())
+            self.assertEqual(
+                (destination / "runtime" / "state.txt").read_text(encoding="utf-8"), "persistent\n"
+            )
+
     def test_replaces_source_ready_marker_only_after_successful_seed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

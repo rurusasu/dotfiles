@@ -191,6 +191,8 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
             if source_path.is_symlink():
                 _copy_symlink(source, source_path, destination / relative_path)
                 continue
+            if not stat.S_ISREG(source_path.lstat().st_mode):
+                continue
             destination_path = destination / relative_path
             if source_path.suffix == ".db" and _is_sqlite_database(source_path):
                 _copy_sqlite_database(source_path, destination_path)
