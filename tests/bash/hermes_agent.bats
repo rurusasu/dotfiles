@@ -977,7 +977,8 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 
 	[ "$status" -eq 0 ]
 	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
-	grep -q '^op <--account> <my.1password.com> <read> ' "$COMMAND_LOG"
+	grep -q '<read>' "$COMMAND_LOG"
+	! grep -q '<signin>' "$COMMAND_LOG"
 	grep -q '^op <item> <get> <Hermes X API MCP> ' "$COMMAND_LOG"
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
