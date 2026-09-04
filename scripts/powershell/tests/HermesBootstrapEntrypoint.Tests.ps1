@@ -144,7 +144,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             "compose -f $script:composeFile build hermes hermes-bootstrap chromium xapi-mcp",
             "compose -f $script:composeFile ps --all --services hermes",
             "compose -f $script:composeFile stop hermes",
-            'volume inspect hermes-data',
+            'volume inspect --format {{ index .Labels "com.rurusasu.dotfiles.hermes-storage.schema" }} hermes-data',
             "compose -f $script:composeFile up -d --force-recreate"
         )
         $script:environmentObservations.Phase | Should -Be @(
@@ -154,7 +154,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             'build',
             'ps',
             'stop',
-            'volume inspect hermes-data',
+            'volume inspect --format {{ index .Labels "com.rurusasu.dotfiles.hermes-storage.schema" }} hermes-data',
             'bootstrap',
             'up'
         )

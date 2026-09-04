@@ -4,15 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
+import re
 import shutil
 import sqlite3
 import stat
+import tempfile
 from pathlib import Path
+from typing import Iterator
 
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
-EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl"}
+READY_MARKER_NAME = ".dotfiles-hermes-storage-ready-v1"
+EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", READY_MARKER_NAME}
+ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
+READY_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
 
 def _is_sqlite_database(path: Path) -> bool:
@@ -23,15 +30,41 @@ def _is_sqlite_database(path: Path) -> bool:
         return False
 
 
+@contextlib.contextmanager
+def _open_sqlite_source(source: Path) -> Iterator[sqlite3.Connection]:
+    sidecars = [Path(f"{source}{suffix}") for suffix in TRANSIENT_SQLITE_SUFFIXES]
+    existing_sidecars = [path for path in sidecars if path.exists()]
+    if not existing_sidecars:
+        source_uri = f"{source.resolve().as_uri()}?mode=ro&immutable=1"
+        connection = sqlite3.connect(source_uri, uri=True)
+        try:
+            yield connection
+        finally:
+            connection.close()
+        return
+
+    with tempfile.TemporaryDirectory(prefix="hermes-storage-sqlite-") as temporary:
+        staged = Path(temporary) / source.name
+        shutil.copy2(source, staged)
+        staged.chmod(0o600)
+        for sidecar in existing_sidecars:
+            staged_sidecar = Path(f"{staged}{sidecar.name.removeprefix(source.name)}")
+            shutil.copy2(sidecar, staged_sidecar)
+            staged_sidecar.chmod(0o600)
+        connection = sqlite3.connect(staged)
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+
 def _copy_sqlite_database(source: Path, destination: Path) -> None:
-    source_uri = f"file:{source.as_posix()}?mode=ro"
-    source_connection = sqlite3.connect(source_uri, uri=True)
     destination_connection = sqlite3.connect(destination)
     try:
-        source_connection.backup(destination_connection)
+        with _open_sqlite_source(source) as source_connection:
+            source_connection.backup(destination_connection)
     finally:
         destination_connection.close()
-        source_connection.close()
 
 
 def _copy_file(source: Path, destination: Path) -> None:
@@ -40,19 +73,94 @@ def _copy_file(source: Path, destination: Path) -> None:
     destination.chmod(source_mode)
 
 
-def _validate_paths(source: Path, destination: Path) -> None:
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
+    target_text = os.readlink(source)
+    target = Path(target_text)
+    if target.is_absolute():
+        normalized_target = Path(os.path.normpath(target))
+        if not _is_within(normalized_target, ALLOWED_ABSOLUTE_SYMLINK_ROOT):
+            raise ValueError(f"absolute symlink target must be below /opt/data: {source} -> {target_text}")
+    else:
+        relative_parent = source.parent.relative_to(source_root)
+        relocated_target = Path(os.path.normpath(relative_parent / target))
+        if relocated_target.parts and relocated_target.parts[0] == "..":
+            raise ValueError(f"relative symlink target escapes Hermes data after relocation: {source} -> {target_text}")
+        resolved_target = (source.parent / target).resolve(strict=False)
+        if not _is_within(resolved_target, source_root.resolve()):
+            raise ValueError(f"relative symlink target escapes Hermes data: {source} -> {target_text}")
+    destination.symlink_to(target_text)
+
+
+def _fsync_tree(root: Path) -> None:
+    directories: list[Path] = []
+    for directory, directory_names, file_names in os.walk(root, followlinks=False):
+        current = Path(directory)
+        directories.append(current)
+        directory_names[:] = [name for name in directory_names if not (current / name).is_symlink()]
+        for file_name in file_names:
+            path = current / file_name
+            if path.is_symlink():
+                continue
+            descriptor = os.open(path, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    for directory in reversed(directories):
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+def _write_ready_marker(destination: Path, ready_token: str) -> None:
+    temporary = destination / f"{READY_MARKER_NAME}.tmp-{os.getpid()}"
+    with temporary.open("x", encoding="utf-8") as handle:
+        handle.write(f"version=1\nvolume_token={ready_token}\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, destination / READY_MARKER_NAME)
+    descriptor = os.open(destination, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _validate_paths(source: Path, destination: Path, ready_token: str) -> None:
+    if not READY_TOKEN_PATTERN.fullmatch(ready_token):
+        raise ValueError("ready token must be 32 lowercase hexadecimal characters")
     if not source.is_dir() or source.is_symlink():
         raise ValueError(f"source must be a real directory: {source}")
     if not destination.is_dir() or destination.is_symlink():
         raise ValueError(f"destination must be a real directory: {destination}")
-    if any(destination.iterdir()):
+
+
+def _clear_destination(destination: Path) -> None:
+    for path in destination.iterdir():
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+
+def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplete: bool = False) -> None:
+    """Copy a stopped Hermes home into a destination and publish readiness."""
+
+    _validate_paths(source, destination, ready_token)
+    if replace_incomplete:
+        _clear_destination(destination)
+    elif any(destination.iterdir()):
         raise ValueError(f"destination must be empty: {destination}")
-
-
-def seed(source: Path, destination: Path) -> None:
-    """Copy a stopped Hermes home into an empty destination directory."""
-
-    _validate_paths(source, destination)
     for source_root, directory_names, file_names in os.walk(source, followlinks=False):
         source_directory = Path(source_root)
         relative_directory = source_directory.relative_to(source)
@@ -67,7 +175,8 @@ def seed(source: Path, destination: Path) -> None:
                 continue
             source_path = source / relative_path
             if source_path.is_symlink():
-                raise ValueError(f"symlinks are not supported in Hermes data: {source_path}")
+                _copy_symlink(source, source_path, destination / relative_path)
+                continue
             retained_directories.append(directory_name)
             (destination / relative_path).mkdir(exist_ok=True)
         directory_names[:] = retained_directories
@@ -80,7 +189,8 @@ def seed(source: Path, destination: Path) -> None:
             relative_path = relative_directory / file_name
             source_path = source / relative_path
             if source_path.is_symlink():
-                raise ValueError(f"symlinks are not supported in Hermes data: {source_path}")
+                _copy_symlink(source, source_path, destination / relative_path)
+                continue
             destination_path = destination / relative_path
             if source_path.suffix == ".db" and _is_sqlite_database(source_path):
                 _copy_sqlite_database(source_path, destination_path)
@@ -88,14 +198,24 @@ def seed(source: Path, destination: Path) -> None:
             else:
                 _copy_file(source_path, destination_path)
 
+    _fsync_tree(destination)
+    _write_ready_marker(destination, ready_token)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
+    parser.add_argument("--ready-token", required=True)
+    parser.add_argument("--replace-incomplete", action="store_true")
     arguments = parser.parse_args()
     try:
-        seed(arguments.source, arguments.destination)
+        seed(
+            arguments.source,
+            arguments.destination,
+            arguments.ready_token,
+            replace_incomplete=arguments.replace_incomplete,
+        )
     except (OSError, sqlite3.Error, ValueError) as error:
         parser.error(str(error))
     return 0
