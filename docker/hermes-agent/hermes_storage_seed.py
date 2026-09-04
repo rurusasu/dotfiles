@@ -17,8 +17,16 @@ from typing import Iterator
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
 READY_MARKER_NAME = ".dotfiles-hermes-storage-ready-v1"
-EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", "gateway.sock", READY_MARKER_NAME}
+EXCLUDED_ROOT_ENTRIES = {
+    ".browser",
+    ".op.env",
+    ".xurl",
+    "gateway.sock",
+    READY_MARKER_NAME,
+}
 EXCLUDED_DIRECTORY_NAMES = {".cache"}
+EXCLUDED_RELATIVE_PATHS = {Path(".bootstrap/transactions")}
+PRIVATE_RELATIVE_DIRECTORIES = {Path(".bootstrap")}
 ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
 READY_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
@@ -82,8 +90,12 @@ def _is_within(path: Path, root: Path) -> bool:
     return True
 
 
-def _is_excluded_entry(name: str, *, is_root: bool) -> bool:
-    return name in EXCLUDED_DIRECTORY_NAMES or (is_root and name in EXCLUDED_ROOT_ENTRIES)
+def _is_excluded_entry(relative_path: Path, *, is_root: bool) -> bool:
+    return (
+        relative_path in EXCLUDED_RELATIVE_PATHS
+        or relative_path.name in EXCLUDED_DIRECTORY_NAMES
+        or (is_root and relative_path.name in EXCLUDED_ROOT_ENTRIES)
+    )
 
 
 def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
@@ -172,11 +184,13 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         is_root = relative_directory == Path(".")
         destination_directory = destination / relative_directory
         destination_directory.mkdir(parents=True, exist_ok=True)
+        if relative_directory in PRIVATE_RELATIVE_DIRECTORIES:
+            destination_directory.chmod(0o700)
 
         retained_directories: list[str] = []
         for directory_name in directory_names:
             relative_path = relative_directory / directory_name
-            if _is_excluded_entry(directory_name, is_root=is_root):
+            if _is_excluded_entry(relative_path, is_root=is_root):
                 continue
             source_path = source / relative_path
             if source_path.is_symlink():
@@ -189,9 +203,9 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         for file_name in file_names:
             if file_name.endswith(TRANSIENT_SQLITE_SUFFIXES):
                 continue
-            if _is_excluded_entry(file_name, is_root=is_root):
-                continue
             relative_path = relative_directory / file_name
+            if _is_excluded_entry(relative_path, is_root=is_root):
+                continue
             source_path = source / relative_path
             source_metadata = source_path.lstat()
             if stat.S_ISLNK(source_metadata.st_mode):
