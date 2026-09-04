@@ -51,11 +51,24 @@ function Test-HermesStorageVolumeReady {
         '--entrypoint', 'python',
         '--mount', "type=volume,source=$VolumeName,target=/target,readonly",
         'local/hermes-agent-gh:latest',
-        '-c', 'import pathlib, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n"; raise SystemExit(0 if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding="utf-8") == expected else 1)',
+        '-c', 'import pathlib, stat, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n";
+try:
+ mode=marker.lstat().st_mode
+except FileNotFoundError:
+ raise SystemExit(3)
+except OSError as error:
+ print(f"Hermes ready marker could not be inspected: {error}", file=sys.stderr); raise SystemExit(2)
+if stat.S_ISLNK(mode) or not stat.S_ISREG(mode): raise SystemExit(3)
+try:
+ actual=marker.read_text(encoding="utf-8")
+except (OSError, UnicodeError) as error:
+ print(f"Hermes ready marker could not be read: {error}", file=sys.stderr); raise SystemExit(2)
+raise SystemExit(0 if actual == expected else 3)',
         $VolumeToken
     )
     $null = @(Invoke-Docker -Arguments $arguments 2>$null)
-    return $LASTEXITCODE -eq 0
+    $status = $LASTEXITCODE
+    return [PSCustomObject]@{ Status = $status; Ready = $status -eq 0 }
 }
 
 function Get-HermesStorageLockName {
@@ -219,21 +232,43 @@ function Initialize-HermesStorageVolume {
             Message  = 'Hermes data volume changed before its lock was acquired; refusing access.'
         }
     }
-    elseif (Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken) {
+    else {
+        $probe = Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken
+    }
+    if ($null -ne $result) {
+        # The locked volume identity check already produced the result.
+    }
+    elseif ($probe.Status -eq 0) {
         $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+    }
+    elseif ($probe.Status -ne 3) {
+        $result = [PSCustomObject]@{
+            Success  = $false
+            Existing = $existing
+            Message  = "Hermes data volume ready marker probe failed with status $($probe.Status); preserving it unchanged."
+        }
     }
     else {
         $null = @(Invoke-Docker -Arguments @('start', '-a', $lockId) 2>$null)
         $seedStatus = $LASTEXITCODE
-        if ($seedStatus -eq 0 -and
-            (Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken)) {
-            $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
-        }
-        elseif ($seedStatus -eq 0) {
-            $result = [PSCustomObject]@{
-                Success  = $false
-                Existing = $existing
-                Message  = 'Hermes data volume seed completed without its valid ready marker.'
+        if ($seedStatus -eq 0) {
+            $postSeedProbe = Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken
+            if ($postSeedProbe.Status -eq 0) {
+                $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+            }
+            elseif ($postSeedProbe.Status -eq 3) {
+                $result = [PSCustomObject]@{
+                    Success  = $false
+                    Existing = $existing
+                    Message  = 'Hermes data volume seed completed without its valid ready marker.'
+                }
+            }
+            else {
+                $result = [PSCustomObject]@{
+                    Success  = $false
+                    Existing = $existing
+                    Message  = "Hermes data volume post-seed ready marker probe failed with status $($postSeedProbe.Status)."
+                }
             }
         }
         else {

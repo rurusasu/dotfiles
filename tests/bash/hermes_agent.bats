@@ -56,6 +56,7 @@ EOF
 	export HERMES_VOLUME_SCHEMA_LABEL=""
 	export HERMES_VOLUME_TOKEN_LABEL=""
 	export HERMES_VOLUME_READY=1
+	export HERMES_VOLUME_PROBE_STATUS=""
 	export HERMES_CREATE_RACE_TOKEN=""
 	export HERMES_LOCK_CREATE_STATUS=0
 	export HERMES_LOCK_CREATE_FAIL_ONCE=0
@@ -167,12 +168,15 @@ if [ "${1:-}" = "run" ]; then
 	previous=""
 	for argument in "$@"; do
 	  if [[ $previous == --entrypoint && $argument == python ]]; then
+	    if [[ -n ${HERMES_VOLUME_PROBE_STATUS:-} ]]; then
+	      exit "$HERMES_VOLUME_PROBE_STATUS"
+	    fi
 	    if [[ -s $VOLUME_READY_FILE ]]; then
 	      ready="$(cat "$VOLUME_READY_FILE")"
 	    else
 	      ready="$HERMES_VOLUME_READY"
 	    fi
-	    exit "$((ready == 1 ? 0 : 1))"
+	    exit "$((ready == 1 ? 0 : 3))"
 	  fi
 	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-seed ]]; then
 	    if [[ ${HERMES_STORAGE_SEED_STATUS:-0} == 0 && ${HERMES_SEED_WRITES_MARKER:-1} == 1 ]]; then
@@ -361,6 +365,20 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 
 	[ "$status" -eq 0 ]
 	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "preserves a ready managed volume when its marker probe cannot run" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+	export HERMES_VOLUME_PROBE_STATUS=125
+
+	run_start_stack
+
+	[ "$status" -eq 125 ]
+	[[ "$output" == *"ready marker probe failed with status 125"* ]]
 	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
 	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
 }

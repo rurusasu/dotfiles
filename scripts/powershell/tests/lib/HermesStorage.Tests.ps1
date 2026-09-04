@@ -14,6 +14,7 @@ Describe 'Hermes Docker storage initialization' {
         $script:createdToken = ''
         $script:raceToken = ''
         $script:volumeReady = $true
+        $script:volumeProbeStatus = $null
         $script:seedExitCode = 0
         $script:seedWritesMarker = $true
         $script:lockCreateExitCode = 0
@@ -64,7 +65,11 @@ Describe 'Hermes Docker storage initialization' {
                 $entrypointIndex = $Arguments.IndexOf('--entrypoint')
                 $entrypoint = if ($entrypointIndex -ge 0) { $Arguments[$entrypointIndex + 1] } else { '' }
                 if ($entrypoint -eq 'python') {
-                    $global:LASTEXITCODE = if ($script:volumeReady) { 0 } else { 1 }
+                    $global:LASTEXITCODE = if ($null -ne $script:volumeProbeStatus) {
+                        $script:volumeProbeStatus
+                    }
+                    elseif ($script:volumeReady) { 0 }
+                    else { 3 }
                 }
                 else {
                     $global:LASTEXITCODE = 1
@@ -187,6 +192,20 @@ Describe 'Hermes Docker storage initialization' {
         $result.Existing | Should -BeTrue
         ($script:dockerCalls -join "`n") | Should -Match '--entrypoint python'
         ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
+    }
+
+    It 'preserves a ready managed volume when its marker probe cannot run' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $script:volumeReady = $true
+        $script:volumeProbeStatus = 125
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match 'ready marker probe failed with status 125'
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
+        $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
     }
 
     It 'rejects a concurrent running lock before marker access' {

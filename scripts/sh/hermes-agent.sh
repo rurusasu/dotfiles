@@ -47,7 +47,19 @@ dotfiles_hermes_storage_volume_ready() {
     --entrypoint python \
     --mount "type=volume,src=$volume_name,dst=/target,readonly" \
     local/hermes-agent-gh:latest \
-    -c 'import pathlib, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n"; raise SystemExit(0 if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding="utf-8") == expected else 1)' \
+    -c 'import pathlib, stat, sys; marker=pathlib.Path("/target/.dotfiles-hermes-storage-ready-v1"); expected=f"version=1\nvolume_token={sys.argv[1]}\n";
+try:
+ mode=marker.lstat().st_mode
+except FileNotFoundError:
+ raise SystemExit(3)
+except OSError as error:
+ print(f"Hermes ready marker could not be inspected: {error}", file=sys.stderr); raise SystemExit(2)
+if stat.S_ISLNK(mode) or not stat.S_ISREG(mode): raise SystemExit(3)
+try:
+ actual=marker.read_text(encoding="utf-8")
+except (OSError, UnicodeError) as error:
+ print(f"Hermes ready marker could not be read: {error}", file=sys.stderr); raise SystemExit(2)
+raise SystemExit(0 if actual == expected else 3)' \
     "$volume_token"
 }
 
@@ -85,7 +97,7 @@ dotfiles_hermes_create_storage_lock() {
 dotfiles_hermes_initialize_storage_volume() {
   local docker_runner="$1"
   local volume_name data_dir volume_schema volume_token actual_schema actual_token lock_name lock_id
-  local volume_status seed_status release_status
+  local volume_status probe_status seed_status release_status
   local schema_label="com.rurusasu.dotfiles.hermes-storage.schema"
   local token_label="com.rurusasu.dotfiles.hermes-storage.init-token"
   local lock_label="com.rurusasu.dotfiles.hermes-storage.lock"
@@ -168,6 +180,20 @@ dotfiles_hermes_initialize_storage_volume() {
     dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
     printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
     return 0
+  else
+    probe_status=$?
+  fi
+  if ((probe_status != 3)); then
+    if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id"; then
+      printf 'Hermes Docker data volume ready marker probe failed with status %s; preserving it unchanged: %s\n' \
+        "$probe_status" "$volume_name" >&2
+      return "$probe_status"
+    else
+      release_status=$?
+      printf 'Hermes Docker data volume ready marker probe failed with status %s and its lock could not be released: %s\n' \
+        "$probe_status" "$volume_name" >&2
+      return "$release_status"
+    fi
   fi
 
   if "$docker_runner" start -a "$lock_id"; then
@@ -175,9 +201,17 @@ dotfiles_hermes_initialize_storage_volume() {
       dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
       printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
       return 0
+    else
+      probe_status=$?
     fi
-    seed_status=1
-    printf 'Hermes Docker data volume seed completed without its ready marker: %s\n' "$volume_name" >&2
+    if ((probe_status == 3)); then
+      seed_status=1
+      printf 'Hermes Docker data volume seed completed without its ready marker: %s\n' "$volume_name" >&2
+    else
+      seed_status=$probe_status
+      printf 'Hermes Docker data volume post-seed ready marker probe failed with status %s: %s\n' \
+        "$probe_status" "$volume_name" >&2
+    fi
   else
     seed_status=$?
   fi
