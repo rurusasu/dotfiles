@@ -162,6 +162,33 @@ def _validate_paths(source: Path, destination: Path, ready_token: str) -> None:
         raise ValueError(f"destination must be a real directory: {destination}")
 
 
+def _validate_source_transaction_state(source: Path) -> None:
+    store = source / ".bootstrap" / "transactions"
+    descriptor: int | None = None
+    try:
+        flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(store, flags)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISDIR(opened.st_mode):
+            raise OSError
+        with os.scandir(descriptor) as entries:
+            if any(entry.name != ".lock" for entry in entries):
+                raise ValueError(
+                    "source contains bootstrap transaction recovery state; "
+                    "recover the source before seeding"
+                )
+    except FileNotFoundError:
+        return
+    except ValueError:
+        raise
+    except OSError:
+        raise ValueError(f"source bootstrap transaction store is unsafe: {store}") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _clear_destination(destination: Path) -> None:
     for path in destination.iterdir():
         if path.is_dir() and not path.is_symlink():
@@ -174,6 +201,7 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
     """Copy a stopped Hermes home into a destination and publish readiness."""
 
     _validate_paths(source, destination, ready_token)
+    _validate_source_transaction_state(source)
     if replace_incomplete:
         _clear_destination(destination)
     elif any(destination.iterdir()):

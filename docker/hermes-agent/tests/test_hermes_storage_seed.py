@@ -51,7 +51,32 @@ def _run_seed_without_source_write_access(source: Path, destination: Path) -> su
 
 
 class HermesStorageSeedTests(unittest.TestCase):
-    def test_skips_root_bootstrap_transaction_state(self) -> None:
+    def test_rejects_unfinished_root_bootstrap_transaction_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            transaction = source / ".bootstrap" / "transactions"
+            transaction.mkdir(parents=True)
+            destination.mkdir()
+            sentinel = destination / "existing.txt"
+            sentinel.write_text("preserved\n", encoding="utf-8")
+            (source / "config.yaml").write_text("gateway: docker\n", encoding="utf-8")
+            state = source / ".bootstrap" / "root-distribution-state.json"
+            state.write_text('{"version": 1}\n', encoding="utf-8")
+            state.chmod(0o600)
+            (transaction / "unsafe").symlink_to("/outside-hermes-data")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "source contains bootstrap transaction recovery state",
+            ):
+                seed(source, destination, TEST_TOKEN, replace_incomplete=True)
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserved\n")
+            self.assertFalse((destination / ".dotfiles-hermes-storage-ready-v1").exists())
+
+    def test_skips_idle_root_bootstrap_transaction_store(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source"
@@ -63,7 +88,7 @@ class HermesStorageSeedTests(unittest.TestCase):
             state = source / ".bootstrap" / "root-distribution-state.json"
             state.write_text('{"version": 1}\n', encoding="utf-8")
             state.chmod(0o600)
-            (transaction / "unsafe").symlink_to("/outside-hermes-data")
+            (transaction / ".lock").write_text("", encoding="utf-8")
 
             seed(source, destination, TEST_TOKEN)
 
@@ -89,7 +114,8 @@ class HermesStorageSeedTests(unittest.TestCase):
             bootstrap = source / ".bootstrap"
             bootstrap.mkdir()
             transactions = bootstrap / "transactions"
-            transactions.symlink_to(source / "missing-transactions", target_is_directory=True)
+            transactions.mkdir()
+            (transactions / ".lock").touch()
             original_lstat = Path.lstat
 
             def docker_desktop_lstat(path: Path) -> os.stat_result:
