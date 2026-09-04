@@ -179,7 +179,7 @@ Describe 'HermesAgentHandler' {
                 "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium browser-mcp xapi-mcp",
                 "compose -f $script:composeFile ps --all --services hermes",
                 "compose -f $script:composeFile stop hermes",
-                "volume inspect hermes-data",
+                "volume inspect --format {{ index .Labels `"com.rurusasu.dotfiles.hermes-storage.schema`" }} hermes-data",
                 "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
             )
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
