@@ -162,7 +162,8 @@ line_of() {
 	[ "$(line_of 'docker image prune --force')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
 	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
-	[ "$(grep -c '^op signin --account my.1password.com$' "$COMMAND_LOG")" -eq 2 ]
+	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
+	! grep -q '^op signin ' "$COMMAND_LOG"
 	[ -s "$PAYLOAD_CAPTURE" ]
 }
 
