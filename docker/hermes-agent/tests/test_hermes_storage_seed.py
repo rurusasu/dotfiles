@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import socket
 import sqlite3
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hermes_storage_seed import seed
 
@@ -49,6 +51,111 @@ def _run_seed_without_source_write_access(source: Path, destination: Path) -> su
 
 
 class HermesStorageSeedTests(unittest.TestCase):
+    def test_skips_nested_cache_directories_with_external_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            profile_home = source / "profiles" / "nancy" / "home"
+            cache = profile_home / ".cache" / "uv" / "bin"
+            cache.mkdir(parents=True)
+            destination.mkdir()
+            (profile_home / "persistent.txt").write_text("kept\n", encoding="utf-8")
+            (cache / "python").symlink_to("/nix/store/unavailable-python")
+
+            seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / "profiles" / "nancy" / "home" / ".cache").exists())
+            self.assertEqual(
+                (destination / "profiles" / "nancy" / "home" / "persistent.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "kept\n",
+            )
+
+    def test_skips_nested_cache_symlink_classified_as_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            profile_home = source / "profiles" / "nancy" / "home"
+            profile_home.mkdir(parents=True)
+            destination.mkdir()
+            (profile_home / ".cache").symlink_to("/opt/data/missing-cache", target_is_directory=True)
+
+            seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / "profiles" / "nancy" / "home" / ".cache").is_symlink())
+
+    def test_skips_entry_when_bind_mount_cannot_lstat_special_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            destination.mkdir()
+            (source / "config.yaml").write_text("gateway: docker\n", encoding="utf-8")
+            socket_path = source / "gateway.sock"
+            socket_path.touch()
+            original_lstat = Path.lstat
+
+            def docker_desktop_lstat(path: Path) -> os.stat_result:
+                if path == socket_path:
+                    raise OSError(errno.ENOTSUP, "Operation not supported", str(path))
+                return original_lstat(path)
+
+            with mock.patch.object(Path, "lstat", docker_desktop_lstat):
+                seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / "gateway.sock").exists())
+            self.assertEqual((destination / "config.yaml").read_text(encoding="utf-8"), "gateway: docker\n")
+            self.assertEqual(
+                (destination / ".dotfiles-hermes-storage-ready-v1").read_text(encoding="utf-8"),
+                f"version=1\nvolume_token={TEST_TOKEN}\n",
+            )
+
+    def test_propagates_unrelated_lstat_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            destination.mkdir()
+            blocked_path = source / "blocked.txt"
+            blocked_path.touch()
+            original_lstat = Path.lstat
+
+            def denied_lstat(path: Path) -> os.stat_result:
+                if path == blocked_path:
+                    raise OSError(errno.EACCES, "Permission denied", str(path))
+                return original_lstat(path)
+
+            with mock.patch.object(Path, "lstat", denied_lstat):
+                with self.assertRaisesRegex(OSError, "Permission denied"):
+                    seed(source, destination, TEST_TOKEN)
+
+    def test_does_not_skip_persistent_file_when_lstat_is_unsupported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            destination.mkdir()
+            state_database = source / "state.db"
+            state_database.touch()
+            original_lstat = Path.lstat
+
+            def unsupported_lstat(path: Path) -> os.stat_result:
+                if path == state_database:
+                    raise OSError(errno.ENOTSUP, "Operation not supported", str(path))
+                return original_lstat(path)
+
+            with mock.patch.object(Path, "lstat", unsupported_lstat):
+                with self.assertRaisesRegex(OSError, "Operation not supported"):
+                    seed(source, destination, TEST_TOKEN)
+
+            self.assertFalse((destination / ".dotfiles-hermes-storage-ready-v1").exists())
+
     @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "requires Unix domain sockets")
     def test_skips_unix_socket_and_publishes_ready_marker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
