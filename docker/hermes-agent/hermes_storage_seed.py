@@ -17,7 +17,8 @@ from typing import Iterator
 
 TRANSIENT_SQLITE_SUFFIXES = ("-wal", "-shm", "-journal")
 READY_MARKER_NAME = ".dotfiles-hermes-storage-ready-v1"
-EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", READY_MARKER_NAME}
+EXCLUDED_ROOT_ENTRIES = {".browser", ".op.env", ".xurl", "gateway.sock", READY_MARKER_NAME}
+EXCLUDED_DIRECTORY_NAMES = {".cache"}
 ALLOWED_ABSOLUTE_SYMLINK_ROOT = Path("/opt/data")
 READY_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
@@ -79,6 +80,10 @@ def _is_within(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _is_excluded_entry(name: str, *, is_root: bool) -> bool:
+    return name in EXCLUDED_DIRECTORY_NAMES or (is_root and name in EXCLUDED_ROOT_ENTRIES)
 
 
 def _copy_symlink(source_root: Path, source: Path, destination: Path) -> None:
@@ -171,7 +176,7 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         retained_directories: list[str] = []
         for directory_name in directory_names:
             relative_path = relative_directory / directory_name
-            if is_root and directory_name in EXCLUDED_ROOT_ENTRIES:
+            if _is_excluded_entry(directory_name, is_root=is_root):
                 continue
             source_path = source / relative_path
             if source_path.is_symlink():
@@ -184,14 +189,15 @@ def seed(source: Path, destination: Path, ready_token: str, *, replace_incomplet
         for file_name in file_names:
             if file_name.endswith(TRANSIENT_SQLITE_SUFFIXES):
                 continue
-            if is_root and file_name in EXCLUDED_ROOT_ENTRIES:
+            if _is_excluded_entry(file_name, is_root=is_root):
                 continue
             relative_path = relative_directory / file_name
             source_path = source / relative_path
-            if source_path.is_symlink():
+            source_metadata = source_path.lstat()
+            if stat.S_ISLNK(source_metadata.st_mode):
                 _copy_symlink(source, source_path, destination / relative_path)
                 continue
-            if not stat.S_ISREG(source_path.lstat().st_mode):
+            if not stat.S_ISREG(source_metadata.st_mode):
                 continue
             destination_path = destination / relative_path
             if source_path.suffix == ".db" and _is_sqlite_database(source_path):
