@@ -967,6 +967,40 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
 }
 
+@test "initializes the service account cache for a standalone X API command" {
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
+	grep -q '^op <--account> <my.1password.com> <read> ' "$COMMAND_LOG"
+	grep -q '^op <item> <get> <Hermes X API MCP> ' "$COMMAND_LOG"
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+}
+
+@test "uses a valid service account cache without a trailing newline" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	[ "$(cat "$OP_TOKEN_CAPTURE")" = cached-token ]
+}
+
 @test "syncs the X API refresh token into the local xurl cache before startup" {
 	local xapi_lookup_count last_xapi_lookup up_line
 	run_start_stack

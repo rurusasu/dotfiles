@@ -334,7 +334,7 @@ dotfiles_hermes_run_with_service_account_cache() {
     set +x
   fi
   if dotfiles_hermes_validate_service_account_environment_cache "$op_env_path" &&
-    IFS= read -r cache_line <"$op_env_path"; then
+    { IFS= read -r cache_line <"$op_env_path" || [[ -n $cache_line ]]; }; then
     token="${cache_line#OP_SERVICE_ACCOUNT_TOKEN=}"
     OP_SERVICE_ACCOUNT_TOKEN="$token" "$@" || status=$?
   else
@@ -534,6 +534,7 @@ dotfiles_hermes_with_xapi_credentials() {
   dotfiles_hermes_op_command >/dev/null ||
     dotfiles_die "1Password CLI (op) is required for Hermes X API credentials."
   dotfiles_have jq || dotfiles_die "jq is required for Hermes X API credentials."
+  dotfiles_hermes_prepare_service_account_environment || return 1
 
   if [[ $- == *x* ]]; then
     xtrace_enabled=1
@@ -559,6 +560,7 @@ dotfiles_hermes_with_xapi_credentials_and_cache() {
   dotfiles_hermes_op_command >/dev/null ||
     dotfiles_die "1Password CLI (op) is required for Hermes X API credentials."
   dotfiles_have jq || dotfiles_die "jq is required for Hermes X API credentials."
+  dotfiles_hermes_prepare_service_account_environment || return 1
 
   if [[ $- == *x* ]]; then
     xtrace_enabled=1
