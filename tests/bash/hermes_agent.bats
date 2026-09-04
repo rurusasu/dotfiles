@@ -7,6 +7,7 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
+	OP_TOKEN_CAPTURE="$BATS_TEST_TMPDIR/op-token.log"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
@@ -21,6 +22,7 @@ setup() {
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
+	: >"$OP_TOKEN_CAPTURE"
 	: >"$VOLUME_SCHEMA_FILE"
 	: >"$VOLUME_TOKEN_FILE"
 	: >"$VOLUME_READY_FILE"
@@ -36,9 +38,10 @@ EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
+	unset OP_SERVICE_ACCOUNT_TOKEN
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -106,6 +109,7 @@ printf "\n" >>"$COMMAND_LOG"
 			exit 0
 		fi
 		[ "${2:-}" = get ] || exit 2
+		printf "%s\n" "${OP_SERVICE_ACCOUNT_TOKEN:-<unset>}" >>"$OP_TOKEN_CAPTURE"
 		if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
 			exit 17
 		fi
@@ -947,6 +951,8 @@ dotfiles_hermes_browser_data_dir
 
 @test "injects X API OAuth credentials from 1Password for explicit wrapper commands" {
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
 
 	run bash -c '
 set -euo pipefail
@@ -1023,20 +1029,42 @@ EOF
 	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "configured-item-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
 }
 
-@test "uses a mode-0600 cached service account after an op read timeout" {
+@test "uses a mode-0600 cached service account without starting an op read" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
 	export OP_READ_COMPLETION_FILE="$BATS_TEST_TMPDIR/op-read-completed"
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
 	run_start_stack
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"using existing Hermes service-account environment"* ]]
+	[[ "$output" != *"using existing Hermes service-account environment"* ]]
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
 	/bin/sleep 2
 	[ ! -e "$OP_READ_COMPLETION_FILE" ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
+}
+
+@test "uses a valid cached service account for every host item read without desktop authorization" {
+	local bootstrap_output
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_TOKEN='unexpected-refresh-token'
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	bootstrap_output="$output"
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	run grep -q '<signin>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	[ -s "$OP_TOKEN_CAPTURE" ]
+	run grep -vx 'cached-token' "$OP_TOKEN_CAPTURE"
+	[ "$status" -eq 1 ]
+	[[ "$bootstrap_output" != *'cached-token'* ]]
 }
 
 @test "rejects a writable cached service account after an op read timeout" {
@@ -1111,6 +1139,7 @@ dotfiles_hermes_service_account_read_timeout_seconds
 	chmod 600 "$HOME/.hermes/.op.env"
 	ln "$HOME/.hermes/.op.env" "$HOME/.hermes/.op.env.previous"
 	export OP_READ_TOKEN='fresh-token'
+	export DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT=1
 	run_start_stack
 	[ "$status" -eq 0 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
@@ -1286,6 +1315,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$status" -eq 0 ]
 	grep -q "$SECRET_MARKER" "$PAYLOAD_CAPTURE"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+	[[ "$output" != *'service-account-token'* ]]
 }
 
 @test "streams an ordered versioned payload and recreates services after success" {

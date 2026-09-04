@@ -324,6 +324,29 @@ dotfiles_hermes_validate_service_account_environment_cache() {
   [[ -n $cache_token && $cache_token != *$'\r'* && $cache_token != *$'\n'* ]]
 }
 
+dotfiles_hermes_run_with_service_account_cache() {
+  local data_dir op_env_path cache_line token status=0 xtrace_enabled=0
+
+  data_dir="$(dotfiles_hermes_data_dir)"
+  op_env_path="$data_dir/.op.env"
+  if [[ $- == *x* ]]; then
+    xtrace_enabled=1
+    set +x
+  fi
+  if dotfiles_hermes_validate_service_account_environment_cache "$op_env_path" &&
+    IFS= read -r cache_line <"$op_env_path"; then
+    token="${cache_line#OP_SERVICE_ACCOUNT_TOKEN=}"
+    OP_SERVICE_ACCOUNT_TOKEN="$token" "$@" || status=$?
+  else
+    status=1
+  fi
+  unset token cache_line data_dir op_env_path
+  if ((xtrace_enabled)); then
+    set -x
+  fi
+  return "$status"
+}
+
 dotfiles_hermes_prepare_service_account_environment() {
   local data_dir op_env_path temporary op_command account reference token status=0 xtrace_enabled=0
 
@@ -337,7 +360,10 @@ dotfiles_hermes_prepare_service_account_environment() {
     xtrace_enabled=1
     set +x
   fi
-  if dotfiles_hermes_read_service_account_token "$op_command" "$account" "$reference" token &&
+  if [[ ${DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT:-0} != 1 ]] &&
+    dotfiles_hermes_validate_service_account_environment_cache "$op_env_path"; then
+    :
+  elif dotfiles_hermes_read_service_account_token "$op_command" "$account" "$reference" token &&
     [[ -n $token && $token != *$'\n'* && $token != *$'\r'* ]]; then
     temporary="$(mktemp "$data_dir/.op.env.XXXXXX")" || status=1
     if ((status == 0)); then
@@ -349,8 +375,6 @@ dotfiles_hermes_prepare_service_account_environment() {
         status=1
       fi
     fi
-  elif dotfiles_hermes_validate_service_account_environment_cache "$op_env_path"; then
-    printf 'Hermes 1Password Service Account could not be loaded; using existing Hermes service-account environment.\n' >&2
   else
     status=1
   fi
@@ -439,8 +463,8 @@ dotfiles_hermes_read_xapi_refresh_token() {
   vault="$(dotfiles_hermes_xapi_secret_vault)"
   item="$(dotfiles_hermes_xapi_oauth_item)"
 
-  "$op_command" signin --account "$account" >/dev/null
-  "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+  dotfiles_hermes_run_with_service_account_cache \
+    "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
     dotfiles_hermes_extract_xapi_refresh_token
 }
 
@@ -499,8 +523,8 @@ dotfiles_hermes_read_xapi_credentials() {
   vault="$(dotfiles_hermes_xapi_secret_vault)"
   item="$(dotfiles_hermes_xapi_secret_item)"
 
-  "$op_command" signin --account "$account" >/dev/null
-  "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+  dotfiles_hermes_run_with_service_account_cache \
+    "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
     dotfiles_hermes_extract_xapi_credentials
 }
 
@@ -629,7 +653,8 @@ dotfiles_hermes_emit_secret_item() {
     set +x
   fi
   if ! item_record="$(
-    "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
+    dotfiles_hermes_run_with_service_account_cache \
+      "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
       jq -ce --arg key "$key" 'if type == "object" then {type: "item", key: $key, item: .} else error("1Password item is not an object") end'
   )"; then
     status=1
