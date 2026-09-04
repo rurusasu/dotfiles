@@ -60,6 +60,8 @@ EOF
 	export HERMES_LOCK_CREATE_STATUS=0
 	export HERMES_LOCK_CREATE_FAIL_ONCE=0
 	export HERMES_LOCK_STATE=""
+	export HERMES_LOCK_ID=1111111111111111111111111111111111111111111111111111111111111111
+	export HERMES_REPLACEMENT_LOCK_ID=2222222222222222222222222222222222222222222222222222222222222222
 	export HERMES_LOCK_RELEASE_STATUS=0
 	export HERMES_SEED_WRITES_MARKER=1
 	export API_READY_AFTER=1
@@ -187,7 +189,9 @@ if [ "${1:-}" = "create" ]; then
 	attempt=$((attempt + 1))
 	printf "%s\n" "$attempt" >"$LOCK_CREATE_ATTEMPT_FILE"
 	if [[ ${HERMES_LOCK_CREATE_FAIL_ONCE:-0} == 1 && $attempt == 1 ]]; then exit 125; fi
-	exit "${HERMES_LOCK_CREATE_STATUS:-0}"
+	if [[ ${HERMES_LOCK_CREATE_STATUS:-0} != 0 ]]; then exit "$HERMES_LOCK_CREATE_STATUS"; fi
+	if ((attempt > 1)); then printf "%s\n" "$HERMES_REPLACEMENT_LOCK_ID"; else printf "%s\n" "$HERMES_LOCK_ID"; fi
+	exit 0
 fi
 if [ "${1:-}" = "inspect" ]; then
 	if [[ -n ${HERMES_LOCK_STATE:-} ]]; then printf "%s\n" "$HERMES_LOCK_STATE"; exit 0; fi
@@ -319,7 +323,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 
 	[ "$status" -eq 42 ]
 	[[ "$output" == *"will be safely replaced on retry"* ]]
-	grep -Fq '<rm> <-f> <dotfiles-hermes-storage-' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
 	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
 	! grep -q '<secret-plan>' "$COMMAND_LOG"
 }
@@ -358,14 +362,14 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	[ "$status" -eq 0 ]
 	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
 	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
-	grep -Fq '<rm> <-f> <dotfiles-hermes-storage-' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
 }
 
 @test "rejects a concurrent storage lock before marker or seed access" {
 	export HERMES_VOLUME_SCHEMA_LABEL=1
 	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 	export HERMES_LOCK_CREATE_STATUS=125
-	export HERMES_LOCK_STATE='1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|running'
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|running"
 
 	run_start_stack
 
@@ -380,15 +384,46 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	export HERMES_VOLUME_SCHEMA_LABEL=1
 	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 	export HERMES_LOCK_CREATE_FAIL_ONCE=1
-	export HERMES_LOCK_STATE='1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|exited'
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
 
 	run_start_stack
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
 	grep -Fq '<inspect> <--format>' "$COMMAND_LOG"
-	grep -Fq '<rm> <-f> <dotfiles-hermes-storage-' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
 	grep -Fq '<run> <--rm> <--entrypoint> <python>' "$COMMAND_LOG"
+}
+
+@test "reclaims an aged created lock by immutable ID" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_FAIL_ONCE=1
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|created"
+	export HERMES_VOLUME_READY=0
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	grep -Fq "<start> <-a> <$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "does not acquire or touch a replacement lock after losing stale ID removal" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_FAIL_ONCE=1
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
+	export HERMES_LOCK_RELEASE_STATUS=17
+
+	run_start_stack
+
+	[ "$status" -eq 17 ]
+	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 1 ]
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	! grep -Fq "<$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
 }
 
 @test "surfaces a lock release failure after seed failure without deleting the volume" {

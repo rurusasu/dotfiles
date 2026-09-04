@@ -81,10 +81,13 @@ function Get-HermesStorageLockState {
         [string]$LockLabel,
 
         [Parameter(Mandatory)]
-        [string]$TokenLabel
+        [string]$TokenLabel,
+
+        [Parameter(Mandatory)]
+        [string]$CreatedLabel
     )
 
-    $format = '{{ index .Config.Labels "' + $LockLabel + '" }}|{{ index .Config.Labels "' + $TokenLabel + '" }}|{{ .State.Status }}'
+    $format = '{{ .Id }}|{{ index .Config.Labels "' + $LockLabel + '" }}|{{ index .Config.Labels "' + $TokenLabel + '" }}|{{ index .Config.Labels "' + $CreatedLabel + '" }}|{{ .State.Status }}'
     $output = @(Invoke-Docker -Arguments @('inspect', '--format', $format, $LockName) 2>$null)
     return [PSCustomObject]@{ Status = $LASTEXITCODE; Value = (($output -join "`n").Trim()) }
 }
@@ -100,6 +103,7 @@ function Initialize-HermesStorageVolume {
     $schemaLabel = 'com.rurusasu.dotfiles.hermes-storage.schema'
     $tokenLabel = 'com.rurusasu.dotfiles.hermes-storage.init-token'
     $lockLabel = 'com.rurusasu.dotfiles.hermes-storage.lock'
+    $lockCreatedLabel = 'com.rurusasu.dotfiles.hermes-storage.lock-created-at'
     $existing = $true
     $schema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
     if ($schema.Status -eq 0) {
@@ -135,11 +139,13 @@ function Initialize-HermesStorageVolume {
     }
 
     $lockName = Get-HermesStorageLockName -VolumeName $volumeName
+    $lockCreatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $seedArguments = @(
         'create',
         '--name', $lockName,
         '--label', "$lockLabel=1",
         '--label', "$tokenLabel=$volumeToken",
+        '--label', "$lockCreatedLabel=$lockCreatedAt",
         '--entrypoint', '/usr/local/bin/hermes-storage-seed',
         '--mount', "type=bind,source=$DataDir,target=/source,readonly",
         '--mount', "type=volume,source=$volumeName,target=/target",
@@ -149,23 +155,43 @@ function Initialize-HermesStorageVolume {
         '--ready-token', $volumeToken,
         '--replace-incomplete'
     )
-    $null = @(Invoke-Docker -Arguments $seedArguments 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        $lockState = Get-HermesStorageLockState -LockName $lockName -LockLabel $lockLabel -TokenLabel $tokenLabel
-        if ($lockState.Status -eq 0 -and
-            $lockState.Value -match ('^1\|' + [regex]::Escape($volumeToken) + '\|(exited|dead)$')) {
-            $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockName) 2>$null)
+    $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
+    $lockCreateStatus = $LASTEXITCODE
+    $lockId = ($lockOutput -join "`n").Trim()
+    if ($lockCreateStatus -ne 0) {
+        $lockState = Get-HermesStorageLockState -LockName $lockName -LockLabel $lockLabel -TokenLabel $tokenLabel -CreatedLabel $lockCreatedLabel
+        $parts = $lockState.Value -split '\|', 5
+        $reclaimStale = $false
+        if ($lockState.Status -eq 0 -and $parts.Count -eq 5 -and
+            $parts[0] -match '^[0-9a-f]{12,64}$' -and $parts[1] -eq '1' -and
+            $parts[2] -eq $volumeToken) {
+            if ($parts[4] -in @('exited', 'dead')) {
+                $reclaimStale = $true
+            }
+            elseif ($parts[4] -eq 'created' -and $parts[3] -match '^[0-9]{1,12}$') {
+                $age = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$parts[3]
+                $reclaimStale = $age -ge 30
+            }
+        }
+        if ($reclaimStale) {
+            $staleLockId = $parts[0]
+            $null = @(Invoke-Docker -Arguments @('rm', '-f', $staleLockId) 2>$null)
             if ($LASTEXITCODE -ne 0) {
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume stale lock could not be reclaimed.' }
             }
-            $null = @(Invoke-Docker -Arguments $seedArguments 2>$null)
-            if ($LASTEXITCODE -ne 0) {
+            $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
+            $lockCreateStatus = $LASTEXITCODE
+            $lockId = ($lockOutput -join "`n").Trim()
+            if ($lockCreateStatus -ne 0) {
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock could not be acquired after stale-lock cleanup.' }
             }
         }
         else {
             return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume initialization is already locked.' }
         }
+    }
+    if ($lockId -notmatch '^[0-9a-f]{12,64}$') {
+        return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock returned an invalid container ID.' }
     }
 
     $lockedSchema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
@@ -182,7 +208,7 @@ function Initialize-HermesStorageVolume {
         $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
     }
     else {
-        $null = @(Invoke-Docker -Arguments @('start', '-a', $lockName) 2>$null)
+        $null = @(Invoke-Docker -Arguments @('start', '-a', $lockId) 2>$null)
         $seedStatus = $LASTEXITCODE
         if ($seedStatus -eq 0 -and
             (Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken)) {
@@ -204,7 +230,7 @@ function Initialize-HermesStorageVolume {
         }
     }
 
-    $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockName) 2>$null)
+    $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockId) 2>$null)
     $releaseStatus = $LASTEXITCODE
     if ($releaseStatus -ne 0) {
         return [PSCustomObject]@{

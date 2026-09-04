@@ -20,6 +20,8 @@ Describe 'Hermes Docker storage initialization' {
         $script:lockCreateFailOnce = $false
         $script:lockCreateAttempts = 0
         $script:lockState = ''
+        $script:lockId = '1111111111111111111111111111111111111111111111111111111111111111'
+        $script:replacementLockId = '2222222222222222222222222222222222222222222222222222222222222222'
         $script:lockReleaseExitCode = 0
         $script:oldVolume = $env:HERMES_DATA_VOLUME
         Remove-Item Env:\HERMES_DATA_VOLUME -ErrorAction SilentlyContinue
@@ -68,6 +70,14 @@ Describe 'Hermes Docker storage initialization' {
                     $global:LASTEXITCODE = 125
                 }
                 else {
+                    if ($script:lockCreateExitCode -eq 0) {
+                        if ($script:lockCreateAttempts -gt 1) {
+                            $script:replacementLockId
+                        }
+                        else {
+                            $script:lockId
+                        }
+                    }
                     $global:LASTEXITCODE = $script:lockCreateExitCode
                 }
             }
@@ -120,7 +130,7 @@ Describe 'Hermes Docker storage initialization' {
         ($script:dockerCalls -join "`n") | Should -Match 'create --name dotfiles-hermes-storage-[0-9a-f]{20} .*--entrypoint /usr/local/bin/hermes-storage-seed'
         ($script:dockerCalls -join "`n") | Should -Match 'create .* --ready-token [0-9a-f]{32} --replace-incomplete'
         ($script:dockerCalls -join "`n") | Should -Match 'run --rm --entrypoint python .*volume_token='
-        $script:dockerCalls[-1] | Should -Match '^rm -f dotfiles-hermes-storage-'
+        $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
         ($script:dockerCalls -join "`n") | Should -Not -Match 'volume rm'
     }
 
@@ -132,7 +142,7 @@ Describe 'Hermes Docker storage initialization' {
 
         $result.Success | Should -BeFalse
         $result.Message | Should -Match 'safe retry'
-        $script:dockerCalls[-1] | Should -Match '^rm -f dotfiles-hermes-storage-'
+        $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
         ($script:dockerCalls -join "`n") | Should -Not -Match 'volume rm'
     }
 
@@ -158,7 +168,7 @@ Describe 'Hermes Docker storage initialization' {
         $result.Success | Should -BeTrue
         $result.Existing | Should -BeTrue
         ($script:dockerCalls -join "`n") | Should -Match 'create .* /usr/local/bin/hermes-storage-seed .*--replace-incomplete'
-        ($script:dockerCalls -join "`n") | Should -Match 'start -a dotfiles-hermes-storage-'
+        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:lockId)"
     }
 
     It 'accepts an exactly matching regular marker while locked' {
@@ -177,7 +187,7 @@ Describe 'Hermes Docker storage initialization' {
         $script:volumeSchema = '1'
         $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         $script:lockCreateExitCode = 125
-        $script:lockState = '1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|running'
+        $script:lockState = "$($script:lockId)|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|running"
 
         $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
 
@@ -190,14 +200,48 @@ Describe 'Hermes Docker storage initialization' {
     It 'reclaims an exited owned lock before retrying atomically' {
         $script:volumeSchema = '1'
         $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $script:volumeReady = $false
         $script:lockCreateFailOnce = $true
-        $script:lockState = '1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|exited'
+        $script:lockState = "$($script:lockId)|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
 
         $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
 
         $result.Success | Should -BeTrue
         $script:lockCreateAttempts | Should -Be 2
         ($script:dockerCalls -join "`n") | Should -Match 'inspect --format .*State.Status.*dotfiles-hermes-storage-'
+        ($script:dockerCalls -join "`n") | Should -Match "rm -f $($script:lockId)"
+        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:replacementLockId)"
+    }
+
+    It 'reclaims an aged created lock by immutable container ID' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $script:volumeReady = $false
+        $script:lockCreateFailOnce = $true
+        $script:lockState = "$($script:lockId)|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|created"
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeTrue
+        $script:lockCreateAttempts | Should -Be 2
+        ($script:dockerCalls -join "`n") | Should -Match "rm -f $($script:lockId)"
+        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:replacementLockId)"
+    }
+
+    It 'does not touch a replacement after losing stale ID removal' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $script:lockCreateFailOnce = $true
+        $script:lockState = "$($script:lockId)|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
+        $script:lockReleaseExitCode = 17
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match 'stale lock could not be reclaimed'
+        $script:lockCreateAttempts | Should -Be 1
+        ($script:dockerCalls -join "`n") | Should -Not -Match $script:replacementLockId
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
     }
 
     It 'surfaces lock release failure without deleting the volume' {
@@ -220,7 +264,7 @@ Describe 'Hermes Docker storage initialization' {
 
         $result.Success | Should -BeFalse
         $result.Message | Should -Match 'valid ready marker'
-        $script:dockerCalls[-1] | Should -Match '^rm -f dotfiles-hermes-storage-'
+        $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
     }
 
     It 'rejects a malformed managed volume token before locking' {

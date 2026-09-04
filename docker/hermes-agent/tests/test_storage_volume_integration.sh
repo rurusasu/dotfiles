@@ -98,6 +98,26 @@ unlink "$fixture_dir/nested/bad-link"
 
 dotfiles_hermes_initialize_storage_volume docker
 lock_name=""
+
+lock_name="$(dotfiles_hermes_storage_lock_name "$volume_name")"
+stale_created_id="$(docker create \
+  --name "$lock_name" \
+  --label "com.rurusasu.dotfiles.hermes-storage.lock=1" \
+  --label "com.rurusasu.dotfiles.hermes-storage.init-token=$volume_token" \
+  --label "com.rurusasu.dotfiles.hermes-storage.lock-created-at=0" \
+  --entrypoint /usr/local/bin/hermes-storage-seed \
+  --mount "type=bind,src=$fixture_dir,dst=/source,readonly" \
+  --mount "type=volume,src=$volume_name,dst=/target" \
+  local/hermes-agent-gh:latest \
+  --source /source --destination /target \
+  --ready-token "$volume_token" --replace-incomplete)"
+dotfiles_hermes_initialize_storage_volume docker
+if docker inspect "$stale_created_id" >/dev/null 2>&1; then
+  printf 'an aged created lock was not reclaimed by immutable ID\n' >&2
+  exit 1
+fi
+lock_name=""
+
 dotfiles_hermes_initialize_storage_volume docker
 
 marker="$(docker run --rm \
