@@ -22,9 +22,15 @@ Describe 'Hermes Docker storage initialization' {
         $script:lockState = ''
         $script:lockId = '1111111111111111111111111111111111111111111111111111111111111111'
         $script:replacementLockId = '2222222222222222222222222222222222222222222222222222222222222222'
+        $script:unixTime = 0
         $script:lockReleaseExitCode = 0
         $script:oldVolume = $env:HERMES_DATA_VOLUME
         Remove-Item Env:\HERMES_DATA_VOLUME -ErrorAction SilentlyContinue
+
+        Mock Get-HermesStorageUnixTime {
+            $script:unixTime += 100
+            return $script:unixTime
+        }
 
         Mock Invoke-Docker {
             $script:dockerCalls.Add(($Arguments -join ' '))
@@ -226,6 +232,9 @@ Describe 'Hermes Docker storage initialization' {
         $script:lockCreateAttempts | Should -Be 2
         ($script:dockerCalls -join "`n") | Should -Match "rm -f $($script:lockId)"
         ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:replacementLockId)"
+        $createCalls = @($script:dockerCalls | Where-Object { $_ -like 'create *' })
+        $createCalls[0] | Should -Match 'lock-created-at=100'
+        $createCalls[1] | Should -Match 'lock-created-at=300'
     }
 
     It 'does not touch a replacement after losing stale ID removal' {

@@ -71,6 +71,13 @@ function Get-HermesStorageLockName {
     return 'dotfiles-hermes-storage-' + $hex.Substring(0, 20)
 }
 
+function Get-HermesStorageUnixTime {
+    [CmdletBinding()]
+    param()
+
+    return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+}
+
 function Get-HermesStorageLockState {
     [CmdletBinding()]
     param(
@@ -139,7 +146,7 @@ function Initialize-HermesStorageVolume {
     }
 
     $lockName = Get-HermesStorageLockName -VolumeName $volumeName
-    $lockCreatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $lockCreatedAt = Get-HermesStorageUnixTime
     $seedArguments = @(
         'create',
         '--name', $lockName,
@@ -155,6 +162,7 @@ function Initialize-HermesStorageVolume {
         '--ready-token', $volumeToken,
         '--replace-incomplete'
     )
+    $lockCreatedArgument = "$lockCreatedLabel=$lockCreatedAt"
     $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
     $lockCreateStatus = $LASTEXITCODE
     $lockId = ($lockOutput -join "`n").Trim()
@@ -169,7 +177,7 @@ function Initialize-HermesStorageVolume {
                 $reclaimStale = $true
             }
             elseif ($parts[4] -eq 'created' -and $parts[3] -match '^[0-9]{1,12}$') {
-                $age = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$parts[3]
+                $age = (Get-HermesStorageUnixTime) - [long]$parts[3]
                 $reclaimStale = $age -ge 30
             }
         }
@@ -179,6 +187,13 @@ function Initialize-HermesStorageVolume {
             if ($LASTEXITCODE -ne 0) {
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume stale lock could not be reclaimed.' }
             }
+            $lockCreatedArgumentIndex = $seedArguments.IndexOf($lockCreatedArgument)
+            if ($lockCreatedArgumentIndex -lt 0) {
+                return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock timestamp could not be refreshed.' }
+            }
+            $lockCreatedAt = Get-HermesStorageUnixTime
+            $lockCreatedArgument = "$lockCreatedLabel=$lockCreatedAt"
+            $seedArguments[$lockCreatedArgumentIndex] = $lockCreatedArgument
             $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
             $lockCreateStatus = $LASTEXITCODE
             $lockId = ($lockOutput -join "`n").Trim()
