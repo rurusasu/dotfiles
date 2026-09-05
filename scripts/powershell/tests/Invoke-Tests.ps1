@@ -67,6 +67,7 @@ else {
     $scriptRoot = (Get-Location).ProviderPath
 }
 $projectRoot = Split-Path -Parent $scriptRoot
+$coverageRequested = ($MinimumCoverage -gt 0) -or $ShowCoverage -or (-not [string]::IsNullOrWhiteSpace($CoverageOutputFile))
 
 # Pester v3 が自動ロードされるのを防ぐ
 if (Get-Module -Name Pester) {
@@ -106,7 +107,7 @@ Write-Host ""
 
 # テスト対象ファイルの収集（カバレッジ有効時のみ）
 $sourceFiles = @()
-if ($MinimumCoverage -gt 0) {
+if ($coverageRequested) {
     $sourceFiles = @(
         "$projectRoot\lib\SetupHandler.ps1",
         "$projectRoot\lib\Invoke-ExternalCommand.ps1",
@@ -145,8 +146,12 @@ $pesterConfig.Output.Verbosity = "Detailed"
 $pesterConfig.Output.CIFormat = "Auto"
 
 # カバレッジ設定
-if ($sourceFiles.Count -gt 0 -and $MinimumCoverage -gt 0) {
-    $pesterConfig.CodeCoverage.Enabled = $true
+if ($coverageRequested) {
+    if ($sourceFiles.Count -eq 0) {
+        $pesterConfig.CodeCoverage.Enabled = $false
+    }
+    else {
+        $pesterConfig.CodeCoverage.Enabled = $true
     $pesterConfig.CodeCoverage.Path = $sourceFiles
     $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
     $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
@@ -155,9 +160,10 @@ if ($sourceFiles.Count -gt 0 -and $MinimumCoverage -gt 0) {
     # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
     $pesterConfig.CodeCoverage.UseBreakpoints = $false
 
-    if ($CoverageOutputFile) {
-        $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
-        $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+        if ($CoverageOutputFile) {
+            $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
+            $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+        }
     }
 }
 else {
