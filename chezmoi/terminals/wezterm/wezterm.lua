@@ -179,6 +179,15 @@ config.keys = {
     { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
 }
 
+if is_macos then
+    -- Bypass macOS IME processing so Backspace cannot be inserted as a space.
+    table.insert(config.keys, 1, {
+        key = "Backspace",
+        mods = "NONE",
+        action = act.SendString("\x7f"),
+    })
+end
+
 -- Remove inherited tab/pane window-manager shortcuts. The shared Leader table
 -- above is the only effective path for these actions; non-WM defaults remain.
 local default_window_manager_bindings = {
