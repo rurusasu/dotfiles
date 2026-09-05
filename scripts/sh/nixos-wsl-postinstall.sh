@@ -327,7 +327,7 @@ fi
 
 # Run nixos-rebuild
 NIX_CONFIG="experimental-features = nix-command flakes" \
-  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME"
+  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 # Handle sync-back
 if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then
