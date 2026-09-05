@@ -315,7 +315,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertEqual(runtime_paths, devcontainer_paths)
         self.assertNotEqual(active_bats_lines[0], "bats tests/bash/")
-        self.assertNotRegex(active_bats_lines[0], r"[*?[]")
+        for glob_marker in ("*", "?", "["):
+            self.assertNotIn(glob_marker, active_bats_lines[0])
 
         self.assertEqual(contract_excluded, devcontainer_paths)
         self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
