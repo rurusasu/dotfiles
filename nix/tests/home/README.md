@@ -38,8 +38,9 @@ package の評価は行わない。
 | Darwin | `tests/bash/macos_config.bats` | Darwin Home Manager 構成を `nix eval` で確認するケースを含む |
 | CI の declarative build | `.github/workflows/ci-bootstrap.yml` | Bats とは別に、Linux/NixOS、NixOS-WSL、Darwin の出力を明示的な `nix build` または WSL switch で確認する |
 
-ローカルでの Bats の標準入口は `task test:bash` である。Nix を必要とするケースは `command -v nix`
-を確認し、Nix がない環境では `skip` する。CI では `.github/workflows/ci-contract.yml` が
+ローカルでの Bats の標準入口は `task test:bash` であり、全スイートを完走するには Nix が必要である。
+一部の Nix 依存ケースは `command -v nix` を確認し、Nix がない環境では `skip` するが、Nix なしで
+`task test:bash` 全体を完走できることは意味しない。CI では `.github/workflows/ci-contract.yml` が
 `tests/bash/install_linux.bats` と `tests/bash/install_macos.bats` を除外し、それ以外の
 `tests/bash/*.bats` を実行する。
 
