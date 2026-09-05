@@ -46,7 +46,7 @@ Describe 'coverage smoke' {
 
         $pwsh = Get-Command pwsh -ErrorAction Stop
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
-        $args = @(
+        $childArguments = @(
             '-NoProfile'
             '-File'
             $runnerPath
@@ -56,7 +56,7 @@ Describe 'coverage smoke' {
             '-CoverageOutputFile'
             $coveragePath
         )
-        $output = & $pwsh.Source @args 2>&1
+        $output = & $pwsh.Source @childArguments 2>&1
         $exitCode = $LASTEXITCODE
         $outputText = $output | Out-String
         Write-Host $outputText
