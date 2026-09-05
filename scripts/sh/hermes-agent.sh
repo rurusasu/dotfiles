@@ -613,7 +613,7 @@ dotfiles_hermes_validate_secret_plan() {
     and ([.items[] | {key, account, vault, item}] == [
       {"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard"},
       {"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT"},
-      {"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP"},
+      {"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP"},
       {"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master"},
       {"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick"},
       {"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman"},

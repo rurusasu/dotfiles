@@ -180,7 +180,7 @@ class PayloadTests(unittest.TestCase):
                     {
                         "key": "google_calendar",
                         "account": "my.1password.com",
-                        "vault": "Private",
+                        "vault": "openclaw",
                         "item": "Google Calendar MCP",
                         "fields": [
                             {

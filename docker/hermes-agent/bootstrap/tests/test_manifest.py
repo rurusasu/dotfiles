@@ -138,6 +138,10 @@ class ManifestTests(unittest.TestCase):
                 "Shiraishi",
             ),
         )
+        google_calendar = next(
+            item for item in manifest.onepassword_items if item.key == "google_calendar"
+        )
+        self.assertEqual(google_calendar.vault, "openclaw")
         self.assertEqual(manifest.shared_repositories[0].sync_owner, "default")
         self.assertEqual(manifest.shared_repositories[0].legacy_target, Path("/opt/data/core/lifelog"))
         with self.assertRaises(FrozenInstanceError):
