@@ -32,4 +32,39 @@ Describe 'PowerShell coverage task contract' {
         $runner | Should -Match 'Install-Module\s+-Name\s+Pester[\s\S]*-MinimumVersion\s+5\.0\.0[\s\S]*-MaximumVersion\s+5\.999\.999'
         $runner | Should -Match 'Import-Module\s+-Name\s+Pester\s+-RequiredVersion\s+\$pesterV5\.Version'
     }
+
+    It 'should exercise the coverage-requested true path and emit coverage XML' {
+        $smokePath = Join-Path $TestDrive 'CoverageSmoke.Tests.ps1'
+        $coveragePath = Join-Path $TestDrive 'coverage.xml'
+        @'
+Describe 'coverage smoke' {
+    It 'should pass a minimal assertion' {
+        $true | Should -BeTrue
+    }
+}
+'@ | Set-Content -LiteralPath $smokePath -Encoding UTF8
+
+        $pwsh = Get-Command pwsh -ErrorAction Stop
+        $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
+        $args = @(
+            '-NoProfile'
+            '-File'
+            $runnerPath
+            '-Path'
+            $smokePath
+            '-ShowCoverage'
+            '-CoverageOutputFile'
+            $coveragePath
+        )
+        $output = & $pwsh.Source @args 2>&1
+        $exitCode = $LASTEXITCODE
+        $outputText = $output | Out-String
+        Write-Host $outputText
+
+        $exitCode | Should -Be 0
+        $outputText | Should -Match 'Source Files:\s+7'
+        (Test-Path -LiteralPath $coveragePath) | Should -BeTrue
+        [xml]$coverageXml = Get-Content -LiteralPath $coveragePath -Raw
+        $coverageXml | Should -Not -BeNullOrEmpty
+    }
 }
