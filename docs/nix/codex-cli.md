@@ -53,11 +53,12 @@ Rust CLI を Nix で再現するものとして扱う。npm package と byte-for
 
 ## 供給網と cache
 
-この flake は `llm-agents.nix` の input revision と各 hash を lock する。Numtide binary
-cache を利用する場合は、repository またはホストの Nix 設定に trusted substituter/key を
-追加する判断が別途必要になる。この repository は cache を暗黙に信頼せず、設定しない
-環境では同じ固定 source からローカル build できる。`follows = "nixpkgs"` は cache hit と
-互換性を損なう可能性があるため設定しない。
+この flake は `llm-agents.nix` の input revision と各 hash を lock し、Numtide binary
+cache の substituter/key も宣言する。NixOS/NixOS-WSL の host 設定にも同じ値を反映し、
+初回の `nixos-rebuild` より前に実行する WSL postinstall では `NIX_CONFIG` で明示的に
+有効化する。これにより cache に存在する Codex の固定出力は取得し、cache miss 時は
+同じ固定 source からローカル build にフォールバックできる。`follows = "nixpkgs"` は
+cache hit と互換性を損なう可能性があるため設定しない。
 
 ## 検証
 

@@ -88,6 +88,19 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
+    It 'should configure the llm-agents binary cache for Codex system builds' {
+        $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
+        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+        $hostModule = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/host/default.nix") -Raw
+
+        $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
+        $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
+        $postInstall | Should -Match 'extra-substituters = https://cache\.numtide\.com'
+        $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
+        $hostModule | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
+        $hostModule | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
+    }
+
     It 'should build the font package set on hosted Nix CI' {
         $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
@@ -137,7 +150,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
-        $script | Should -Not -Match 'SkipFlakeUpdate"\] = \$true'
+        $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
