@@ -33,11 +33,16 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
     def test_registry_has_only_explicit_reviewed_candidates(self) -> None:
         registry = self.updater.load_candidate_registry(REGISTRY)
         self.assertEqual(
-            set(registry), {"dia-browser", "orca-editor", "hammerspoon", "docker-desktop"}
+            set(registry), {"dia-browser", "orca-editor", "hammerspoon"}
         )
         for package in registry.values():
             self.assertNotIn("dia", package.candidates)
             self.assertNotIn("orca", package.candidates)
+
+    def test_docker_desktop_is_not_a_custom_darwin_update_profile(self) -> None:
+        self.assertNotIn("docker-desktop", self.updater.DERIVATIONS)
+        self.assertNotIn("docker-desktop", self.updater.PROFILES)
+        self.assertNotIn("docker-desktop", self.updater.IDENTITIES)
 
     def test_only_explicit_attrs_are_evaluated(self) -> None:
         runner = self.updater.RecordingNixRunner()

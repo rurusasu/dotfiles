@@ -16,7 +16,8 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
-DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
+DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
+LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
@@ -151,15 +152,50 @@ preserve_shell_rc_for_nix_darwin() {
 }
 
 stop_existing_docker_desktop() {
-  local docker_cli="$DOCKER_APP/Contents/Resources/bin/docker"
-  [[ -x $docker_cli ]] || return 0
-  if ! pgrep -x com.docker.backend >/dev/null 2>&1 &&
-    ! pgrep -x "Docker Desktop" >/dev/null 2>&1; then
-    return 0
-  fi
+  local app docker_cli
+  for app in "$LEGACY_DOCKER_APP" "$DOCKER_APP"; do
+    docker_cli="$app/Contents/Resources/bin/docker"
+    [[ -x $docker_cli ]] || continue
+    if ! pgrep -x com.docker.backend >/dev/null 2>&1 &&
+      ! pgrep -x "Docker Desktop" >/dev/null 2>&1; then
+      return 0
+    fi
 
-  dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
-  "$docker_cli" desktop stop --timeout 120
+    dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
+    "$docker_cli" desktop stop --timeout 120
+    return 0
+  done
+}
+
+remove_stale_docker_desktop_links() {
+  local link_path link_target
+  local -a link_paths=(
+    "$HOMEBREW_BIN_DIR/docker"
+    "$HOMEBREW_BIN_DIR/docker-compose"
+    "$HOMEBREW_BIN_DIR/docker-credential-desktop"
+    "$HOMEBREW_BIN_DIR/docker-credential-ecr-login"
+    "$HOMEBREW_BIN_DIR/docker-credential-osxkeychain"
+    "$HOMEBREW_BIN_DIR/kubectl"
+    "$HOMEBREW_BIN_DIR/kubectl.docker"
+    "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+  )
+
+  for link_path in "${link_paths[@]}"; do
+    if [[ -L $link_path ]]; then
+      link_target="$(/usr/bin/readlink "$link_path")"
+      case "$link_target" in
+      "$DOCKER_APP/Contents/Resources/"* | "$LEGACY_DOCKER_APP/Contents/Resources/"*) ;;
+      *) dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path" ;;
+      esac
+    elif [[ -e $link_path ]]; then
+      dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
+    fi
+  done
+
+  for link_path in "${link_paths[@]}"; do
+    [[ -L $link_path ]] || continue
+    sudo /bin/rm -f -- "$link_path"
+  done
 }
 
 repair_homebrew_cask_link_directories() {
@@ -402,7 +438,7 @@ ensure_docker_desktop_md5_compatibility() {
 
 setup_docker_runtime() {
   [[ -d $DOCKER_APP ]] ||
-    dotfiles_die "Docker Desktop was not installed by nix-darwin: $DOCKER_APP"
+    dotfiles_die "Docker Desktop was not installed by Homebrew cask: $DOCKER_APP"
 
   local installer="$DOCKER_APP/Contents/MacOS/install"
   [[ -x $installer ]] || dotfiles_die "Docker Desktop installer not found: $installer"
@@ -475,6 +511,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   if ((DOTFILES_WITH_DOCKER == 1)); then
     stop_existing_docker_desktop
+    remove_stale_docker_desktop_links
   fi
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install

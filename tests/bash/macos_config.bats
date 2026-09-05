@@ -161,7 +161,7 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Docker profile keeps Ollama and Docker out of Homebrew casks" {
+@test "Darwin Docker profile installs Docker Desktop only through Homebrew cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 
 	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_DOCKER=1 \
@@ -171,11 +171,14 @@ setup() {
 		"
 
 	[ "$status" -eq 0 ]
-	run jq -e 'all(.[]; .name != "ollama-app" and .name != "docker-desktop" and .name != "google-chrome" and .name != "discord")' <<<"$output"
+	run jq -e '
+		any(.[]; .name == "docker-desktop") and
+		all(.[]; .name != "ollama-app" and .name != "google-chrome" and .name != "discord")
+	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin Hermes profile installs Hermes Desktop only through Homebrew" {
+@test "Darwin Hermes profile installs Hermes and Docker Desktop through Homebrew" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 
@@ -195,6 +198,7 @@ setup() {
 	[ "$status" -eq 0 ]
 	run jq -e '
 		any(.casks[]; .name == "hermes-desktop")
+		and any(.casks[]; .name == "docker-desktop")
 		and all(.system[]; test("^hermes-desktop($|-[0-9])") | not)
 		and all(.home[]; test("^hermes-desktop($|-[0-9])") | not)
 		and .hasHermesFlakeInput == false
@@ -256,7 +260,8 @@ setup() {
 
 	[ "$status" -eq 0 ]
 	run jq -e '
-		all(.casks[]; .name != "ollama-app" and .name != "docker-desktop") and
+		all(.casks[]; .name != "ollama-app") and
+		any(.casks[]; .name == "docker-desktop") and
 		all(.casks[]; .name != "google-chrome" and .name != "discord") and
 		any(.system[]; test("^google-chrome(-|$)")) and
 		any(.system[]; test("^discord(-|$)")) and

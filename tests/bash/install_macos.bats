@@ -9,7 +9,8 @@ setup() {
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
-	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Nix Apps/Docker.app"
+	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Applications/Docker.app"
+	FAKE_LEGACY_DOCKER_APP="$BATS_TEST_TMPDIR/Nix Apps/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
 	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
@@ -34,7 +35,7 @@ setup() {
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
-	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
+	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP FAKE_LEGACY_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
@@ -44,6 +45,7 @@ setup() {
 	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
+	export DOTFILES_LEGACY_DOCKER_APP_PATH="$FAKE_LEGACY_DOCKER_APP"
 	export DOTFILES_LAUNCHCTL_COMMAND="$STUB_BIN/launchctl"
 	export DOTFILES_ACCEPT_DOCKER_LICENSE=1
 	export DOTFILES_DARWIN_MIGRATION="$STUB_BIN/migrate-darwin-provider"
@@ -239,6 +241,15 @@ EOF
 	chmod +x \
 		"$FAKE_DOCKER_APP/Contents/MacOS/install" \
 		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+}
+
+write_legacy_docker_app() {
+	mkdir -p "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin"
+	cat >"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf 'legacy-docker %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
 }
 
 write_installed_stubs() {
@@ -599,6 +610,9 @@ exit 1
 	run "$INSTALLER" --help
 
 	[ "$status" -eq 0 ]
+	[[ "$output" == *"--with-ollama"* ]]
+	[[ "$output" == *"--with-docker"* ]]
+	[[ "$output" == *"--with-hermes"* ]]
 	[[ "$output" == *"Hermes Desktop"* ]]
 	[[ "$output" == *"127.0.0.1:9119"* ]]
 }
@@ -1065,6 +1079,89 @@ EOF
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
+@test "legacy Nix Docker Desktop is stopped before Homebrew cask activation" {
+	write_installed_stubs
+	export FAKE_HOMEBREW_DOCKER_APP="$BATS_TEST_TMPDIR/Homebrew Docker.app"
+	cp -R "$FAKE_DOCKER_APP" "$FAKE_HOMEBREW_DOCKER_APP"
+	rm -rf "$FAKE_DOCKER_APP"
+	write_legacy_docker_app
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "run" ]; then
+	mkdir -p "$(dirname "$FAKE_DOCKER_APP")"
+	cp -R "$FAKE_HOMEBREW_DOCKER_APP" "$FAKE_DOCKER_APP"
+fi
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		"legacy-docker desktop stop --timeout 120" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
+@test "known stale Docker Desktop symlinks are removed before Homebrew cask activation" {
+	write_installed_stubs
+	local -a links=(
+		"$FAKE_HOMEBREW_BIN_DIR/docker"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-compose"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain"
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl"
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl.docker"
+		"$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	)
+	local -a targets=(
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+		"$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop"
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login"
+		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain"
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl"
+		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl"
+		"$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+	)
+	local index
+	for index in "${!links[@]}"; do
+		ln -s "${targets[$index]}" "${links[$index]}"
+	done
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	for link in "${links[@]}"; do
+		[ ! -e "$link" ]
+		[ ! -L "$link" ]
+	done
+	assert_log_order \
+		"sudo </bin/rm> <-f> <--> <${links[0]}>" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
+@test "Docker Desktop link cleanup rejects regular files directories and foreign symlinks" {
+	write_installed_stubs
+	local conflict="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local scenario
+	for scenario in regular-file directory foreign-symlink; do
+		rm -rf "$conflict"
+		case "$scenario" in
+		regular-file) printf 'keep\n' >"$conflict" ;;
+		directory) mkdir "$conflict" ;;
+		foreign-symlink) ln -s "$TEST_HOMEBREW_LINK_TARGET/docker" "$conflict" ;;
+		esac
+		: >"$COMMAND_LOG"
+
+		run_macos_installer --with-docker
+
+		[ "$status" -ne 0 ]
+		[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
+		[[ -e $conflict || -L $conflict ]]
+		! grep -q 'nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
+	done
+}
+
 @test "nix-darwin user profile provides chezmoi after activation" {
 	write_installed_stubs
 	rm "$STUB_BIN/chezmoi"
@@ -1128,8 +1225,13 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	grep -q 'export OP_BIOMETRIC_UNLOCK_ENABLED' "$INSTALLER"
 }
 
-@test "Docker runtime uses the Nix app and requires explicit license acceptance" {
-	grep -q '/Applications/Nix Apps/Docker.app' "$INSTALLER"
+@test "Docker runtime uses the Homebrew cask app and requires explicit license acceptance" {
+	run env -u DOTFILES_DOCKER_APP_PATH bash -c '
+. "$INSTALLER"
+printf "%s\n" "$DOCKER_APP"
+'
+	[ "$status" -eq 0 ]
+	[ "$output" = "/Applications/Docker.app" ]
 	grep -q 'DOTFILES_ACCEPT_DOCKER_LICENSE' "$INSTALLER"
 	grep -q 'requires DOTFILES_ACCEPT_DOCKER_LICENSE=1' "$INSTALLER"
 	! grep -q 'desktop.docker.com/mac' "$INSTALLER"

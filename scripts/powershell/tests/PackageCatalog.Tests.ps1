@@ -580,7 +580,8 @@ in sets.providerErrors
         It 'should map Docker to Winget Homebrew cask and Linux system module providers' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"docker-desktop"\).*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
+            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?source\s*=\s*"homebrew";.*?identity\s*=\s*"docker-desktop";.*?cask\s*=\s*"docker-desktop";.*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
+            $sets | Should -Not -Match 'dockerDesktopPackage|selectDarwinPackage\s+"docker-desktop"|callPackage\s+\./docker-desktop'
         }
 
         It 'should keep true Windows-only components with explicit unsupported reasons' {
