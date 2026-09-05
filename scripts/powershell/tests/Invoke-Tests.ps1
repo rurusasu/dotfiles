@@ -152,13 +152,13 @@ if ($coverageRequested) {
     }
     else {
         $pesterConfig.CodeCoverage.Enabled = $true
-    $pesterConfig.CodeCoverage.Path = $sourceFiles
-    $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
-    $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
-    # 外部コマンド直接呼び出しはカバレッジから除外
-    $pesterConfig.CodeCoverage.ExcludeTests = $true
-    # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
-    $pesterConfig.CodeCoverage.UseBreakpoints = $false
+        $pesterConfig.CodeCoverage.Path = $sourceFiles
+        $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
+        $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+        # 外部コマンド直接呼び出しはカバレッジから除外
+        $pesterConfig.CodeCoverage.ExcludeTests = $true
+        # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
+        $pesterConfig.CodeCoverage.UseBreakpoints = $false
 
         if ($CoverageOutputFile) {
             $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
