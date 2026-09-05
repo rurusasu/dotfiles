@@ -21,6 +21,7 @@ LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Doc
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
+DOCKER_CASK_TOKEN="${DOTFILES_DOCKER_CASK_TOKEN:-docker-desktop}"
 OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
 LAUNCHCTL_COMMAND="${DOTFILES_LAUNCHCTL_COMMAND:-/bin/launchctl}"
 OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
@@ -167,6 +168,23 @@ stop_existing_docker_desktop() {
   done
 }
 
+docker_desktop_link_target_is_expected() {
+  local link_path="$1" link_target="$2" target_suffix
+  case "$link_path" in
+  "$HOMEBREW_BIN_DIR/docker") target_suffix="/bin/docker" ;;
+  "$HOMEBREW_BIN_DIR/docker-compose") target_suffix="/cli-plugins/docker-compose" ;;
+  "$HOMEBREW_BIN_DIR/docker-credential-desktop") target_suffix="/bin/docker-credential-desktop" ;;
+  "$HOMEBREW_BIN_DIR/docker-credential-ecr-login") target_suffix="/bin/docker-credential-ecr-login" ;;
+  "$HOMEBREW_BIN_DIR/docker-credential-osxkeychain") target_suffix="/bin/docker-credential-osxkeychain" ;;
+  "$HOMEBREW_BIN_DIR/kubectl" | "$HOMEBREW_BIN_DIR/kubectl.docker") target_suffix="/bin/kubectl" ;;
+  "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose") target_suffix="/cli-plugins/docker-compose" ;;
+  *) return 1 ;;
+  esac
+
+  [[ $link_target == "$DOCKER_APP/Contents/Resources$target_suffix" ||
+    $link_target == "$LEGACY_DOCKER_APP/Contents/Resources$target_suffix" ]]
+}
+
 remove_stale_docker_desktop_links() {
   local link_path link_target
   local -a link_paths=(
@@ -180,13 +198,13 @@ remove_stale_docker_desktop_links() {
     "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
   )
 
+  homebrew_cask_is_installed "$DOCKER_CASK_TOKEN" && return 0
+
   for link_path in "${link_paths[@]}"; do
     if [[ -L $link_path ]]; then
       link_target="$(/usr/bin/readlink "$link_path")"
-      case "$link_target" in
-      "$DOCKER_APP/Contents/Resources/"* | "$LEGACY_DOCKER_APP/Contents/Resources/"*) ;;
-      *) dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path" ;;
-      esac
+      docker_desktop_link_target_is_expected "$link_path" "$link_target" ||
+        dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
     elif [[ -e $link_path ]]; then
       dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
     fi

@@ -96,6 +96,8 @@ exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub brew 'exit 1'
+	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
@@ -1138,6 +1140,86 @@ fi
 	assert_log_order \
 		"sudo </bin/rm> <-f> <--> <${links[0]}>" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
+@test "already-managed Docker cask rerun preserves valid links" {
+	write_installed_stubs
+	write_legacy_docker_app
+	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
+	export DOCKER_LINK="$FAKE_HOMEBREW_BIN_DIR/docker"
+	export COMPOSE_LINK="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$DOCKER_LINK"
+	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$COMPOSE_LINK"
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
+	${4:-} == docker-desktop && -f $DOCKER_CASK_STATE ]]; then
+	exit 0
+fi
+exit 1
+'
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run && ! -f $DOCKER_CASK_STATE ]]; then
+	[[ ! -e $DOCKER_LINK && ! -L $DOCKER_LINK ]] || exit 91
+	[[ ! -e $COMPOSE_LINK && ! -L $COMPOSE_LINK ]] || exit 92
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" "$DOCKER_LINK"
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$COMPOSE_LINK"
+	touch "$DOCKER_CASK_STATE"
+fi
+'
+
+	run_macos_installer --with-docker
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$DOCKER_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$COMPOSE_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	: >"$COMMAND_LOG"
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$DOCKER_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$COMPOSE_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+}
+
+@test "Docker Desktop link cleanup rejects wrong resource and traversal targets" {
+	write_installed_stubs
+	local conflict="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local scenario target
+	for scenario in wrong-resource traversal; do
+		rm -f "$conflict"
+		case "$scenario" in
+		wrong-resource) target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker-compose" ;;
+		traversal) target="$FAKE_DOCKER_APP/Contents/Resources/../../../../outside/docker" ;;
+		esac
+		ln -s "$target" "$conflict"
+		: >"$COMMAND_LOG"
+
+		run_macos_installer --with-docker
+
+		[ "$status" -ne 0 ]
+		[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
+		[ "$(readlink "$conflict")" = "$target" ]
+		! grep -q 'nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
+	done
+}
+
+@test "late Docker Desktop link conflict preserves earlier valid stale links" {
+	write_installed_stubs
+	local first_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local last_link="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	local first_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local last_target="$TEST_HOMEBREW_LINK_TARGET/docker-compose"
+	ln -s "$first_target" "$first_link"
+	ln -s "$last_target" "$last_link"
+
+	run_macos_installer --with-docker
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $last_link"* ]]
+	[ "$(readlink "$first_link")" = "$first_target" ]
+	[ "$(readlink "$last_link")" = "$last_target" ]
+	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
 }
 
 @test "Docker Desktop link cleanup rejects regular files directories and foreign symlinks" {
