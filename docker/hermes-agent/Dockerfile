@@ -32,12 +32,26 @@ def replace_once(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
-def replace_pattern_once(path: Path, pattern: str, replacement: str) -> None:
+def replace_pattern_variant_once(path: Path, variants: list[tuple[str, str]]) -> None:
     text = path.read_text(encoding="utf-8")
-    updated, count = re.subn(pattern, replacement, text, count=1)
-    if count != 1:
-        raise SystemExit(f"expected exactly one pinned source match in {path}")
-    path.write_text(updated, encoding="utf-8")
+    matches = [
+        (pattern, replacement)
+        for pattern, replacement in variants
+        if len(re.findall(pattern, text)) == 1
+    ]
+    if len(matches) != 1:
+        raise SystemExit(f"expected exactly one pinned source variant in {path}")
+    pattern, replacement = matches[0]
+    path.write_text(re.sub(pattern, replacement, text, count=1), encoding="utf-8")
+
+
+def replace_variant_once(path: Path, variants: list[tuple[str, str]]) -> None:
+    text = path.read_text(encoding="utf-8")
+    matches = [(old, new) for old, new in variants if text.count(old) == 1]
+    if len(matches) != 1:
+        raise SystemExit(f"expected exactly one pinned source variant in {path}")
+    old, new = matches[0]
+    path.write_text(text.replace(old, new), encoding="utf-8")
 
 
 replace_once(
@@ -45,14 +59,24 @@ replace_once(
     'types="public_channel,private_channel",',
     'types="public_channel",',
 )
-replace_pattern_once(
+replace_pattern_variant_once(
     Path("/opt/hermes/toolsets.py"),
-    r'("browser_dialog"(?:,\s*"browser_exec")?),\s*"web_search"',
-    r'\1',
+    [
+        (
+            r'("browser_dialog"(?:,\s*"browser_exec")?),\s*"web_search"',
+            r'\1',
+        ),
+        (
+            r'(\[t for t in _HERMES_CORE_TOOLS if t\.startswith\("browser_"\)\])\s*\+\s*\["web_search"\]',
+            r'\1',
+        ),
+    ],
 )
-replace_once(
+replace_variant_once(
     Path("/opt/hermes/plugins/platforms/discord/adapter.py"),
-    '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
+    [
+        (
+            '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
         """Return True when this bot is explicitly @mentioned in the message.
 
         Treats the bot as mentioned if it is either present in the resolved
@@ -65,7 +89,7 @@ replace_once(
             return True
         return str(self._client.user.id) in self._raw_mentioned_user_ids(message)
 ''',
-    '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
+            '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
         """Return True when this bot is explicitly @mentioned in the message.
 
         In addition to direct user mentions, Discord creates a managed role
@@ -97,6 +121,50 @@ replace_once(
             for role in role_mentions
         )
 ''',
+        ),
+        (
+            '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
+        """True when the bot is in ``message.mentions`` or raw-mentioned in the content."""
+        if not self._client or not self._client.user:
+            return False
+        if self._client.user in getattr(message, "mentions", []):
+            return True
+        return str(self._client.user.id) in self._raw_mentioned_user_ids(message)
+''',
+            '''    def _self_is_explicitly_mentioned(self, message: Any) -> bool:
+        """Return True when this bot is explicitly @mentioned in the message.
+
+        In addition to direct user mentions, Discord creates a managed role
+        for each bot.  Discord renders that role as the bot's display name,
+        but sends it as ``<@&ROLE_ID>`` and leaves ``message.mentions`` empty.
+        Treat only a managed role owned by this bot as an equivalent mention;
+        ordinary role mentions must not wake the bot.
+        """
+        if not self._client or not self._client.user:
+            return False
+        if self._client.user in getattr(message, "mentions", []):
+            return True
+        if str(self._client.user.id) in self._raw_mentioned_user_ids(message):
+            return True
+
+        bot_id = int(self._client.user.id)
+        role_mentions = list(getattr(message, "role_mentions", []))
+        raw_role_ids = re.findall(r"<@&([0-9]+)>", getattr(message, "content", "") or "")
+        guild = getattr(message, "guild", None)
+        get_role = getattr(guild, "get_role", None)
+        if callable(get_role):
+            for raw_role_id in raw_role_ids:
+                role = get_role(int(raw_role_id))
+                if role is not None:
+                    role_mentions.append(role)
+
+        return any(
+            getattr(getattr(role, "tags", None), "bot_id", None) == bot_id
+            for role in role_mentions
+        )
+''',
+        ),
+    ],
 )
 PY
 
