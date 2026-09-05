@@ -32,10 +32,10 @@ package の評価は行わない。
 
 構成を実際に組み合わせて評価する経路は、`nix-unit` とは別に Bats と CI の build で確認する。
 
-| 対象 | テスト経路 | 確認する内容 |
-| --- | --- | --- |
-| NixOS / WSL | `tests/bash/flake_outputs.bats` | flake の出力と NixOS-WSL Home Manager 構成を `nix eval` で確認するケースを含む |
-| Darwin | `tests/bash/macos_config.bats` | Darwin Home Manager 構成を `nix eval` で確認するケースを含む |
+| 対象                    | テスト経路                           | 確認する内容                                                                                            |
+| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| NixOS / WSL             | `tests/bash/flake_outputs.bats`      | flake の出力と NixOS-WSL Home Manager 構成を `nix eval` で確認するケースを含む                          |
+| Darwin                  | `tests/bash/macos_config.bats`       | Darwin Home Manager 構成を `nix eval` で確認するケースを含む                                            |
 | CI の declarative build | `.github/workflows/ci-bootstrap.yml` | Bats とは別に、Linux/NixOS、NixOS-WSL、Darwin の出力を明示的な `nix build` または WSL switch で確認する |
 
 ローカルでの Bats の標準入口は `task test:bash` であり、全スイートを完走するには Nix が必要である。
