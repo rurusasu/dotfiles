@@ -106,7 +106,7 @@ EOF
 	[[ "$output" == *'"id":"acceptance-GitHubUsedOpenClawPAT"'* ]]
 
 	run "$op" item get "Google Calendar MCP" \
-		--account my.1password.com --vault Private --format json
+		--account my.1password.com --vault openclaw --format json
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'"id":"acceptance-Google Calendar MCP"'* ]]
 	[[ "$output" == *'"label":"oauth_credentials_json"'* ]]
@@ -153,7 +153,7 @@ EOF
 	[ "$status" -ne 0 ]
 
 	run "$op" item get "Google Calendar MCP" \
-		--account my.1password.com --vault openclaw --format json
+		--account my.1password.com --vault Private --format json
 	[ "$status" -ne 0 ]
 }
 
