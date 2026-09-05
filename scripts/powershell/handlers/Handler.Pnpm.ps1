@@ -48,13 +48,32 @@ class PnpmHandler : SetupHandlerBase {
         セットアップ成功時は $true、失敗時は $false
     #>
     hidden [bool] TryBootstrapPnpm() {
-        # 方法1: corepack enable で pnpm を有効化
+        # 方法1: npm で pnpm をインストール
+        # Corepack は Windows で extensionless な pnpm shim を生成することがあり、
+        # pnpm add -g 実行時に ERROR_BAD_EXE_FORMAT (os error 193) になるため、
+        # Windows のグローバル npm bin に .cmd shim を配置する経路を優先する。
+        $npmCmd = Get-ExternalCommand -Name "npm"
+        if ($npmCmd) {
+            $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
+            try {
+                Invoke-Npm -Arguments @("install", "-g", "pnpm@latest")
+                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
+                    $this.Log("npm で pnpm をインストールしました", "Green")
+                    return $true
+                }
+            }
+            catch {
+                $this.Log("npm での pnpm インストールに失敗: $($_.Exception.Message)", "Yellow")
+            }
+        }
+
+        # 方法2: corepack enable で pnpm を有効化（npm がない環境向け）
         $corepackCmd = Get-ExternalCommand -Name "corepack"
         if ($corepackCmd) {
             $this.Log("pnpm が見つかりません。corepack で有効化を試みます...")
             try {
                 Invoke-Corepack -Arguments @("enable")
-                if ($LASTEXITCODE -eq 0) {
+                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
                     Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate")
                     if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
                         $this.Log("corepack で pnpm を有効化しました", "Green")
@@ -67,24 +86,8 @@ class PnpmHandler : SetupHandlerBase {
             }
         }
 
-        # 方法2: npm install -g pnpm
-        $npmCmd = Get-ExternalCommand -Name "npm"
-        if ($npmCmd) {
-            $this.Log("npm 経由で pnpm をインストールします...")
-            try {
-                Invoke-Npm -Arguments @("install", "-g", "pnpm")
-                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
-                    $this.Log("npm で pnpm をインストールしました", "Green")
-                    return $true
-                }
-            }
-            catch {
-                $this.Log("npm での pnpm インストールに失敗: $($_.Exception.Message)", "Yellow")
-            }
-        }
-
         $this.LogWarning("pnpm をセットアップできませんでした。Node.js がインストールされているか確認してください")
-        $this.Log("手動インストール: winget install OpenJS.NodeJS.LTS && corepack enable && corepack prepare pnpm@latest --activate", "Yellow")
+        $this.Log("手動インストール: winget install OpenJS.NodeJS.LTS && npm install -g pnpm@latest", "Yellow")
         return $false
     }
 

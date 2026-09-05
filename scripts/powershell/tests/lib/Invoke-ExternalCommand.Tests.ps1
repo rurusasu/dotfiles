@@ -77,6 +77,47 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
+Describe 'Invoke-Pnpm' {
+    It 'should prefer the Windows cmd shim over an extensionless pnpm shim' {
+        Mock Get-Command {
+            if ($Name -eq "pnpm.cmd") {
+                return [PSCustomObject]@{
+                    Source      = "C:\\Users\\runneradmin\\AppData\\Local\\pnpm\\pnpm.cmd"
+                    Path        = "C:\\Users\\runneradmin\\AppData\\Local\\pnpm\\pnpm.cmd"
+                    CommandType = "Application"
+                }
+            }
+            return $null
+        }
+        Mock Invoke-NativeCommand {
+            $global:LASTEXITCODE = 0
+            return "10.0.0"
+        }
+
+        $result = Invoke-Pnpm -Arguments @("--version")
+
+        $result | Should -Contain "10.0.0"
+        Should -Invoke Invoke-NativeCommand -Times 1 -ParameterFilter {
+            $Command -eq "C:\\Users\\runneradmin\\AppData\\Local\\pnpm\\pnpm.cmd" -and
+            $Arguments -contains "--version"
+        }
+    }
+
+    It 'should fall back to pnpm when the cmd shim is unavailable' {
+        Mock Get-Command { return $null }
+        Mock Invoke-NativeCommand {
+            $global:LASTEXITCODE = 0
+            return "10.0.0"
+        }
+
+        Invoke-Pnpm -Arguments @("--version") | Should -Contain "10.0.0"
+
+        Should -Invoke Invoke-NativeCommand -Times 1 -ParameterFilter {
+            $Command -eq "pnpm" -and $Arguments -contains "--version"
+        }
+    }
+}
+
 Describe 'Invoke-Winget' {
     BeforeEach {
         $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS

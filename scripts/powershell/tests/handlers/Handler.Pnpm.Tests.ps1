@@ -104,6 +104,33 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'CanApply - npm bootstrap is preferred when both installers exist' {
+        BeforeEach {
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return $null }
+                if ($Name -eq "corepack") { return @{ Source = "C:\\corepack.cmd" } }
+                if ($Name -eq "npm") { return @{ Source = "C:\\npm.cmd" } }
+                return $null
+            }
+            Mock Invoke-Npm { $global:LASTEXITCODE = 0 }
+            Mock Invoke-Corepack { throw "corepack should not be used when npm is available" }
+            Mock Invoke-Pnpm {
+                $global:LASTEXITCODE = 0
+                return "10.0.0"
+            }
+            Mock Test-PathExist { return $true }
+            Mock Write-Host { }
+        }
+
+        It 'should return true without invoking corepack' {
+            $result = $handler.CanApply($ctx)
+            $result | Should -Be $true
+            Should -Invoke Invoke-Npm -Times 1 -ParameterFilter { $Arguments -contains "pnpm@latest" }
+            Should -Invoke Invoke-Corepack -Times 0
+        }
+    }
+
     Context 'CanApply - package file missing' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
