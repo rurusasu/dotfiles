@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
+BOOTSTRAP_WRAPPER = REPOSITORY_ROOT / "docker/hermes-agent/hermes-bootstrap"
 HINDSIGHT_CLIENT_VERSION = "0.6.1"
 HERMES_LCM_VERSION = "v0.20.0"
 HERMES_LCM_COMMIT = "49e99a272d2d461e5c90732e7ef2bc20e96f0826"
@@ -40,6 +41,25 @@ class DockerfileContractTests(unittest.TestCase):
             dockerfile,
         )
         self.assertIn("chmod 0755 /usr/local/bin/hermes-gateway-converge", dockerfile)
+
+    def test_runtime_installs_the_storage_ownership_command_without_changing_final_user(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "COPY hermes-agent/hermes_storage_ownership.py /usr/local/bin/hermes-storage-ownership",
+            dockerfile,
+        )
+        self.assertIn("chmod 0755 /usr/local/bin/hermes-storage-ownership", dockerfile)
+        self.assertIn("test_hermes_storage_ownership.py", dockerfile)
+        final_stage = dockerfile.rsplit("FROM hermes-bootstrap-runtime", 1)[1]
+        self.assertNotIn("USER 10000", final_stage)
+
+    def test_bootstrap_wrapper_rejects_the_wrong_identity_and_sets_a_private_umask(self) -> None:
+        wrapper = BOOTSTRAP_WRAPPER.read_text(encoding="utf-8")
+
+        self.assertIn('"$(id -u)" = 10000', wrapper)
+        self.assertIn('"$(id -g)" = 10000', wrapper)
+        self.assertIn("umask 077", wrapper)
 
     def test_runtime_installs_and_verifies_the_supported_hindsight_client(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")

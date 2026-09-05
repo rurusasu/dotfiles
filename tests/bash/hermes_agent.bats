@@ -68,6 +68,7 @@ EOF
 	export HERMES_REPLACEMENT_LOCK_ID=2222222222222222222222222222222222222222222222222222222222222222
 	export HERMES_LOCK_RELEASE_STATUS=0
 	export HERMES_SEED_WRITES_MARKER=1
+	export HERMES_STORAGE_OWNERSHIP_STATUS=0
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -187,6 +188,9 @@ if [ "${1:-}" = "run" ]; then
 	      printf "1\n" >"$VOLUME_READY_FILE"
 	    fi
 	    exit "${HERMES_STORAGE_SEED_STATUS:-0}"
+	  fi
+	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-ownership ]]; then
+	    exit "${HERMES_STORAGE_OWNERSHIP_STATUS:-0}"
 	  fi
 	  previous="$argument"
 	done
@@ -314,7 +318,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.schema=1>' "$COMMAND_LOG"
 	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.init-token=' "$COMMAND_LOG"
 	grep -Fq '<create> <--name> <dotfiles-hermes-storage-' "$COMMAND_LOG"
@@ -357,7 +361,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+	assert_log_order '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 }
 
 @test "accepts a managed volume with the ready marker" {
@@ -370,7 +374,43 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	[ "$status" -eq 0 ]
 	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
 	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	assert_log_order '<--entrypoint> <python>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "converges managed volume ownership with a restricted one-shot container" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	ownership_command="$(grep -F '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' "$COMMAND_LOG")"
+	[[ $ownership_command == *'<run> <--rm> <--network> <none> <--read-only>'* ]]
+	[[ $ownership_command == *'<--cap-drop> <ALL> <--cap-add> <CHOWN> <--cap-add> <DAC_OVERRIDE>'* ]]
+	[[ $ownership_command == *'<--security-opt> <no-new-privileges:true> <--user> <0:0>'* ]]
+	[[ $ownership_command == *'<--mount> <type=volume,src=hermes-data,dst=/target>'* ]]
+	[[ $ownership_command == *'<--target> </target> <--uid> <10000> <--gid> <10000>'* ]]
+	[[ $ownership_command != *'type=bind'* ]]
+	without_first_mount="${ownership_command/<--mount>/}"
+	[[ $without_first_mount != "$ownership_command" ]]
+	[[ $without_first_mount != *'<--mount>'* ]]
+}
+
+@test "stops before bootstrap and recreate when ownership convergence fails" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+	export HERMES_STORAGE_OWNERSHIP_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	[[ "$output" == *"ownership convergence failed with status 42"* ]]
+	assert_log_order '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>'
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+	! grep -Fq '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 }
 
 @test "preserves a ready managed volume when its marker probe cannot run" {

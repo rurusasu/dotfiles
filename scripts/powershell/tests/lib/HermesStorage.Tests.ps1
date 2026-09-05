@@ -17,6 +17,7 @@ Describe 'Hermes Docker storage initialization' {
         $script:volumeProbeStatus = $null
         $script:seedExitCode = 0
         $script:seedWritesMarker = $true
+        $script:ownershipExitCode = 0
         $script:lockCreateExitCode = 0
         $script:lockCreateFailOnce = $false
         $script:lockCreateAttempts = 0
@@ -70,6 +71,9 @@ Describe 'Hermes Docker storage initialization' {
                     }
                     elseif ($script:volumeReady) { 0 }
                     else { 3 }
+                }
+                elseif ($entrypoint -eq '/usr/local/bin/hermes-storage-ownership') {
+                    $global:LASTEXITCODE = $script:ownershipExitCode
                 }
                 else {
                     $global:LASTEXITCODE = 1
@@ -180,6 +184,9 @@ Describe 'Hermes Docker storage initialization' {
         $result.Existing | Should -BeTrue
         ($script:dockerCalls -join "`n") | Should -Match 'create .* /usr/local/bin/hermes-storage-seed .*--replace-incomplete'
         ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:lockId)"
+        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
+        $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf("start -a $($script:lockId)")
+        $script:dockerCalls.IndexOf("rm -f $($script:lockId)") | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
     }
 
     It 'accepts an exactly matching regular marker while locked' {
@@ -192,6 +199,33 @@ Describe 'Hermes Docker storage initialization' {
         $result.Existing | Should -BeTrue
         ($script:dockerCalls -join "`n") | Should -Match '--entrypoint python'
         ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
+    }
+
+    It 'should converge ownership with one restricted named-volume mount before releasing the lock' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeTrue
+        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
+        $ownershipCall | Should -Be 'run --rm --network none --read-only --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --security-opt no-new-privileges:true --user 0:0 --entrypoint /usr/local/bin/hermes-storage-ownership --mount type=volume,source=hermes-data,target=/target local/hermes-agent-gh:latest --target /target --uid 10000 --gid 10000'
+        $probeCall = @($script:dockerCalls | Where-Object { $_ -match '--entrypoint python' })[0]
+        $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($probeCall)
+        $script:dockerCalls.IndexOf("rm -f $($script:lockId)") | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+    }
+
+    It 'should release the lock and fail when ownership convergence fails' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $script:ownershipExitCode = 42
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match 'ownership convergence failed with status 42'
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
+        $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
     }
 
     It 'preserves a ready managed volume when its marker probe cannot run' {

@@ -54,6 +54,11 @@ services:
       - bootstrap
     entrypoint: /usr/local/bin/hermes-bootstrap
     command: apply
+    user: "10000:10000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
         required: false
@@ -63,6 +68,7 @@ services:
         target: /opt/data
     environment:
       HERMES_HOME: /opt/data
+      HOME: /opt/data
 
   chromium:
     build:

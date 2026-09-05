@@ -71,6 +71,33 @@ raise SystemExit(0 if actual == expected else 3)',
     return [PSCustomObject]@{ Status = $status; Ready = $status -eq 0 }
 }
 
+function Invoke-HermesStorageOwnership {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VolumeName
+    )
+
+    $arguments = @(
+        'run', '--rm',
+        '--network', 'none',
+        '--read-only',
+        '--cap-drop', 'ALL',
+        '--cap-add', 'CHOWN',
+        '--cap-add', 'DAC_OVERRIDE',
+        '--security-opt', 'no-new-privileges:true',
+        '--user', '0:0',
+        '--entrypoint', '/usr/local/bin/hermes-storage-ownership',
+        '--mount', "type=volume,source=$VolumeName,target=/target",
+        'local/hermes-agent-gh:latest',
+        '--target', '/target',
+        '--uid', '10000',
+        '--gid', '10000'
+    )
+    $null = @(Invoke-Docker -Arguments $arguments 2>$null)
+    return $LASTEXITCODE
+}
+
 function Get-HermesStorageLockName {
     [CmdletBinding()]
     param(
@@ -125,6 +152,7 @@ function Initialize-HermesStorageVolume {
     $lockLabel = 'com.rurusasu.dotfiles.hermes-storage.lock'
     $lockCreatedLabel = 'com.rurusasu.dotfiles.hermes-storage.lock-created-at'
     $existing = $true
+    $result = $null
     $schema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
     if ($schema.Status -eq 0) {
         if ($schema.Value -ne '1') {
@@ -239,7 +267,17 @@ function Initialize-HermesStorageVolume {
         # The locked volume identity check already produced the result.
     }
     elseif ($probe.Status -eq 0) {
-        $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+        $ownershipStatus = Invoke-HermesStorageOwnership -VolumeName $volumeName
+        if ($ownershipStatus -eq 0) {
+            $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+        }
+        else {
+            $result = [PSCustomObject]@{
+                Success  = $false
+                Existing = $existing
+                Message  = "Hermes data volume ownership convergence failed with status $ownershipStatus."
+            }
+        }
     }
     elseif ($probe.Status -ne 3) {
         $result = [PSCustomObject]@{
@@ -254,7 +292,17 @@ function Initialize-HermesStorageVolume {
         if ($seedStatus -eq 0) {
             $postSeedProbe = Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken
             if ($postSeedProbe.Status -eq 0) {
-                $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+                $ownershipStatus = Invoke-HermesStorageOwnership -VolumeName $volumeName
+                if ($ownershipStatus -eq 0) {
+                    $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+                }
+                else {
+                    $result = [PSCustomObject]@{
+                        Success  = $false
+                        Existing = $existing
+                        Message  = "Hermes data volume ownership convergence failed with status $ownershipStatus."
+                    }
+                }
             }
             elseif ($postSeedProbe.Status -eq 3) {
                 $result = [PSCustomObject]@{

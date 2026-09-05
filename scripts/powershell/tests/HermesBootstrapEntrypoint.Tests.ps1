@@ -183,6 +183,53 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Start-Sleep -Times 0 -Exactly
     }
 
+    It 'should stop before bootstrap and recreate when storage ownership convergence fails' {
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
+                $script:eventLog.Add([string]$Arguments[3])
+            }
+            if ($Arguments[0] -eq 'volume' -and $Arguments[1] -eq 'inspect') {
+                $format = $Arguments[$Arguments.IndexOf('--format') + 1]
+                $global:LASTEXITCODE = 0
+                if ($format -match 'hermes-storage\.schema') { return '1' }
+                if ($format -match 'hermes-storage\.init-token') {
+                    return 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                }
+            }
+            elseif ($Arguments[0] -eq 'create') {
+                $global:LASTEXITCODE = 0
+                return '1111111111111111111111111111111111111111111111111111111111111111'
+            }
+            elseif ($Arguments[0] -eq 'run') {
+                $entrypoint = $Arguments[$Arguments.IndexOf('--entrypoint') + 1]
+                $global:LASTEXITCODE = if ($entrypoint -eq '/usr/local/bin/hermes-storage-ownership') {
+                    42
+                }
+                else {
+                    0
+                }
+                return @()
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes data volume ownership convergence failed with status 42.'
+        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
+        $releaseCall = 'rm -f 1111111111111111111111111111111111111111111111111111111111111111'
+        $script:dockerCalls.IndexOf($releaseCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+        Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        Should -Invoke Invoke-HermesXApiCredentialScope -Times 0 -Exactly
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'up -d --force-recreate'
+    }
+
     It 'should recover an existing Hermes runtime after bootstrap failure' {
         Mock Invoke-Docker {
             $script:dockerCalls.Add(($Arguments -join ' '))

@@ -63,6 +63,23 @@ raise SystemExit(0 if actual == expected else 3)' \
     "$volume_token"
 }
 
+dotfiles_hermes_converge_storage_ownership() {
+  local docker_runner="$1" volume_name="$2"
+
+  "$docker_runner" run --rm \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add CHOWN \
+    --cap-add DAC_OVERRIDE \
+    --security-opt no-new-privileges:true \
+    --user 0:0 \
+    --entrypoint /usr/local/bin/hermes-storage-ownership \
+    --mount "type=volume,src=$volume_name,dst=/target" \
+    local/hermes-agent-gh:latest \
+    --target /target --uid 10000 --gid 10000
+}
+
 dotfiles_hermes_release_storage_lock() {
   local docker_runner="$1" lock_id="$2"
 
@@ -97,7 +114,7 @@ dotfiles_hermes_create_storage_lock() {
 dotfiles_hermes_initialize_storage_volume() {
   local docker_runner="$1"
   local volume_name data_dir volume_schema volume_token actual_schema actual_token lock_name lock_id
-  local volume_status probe_status seed_status release_status
+  local volume_status probe_status seed_status ownership_status release_status
   local schema_label="com.rurusasu.dotfiles.hermes-storage.schema"
   local token_label="com.rurusasu.dotfiles.hermes-storage.init-token"
   local lock_label="com.rurusasu.dotfiles.hermes-storage.lock"
@@ -177,9 +194,22 @@ dotfiles_hermes_initialize_storage_volume() {
   fi
 
   if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
-    printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
-    return 0
+    if dotfiles_hermes_converge_storage_ownership "$docker_runner" "$volume_name"; then
+      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
+      printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
+      return 0
+    else
+      ownership_status=$?
+    fi
+    if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id"; then
+      printf 'Hermes Docker data volume ownership convergence failed with status %s: %s\n' \
+        "$ownership_status" "$volume_name" >&2
+      return "$ownership_status"
+    fi
+    release_status=$?
+    printf 'Hermes Docker data volume ownership convergence failed with status %s and its lock could not be released: %s\n' \
+      "$ownership_status" "$volume_name" >&2
+    return "$release_status"
   else
     probe_status=$?
   fi
@@ -198,9 +228,22 @@ dotfiles_hermes_initialize_storage_volume() {
 
   if "$docker_runner" start -a "$lock_id"; then
     if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
-      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
-      printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
-      return 0
+      if dotfiles_hermes_converge_storage_ownership "$docker_runner" "$volume_name"; then
+        dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
+        printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
+        return 0
+      else
+        ownership_status=$?
+      fi
+      if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id"; then
+        printf 'Hermes Docker data volume ownership convergence failed with status %s: %s\n' \
+          "$ownership_status" "$volume_name" >&2
+        return "$ownership_status"
+      fi
+      release_status=$?
+      printf 'Hermes Docker data volume ownership convergence failed with status %s and its lock could not be released: %s\n' \
+        "$ownership_status" "$volume_name" >&2
+      return "$release_status"
     else
       probe_status=$?
     fi

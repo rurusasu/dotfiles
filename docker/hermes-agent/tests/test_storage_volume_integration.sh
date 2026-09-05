@@ -28,6 +28,8 @@ with sqlite3.connect(root / "state?#%.db") as database:
     database.execute("create table checks (value text not null)")
     database.execute("insert into checks values ('atomic-ready')")
 (root / "nested" / "config-link").symlink_to("../config.yaml")
+(root / "print-umask").write_text("#!/bin/sh\numask\n", encoding="utf-8")
+(root / "print-umask").chmod(0o755)
 PY
 
 # shellcheck source=../../../scripts/sh/install-common.sh
@@ -37,9 +39,48 @@ source "$repository_root/scripts/sh/hermes-agent.sh"
 export HERMES_DATA_DIR="$fixture_dir"
 export HERMES_DATA_VOLUME="$volume_name"
 
+for wrong_user in 0:10000 10000:0; do
+  if docker run --rm \
+    --user "$wrong_user" \
+    --env HOME=/opt/data \
+    --mount "type=bind,src=$fixture_dir/print-umask,dst=/opt/hermes/.venv/bin/python,readonly" \
+    --entrypoint /usr/local/bin/hermes-bootstrap \
+    local/hermes-agent-gh:latest >/dev/null 2>&1; then
+    printf 'bootstrap wrapper accepted the wrong uid/gid: %s\n' "$wrong_user" >&2
+    exit 1
+  fi
+done
+bootstrap_umask="$(docker run --rm \
+  --user 10000:10000 \
+  --env HOME=/opt/data \
+  --mount "type=bind,src=$fixture_dir/print-umask,dst=/opt/hermes/.venv/bin/python,readonly" \
+  --entrypoint /usr/local/bin/hermes-bootstrap \
+  local/hermes-agent-gh:latest)"
+[[ $bootstrap_umask == 0077 ]]
+
 dotfiles_hermes_initialize_storage_volume docker
 volume_token="$(docker volume inspect --format '{{ index .Labels "com.rurusasu.dotfiles.hermes-storage.init-token" }}' "$volume_name")"
 lock_name="$(dotfiles_hermes_storage_lock_name "$volume_name")"
+
+ownership_state="$(docker run --rm \
+  --entrypoint python \
+  --mount "type=volume,src=$volume_name,dst=/target,readonly" \
+  local/hermes-agent-gh:latest \
+  -c 'import os; paths=["/target", "/target/nested", "/target/config.yaml", "/target/state?#%.db"]; print("|".join(f"{os.stat(path).st_uid}:{os.stat(path).st_gid}" for path in paths)); link=os.lstat("/target/nested/config-link"); print(f"{link.st_uid}:{link.st_gid}")')"
+[[ $ownership_state == $'10000:10000|10000:10000|10000:10000|10000:10000\n0:0' ]]
+
+docker run --rm \
+  --entrypoint python \
+  --mount "type=volume,src=$volume_name,dst=/target" \
+  local/hermes-agent-gh:latest \
+  -c 'import os, pathlib; path=pathlib.Path("/target/metadata?#%.bin"); path.write_bytes(b"persistent\x00payload\n"); path.chmod(0o751); os.utime(path, ns=(1700000000111111111, 1700000000222222222))'
+dotfiles_hermes_initialize_storage_volume docker
+metadata_state="$(docker run --rm \
+  --entrypoint python \
+  --mount "type=volume,src=$volume_name,dst=/target,readonly" \
+  local/hermes-agent-gh:latest \
+  -c 'import pathlib, stat; path=pathlib.Path("/target/metadata?#%.bin"); info=path.stat(); print(f"{info.st_uid}:{info.st_gid}|{stat.S_IMODE(info.st_mode):04o}|{info.st_mtime_ns}|{path.read_bytes().hex()}")')"
+[[ $metadata_state == '10000:10000|0751|1700000000222222222|70657273697374656e74007061796c6f61640a' ]]
 
 docker run -d --rm \
   --name "$lock_name" \
