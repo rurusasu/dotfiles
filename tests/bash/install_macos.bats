@@ -1182,6 +1182,28 @@ fi
 	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
 }
 
+@test "installed Docker cask rejects a foreign link without removing valid current links" {
+	write_installed_stubs
+	local valid_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local valid_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+	local conflict="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	local conflict_target="$TEST_HOMEBREW_LINK_TARGET/docker-compose"
+	ln -s "$valid_target" "$valid_link"
+	ln -s "$conflict_target" "$conflict"
+	write_stub brew '
+[[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
+	[ "$(readlink "$valid_link")" = "$valid_target" ]
+	[ "$(readlink "$conflict")" = "$conflict_target" ]
+	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+	! grep -q 'nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
+}
+
 @test "Docker Desktop link cleanup rejects wrong resource and traversal targets" {
 	write_installed_stubs
 	local conflict="$FAKE_HOMEBREW_BIN_DIR/docker"

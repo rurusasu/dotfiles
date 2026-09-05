@@ -186,7 +186,7 @@ docker_desktop_link_target_is_expected() {
 }
 
 remove_stale_docker_desktop_links() {
-  local link_path link_target
+  local cask_is_installed=0 link_path link_target
   local -a link_paths=(
     "$HOMEBREW_BIN_DIR/docker"
     "$HOMEBREW_BIN_DIR/docker-compose"
@@ -198,7 +198,9 @@ remove_stale_docker_desktop_links() {
     "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
   )
 
-  homebrew_cask_is_installed "$DOCKER_CASK_TOKEN" && return 0
+  if homebrew_cask_is_installed "$DOCKER_CASK_TOKEN"; then
+    cask_is_installed=1
+  fi
 
   for link_path in "${link_paths[@]}"; do
     if [[ -L $link_path ]]; then
@@ -209,6 +211,8 @@ remove_stale_docker_desktop_links() {
       dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
     fi
   done
+
+  ((cask_is_installed == 0)) || return 0
 
   for link_path in "${link_paths[@]}"; do
     [[ -L $link_path ]] || continue
