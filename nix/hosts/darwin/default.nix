@@ -196,7 +196,8 @@ in
 
   users.users.${user}.home = home;
 
-  environment.systemPackages = sets.darwinSystemPackagesForInstallFeatures installFeatures;
+  environment.systemPackages =
+    sets.darwinSystemPackagesForInstallFeatures installFeatures ++ sets.hostPackages;
 
   home-manager = {
     useGlobalPkgs = true;

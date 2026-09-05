@@ -89,6 +89,28 @@ nix_fixture_darwin_package_split() {
 	grep -q 'linuxSystemModules' "$SETS"
 }
 
+@test "host package set includes GitHub CLI for Darwin and Linux" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			mkPackages = system:
+				let
+					pkgs = import flake.inputs.nixpkgs { inherit system; config.allowUnfree = true; };
+					sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+				in builtins.map (package: package.pname or package.name) sets.hostPackages;
+		in {
+			darwin = mkPackages \"aarch64-darwin\";
+			linux = mkPackages \"x86_64-linux\";
+		}
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '(.darwin | index("gh") != null) and (.linux | index("gh") != null)' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Hermes Desktop uses the official Homebrew cask only with the Hermes profile" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
