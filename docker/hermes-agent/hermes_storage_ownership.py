@@ -25,12 +25,35 @@ def _open_entry(parent_fd: int, name: str, mode: int) -> int:
     return os.open(name, flags, dir_fd=parent_fd)
 
 
+def _requires_ownership_change(
+    info: os.stat_result,
+    uid: int,
+    gid: int,
+) -> bool:
+    return info.st_uid != uid or info.st_gid != gid
+
+
+def _preflight_ownership(
+    info: os.stat_result,
+    uid: int,
+    gid: int,
+) -> None:
+    if _requires_ownership_change(info, uid, gid) and info.st_mode & (
+        stat.S_ISUID | stat.S_ISGID
+    ):
+        raise RuntimeError("ownership convergence would clear set-ID mode bits")
+
+
 def _set_ownership(
     fd: int,
     before: os.stat_result,
     uid: int,
     gid: int,
 ) -> None:
+    _preflight_ownership(before, uid, gid)
+    if not _requires_ownership_change(before, uid, gid):
+        return
+
     os.fchown(fd, uid, gid)
     after = os.fstat(fd)
     if after.st_uid != uid or after.st_gid != gid:
@@ -39,6 +62,36 @@ def _set_ownership(
         raise RuntimeError("ownership convergence changed mode")
     if after.st_mtime_ns != before.st_mtime_ns:
         raise RuntimeError("ownership convergence changed mtime")
+
+
+def _preflight_directory(
+    directory_fd: int, root_device: int, uid: int, gid: int
+) -> None:
+    with os.scandir(directory_fd) as entries:
+        snapshots = [
+            (
+                entry.name,
+                os.stat(entry.name, dir_fd=directory_fd, follow_symlinks=False),
+            )
+            for entry in entries
+        ]
+
+    for name, before in snapshots:
+        if before.st_dev != root_device:
+            continue
+        if not (stat.S_ISDIR(before.st_mode) or stat.S_ISREG(before.st_mode)):
+            continue
+
+        child_fd = _open_entry(directory_fd, name, before.st_mode)
+        try:
+            opened = os.fstat(child_fd)
+            if _identity(opened) != _identity(before):
+                raise RuntimeError(f"entry changed while opening: {name!r}")
+            _preflight_ownership(opened, uid, gid)
+            if stat.S_ISDIR(opened.st_mode):
+                _preflight_directory(child_fd, root_device, uid, gid)
+        finally:
+            os.close(child_fd)
 
 
 def _converge_directory(
@@ -79,6 +132,8 @@ def converge_ownership(target: Path | str, uid: int, gid: int) -> None:
         root = os.fstat(root_fd)
         if not stat.S_ISDIR(root.st_mode):
             raise NotADirectoryError(os.fspath(target))
+        _preflight_ownership(root, uid, gid)
+        _preflight_directory(root_fd, root.st_dev, uid, gid)
         _converge_directory(root_fd, root.st_dev, uid, gid)
         _set_ownership(root_fd, root, uid, gid)
     finally:

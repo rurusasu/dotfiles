@@ -4,15 +4,78 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from hermes_storage_ownership import converge_ownership
 
 
+def _alternate_id(current: int) -> int:
+    return 10000 if current != 10000 else 10001
+
+
+def _with_ownership(info: os.stat_result, uid: int, gid: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        st_dev=info.st_dev,
+        st_ino=info.st_ino,
+        st_mode=info.st_mode,
+        st_uid=uid,
+        st_gid=gid,
+        st_mtime_ns=info.st_mtime_ns,
+    )
+
+
 class HermesStorageOwnershipTests(unittest.TestCase):
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.geteuid() == 0,
+        "requires Linux root ownership semantics",
+    )
+    def test_rejects_setid_transition_before_any_owner_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "target"
+            root.mkdir()
+            for name in ("candidate-a", "candidate-b"):
+                (root / name).write_bytes(name.encode("ascii") + b"\x00data")
+            with os.scandir(root) as entries:
+                ordinary, setid = (root / entry.name for entry in entries)
+
+            ordinary.chmod(0o640)
+            setid.chmod(0o6750)
+
+            paths = (root, ordinary, setid)
+            before = {
+                path.name: (
+                    path.stat().st_uid,
+                    path.stat().st_gid,
+                    stat.S_IMODE(path.stat().st_mode),
+                    path.stat().st_mtime_ns,
+                )
+                for path in paths
+            }
+            contents = {path.name: path.read_bytes() for path in (ordinary, setid)}
+
+            with self.assertRaises(RuntimeError):
+                converge_ownership(root, 10000, 10000)
+
+            after = {
+                path.name: (
+                    path.stat().st_uid,
+                    path.stat().st_gid,
+                    stat.S_IMODE(path.stat().st_mode),
+                    path.stat().st_mtime_ns,
+                )
+                for path in paths
+            }
+            self.assertEqual(after, before)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in (ordinary, setid)},
+                contents,
+            )
+
     def test_changes_only_regular_files_and_directories(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "target"
@@ -26,17 +89,32 @@ class HermesStorageOwnershipTests(unittest.TestCase):
             if hasattr(os, "mkfifo"):
                 os.mkfifo(fifo)
 
-            changed_inodes: list[int] = []
-            real_fchown = os.fchown
+            target_uid = _alternate_id(os.getuid())
+            target_gid = _alternate_id(os.getgid())
+            changed_inodes: set[int] = set()
+            real_fstat = os.fstat
 
             def record_fchown(fd: int, uid: int, gid: int) -> None:
-                changed_inodes.append(os.fstat(fd).st_ino)
-                real_fchown(fd, uid, gid)
+                self.assertEqual((uid, gid), (target_uid, target_gid))
+                changed_inodes.add(real_fstat(fd).st_ino)
 
-            with mock.patch(
-                "hermes_storage_ownership.os.fchown", side_effect=record_fchown
+            def report_changed_ownership(fd: int) -> os.stat_result | SimpleNamespace:
+                info = real_fstat(fd)
+                if info.st_ino in changed_inodes:
+                    return _with_ownership(info, target_uid, target_gid)
+                return info
+
+            with (
+                mock.patch(
+                    "hermes_storage_ownership.os.fchown",
+                    side_effect=record_fchown,
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat",
+                    side_effect=report_changed_ownership,
+                ),
             ):
-                converge_ownership(root, os.getuid(), os.getgid())
+                converge_ownership(root, target_uid, target_gid)
 
             self.assertEqual(
                 set(changed_inodes),
@@ -94,8 +172,10 @@ class HermesStorageOwnershipTests(unittest.TestCase):
             foreign_file.write_text("untouched\n", encoding="utf-8")
             root_device = root.stat().st_dev
             real_stat = os.stat
-            real_fchown = os.fchown
-            changed_inodes: list[int] = []
+            target_uid = _alternate_id(os.getuid())
+            target_gid = _alternate_id(os.getgid())
+            changed_inodes: set[int] = set()
+            real_fstat = os.fstat
 
             def report_foreign_device(
                 path: object, *args: object, **kwargs: object
@@ -108,8 +188,14 @@ class HermesStorageOwnershipTests(unittest.TestCase):
                 return result
 
             def record_fchown(fd: int, uid: int, gid: int) -> None:
-                changed_inodes.append(os.fstat(fd).st_ino)
-                real_fchown(fd, uid, gid)
+                self.assertEqual((uid, gid), (target_uid, target_gid))
+                changed_inodes.add(real_fstat(fd).st_ino)
+
+            def report_changed_ownership(fd: int) -> os.stat_result | SimpleNamespace:
+                info = real_fstat(fd)
+                if info.st_ino in changed_inodes:
+                    return _with_ownership(info, target_uid, target_gid)
+                return info
 
             with (
                 mock.patch(
@@ -119,10 +205,14 @@ class HermesStorageOwnershipTests(unittest.TestCase):
                 mock.patch(
                     "hermes_storage_ownership.os.fchown", side_effect=record_fchown
                 ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat",
+                    side_effect=report_changed_ownership,
+                ),
             ):
-                converge_ownership(root, os.getuid(), os.getgid())
+                converge_ownership(root, target_uid, target_gid)
 
-            self.assertEqual(changed_inodes, [root.stat().st_ino])
+            self.assertEqual(changed_inodes, {root.stat().st_ino})
             self.assertNotIn(foreign.stat().st_ino, changed_inodes)
             self.assertNotIn(foreign_file.stat().st_ino, changed_inodes)
 
