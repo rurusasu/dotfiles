@@ -84,6 +84,21 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin installs GitHub CLI system-wide for host integrations" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in builtins.map (package: package.pname or package.name) config.environment.systemPackages
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'index("gh") != null' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Darwin default and Hermes profiles route Raycast system-wide without a cask" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"

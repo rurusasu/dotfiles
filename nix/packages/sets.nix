@@ -1464,6 +1464,9 @@ lib.mapAttrs (_: resolve) grouped
       builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
     );
 
+  # Host integrations such as Orca need GitHub CLI outside the user profile.
+  hostPackages = resolve [ "gh" ];
+
   # Windows: nix attr name → winget PackageIdentifier
   inherit
     wingetMap
