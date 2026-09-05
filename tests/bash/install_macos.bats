@@ -461,6 +461,21 @@ run_macos_installer() {
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
 }
 
+@test "macOS installer clears an incomplete inherited Git command config" {
+	write_installed_stubs
+	write_stub nix '
+env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+'
+	export GIT_CONFIG_COUNT=2
+	export GIT_CONFIG_VALUE_0=one
+	export GIT_CONFIG_VALUE_1=two
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+}
+
 @test "WithOllama starts its API after chezmoi without starting Docker" {
 	write_installed_stubs
 	write_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -546,6 +561,7 @@ exit 1
 		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
+		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"docker info" \
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \

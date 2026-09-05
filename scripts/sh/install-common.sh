@@ -17,6 +17,33 @@ dotfiles_have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+dotfiles_unset_git_command_config_environment() {
+  local name
+  while IFS='=' read -r name _; do
+    case "$name" in
+    GIT_CONFIG_COUNT | GIT_CONFIG_KEY_* | GIT_CONFIG_VALUE_*) unset "$name" ;;
+    esac
+  done < <(/usr/bin/env)
+}
+
+dotfiles_sanitize_incomplete_git_config_environment() {
+  local count="${GIT_CONFIG_COUNT:-}" index
+  [[ -n $count ]] || return 0
+
+  if [[ ! $count =~ ^[0-9]+$ ]]; then
+    dotfiles_unset_git_command_config_environment
+    return 0
+  fi
+
+  for ((index = 0; index < count; index++)); do
+    if ! /usr/bin/printenv "GIT_CONFIG_KEY_$index" >/dev/null 2>&1 ||
+      ! /usr/bin/printenv "GIT_CONFIG_VALUE_$index" >/dev/null 2>&1; then
+      dotfiles_unset_git_command_config_environment
+      return 0
+    fi
+  done
+}
+
 dotfiles_herdr_command() {
   local candidate
 

@@ -70,6 +70,7 @@ in
 
     # PATH: bun and pnpm global binaries
     sessionPath = [
+      "$HOME/.local/bin"
       "$HOME/.bun/bin"
       "$HOME/.local/share/pnpm/bin"
       "$HOME/.local/share/pnpm"

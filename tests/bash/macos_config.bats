@@ -499,6 +499,21 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin Home Manager exposes official per-user CLI launchers" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.home-manager.users.codex.home.sessionPath
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'index("$HOME/.local/bin") != null' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Darwin provisions GNU timeout for native Ollama" {
 	grep -Fq 'pkgs.coreutils' "$REPO_ROOT/nix/home/common.nix"
 }

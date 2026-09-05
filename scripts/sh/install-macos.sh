@@ -465,6 +465,7 @@ migrate_darwin_providers() {
 }
 
 main() {
+  dotfiles_sanitize_incomplete_git_config_environment
   resolve_install_profile "$@"
   preflight
   ensure_command_line_tools
@@ -482,6 +483,9 @@ main() {
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   apply_chezmoi
+  if ((DOTFILES_WITH_HERMES == 1)); then
+    dotfiles_run_task hermes:desktop:install
+  fi
   if ((DOTFILES_WITH_OLLAMA == 1)); then
     setup_ollama_runtime
   fi
