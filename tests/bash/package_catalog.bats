@@ -115,7 +115,7 @@ nix_fixture_darwin_package_split() {
 				sets = import $SETS {
 					inherit pkgs;
 					lib = pkgs.lib;
-					codexPackage = flake.inputs.llm-agents.packages.${system}.codex;
+					codexPackage = flake.inputs.llm-agents.packages.\${system}.codex;
 				};
 				in builtins.map (package: package.pname or package.name) sets.hostPackages;
 		in {
