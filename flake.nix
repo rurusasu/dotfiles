@@ -36,6 +36,10 @@
       url = "github:raine/workmux";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Codex is updated independently from nixpkgs by the maintained
+    # llm-agents.nix package set. Keep its nixpkgs input independent so the
+    # package uses the nixpkgs revision it is tested against.
+    llm-agents.url = "github:numtide/llm-agents.nix";
   };
 
   outputs =

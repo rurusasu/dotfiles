@@ -23,3 +23,8 @@
 4. パッケージ追加前に `nix/packages/sets.nix` の所有範囲と各 OS への影響を確認する。
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
 6. 対象 OS の評価・テストと `tests/bash/home_layout.bats` を実行する。
+
+## Codex CLI
+
+Codex の Nix 更新方針と Windows の winget との責務分担は
+[`docs/nix/codex-cli.md`](../docs/nix/codex-cli.md) を参照する。

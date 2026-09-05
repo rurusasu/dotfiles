@@ -1,9 +1,12 @@
 {
   pkgs,
   lib,
+  codexPackage,
 }:
 let
-  sets = import ./sets.nix { inherit pkgs lib; };
+  sets = import ./sets.nix {
+    inherit pkgs lib codexPackage;
+  };
   reportFile = pkgs.writeText "package-support.json" (builtins.toJSON sets.supportReport);
   darwinPackagesFile = pkgs.writeText "darwin-packages.json" (
     builtins.toJSON (builtins.attrNames sets.darwinPackages)

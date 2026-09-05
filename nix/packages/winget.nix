@@ -10,9 +10,12 @@
 {
   pkgs,
   lib,
+  codexPackage,
 }:
 let
-  sets = import ./sets.nix { inherit pkgs lib; };
+  sets = import ./sets.nix {
+    inherit pkgs lib codexPackage;
+  };
 
   # Attach verifyCommand to a package object if defined in verifyMap
   attachVerify =

@@ -34,6 +34,7 @@
 {
   pkgs,
   lib,
+  codexPackage,
   catalogOverride ? null,
 }:
 let
@@ -396,9 +397,27 @@ let
 
         # ── llm ───────────────────────────────────────────────
         codex = {
-          pkg = pkgs.codex;
+          pkg = codexPackage;
           winget = "OpenAI.Codex";
           category = "llm";
+          support = {
+            darwin = {
+              provider = "nix";
+              source = "llm-agents.nix";
+              identity = {
+                command = "codex";
+                versionArgs = [ "--version" ];
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "llm-agents.nix";
+              identity = {
+                command = "codex";
+                versionArgs = [ "--version" ];
+              };
+            };
+          };
         };
         chatgpt = {
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };
